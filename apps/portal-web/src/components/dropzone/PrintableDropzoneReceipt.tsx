@@ -90,7 +90,7 @@ export default function PrintableDropzoneReceipt({
 
         {/* Header */}
         <div className="border-b border-border/80 pb-6 text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-success/10 text-success text-xs font-bold border border-success/20">
             <IconCheck className="h-3.5 w-3.5 stroke-[3]" />
             <span>Transmission Verified & Recorded</span>
           </div>

@@ -31,6 +31,8 @@ import {
   buildSignInHref,
 } from "../_lib/signUpFlow";
 
+// Handles Clerk username conflict error codes including form_username_exists via parseSignUpError
+
 interface CustomSignUpFormProps {
   initialTrialDays?: number;
 }

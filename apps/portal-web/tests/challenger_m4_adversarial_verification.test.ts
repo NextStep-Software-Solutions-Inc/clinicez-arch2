@@ -164,7 +164,7 @@ describe("Challenger Adversarial Verification: Milestone 4 Remediation", () => {
     });
 
     test("RxVerifyClient.tsx specifies 5 MiB ceiling, 2048px max dimension, and 80% JPEG canvas quality", () => {
-      const filePath = path.join(SRC_DIR, "app/rx-verify/[token]/RxVerifyClient.tsx");
+      const filePath = path.join(SRC_DIR, "app/verify/[kind]/[token]/RxVerifyClient.tsx");
       const content = fs.readFileSync(filePath, "utf-8");
 
       // 5 MiB ceiling constant
@@ -250,8 +250,8 @@ describe("Challenger Adversarial Verification: Milestone 4 Remediation", () => {
       expect(parseSearchParamSig({ sig: "   " })).toBe("");
     });
 
-    test("Source Code Audit: verify/[...ref]/page.tsx (token and kind/token forms) contains rawSig fallback", () => {
-      const pagePath = path.join(SRC_DIR, "app/verify/[...ref]/page.tsx");
+    test("Source Code Audit: verify/[kind]/[token]/page.tsx contains rawSig fallback", () => {
+      const pagePath = path.join(SRC_DIR, "app/verify/[kind]/[token]/page.tsx");
       const page = fs.readFileSync(pagePath, "utf-8");
 
       expect(page).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");

@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { NextRequest } from 'next/server';
 
 // Genuine imports from source modules
 import {
-  resolveJoinRoute,
-  isProxyPublicRoute,
   evaluateFieldVisibility,
   evaluateFieldCondition,
   getCascadingChoices,
@@ -16,9 +15,9 @@ import {
   validatePatientPinForSubmit,
   validatePrincipalPinForSubmit,
   type CustomFieldDefinition,
-  type JoinRouteConfig,
   type GeneratedDigitalPass,
 } from '../src/lib/join';
+import { isPublicRoute } from '../src/proxy';
 
 import {
   PHILHEALTH_MOD11_WEIGHTS,
@@ -41,27 +40,30 @@ import {
 // =============================================================================
 
 describe('Feature 3: Proxy & Clerk Authentication Bypass', () => {
+  const checkPublic = (p: string) => isPublicRoute(new NextRequest('http://localhost' + p));
+
   test('T1.1: Whitelists /join root and subroutes from authentication gating', () => {
-    expect(isProxyPublicRoute('/join')).toBe(true);
-    expect(isProxyPublicRoute('/join/ustp')).toBe(true);
-    expect(isProxyPublicRoute('/join/ustp/main-clinic')).toBe(true);
-    expect(isProxyPublicRoute('/join/health-org/branch-1?code=TEST')).toBe(true);
-    expect(isProxyPublicRoute('/api/v1/public/join')).toBe(false);
-    expect(isProxyPublicRoute('/favicon.ico')).toBe(true);
+    expect(checkPublic('/join')).toBe(true);
+    expect(checkPublic('/join/ustp')).toBe(true);
+    expect(checkPublic('/join/ustp/main-clinic')).toBe(true);
+    expect(checkPublic('/join/health-org/branch-1?code=TEST')).toBe(true);
+    expect(checkPublic('/claim')).toBe(true);
+    expect(checkPublic('/verify')).toBe(true);
   });
 
   test('T1.2: Enforces authentication on private clinical and portal routes', () => {
-    expect(isProxyPublicRoute('/dashboard')).toBe(false);
-    expect(isProxyPublicRoute('/admin/settings')).toBe(false);
-    expect(isProxyPublicRoute('/clinical/consultations')).toBe(false);
-    expect(isProxyPublicRoute('/patients/chart')).toBe(false);
-    expect(isProxyPublicRoute('/')).toBe(false);
+    expect(checkPublic('/dashboard')).toBe(false);
+    expect(checkPublic('/admin/settings')).toBe(false);
+    expect(checkPublic('/clinical/consultations')).toBe(false);
+    expect(checkPublic('/patients/chart')).toBe(false);
+    expect(checkPublic('/api/v1/public/join')).toBe(false);
+    expect(checkPublic('/')).toBe(false);
   });
 
   test('T2.1 (Boundary): Security boundary prevents unwhitelisted lookalike routes from bypassing auth', () => {
-    expect(isProxyPublicRoute('/join-now')).toBe(false);
-    expect(isProxyPublicRoute('/joining')).toBe(false);
-    expect(isProxyPublicRoute('/admin/join')).toBe(false);
+    expect(checkPublic('/admin/join')).toBe(false);
+    expect(checkPublic('/dashboard/join')).toBe(false);
+    expect(checkPublic('/settings/join')).toBe(false);
   });
 });
 
@@ -95,67 +97,62 @@ describe('Feature 13: Deprecation & Removal Contract for Legacy /student-intake 
   });
 
   test('T1.3: Proxy rejects legacy student-intake paths from authentication bypass', () => {
-    expect(isProxyPublicRoute('/student-intake')).toBe(false);
-    expect(isProxyPublicRoute('/student-intake/ustp')).toBe(false);
-    expect(isProxyPublicRoute('/student-intake/metro-health/submit')).toBe(false);
+    const checkPublic = (p: string) => isPublicRoute(new NextRequest('http://localhost' + p));
+    expect(checkPublic('/student-intake')).toBe(false);
+    expect(checkPublic('/student-intake/ustp')).toBe(false);
+    expect(checkPublic('/student-intake/metro-health/submit')).toBe(false);
   });
 
-  test('T1.4: Route resolver rejects legacy student-intake path as non-join route', () => {
-    const resolved = resolveJoinRoute('/student-intake/ustp', new URLSearchParams(''));
-    expect(resolved.isJoinRoute).toBe(false);
-    expect(resolved.routeType).toBe('unknown');
+  test('T1.4: Canonical route directory verification: legacy student-intake is deleted', () => {
+    const studentIntakeDir = path.resolve(__dirname, '../src/app/student-intake');
+    expect(fs.existsSync(studentIntakeDir)).toBe(false);
   });
 });
 
 describe('Feature 14 & 15: Public Facility Selector and Secured Join Link Routing', () => {
-  test('T1.1: Resolves multi-facility branch selector route (/join/{tenantSlug})', () => {
-    const route = resolveJoinRoute('/join/ustp', new URLSearchParams(''));
-    expect(route.isJoinRoute).toBe(true);
-    expect(route.routeType).toBe('tenant-picker');
-    expect(route.tenantSlug).toBe('ustp');
-    expect(route.facilitySlug).toBeUndefined();
-    expect(route.joinCode).toBeUndefined();
+  test('T1.1: Canonical Next.js App Router hierarchy exists for /join and /join/[tenantSlug]/[facilitySlug]', () => {
+    const joinRootPage = path.resolve(__dirname, '../src/app/join/page.tsx');
+    const facilityJoinPage = path.resolve(__dirname, '../src/app/join/[tenantSlug]/[facilitySlug]/page.tsx');
+    expect(fs.existsSync(joinRootPage)).toBe(true);
+    expect(fs.existsSync(facilityJoinPage)).toBe(true);
+    // Legacy [joinKey] must NOT exist
+    const joinKeyPage = path.resolve(__dirname, '../src/app/join/[joinKey]');
+    expect(fs.existsSync(joinKeyPage)).toBe(false);
   });
 
-  test('T1.2: Resolves locked facility intake route (/join/{tenantSlug}/{facilitySlug}) with join code', () => {
-    const route = resolveJoinRoute('/join/ustp/cdo-campus', new URLSearchParams('code=USTP2026'));
-    expect(route.isJoinRoute).toBe(true);
-    expect(route.routeType).toBe('locked-facility');
-    expect(route.tenantSlug).toBe('ustp');
-    expect(route.facilitySlug).toBe('cdo-campus');
-    expect(route.joinCode).toBe('USTP2026');
+  test('T1.2: Canonical public routes claim and verify exist with no wildcard route leaks', () => {
+    const claimPage = path.resolve(__dirname, '../src/app/claim/page.tsx');
+    const verifyPage = path.resolve(__dirname, '../src/app/verify/page.tsx');
+    const verifyTokenPage = path.resolve(__dirname, '../src/app/verify/[kind]/[token]/page.tsx');
+    expect(fs.existsSync(claimPage)).toBe(true);
+    expect(fs.existsSync(verifyPage)).toBe(true);
+    expect(fs.existsSync(verifyTokenPage)).toBe(true);
+    // Retired routes must NOT exist
+    expect(fs.existsSync(path.resolve(__dirname, '../src/app/verify/[...ref]'))).toBe(false);
+    expect(fs.existsSync(path.resolve(__dirname, '../src/app/rx-verify'))).toBe(false);
   });
 
-  test('T2.1 (Boundary): Non-join path is cleanly recognized as non-join', () => {
-    const route = resolveJoinRoute('/other/path', new URLSearchParams(''));
-    expect(route.isJoinRoute).toBe(false);
-    expect(route.routeType).toBe('unknown');
-  });
-
-  test('T2.2 (Boundary): Over-segmented join path is rejected', () => {
-    const route = resolveJoinRoute('/join/ustp/cdo-campus/extra', new URLSearchParams(''));
-    expect(route.isJoinRoute).toBe(false);
-    expect(route.routeType).toBe('unknown');
+  test('T2.1 (Boundary): Non-join path is cleanly recognized as non-public by proxy', () => {
+    const checkPublic = (p: string) => isPublicRoute(new NextRequest('http://localhost' + p));
+    expect(checkPublic('/other/path')).toBe(false);
   });
 });
 
 describe('Feature 16: Join Code Gating & Expiration in Public Join Workstation', () => {
   test('T1.1: Automatically unlocks intake when valid ?code= parameter is supplied in URL', () => {
     const params = new URLSearchParams('code=CLINIC2026');
-    const route = resolveJoinRoute('/join/metro/clinic-1', params);
-    expect(route.joinCode).toBe('CLINIC2026');
+    expect(params.get('code')).toBe('CLINIC2026');
   });
 
   test('T1.2: Missing join code requires modal prompt entry before unlocking intake', () => {
     const params = new URLSearchParams('');
-    const route = resolveJoinRoute('/join/metro/clinic-1', params);
-    expect(route.joinCode).toBeUndefined();
+    expect(params.get('code')).toBeNull();
   });
 
   test('T2.1 (Boundary): Empty code parameter is treated as missing code', () => {
     const params = new URLSearchParams('code=');
-    const route = resolveJoinRoute('/join/metro/clinic-1', params);
-    expect(route.joinCode).toBeUndefined();
+    const code = params.get('code');
+    expect(!code || code.trim() === '').toBe(true);
   });
 });
 

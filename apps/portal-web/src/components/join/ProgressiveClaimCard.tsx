@@ -457,7 +457,11 @@ export function ProgressiveClaimCard({
             <ArrowRight className="w-4 h-4" />
           </button>
         ) : isInsideClerk ? (
-          <SignInButton mode="modal">
+          <SignInButton
+            mode="modal"
+            forceRedirectUrl={`/claim?token=${encodeURIComponent(claimToken)}`}
+            fallbackRedirectUrl={`/claim?token=${encodeURIComponent(claimToken)}`}
+          >
             <button
               type="button"
               className="w-full inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm sm:text-base transition-all shadow-lg shadow-primary/20 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"

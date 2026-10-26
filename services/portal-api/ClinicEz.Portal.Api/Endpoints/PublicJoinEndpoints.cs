@@ -322,7 +322,7 @@ public sealed class PublicJoinEndpoints : IEndpoint
             }
             else
             {
-                var claimUrl = $"{baseUrl}/join/claim?token={Uri.EscapeDataString(claimToken)}";
+                var claimUrl = PublicRoutes.Claim(claimToken, baseUrl);
 
                 publisher.Enqueue(
                     InteropTypes.NotificationEmailRequested,

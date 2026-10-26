@@ -304,8 +304,8 @@ export default function RxUploadClient({ token }: { token: string }) {
 
   if (rxInfo.isExpired) {
     return renderShell(
-      <Card className="w-full max-w-md p-8 text-center rounded-3xl border-amber-200 dark:border-amber-900 bg-amber-50/30 dark:bg-amber-950/20 shadow-sm">
-        <div className="size-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+      <Card className="w-full max-w-md p-8 text-center rounded-3xl border-warning/30 bg-warning/5 shadow-sm">
+        <div className="size-12 rounded-full bg-warning/15 text-warning flex items-center justify-center mx-auto mb-3">
           <IconClock className="h-6 w-6" />
         </div>
         <h2 className="text-lg font-bold text-foreground">e-Prescription Expired</h2>
@@ -353,7 +353,7 @@ export default function RxUploadClient({ token }: { token: string }) {
             </div>
 
             {timeLeft && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-bold shrink-0">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-warning/10 text-warning border border-warning/20 text-xs font-bold shrink-0">
                 <IconClock className="h-3.5 w-3.5 shrink-0" />
                 <span>Valid for: {timeLeft.days}d {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s</span>
               </div>
@@ -469,8 +469,8 @@ export default function RxUploadClient({ token }: { token: string }) {
         {/* Pharmacy Dispense Submission Form */}
         <CardContent className="p-6 sm:p-8 space-y-6">
           {rxInfo.isAlreadyDispensed ? (
-            <div className="p-6 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-center space-y-2">
-              <div className="size-10 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <div className="p-6 rounded-2xl bg-warning/10 border border-warning/20 text-center space-y-2">
+              <div className="size-10 rounded-full bg-warning/15 text-warning flex items-center justify-center mx-auto">
                 <IconCheck className="h-5 w-5" />
               </div>
               <h3 className="font-bold text-sm text-foreground">Already Dispensed</h3>

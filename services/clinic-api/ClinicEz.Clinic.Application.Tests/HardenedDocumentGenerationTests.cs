@@ -230,7 +230,7 @@ public class HardenedDocumentGenerationTests
                 )
             },
             PublicVerificationToken: "test-rx-token",
-            PublicVerificationUrl: "https://clinicez.ph/rx-verify/test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/test-rx-token",
             QrPayload: "CLINICEZ:RX:RX-20261004-0011:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,
@@ -375,16 +375,6 @@ public class HardenedDocumentGenerationTests
         pdfText.Should().Contain("%%EOF");
     }
 
-    [Theory]
-    [InlineData("Juan Dela Cruz", "J**n D**a C**z")]
-    [InlineData("Maria Santos", "M***a S****s")]
-    [InlineData("Al Jo", "A* J*")]
-    public void DocumentVerificationResultDto_MaskName_Should_Protect_Patient_Privacy(string input, string expected)
-    {
-        var masked = ClinicEz.Clinic.Application.Features.Documents.DTOs.DocumentVerificationResultDto.MaskName(input);
-        masked.Should().Be(expected);
-    }
-
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Reception_Placard_PDF()
     {
@@ -404,7 +394,7 @@ public class HardenedDocumentGenerationTests
 
         var pdfBytes = _pdfService.GenerateReceptionPlacardPdf(
             settings,
-            "https://dev.clinicez.net/join/E2FW28KT",
+            "https://dev.clinicez.net/join?code=E2FW28KT",
             "E2FW28KT",
             "Oct 15, 2026, 08:49 AM GMT+8 (in 23h)");
 
@@ -1276,70 +1266,6 @@ public class HardenedDocumentGenerationTests
         Encoding.ASCII.GetString(medCertPdf, 0, 10).Should().StartWith("%PDF-");
     }
 
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_Should_Resolve_By_Security_Digest()
-    {
-        var testDigest = "a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0";
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(Guid.NewGuid());
-        clinicContext.TenantId.Returns("tenant-001");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<MediatR.ISender>();
-        var pdfService = Substitute.For<IClinicDocumentPdfService>();
-
-        var cert = new MedicalCertificate
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-001",
-            ClinicId = clinicContext.ClinicId,
-            CertificateNumber = "MC-20261020-0099",
-            PatientId = Guid.NewGuid(),
-            PatientName = "Maria Clara",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Allan Ramos",
-            PrcLicenseNumber = "PRC-0056789",
-            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            Diagnosis = "Acute Bronchitis",
-            FitnessStatus = "UnfitToWork",
-            Purpose = "Rest",
-            IsSigned = true,
-            SignedAt = DateTime.UtcNow,
-            SecurityDigest = testDigest
-        };
-
-        await medCertRepo.AddAsync(cert, CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender,
-            pdfService,
-            medCertRepo,
-            referralRepo,
-            staffRepo,
-            encounterRepo,
-            labOrderRepo,
-            settingsRepo,
-            patientRepo);
-
-        var actionResult = await controller.VerifyDocument(testDigest, CancellationToken.None);
-        actionResult.Should().NotBeNull();
-        actionResult.Result.Should().BeOfType<OkObjectResult>();
-
-        var okResult = (OkObjectResult)actionResult.Result!;
-        var response = okResult.Value as ApiResponse<ClinicEz.Clinic.Application.Features.Documents.DTOs.DocumentVerificationResultDto>;
-        response.Should().NotBeNull();
-        response!.Data.Should().NotBeNull();
-        response.Data!.IsVerified.Should().BeTrue();
-    }
-
     // =========================================================================
     // TEST GENERATION & EXTRACTION HELPERS
     // =========================================================================
@@ -1461,7 +1387,7 @@ public class HardenedDocumentGenerationTests
             SpecialInstructions: "Follow exact dosing schedule",
             Items: items,
             PublicVerificationToken: "test-rx-token",
-            PublicVerificationUrl: "https://clinicez.ph/verify/test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/test-rx-token",
             QrPayload: "CLINICEZ:RX:RX-20261020-0088:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,

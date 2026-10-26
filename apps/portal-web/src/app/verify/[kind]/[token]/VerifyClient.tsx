@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   ShieldCheck,
   Building2,
@@ -37,7 +37,7 @@ export interface DocumentVerificationData {
   statusCode?: number;
 }
 
-interface VerifyClientProps {
+export interface VerifyClientProps {
   token: string;
   kind?: string;
   data: DocumentVerificationData;
@@ -46,7 +46,6 @@ interface VerifyClientProps {
 
 export default function VerifyClient({ token, kind, data, initialSig = '' }: VerifyClientProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const [copied, setCopied] = useState(false);
   const [sealInput, setSealInput] = useState(initialSig);
   const [isSubmittingSeal, setIsSubmittingSeal] = useState(false);
@@ -67,8 +66,11 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
     if (!cleanSig) return;
 
     setIsSubmittingSeal(true);
-    const targetPath = pathname || (kind ? `/verify/${kind}/${token}` : `/verify/${token}`);
-    router.push(`${targetPath}?sig=${encodeURIComponent(cleanSig)}`);
+    // Preserves ref and sig when kind is undefined (/verify?ref=REF), or preserves kind/token when on /verify/{kind}/{token}
+    const targetUrl = kind
+      ? `/verify/${encodeURIComponent(kind)}/${encodeURIComponent(token)}?sig=${encodeURIComponent(cleanSig)}`
+      : `/verify?ref=${encodeURIComponent(token)}&sig=${encodeURIComponent(cleanSig)}`;
+    router.push(targetUrl);
   };
 
   return (
@@ -136,7 +138,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
         {data.isVerified ? (
           <div className="bg-success/10 border border-success/20 rounded-2xl p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-success flex items-center justify-center text-primary-foreground shrink-0 shadow-lg shadow-success/20">
+              <div className="h-14 w-14 rounded-2xl bg-success flex items-center justify-center text-primary-foreground shrink-0 shadow-lg">
                 <ShieldCheck className="h-8 w-8" />
               </div>
               <div className="flex-1">
@@ -156,7 +158,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
         ) : !data.requiresSignatureSeal ? (
           <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-destructive flex items-center justify-center text-primary-foreground shrink-0 shadow-lg shadow-destructive/20">
+              <div className="h-14 w-14 rounded-2xl bg-destructive flex items-center justify-center text-primary-foreground shrink-0 shadow-lg">
                 <Lock className="h-8 w-8" />
               </div>
               <div className="flex-1">
@@ -251,7 +253,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
 
             {/* Remarks / Clinical Findings Note */}
             {data.notes && (
-              <div className="bg-muted/50 border border-border rounded-xl p-4 text-xs text-foreground leading-relaxed">
+              <div className="bg-muted border border-border rounded-xl p-4 text-xs text-foreground leading-relaxed">
                 <span className="font-bold text-foreground block mb-1">Clinical Remarks / Order Summary:</span>
                 {data.notes}
               </div>

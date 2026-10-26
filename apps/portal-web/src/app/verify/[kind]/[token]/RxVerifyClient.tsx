@@ -50,7 +50,7 @@ export interface RxVerificationData {
   patientAllergies?: string | null;
   clinicalDiagnosis?: string | null;
   items?: PrescriptionItem[];
-  dispenseStatus: string; // 'Pending' | 'Dispensed' | 'DispensedExternally'
+  dispenseStatus: string;
   isValid: boolean;
   isAlreadyDispensed: boolean;
   dispensedPharmacyName?: string | null;
@@ -61,7 +61,7 @@ export interface RxVerificationData {
   isExpired?: boolean;
   hasDangerousDrug?: boolean;
   itemCount?: number;
-  syncStatus?: string; // 'Synced' | 'PendingClinicSync'
+  syncStatus?: string;
   isOfflinePending?: boolean;
 }
 
@@ -204,7 +204,6 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
       const portalApiUrl = getPortalApiUrl();
 
       if (receiptFile) {
-        // Multipart upload
         const formData = new FormData();
         formData.append('externalPharmacyName', finalPharmacy);
         if (branchLocation.trim()) formData.append('externalBranchLocation', branchLocation.trim());
@@ -229,7 +228,6 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
           throw new Error(errPayload.message || `Dispense recording failed with status ${response.status}`);
         }
       } else {
-        // JSON upload
         const targetUrl = joinApiUrl(
           portalApiUrl,
           `/public/rx-verify/${encodeURIComponent(token)}/dispense`
@@ -302,7 +300,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               Print
             </button>
             {data.isValid ? (
-              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-success/10 text-success border border-success/20">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 Cryptographically Verified
               </span>
@@ -317,13 +315,13 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
 
         {/* Edge Cell Offline Pending Clinic Sync Banner */}
         {isOfflinePending && (
-          <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 shadow-sm text-amber-900 flex items-start gap-3">
-            <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 shadow-sm text-foreground flex items-start gap-3">
+            <Clock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
             <div className="space-y-0.5 text-xs">
-              <p className="font-bold uppercase tracking-wider text-amber-800">
+              <p className="font-bold uppercase tracking-wider text-warning">
                 Authorized Offline Prescription (Edge Clinic Mode)
               </p>
-              <p className="text-amber-700">
+              <p className="text-muted-foreground">
                 This electronic prescription was legitimately issued by an accredited clinic facility operating in local Edge mode. Dispensing is fully authorized; fulfillment records will automatically synchronize across the Hub once connectivity is restored.
               </p>
             </div>
@@ -346,17 +344,17 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
             </div>
           </div>
         ) : isDispensed ? (
-          <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-5 shadow-sm">
+          <div className="bg-warning/10 border-2 border-warning/30 rounded-xl p-5 shadow-sm">
             <div className="flex items-start gap-3">
-              <BadgeAlert className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+              <BadgeAlert className="w-6 h-6 text-warning shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <h2 className="text-base font-bold text-amber-900">
+                <h2 className="text-base font-bold text-foreground">
                   PRESCRIPTION ALREADY DISPENSED
                 </h2>
-                <p className="text-sm text-amber-800">
+                <p className="text-sm text-muted-foreground">
                   This electronic prescription has already been fulfilled and is locked against duplicate dispensing.
                 </p>
-                <div className="mt-2 text-xs font-medium text-amber-900 bg-amber-100/70 p-3 rounded-lg border border-amber-200 flex flex-wrap gap-x-6 gap-y-1">
+                <div className="mt-2 text-xs font-medium text-foreground bg-warning/15 p-3 rounded-lg border border-warning/25 flex flex-wrap gap-x-6 gap-y-1">
                   <span>
                     <strong>Dispensed At:</strong> {data.dispensedPharmacyName || 'Accredited Drugstore'}
                   </span>
@@ -375,14 +373,14 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
             </div>
           </div>
         ) : (
-          <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-5 shadow-sm">
+          <div className="bg-success/10 border-2 border-success/30 rounded-xl p-5 shadow-sm">
             <div className="flex items-start gap-3">
-              <CheckCircle className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
+              <CheckCircle className="w-6 h-6 text-success shrink-0 mt-0.5" />
               <div>
-                <h2 className="text-base font-bold text-emerald-900">
+                <h2 className="text-base font-bold text-foreground">
                   ACTIVE & UNFULFILLED PRESCRIPTION
                 </h2>
-                <p className="text-sm text-emerald-800">
+                <p className="text-sm text-muted-foreground">
                   Authorized for one-time dispensing by any licensed pharmacist at an accredited drugstore.
                 </p>
               </div>
@@ -486,7 +484,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <Pill className="w-4 h-4 text-primary" />
               Prescribed Medications
             </span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <span className="text-xs font-bold px-2 py-0.5 rounded bg-success/15 text-success border border-success/25">
               Generics Act of 1988 (RA 6675)
             </span>
           </div>
@@ -595,7 +593,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                   <select
                     value={pharmacyName}
                     onChange={(e) => setPharmacyName(e.target.value)}
-                    className="w-full text-sm border border-border rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                   >
                     {COMMON_DRUGSTORES.map((d) => (
                       <option key={d} value={d}>
@@ -615,7 +613,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                       placeholder="e.g. Local Community Pharmacy"
                       value={customPharmacy}
                       onChange={(e) => setCustomPharmacy(e.target.value)}
-                      className="w-full text-sm border border-border rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                      className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                     />
                   </div>
                 ) : (
@@ -628,7 +626,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                       placeholder="e.g. Ayala Center Cebu, Makati Ave Branch"
                       value={branchLocation}
                       onChange={(e) => setBranchLocation(e.target.value)}
-                      className="w-full text-sm border border-border rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                      className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                     />
                   </div>
                 )}
@@ -645,7 +643,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                     placeholder="e.g. OR-2026-081923"
                     value={officialReceiptNumber}
                     onChange={(e) => setOfficialReceiptNumber(e.target.value)}
-                    className="w-full text-sm border border-border rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary font-mono"
+                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary font-mono"
                   />
                 </div>
 
@@ -659,7 +657,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                     placeholder="e.g. Maria Clara Santos, RPh"
                     value={pharmacistName}
                     onChange={(e) => setPharmacistName(e.target.value)}
-                    className="w-full text-sm border border-border rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
 
@@ -673,7 +671,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                     placeholder="e.g. PRC-0089123"
                     value={pharmacistPrcLicense}
                     onChange={(e) => setPharmacistPrcLicense(e.target.value)}
-                    className="w-full text-sm border border-border rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
               </div>
@@ -687,11 +685,11 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                   placeholder="e.g. Advised patient on taking with meals; generic substitution explained."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full text-sm border border-border rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                  className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                 />
               </div>
 
-              {/* Optional Receipt Attachment (<= 5 MiB with client compression) */}
+              {/* Receipt Attachment (<= 5 MiB with client compression) */}
               <div className="space-y-1.5 pt-1">
                 <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <UploadCloud className="w-4 h-4 text-primary" />
@@ -710,7 +708,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                     </span>
                   )}
                   {receiptFile && !compressing && (
-                    <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                    <span className="text-xs text-success font-semibold flex items-center gap-1">
                       <FileCheck className="w-3.5 h-3.5" />
                       Ready ({Math.round(receiptFile.size / 1024)} KB)
                     </span>
@@ -740,12 +738,12 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
             </form>
           </div>
         ) : submitSuccess ? (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center space-y-2">
-            <CheckCircle className="w-8 h-8 text-emerald-600 mx-auto" />
-            <h3 className="text-base font-bold text-emerald-900">
+          <div className="bg-success/10 border border-success/20 rounded-xl p-5 text-center space-y-2">
+            <CheckCircle className="w-8 h-8 text-success mx-auto" />
+            <h3 className="text-base font-bold text-foreground">
               Dispensing Confirmed & Recorded
             </h3>
-            <p className="text-xs text-emerald-700 max-w-md mx-auto">
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
               The electronic prescription is now permanently locked. Official receipt details have been transmitted to the prescribing doctor’s Clinic EMR.
             </p>
           </div>

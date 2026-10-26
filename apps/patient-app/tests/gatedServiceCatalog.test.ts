@@ -294,26 +294,29 @@ describe('Gated Service Catalog & Join Code Verification (Milestone 3)', () => {
       expect(result.services.length).toBe(2);
     });
 
-    test('reception QR parser accurately extracts 6-character join codes from multiple formats', () => {
-      // 1. Raw 6-character code
+    test('reception QR parser accurately extracts join codes from query parameters and raw codes', () => {
+      // 1. Raw join codes
       expect(parseReceptionQr('CDO202')).toBe('CDO202');
       expect(parseReceptionQr('ustp26')).toBe('USTP26');
 
-      // 2. Custom App URL scheme
+      // 2. Custom App URL scheme with query parameters
       expect(parseReceptionQr('clinicez://join?code=CDO202')).toBe('CDO202');
-      expect(parseReceptionQr('clinicez://join/VIP888')).toBe('VIP888');
+      expect(parseReceptionQr('clinicez://clinics/cdo/unlock?code=VIP888')).toBe('VIP888');
 
-      // 3. Web URL path segment
-      expect(parseReceptionQr('https://clinicez.ph/join/CDO202')).toBe('CDO202');
-      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-1/VIP888')).toBe('VIP888');
-
-      // 4. Web URL query parameter
+      // 3. Web URL query parameters (?code= or ?joinCode=)
+      expect(parseReceptionQr('https://clinicez.ph/join?code=CDO202')).toBe('CDO202');
+      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-1/facility-1?code=VIP888')).toBe('VIP888');
       expect(parseReceptionQr('https://clinicez.ph/clinic/details?joinCode=CDO202')).toBe('CDO202');
 
+      // 4. Legacy path-only URLs without query parameter return null (dropped path segment scanning)
+      expect(parseReceptionQr('clinicez://join/VIP888')).toBeNull();
+      expect(parseReceptionQr('https://clinicez.ph/join/CDO202')).toBeNull();
+      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-1/VIP888')).toBeNull();
+
       // 5. Invalid payloads return null
-      expect(parseReceptionQr('invalid-data')).toBeNull();
+      expect(parseReceptionQr('invalid_with_underscore')).toBeNull();
       expect(parseReceptionQr('')).toBeNull();
-      expect(parseReceptionQr('12345')).toBeNull(); // 5 chars
+      expect(parseReceptionQr('12')).toBeNull(); // 2 chars (< 3 chars min)
     });
   });
 

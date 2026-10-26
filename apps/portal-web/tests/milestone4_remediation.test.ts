@@ -69,7 +69,7 @@ describe("Milestone 4 Remediation: Core Logic & Semantic Standards", () => {
     });
 
     test("VerifyClient.tsx contains zero amber-* and emerald-* utility classes", () => {
-      const filePath = path.join(SRC_DIR, "app/verify/[...ref]/VerifyClient.tsx");
+      const filePath = path.join(SRC_DIR, "app/verify/[kind]/[token]/VerifyClient.tsx");
       const content = fs.readFileSync(filePath, "utf-8");
 
       const emeraldMatches = content.match(/\bemerald-[a-z0-9/-]+/g);
@@ -111,7 +111,7 @@ describe("Milestone 4 Remediation: Core Logic & Semantic Standards", () => {
     });
 
     test("verify page.tsx incorporates rawSig fallback", () => {
-      const pagePath = path.join(SRC_DIR, "app/verify/[...ref]/page.tsx");
+      const pagePath = path.join(SRC_DIR, "app/verify/[kind]/[token]/page.tsx");
       const pageContent = fs.readFileSync(pagePath, "utf-8");
 
       expect(pageContent).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");

@@ -26,7 +26,7 @@ export function JoinCodeErrorCard({
     const clean = retryCode.trim().toUpperCase();
     if (!clean) return;
     setIsNavigating(true);
-    router.push(`/join/${encodeURIComponent(clean)}`);
+    router.push(`/join?code=${encodeURIComponent(clean)}`);
   };
 
   const isExpired = statusCode === 410 || errorCode === "JOIN_CODE_EXPIRED";

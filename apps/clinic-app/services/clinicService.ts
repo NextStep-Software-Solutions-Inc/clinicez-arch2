@@ -1850,22 +1850,6 @@ export interface ReferralLetterRecord {
   createdAt: string;
 }
 
-export interface DocumentVerificationResult {
-  isVerified: boolean;
-  documentType: string;
-  documentNumber: string;
-  facilityName: string;
-  facilityAddress: string;
-  patientMaskedName: string;
-  doctorName: string;
-  doctorPrcLicense: string;
-  issueDate: string;
-  status: string;
-  securityDigest: string;
-  verificationMessage: string;
-  notes?: string;
-}
-
 export interface ClinicRecordAttachmentRecord {
   id: string;
   tenantId: string;
@@ -3294,9 +3278,6 @@ export const clinicService = {
     return clinicApiUrl(`/documents/referrals/${id}/pdf${qs}`);
   },
 
-  async verifyDocument(securityDigestOrNumber: string) {
-    return clinicApiClient.get<DocumentVerificationResult>(`/documents/verify/${encodeURIComponent(securityDigestOrNumber)}`);
-  },
 
   // Records & Attachments
   async uploadRecordAttachment(payload: {

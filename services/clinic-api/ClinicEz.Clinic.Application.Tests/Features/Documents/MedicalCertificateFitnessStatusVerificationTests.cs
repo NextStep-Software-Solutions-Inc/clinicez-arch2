@@ -188,52 +188,8 @@ public class MedicalCertificateFitnessStatusVerificationTests
     }
 
     // =========================================================================
-    // 3. DocumentsController.VerifyDocument & VERTICAL END-TO-END FLOW TESTS
+    // 3. DocumentsController VERTICAL END-TO-END FLOW TESTS
     // =========================================================================
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_MedicalCertificate_ByCertificateNumber_ShouldReturnFormattedNotes()
-    {
-        var (controller, cert, _) = await SetupControllerWithCertAsync("FitToWork", 3);
-
-        var result = await controller.VerifyDocument(cert.CertificateNumber, CancellationToken.None);
-
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.IsVerified.Should().BeTrue();
-        resp.Data.Notes.Should().Be("Fitness Status: FIT TO WORK • Rest Recommended: 3 day(s)");
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_MedicalCertificate_BySecurityDigest_ShouldReturnFormattedNotes()
-    {
-        var (controller, _, digest) = await SetupControllerWithCertAsync("UnfitToWork", 5);
-
-        var result = await controller.VerifyDocument(digest, CancellationToken.None);
-
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.IsVerified.Should().BeTrue();
-        resp.Data.Notes.Should().Be("Fitness Status: UNFIT TO WORK • Rest Recommended: 5 day(s)");
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_MedicalCertificate_WhenRestDaysNull_ShouldDefaultTo0Days()
-    {
-        var (controller, cert, _) = await SetupControllerWithCertAsync("LightDuty", null);
-
-        var result = await controller.VerifyDocument(cert.CertificateNumber, CancellationToken.None);
-
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.Notes.Should().Be("Fitness Status: LIGHT DUTY • Rest Recommended: 0 day(s)");
-    }
 
     [Theory]
     [InlineData("FitToWork", "FIT TO WORK", "FITTOWORK")]
@@ -241,7 +197,7 @@ public class MedicalCertificateFitnessStatusVerificationTests
     [InlineData("FitToSchool", "FIT TO SCHOOL", "FITTOSCHOOL")]
     [InlineData("LightDuty", "LIGHT DUTY", "LIGHTDUTY")]
     [InlineData("FitWithRestrictions", "FIT WITH RESTRICTIONS", "FITWITHRESTRICTIONS")]
-    public async Task EndToEnd_IssueCommand_DownloadPdf_And_VerifyDocument_ShouldPreserveWireCodeAndFormatOutputs(
+    public async Task EndToEnd_IssueCommand_And_DownloadPdf_ShouldPreserveWireCodeAndFormatOutputs(
         string selectedFitnessCode, string expectedDisplay, string unspacedAntiPattern)
     {
         var clinicId = Guid.NewGuid();
@@ -254,8 +210,6 @@ public class MedicalCertificateFitnessStatusVerificationTests
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
         var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
 
@@ -290,7 +244,7 @@ public class MedicalCertificateFitnessStatusVerificationTests
 
         var controller = new DocumentsController(
             Substitute.For<ISender>(), _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
+            settingsRepo, patientRepo, uow);
 
         // 2. Download generated OMC PDF via controller endpoint
         var downloadAction = await controller.DownloadMedicalCertificatePdf(dto.Id, wet: null, CancellationToken.None);
@@ -300,14 +254,6 @@ public class MedicalCertificateFitnessStatusVerificationTests
         var pdfText = ExtractExactPdfText(fileContent.FileContents);
         pdfText.Should().Contain($"Fitness Status: {expectedDisplay}");
         pdfText.Should().NotContain(unspacedAntiPattern);
-
-        // 3. Verify QR / security digest public lookup
-        var verifyAction = await controller.VerifyDocument(persisted.SecurityDigest!, CancellationToken.None);
-        verifyAction.Result.Should().BeOfType<OkObjectResult>();
-        var okVerify = (OkObjectResult)verifyAction.Result!;
-        var verifyResp = (ApiResponse<DocumentVerificationResultDto>)okVerify.Value!;
-        verifyResp.Data.Should().NotBeNull();
-        verifyResp.Data!.Notes.Should().Be($"Fitness Status: {expectedDisplay} • Rest Recommended: 2 day(s)");
     }
 
     // =========================================================================
@@ -342,55 +288,6 @@ public class MedicalCertificateFitnessStatusVerificationTests
         IsSigned = true,
         SignedAt = DateTime.UtcNow
     };
-
-    private static async Task<(DocumentsController Controller, MedicalCertificate Cert, string Digest)> SetupControllerWithCertAsync(
-        string fitnessStatus, int? restDays)
-    {
-        var testDigest = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
-        var clinicId = Guid.NewGuid();
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(clinicId);
-        clinicContext.TenantId.Returns("tenant-001");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<ISender>();
-        var pdfService = Substitute.For<IClinicDocumentPdfService>();
-
-        var cert = new MedicalCertificate
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-001",
-            ClinicId = clinicId,
-            CertificateNumber = "MC-20261024-9999",
-            PatientId = Guid.NewGuid(),
-            PatientName = "Maria Clara",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Allan Ramos",
-            PrcLicenseNumber = "PRC-0056789",
-            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            Diagnosis = "Acute Bronchitis",
-            FitnessStatus = fitnessStatus,
-            RecommendedRestDays = restDays,
-            SecurityDigest = testDigest
-        };
-
-        await medCertRepo.AddAsync(cert, CancellationToken.None);
-        await settingsRepo.AddAsync(new ClinicSettings { ClinicId = clinicId, TenantId = "tenant-001", ClinicName = "St. Jude Clinic" }, CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender, pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
-
-        return (controller, cert, testDigest);
-    }
 
     /// <summary>
     /// Resolves PDF indirect objects, per-font /ToUnicode CMap streams (/Font &lt;&lt; /F* N 0 R &gt;&gt; -&gt; /ToUnicode M 0 R),

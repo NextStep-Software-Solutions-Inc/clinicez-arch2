@@ -26,14 +26,17 @@ const ISSUE_74_FRONTEND_COMPONENTS = [
   "app/(main)/contact-us/_components/ContactUsClient.tsx",
   "components/NewsletterForm.tsx",
   "components/join/MobileAppStoreBadges.tsx",
-  "app/join/[joinKey]/page.tsx",
-  "app/join/[joinKey]/[facilitySlug]/page.tsx",
+  "app/join/page.tsx",
+  "app/join/[tenantSlug]/[facilitySlug]/page.tsx",
+  "components/join/JoinLandingClient.tsx",
   "components/join/JoinCodeErrorCard.tsx",
-  "app/rx-verify/[token]/page.tsx",
-  "app/rx-verify/[token]/RxVerifyClient.tsx",
+  "app/claim/page.tsx",
   "app/upload/rx/[token]/RxUploadClient.tsx",
-  "app/verify/[...ref]/page.tsx",
-  "app/verify/[...ref]/VerifyClient.tsx",
+  "app/verify/page.tsx",
+  "app/verify/VerifyLookupClient.tsx",
+  "app/verify/[kind]/[token]/page.tsx",
+  "app/verify/[kind]/[token]/VerifyClient.tsx",
+  "app/verify/[kind]/[token]/RxVerifyClient.tsx",
   "app/queue-display/[tenantSlug]/[facilitySlug]/page.tsx",
   "app/queue-tv/[facilitySlug]/page.tsx",
   "components/queue-display/QueueDisplayClient.tsx",
@@ -104,5 +107,43 @@ describe("Issue #74: Design Tokens & Zero Raw Hex Literal Audit", () => {
       expect(claimContent).toMatch(/text-foreground|text-muted-foreground|bg-card/);
       expect(claimContent).not.toMatch(/#[0-9a-fA-F]{6}/);
     });
+  });
+
+  describe("Tier 4: Forbidden Palette Utility Classes Audit", () => {
+    const FORBIDDEN_PALETTE_REGEX = /\b(?:emerald|amber|yellow)-(?:[1-9]00|50|950)(?:\/[0-9]+)?\b/g;
+
+    const PUBLIC_PORTAL_COMPONENTS = [
+      "app/join/page.tsx",
+      "app/join/[tenantSlug]/[facilitySlug]/page.tsx",
+      "components/join/JoinLandingClient.tsx",
+      "components/join/JoinCodeErrorCard.tsx",
+      "components/join/JoinClient.tsx",
+      "components/join/OutsideDocumentDropzone.tsx",
+      "components/join/ProgressiveClaimCard.tsx",
+      "app/claim/page.tsx",
+      "app/verify/page.tsx",
+      "app/verify/VerifyLookupClient.tsx",
+      "app/verify/[kind]/[token]/page.tsx",
+      "app/verify/[kind]/[token]/VerifyClient.tsx",
+      "app/verify/[kind]/[token]/RxVerifyClient.tsx",
+      "components/dropzone/PrintableDropzoneReceipt.tsx",
+      "app/upload/rx/[token]/RxUploadClient.tsx",
+      "app/upload/lab/[token]/LabUploadClient.tsx",
+      "app/invitations/[token]/InvitationAcceptClient.tsx",
+      "app/reset-password/[token]/PasswordResetClient.tsx",
+    ];
+
+    for (const relPath of PUBLIC_PORTAL_COMPONENTS) {
+      test(`T4.1: Component ${relPath} contains ZERO emerald/amber/yellow forbidden classes`, () => {
+        const fullPath = path.join(SRC_DIR, relPath);
+        if (!fs.existsSync(fullPath)) {
+          throw new Error(`Component file not found on disk: ${relPath}`);
+        }
+
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const matches = content.match(FORBIDDEN_PALETTE_REGEX);
+        expect(matches).toBeNull();
+      });
+    }
   });
 });

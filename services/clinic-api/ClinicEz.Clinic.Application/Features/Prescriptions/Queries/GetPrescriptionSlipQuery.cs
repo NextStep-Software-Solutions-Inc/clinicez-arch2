@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Security;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
@@ -88,10 +89,8 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
         }
 
         var token = encounter.RxPublicVerificationToken;
-        var portalBase = VerificationUrlResolver.Resolve(_configuration).TrimEnd('/');
-        var rxVerifyUrl = !string.IsNullOrWhiteSpace(portalBase)
-            ? $"{portalBase}/rx-verify/{token}"
-            : $"/rx-verify/{token}";
+        var portalBase = VerificationUrlResolver.Resolve(_configuration);
+        var rxVerifyUrl = PublicRoutes.VerifyRx(token!, portalBase);
         var uploadUrl = rxVerifyUrl;
         var qrPayload = rxVerifyUrl;
 

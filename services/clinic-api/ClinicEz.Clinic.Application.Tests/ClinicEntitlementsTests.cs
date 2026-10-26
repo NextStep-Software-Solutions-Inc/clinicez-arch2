@@ -386,7 +386,6 @@ public class ClinicEntitlementsTests
         app.MapPost("/api/v1/auth/login", () => Results.Ok("signed-in"));
         app.MapPost("/api/v1/public/lab-upload/token", () => Results.Ok("uploaded"));
         app.MapPost("/api/v1/public/rx-verify/token/dispense", () => Results.Ok("dispensed"));
-        app.MapGet("/api/v1/documents/verify/RX-1", () => Results.Ok("verified"));
         app.MapPost("/api/v1/patients/public/student-intake", () => Results.Ok("intake"));
         app.MapGet("/health", () => Results.Ok("healthy"));
         await app.StartAsync();
@@ -459,7 +458,6 @@ public class ClinicEntitlementsTests
 
         (await StaffPost(client, "/api/v1/public/lab-upload/token")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await StaffPost(client, "/api/v1/public/rx-verify/token/dispense")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await StaffGet(client, "/api/v1/documents/verify/RX-1")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await StaffPost(client, "/api/v1/patients/public/student-intake")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 

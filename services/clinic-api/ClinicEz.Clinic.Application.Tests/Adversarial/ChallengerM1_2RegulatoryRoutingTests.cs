@@ -120,7 +120,7 @@ public class ChallengerM1_2RegulatoryRoutingTests
             SpecialInstructions: "Follow prescribed timing strictly",
             Items: items,
             PublicVerificationToken: "test-rx-token",
-            PublicVerificationUrl: "https://clinicez.ph/verify/test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/test-rx-token",
             QrPayload: "CLINICEZ:RX:RX-2026-001:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,
@@ -456,7 +456,7 @@ public class ChallengerM1_2RegulatoryRoutingTests
 
         var controller = new DocumentsController(
             sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
+            settingsRepo, patientRepo);
 
         // 1. When wet: true -> suppresses digital badge
         var wetResult = await controller.DownloadMedicalCertificatePdf(cert.Id, wet: true, CancellationToken.None);
@@ -531,7 +531,7 @@ public class ChallengerM1_2RegulatoryRoutingTests
 
         var controller = new DocumentsController(
             sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
+            settingsRepo, patientRepo);
 
         // 1. When wet: true -> suppresses digital badge
         var wetResult = await controller.DownloadReferralLetterPdf(referral.Id, wet: true, CancellationToken.None);
@@ -602,277 +602,6 @@ public class ChallengerM1_2RegulatoryRoutingTests
         var eSignPdf = ExtractTextFromPdf(((FileContentResult)eSignResult).FileContents);
         eSignPdf.Should().Contain("Digitally Certified & Locked");
         eSignPdf.Should().Contain("Security Hash");
-    }
-
-    // =========================================================================
-    // 4. SECURITY DIGEST VERIFICATION RESOLUTION (/verify/{digest})
-    // =========================================================================
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_SecurityDigestResolution_MedicalCertificate()
-    {
-        var testDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-        var clinicId = Guid.NewGuid();
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(clinicId);
-        clinicContext.TenantId.Returns("tenant-test-01");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<ISender>();
-
-        var cert = new MedicalCertificate
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-test-01",
-            ClinicId = clinicId,
-            CertificateNumber = "MC-20261020-0055",
-            PatientId = Guid.NewGuid(),
-            PatientName = "Maria Clara De Los Santos",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Allan Ramos",
-            PrcLicenseNumber = "PRC-0056789",
-            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            Diagnosis = "Acute Bronchitis",
-            FitnessStatus = "UnfitToWork",
-            RecommendedRestDays = 3,
-            Purpose = "Employment",
-            IsSigned = true,
-            SignedAt = DateTime.UtcNow,
-            SecurityDigest = testDigest
-        };
-        await medCertRepo.AddAsync(cert, CancellationToken.None);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
-
-        // ACT 1: Verify using exact 64-char security digest
-        var resultByDigest = await controller.VerifyDocument(testDigest, CancellationToken.None);
-        resultByDigest.Result.Should().BeOfType<OkObjectResult>();
-        var okResult1 = (OkObjectResult)resultByDigest.Result!;
-        var resp1 = (ApiResponse<DocumentVerificationResultDto>)okResult1.Value!;
-        resp1.Data.Should().NotBeNull();
-        resp1.Data!.IsVerified.Should().BeTrue();
-        resp1.Data.DocumentType.Should().Be("Medical Certificate");
-        resp1.Data.DocumentNumber.Should().Be("MC-20261020-0055");
-        resp1.Data.SecurityDigest.Should().Be(testDigest);
-        resp1.Data.PatientMaskedName.Should().Be("M***a C***a D* L*s S****s");
-
-        // ACT 2: Verify using certificate number
-        var resultByNumber = await controller.VerifyDocument("MC-20261020-0055", CancellationToken.None);
-        resultByNumber.Result.Should().BeOfType<OkObjectResult>();
-
-        // ACT 3: Verify with leading/trailing whitespaces around digest
-        var resultWithWhitespace = await controller.VerifyDocument($"   {testDigest}   ", CancellationToken.None);
-        resultWithWhitespace.Result.Should().BeOfType<OkObjectResult>();
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_SecurityDigestResolution_ReferralLetter()
-    {
-        var testDigest = "7d865e959b2466918c9863afca942d0fb89d7c9ac0c99bafc3749504ded97730";
-        var clinicId = Guid.NewGuid();
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(clinicId);
-        clinicContext.TenantId.Returns("tenant-test-01");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<ISender>();
-
-        var referral = new ReferralLetter
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-test-01",
-            ClinicId = clinicId,
-            ReferralNumber = "REF-20261020-0099",
-            PatientId = Guid.NewGuid(),
-            PatientName = "Juanito Dela Cruz",
-            ReferringDoctorId = Guid.NewGuid(),
-            ReferringDoctorName = "Dr. Roberto Cruz",
-            ReferredToDoctor = "Dr. Teresa Lim",
-            ReferredToFacility = "Philippine Heart Center",
-            ReferredDepartment = "Cardiology",
-            ReferralDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            Urgency = "Urgent",
-            ProvisionalDiagnosis = "Hypertensive Emergency",
-            ReasonForReferral = "Coronary Angiography",
-            ClinicalSummary = "Chest pain",
-            IsSigned = true,
-            SignedAt = DateTime.UtcNow,
-            SecurityDigest = testDigest
-        };
-        await referralRepo.AddAsync(referral, CancellationToken.None);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
-
-        // ACT
-        var result = await controller.VerifyDocument(testDigest, CancellationToken.None);
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.IsVerified.Should().BeTrue();
-        resp.Data.DocumentType.Should().Be("Clinical Referral Letter");
-        resp.Data.DocumentNumber.Should().Be("REF-20261020-0099");
-        resp.Data.SecurityDigest.Should().Be(testDigest);
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_SecurityDigestResolution_ElectronicPrescription()
-    {
-        var rxToken = "rx-verify-tok-abcdef-123456";
-        var clinicId = Guid.NewGuid();
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(clinicId);
-        clinicContext.TenantId.Returns("tenant-test-01");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<ISender>();
-
-        var encounter = new ConsultationEncounter
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-test-01",
-            ClinicId = clinicId,
-            PatientId = Guid.NewGuid(),
-            PatientName = "Enrique Gil",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Roberto Gomez",
-            DoctorPrcLicense = "0089123",
-            EncounterDate = DateTime.UtcNow,
-            PrescriptionNumber = "RX-20261020-0044",
-            RxPublicVerificationToken = rxToken,
-            RxDispenseStatus = PrescriptionDispenseStatus.Issued
-        };
-        await encounterRepo.AddAsync(encounter, CancellationToken.None);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
-
-        // ACT
-        var result = await controller.VerifyDocument(rxToken, CancellationToken.None);
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.IsVerified.Should().BeTrue();
-        resp.Data.DocumentType.Should().Be("Electronic Prescription (e-Rx)");
-        resp.Data.DocumentNumber.Should().Be("RX-20261020-0044");
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_SecurityDigestResolution_DiagnosticRequisitionSlip()
-    {
-        var claimToken = "lab-token-claim-778899";
-        var clinicId = Guid.NewGuid();
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(clinicId);
-        clinicContext.TenantId.Returns("tenant-test-01");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<ISender>();
-
-        var labOrder = new ClinicLabOrder
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-test-01",
-            ClinicId = clinicId,
-            OrderNumber = "ORD-20261020-0011",
-            PatientId = Guid.NewGuid(),
-            PatientName = "Maria Clara De Los Santos",
-            OrderedByDoctorId = Guid.NewGuid(),
-            OrderedByDoctorName = "Dr. Maria Kristine Cruz",
-            OrderDate = DateTime.UtcNow,
-            ClaimToken = claimToken,
-            Status = LabOrderStatus.Ordered
-        };
-        await labOrderRepo.AddAsync(labOrder, CancellationToken.None);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
-
-        // ACT
-        var result = await controller.VerifyDocument(claimToken, CancellationToken.None);
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.IsVerified.Should().BeTrue();
-        resp.Data.DocumentType.Should().Be("Diagnostic Requisition Slip");
-        resp.Data.DocumentNumber.Should().Be("ORD-20261020-0011");
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_UnknownDigestOrTampered_ShouldReturn404NotFound()
-    {
-        var clinicId = Guid.NewGuid();
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(clinicId);
-        clinicContext.TenantId.Returns("tenant-test-01");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<ISender>();
-
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
-
-        // ACT: Request verification for non-existent digest
-        var result = await controller.VerifyDocument("deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd", CancellationToken.None);
-
-        // ASSERT: Must be NotFoundObjectResult
-        result.Result.Should().BeOfType<NotFoundObjectResult>();
-        var notFoundResult = (NotFoundObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)notFoundResult.Value!;
-        resp.Succeeded.Should().BeFalse();
-        resp.Message.Should().Contain("No verified medical document was found matching the identifier or seal");
     }
 
     // =========================================================================
