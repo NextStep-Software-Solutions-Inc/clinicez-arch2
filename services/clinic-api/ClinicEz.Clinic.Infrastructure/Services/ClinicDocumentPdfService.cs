@@ -880,6 +880,29 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         ClinicPatient? patient = null,
         string? queueNumber = null)
     {
+        return BuildBillingDocumentPdf(invoice, settings, doctor, patient, queueNumber, isOfficialReceipt: false);
+    }
+
+    public byte[] GenerateOfficialReceiptPdf(
+        Invoice invoice,
+        PaymentRecord? payment,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        ClinicPatient? patient = null,
+        string? queueNumber = null)
+    {
+        return BuildBillingDocumentPdf(invoice, settings, doctor, patient, queueNumber, isOfficialReceipt: true, specificPayment: payment);
+    }
+
+    private byte[] BuildBillingDocumentPdf(
+        Invoice invoice,
+        ClinicSettings settings,
+        StaffMember? doctor,
+        ClinicPatient? patient,
+        string? queueNumber,
+        bool isOfficialReceipt,
+        PaymentRecord? specificPayment = null)
+    {
         var config = MapToTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
 
@@ -891,24 +914,75 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             : (invoice.LineItems.FirstOrDefault(li => !string.IsNullOrWhiteSpace(li.DoctorName))?.DoctorName ?? "Attending Clinician");
         var doctorPrc = doctor?.PrcLicenseNumber ?? "Registered Clinician";
 
-        var orPayment = invoice.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
+        var orPayment = specificPayment ?? invoice.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
         var isPaid = invoice.Status == Domain.Enums.InvoiceStatus.Paid;
-        var statusLabel = isPaid ? "OFFICIAL RECEIPT" : "STATEMENT OF ACCOUNT";
-        var statusBadgeColor = isPaid ? "#16A34A" : primaryColor;
 
+        string statusLabel;
+        string statusBadgeText;
+        string statusBadgeColor;
+        string statusBadgeBg;
+        string refText;
+        string digestDocType;
+        string digestDocNumber;
+        string verifyDocType;
+        string complianceNotice;
         var issuedDateTime = invoice.CreatedAt != default ? invoice.CreatedAt : invoice.InvoiceDate;
+
+        if (isOfficialReceipt)
+        {
+            var orNumber = orPayment?.PaymentNumber ?? invoice.InvoiceNumber;
+            statusLabel = "OFFICIAL RECEIPT";
+            statusBadgeText = "OFFICIAL RECEIPT";
+            statusBadgeColor = "#16A34A";
+            statusBadgeBg = "#F0FDF4";
+            var payDate = orPayment != null ? orPayment.PaymentDate : issuedDateTime;
+            refText = !string.IsNullOrWhiteSpace(orPayment?.PaymentNumber)
+                ? $"Official Receipt: #{orPayment.PaymentNumber} • Invoice Ref: #{invoice.InvoiceNumber} • Issued: {payDate:MMMM dd, yyyy}"
+                : $"Official Receipt Ref: #{invoice.InvoiceNumber} • Issued: {issuedDateTime:MMMM dd, yyyy}";
+            digestDocType = "OFFICIAL-RECEIPT";
+            digestDocNumber = orNumber;
+            verifyDocType = "receipt";
+            complianceNotice = "Official Clinic EZ Official Receipt • BIR Compliant Healthcare Document under RA 8792 & RA 10173";
+        }
+        else
+        {
+            statusLabel = "STATEMENT OF ACCOUNT";
+            statusBadgeText = invoice.Status.ToString().ToUpperInvariant();
+            if (isPaid)
+            {
+                statusBadgeColor = "#16A34A";
+                statusBadgeBg = "#F0FDF4";
+            }
+            else if (invoice.Status == Domain.Enums.InvoiceStatus.PartiallyPaid)
+            {
+                statusBadgeColor = "#D97706";
+                statusBadgeBg = "#FFFBEB";
+            }
+            else
+            {
+                statusBadgeColor = primaryColor;
+                statusBadgeBg = "#F0FDFA";
+            }
+
+            refText = $"Document Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}";
+            digestDocType = "INVOICE-SOA";
+            digestDocNumber = invoice.InvoiceNumber;
+            verifyDocType = "invoice";
+            complianceNotice = "Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173";
+        }
+
         var digest = _securityService.ComputeDocumentDigest(
             invoice.TenantId ?? settings.TenantId,
-            isPaid ? "OFFICIAL-RECEIPT" : "INVOICE-SOA",
-            invoice.InvoiceNumber,
+            digestDocType,
+            digestDocNumber,
             invoice.PatientId,
             doctorPrc,
             issuedDateTime);
 
         var verifyUrl = _securityService.GenerateVerificationUrl(
             _verificationBaseUrl,
-            isPaid ? "receipt" : "invoice",
-            invoice.InvoiceNumber,
+            verifyDocType,
+            digestDocNumber,
             digest);
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
@@ -937,15 +1011,12 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         r.RelativeItem().Column(titleCol =>
                         {
                             titleCol.Item().Text(statusLabel).FontSize(14).Bold().FontColor(statusBadgeColor);
-                            var refText = isPaid && !string.IsNullOrWhiteSpace(orPayment?.PaymentNumber)
-                                ? $"Official Receipt: #{orPayment.PaymentNumber} • Invoice Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}"
-                                : $"Document Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}";
                             titleCol.Item().Text(refText).FontSize(8.5f).SemiBold().FontColor("#6B7280");
                         });
 
                         r.ConstantItem(120).AlignRight().Column(badgeCol =>
                         {
-                            badgeCol.Item().Border(1).BorderColor(statusBadgeColor).Background(isPaid ? "#F0FDF4" : "#F0FDFA").PaddingVertical(3).PaddingHorizontal(8).AlignCenter().Text(isPaid ? "OFFICIAL RECEIPT" : invoice.Status.ToString().ToUpperInvariant()).FontSize(9).Bold().FontColor(statusBadgeColor);
+                            badgeCol.Item().Border(1).BorderColor(statusBadgeColor).Background(statusBadgeBg).PaddingVertical(3).PaddingHorizontal(8).AlignCenter().Text(statusBadgeText).FontSize(9).Bold().FontColor(statusBadgeColor);
                         });
                     });
 
@@ -981,12 +1052,14 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             {
                                 if (isWalkInRetail)
                                 {
-                                    var cashierDisplayName = !string.IsNullOrWhiteSpace(invoice.BilledByStaffName)
-                                        ? invoice.BilledByStaffName
-                                        : "Cashier Station";
+                                    var cashierDisplayName = (isOfficialReceipt && orPayment != null && !string.IsNullOrWhiteSpace(orPayment.ReceivedByStaffName))
+                                        ? orPayment.ReceivedByStaffName
+                                        : (!string.IsNullOrWhiteSpace(invoice.BilledByStaffName)
+                                            ? invoice.BilledByStaffName
+                                            : "Cashier Station");
                                     c.Item().Text(t =>
                                     {
-                                        t.Span("Dispensed By: ").SemiBold().FontColor("#475569");
+                                        t.Span(isOfficialReceipt ? "Received By: " : "Dispensed By: ").SemiBold().FontColor("#475569");
                                         t.Span(cashierDisplayName).Bold().FontColor("#0F172A");
                                     });
                                     c.Item().PaddingTop(2).Text("Station: In-Clinic Cashier POS").FontSize(8.5f).FontColor("#475569");
@@ -999,9 +1072,12 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                         t.Span(docName).Bold().FontColor("#0F172A");
                                     });
                                     c.Item().PaddingTop(2).Text($"PRC License: {doctorPrc}").FontSize(8.5f).FontColor("#475569");
-                                    if (!string.IsNullOrWhiteSpace(invoice.BilledByStaffName))
+                                    var cashierDisplayName = (isOfficialReceipt && orPayment != null && !string.IsNullOrWhiteSpace(orPayment.ReceivedByStaffName))
+                                        ? orPayment.ReceivedByStaffName
+                                        : invoice.BilledByStaffName;
+                                    if (!string.IsNullOrWhiteSpace(cashierDisplayName))
                                     {
-                                        c.Item().PaddingTop(2).Text($"Cashier: {invoice.BilledByStaffName}").FontSize(8.5f).FontColor("#64748B");
+                                        c.Item().PaddingTop(2).Text($"Cashier: {cashierDisplayName}").FontSize(8.5f).FontColor("#64748B");
                                     }
                                 }
                             });
@@ -1086,46 +1162,71 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             r.RelativeItem().AlignRight().Text($"₱{invoice.NetAmount:N2}").FontSize(11.5f).Bold().FontColor(primaryColor);
                         });
 
-                        if (invoice.Payments.Any())
+                        if (isOfficialReceipt)
                         {
-                            foreach (var payRecord in invoice.Payments.OrderBy(p => p.PaymentDate))
-                            {
-                                totals.Item().PaddingTop(2).Row(r =>
-                                {
-                                    var refText = !string.IsNullOrWhiteSpace(payRecord.ReferenceNumber) ? $" (Ref: {payRecord.ReferenceNumber})" : "";
-                                    var payDesc = $"Paid ({payRecord.Method} - OR #{payRecord.PaymentNumber}{refText}):";
-                                    r.RelativeItem().Text(payDesc).FontSize(8.5f).SemiBold().FontColor("#16A34A");
-                                    r.RelativeItem().AlignRight().Text($"₱{payRecord.Amount:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
-                                });
-                            }
-
-                            if (invoice.Payments.Count > 1)
-                            {
-                                totals.Item().PaddingTop(1).Row(r =>
-                                {
-                                    r.RelativeItem().Text("Total Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
-                                    r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
-                                });
-                            }
-
-                            if (invoice.BalanceDue > 0)
-                            {
-                                totals.Item().PaddingTop(2).Row(r =>
-                                {
-                                    r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor("#DC2626");
-                                    r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor("#DC2626");
-                                });
-                            }
-                        }
-                        else if (invoice.AmountPaid > 0)
-                        {
+                            var payAmount = orPayment?.Amount ?? invoice.AmountPaid;
+                            var payMethod = orPayment?.Method.ToString() ?? "Cash";
+                            var refSuffix = !string.IsNullOrWhiteSpace(orPayment?.ReferenceNumber) ? $" (Ref: {orPayment.ReferenceNumber})" : "";
                             totals.Item().PaddingTop(2).Row(r =>
                             {
-                                r.RelativeItem().Text("Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
-                                r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                r.RelativeItem().Text($"Paid ({payMethod}{refSuffix}):").FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                r.RelativeItem().AlignRight().Text($"₱{payAmount:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
                             });
 
-                            if (invoice.BalanceDue > 0)
+                            totals.Item().PaddingTop(2).Row(r =>
+                            {
+                                var balColor = invoice.BalanceDue > 0 ? "#DC2626" : "#16A34A";
+                                r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor(balColor);
+                                r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor(balColor);
+                            });
+                        }
+                        else
+                        {
+                            if (invoice.Payments.Any())
+                            {
+                                foreach (var payRecord in invoice.Payments.OrderBy(p => p.PaymentDate))
+                                {
+                                    totals.Item().PaddingTop(2).Row(r =>
+                                    {
+                                        var refTextPayment = !string.IsNullOrWhiteSpace(payRecord.ReferenceNumber) ? $" (Ref: {payRecord.ReferenceNumber})" : "";
+                                        var payDesc = $"Paid ({payRecord.Method} - OR #{payRecord.PaymentNumber}{refTextPayment}):";
+                                        r.RelativeItem().Text(payDesc).FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                        r.RelativeItem().AlignRight().Text($"₱{payRecord.Amount:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                    });
+                                }
+
+                                if (invoice.Payments.Count > 1)
+                                {
+                                    totals.Item().PaddingTop(1).Row(r =>
+                                    {
+                                        r.RelativeItem().Text("Total Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                        r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                    });
+                                }
+
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    var balColor = invoice.BalanceDue > 0 ? "#DC2626" : "#16A34A";
+                                    r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor(balColor);
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor(balColor);
+                                });
+                            }
+                            else if (invoice.AmountPaid > 0)
+                            {
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    r.RelativeItem().Text("Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                });
+
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    var balColor = invoice.BalanceDue > 0 ? "#DC2626" : "#16A34A";
+                                    r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor(balColor);
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor(balColor);
+                                });
+                            }
+                            else
                             {
                                 totals.Item().PaddingTop(2).Row(r =>
                                 {
@@ -1150,13 +1251,13 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         Right = new SignatoryParty
                         {
                             SignatureSpaceHeight = 30,
-                            Name = invoice.BilledByStaffName ?? "Authorized Billing Officer",
-                            Title = "Billing Officer / Cashier",
+                            Name = (isOfficialReceipt && orPayment != null && !string.IsNullOrWhiteSpace(orPayment.ReceivedByStaffName))
+                                ? orPayment.ReceivedByStaffName
+                                : (invoice.BilledByStaffName ?? "Authorized Billing Officer"),
+                            Title = isOfficialReceipt ? "Cashier / Receiving Officer" : "Billing Officer / Cashier",
                             AlignCenter = true
                         },
-                        BottomComplianceNotice = isPaid
-                            ? "Official Clinic EZ Official Receipt • BIR Compliant Healthcare Document under RA 8792 & RA 10173"
-                            : "Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173"
+                        BottomComplianceNotice = complianceNotice
                     });
                 });
 

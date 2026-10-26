@@ -2491,6 +2491,11 @@ export const clinicService = {
     return clinicApiUrl(`/billing/invoices/${invoiceId}/pdf`);
   },
 
+  getReceiptPdfUrl(invoiceId: string, paymentId?: string) {
+    const qs = paymentId ? `?paymentId=${paymentId}` : '';
+    return clinicApiUrl(`/billing/invoices/${invoiceId}/receipt-pdf${qs}`);
+  },
+
   async downloadInvoicePreviewPdf(payload: {
     patientId?: string;
     patientName: string;

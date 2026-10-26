@@ -64,6 +64,57 @@ public sealed class BillingController : ControllerBase
     [HasPermission(ClinicPermissions.BillingRead)]
     public async Task<IActionResult> DownloadInvoicePdf(
         Guid id,
+        [FromQuery] string? type,
+        CancellationToken ct)
+    {
+        if (string.Equals(type, "receipt", StringComparison.OrdinalIgnoreCase))
+        {
+            return await DownloadReceiptPdf(id, null, ct);
+        }
+
+        if (_invoiceRepo == null || _pdfService == null)
+            return StatusCode(503, "Document generation service is unavailable.");
+
+        var invoice = await _invoiceRepo.Query(i => i.Id == id)
+            .Include(i => i.LineItems)
+            .Include(i => i.Payments)
+            .FirstOrDefaultAsync(ct);
+
+        if (invoice == null) return NotFound($"Invoice '{id}' not found.");
+
+        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new ClinicSettings
+        {
+            TenantId = invoice.TenantId ?? "default",
+            ClinicId = invoice.ClinicId,
+            ClinicName = "Clinic EZ Partner Medical Clinic"
+        };
+
+        var patient = (invoice.PatientId != Guid.Empty && _patientRepo != null)
+            ? await _patientRepo.GetByIdAsync(invoice.PatientId, ct)
+            : null;
+
+        var doctor = (invoice.AttendingDoctorId.HasValue && _staffRepo != null)
+            ? await _staffRepo.GetByIdAsync(invoice.AttendingDoctorId.Value, ct)
+            : null;
+
+        string? queueNumber = null;
+        if (invoice.QueueItemId.HasValue && _queueRepo != null)
+        {
+            var qItem = await _queueRepo.GetByIdAsync(invoice.QueueItemId.Value, ct);
+            queueNumber = qItem?.QueueNumber;
+        }
+
+        var pdfBytes = _pdfService.GenerateInvoicePdf(invoice, settings, doctor, patient, queueNumber);
+        var filename = $"SOA-{invoice.InvoiceNumber}.pdf";
+
+        return File(pdfBytes, "application/pdf", filename);
+    }
+
+    [HttpGet("invoices/{id:guid}/receipt-pdf")]
+    [HasPermission(ClinicPermissions.BillingRead)]
+    public async Task<IActionResult> DownloadReceiptPdf(
+        Guid id,
+        [FromQuery] Guid? paymentId,
         CancellationToken ct)
     {
         if (_invoiceRepo == null || _pdfService == null)
@@ -98,10 +149,18 @@ public sealed class BillingController : ControllerBase
             queueNumber = qItem?.QueueNumber;
         }
 
-        var pdfBytes = _pdfService.GenerateInvoicePdf(invoice, settings, doctor, patient, queueNumber);
-        var filename = invoice.Status == InvoiceStatus.Paid
-            ? $"Receipt-{invoice.InvoiceNumber}.pdf"
-            : $"SOA-{invoice.InvoiceNumber}.pdf";
+        PaymentRecord? payment = null;
+        if (paymentId.HasValue)
+        {
+            payment = invoice.Payments.FirstOrDefault(p => p.Id == paymentId.Value);
+        }
+        payment ??= invoice.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
+
+        var pdfBytes = _pdfService.GenerateOfficialReceiptPdf(invoice, payment, settings, doctor, patient, queueNumber);
+        var docNumber = payment != null && !string.IsNullOrWhiteSpace(payment.PaymentNumber)
+            ? payment.PaymentNumber
+            : invoice.InvoiceNumber;
+        var filename = $"Receipt-{docNumber}.pdf";
 
         return File(pdfBytes, "application/pdf", filename);
     }

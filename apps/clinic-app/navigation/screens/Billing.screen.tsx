@@ -171,6 +171,7 @@ export default function BillingScreen() {
   const [registryResults, setRegistryResults] = useState<ClinicPatient[]>([]);
   const [isSearchingRegistry, setIsSearchingRegistry] = useState(false);
   const [hasSearchedRegistry, setHasSearchedRegistry] = useState(false);
+  const [isRegistrySearchExpanded, setIsRegistrySearchExpanded] = useState(false);
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [patients, setPatients] = useState<BillingPatient[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -468,6 +469,7 @@ export default function BillingScreen() {
       existingInvoiceNumber: openInv ? openInv.invoiceNumber : paidInv?.invoiceNumber,
     };
     await handleSelectPatient(bp);
+    setIsRegistrySearchExpanded(false);
   }, [invoices, handleSelectPatient]);
 
   const handleSearchRegistry = useCallback(async () => {
@@ -487,6 +489,27 @@ export default function BillingScreen() {
       setIsSearchingRegistry(false);
     }
   }, [registrySearch]);
+
+  const handleClearRegistrySearch = useCallback(() => {
+    setRegistrySearch('');
+    setRegistryResults([]);
+    setHasSearchedRegistry(false);
+  }, []);
+
+  useEffect(() => {
+    const term = registrySearch.trim();
+    if (term.length < 2) {
+      if (term.length === 0 && hasSearchedRegistry) {
+        setRegistryResults([]);
+        setHasSearchedRegistry(false);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleSearchRegistry();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [registrySearch, handleSearchRegistry, hasSearchedRegistry]);
 
   const handleAddRetailItem = useCallback((svc: ClinicServiceItem) => {
     setLineItems((prev) => {
@@ -839,6 +862,7 @@ export default function BillingScreen() {
       setDiscountId(currentPatientProfile?.pwdId || '');
     } else if (type === 'PhilHealthKonsulta') {
       setDiscountId(currentPatientProfile?.philHealthNumber || '');
+      setPaymentMethod('PhilHealthKonsulta');
     } else {
       setDiscountId('');
     }
@@ -854,7 +878,7 @@ export default function BillingScreen() {
     if (!target) return;
     const invId = 'invoiceId' in target ? target.invoiceId : ('id' in target ? target.id : undefined);
     if (invId) {
-      openDocument(clinicService.getInvoicePdfUrl(invId));
+      openDocument(clinicService.getReceiptPdfUrl(invId));
       return;
     }
     handlePrintProfessionalReceipt(target);
@@ -862,11 +886,6 @@ export default function BillingScreen() {
 
   const handlePrintProfessionalReceipt = (receipt?: ReceiptSummary | InvoiceRecord) => {
     if (receipt) {
-      const invId = 'invoiceId' in receipt ? receipt.invoiceId : ('id' in receipt ? receipt.id : undefined);
-      if (invId) {
-        openDocument(clinicService.getInvoicePdfUrl(invId));
-        return;
-      }
       if ('items' in receipt && Array.isArray((receipt as any).items)) {
         printProfessionalReceipt(receipt as ReceiptSummary, printLetterhead);
       } else {
@@ -1008,8 +1027,13 @@ export default function BillingScreen() {
       return;
     }
 
-    if (amountToCollect <= 0) {
+    if (amountToCollect <= 0 && balanceDue > 0) {
       notify.error('No outstanding balance to collect.');
+      return;
+    }
+
+    if (paymentMethod === 'PhilHealthKonsulta' && !referenceNumber.trim()) {
+      notify.error('Enter a valid PhilHealth claim or transaction reference number to settle this account.');
       return;
     }
 
@@ -1104,14 +1128,16 @@ export default function BillingScreen() {
       orNumber = invoice.invoiceNumber;
     }
 
-    if (amountToCollect > 0) {
+    if (amountToCollect > 0 || balanceDue === 0) {
       const isPartial = isPartialPayment && amountToCollect < balanceDue;
       const [paidInvoice, payErr] = await clinicService.recordPayment(invoiceToPayId, {
         amount: amountToCollect,
         method: paymentMethod,
-        referenceNumber: referenceNumber || undefined,
+        referenceNumber: referenceNumber?.trim() || undefined,
         notes: isPartial
           ? `Partial payment received from ${effWalkInName} by ${currentName}`
+          : balanceDue === 0
+          ? `Settled (₱0.00 / 100% discount / ${paymentMethod}) by ${currentName}${referenceNumber ? ` [Ref: ${referenceNumber.trim()}]` : ''}`
           : `Received from ${effWalkInName} by ${currentName}`,
       });
 
@@ -1169,12 +1195,14 @@ export default function BillingScreen() {
     if (isPartialPayment && amountToCollect < balanceDue) {
       const remaining = Math.max(0, balanceDue - amountToCollect);
       notify.success(`Partial payment of ${formatPeso(amountToCollect)} recorded. Remaining balance: ${formatPeso(remaining)}.`);
+    } else if (balanceDue === 0) {
+      notify.success(`PhilHealth / zero-balance settlement recorded. Official receipt #${orNumber} issued.`);
     } else {
       notify.success(`Payment of ${formatPeso(amountToCollect)} recorded. Invoice settled.`);
     }
 
     // Auto-complete linked queue ticket on full payment settlement (F13)
-    if ((!isPartialPayment || amountToCollect >= balanceDue) && selectedPatient?.queueItemId) {
+    if ((!isPartialPayment || amountToCollect >= balanceDue || balanceDue === 0) && selectedPatient?.queueItemId) {
       clinicService.completeQueueItem(selectedPatient.queueItemId).catch(() => {});
     }
 
@@ -1978,6 +2006,10 @@ export default function BillingScreen() {
           title={
             isPartialPayment && amountToCollect < balanceDue
               ? `Collect Partial · ${formatPeso(amountToCollect)}`
+              : balanceDue === 0
+              ? paymentMethod === 'PhilHealthKonsulta'
+                ? `Settle & Issue PhilHealth Clearance · ₱0.00`
+                : `Settle Balance · ₱0.00`
               : activeInvoice
               ? `Settle Balance · ${formatPeso(amountToCollect)}`
               : `Collect & Issue Receipt · ${formatPeso(amountToCollect)}`
@@ -1986,12 +2018,19 @@ export default function BillingScreen() {
           disabled={
             !selectedPatient ||
             lineItems.length === 0 ||
-            amountToCollect <= 0 ||
+            (amountToCollect <= 0 && balanceDue > 0) ||
+            (isPartialPayment && amountToCollect <= 0) ||
+            (paymentMethod === 'PhilHealthKonsulta' && balanceDue === 0 && !referenceNumber.trim()) ||
             (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate && !selectedPatient.isWalkInRetail)
           }
           onPress={handleSettlePayment}
           style={styles.settlePrimaryButton}
         />
+        {paymentMethod === 'PhilHealthKonsulta' && balanceDue === 0 && !referenceNumber.trim() && (
+          <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.settleHelperText}>
+            Enter the PhilHealth transaction or claim number above to enable settlement.
+          </ThemedText>
+        )}
         {selectedPatient && !selectedPatient.isWalkInRetail && lineItems.length > 0 && (
           <Button
             variant="outline"
@@ -2153,84 +2192,173 @@ export default function BillingScreen() {
     </Card>
   );
 
-  const renderRegistrySearch = () => (
-    <Card>
-      <CardHeader
-        title="Search Patient Registry"
-        icon="search"
-        rightAction={
-          registryResults.length > 0 ? (
-            <Badge label={`${registryResults.length} found`} variant="neutral" size="sm" />
-          ) : undefined
-        }
-      />
-      <View style={styles.registrySearchRow}>
-        <View style={styles.flexFill}>
-          <Input
-            label="Patient Name / MRN"
-            placeholder="Type name, MRN, or ClinicEZ ID..."
-            value={registrySearch}
-            onChangeText={setRegistrySearch}
-            onSubmitEditing={handleSearchRegistry}
-          />
-        </View>
-        <View style={styles.registrySearchBtnWrap}>
-          <Button
-            size="md"
-            variant="primary"
-            icon="search"
-            title="Search"
-            loading={isSearchingRegistry}
-            onPress={handleSearchRegistry}
-          />
-        </View>
-      </View>
+  const renderRegistrySearch = () => {
+    const isPatientSelected = selectedPatient && !selectedPatient.isWalkInRetail;
 
-      {isSearchingRegistry ? (
-        <SkeletonList rows={3} rowHeight={theme.sizes.controlMd} />
-      ) : hasSearchedRegistry && registryResults.length === 0 ? (
-        <EmptyState
-          icon="search"
-          title="No patients found"
-          description="Try searching with a different name, MRN, or phone number."
-        />
-      ) : registryResults.length > 0 ? (
-        <View style={styles.registryResultsList}>
-          {registryResults.map((patient) => {
-            const isSelected = selectedPatient?.patientId === patient.id;
-            const displayName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
-            return (
-              <View key={patient.id} style={styles.registryResultItem}>
-                <View style={styles.flexFill}>
-                  <View style={styles.registryResultHeader}>
-                    <ThemedText variant="bodyBold" color={theme.colors.text}>
-                      {displayName}
-                    </ThemedText>
-                    {patient.patientCode && <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />}
-                    {patient.seniorCitizenId && <Badge label="Senior" variant="warning" size="sm" />}
-                    {patient.pwdId && <Badge label="PWD" variant="info" size="sm" />}
-                  </View>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    DOB: {patient.dateOfBirth || 'N/A'} • Contact: {patient.contactNumber || 'N/A'}
+    return (
+      <>
+        {isPatientSelected && (
+          <Card style={styles.activePatientCard}>
+            <View style={styles.activePatientRow}>
+              <View style={[styles.flexFill, styles.activePatientDetails]}>
+                <View style={styles.registryResultHeader}>
+                  <Icon name="checkCircle" size={theme.sizes.iconMd} color={theme.colors.successText} />
+                  <ThemedText variant="h3" color={theme.colors.text}>
+                    {selectedPatient.patientName}
                   </ThemedText>
+                  {currentPatientProfile?.patientCode && (
+                    <Badge label={`Code: ${currentPatientProfile.patientCode}`} variant="neutral" size="sm" />
+                  )}
+                  {currentPatientProfile?.philHealthNumber && (
+                    <Badge label="PhilHealth" variant="success" size="sm" />
+                  )}
+                  {currentPatientProfile?.seniorCitizenId && (
+                    <Badge label="Senior" variant="warning" size="sm" />
+                  )}
+                  {currentPatientProfile?.pwdId && (
+                    <Badge label="PWD" variant="info" size="sm" />
+                  )}
+                  {selectedPatient.hasOpenSoa && (
+                    <Badge label="Open SOA" variant="emergency" size="sm" />
+                  )}
                 </View>
-                <Button
-                  size="sm"
-                  variant={isSelected ? 'primary' : 'outline'}
-                  title={isSelected ? 'Selected' : 'Load SOA / Bill'}
-                  onPress={() => handleSelectRegistryPatient(patient)}
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  DOB: {currentPatientProfile?.dateOfBirth || 'N/A'} • Contact: {currentPatientProfile?.contactNumber || 'N/A'}
+                  {currentPatientProfile?.philHealthNumber ? ` • PIN: ${currentPatientProfile.philHealthNumber}` : ''}
+                </ThemedText>
+              </View>
+              <Button
+                size="sm"
+                variant="outline"
+                icon="search"
+                title={isRegistrySearchExpanded ? 'Hide Search' : 'Change Patient'}
+                onPress={() => setIsRegistrySearchExpanded((prev) => !prev)}
+              />
+            </View>
+          </Card>
+        )}
+
+        {(!isPatientSelected || isRegistrySearchExpanded) && (
+          <Card>
+            <CardHeader
+              title="Search Patient Registry"
+              icon="search"
+              rightAction={
+                registryResults.length > 0 ? (
+                  <Badge label={`${registryResults.length} found`} variant="neutral" size="sm" />
+                ) : undefined
+              }
+            />
+            <View style={styles.registrySearchRow}>
+              <View style={styles.flexFill}>
+                <Input
+                  label="Patient Name / MRN / Mobile / PhilHealth"
+                  placeholder="Type name, MRN, phone, or PhilHealth #..."
+                  value={registrySearch}
+                  onChangeText={setRegistrySearch}
+                  onSubmitEditing={handleSearchRegistry}
                 />
               </View>
-            );
-          })}
-        </View>
-      ) : (
-        <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.registrySearchHint}>
-          Enter patient name, MRN, or mobile number and tap Search to retrieve their chart and Statement of Account.
-        </ThemedText>
-      )}
-    </Card>
-  );
+              {registrySearch.trim().length > 0 && (
+                <View style={styles.registrySearchBtnWrap}>
+                  <Button
+                    size="md"
+                    variant="ghost"
+                    icon="x"
+                    title="Clear"
+                    onPress={handleClearRegistrySearch}
+                  />
+                </View>
+              )}
+              <View style={styles.registrySearchBtnWrap}>
+                <Button
+                  size="md"
+                  variant="primary"
+                  icon="search"
+                  title="Search"
+                  loading={isSearchingRegistry}
+                  onPress={handleSearchRegistry}
+                />
+              </View>
+            </View>
+
+            {isSearchingRegistry ? (
+              <SkeletonList rows={3} rowHeight={theme.sizes.controlMd} />
+            ) : hasSearchedRegistry && registryResults.length === 0 ? (
+              <EmptyState
+                icon="search"
+                title="No patients found"
+                description="Try searching with a different name, MRN, PhilHealth #, or phone number."
+              />
+            ) : registryResults.length > 0 ? (
+              <ScrollView
+                style={styles.registryResultsScroll}
+                contentContainerStyle={styles.registryResultsList}
+                nestedScrollEnabled
+              >
+                {registryResults.map((patient) => {
+                  const isSelected = selectedPatient?.patientId === patient.id;
+                  const displayName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
+                  const openInv = invoices.find(
+                    (inv) => inv.patientId === patient.id && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
+                  );
+                  const paidInv = invoices.find((inv) => inv.patientId === patient.id && inv.status === 'Paid');
+                  const inQueue = patients.find((p) => p.patientId === patient.id && !p.isAlreadyBilled);
+
+                  return (
+                    <Pressable
+                      key={patient.id}
+                      onPress={() => handleSelectRegistryPatient(patient)}
+                      style={({ pressed }) => [
+                        styles.registryResultItem,
+                        pressed && styles.registryResultItemPressed,
+                        isSelected && styles.registryResultItemSelected,
+                      ]}
+                    >
+                      <View style={styles.flexFill}>
+                        <View style={styles.registryResultHeader}>
+                          <ThemedText variant="bodyBold" color={theme.colors.text}>
+                            {displayName}
+                          </ThemedText>
+                          {patient.patientCode && <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />}
+                          {patient.philHealthNumber && <Badge label="PhilHealth" variant="success" size="sm" />}
+                          {patient.seniorCitizenId && <Badge label="Senior" variant="warning" size="sm" />}
+                          {patient.pwdId && <Badge label="PWD" variant="info" size="sm" />}
+                          {openInv && (
+                            <Badge
+                              label={`Open SOA · ${formatPeso(openInv.balanceDue ?? openInv.netAmount)}`}
+                              variant="emergency"
+                              size="sm"
+                            />
+                          )}
+                          {paidInv && !openInv && <Badge label="Paid Today" variant="neutral" size="sm" />}
+                          {inQueue?.queueNumber && <Badge label={`Queue #${inQueue.queueNumber}`} variant="info" size="sm" />}
+                        </View>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          DOB: {patient.dateOfBirth || 'N/A'} • Contact: {patient.contactNumber || 'N/A'}
+                          {patient.philHealthNumber ? ` • PIN: ${patient.philHealthNumber}` : ''}
+                        </ThemedText>
+                      </View>
+                      <Button
+                        size="sm"
+                        variant={isSelected ? 'primary' : 'outline'}
+                        title={isSelected ? 'Selected' : 'Load SOA / Bill'}
+                        onPress={() => handleSelectRegistryPatient(patient)}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.registrySearchHint}>
+                Enter patient name, MRN, mobile number, or PhilHealth # and tap Search to retrieve their chart and Statement of Account.
+              </ThemedText>
+            )}
+          </Card>
+        )}
+      </>
+    );
+  };
 
   const renderTabBar = () => (
     <View style={styles.tabBar}>
@@ -2946,6 +3074,9 @@ const styles = StyleSheet.create({
   registryResultsList: {
     gap: theme.spacing.sm,
   },
+  registryResultsScroll: {
+    maxHeight: 280,
+  },
   registryResultItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2958,6 +3089,37 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderLight,
     gap: theme.spacing.md,
     flexWrap: 'wrap',
+  },
+  registryResultItemSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySubtle,
+  },
+  registryResultItemPressed: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primaryBorder,
+  },
+  activePatientCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primaryBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  activePatientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  activePatientDetails: {
+    gap: theme.spacing.xs,
+  },
+  settleHelperText: {
+    textAlign: 'center',
+    marginTop: theme.spacing.xs,
   },
   registryResultHeader: {
     flexDirection: 'row',
