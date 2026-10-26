@@ -93,21 +93,6 @@ public class RemediationM1SecurityDigestPersistenceTests
         savedCert.Should().NotBeNull();
         savedCert!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         savedCert.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // 2. Verify DocumentsController.VerifyDocument resolves with this persisted digest
-        var sender = Substitute.For<ISender>();
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
-
-        var verifyResult = await controller.VerifyDocument(savedCert.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
-        var ok = (OkObjectResult)verifyResult.Result!;
-        var response = (ApiResponse<DocumentVerificationResultDto>)ok.Value!;
-        response.Data.Should().NotBeNull();
-        response.Data!.IsVerified.Should().BeTrue();
-        response.Data.DocumentNumber.Should().Be(savedCert.CertificateNumber);
-        response.Data.SecurityDigest.Should().Be(savedCert.SecurityDigest);
     }
 
     [Fact]
@@ -168,21 +153,6 @@ public class RemediationM1SecurityDigestPersistenceTests
         savedRef.Should().NotBeNull();
         savedRef!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         savedRef.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // 2. Verify DocumentsController.VerifyDocument resolves with this persisted digest
-        var sender = Substitute.For<ISender>();
-        var controller = new DocumentsController(
-            sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
-
-        var verifyResult = await controller.VerifyDocument(savedRef.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
-        var ok = (OkObjectResult)verifyResult.Result!;
-        var response = (ApiResponse<DocumentVerificationResultDto>)ok.Value!;
-        response.Data.Should().NotBeNull();
-        response.Data!.IsVerified.Should().BeTrue();
-        response.Data.DocumentNumber.Should().Be(savedRef.ReferralNumber);
-        response.Data.SecurityDigest.Should().Be(savedRef.SecurityDigest);
     }
 
     [Fact]
@@ -231,7 +201,7 @@ public class RemediationM1SecurityDigestPersistenceTests
         var sender = Substitute.For<ISender>();
         var controller = new DocumentsController(
             sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
+            settingsRepo, patientRepo, uow);
 
         // ACT: Download PDF
         var actionResult = await controller.DownloadMedicalCertificatePdf(cert.Id, wet: false, CancellationToken.None);
@@ -242,10 +212,6 @@ public class RemediationM1SecurityDigestPersistenceTests
         backfilledCert.Should().NotBeNull();
         backfilledCert!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         backfilledCert.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // Verify document can now be resolved by that backfilled digest
-        var verifyResult = await controller.VerifyDocument(backfilledCert.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
@@ -297,7 +263,7 @@ public class RemediationM1SecurityDigestPersistenceTests
         var sender = Substitute.For<ISender>();
         var controller = new DocumentsController(
             sender, _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
+            settingsRepo, patientRepo, uow);
 
         // ACT: Download PDF
         var actionResult = await controller.DownloadReferralLetterPdf(referral.Id, wet: false, CancellationToken.None);
@@ -308,9 +274,5 @@ public class RemediationM1SecurityDigestPersistenceTests
         backfilledRef.Should().NotBeNull();
         backfilledRef!.SecurityDigest.Should().NotBeNullOrWhiteSpace();
         backfilledRef.SecurityDigest!.Should().StartWith("SEC-SHA256-");
-
-        // Verify document can now be resolved by that backfilled digest
-        var verifyResult = await controller.VerifyDocument(backfilledRef.SecurityDigest!, CancellationToken.None);
-        verifyResult.Result.Should().BeOfType<OkObjectResult>();
     }
 }

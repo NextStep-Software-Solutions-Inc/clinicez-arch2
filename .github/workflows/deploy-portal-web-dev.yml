@@ -8,6 +8,8 @@ on:
       - 'apps/portal-web/**'
       - 'packages/shared-ts/**'
       - 'packages/design-tokens/**'
+      - 'scripts/check-no-broker.ps1'
+      - 'scripts/check-no-turnstile.ps1'
       - '.github/workflows/deploy-portal-web-dev.yml'
   pull_request:
     branches:
@@ -16,6 +18,8 @@ on:
       - 'apps/portal-web/**'
       - 'packages/shared-ts/**'
       - 'packages/design-tokens/**'
+      - 'scripts/check-no-broker.ps1'
+      - 'scripts/check-no-turnstile.ps1'
       - '.github/workflows/deploy-portal-web-dev.yml'
   workflow_dispatch:
     inputs:
@@ -39,6 +43,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Guard against message brokers and portal-to-clinic dependencies
+        shell: pwsh
+        run: ./scripts/check-no-broker.ps1
+
+      - name: Guard against Cloudflare Turnstile residue
+        shell: pwsh
+        run: ./scripts/check-no-turnstile.ps1
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -54,6 +66,9 @@ jobs:
 
       - name: Type check all apps
         run: bun run typecheck:all
+
+      - name: Test portal web
+        run: bun run test:portal
 
       - name: Lint portal web
         run: bun run lint:portal

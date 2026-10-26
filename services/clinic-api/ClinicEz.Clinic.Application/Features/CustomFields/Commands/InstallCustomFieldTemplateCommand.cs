@@ -73,6 +73,7 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
                 existing.Placeholder = fieldTemplate.Placeholder;
                 existing.VisibilityRuleJson = fieldTemplate.VisibilityRuleJson;
                 existing.ConditionalOptionsJson = fieldTemplate.ConditionalOptionsJson;
+                existing.BoundaryMode = fieldTemplate.BoundaryMode;
                 existing.IsActive = true;
                 existing.IsDeleted = false;
                 existing.DeletedAt = null;
@@ -99,6 +100,7 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
                     Placeholder = fieldTemplate.Placeholder,
                     VisibilityRuleJson = fieldTemplate.VisibilityRuleJson,
                     ConditionalOptionsJson = fieldTemplate.ConditionalOptionsJson,
+                    BoundaryMode = fieldTemplate.BoundaryMode,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = "ClinicAdmin"
@@ -134,7 +136,8 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
             f.IsActive,
             f.CreatedAt,
             f.VisibilityRuleJson,
-            f.ConditionalOptionsJson
+            f.ConditionalOptionsJson,
+            f.BoundaryMode
         )).ToList().AsReadOnly();
     }
 }

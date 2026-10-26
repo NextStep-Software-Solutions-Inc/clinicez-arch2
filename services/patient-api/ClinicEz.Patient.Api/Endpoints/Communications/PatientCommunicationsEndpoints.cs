@@ -202,11 +202,11 @@ public sealed class PatientCommunicationsEndpoints : IEndpoint
         // 8. POST /api/v1/patient/communications/attachments
         group.MapPost("/communications/attachments", async (
                 IFormFile? file,
-                ICurrentUserService currentUser,
-                IPatientRepository patientRepo,
-                IImageConversionService imageService,
-                IPatientEncryptionService encryptionService,
-                IStorageService storageService,
+                [FromServices] ICurrentUserService currentUser,
+                [FromServices] IPatientRepository patientRepo,
+                [FromServices] IImageConversionService imageService,
+                [FromServices] IPatientEncryptionService encryptionService,
+                [FromServices] IStorageService storageService,
                 CancellationToken ct) =>
             {
                 var userId = currentUser.UserId;
@@ -256,6 +256,7 @@ public sealed class PatientCommunicationsEndpoints : IEndpoint
                 return Results.Ok(ApiResponse<CommsAttachmentReference>.Success(attachmentRef));
             })
             .DisableAntiforgery()
+            .Accepts<IFormFile>("multipart/form-data")
             .WithName("UploadCommunicationAttachment")
             .WithSummary("Sanitize, transcode HEIC/WebP, strip EXIF, encrypt AES-256-GCM, and store attachment")
             .Produces<ApiResponse<CommsAttachmentReference>>(StatusCodes.Status200OK)

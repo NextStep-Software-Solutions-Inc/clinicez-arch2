@@ -8,12 +8,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useFacilityLicense } from '../FacilityActivationGate';
 import { useConnection } from '../connection/ConnectionGate';
 import { isValidEmail } from '../../services/passwordPolicy';
-import TurnstileWidget from '../turnstile/TurnstileWidget';
 import { AuthScreen, ErrorNotice, InfoNotice, authStyles } from './AuthScreen';
 
 /** Email + password sign-in against the facility's own user store. Works on a LAN with no internet. */
 export default function LoginScreen() {
-  const { login, notice, turnstileRequired, turnstileSiteKey } = useAuth();
+  const { login, notice } = useAuth();
   const { license } = useFacilityLicense();
   const { serverLabel, changeServer } = useConnection();
   const [email, setEmail] = useState('');
@@ -21,7 +20,6 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const submit = async () => {
     if (!isValidEmail(email)) {
@@ -32,14 +30,10 @@ export default function LoginScreen() {
       setError('Enter your password.');
       return;
     }
-    if (turnstileRequired && !turnstileToken) {
-      setError('Please complete the security challenge before signing in.');
-      return;
-    }
 
     setBusy(true);
     setError(null);
-    const failure = await login(email, password, turnstileToken);
+    const failure = await login(email, password);
     // On success the auth state changes and this screen unmounts.
     if (failure) {
       setError(failure);
@@ -101,23 +95,6 @@ export default function LoginScreen() {
           onRightIconPress={() => setShowPassword((v) => !v)}
           required
         />
-
-        {turnstileRequired ? (
-          <TurnstileWidget
-            siteKey={turnstileSiteKey}
-            onVerify={(token) => {
-              setTurnstileToken(token);
-              if (error?.includes('security challenge')) {
-                setError(null);
-              }
-            }}
-            onExpire={() => setTurnstileToken(null)}
-            onError={() => {
-              // Fail open on error
-              setTurnstileToken('LOCAL-OFFLINE-BYPASS');
-            }}
-          />
-        ) : null}
 
         <Button title="Sign in" size="lg" loading={busy} onPress={submit} />
         <ThemedText variant="caption" color={theme.colors.textMuted}>

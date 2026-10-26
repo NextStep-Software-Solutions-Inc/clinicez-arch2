@@ -15,8 +15,7 @@ public enum AuthFailure
     WeakPassword,
     AlreadyBootstrapped,
     InvalidRequest,
-    NotFound,
-    BotChallengeFailed = 20
+    NotFound
 }
 
 public sealed record AuthUserDto(
@@ -54,16 +53,13 @@ public sealed record AuthStatusDto(
     bool WorkspaceFound,
     string LicenseStatus,
     bool RequiresBootstrap,
-    string? ClinicName,
-    bool TurnstileEnabled = false,
-    string? TurnstileSiteKey = null);
+    string? ClinicName);
 
 public sealed record LoginRequest(
     string? Workspace,
     string? Email,
     string? Password,
-    string? DeviceLabel,
-    string? TurnstileToken = null);
+    string? DeviceLabel);
 
 public sealed record RefreshRequest(string? RefreshToken);
 

@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { dialog } from '@utils/dialog';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { publicRoutes } from '@shared/safe';
 
 interface ExternalReceiptData {
   pharmacyName: string;
@@ -214,7 +215,7 @@ export default function PrescriptionsScreen() {
       dialog.alert('Link Unavailable', 'The public verification portal is not configured for this app.');
       return;
     }
-    const url = `${portalUrl}/rx-verify/${token}`;
+    const url = publicRoutes.verifyRx(token, { baseUrl: portalUrl });
     await Clipboard.setStringAsync(url);
     dialog.alert('Link Copied', 'Public pharmacy verification link copied to clipboard.');
   };

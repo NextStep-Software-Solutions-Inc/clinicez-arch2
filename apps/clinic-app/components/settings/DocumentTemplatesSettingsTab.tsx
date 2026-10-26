@@ -1212,7 +1212,7 @@ export default function DocumentTemplatesSettingsTab({
                     'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textLight}>
-                  Verify online: portal.clinicez.ph/verify/DOC-SEC-2026
+                  Verify online: portal.clinicez.ph/verify/med-cert/DOC-SEC-2026
                 </ThemedText>
               </View>
             </ScrollView>

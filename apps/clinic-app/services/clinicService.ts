@@ -1627,6 +1627,14 @@ export interface BatchSaveDentalChartPayload {
   }[];
 }
 
+export interface PatientDirectoryCounts {
+  all: number;
+  students: number;
+  employees: number;
+  alerts: number;
+  seniorPwd: number;
+}
+
 export interface ClinicPatient {
   id: string;
   tenantId: string;
@@ -1767,6 +1775,8 @@ export interface ConditionalOptionsConfig {
   defaultOptions?: string[];
 }
 
+export type BoundaryMode = 'pastOrToday' | 'futureOrToday' | 'futureOnly' | 'any';
+
 export interface ClinicCustomFieldDefinition {
   id: string;
   tenantId: string;
@@ -1784,6 +1794,7 @@ export interface ClinicCustomFieldDefinition {
   createdAt?: string;
   visibilityRuleJson?: string;
   conditionalOptionsJson?: string;
+  boundaryMode?: BoundaryMode | null;
 }
 
 export interface MedicalCertificateRecord {
@@ -1837,22 +1848,6 @@ export interface ReferralLetterRecord {
   signedAt?: string;
   securityDigest?: string;
   createdAt: string;
-}
-
-export interface DocumentVerificationResult {
-  isVerified: boolean;
-  documentType: string;
-  documentNumber: string;
-  facilityName: string;
-  facilityAddress: string;
-  patientMaskedName: string;
-  doctorName: string;
-  doctorPrcLicense: string;
-  issueDate: string;
-  status: string;
-  securityDigest: string;
-  verificationMessage: string;
-  notes?: string;
 }
 
 export interface ClinicRecordAttachmentRecord {
@@ -1973,12 +1968,6 @@ export interface ClinicSettingsRecord {
   appointmentReminder24hEnabled?: boolean;
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
-
-  // Bot Challenge Protection (Turnstile)
-  turnstileEnabled?: boolean;
-  turnstileSiteKey?: string | null;
-  isTurnstileOverriddenByEnv?: boolean;
-  turnstileEnvOverrideValue?: boolean | null;
 
   // Regional Timezone, Date & Time Format Overrides (null/undefined = inherit from WorkspaceProfile)
   timeZoneId?: string | null;
@@ -3114,6 +3103,13 @@ export const clinicService = {
     return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
   },
 
+  async getPatientCounts(search?: string) {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    const qs = params.toString();
+    return clinicApiClient.get<PatientDirectoryCounts>(`/patients/counts${qs ? `?${qs}` : ''}`);
+  },
+
   async getPatientById(id: string) {
     return clinicApiClient.get<ClinicPatient>(`/patients/${id}`);
   },
@@ -3282,9 +3278,6 @@ export const clinicService = {
     return clinicApiUrl(`/documents/referrals/${id}/pdf${qs}`);
   },
 
-  async verifyDocument(securityDigestOrNumber: string) {
-    return clinicApiClient.get<DocumentVerificationResult>(`/documents/verify/${encodeURIComponent(securityDigestOrNumber)}`);
-  },
 
   // Records & Attachments
   async uploadRecordAttachment(payload: {
@@ -4796,7 +4789,14 @@ export function formatClinicTime(
  */
 export function formatClinicDateTime(
   input: string | Date | number | null | undefined,
-  options?: { dateFormat?: string; timeFormat?: string; timeZoneId?: string; separator?: string; fallback?: string }
+  options?: {
+    dateFormat?: string;
+    timeFormat?: string;
+    timeZoneId?: string;
+    separator?: string;
+    fallback?: string;
+    includeSeconds?: boolean;
+  }
 ): string {
   const fallback = options?.fallback ?? '—';
   if (input === null || input === undefined || input === '') return fallback;
@@ -4813,6 +4813,7 @@ export function formatClinicDateTime(
     timeFormat: options?.timeFormat,
     timeZoneId: options?.timeZoneId,
     fallback,
+    includeSeconds: options?.includeSeconds,
   });
 
   if (dStr === fallback || tStr === fallback) return fallback;

@@ -67,8 +67,8 @@ services:
       - Smtp__Password=${SMTP_PASSWORD:-}
       # Web portal base URL (billing redirects when the request carries no Origin/Referer).
       - FrontendBaseUrl=${FRONTEND_BASE_URL:-}
-      # Clinic API the portal calls (provisioning, workspace-level reads).
-      - Services__ClinicApiUrl=${SERVICES_CLINIC_API_URL:-http://clinic-api:8080}
+      # Patient API the portal calls (provisioning, workspace-level reads).
+      - Services__PatientApiUrl=${SERVICES_PATIENT_API_URL:-http://patient-api:8080}
       # Workspaces one user may own.
       - Workspace__MaxOwnedPerUser=${WORKSPACE_MAX_OWNED_PER_USER:-1}
       # Public lab-result upload relay limits (allowed content types stay at the code default: pdf, jpeg, png).

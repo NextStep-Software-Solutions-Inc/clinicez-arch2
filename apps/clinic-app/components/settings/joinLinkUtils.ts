@@ -4,6 +4,8 @@
  * Expiration calculation, URL formatting, and Document Quarantine review.
  */
 
+import { publicRoutes } from '@shared/safe';
+
 export function generateRandomJoinCode(length: number = 8): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude ambiguous chars (0, O, 1, I)
   let code = '';
@@ -48,8 +50,7 @@ export function formatReceptionCodeUrl(
   baseUrl: string,
   code: string
 ): string {
-  const cleanBase = baseUrl.replace(/\/+$/, '');
-  return `${cleanBase}/join/${encodeURIComponent(code.trim())}`;
+  return publicRoutes.join({ baseUrl, code });
 }
 
 export function formatReceptionQrUrl(
@@ -58,9 +59,7 @@ export function formatReceptionQrUrl(
   facilitySlug: string,
   code?: string
 ): string {
-  const cleanBase = baseUrl.replace(/\/+$/, '');
-  const url = `${cleanBase}/join/${tenantSlug}/${facilitySlug}`;
-  return code && code.trim() ? `${url}?code=${encodeURIComponent(code.trim())}` : url;
+  return publicRoutes.facilityJoin(tenantSlug, facilitySlug, { baseUrl, code });
 }
 
 export function formatJoinCodeExpiration(expiresAt: Date | string | null | undefined): string {

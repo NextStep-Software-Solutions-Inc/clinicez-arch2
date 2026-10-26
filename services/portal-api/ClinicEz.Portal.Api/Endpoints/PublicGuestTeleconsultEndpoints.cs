@@ -32,19 +32,29 @@ public sealed class PublicGuestTeleconsultEndpoints : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("/portal/guest/teleconsult/verify", HandleAsync)
-            .AllowAnonymous()
-            .DisableAntiforgery()
-            .RequireRateLimiting("GuestVerifyRateLimiter")
-            .WithName("VerifyGuestTeleconsultAccess")
-            .WithSummary("Dual-factor guest teleconsultation verification (OTP + Date of Birth)")
-            .WithDescription("Verifies guest teleconsultation invite token, patient DOB, and 6-digit OTP code. Enforces 5-attempt permanent lockout and Zero-PHI LiveKit room token minting.")
-            .WithTags("GuestTeleconsult")
-            .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status200OK)
-            .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status400BadRequest)
-            .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status401Unauthorized)
-            .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status410Gone)
-            .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status423Locked);
+        (string Route, string Name)[] verifyRoutes =
+        [
+            ("/portal/guest/teleconsult/verify", "VerifyGuestTeleconsultAccess"),
+            ("/public/guest/teleconsult/verify", "VerifyPublicGuestTeleconsultAccess"),
+            ("/guest/verify", "VerifyGuestAccess")
+        ];
+
+        foreach (var (route, name) in verifyRoutes)
+        {
+            app.MapPost(route, HandleAsync)
+                .AllowAnonymous()
+                .DisableAntiforgery()
+                .RequireRateLimiting("GuestVerifyRateLimiter")
+                .WithName(name)
+                .WithSummary("Dual-factor guest teleconsultation verification (OTP + Date of Birth)")
+                .WithDescription("Verifies guest teleconsultation invite token, patient DOB, and 6-digit OTP code. Enforces 5-attempt permanent lockout and Zero-PHI LiveKit room token minting.")
+                .WithTags("GuestTeleconsult")
+                .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status200OK)
+                .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status400BadRequest)
+                .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status401Unauthorized)
+                .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status410Gone)
+                .Produces<ApiResponse<GuestTeleconsultVerifyResponse>>(StatusCodes.Status423Locked);
+        }
     }
 
     public static async Task<IResult> HandleAsync(

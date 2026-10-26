@@ -6,13 +6,17 @@ import { IconSlot } from '../ui/Icon';
 import Badge, { type BadgeVariant } from '../ui/Badge';
 import Button from '../ui/Button';
 import { useBreakpoint } from '../../utils/useBreakpoint';
-import type { ClinicAuditEntryDto, ClinicAuditEntryDetailDto } from '../../services/clinicService';
+import { formatClinicDateTime, type ClinicAuditEntryDto, type ClinicAuditEntryDetailDto } from '../../services/clinicService';
+import { useClinic } from '../../context/ClinicContext';
 
 export interface AuditInspectionDrawerProps {
   entry: ClinicAuditEntryDto | null;
   detail: ClinicAuditEntryDetailDto | null;
   loadingDetail?: boolean;
   onClose: () => void;
+  dateFormat?: string;
+  timeFormat?: string;
+  timeZoneId?: string;
 }
 
 export function AuditInspectionDrawer({
@@ -20,10 +24,24 @@ export function AuditInspectionDrawer({
   detail,
   loadingDetail = false,
   onClose,
+  dateFormat,
+  timeFormat,
+  timeZoneId,
 }: AuditInspectionDrawerProps) {
   const { isDesktop } = useBreakpoint();
+  const clinic = useClinic();
+  const effectiveDateFormat = dateFormat || clinic?.dateFormat;
+  const effectiveTimeFormat = timeFormat || clinic?.timeFormat;
+  const effectiveTimeZoneId = timeZoneId || clinic?.timeZoneId;
 
   if (!entry) return null;
+
+  const formattedClinicTimestamp = formatClinicDateTime(entry.timestamp, {
+    dateFormat: effectiveDateFormat,
+    timeFormat: effectiveTimeFormat,
+    timeZoneId: effectiveTimeZoneId,
+    fallback: entry.timestamp,
+  });
 
   const severityVariant: BadgeVariant =
     entry.severity === 'Emergency'
@@ -83,8 +101,8 @@ export function AuditInspectionDrawer({
             <ThemedText style={styles.metaValueCode}>{entry.timestamp}</ThemedText>
           </View>
           <View style={styles.metaRow}>
-            <ThemedText style={styles.metaKey}>Local Recorded</ThemedText>
-            <ThemedText style={styles.metaValue}>{new Date(entry.timestamp).toLocaleString()}</ThemedText>
+            <ThemedText style={styles.metaKey}>Clinic Timestamp</ThemedText>
+            <ThemedText style={styles.metaValue}>{formattedClinicTimestamp}</ThemedText>
           </View>
           <View style={styles.metaRow}>
             <ThemedText style={styles.metaKey}>Action Verb</ThemedText>

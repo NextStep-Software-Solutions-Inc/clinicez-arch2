@@ -56,7 +56,8 @@ public sealed class GetClinicCustomFieldsQueryHandler : IRequestHandler<GetClini
             f.IsActive,
             f.CreatedAt,
             f.VisibilityRuleJson,
-            f.ConditionalOptionsJson
+            f.ConditionalOptionsJson,
+            f.BoundaryMode
         )).ToList().AsReadOnly();
     }
 }

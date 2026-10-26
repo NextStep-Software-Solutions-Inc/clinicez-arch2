@@ -28,6 +28,7 @@ public sealed class PatientRouteGuardTests : IAsyncLifetime
     [InlineData("/clinics", null)]
     [InlineData("/patients", null)]
     [InlineData("/patients/claim-intake", null)]
+    [InlineData("/patients/me", null)]
     [InlineData("/webhooks/clerk", null)]
     public void ResolveGuardedParameter_ClassifiesRouteShapes(string template, string? expected)
     {
@@ -41,7 +42,8 @@ public sealed class PatientRouteGuardTests : IAsyncLifetime
     {
         var patientRoutes = Routes()
             .Where(r => r.RoutePattern.RawText!.StartsWith("/api/v1/patients/", StringComparison.Ordinal))
-            .Where(r => !string.Equals(r.RoutePattern.RawText, "/api/v1/patients/claim-intake", StringComparison.Ordinal))
+            .Where(r => !string.Equals(r.RoutePattern.RawText, "/api/v1/patients/claim-intake", StringComparison.Ordinal)
+                     && !string.Equals(r.RoutePattern.RawText, "/api/v1/patients/me", StringComparison.Ordinal))
             .ToList();
 
         patientRoutes.Should().NotBeEmpty();
@@ -49,6 +51,13 @@ public sealed class PatientRouteGuardTests : IAsyncLifetime
             .Where(r => PatientOwnershipMiddleware.ResolveGuardedParameter(r.RoutePattern) is null)
             .Select(r => r.RoutePattern.RawText)
             .Should().BeEmpty("a patient route without {id}/{patientId}/by-clerk would skip the ownership check");
+    }
+
+    [Fact]
+    public void PatientsMeRoute_RequiresAuthorization()
+    {
+        var meRoute = Routes().Single(r => string.Equals(r.RoutePattern.RawText, "/api/v1/patients/me", StringComparison.Ordinal));
+        meRoute.Metadata.GetOrderedMetadata<IAuthorizeData>().Should().NotBeEmpty();
     }
 
     [Fact]

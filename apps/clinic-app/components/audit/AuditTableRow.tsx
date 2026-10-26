@@ -4,13 +4,17 @@ import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
 import Badge, { type BadgeVariant } from '../ui/Badge';
 import Button from '../ui/Button';
-import type { ClinicAuditEntryDto } from '../../services/clinicService';
+import { formatClinicDateTime, type ClinicAuditEntryDto } from '../../services/clinicService';
+import { useClinic } from '../../context/ClinicContext';
 
 export interface AuditTableRowProps {
   entry: ClinicAuditEntryDto;
   onInspect: (entry: ClinicAuditEntryDto) => void;
   isEven?: boolean;
   mode?: 'table' | 'card';
+  dateFormat?: string;
+  timeFormat?: string;
+  timeZoneId?: string;
 }
 
 export const AuditTableRow = React.memo(function AuditTableRow({
@@ -18,8 +22,21 @@ export const AuditTableRow = React.memo(function AuditTableRow({
   onInspect,
   isEven = false,
   mode = 'table',
+  dateFormat: propDateFormat,
+  timeFormat: propTimeFormat,
+  timeZoneId: propTimeZoneId,
 }: AuditTableRowProps) {
-  const formattedTimestamp = formatTimestamp(entry.timestamp);
+  const clinic = useClinic();
+  const activeDateFormat = propDateFormat || clinic?.dateFormat;
+  const activeTimeFormat = propTimeFormat || clinic?.timeFormat;
+  const activeTimeZoneId = propTimeZoneId || clinic?.timeZoneId;
+
+  const formattedTimestamp = formatClinicDateTime(entry.timestamp, {
+    dateFormat: activeDateFormat,
+    timeFormat: activeTimeFormat,
+    timeZoneId: activeTimeZoneId,
+    fallback: entry.timestamp,
+  });
 
   const severityVariant: BadgeVariant =
     entry.severity === 'Emergency'
@@ -204,11 +221,17 @@ export const AuditCard = React.memo(function AuditCard(props: Omit<AuditTableRow
   return <AuditTableRow {...props} mode="card" />;
 });
 
-function formatTimestamp(isoString: string): string {
+export function formatTimestamp(
+  isoString: string,
+  options?: { dateFormat?: string; timeFormat?: string; timeZoneId?: string }
+): string {
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
-    return d.toISOString().replace('T', ' ').slice(0, 19);
+    return formatClinicDateTime(isoString, {
+      dateFormat: options?.dateFormat,
+      timeFormat: options?.timeFormat,
+      timeZoneId: options?.timeZoneId,
+      fallback: isoString,
+    });
   } catch {
     return isoString;
   }
@@ -239,7 +262,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   colTimestamp: {
-    width: 160,
+    width: 175,
     flexShrink: 0,
   },
   colCategory: {

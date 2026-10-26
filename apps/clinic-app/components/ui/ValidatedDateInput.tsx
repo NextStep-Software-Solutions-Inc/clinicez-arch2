@@ -217,6 +217,7 @@ export interface ValidatedDateInputProps {
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   testID?: string;
+  inputTestID?: string;
   leftIcon?: string;
   rightIcon?: string;
   onRightIconPress?: () => void;
@@ -244,6 +245,7 @@ export default function ValidatedDateInput({
   containerStyle,
   inputStyle,
   testID = 'validated-date-input',
+  inputTestID,
   leftIcon = 'calendar',
   rightIcon,
   onRightIconPress,
@@ -372,6 +374,8 @@ export default function ValidatedDateInput({
         )}
 
         <TextInput
+          data-testid={inputTestID || (testID ? `${testID}-input` : undefined)}
+          testID={inputTestID || (testID ? `${testID}-input` : undefined)}
           style={[styles.input, inputStyle]}
           value={value}
           onChangeText={handleChangeText}

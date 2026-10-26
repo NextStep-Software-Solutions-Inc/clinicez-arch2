@@ -19,6 +19,7 @@ using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Infrastructure.Hub;
+using ClinicEz.Portal.Infrastructure.Messaging.Handlers;
 using ClinicEz.Portal.Infrastructure.Notifications;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Interceptors;
@@ -143,6 +144,9 @@ public static class DependencyInjection
             .Handle<BillingInvoicePaidPayload, BillingInvoicePaidHandler>(InteropTypes.BillingInvoicePaid)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
             .Handle<NotificationEmailRequestedPayload, NotificationEmailRequestedHandler>(InteropTypes.NotificationEmailRequested)
+            .Handle<FacilityJoinSettingsUpdatedPayload, FacilityJoinSettingsUpdatedHandler>(InteropTypes.FacilityJoinSettingsUpdated)
+            .Handle<DocumentAttestationPublishedPayload, DocumentAttestationPublishedHandler>(InteropTypes.DocumentAttestationPublished)
+            .Handle<QueueBoardUpdatedPayload, QueueBoardUpdatedHandler>(InteropTypes.QueueBoardUpdated)
             .Respond<PhilHealthConfigRequestedPayload, PhilHealthConfigRespondedPayload, PhilHealthConfigRequestedResponder>(
                 InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
             .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(
@@ -182,12 +186,6 @@ public static class DependencyInjection
         services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<IOptions<SmtpOptions>>().Value.Mode == SmtpMode.Log
             ? ActivatorUtilities.CreateInstance<LogEmailSender>(sp)
             : ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp));
-
-        // Bot challenge verification for public entry points (Cloudflare Turnstile)
-        services.AddHttpClient<ITurnstileValidator, CloudflareTurnstileValidator>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(10);
-        });
 
         return services;
     }

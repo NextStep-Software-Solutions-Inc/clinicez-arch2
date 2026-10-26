@@ -298,7 +298,12 @@ public class LabInteropFlowTests
 
         (await host.RequisitionsAsync()).Single().Status.Should().Be(RequisitionStatus.Verified);
         var outbox = await host.OutboxAsync();
-        outbox.Select(o => o.Type).Should().BeEquivalentTo(new[] { InteropTypes.LabResultFinalized, InteropTypes.LabOrderStatusChanged });
+        outbox.Select(o => o.Type).Should().BeEquivalentTo(new[]
+        {
+            InteropTypes.LabResultFinalized,
+            InteropTypes.LabOrderStatusChanged,
+            InteropTypes.DocumentAttestationPublished
+        });
         outbox.Should().OnlyContain(o => o.DispatchedAtUtc == null);
     }
 

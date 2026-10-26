@@ -83,6 +83,7 @@ import {
   clinicService,
   getManilaTodayStr,
   ClinicPatient,
+  PatientDirectoryCounts,
   RegisterPatientPayload,
   PatientChart,
   LabOrderSlipData,
@@ -144,6 +145,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { letterhead, rooms = [] } = useClinic();
   const { currentName, staff: staffList, current: currentStaff } = useStaff();
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
+  const [totalCounts, setTotalCounts] = useState<PatientDirectoryCounts | null>(null);
   const [patientsError, setPatientsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -434,6 +436,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setPage(1);
     setScrollY(0);
     lastScrollYRef.current = 0;
+    clinicService.getPatientCounts(activeSearch || undefined).then(([countsData]) => {
+      if (countsData) {
+        setTotalCounts(countsData);
+      }
+    });
+
     const [data, err] = await clinicService.getPatients(
       activeSearch || undefined,
       hasAlertsFilter,
@@ -571,7 +579,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       const { isValid, errors } = validateCustomFields(tenantCustomFields, dynamicFieldValues, staticValues);
       if (!isValid) {
         setDynamicFieldErrors(errors);
-        Alert.alert('Invalid Custom Fields', Object.values(errors).join('\n'));
+        const errorMessages = Object.values(errors);
+        const hasFormatOrBoundaryError = errorMessages.some((msg) => !msg.endsWith('is required.'));
+        Alert.alert(
+          hasFormatOrBoundaryError ? 'Invalid Custom Fields' : 'Missing Required Custom Fields',
+          errorMessages.join('\n')
+        );
         return;
       }
     }
@@ -1417,10 +1430,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     let alerts = 0;
     let seniorPwd = 0;
     for (const p of patients) {
-      if (p.customFields?.classification === 'Student' || !!p.customFields?.student_id) {
+      if (
+        p.customFields?.classification === 'Student' ||
+        p.customFields?.category === 'Student' ||
+        !!p.customFields?.student_id
+      ) {
         students++;
       }
-      if (p.customFields?.classification === 'Employee' || !!p.customFields?.employee_id) {
+      if (
+        p.customFields?.classification === 'Employee' ||
+        p.customFields?.category === 'Employee' ||
+        !!p.customFields?.employee_id
+      ) {
         employees++;
       }
       if (hasKnownAllergies(p.allergies) || (p.alerts && p.alerts.trim().length > 0)) {
@@ -1447,13 +1468,35 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       return !!p.seniorCitizenId || !!p.pwdId || p.age >= 60;
     }
     if (filterMode === 'STUDENTS') {
-      return p.customFields?.classification === 'Student' || !!p.customFields?.student_id;
+      return (
+        p.customFields?.classification === 'Student' ||
+        p.customFields?.category === 'Student' ||
+        !!p.customFields?.student_id
+      );
     }
     if (filterMode === 'EMPLOYEES') {
-      return p.customFields?.classification === 'Employee' || !!p.customFields?.employee_id;
+      return (
+        p.customFields?.classification === 'Employee' ||
+        p.customFields?.category === 'Employee' ||
+        !!p.customFields?.employee_id
+      );
     }
     return true;
   });
+
+  const formatTabCount = useCallback(
+    (loaded: number | undefined, total: number | undefined): string | number | undefined => {
+      if (loaded === undefined) return undefined;
+      if (total !== undefined && total !== null) {
+        return `${loaded}/${total}`;
+      }
+      if (!hasMore && patients !== null) {
+        return `${loaded}/${loaded}`;
+      }
+      return loaded;
+    },
+    [hasMore, patients]
+  );
 
   const isTable = effectiveViewMode === 'table';
   const itemHeight = isTable ? 64 : 270;
@@ -1613,21 +1656,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           value={filterMode}
           onChange={handleFilterModeChange}
           options={[
-            { value: 'ALL', label: 'All patients', count: filterCounts?.all },
-            { value: 'STUDENTS', label: 'Students', count: filterCounts?.students },
-            { value: 'EMPLOYEES', label: 'Employees', count: filterCounts?.employees },
-            { value: 'ALERTS', label: 'Alerts & allergies', count: filterCounts?.alerts },
-            { value: 'SENIOR_PWD', label: 'Senior & PWD', count: filterCounts?.seniorPwd },
+            { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
+            { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
+            { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
+            {
+              value: 'ALERTS',
+              label: 'Alerts & allergies',
+              count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
+              badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
+            },
+            { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
           ]}
         />
 
         {isWorkstation ? (
           <View style={styles.toolbarRight}>
-            {patients !== null ? (
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                {filteredPatients.length} loaded{hasMore ? ' • Scroll for more' : ''}
-              </ThemedText>
-            ) : null}
             <SegmentedControl<PatientDirectoryViewMode>
               value={viewMode}
               onChange={handleViewModeChange}

@@ -26,7 +26,7 @@ const FORBIDDEN_CONSTANTS = [
   'STATUTORY_YAKAP_DIAGNOSTICS',
 ];
 
-const URL_PATTERN = /https?:\/\/(?!\$\{)(?!www\.w3\.org\/)(?!challenges\.cloudflare\.com\/)[^\s'"`)]+/i;
+const URL_PATTERN = /https?:\/\/(?!\$\{)(?!www\.w3\.org\/)[^\s'"`)]+/i;
 const LOCAL_PATTERN = /\b(localhost|127\.0\.0\.1|0\.0\.0\.0)\b/i;
 
 function* walk(dir) {

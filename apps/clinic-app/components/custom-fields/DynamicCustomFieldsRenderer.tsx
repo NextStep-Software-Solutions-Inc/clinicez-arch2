@@ -7,6 +7,7 @@ import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import type {
   ClinicCustomFieldDefinition,
+  BoundaryMode,
   VisibilityRule,
   ConditionalOptionsConfig,
 } from '../../services/clinicService';
@@ -26,6 +27,24 @@ export interface DynamicCustomFieldsRendererProps {
   errors?: Record<string, string>;
   staticValues?: StaticPatientValues;
   disabled?: boolean;
+}
+
+/**
+ * Resolves the effective boundary mode for a custom Date field:
+ * - If field.boundaryMode is configured, uses it.
+ * - If field.category (case-insensitive) is 'Clinical', defaults to 'pastOrToday'.
+ * - Otherwise defaults to 'any'.
+ */
+export function resolveEffectiveBoundaryMode(
+  field: Pick<ClinicCustomFieldDefinition, 'boundaryMode' | 'category'>
+): BoundaryMode {
+  if (field.boundaryMode) {
+    return field.boundaryMode;
+  }
+  if (field.category && field.category.trim().toLowerCase() === 'clinical') {
+    return 'pastOrToday';
+  }
+  return 'any';
 }
 
 /**
@@ -303,12 +322,14 @@ export function mergeCustomFieldsForUpdate(
 /**
  * Validates custom fields: enforces isRequired only on currently VISIBLE fields.
  * Hidden fields never block validation.
- * Validates non-empty Number fields against isValidCustomNumber, and Date fields against validateDateString.
+ * Validates non-empty Number fields against isValidCustomNumber, and Date fields
+ * against validateDateString using each field's effective boundary mode.
  */
 export function validateCustomFields(
   definitions: ClinicCustomFieldDefinition[],
   values: Record<string, any>,
-  staticValues: StaticPatientValues = {}
+  staticValues: StaticPatientValues = {},
+  options?: { now?: Date }
 ): { isValid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   let isValid = true;
@@ -338,9 +359,13 @@ export function validateCustomFields(
           isValid = false;
         }
       } else if (def.dataType === 'Date') {
-        const dateCheck = validateDateString(String(val), { boundaryMode: 'any' });
-        if (!dateCheck.isValid) {
-          errors[def.fieldKey] = `${def.label} must be a valid date (YYYY-MM-DD).`;
+        const boundaryMode = resolveEffectiveBoundaryMode(def);
+        const res = validateDateString(String(val).trim(), {
+          boundaryMode,
+          now: options?.now,
+        });
+        if (!res.isValid) {
+          errors[def.fieldKey] = `${def.label}: ${res.errorMessage || 'Invalid date'}`;
           isValid = false;
         }
       }
@@ -515,7 +540,8 @@ export default function DynamicCustomFieldsRenderer({
             );
           }
 
-          case 'Date':
+          case 'Date': {
+            const effectiveBoundaryMode = resolveEffectiveBoundaryMode(field);
             return (
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <ValidatedDateInput
@@ -525,11 +551,12 @@ export default function DynamicCustomFieldsRenderer({
                   value={val !== undefined && val !== null ? String(val) : ''}
                   onChangeText={(text) => handleFieldChange(field.fieldKey, text)}
                   error={error}
-                  boundaryMode="any"
+                  boundaryMode={effectiveBoundaryMode}
                   disabled={disabled}
                 />
               </View>
             );
+          }
 
           case 'Boolean': {
             const boolVal = parseBooleanState(val);

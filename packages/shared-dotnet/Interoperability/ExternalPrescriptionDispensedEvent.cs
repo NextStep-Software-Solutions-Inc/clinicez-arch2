@@ -16,4 +16,9 @@ public record ExternalPrescriptionDispensedEvent
     public string? ReceiptDocumentBase64 { get; init; }
     public string? Notes { get; init; }
     public DateTime DispensedAt { get; init; } = DateTime.UtcNow;
+
+    // Decoupled Portal Dispense Relay extensions (Milestone 1)
+    public string? VerificationToken { get; init; }
+    public string? ReceiptFileName { get; init; }
+    public string? ReceiptContentType { get; init; }
 }

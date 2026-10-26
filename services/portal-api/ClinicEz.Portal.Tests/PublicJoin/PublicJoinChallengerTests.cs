@@ -275,7 +275,7 @@ public sealed class PublicJoinChallengerTests : IDisposable
         {
             ["patientName"] = quoteInjection,
             ["facilityName"] = imgInjection,
-            ["claimUrl"] = "https://portal.clinicez.test/join/claim?token=eyJhbGciOiJIUzI1NiJ9.test",
+            ["claimUrl"] = "https://portal.clinicez.test/claim?token=eyJhbGciOiJIUzI1NiJ9.test",
             ["ttlHours"] = "48",
             ["expiresAt"] = $"2026-10-15 12:00 UTC {scriptInjection}"
         };
@@ -301,7 +301,7 @@ public sealed class PublicJoinChallengerTests : IDisposable
         {
             ["patientName"] = "Juan Dela Cruz",
             ["facilityName"] = "Central Clinic",
-            ["claimUrl"] = "https://portal.clinicez.test/join/claim?token=token123",
+            ["claimUrl"] = "https://portal.clinicez.test/claim?token=token123",
             ["ttlHours"] = "48",
             ["expiresAt"] = "2026-10-15 12:00 UTC"
         };
@@ -336,8 +336,8 @@ public sealed class PublicJoinChallengerTests : IDisposable
         var emailPayload = emailEnvelope.GetPayload<NotificationEmailRequestedPayload>();
         var claimUrl = emailPayload.Model["claimUrl"];
 
-        // Format must be: {baseUrl}/join/claim?token={token}
-        var match = Regex.Match(claimUrl, @"^https://portal\.clinicez\.test/join/claim\?token=([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$");
+        // Format must be: {baseUrl}/claim?token={token}
+        var match = Regex.Match(claimUrl, @"^https://portal\.clinicez\.test/claim\?token=([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$");
         Assert.True(match.Success, $"Claim URL did not match expected structure: {claimUrl}");
 
         var rawToken = Uri.UnescapeDataString(match.Groups[1].Value);
@@ -352,7 +352,7 @@ public sealed class PublicJoinChallengerTests : IDisposable
     [InlineData("javascript:alert(document.cookie)")]
     [InlineData("data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==")]
     [InlineData("vbscript:MsgBox(1)")]
-    [InlineData("/relative/join/claim?token=123")]
+    [InlineData("/relative/claim?token=123")]
     public void Probe4_EmailTemplate_MaliciousOrNonHttpUrls_AreRejected(string badUrl)
     {
         var model = new Dictionary<string, string>

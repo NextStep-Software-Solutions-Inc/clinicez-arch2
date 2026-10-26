@@ -13,6 +13,7 @@ on:
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
       - 'scripts/check-no-broker.ps1'
+      - 'scripts/check-no-turnstile.ps1'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     branches:
@@ -26,6 +27,7 @@ on:
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
       - 'scripts/check-no-broker.ps1'
+      - 'scripts/check-no-turnstile.ps1'
       - '.github/workflows/backend-ci.yml'
   workflow_dispatch:
 
@@ -46,6 +48,10 @@ jobs:
     - name: Guard against message brokers (Interop Hub only)
       shell: pwsh
       run: ./scripts/check-no-broker.ps1
+
+    - name: Guard against Cloudflare Turnstile residue
+      shell: pwsh
+      run: ./scripts/check-no-turnstile.ps1
 
     - name: Restore dependencies
       run: dotnet restore CLINICEZ.sln

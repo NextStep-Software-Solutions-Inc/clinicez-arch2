@@ -35,7 +35,7 @@ patient-api's database now declares `LabRequestSlip`, `PrescriptionDocument`, `L
 
 ## What crosses the hub, and in what form
 
-All payloads are JSON records serialised by `InteropJson`, wrapped in an envelope (`MessageId`, `CorrelationId`, `Type`, `SchemaVersion`, `From`, `To`, `SentAtUtc`, `ExpiresAtUtc`, `Payload`). The envelope is capped at `Hub:MaxEnvelopeBytes` (1 MiB). In v1 payloads are readable by the hub (TLS in transit, optional AES-256-GCM at rest); sealed payloads are reserved but not implemented. See the [message catalog](platform-contract.md#message-type-catalog).
+All payloads are JSON records serialised by `InteropJson`, wrapped in an envelope (`MessageId`, `CorrelationId`, `Type`, `SchemaVersion`, `From`, `To`, `SentAtUtc`, `ExpiresAtUtc`, `Payload`). The envelope is capped at `Hub:MaxEnvelopeBytes` (8 MiB). In v1 payloads are readable by the hub (TLS in transit, optional AES-256-GCM at rest); sealed payloads are reserved but not implemented. See the [message catalog](platform-contract.md#message-type-catalog).
 
 | Flow | Direction | Personal data in the payload |
 |---|---|---|
