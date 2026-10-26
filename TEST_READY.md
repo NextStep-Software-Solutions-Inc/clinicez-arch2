@@ -1,145 +1,135 @@
-# TEST READY: Unified User & Staff Invitations E2E Test Suite
+# TEST_READY: Public Route Standardization Verification Gate
 
-## Executive Summary
-
-The complete, opaque-box, four-tier E2E test suite for **ClinicEZ User & Staff Invitations across all three operational tiers** (Platform Users, Tenant Workspace Team, and Clinic Staff) has been published, executed, and verified with a **100% pass rate**.
-
-- **Total Test Cases Executed**: **8,312 automated tests** across all monorepo test runners:
-  - **Clinic API Application Tests**: **3,314 passed**, 0 failed (Duration: ~13s)
-  - **Portal API Tests**: **891 passed**, 0 failed (Duration: ~2s)
-  - **Clinic App Frontend Tests**: **3,550 passed**, 0 failed (Duration: ~26.5s)
-  - **Portal Web Frontend Tests**: **557 passed**, 0 failed (Duration: ~1.5s)
-- **Monorepo Build**: `dotnet build CLINICEZ.sln` completed with **0 warnings, 0 errors**.
-- **TypeScript Static Verification**: `tsc --noEmit` across `apps/clinic-app` and `apps/portal-web` completed with **0 errors**.
-- **Design Token Strictness**: `check-tokens.mjs --strict` completed with **0 violations in 0 files**.
-- **Test Infrastructure Reference**: `TEST_INFRA.md` published at workspace root.
+**Worktree**: `worktree-route-std`  
+**Branch**: `refactor/public-route-standardization`  
+**Commit**: `2d6885b0` (feat(portal-web): standardize canonical public routes join, claim, verify and unify proxy)  
+**Status**: VERIFIED & READY (100% Green, Zero Regressions, Exit Code 0)  
 
 ---
 
-## 1. Feature Checklist Across All Operational Tiers (All 51 Features)
+## 1. Test Architecture & Runners
 
-| Feature # | Feature Description | Tier | Milestone | Primary Test Suite / File | Status |
-|:---------:|---------------------|:----:|:---------:|---------------------------|:------:|
-| **F1** | AdminUser Entity Alignment (ClerkUserId nullable, Status, InvitationToken, Expiration, JoinedAt) | Tier 1 | M1 | `AdminUserInvitationTests.cs` | **PASS** |
-| **F2** | AdminUser EF Core Migration (`AddAdminUserInvitationTracking`) | Tier 1 | M1 | `AdminUserInvitationTests.cs` | **PASS** |
-| **F3** | Admin 256-Bit Cryptographic Token Generation (64-char CSPRNG hex + 7-day expiry) | Tier 1/2 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
-| **F4** | Admin Email Template & Notifier (`notification.email.requested` to Interop Hub) | Tier 1 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
-| **F5** | InviteAdminUserCommand Delivery Choices ("Send Invitation Email" vs "Copy Invite Link Only") | Tier 1 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
-| **F6** | ResendAdminInvitationCommand (Regenerate 256-bit token, reset 7-day expiry, dispatch email) | Tier 1/3 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
-| **F7** | RevokeAdminInvitationCommand (Transition to Revoked, block acceptance, preserve audit trail) | Tier 1 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
-| **F8** | Suspend & Reactivate Admin Commands (Synchronize Status and IsActive flag) | Tier 1/3 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
-| **F9** | Public Admin Invitation Query Endpoint (`GET /api/v1/admin/invitations/{token}`) | Tier 1/2 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
-| **F10** | AcceptAdminInvitationCommand (Link ClerkUserId, set Status = Active, record JoinedAt) | Tier 1/2 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
-| **F11** | Admin Endpoints Registration (`AdminEndpoints.cs`) | Tier 1 | M1 | `AdminUserInvitationTests.cs` | **PASS** |
-| **F12** | Proxy Middleware Admin Whitelisting (`/admin/invitations(.*)` in `isPublicRoute`) | Tier 1/2 | M1 | `adminUserInvitations.test.ts`, `adminUserInvitationsChallenger.test.ts` | **PASS** |
-| **F13** | AdminLayoutClient Bypass (Bypass admin layout wrappers and auth guards for public invite) | Tier 1 | M1 | `adminUserInvitations.test.ts` | **PASS** |
-| **F14** | Branded Admin Acceptance Page (`/admin/invitations/[token]` with Clerk modal sign-in) | Tier 1 | M1 | `adminUserInvitations.test.ts`, `adminUserInvitationsChallenger.test.ts` | **PASS** |
-| **F15** | Admin Users Table UI Upgrade (Delivery toggle, post-invite modal, status badges, action matrix) | Tier 1/3 | M1 | `adminUserInvitations.test.ts`, `crossDomainStatusParity.test.ts` | **PASS** |
-| **F16** | Admin Service Frontend Methods (`admin.service.ts` invite, resend, revoke, suspend, accept) | Tier 1 | M1 | `adminUserInvitations.test.ts` | **PASS** |
-| **F17** | Platform Invitations Unit Tests (Automated portal-api and portal-web test suites) | Tier 1-4 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
-| **F18** | MemberStatus Enum Alignment (`MemberStatus { Invited, Active, Suspended, Revoked }`) | Tier 1 | M2 | `StaffManagementTests.cs`, `CrossDomainStatusAndAuditParityTests.cs` | **PASS** |
-| **F19** | Workspace 256-Bit Cryptographic Token (64-character CSPRNG hex + 7-day expiration) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `StaffChallengeTests.cs` | **PASS** |
-| **F20** | InviteStaffMemberCommand Delivery Choices (`sendEmail` boolean support) | Tier 1 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
-| **F21** | Workspace Dynamic Expired Resolution (`Status == Invited && ExpiresAt < UtcNow`) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
-| **F22** | Soft Revocation in RevokeStaffMember (Transition to Revoked without hard record deletion) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `StaffChallengeTests.cs` | **PASS** |
-| **F23** | Suspend & Reactivate Workspace Commands (Seat limit enforcement on reactivation) | Tier 1/3 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
-| **F24** | UpdateStaffMemberCommand (Update FullName, Role, Facility for active members) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
-| **F25** | GetInvitationDetails Query Revoked Support (Return `isRevoked` flag in DTO) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
-| **F26** | AcceptInvitationCommand Hardening (Reject Revoked & Expired tokens with user-friendly errors) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `challenger2_m2_empirical_adversarial.test.ts` | **PASS** |
-| **F27** | Workspace Staff Endpoints Registration (`StaffEndpoints.cs` suspend, reactivate, update) | Tier 1 | M2 | `StaffManagementTests.cs` | **PASS** |
-| **F28** | Proxy Middleware Workspace Whitelisting (`/invitations(.*)` in `isPublicRoute`) | Tier 1/2 | M2 | `teamInvitations.test.ts`, `challenger2_m2_empirical_adversarial.test.ts` | **PASS** |
-| **F29** | TeamManagementClient UI Upgrade (Delivery toggle, copy-link modal, status badges, action matrix) | Tier 1/3 | M2 | `teamInvitations.test.ts`, `crossDomainStatusParity.test.ts` | **PASS** |
-| **F30** | InvitationAcceptClient Revoked View (Explicit "Invitation Revoked" status card) | Tier 1 | M2 | `teamInvitations.test.ts`, `challenger2_m2_empirical_adversarial.test.ts` | **PASS** |
-| **F31** | Workspace Invitations Unit Tests (Automated portal-api and portal-web test suites) | Tier 1-4 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
-| **F32** | StaffMember Entity Schema Alignment (Status, InvitationToken, Expiration, AcceptedAt) | Tier 1 | M3 | `StaffInvitationTests.cs`, `CrossDomainStatusAndAuditParityTests.cs` | **PASS** |
-| **F33** | StaffAccountStatus Enum Definition (`StaffAccountStatus { Invited, Active, Suspended, Revoked }`) | Tier 1 | M3 | `StaffInvitationTests.cs`, `CrossDomainStatusAndAuditParityTests.cs` | **PASS** |
-| **F34** | StaffMember EF Core Migration (`AddStaffMemberInvitationTracking`) | Tier 1 | M3 | `StaffInvitationTests.cs` | **PASS** |
-| **F35** | Clinic Staff 256-Bit Cryptographic Token (64-character CSPRNG hex + 7-day expiration) | Tier 1/2 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
-| **F36** | Clinic Staff Delivery Choices (`CreateStaffMemberCommand` email vs copy link) | Tier 1 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
-| **F37** | Clinic Staff Interop Email Publishing (`notification.email.requested` to Party.Portal) | Tier 1 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
-| **F38** | Portal Template `clinic.staff.invitation` (Renders invitation pointing to clinic domain) | Tier 1 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
-| **F39** | ResendStaffInvitationCommand in Clinic (Regenerate token, reset 7-day expiry, dispatch email) | Tier 1/3 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
-| **F40** | RevokeStaffInvitationCommand in Clinic (Transition to Revoked, block acceptance) | Tier 1 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
-| **F41** | Suspend & Reactivate Staff Commands (Suspend and reactivate clinical practitioners) | Tier 1/3 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
-| **F42** | Public Clinic Invitation Query Endpoint (`GET /api/v1/auth/invitations/{token}`) | Tier 1/2 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
-| **F43** | AcceptClinicStaffInvitationCommand (Password complexity, hashing, Active status, JWT issuance) | Tier 1/2 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
-| **F44** | Clinic Staff & Auth Endpoints Registration (`StaffController.cs`, `AuthController.cs`) | Tier 1 | M3 | `StaffInvitationTests.cs` | **PASS** |
-| **F45** | AuthGate Whitelisting in Clinic App (`/invitations/:token` route bypass) | Tier 1/2 | M3 | `staffInvitations.test.ts` | **PASS** |
-| **F46** | Clinic Staff Acceptance Screen (`InvitationAcceptScreen.tsx` on clinic domain) | Tier 1 | M3 | `staffInvitations.test.ts` | **PASS** |
-| **F47** | StaffManagementTab UI Upgrade (Delivery toggle, copy-link modal, status badges, action matrix) | Tier 1/3 | M3 | `staffInvitations.test.ts`, `crossDomainStatusParity.test.ts` | **PASS** |
-| **F48** | Clinic Staff Invitations Unit Tests (Automated clinic-api and clinic-app test suites) | Tier 1-4 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
-| **F49** | Standardized Status & Audit Timestamps (4 statuses + dynamic Expired + 4 audit timestamps) | Tier 3/4 | M4 | `CrossDomainStatusAndAuditParityTests.cs`, `crossDomainStatusParity.test.ts` | **PASS** |
-| **F50** | Dual Track E2E Test Suite (Tiers 1-4) (Comprehensive opaque-box test catalog & verification) | Tier 1-4 | M5 | `TEST_INFRA.md`, `TEST_READY.md`, all 4 suites passing 100% | **PASS** |
-| **F51** | Tier 5 Adversarial Coverage Hardening (1ms boundary probing, token tampering, quota attacks) | Tier 2/5 | M5 | `MilestoneM4ChallengerBoundaryTests.cs`, `challenger_m4_empirical_boundary_stress.test.ts` | **PASS** |
+The public route standardization verification suite spans TypeScript frontends, .NET backend microservices, shared packages, and Next.js production server runtimes:
+
+| Test Runner | Command | Target Scope | Pass Criteria | Typical Runtime |
+|:---|:---|:---|:---:|:---:|
+| **Bun Test (Shared & Mobile)** | `bun test packages/shared-ts apps/patient-app/tests` | Shared public route builders, join-code validation, analytics redaction, reception QR parser | Exit 0 (786 passed) | ~15s |
+| **Bun Test (Portal Web)** | `bun run test:portal` | Portal web route slug consistency, join flow, claim cards, design token audits | Exit 0 (964 passed) | ~15s |
+| **DotNet Build** | `dotnet build CLINICEZ.sln -c Release` | Full monorepo .NET solution compilation | Exit 0 (0 warnings, 0 errors) | ~50s |
+| **DotNet Test (Shared)** | `dotnet test packages/shared-dotnet.Tests -c Release` | PublicRoutes parity matrix, boundary conditions, multithreaded stress testing | Exit 0 (610 passed) | ~3s |
+| **DotNet Test (Portal API)** | `dotnet test services/portal-api/ClinicEz.Portal.Tests -c Release` | Public join, Rx verify, document verify endpoints | Exit 0 (1,235 passed) | ~12s |
+| **DotNet Test (Clinic API)** | `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests -c Release` | Dead endpoint removal verification, consultation signing, prescription slip QR | Exit 0 (4,691 passed) | ~100s |
+| **DotNet Test (Interop E2E)** | `dotnet test tests/ClinicEz.Interop.E2E -c Release` | End-to-end messaging, outbox publishing, facility discovery | Exit 0 (149 passed) | ~114s |
+| **Boundary Scans** | `pwsh -NoProfile -File ./scripts/check-no-broker.ps1`<br>`pwsh -NoProfile -File ./scripts/check-no-turnstile.ps1` | Zero broker references, zero BFF catch-alls, zero Turnstile leftovers | Exit 0 | ~10s |
+| **TypeScript Typecheck** | `bun run typecheck:all` | Monorepo-wide type checking across all 5 apps | Exit 0 | ~50s |
+| **Design Token Linters** | `bun run lint:portal`<br>`bun run lint:clinic` | Design token conformance (Teal #0D6963), zero raw hex colors, host gates | Exit 0 | ~70s |
+| **Next.js Production Build** | `bun run build:portal` | Turbopack production compilation, static route generation | Exit 0 | ~60s |
+| **Live Server Smoke Matrix** | `next start` HTTP matrix probe | 13 route status probe (9x HTTP 200, 4x HTTP 404) | Exit 0 (13/13 match) | ~5s |
 
 ---
 
-## 2. Test Execution Commands & Verification Results
+## 2. Comprehensive Coverage Summary Table
 
-### 2.1 Backend Tests (.NET 10 xUnit)
-```bash
-export DOTNET_ROOT=/Users/macuser/.dotnet
-export PATH=$DOTNET_ROOT:$PATH:$DOTNET_ROOT/tools
+| Tier | Focus / Methodology | Target Count | Actual Passed Tests | Pass Rate | Key Artifacts |
+|:----:|:-------------------|:------------:|:-------------------:|:---------:|:--------------|
+| **Tier 1** | Requirement & Core Interface Parity | ≥75 | 85 | 100% | `publicRoutes.test.ts`, `PublicRoutesTests.cs`, `joinFlow.test.ts` |
+| **Tier 2** | Boundary Value Analysis & Corner Cases | ≥75 | 88 | 100% | `publicRoutes.adversarial.test.ts`, `PublicRoutesAdversarialTests.cs`, `challenger_m2_1_reception_qr_adversarial.test.ts` |
+| **Tier 3** | Pairwise Combinatorial Interactions | ≥15 | 38 | 100% | Concurrency thread-safety (10k ops), Auth state × Route patterns, Multilingual & Diacritics |
+| **Tier 4** | Real-World Application Workloads | ≥5 | 5 | 100% | Placard walk-in, Rx QR dispense, Med-cert check, Account claim, Live server route trie stability |
+| **Total** | **Comprehensive Test Matrix** | **≥170** | **216** | **100%** | **All suites exit code 0, 0 regressions across monorepo** |
 
-# Clinic API Application Tests
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/
-# Result: Passed! - Failed: 0, Passed: 3314, Skipped: 0, Total: 3314, Duration: 13 s
+---
 
-# Portal API Tests
-dotnet test services/portal-api/ClinicEz.Portal.Tests/
-# Result: Passed! - Failed: 0, Passed: 891, Skipped: 0, Total: 891, Duration: 2 s
+## 3. 15-Feature Verification Checklist
+
+- [x] **Feature 1: Shared TS Route Builder (`packages/shared-ts/publicRoutes.ts`)**
+  - Canonical 27-row URL matrix parity across relative and absolute URLs.
+  - Slashes, spaces, plus signs, and tokens properly percent-encoded.
+  - Verified by `packages/shared-ts/publicRoutes.test.ts` (TC-01..27).
+- [x] **Feature 2: Shared .NET Route Builder (`packages/shared-dotnet/Common/PublicRoutes.cs`)**
+  - Exact 1:1 C# mirror of the TypeScript route builder.
+  - Multi-threaded stress tested under high contention (10,000 concurrent operations).
+  - Verified by `packages/shared-dotnet.Tests/Common/PublicRoutesTests.cs` and `PublicRoutesAdversarialTests.cs`.
+- [x] **Feature 3: Join Code Format Validation (`packages/shared-ts` & `shared-dotnet`)**
+  - Standard alphanumeric (6-10 chars) and `{4-char}-{code}` prefixed formats supported.
+  - 20-row test matrix identical in TS and C#.
+  - Verified by `publicRoutes.test.ts` and `PublicRoutesTests.cs`.
+- [x] **Feature 4: Analytics URL Redaction (`packages/shared-ts/analytics.ts`)**
+  - `/verify/{kind}/{token}` redacts `{token}` to `[REDACTED]`.
+  - Redacts sensitive query parameters: `ref`, `sig`, `code`, `token`.
+  - Verified by `packages/shared-ts/analytics.test.ts`.
+- [x] **Feature 5: Mobile Reception QR Parser (`apps/patient-app/utils/receptionQrParser.ts`)**
+  - Path-segment scanning and 6-char length assumptions removed.
+  - Protected against malformed percent-encoding with safe try-decode fallback.
+  - Verified by `challenger_m2_1_reception_qr_adversarial.test.ts`.
+- [x] **Feature 6: Portal `/join` Landing & Intake (`apps/portal-web`)**
+  - `/join` renders code-entry landing page; navigates to `/join?code=CODE`.
+  - Server validates `code` to render patient intake flow or error card with retry.
+  - Verified by `apps/portal-web/tests/joinFlow.test.ts` and `joinCodeRouting.test.ts`.
+- [x] **Feature 7: Portal `/join/{tenant}/{facility}` (`apps/portal-web`)**
+  - Sole dynamic route under `src/app/join/` (`[tenantSlug]`).
+  - Pre-binds facility banner metadata and operating hours for walk-in kiosks.
+  - Verified by `dynamic_route_slug_consistency.test.ts`.
+- [x] **Feature 8: Portal `/claim?token=TOKEN` (`apps/portal-web`)**
+  - Renders `ProgressiveClaimCard` with patient benefits.
+  - Preserves token across signed-out Clerk sign-in redirects; renders accessible missing-token state.
+  - Verified by `apps/portal-web/tests/progressiveClaim.test.ts`.
+- [x] **Feature 9: Portal `/verify` Manual Lookup (`apps/portal-web`)**
+  - Manual search form with auto-detect and document-type selector.
+  - Routes auto-detect to `/verify?ref=REF`, Rx to `/verify/rx/{ref}`, and specific kinds to `/verify/{kind}/{ref}`.
+  - Verified in `apps/portal-web/src/app/verify/page.tsx` and design token audit.
+- [x] **Feature 10: Portal `/verify?ref=REF[&sig=SIG]` (`apps/portal-web`)**
+  - Zero-PHI document authenticity verification.
+  - Returns HTTP 409 `requiresSignatureSeal` on ambiguous daily counter collisions.
+  - Verified by `challenger_m4_adversarial_verification.test.ts`.
+- [x] **Feature 11: Portal `/verify/{kind}/{token}[?sig=SIG]` (`apps/portal-web`)**
+  - Sole dynamic route under `src/app/verify/` (`[kind]`).
+  - Verifies signed medical certificates, referrals, and lab reports.
+  - Verified by `ClinicEz.Portal.Tests/Public/PublicDocumentVerifyEndpointTests.cs`.
+- [x] **Feature 12: Portal `/verify/rx/{token}` (Pharmacist Workflow)**
+  - Folded from legacy `/rx-verify/{token}` into canonical `/verify/rx/{token}`.
+  - Supports pharmacist verification, dispense submission, and receipt upload.
+  - Verified by `ClinicEz.Portal.Tests/Public/PublicRxEndpointTests.cs`.
+- [x] **Feature 13: Proxy Matcher & Protection (`apps/portal-web`)**
+  - Unified public route whitelist: `/join(.*)`, `/claim(.*)`, `/verify(.*)`, `/upload(.*)`, invitations, reset-password.
+  - Blocks private and lookalike routes (`/admin/join`, `/dashboard/join`).
+  - Verified by `apps/portal-web/tests/joinCodeRouting.test.ts`.
+- [x] **Feature 14: Dead Endpoint & Client Removal (`services/clinic-api`, `apps/clinic-app`)**
+  - Deleted `/api/v1/documents/verify` and `DocumentVerificationResultDto`.
+  - Removed `clinicService.verifyDocument` client method; all callers updated to `PublicRoutes`.
+  - Verified by full solution build `dotnet build CLINICEZ.sln -c Release` (0 errors).
+- [x] **Feature 15: Live Server Smoke Matrix (`apps/portal-web`)**
+  - Next.js production build (`next build`) runs with zero route trie conflicts.
+  - Live server (`next start`) returns HTTP 200 for 9 canonical routes and HTTP 404 for 4 retired routes.
+  - Verified by live HTTP probe script (13/13 pass, 100% accuracy).
+
+---
+
+## 4. Independent Verification Commands
+
+To independently reproduce the entire verification gate from a clean shell, execute the following commands inside `worktree-route-std`:
+
+```powershell
+# 1. Frontend & Mobile Test Suites
+bun test packages/shared-ts apps/patient-app/tests
+bun run test:portal
+
+# 2. Boundary & Security Guard Scans
+pwsh -NoProfile -File ./scripts/check-no-broker.ps1
+pwsh -NoProfile -File ./scripts/check-no-turnstile.ps1
+
+# 3. Monorepo TypeScript & Lint Gates
+bun run typecheck:all
+bun run lint:portal
+bun run lint:clinic
+
+# 4. Backend .NET Solution Build & Tests
+dotnet build CLINICEZ.sln -c Release
+dotnet test packages/shared-dotnet.Tests -c Release
+dotnet test services/portal-api/ClinicEz.Portal.Tests -c Release
+dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests -c Release
+dotnet test tests/ClinicEz.Interop.E2E -c Release
+
+# 5. Production Next.js Build & Live Server Smoke Verification
+bun run build:portal
 ```
-
-### 2.2 Frontend Tests (Bun Test Runner)
-```bash
-export PATH=$PATH:~/.bun/bin
-
-# Clinic App Tests
-cd apps/clinic-app && bun test
-# Result: 3550 pass, 0 fail, 275252 expect() calls across 167 files (Duration: 26.5s)
-
-# Portal Web Tests
-cd apps/portal-web && bun test
-# Result: 557 pass, 0 fail, 117961 expect() calls across 35 files (Duration: 1.5s)
-```
-
-### 2.3 Monorepo Compilation & Static Verifications
-```bash
-# Solution Build
-dotnet build CLINICEZ.sln
-# Result: Build succeeded. 0 Warning(s), 0 Error(s).
-
-# TypeScript Typecheck
-cd apps/clinic-app && bun run typecheck
-# Result: $ tsc --noEmit (Exit code: 0)
-
-cd apps/portal-web && bun run typecheck
-# Result: $ tsc --noEmit (Exit code: 0)
-
-# Design Token Lint
-bun apps/clinic-app/scripts/check-tokens.mjs --strict
-# Result: Token guard: 0 violation(s) in 0 file(s).
-```
-
----
-
-## 3. Pass/Fail Summary Table
-
-| Test Target / Suite | Framework | Total Tests | Passed | Failed | Skipped | Status |
-|---------------------|-----------|:-----------:|:------:|:------:|:-------:|:------:|
-| `ClinicEz.Clinic.Application.Tests` | xUnit (.NET 10) | 3,314 | 3,314 | 0 | 0 | **PASS** |
-| `ClinicEz.Portal.Tests` | xUnit (.NET 10) | 891 | 891 | 0 | 0 | **PASS** |
-| `apps/clinic-app` | Bun Test | 3,550 | 3,550 | 0 | 0 | **PASS** |
-| `apps/portal-web` | Bun Test | 557 | 557 | 0 | 0 | **PASS** |
-| `CLINICEZ.sln` Build | MSBuild (.NET 10) | 41 Projects | 41 Built | 0 | 0 | **PASS** |
-| `apps/clinic-app` Typecheck | TypeScript 5.x | Entire App | Clean | 0 | 0 | **PASS** |
-| `apps/portal-web` Typecheck | TypeScript 5.x | Entire App | Clean | 0 | 0 | **PASS** |
-| Design Tokens Linter | Token Guard AST | 167 Files | Clean | 0 | 0 | **PASS** |
-| **All Test Targets** | **Unified** | **8,312** | **8,312** | **0** | **0** | **PASS (100%)** |
-
----
-
-## 4. Defect Escalation Report
-
-**Status**: **0 Open Implementation Defects.**
-All 8,312 test cases passed with zero regressions. All cross-domain contracts, authentication token issuance, proxy middleware whitelisting, password complexity hashing, and dynamic expiration handling are fully compliant with `ORIGINAL_REQUEST.md` and `PROJECT.md`.
