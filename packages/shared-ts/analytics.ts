@@ -36,6 +36,25 @@ export function isVercelTelemetryAllowed(
 }
 
 /**
+ * Canonical set of sensitive parameter keys matched case-insensitively.
+ * Kept at module scope to avoid re-allocation per sanitizeAnalyticsUrl invocation.
+ */
+const SENSITIVE_PARAMS = new Set([
+  'token',
+  'code',
+  'secret',
+  'invite',
+  'session',
+  'signature',
+  'sig',
+  'ref',
+  'key',
+  'auth',
+  'password',
+  'pin',
+]);
+
+/**
  * Sanitizes URLs to remove sensitive healthcare tokens and credentials before sending to analytics.
  */
 export function sanitizeAnalyticsUrl(rawUrl: string): string {
@@ -43,27 +62,25 @@ export function sanitizeAnalyticsUrl(rawUrl: string): string {
     const isAbsolute = /^https?:\/\//i.test(rawUrl);
     const parsed = new URL(rawUrl, 'https://app.clinicez.internal');
 
-    const SENSITIVE_PARAMS = [
-      'token',
-      'code',
-      'secret',
-      'invite',
-      'session',
-      'signature',
-      'key',
-      'auth',
-      'password',
-      'pin',
-    ];
-
-    for (const p of SENSITIVE_PARAMS) {
-      if (parsed.searchParams.has(p)) {
-        parsed.searchParams.set(p, '[REDACTED]');
+    const keysToRedact: string[] = [];
+    for (const key of parsed.searchParams.keys()) {
+      if (SENSITIVE_PARAMS.has(key.toLowerCase())) {
+        keysToRedact.push(key);
       }
     }
+    for (const key of keysToRedact) {
+      parsed.searchParams.set(key, '[REDACTED]');
+    }
 
+    // 1) Redact 2-segment verify: /verify/{kind}/{token} -> /verify/{kind}/[REDACTED]
     parsed.pathname = parsed.pathname.replace(
-      /(\/(?:rx-verify|invitations|verify|upload\/(?:lab|rx))\/)[^/]+/g,
+      /(\/verify\/[^/]+\/)[^/]+/gi,
+      '$1[REDACTED]'
+    );
+
+    // 2) Redact 1-segment routes: invitations, rx-verify, upload
+    parsed.pathname = parsed.pathname.replace(
+      /(\/(?:rx-verify|invitations|upload\/(?:lab|rx))\/)[^/]+/gi,
       '$1[REDACTED]'
     );
 

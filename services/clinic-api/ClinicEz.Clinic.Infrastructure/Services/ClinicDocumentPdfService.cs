@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Infrastructure.Common;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents;
 using ClinicEz.Shared.Documents.Common;
 using ClinicEz.Shared.Documents.Components;
@@ -433,9 +434,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             slip.PrescriptionNumber,
             digest);
 
-        var portalBase = string.IsNullOrWhiteSpace(_verificationBaseUrl) ? "" : _verificationBaseUrl.TrimEnd('/');
         var rxVerifyUrl = !string.IsNullOrWhiteSpace(slip.PublicVerificationToken)
-            ? $"{portalBase}/rx-verify/{slip.PublicVerificationToken}"
+            ? PublicRoutes.VerifyRx(slip.PublicVerificationToken, _verificationBaseUrl)
             : (!string.IsNullOrWhiteSpace(slip.QrPayload) && !slip.QrPayload.StartsWith("CLINICEZ:RX:") ? slip.QrPayload : verifyUrl);
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(rxVerifyUrl, 4);
@@ -783,8 +783,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         var effectiveQrUrl = !string.IsNullOrWhiteSpace(qrUrl)
             ? qrUrl.Trim()
             : (!string.IsNullOrWhiteSpace(effectiveJoinCode)
-                ? $"{_verificationBaseUrl.TrimEnd('/')}/join/{Uri.EscapeDataString(effectiveJoinCode)}"
-                : $"{_verificationBaseUrl.TrimEnd('/')}/join/{settings.TenantSlug ?? settings.TenantId}/{settings.FacilitySlug ?? "main"}");
+                ? PublicRoutes.Join(_verificationBaseUrl, effectiveJoinCode)
+                : PublicRoutes.FacilityJoin(settings.TenantSlug ?? settings.TenantId, settings.FacilitySlug ?? "main", _verificationBaseUrl));
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(effectiveQrUrl, 10);
 

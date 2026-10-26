@@ -144,7 +144,7 @@ public class PublicJoinEndpointsTests : IDisposable
         Assert.Contains("Metro Main Clinic", emailPayload.Subject);
         Assert.Equal("Juan Dela Cruz", emailPayload.Model["patientName"]);
         Assert.Equal("Metro Main Clinic", emailPayload.Model["facilityName"]);
-        Assert.Contains("/join/claim?token=", emailPayload.Model["claimUrl"]);
+        Assert.Contains("/claim?token=", emailPayload.Model["claimUrl"]);
         Assert.Contains(Uri.EscapeDataString(claimTokenProp), emailPayload.Model["claimUrl"]);
 
         // Explicitly verify ZERO SMS messages were dispatched

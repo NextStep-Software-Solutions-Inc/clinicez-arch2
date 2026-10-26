@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Licensing;
 using Microsoft.Extensions.Hosting;
 
@@ -90,7 +91,7 @@ public class DocumentSecurityService : IDocumentSecurityService
         }
 
         var sigShort = cleanDigest[..ShortSignatureLength];
-        return $"{cleanBase}/verify/{docType.Trim().ToLowerInvariant()}/{Uri.EscapeDataString(token.Trim())}?sig={sigShort}";
+        return PublicRoutes.VerifyKind(docType, token, baseUrl, sigShort);
     }
 
     public bool VerifyDigest(string tenantId, string docType, string docNumber, Guid? patientId, string? doctorOrStaffPrc, DateTime issuedAt, string providedDigest)

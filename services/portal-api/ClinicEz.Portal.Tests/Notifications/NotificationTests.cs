@@ -282,7 +282,7 @@ public class EmailTemplateRendererTests
         {
             ["patientName"] = "Maria Clara",
             ["facilityName"] = "St. Jude Clinic",
-            ["claimUrl"] = "https://portal.clinicez.ph/join/claim?token=sample.token",
+            ["claimUrl"] = "https://portal.clinicez.ph/claim?token=sample.token",
             ["ttlHours"] = "48",
             ["expiresAt"] = "2026-10-15 12:00 UTC"
         };
@@ -292,12 +292,12 @@ public class EmailTemplateRendererTests
         Assert.Contains("Hello Maria Clara", mail.Html);
         Assert.Contains("St. Jude Clinic", mail.Html);
         Assert.Contains("#0D6963", mail.Html);
-        Assert.Contains("https://portal.clinicez.ph/join/claim?token=sample.token", mail.Html);
+        Assert.Contains("https://portal.clinicez.ph/claim?token=sample.token", mail.Html);
         Assert.Contains("48 hours", mail.Html);
         Assert.Contains("2026-10-15 12:00 UTC", mail.Html);
 
         Assert.Contains("Maria Clara", mail.Text);
-        Assert.Contains("https://portal.clinicez.ph/join/claim?token=sample.token", mail.Text);
+        Assert.Contains("https://portal.clinicez.ph/claim?token=sample.token", mail.Text);
     }
 
     [Fact]

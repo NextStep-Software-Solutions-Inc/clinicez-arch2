@@ -16,6 +16,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Documents.Security;
 using Interop = ClinicEz.Shared.Interoperability;
 
@@ -237,9 +238,9 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             var rxSummary = encounter.Prescriptions.Any()
                 ? string.Join("; ", encounter.Prescriptions.Select(p => $"{p.GenericName} {p.Dosage} {p.Form} ({p.Sig}) - Qty: {p.Quantity}".Trim()))
                 : null;
-            var portalBase = VerificationUrlResolver.Resolve(_configuration).TrimEnd('/');
+            var portalBase = VerificationUrlResolver.Resolve(_configuration);
             var rxUrl = !string.IsNullOrWhiteSpace(encounter.RxPublicVerificationToken)
-                ? (!string.IsNullOrWhiteSpace(portalBase) ? $"{portalBase}/rx-verify/{encounter.RxPublicVerificationToken}" : $"/rx-verify/{encounter.RxPublicVerificationToken}")
+                ? PublicRoutes.VerifyRx(encounter.RxPublicVerificationToken, portalBase)
                 : null;
 
             var pushPayload = new ClinicPushAppointmentsPayload(
@@ -338,10 +339,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                 : null;
         }
 
-        var portalBase = VerificationUrlResolver.Resolve(_configuration).TrimEnd('/');
-        var rxVerifyUrl = !string.IsNullOrWhiteSpace(portalBase)
-            ? $"{portalBase}/rx-verify/{encounter.RxPublicVerificationToken}"
-            : $"/rx-verify/{encounter.RxPublicVerificationToken}";
+        var portalBase = VerificationUrlResolver.Resolve(_configuration);
+        var rxVerifyUrl = PublicRoutes.VerifyRx(encounter.RxPublicVerificationToken!, portalBase);
 
         return new Interop.PrescriptionIssuedEvent
         {
