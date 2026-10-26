@@ -73,12 +73,17 @@ export function parseReceptionQrPayload(rawPayload: string): ParsedReceptionQr |
     /^clinicez:\/\/(?:clinics\/([^/?#]+)\/unlock|join)?\?(?:.*&)?(?:code|joinCode)=([^&#\s]+)/i
   );
   if (customSchemeMatch) {
-    const candidateCode = decodeURIComponent(customSchemeMatch[2].trim());
-    if (publicRoutes.isValidJoinCode(candidateCode)) {
-      return {
-        joinCode: publicRoutes.normalizeJoinCode(candidateCode),
-        clinicId: customSchemeMatch[1] ?? undefined,
-      };
+    try {
+      const candidateCode = decodeURIComponent(customSchemeMatch[2].trim());
+      if (publicRoutes.isValidJoinCode(candidateCode)) {
+        return {
+          joinCode: publicRoutes.normalizeJoinCode(candidateCode),
+          clinicId: customSchemeMatch[1] ?? undefined,
+        };
+      }
+    } catch {
+      // Malformed percent-encoding in query parameters (e.g. %ZZ, %)
+      return null;
     }
   }
 
