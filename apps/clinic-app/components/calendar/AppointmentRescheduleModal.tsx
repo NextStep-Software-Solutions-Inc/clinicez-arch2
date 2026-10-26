@@ -156,7 +156,6 @@ export function AppointmentRescheduleModal({
         newScheduledAt,
         durationMinutes: appointment.durationMinutes || 30,
         reason: reason.trim() || undefined,
-        doctorId: selectedDoctorId || undefined,
       }
     );
 
@@ -264,7 +263,7 @@ export function AppointmentRescheduleModal({
                 </View>
                 {appointment.doctorName ? (
                   <View style={styles.snapshotRow}>
-                    <Icon name="user" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                    <Icon name="stethoscope" size={theme.sizes.iconSm} color={theme.colors.primary} />
                     <ThemedText variant="small" color={theme.colors.textSecondary}>
                       Physician:{' '}
                       <ThemedText variant="smallBold" color={theme.colors.text}>
