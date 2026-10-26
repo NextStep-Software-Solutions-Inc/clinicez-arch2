@@ -46,17 +46,12 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="flex flex-col items-center justify-center pt-32 pb-24 px-6 lg:px-8 text-center relative z-10">
-        <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-md">
-          <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-pulse" />
-          Clinic EZ V2 is now Live
-        </div>
-        
         <h1 className="max-w-4xl text-5xl font-extrabold tracking-tight sm:text-7xl mb-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-emerald-400">
-          Healthcare Management, <br className="hidden sm:block" /> Elevated.
+          The unified operating platform for <br className="hidden sm:block" /> clinics, labs, and pharmacies.
         </h1>
         
         <p className="max-w-2xl text-lg text-muted-foreground mb-10 leading-relaxed">
-          The all-in-one unified portal for clinics, laboratories, and pharmacies. Experience seamless administration with enterprise-grade security and blazing-fast performance.
+          Connect patient encounters, diagnostic worklists, and pharmacy dispensing in one synchronized system—with native PhilHealth YAKAP compliance and offline-resilient edge support.
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">

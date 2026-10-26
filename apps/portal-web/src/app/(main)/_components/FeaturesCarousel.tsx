@@ -41,13 +41,13 @@ export function FeaturesCarousel() {
       icon: Activity,
     },
     {
-      title: "Bank-grade Security",
-      description: "Keep patient data fully protected. All files and data transfers are end-to-end encrypted within our HIPAA-compliant infrastructure.",
+      title: "Data Privacy & Compliance",
+      description: "Keep patient data fully protected. End-to-end encrypted infrastructure compliant with RA 10173 (Data Privacy Act of 2012) and DOH standards.",
       icon: ShieldCheck,
     },
     {
-      title: "Lightning Fast",
-      description: "Save hours every week with a blazing fast interface that never keeps your staff or your patients waiting.",
+      title: "Offline-Resilient Care",
+      description: "Never let network outages halt patient care. Continue consultations and triage seamlessly with edge-synchronized workstations.",
       icon: Zap,
     },
     {
