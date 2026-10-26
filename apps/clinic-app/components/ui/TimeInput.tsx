@@ -28,6 +28,7 @@ export interface TimeInputProps {
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   testID?: string;
+  inputTestID?: string;
 }
 
 export function formatTimeMask(raw: string): string {
@@ -90,6 +91,7 @@ export default function TimeInput({
   containerStyle,
   inputStyle,
   testID = 'time-input',
+  inputTestID,
 }: TimeInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -172,6 +174,8 @@ export default function TimeInput({
         ]}
       >
         <TextInput
+          data-testid={inputTestID || (testID ? `${testID}-input` : undefined)}
+          testID={inputTestID || (testID ? `${testID}-input` : undefined)}
           style={[styles.input, inputStyle]}
           value={value}
           onChangeText={handleChangeText}
