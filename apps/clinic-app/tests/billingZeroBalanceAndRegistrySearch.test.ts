@@ -181,4 +181,12 @@ describe('Billing Zero-Balance Settlement & Patient Registry Search Suite', () =
       expect(matches).toEqual([]);
     });
   });
+
+  describe('Suite 4: Retail Mode Layout Streamlining', () => {
+    test('4.1 Eliminates redundant Quick OTC & Supply Picker card in favor of unified Invoice Items catalog', () => {
+      expect(billingContent).not.toContain('Quick OTC & Supply Picker');
+      expect(billingContent).not.toContain('renderRetailCatalogCard');
+      expect(billingContent).not.toContain('retailCatalog');
+    });
+  });
 });

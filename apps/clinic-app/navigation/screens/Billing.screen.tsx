@@ -166,7 +166,6 @@ export default function BillingScreen() {
   const [billingMode, setBillingMode] = useState<BillingMode>('queue');
   const [activeTab, setActiveTab] = useState<BillingTab>('active');
   const [walkInCustomerName, setWalkInCustomerName] = useState('Walk-In Retail Guest');
-  const [retailSearch, setRetailSearch] = useState('');
   const [registrySearch, setRegistrySearch] = useState('');
   const [registryResults, setRegistryResults] = useState<ClinicPatient[]>([]);
   const [isSearchingRegistry, setIsSearchingRegistry] = useState(false);
@@ -511,29 +510,6 @@ export default function BillingScreen() {
     return () => clearTimeout(timer);
   }, [registrySearch, handleSearchRegistry, hasSearchedRegistry]);
 
-  const handleAddRetailItem = useCallback((svc: ClinicServiceItem) => {
-    setLineItems((prev) => {
-      const existing = prev.find((i) => (svc.code && i.code === svc.code) || i.name === svc.name);
-      if (existing) {
-        return prev.map((i) =>
-          i.id === existing.id ? { ...i, qty: i.qty + 1 } : i
-        );
-      }
-      return [
-        ...prev,
-        {
-          id: `retail-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          code: svc.code || '',
-          name: svc.name,
-          category: svc.category || 'Medicine',
-          price: svc.standardPrice,
-          qty: 1,
-          doctorName: currentName,
-        },
-      ];
-    });
-  }, [currentName]);
-
   const handleSelectUnsettledInvoice = useCallback((inv: InvoiceRecord) => {
     const isPromissory = Boolean(
       inv.notes?.includes('[PROMISSORY NOTE]') ||
@@ -629,32 +605,6 @@ export default function BillingScreen() {
     selectedPatient && !patients.some((p) => p.key === selectedPatient.key)
       ? [selectedPatient, ...patients]
       : patients;
-
-  const retailCatalog = services.filter((s) => {
-    const isRetail =
-      s.category?.toLowerCase() === 'medicine' ||
-      s.category?.toLowerCase() === 'supply' ||
-      s.category?.toLowerCase() === 'nonclinical' ||
-      s.category === 'Medicine' ||
-      s.category === 'Supply' ||
-      s.category === 'NonClinical';
-    const hasAnyRetail = services.some(
-      (x) =>
-        x.category?.toLowerCase() === 'medicine' ||
-        x.category?.toLowerCase() === 'supply' ||
-        x.category?.toLowerCase() === 'nonclinical'
-    );
-    if (hasAnyRetail && !isRetail) return false;
-
-    if (retailSearch.trim()) {
-      const q = retailSearch.trim().toLowerCase();
-      return (
-        s.name.toLowerCase().includes(q) ||
-        (s.code && s.code.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
 
   const handleAddService = (svc: ClinicServiceItem) => {
     const targetDoctorId = selectedPatient?.doctorId;
@@ -2156,42 +2106,6 @@ export default function BillingScreen() {
     </Card>
   );
 
-  const renderRetailCatalogCard = () => (
-    <Card>
-      <CardHeader
-        title="Quick OTC & Supply Picker"
-        icon="pill"
-        rightAction={<Badge label={`${retailCatalog.length} available`} variant="neutral" size="sm" />}
-      />
-      <Input
-        label="Search OTC & Supplies"
-        placeholder="Filter medicines or supplies by name..."
-        value={retailSearch}
-        onChangeText={setRetailSearch}
-      />
-      {retailCatalog.length === 0 ? (
-        <EmptyState
-          icon="clipboard"
-          title="No retail items matching search"
-          description="Check the spelling or add items under Medicine or Supply categories in Settings."
-        />
-      ) : (
-        <View style={styles.chipRow}>
-          {retailCatalog.map((svc) => (
-            <Button
-              key={svc.id}
-              size="sm"
-              variant="outline"
-              icon="plus"
-              title={`${svc.name} · ${formatPeso(svc.standardPrice)}`}
-              onPress={() => handleAddRetailItem(svc)}
-            />
-          ))}
-        </View>
-      )}
-    </Card>
-  );
-
   const renderRegistrySearch = () => {
     const isPatientSelected = selectedPatient && !selectedPatient.isWalkInRetail;
 
@@ -2693,7 +2607,6 @@ export default function BillingScreen() {
           <View style={[styles.columns, isWide && styles.columnsWide]}>
             <View style={[styles.column, isWide && styles.mainColumn]}>
               {renderRetailCustomerCard()}
-              {renderRetailCatalogCard()}
               {renderInvoiceItems()}
               {renderDiscounts()}
             </View>
