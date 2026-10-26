@@ -250,18 +250,12 @@ describe("Challenger Adversarial Verification: Milestone 4 Remediation", () => {
       expect(parseSearchParamSig({ sig: "   " })).toBe("");
     });
 
-    test("Source Code Audit: verify/[token]/page.tsx and verify/[kind]/[token]/page.tsx contain rawSig fallback", () => {
-      const page1Path = path.join(SRC_DIR, "app/verify/[token]/page.tsx");
-      const page2Path = path.join(SRC_DIR, "app/verify/[kind]/[token]/page.tsx");
+    test("Source Code Audit: verify/[...ref]/page.tsx (token and kind/token forms) contains rawSig fallback", () => {
+      const pagePath = path.join(SRC_DIR, "app/verify/[...ref]/page.tsx");
+      const page = fs.readFileSync(pagePath, "utf-8");
 
-      const page1 = fs.readFileSync(page1Path, "utf-8");
-      const page2 = fs.readFileSync(page2Path, "utf-8");
-
-      expect(page1).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");
-      expect(page1).toContain("const sig = rawSig ? rawSig.trim().replace(/^SEC-SHA256-/i, '') : undefined;");
-
-      expect(page2).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");
-      expect(page2).toContain("const sig = rawSig ? rawSig.trim().replace(/^SEC-SHA256-/i, '') : undefined;");
+      expect(page).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");
+      expect(page).toContain("const sig = rawSig ? rawSig.trim().replace(/^SEC-SHA256-/i, '') : undefined;");
     });
   });
 });

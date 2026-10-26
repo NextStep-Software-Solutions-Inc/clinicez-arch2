@@ -5,13 +5,14 @@ import JoinClient, { INSTITUTIONAL_CUSTOM_FIELDS } from "@/components/join/JoinC
 import JoinCodeErrorCard from "@/components/join/JoinCodeErrorCard";
 
 interface FacilityJoinPageProps {
-  params: Promise<{ tenantSlug: string; facilitySlug: string }>;
+  // `[joinKey]` is the tenant slug at this level (see `join/[joinKey]/page.tsx`).
+  params: Promise<{ joinKey: string; facilitySlug: string }>;
 }
 
 export async function generateMetadata({
   params,
 }: FacilityJoinPageProps): Promise<Metadata> {
-  const { tenantSlug, facilitySlug } = await params;
+  const { joinKey: tenantSlug, facilitySlug } = await params;
   return {
     title: `Clinic Intake | ${facilitySlug.toUpperCase()} (${tenantSlug})`,
     description: `Secured patient self-registration and intake workstation for ${facilitySlug}.`,
@@ -21,7 +22,7 @@ export async function generateMetadata({
 export { INSTITUTIONAL_CUSTOM_FIELDS };
 
 export default async function FacilityJoinPage({ params }: FacilityJoinPageProps) {
-  const { tenantSlug, facilitySlug } = await params;
+  const { joinKey: tenantSlug, facilitySlug } = await params;
   const cleanTenant = (tenantSlug || "").trim().toLowerCase();
   const cleanFacility = (facilitySlug || "").trim().toLowerCase();
 
