@@ -2257,29 +2257,19 @@ export default function BillingScreen() {
                   value={registrySearch}
                   onChangeText={setRegistrySearch}
                   onSubmitEditing={handleSearchRegistry}
+                  rightIcon={registrySearch.trim().length > 0 ? 'x' : undefined}
+                  onRightIconPress={handleClearRegistrySearch}
                 />
               </View>
-              {registrySearch.trim().length > 0 && (
-                <View style={styles.registrySearchBtnWrap}>
-                  <Button
-                    size="md"
-                    variant="ghost"
-                    icon="x"
-                    title="Clear"
-                    onPress={handleClearRegistrySearch}
-                  />
-                </View>
-              )}
-              <View style={styles.registrySearchBtnWrap}>
-                <Button
-                  size="md"
-                  variant="primary"
-                  icon="search"
-                  title="Search"
-                  loading={isSearchingRegistry}
-                  onPress={handleSearchRegistry}
-                />
-              </View>
+              <Button
+                size="md"
+                variant="primary"
+                icon="search"
+                title="Search"
+                loading={isSearchingRegistry}
+                onPress={handleSearchRegistry}
+                style={styles.registrySearchBtn}
+              />
             </View>
 
             {isSearchingRegistry ? (
@@ -3068,8 +3058,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
   },
-  registrySearchBtnWrap: {
-    marginBottom: theme.spacing.sm,
+  registrySearchBtn: {
+    height: theme.sizes.controlMd,
+    minHeight: theme.sizes.controlMd,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   registryResultsList: {
     gap: theme.spacing.sm,

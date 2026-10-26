@@ -137,9 +137,11 @@ describe('Billing Zero-Balance Settlement & Patient Registry Search Suite', () =
       expect(billingContent).toContain('350');
     });
 
-    test('2.2 Provides clear button to reset registry search query and results', () => {
+    test('2.2 Provides clear (X) icon button inside input to reset registry search query and results', () => {
       expect(billingContent).toContain('handleClearRegistrySearch');
-      expect(billingContent).toContain("title=\"Clear\"");
+      expect(billingContent).toContain("rightIcon={registrySearch.trim().length > 0 ? 'x' : undefined}");
+      expect(billingContent).toContain('onRightIconPress={handleClearRegistrySearch}');
+      expect(billingContent).toContain('registrySearchBtn');
     });
 
     test('2.3 Constrains registry search results inside scrollable container (maxHeight: 280)', () => {
