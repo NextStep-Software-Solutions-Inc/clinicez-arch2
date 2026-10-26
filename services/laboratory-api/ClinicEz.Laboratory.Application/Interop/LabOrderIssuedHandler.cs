@@ -4,6 +4,7 @@ using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,7 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
     private readonly ILabOrderLifecycle _lifecycle;
     private readonly ILabOrderBilling _billing;
     private readonly ILogger<LabOrderIssuedHandler> _logger;
+    private readonly IInteropPublisher? _publisher;
 
     public LabOrderIssuedHandler(
         IRepository<LabRequisition> requisitionRepository,
@@ -45,7 +47,8 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
         ILabContext labContext,
         ILabOrderLifecycle lifecycle,
         ILabOrderBilling billing,
-        ILogger<LabOrderIssuedHandler> logger)
+        ILogger<LabOrderIssuedHandler> logger,
+        IInteropPublisher? publisher = null)
     {
         _requisitionRepository = requisitionRepository;
         _settingsRepository = settingsRepository;
@@ -54,6 +57,7 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
         _lifecycle = lifecycle;
         _billing = billing;
         _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task HandleAsync(LabRequisitionIssuedEvent msg, InteropMessageContext context, CancellationToken ct)
@@ -198,6 +202,26 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
         }
 
         await _requisitionRepository.AddAsync(requisition, ct);
+
+        if (requisition.HasClinicEzPatient && requisition.PatientId != Guid.Empty && _publisher != null)
+        {
+            var grantId = CommsGrantIdGenerator.Create(requisition.TenantId, requisition.LaboratoryId.ToString(), "LabRequisition", requisition.Id.ToString());
+            var commsFrom = Party.ForFacility(requisition.TenantId, requisition.LaboratoryId.ToString(), FacilityType.Laboratory);
+            var toParty = Party.ForFacility(requisition.TenantId, requisition.LaboratoryId.ToString(), FacilityType.Laboratory, service: InteropServices.Comms);
+            var grantPayload = new CommsEligibilityGrantedPayload(
+                GrantId: grantId,
+                TenantId: requisition.TenantId,
+                FacilityId: requisition.LaboratoryId.ToString(),
+                FacilityType: "Laboratory",
+                PatientId: requisition.PatientId,
+                ContextType: "LabRequisition",
+                ContextId: requisition.Id.ToString(),
+                WindowStartUtc: DateTime.UtcNow,
+                WindowEndUtc: DateTime.UtcNow.AddDays(14),
+                Version: 1);
+            _publisher.Enqueue(InteropTypes.CommsEligibilityGranted, commsFrom, toParty, correlationId: grantId, grantPayload);
+        }
+
         await _unitOfWork.SaveChangesAsync(ct);
 
         _logger.LogInformation(

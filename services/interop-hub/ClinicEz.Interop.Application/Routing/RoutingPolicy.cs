@@ -89,7 +89,7 @@ public sealed class RoutingPolicy(IDirectoryStore directory, IMessageStore messa
     private static readonly string[] PlatformServices = [.. InteropServices.PlatformServices];
 
     private static readonly string[] FacilityPlaneServices =
-        [InteropServices.Clinic, InteropServices.Laboratory, InteropServices.Pharmacy, InteropServices.Organization, InteropServices.Billing];
+        [InteropServices.Clinic, InteropServices.Laboratory, InteropServices.Pharmacy, InteropServices.Organization, InteropServices.Billing, InteropServices.Comms];
 
     public async Task<RouteDecision> RouteAsync(HubPrincipal sender, InteropEnvelope envelope, CancellationToken ct)
     {
@@ -226,6 +226,9 @@ public sealed class RoutingPolicy(IDirectoryStore directory, IMessageStore messa
 
         var from = envelope.From;
         if (from.TenantId == target.TenantId) return (null, null);
+
+        if (envelope.Type.StartsWith("comms.", StringComparison.OrdinalIgnoreCase))
+            return ($"Cross-tenant messages of type '{envelope.Type}' are prohibited.", null);
 
         var fromKey = HubFacility.MakeKey(from.TenantId!, from.FacilityId!);
 

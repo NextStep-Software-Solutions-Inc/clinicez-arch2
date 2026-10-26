@@ -11,7 +11,10 @@ using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +54,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IPrescriptionPublisher _prescriptionPublisher;
     private readonly IClaimSlipService _claims;
     private readonly IPatientDocumentPublisher _documents;
+    private readonly IInteropPublisher? _publisher;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -64,7 +68,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IPatientAppointmentPublisher appointmentPublisher,
         IPrescriptionPublisher prescriptionPublisher,
         IClaimSlipService claims,
-        IPatientDocumentPublisher documents)
+        IPatientDocumentPublisher documents,
+        IInteropPublisher? publisher = null)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
@@ -78,6 +83,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _prescriptionPublisher = prescriptionPublisher;
         _claims = claims;
         _documents = documents;
+        _publisher = publisher;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
@@ -268,6 +274,25 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             );
 
             await _appointmentPublisher.PublishAppointmentUpdatedAsync(pushPayload, cancellationToken);
+        }
+
+        if (_publisher != null)
+        {
+            var grantId = CommsGrantIdGenerator.Create(encounter.TenantId, encounter.ClinicId.ToString(), "Encounter", encounter.Id.ToString());
+            var from = Party.ForFacility(encounter.TenantId, encounter.ClinicId.ToString(), FacilityType.Clinic);
+            var to = Party.ForFacility(encounter.TenantId, encounter.ClinicId.ToString(), FacilityType.Clinic, service: InteropServices.Comms);
+            var grantPayload = new CommsEligibilityGrantedPayload(
+                GrantId: grantId,
+                TenantId: encounter.TenantId,
+                FacilityId: encounter.ClinicId.ToString(),
+                FacilityType: "Clinic",
+                PatientId: encounter.PatientId,
+                ContextType: "Encounter",
+                ContextId: encounter.Id.ToString(),
+                WindowStartUtc: DateTime.UtcNow,
+                WindowEndUtc: DateTime.UtcNow.AddDays(14),
+                Version: 1);
+            _publisher.Enqueue(InteropTypes.CommsEligibilityGranted, from, to, correlationId: grantId, grantPayload);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

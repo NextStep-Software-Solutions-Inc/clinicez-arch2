@@ -14,7 +14,8 @@ public static class PlanTierDefaults
                 MaxAnalyzers = 3,
                 MaxMonthlyConsultations = 2500,
                 MaxStorageMb = 20480,
-                ConcurrentTerminals = 5
+                ConcurrentTerminals = 5,
+                CallMinutesMonthly = 0
             },
             "enterprise" => new FacilityLimits
             {
@@ -23,7 +24,8 @@ public static class PlanTierDefaults
                 MaxAnalyzers = 10,
                 MaxMonthlyConsultations = 10000,
                 MaxStorageMb = 102400,
-                ConcurrentTerminals = 20
+                ConcurrentTerminals = 20,
+                CallMinutesMonthly = 0
             },
             _ => new FacilityLimits // Community / Default
             {
@@ -32,7 +34,8 @@ public static class PlanTierDefaults
                 MaxAnalyzers = 1,
                 MaxMonthlyConsultations = 500,
                 MaxStorageMb = 5120,
-                ConcurrentTerminals = 2
+                ConcurrentTerminals = 2,
+                CallMinutesMonthly = 0
             }
         };
 

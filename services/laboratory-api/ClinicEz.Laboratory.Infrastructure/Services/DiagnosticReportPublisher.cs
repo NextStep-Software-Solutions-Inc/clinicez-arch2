@@ -3,6 +3,7 @@ using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Application.Interop;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.Extensions.Logging;
 
@@ -33,6 +34,24 @@ public class DiagnosticReportPublisher : IDiagnosticReportPublisher
             LabInteropParties.OrderingClinic(reportEvent.OrderingTenantId, reportEvent.OrderingFacilityId),
             reportEvent.RequisitionId,
             reportEvent);
+
+        if (reportEvent.PatientId is { } patientId && patientId != Guid.Empty)
+        {
+            var grantId = CommsGrantIdGenerator.Create(reportEvent.LaboratoryTenantId, reportEvent.LaboratoryFacilityId, "LabResult", reportEvent.ReportId.ToString());
+            var commsTo = Party.ForFacility(reportEvent.LaboratoryTenantId, reportEvent.LaboratoryFacilityId, FacilityType.Laboratory, service: InteropServices.Comms);
+            var grantPayload = new CommsEligibilityGrantedPayload(
+                GrantId: grantId,
+                TenantId: reportEvent.LaboratoryTenantId,
+                FacilityId: reportEvent.LaboratoryFacilityId,
+                FacilityType: "Laboratory",
+                PatientId: patientId,
+                ContextType: "LabResult",
+                ContextId: reportEvent.ReportId.ToString(),
+                WindowStartUtc: DateTime.UtcNow,
+                WindowEndUtc: DateTime.UtcNow.AddDays(14),
+                Version: 1);
+            _publisher.Enqueue(InteropTypes.CommsEligibilityGranted, from, commsTo, correlationId: grantId, grantPayload);
+        }
 
         EnqueuePatientDocument(reportEvent, from);
     }

@@ -102,7 +102,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
-      BACKUP_DATABASES: CLINICEZ_CLINIC_DB CLINICEZ_BILLING_DB CLINICEZ_LABORATORY_DB CLINICEZ_PHARMACY_DB CLINICEZ_ORGANIZATION_DB CLINICEZ_INTEROP_HUB_LOCAL_DB
+      BACKUP_DATABASES: CLINICEZ_CLINIC_DB CLINICEZ_BILLING_DB CLINICEZ_LABORATORY_DB CLINICEZ_PHARMACY_DB CLINICEZ_ORGANIZATION_DB CLINICEZ_COMMS_DB CLINICEZ_INTEROP_HUB_LOCAL_DB
     volumes:
       - ${BACKUP_DIR:-./backups}:/backups
       - ./backup/backup.sh:/backup/backup.sh:ro
@@ -113,6 +113,7 @@ services:
       - laboratory-api-keys:/data/keys/laboratory-api:ro
       - pharmacy-api-keys:/data/keys/pharmacy-api:ro
       - organization-api-keys:/data/keys/organization-api:ro
+      - comms-api-keys:/data/keys/comms-api:ro
 
   # ---------------------------------------------------------------- cell hub
   # Same binary as the cloud hub in Local mode. Same-cell traffic stays on the LAN; cross-cell traffic is forwarded to the cloud
@@ -297,6 +298,26 @@ services:
       - organization-api-keys:/app/keys
     healthcheck: *api-healthcheck
 
+  comms-api:
+    image: ghcr.io/${GHCR_OWNER_REPO:?GHCR_OWNER_REPO must be set}/comms-api:${IMAGE_TAG:-latest}
+    profiles: ["comms"]
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *api-env
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=CLINICEZ_COMMS_DB;Username=${POSTGRES_USER:-clinicez};Password=${POSTGRES_PASSWORD}
+      Messaging__Service: comms
+      Messaging__ClientId: ${COMMS_HUB_CLIENT_ID:-}
+      Messaging__ClientSecret: ${COMMS_HUB_CLIENT_SECRET:-}
+      Messaging__SigningKey: ${COMMS_HUB_SIGNING_KEY:-}
+      Jwt__SigningKey: ${COMMS_JWT_SIGNING_KEY:-}
+    volumes:
+      - comms-api-keys:/app/keys
+    healthcheck: *api-healthcheck
+
   # ---------------------------------------------------------------- web apps (nginx, same-origin /api proxy)
   # Native phones/tablets enter http://<this-server>:<web port> as their server address: the nginx in each web image
   # proxies /api/ to its API, so the APIs themselves never need a host port.
@@ -351,3 +372,4 @@ volumes:
   laboratory-api-keys:
   pharmacy-api-keys:
   organization-api-keys:
+  comms-api-keys:

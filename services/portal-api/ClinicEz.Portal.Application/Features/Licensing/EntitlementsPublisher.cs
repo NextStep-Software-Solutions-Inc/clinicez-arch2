@@ -71,8 +71,8 @@ public sealed class EntitlementsPublisher(
                     ReadOnlyGraceUntilUtc = payload.ReadOnlyGraceUntil!.Value
                 };
 
-            // The facility's own service and the billing service of the same cell each hold the license.
-            foreach (var service in new[] { null, InteropServices.Billing })
+            // The facility's own service, billing, and comms services of the same cell each hold the license.
+            foreach (var service in new[] { null, InteropServices.Billing, InteropServices.Comms })
             {
                 publisher.Enqueue(
                     InteropTypes.EntitlementsChanged,

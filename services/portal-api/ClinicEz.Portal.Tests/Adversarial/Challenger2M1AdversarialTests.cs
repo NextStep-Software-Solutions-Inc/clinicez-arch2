@@ -323,7 +323,7 @@ public class Challenger2M1AdversarialTests : IDisposable
 
         // Contrast with license message which MUST carry the license
         var licenseMessages = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued);
-        Assert.Equal(2, licenseMessages.Count);
+        Assert.Equal(3, licenseMessages.Count);
         Assert.All(licenseMessages, msg =>
         {
             var p = msg.GetPayload<FacilityCreatedEvent>();

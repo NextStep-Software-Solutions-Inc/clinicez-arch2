@@ -19,7 +19,7 @@
   (portal HubEdgeCredentials). -NoLocalHub (single facility, no hub): clinic and billing use the PORTAL-issued per-service
   clients against the cloud hub: -CloudHubUrl (= MESSAGING_HUB_URL), -ClinicHubClientId/-ClinicHubClientSecret and
   -BillingHubClientId/-BillingHubClientSecret. -AirGapped: UPSTREAM_ENABLED=false, same-cell traffic only (cross-cell messages
-  are rejected, not queued); not combinable with -NoLocalHub. -With laboratory,pharmacy,organization,cashier switches optional
+  are rejected, not queued); not combinable with -NoLocalHub. -With laboratory,pharmacy,organization,cashier,comms switches optional
   profiles on. -Force rewrites .env (old one saved as .env.bak.<time>, generated secrets kept).
   -Yes never prompts. -NoPull skips the pull (images loaded with `docker load`). -NoStart only writes the configuration.
   Keys (ECDSA P-256, one-line base64 of a PEM). -LicensePublicKey <key> | -LicensePublicKeyFile <pem file>: the portal's license PUBLIC key
@@ -77,14 +77,14 @@ $Keys = @(
   'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL',
   'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET',
   'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET',
-  'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT',
+  'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'COMMS_HUB_CLIENT_ID', 'COMMS_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT',
   'POSTGRES_USER', 'POSTGRES_PASSWORD', 'HANGFIRE_DASHBOARD_PASSWORD',
-  'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
+  'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'COMMS_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
   'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0', 'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1', 'CLINIC_DOCUMENT_SIGNING_KEY', 'LABORATORY_DOCUMENT_SIGNING_KEY', 'GAMOT_UPSC_SECRET_KEY',
   'FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'HUB_SIGNING_REQUIRED', 'EDGE_HUB_SIGNING_KEY',
   'CLINIC_HUB_SIGNING_KEY', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_SIGNING_KEY', 'BILLING_HUB_PUBLIC_KEY',
   'LABORATORY_HUB_SIGNING_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'PHARMACY_HUB_PUBLIC_KEY',
-  'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY',
+  'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY', 'COMMS_HUB_SIGNING_KEY', 'COMMS_HUB_PUBLIC_KEY',
   'CLINIC_WEB_PORT', 'LABORATORY_WEB_PORT', 'PHARMACY_WEB_PORT', 'CASHIER_WEB_PORT',
   'BACKUP_DIR', 'BACKUP_INTERVAL_HOURS', 'BACKUP_RETENTION_DAYS',
   'STORAGE_PROVIDER', 'STORAGE_ENABLE_LOCAL_FALLBACK',
@@ -93,8 +93,8 @@ $Keys = @(
 )
 
 # Keys that must be a P-256 PEM (checked, normalized to one-line base64): public / private.
-$PubKeyVars = @('FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_PUBLIC_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_PUBLIC_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY')
-$PrivKeyVars = @('EDGE_HUB_SIGNING_KEY', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY', 'LABORATORY_HUB_SIGNING_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_SIGNING_KEY')
+$PubKeyVars = @('FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_PUBLIC_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_PUBLIC_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY', 'COMMS_HUB_PUBLIC_KEY')
+$PrivKeyVars = @('EDGE_HUB_SIGNING_KEY', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY', 'LABORATORY_HUB_SIGNING_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_SIGNING_KEY', 'COMMS_HUB_SIGNING_KEY')
 
 # service, env prefix, compose profile ('' = always), hub facility type ('-' = no facility)
 $Services = @(
@@ -102,7 +102,8 @@ $Services = @(
   @{ Svc = 'billing'; Prefix = 'BILLING'; Profile = ''; FType = '-' },
   @{ Svc = 'laboratory'; Prefix = 'LABORATORY'; Profile = 'laboratory'; FType = 'Laboratory' },
   @{ Svc = 'pharmacy'; Prefix = 'PHARMACY'; Profile = 'pharmacy'; FType = 'Pharmacy' },
-  @{ Svc = 'organization'; Prefix = 'ORGANIZATION'; Profile = 'organization'; FType = 'Organization' }
+  @{ Svc = 'organization'; Prefix = 'ORGANIZATION'; Profile = 'organization'; FType = 'Organization' },
+  @{ Svc = 'comms'; Prefix = 'COMMS'; Profile = 'comms'; FType = '-' }
 )
 
 $Cfg = @{}
@@ -400,6 +401,7 @@ function Get-EnabledServices {
   if (Test-HasProfile 'pharmacy') { $s += 'pharmacy-api'; $s += 'pharmacy-web' }
   if (Test-HasProfile 'organization') { $s += 'organization-api' }
   if (Test-HasProfile 'cashier') { $s += 'cashier-web' }
+  if (Test-HasProfile 'comms') { $s += 'comms-api' }
   return $s
 }
 
@@ -446,13 +448,13 @@ function Select-Profiles {
   if ($With) { $extra = $With }
   elseif ($Cfg['COMPOSE_PROFILES']) { $extra = $Cfg['COMPOSE_PROFILES'] }
   elseif ($Interactive) {
-    foreach ($p in 'laboratory', 'pharmacy', 'organization', 'cashier') {
+    foreach ($p in @('laboratory', 'pharmacy', 'organization', 'cashier', 'comms')) {
       if (Read-YesNo "Enable the $p profile?" $false) { $extra = "$extra,$p" }
     }
   }
   $list = @($extra -replace '\s', '' -split ',' | Where-Object { $_ -and $_ -ne 'local-hub' })
   foreach ($p in $list) {
-    if (@('laboratory', 'pharmacy', 'organization', 'cashier') -notcontains $p) { Stop-Install "Unknown profile '$p' (laboratory, pharmacy, organization, cashier)." }
+    if (@('laboratory', 'pharmacy', 'organization', 'cashier', 'comms') -notcontains $p) { Stop-Install "Unknown profile '$p' (laboratory, pharmacy, organization, cashier, comms)." }
   }
   if ($NoLocalHub) {
     if ($list.Count -gt 0) { Stop-Install '-NoLocalHub only fits a single-facility site: several facilities need the local hub (README).' }
@@ -672,10 +674,10 @@ function Write-EnvFile {
       '#     generated here; the same values go into hub-bootstrap.env.',
       '#   -NoLocalHub: MESSAGING_HUB_URL is the cloud hub; CLINIC_ and BILLING_HUB_CLIENT_ID/SECRET are the PORTAL-issued',
       '#     per-service clients (the other services do not run).',
-      'MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET', 'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT'),
+      'MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET', 'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'COMMS_HUB_CLIENT_ID', 'COMMS_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT'),
     @('# Database', 'POSTGRES_USER', 'POSTGRES_PASSWORD'),
     @('# Clinical Record Storage', 'STORAGE_PROVIDER', 'STORAGE_ENABLE_LOCAL_FALLBACK', 'S3_SERVICE_URL', 'S3_BUCKET_NAME', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_REGION', 'S3_FORCE_PATH_STYLE', 'R2_ACCOUNT_ID', 'R2_BUCKET_NAME', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_URL'),
-    @('# Service secrets', 'HANGFIRE_DASHBOARD_PASSWORD', 'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
+    @('# Service secrets', 'HANGFIRE_DASHBOARD_PASSWORD', 'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'COMMS_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
       '# Only while rotating the master secret: the previous value(s), so old records stay readable (see README).',
       'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0', 'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1',
       '# Keys of the document digests (verification QR codes), one per service, and the pharmacy UPSC code key: keep them with this file.',
@@ -688,7 +690,7 @@ function Write-EnvFile {
       'FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'HUB_SIGNING_REQUIRED', 'EDGE_HUB_SIGNING_KEY',
       'CLINIC_HUB_SIGNING_KEY', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_SIGNING_KEY', 'BILLING_HUB_PUBLIC_KEY',
       'LABORATORY_HUB_SIGNING_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'PHARMACY_HUB_PUBLIC_KEY',
-      'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY'),
+      'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY', 'COMMS_HUB_SIGNING_KEY', 'COMMS_HUB_PUBLIC_KEY'),
     @('# Web ports', 'CLINIC_WEB_PORT', 'LABORATORY_WEB_PORT', 'PHARMACY_WEB_PORT', 'CASHIER_WEB_PORT'),
     @('# Backups', 'BACKUP_DIR', 'BACKUP_INTERVAL_HOURS', 'BACKUP_RETENTION_DAYS')
   )
@@ -932,7 +934,7 @@ function Invoke-Restore {
     if (-not $Yes -and -not (Read-YesNo 'Continue?' $false)) { Stop-Install 'Cancelled.' }
     [void](Invoke-Dc (@('stop') + $stop))
     $dockerArgs = @('run', '--rm', '-v', 'clinicez-edge_clinic-records:/data/clinic-records')
-    foreach ($svc in 'clinic-api', 'billing-api', 'laboratory-api', 'pharmacy-api', 'organization-api') { $dockerArgs += '-v'; $dockerArgs += "clinicez-edge_${svc}-keys:/data/keys/$svc" }
+    foreach ($svc in 'clinic-api', 'billing-api', 'laboratory-api', 'pharmacy-api', 'organization-api', 'comms-api') { $dockerArgs += '-v'; $dockerArgs += "clinicez-edge_${svc}-keys:/data/keys/$svc" }
     $dockerArgs += '-v'; $dockerArgs += ((Split-Path -Parent $full) + ':/in:ro')
     $dockerArgs += 'postgres:16'; $dockerArgs += 'tar'; $dockerArgs += '-xzf'; $dockerArgs += "/in/$name"; $dockerArgs += '-C'; $dockerArgs += '/data'
     & docker @dockerArgs | Out-Host

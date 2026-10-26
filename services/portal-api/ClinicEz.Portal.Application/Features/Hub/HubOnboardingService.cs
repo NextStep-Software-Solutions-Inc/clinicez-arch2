@@ -42,7 +42,8 @@ public static class EdgeHubServices
         InteropServices.Laboratory,
         InteropServices.Pharmacy,
         InteropServices.Organization,
-        InteropServices.Billing
+        InteropServices.Billing,
+        InteropServices.Comms
     ];
 
     public static bool IsKnown(string service) => All.Contains(service, StringComparer.Ordinal);

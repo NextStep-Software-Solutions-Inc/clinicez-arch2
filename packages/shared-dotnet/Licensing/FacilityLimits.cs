@@ -26,4 +26,7 @@ public record FacilityLimits
 
     [JsonPropertyName("concurrentTerminals")]
     public int ConcurrentTerminals { get; init; } = 2;
+
+    [JsonPropertyName("callMinutesMonthly")]
+    public int CallMinutesMonthly { get; init; } = 0;
 }
