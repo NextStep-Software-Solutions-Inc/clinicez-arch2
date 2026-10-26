@@ -1659,7 +1659,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
             { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
             { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
-            { value: 'ALERTS', label: 'Alerts & allergies', count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts) },
+            {
+              value: 'ALERTS',
+              label: 'Alerts & allergies',
+              count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
+              badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
+            },
             { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
           ]}
         />
