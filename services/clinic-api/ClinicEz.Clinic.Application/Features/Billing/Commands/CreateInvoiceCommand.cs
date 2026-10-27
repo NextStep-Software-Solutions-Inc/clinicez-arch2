@@ -109,7 +109,18 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand request, CancellationToken cancellationToken)
     {
-        if (!request.IsWalkInRetail && (!request.PatientId.HasValue || request.PatientId.Value == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientName)))
+        if (request.IsWalkInRetail)
+        {
+            var customerName = !string.IsNullOrWhiteSpace(request.WalkInCustomerName)
+                ? request.WalkInCustomerName.Trim()
+                : (!string.IsNullOrWhiteSpace(request.PatientName) ? request.PatientName.Trim() : null);
+
+            if (string.IsNullOrWhiteSpace(customerName))
+            {
+                throw new BadRequestException("Customer name is required for Walk-In Retail POS invoices.");
+            }
+        }
+        else if (!request.PatientId.HasValue || request.PatientId.Value == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientName))
         {
             throw new BadRequestException("PatientId and PatientName are required to generate an invoice.");
         }
@@ -120,7 +131,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
         var effectivePatientName = !string.IsNullOrWhiteSpace(request.WalkInCustomerName)
             ? request.WalkInCustomerName.Trim()
-            : (!string.IsNullOrWhiteSpace(request.PatientName) ? request.PatientName.Trim() : "Walk-In Retail Guest");
+            : request.PatientName!.Trim();
 
         // Active invoice lookup for Draft SOA merging & Paid duplicate prevention
         Invoice? existingInvoice = null;

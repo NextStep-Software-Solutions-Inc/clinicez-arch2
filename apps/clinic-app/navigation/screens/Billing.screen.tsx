@@ -165,7 +165,8 @@ export default function BillingScreen() {
 
   const [billingMode, setBillingMode] = useState<BillingMode>('queue');
   const [activeTab, setActiveTab] = useState<BillingTab>('active');
-  const [walkInCustomerName, setWalkInCustomerName] = useState('Walk-In Retail Guest');
+  const [walkInCustomerName, setWalkInCustomerName] = useState('');
+  const [walkInCustomerTouched, setWalkInCustomerTouched] = useState(false);
   const [registrySearch, setRegistrySearch] = useState('');
   const [registryResults, setRegistryResults] = useState<ClinicPatient[]>([]);
   const [isSearchingRegistry, setIsSearchingRegistry] = useState(false);
@@ -992,10 +993,16 @@ export default function BillingScreen() {
       return;
     }
 
-    setIsProcessing(true);
-
     const isRetail = billingMode === 'retail' || Boolean(selectedPatient.isWalkInRetail);
-    const effWalkInName = isRetail ? (walkInCustomerName.trim() || 'Walk-In Retail Guest') : selectedPatient.patientName;
+    const effWalkInName = isRetail ? walkInCustomerName.trim() : selectedPatient.patientName;
+
+    if (isRetail && !effWalkInName) {
+      setWalkInCustomerTouched(true);
+      notify.error('Customer name is required for Walk-In Retail POS.');
+      return;
+    }
+
+    setIsProcessing(true);
 
     let invoiceToPayId: string;
     let orNumber: string;
@@ -1202,11 +1209,12 @@ export default function BillingScreen() {
       setReferenceNumber('');
       setDiscountId('');
       setDiscountType('None');
-      setWalkInCustomerName('Walk-In Retail Guest');
+      setWalkInCustomerName('');
+      setWalkInCustomerTouched(false);
       setSelectedPatient({
         key: 'retail-walk-in',
         patientId: '',
-        patientName: 'Walk-In Retail Guest',
+        patientName: '',
         isWalkInRetail: true,
       });
     } else {
@@ -1560,7 +1568,7 @@ export default function BillingScreen() {
             </ThemedText>
             <ThemedText variant="caption" color={theme.colors.primaryDark}>
               {selectedPatient?.isWalkInRetail
-                ? `Customer: ${selectedPatient.patientName || 'Walk-In Retail Guest'} • OTC medicines & supplies`
+                ? `Customer: ${selectedPatient.patientName || '(Name required)'} • OTC medicines & supplies`
                 : `${selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}Auto-populated from today's encounter & procedures`}
             </ThemedText>
           </View>
@@ -1967,6 +1975,7 @@ export default function BillingScreen() {
           loading={isProcessing}
           disabled={
             !selectedPatient ||
+            (Boolean(selectedPatient.isWalkInRetail || billingMode === 'retail') && !walkInCustomerName.trim()) ||
             lineItems.length === 0 ||
             (amountToCollect <= 0 && balanceDue > 0) ||
             (isPartialPayment && amountToCollect <= 0) ||
@@ -1976,6 +1985,11 @@ export default function BillingScreen() {
           onPress={handleSettlePayment}
           style={styles.settlePrimaryButton}
         />
+        {Boolean(selectedPatient?.isWalkInRetail || billingMode === 'retail') && !walkInCustomerName.trim() && (
+          <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.settleHelperText}>
+            Enter customer name to collect payment and issue receipt.
+          </ThemedText>
+        )}
         {paymentMethod === 'PhilHealthKonsulta' && balanceDue === 0 && !referenceNumber.trim() && (
           <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.settleHelperText}>
             Enter the PhilHealth transaction or claim number above to enable settlement.
@@ -2063,7 +2077,7 @@ export default function BillingScreen() {
           setSelectedPatient({
             key: 'retail-walk-in',
             patientId: '',
-            patientName: walkInCustomerName.trim() || 'Walk-In Retail Guest',
+            patientName: walkInCustomerName.trim(),
             isWalkInRetail: true,
           });
           setActiveInvoice(null);
@@ -2087,24 +2101,31 @@ export default function BillingScreen() {
     </View>
   );
 
-  const renderRetailCustomerCard = () => (
-    <Card>
-      <CardHeader title="Walk-In Customer" icon="patient" />
-      <Input
-        label="Customer Name"
-        placeholder="Walk-In Retail Guest"
-        value={walkInCustomerName}
-        onChangeText={(text) => {
-          setWalkInCustomerName(text);
-          setSelectedPatient((prev) =>
-            prev?.isWalkInRetail
-              ? { ...prev, patientName: text.trim() || 'Walk-In Retail Guest' }
-              : prev
-          );
-        }}
-      />
-    </Card>
-  );
+  const renderRetailCustomerCard = () => {
+    const isNameMissing = !walkInCustomerName.trim();
+    return (
+      <Card>
+        <CardHeader title="Walk-In Customer" icon="patient" />
+        <Input
+          label="Customer Name *"
+          placeholder="Enter customer name"
+          value={walkInCustomerName}
+          onChangeText={(text) => {
+            setWalkInCustomerName(text);
+            setWalkInCustomerTouched(true);
+            setSelectedPatient((prev) =>
+              prev?.isWalkInRetail
+                ? { ...prev, patientName: text.trim() }
+                : prev
+            );
+          }}
+          onBlur={() => setWalkInCustomerTouched(true)}
+          helperText="Customer name is required for walk-in retail transactions."
+          error={walkInCustomerTouched && isNameMissing ? 'Customer name is required.' : undefined}
+        />
+      </Card>
+    );
+  };
 
   const renderRegistrySearch = () => {
     const isPatientSelected = selectedPatient && !selectedPatient.isWalkInRetail;

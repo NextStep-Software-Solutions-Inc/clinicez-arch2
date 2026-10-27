@@ -195,6 +195,15 @@ public sealed class BillingController : ControllerBase
         [FromBody] CreateInvoiceRequest request,
         CancellationToken ct)
     {
+        if (request.IsWalkInRetail &&
+            string.IsNullOrWhiteSpace(request.WalkInCustomerName) &&
+            string.IsNullOrWhiteSpace(request.PatientName))
+        {
+            return BadRequest(ApiResponse<InvoiceDto>.Fail(
+                "Customer name is required for Walk-In Retail POS invoices.",
+                [new ApiFieldError("WalkInCustomerName", "Required", "Customer name is required for Walk-In Retail POS invoices.")]));
+        }
+
         var command = new CreateInvoiceCommand(
             request.PatientId,
             request.PatientName,
