@@ -89,6 +89,9 @@ const mockStaffContext = {
     currentStaff: { id: 'staff-nurse-1', name: 'Nurse Joy', role: 'Nurse' },
     staff: [],
   }),
+  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim() || 'Staff',
+  staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
+  StaffProvider: ({ children }: any) => children,
 };
 mock.module('../context/StaffContext', () => mockStaffContext);
 mock.module('../../context/StaffContext', () => mockStaffContext);
@@ -115,7 +118,7 @@ mock.module('../services/apiClient', () => ({
 
 const { clinicService } = await import('../services/clinicService');
 const { default: NursingProceduresTab, ProcedureExecutionModal } = await import('../components/chart/NursingProceduresTab');
-const { default: DiagnosticLabTab } = await import('../components/chart/DiagnosticLabTab');
+const { default: DiagnosticLabTab, AttachExternalLabModal } = await import('../components/chart/DiagnosticLabTab');
 const { default: AdministerVaccineModal } = await import('../components/chart/AdministerVaccineModal');
 import type { ClinicalProcedureRecord } from '../services/clinicService';
 
@@ -295,6 +298,45 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       expect(element).toBeDefined();
       const markup = renderToStaticMarkup(element);
       expect(markup).toContain('data-testid="intake-specimen-button"');
+    });
+
+    test('5.2 AttachExternalLabModal renders file attachment selector and format options', () => {
+      const element = React.createElement(AttachExternalLabModal, {
+        visible: true,
+        orderId: 'lab-order-123',
+        onClose: () => {},
+        onSuccess: () => {},
+      });
+
+      expect(element).toBeDefined();
+      const markup = renderToStaticMarkup(element);
+      expect(markup).toContain('Attach External Lab Result');
+      expect(markup).toContain('Select Result Document (PDF / Photo)');
+      expect(markup).toContain('Official PDF');
+      expect(markup).toContain('Scanned Photo');
+    });
+
+    test('5.3 clinicService.attachExternalLabResult transmits base64 file and metadata', async () => {
+      mockPostResponse = { id: 'lab-order-123', status: 'CompletedWithExternalReport' };
+      const [res, err] = await clinicService.attachExternalLabResult('lab-order-123', {
+        externalLabName: 'Hi-Precision Diagnostics',
+        documentType: 'PDF',
+        fileBase64: 'data:application/pdf;base64,JVBERi0xLjQK...',
+        contentType: 'application/pdf',
+        fileName: 'cbc_result.pdf',
+        notes: 'Verified normal range',
+      });
+
+      expect(err).toBeNull();
+      expect(lastPostUrl).toBe('/lab-orders/lab-order-123/attach-external-result');
+      expect(lastPostPayload).toMatchObject({
+        externalLabName: 'Hi-Precision Diagnostics',
+        documentType: 'PDF',
+        fileBase64: 'data:application/pdf;base64,JVBERi0xLjQK...',
+        contentType: 'application/pdf',
+        fileName: 'cbc_result.pdf',
+        notes: 'Verified normal range',
+      });
     });
   });
 });

@@ -2639,6 +2639,8 @@ export const clinicService = {
     documentType: 'Photo' | 'PDF';
     documentUrl?: string;
     fileBase64?: string;
+    contentType?: string;
+    fileName?: string;
     notes?: string;
     uploadedBy?: string;
   }) {

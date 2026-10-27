@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button, Modal, Input } from '../ui';
 import { notify } from '@utils/feedback';
 import { clinicService } from '../../services/clinicService';
 import { openDocument } from '../../services/documentOpener';
+import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
 import type {
   ClinicPatient,
   ClinicLabOrderRecord,
@@ -705,6 +706,73 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     gap: theme.spacing.sm,
   },
+  fieldBlock: {
+    gap: 6,
+  },
+  formatChipRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  formatChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  formatChip_active: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
+  },
+  pickedFileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    gap: theme.spacing.sm,
+  },
+  pickedFileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+  },
+  pickedFileActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  changeFileBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+  },
+  clearFileBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  pickFileBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    gap: 4,
+  },
 });
 
 export interface SpecimenIntakeModalProps {
@@ -812,9 +880,37 @@ export function AttachExternalLabModal({
   onSuccess?: () => void;
 }) {
   const [labName, setLabName] = useState('');
-  const [docType] = useState<'PDF' | 'Photo'>('PDF');
+  const [docType, setDocType] = useState<'PDF' | 'Photo'>('PDF');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pickedFile, setPickedFile] = useState<PickedDocumentResult | null>(null);
+  const [picking, setPicking] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setLabName('');
+      setDocType('PDF');
+      setNotes('');
+      setPickedFile(null);
+      setSaving(false);
+      setPicking(false);
+    }
+  }, [visible]);
+
+  const handlePick = async () => {
+    setPicking(true);
+    try {
+      const res = await pickLabResultDocument();
+      if (res) {
+        setPickedFile(res);
+        setDocType(res.documentType);
+      }
+    } catch (err: any) {
+      notify.error(err?.message || 'Failed to select document file.');
+    } finally {
+      setPicking(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!orderId) return;
@@ -822,10 +918,17 @@ export function AttachExternalLabModal({
       notify.error('Diagnostic laboratory name is required.');
       return;
     }
+    if (!pickedFile?.base64) {
+      notify.error('A result file is required. Please choose a PDF or image.');
+      return;
+    }
     setSaving(true);
     const [, err] = await clinicService.attachExternalLabResult(orderId, {
       externalLabName: labName.trim(),
       documentType: docType,
+      fileBase64: pickedFile.base64,
+      contentType: pickedFile.mimeType,
+      fileName: pickedFile.name,
       notes: notes.trim() || undefined,
       documentUrl: 'external-labs/lab-result.pdf',
     });
@@ -868,6 +971,92 @@ export function AttachExternalLabModal({
           onChangeText={setLabName}
           placeholder="e.g. Hi-Precision Diagnostics / St. Luke's"
         />
+
+        <View style={styles.fieldBlock}>
+          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+            Document Format
+          </ThemedText>
+          <View style={styles.formatChipRow}>
+            {(['PDF', 'Photo'] as const).map((fmt) => (
+              <Pressable
+                key={fmt}
+                style={[
+                  styles.formatChip,
+                  docType === fmt && styles.formatChip_active,
+                ]}
+                onPress={() => setDocType(fmt)}
+              >
+                <ThemedText
+                  variant="captionBold"
+                  color={docType === fmt ? theme.colors.primaryDark : theme.colors.textSecondary}
+                >
+                  {fmt === 'PDF' ? 'Official PDF' : 'Scanned Photo'}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.fieldBlock}>
+          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+            Result File Attachment * (PDF, JPEG, PNG)
+          </ThemedText>
+          {pickedFile ? (
+            <View style={styles.pickedFileCard}>
+              <View style={styles.pickedFileInfo}>
+                <Icon
+                  name={docType === 'PDF' ? 'file' : 'camera'}
+                  size={theme.sizes.iconMd}
+                  color={theme.colors.primary}
+                />
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
+                    {pickedFile.name}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {pickedFile.size ? `${(pickedFile.size / 1024).toFixed(1)} KB • ` : ''}
+                    Ready to attach
+                  </ThemedText>
+                </View>
+              </View>
+              <View style={styles.pickedFileActions}>
+                <Pressable
+                  style={styles.changeFileBtn}
+                  onPress={handlePick}
+                  disabled={picking || saving}
+                >
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                    Change
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  style={styles.clearFileBtn}
+                  onPress={() => setPickedFile(null)}
+                  disabled={saving}
+                >
+                  <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                    Remove
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.pickFileBtn}
+              onPress={handlePick}
+              disabled={picking || saving}
+            >
+              <Icon name="upload" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+              <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                {picking ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                PDF, JPG, or PNG up to 15 MB
+              </ThemedText>
+            </Pressable>
+          )}
+        </View>
+
         <Input
           label="Clinical Notes / Findings Summary"
           value={notes}
