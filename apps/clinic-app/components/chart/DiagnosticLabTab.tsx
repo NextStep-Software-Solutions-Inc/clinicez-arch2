@@ -6,6 +6,7 @@ import { notify } from '@utils/feedback';
 import { clinicService } from '../../services/clinicService';
 import { openDocument } from '../../services/documentOpener';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
+import { LabOrderStageChip } from '../interop/InteropBadges';
 import type {
   ClinicPatient,
   ClinicLabOrderRecord,
@@ -74,6 +75,7 @@ export default function DiagnosticLabTab({
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'EXTERNAL' | 'PANIC'>('ALL');
   const [panicModalVisible, setPanicModalVisible] = useState(false);
   const [intakeModalVisible, setIntakeModalVisible] = useState(false);
+  const [targetSpecimenOrder, setTargetSpecimenOrder] = useState<ClinicLabOrderRecord | null>(null);
   const [attachModalVisible, setAttachModalVisible] = useState(false);
   const [targetAttachOrderId, setTargetAttachOrderId] = useState<string | null>(null);
   const [targetPanicOrder, setTargetPanicOrder] = useState<any | null>(null);
@@ -150,6 +152,20 @@ export default function DiagnosticLabTab({
       setTargetAttachOrderId(orderId);
       setAttachModalVisible(true);
     }
+  };
+
+  const handleCancelLabOrder = async (order: ClinicLabOrderRecord) => {
+    const confirmed = typeof window !== 'undefined' && window.confirm
+      ? window.confirm(`Cancel laboratory requisition #${order.orderNumber}? This will revoke the lab order.`)
+      : true;
+    if (!confirmed) return;
+    const [, err] = await clinicService.cancelLabOrder(order.id);
+    if (err) {
+      notify.error(err.message || 'Failed to cancel laboratory order.');
+      return;
+    }
+    notify.success(`Requisition #${order.orderNumber} cancelled.`);
+    onRefreshChart?.();
   };
 
   return (
@@ -256,6 +272,8 @@ export default function DiagnosticLabTab({
         <Pressable
           testID="intake-specimen-button"
           onPress={() => {
+            const firstPending = labOrders.find((o) => o.status === 'Ordered');
+            setTargetSpecimenOrder(firstPending || null);
             if (onIntakeSpecimen) {
               onIntakeSpecimen();
             } else {
@@ -310,10 +328,11 @@ export default function DiagnosticLabTab({
                       <Badge label="Panic Value" variant="emergency" size="sm" icon="emergency" />
                     ) : null}
                     <Badge
-                      label={order.status}
-                      variant={isCompleted ? 'success' : order.status === 'Draft' ? 'neutral' : 'info'}
+                      label={order.status === 'SpecimenCollected' ? 'Specimen Collected' : order.status}
+                      variant={isCompleted ? 'success' : order.status === 'SpecimenCollected' ? 'info' : order.status === 'Draft' ? 'neutral' : 'info'}
                       size="sm"
                     />
+                    <LabOrderStageChip order={order} />
                   </View>
                 </View>
 
@@ -362,6 +381,23 @@ export default function DiagnosticLabTab({
                   </View>
                 ) : null}
 
+                {/* Specimen Collected Info */}
+                {order.status === 'SpecimenCollected' ? (
+                  <View style={styles.specimenCollectedBlock}>
+                    <Icon name="checkCircle" size={14} color={theme.colors.successText || theme.colors.primaryDark} />
+                    <View style={{ flex: 1 }}>
+                      <ThemedText variant="captionBold" color={theme.colors.text}>
+                        Specimen Accessioned & Logged
+                      </ThemedText>
+                      {order.stageReason ? (
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                          {order.stageReason}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
+
                 {/* Actions */}
                 <View style={styles.orderFooter}>
                   <Pressable
@@ -374,7 +410,23 @@ export default function DiagnosticLabTab({
                     </ThemedText>
                   </Pressable>
 
-                  {!isCompleted ? (
+                  {!isCompleted && order.status === 'Ordered' ? (
+                    <Pressable
+                      testID={`collect-specimen-${order.id}`}
+                      onPress={() => {
+                        setTargetSpecimenOrder(order);
+                        setIntakeModalVisible(true);
+                      }}
+                      style={styles.actionBtn}
+                    >
+                      <Icon name="lab" size={14} color={theme.colors.primaryDark} />
+                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                        Log Specimen
+                      </ThemedText>
+                    </Pressable>
+                  ) : null}
+
+                  {!isCompleted && order.status !== 'Cancelled' ? (
                     <Pressable
                       onPress={() => handleAttachAction(order.id)}
                       style={styles.actionBtn}
@@ -382,6 +434,19 @@ export default function DiagnosticLabTab({
                       <Icon name="upload" size={14} color={theme.colors.primaryDark} />
                       <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
                         Attach External Result
+                      </ThemedText>
+                    </Pressable>
+                  ) : null}
+
+                  {!isCompleted && order.status === 'Ordered' ? (
+                    <Pressable
+                      testID={`cancel-lab-order-${order.id}`}
+                      onPress={() => handleCancelLabOrder(order)}
+                      style={[styles.actionBtn, styles.actionBtn_emergency]}
+                    >
+                      <Icon name="close" size={14} color={theme.colors.emergencyText} />
+                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                        Cancel Requisition
                       </ThemedText>
                     </Pressable>
                   ) : null}
@@ -461,11 +526,17 @@ export default function DiagnosticLabTab({
       {/* Ambulatory Specimen Collection Modal */}
       <SpecimenIntakeModal
         visible={intakeModalVisible}
+        targetOrder={targetSpecimenOrder}
+        pendingOrders={labOrders.filter((o) => o.status === 'Ordered')}
         patient={patient}
         patientId={patientId || patient?.id}
-        onClose={() => setIntakeModalVisible(false)}
+        onClose={() => {
+          setIntakeModalVisible(false);
+          setTargetSpecimenOrder(null);
+        }}
         onSuccess={() => {
           setIntakeModalVisible(false);
+          setTargetSpecimenOrder(null);
           onRefreshChart?.();
         }}
         onRefreshChart={onRefreshChart}
@@ -782,25 +853,64 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     gap: 4,
   },
+  orderSummaryBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    marginBottom: theme.spacing.sm,
+  },
+  orderSelectChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  orderSelectChip_active: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
+  },
+  specimenCollectedBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: '#F0FDF4',
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginTop: theme.spacing.xs,
+  },
 });
 
 export interface SpecimenIntakeModalProps {
   visible: boolean;
+  targetOrder?: ClinicLabOrderRecord | null;
+  pendingOrders?: ClinicLabOrderRecord[];
   patient?: ClinicPatient | null;
   patientId?: string;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (updatedOrder?: ClinicLabOrderRecord) => void;
   onRefreshChart?: () => void;
 }
 
 export function SpecimenIntakeModal({
   visible,
+  targetOrder,
+  pendingOrders = [],
   patient,
   patientId,
   onClose,
   onSuccess,
   onRefreshChart,
 }: SpecimenIntakeModalProps) {
+  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [specimenType, setSpecimenType] = useState('Whole Blood (EDTA)');
   const [containerType, setContainerType] = useState('Purple_EDTA');
   const [phlebName, setPhlebName] = useState('Treatment Nurse');
@@ -808,11 +918,54 @@ export function SpecimenIntakeModal({
   const [notes, setNotes] = useState('Specimen accessioned for in-house laboratory processing.');
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (visible) {
+      const activeId = targetOrder?.id || pendingOrders.find(o => o.status === 'Ordered')?.id || pendingOrders[0]?.id || '';
+      setSelectedOrderId(activeId);
+      setBarcode(`SPEC-${Date.now().toString().slice(-6)}`);
+
+      const activeOrder = targetOrder || pendingOrders.find(o => o.id === activeId) || pendingOrders[0];
+      if (activeOrder) {
+        const tests = (activeOrder.items || []).map(i => (i.testName || '').toLowerCase());
+        const hasUrine = tests.some(t => t.includes('urine') || t.includes('urinalysis'));
+        const hasStool = tests.some(t => t.includes('fecal') || t.includes('stool'));
+        if (hasUrine) {
+          setSpecimenType('Clean Catch Urine');
+          setContainerType('Sterile_Urine_Cup');
+        } else if (hasStool) {
+          setSpecimenType('Stool Specimen');
+          setContainerType('Stool_Container');
+        } else {
+          setSpecimenType('Whole Blood (EDTA)');
+          setContainerType('Purple_EDTA');
+        }
+      }
+    }
+  }, [visible, targetOrder, pendingOrders]);
+
+  const activeTargetOrder = targetOrder || pendingOrders.find(o => o.id === selectedOrderId) || pendingOrders[0];
+
   const handleIntake = async () => {
+    const finalOrderId = selectedOrderId || activeTargetOrder?.id;
+    if (!finalOrderId) {
+      notify.error('Please select an active laboratory requisition to log specimen collection.');
+      return;
+    }
     setSaving(true);
-    notify.success(`Specimen ${barcode} intake completed for ${patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'}.`);
+    const [res, err] = await clinicService.collectLabOrderSpecimen(finalOrderId, {
+      specimenType,
+      containerType,
+      accessionBarcode: barcode,
+      collectorName: phlebName,
+      notes,
+    });
     setSaving(false);
-    onSuccess?.();
+    if (err) {
+      notify.error(err.message || 'Failed to log specimen collection.');
+      return;
+    }
+    notify.success(`Specimen ${barcode} intake completed for ${res?.orderNumber ? `Order #${res.orderNumber}` : (patient ? `${patient.firstName} ${patient.lastName}` : 'Patient')}.`);
+    onSuccess?.(res ?? undefined);
     onRefreshChart?.();
     onClose();
   };
@@ -838,6 +991,48 @@ export function SpecimenIntakeModal({
       }
     >
       <View style={styles.modalSection}>
+        {activeTargetOrder ? (
+          <View style={styles.orderSummaryBox}>
+            <Icon name="lab" size={16} color={theme.colors.primaryDark} />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="captionBold" color={theme.colors.text}>
+                Requisition #{activeTargetOrder.orderNumber}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                {(activeTargetOrder.items || []).map((i: any) => i.testName).join(', ') || 'Diagnostic Panel'}
+              </ThemedText>
+            </View>
+          </View>
+        ) : null}
+
+        {/* If multiple pending orders and no explicit single target, allow switching */}
+        {!targetOrder && pendingOrders.length > 1 ? (
+          <View style={{ marginBottom: theme.spacing.sm }}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+              Select Order to Accession:
+            </ThemedText>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {pendingOrders.map((o) => (
+                <Pressable
+                  key={o.id}
+                  onPress={() => setSelectedOrderId(o.id)}
+                  style={[
+                    styles.orderSelectChip,
+                    selectedOrderId === o.id && styles.orderSelectChip_active,
+                  ]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    color={selectedOrderId === o.id ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    #{o.orderNumber}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
           SPECIMEN COLLECTION DETAILS
         </ThemedText>

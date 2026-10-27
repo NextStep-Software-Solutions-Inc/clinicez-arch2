@@ -89,4 +89,16 @@ public sealed class ProceduresController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicalProcedureDto>.Success(result, "Procedure completed successfully."));
     }
+
+    [HttpPost("{id:guid}/cancel")]
+    [HasPermission(ClinicPermissions.ProceduresWrite)]
+    public async Task<ActionResult<ApiResponse<ClinicalProcedureDto>>> CancelProcedure(
+        Guid id,
+        [FromBody] CancelProcedureRequest? request,
+        CancellationToken ct)
+    {
+        var command = new CancelProcedureCommand(id, request?.Reason);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ClinicalProcedureDto>.Success(result, "Procedure cancelled successfully."));
+    }
 }

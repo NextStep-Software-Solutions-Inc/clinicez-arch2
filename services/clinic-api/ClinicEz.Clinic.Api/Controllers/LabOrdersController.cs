@@ -154,4 +154,35 @@ public sealed class LabOrdersController : ControllerBase
         var file = await _sender.Send(new GetLabOrderReportFileQuery(id), ct);
         return File(file.Content, file.ContentType, file.FileName);
     }
+
+    [HttpPost("{id:guid}/cancel")]
+    [HasPermission(ClinicPermissions.LabOrdersWrite)]
+    public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> CancelLabOrder(
+        [FromRoute] Guid id,
+        [FromBody] CancelClinicLabOrderRequest? request,
+        CancellationToken ct)
+    {
+        var command = new CancelClinicLabOrderCommand(id, request?.Reason);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Lab requisition cancelled successfully."));
+    }
+
+    [HttpPost("{id:guid}/collect-specimen")]
+    [HasPermission(ClinicPermissions.LabOrdersWrite)]
+    public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> CollectSpecimen(
+        [FromRoute] Guid id,
+        [FromBody] CollectSpecimenRequest? request,
+        CancellationToken ct)
+    {
+        var command = new CollectSpecimenLabOrderCommand(
+            id,
+            request?.SpecimenType,
+            request?.ContainerType,
+            request?.AccessionBarcode,
+            request?.CollectorName,
+            request?.Notes
+        );
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Specimen collection recorded successfully."));
+    }
 }
