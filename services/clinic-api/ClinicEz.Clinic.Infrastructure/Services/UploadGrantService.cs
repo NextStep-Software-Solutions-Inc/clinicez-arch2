@@ -29,7 +29,7 @@ public sealed class UploadGrantService : IUploadGrantService
 
     public async Task<MintedUploadGrant> MintAsync(ClinicLabOrder order, UploaderKind kind, CancellationToken ct)
     {
-        var baseUrl = RequirePublicBaseUrl();
+        var portalUrl = RequirePortalBaseUrl();
 
         var now = DateTime.UtcNow;
         var earlier = await _db.UploadGrants
@@ -59,7 +59,7 @@ public sealed class UploadGrantService : IUploadGrantService
             CreatedBy = "system"
         });
 
-        return new MintedUploadGrant(token, $"{baseUrl}/{token}", expiresAt);
+        return new MintedUploadGrant(token, $"{portalUrl}/upload/lab/{token}", expiresAt);
     }
 
     public async Task<UploadGrantContext?> ResolveAsync(string token, CancellationToken ct)
@@ -90,16 +90,16 @@ public sealed class UploadGrantService : IUploadGrantService
         return new UploadGrantContext(grant, order, clinic, patient);
     }
 
-    private string RequirePublicBaseUrl()
+    private string RequirePortalBaseUrl()
     {
-        var configured = _options.PublicUploadBaseUrl?.Trim();
+        var configured = _options.PortalBaseUrl?.Trim();
         if (string.IsNullOrEmpty(configured)
             || !Uri.TryCreate(configured, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
         {
             throw new InvalidOperationException(
-                "Clinic:PublicUploadBaseUrl (environment variable Clinic__PublicUploadBaseUrl) must be set to the absolute public URL of "
-                + "the upload page, for example https://portal.example.com/upload/lab, before lab orders can be issued.");
+                "PortalBaseUrl (environment variable PORTAL_BASE_URL or Clinic__PortalBaseUrl) must be set to the absolute public URL of "
+                + "the portal, for example https://dev.clinicez.net, before lab orders can be issued.");
         }
 
         return configured.TrimEnd('/');

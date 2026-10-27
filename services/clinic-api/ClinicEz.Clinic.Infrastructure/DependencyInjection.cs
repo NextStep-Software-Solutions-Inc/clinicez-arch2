@@ -146,6 +146,15 @@ public static class DependencyInjection
         services.AddHttpClient(PatientRecordSharedHandler.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.Configure<ClinicUploadOptions>(configuration.GetSection(ClinicUploadOptions.SectionName));
+        services.PostConfigure<ClinicUploadOptions>(options =>
+        {
+            if (string.IsNullOrWhiteSpace(options.PortalBaseUrl))
+            {
+                options.PortalBaseUrl = configuration["Portal:BaseUrl"]
+                    ?? configuration["PortalBaseUrl"]
+                    ?? configuration["PORTAL_BASE_URL"];
+            }
+        });
         services.AddScoped<IUploadGrantService, UploadGrantService>();
         services.AddScoped<ILabResultFileStore, LabResultFileStore>();
         services.AddScoped<ILabResultIntake, LabResultIntake>();

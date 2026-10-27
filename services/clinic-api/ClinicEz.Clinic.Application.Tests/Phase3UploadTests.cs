@@ -75,9 +75,9 @@ public class UploadGrantServiceTests
 
         foreach (var url in new[] { null, "", "   ", "/relative/upload", "ftp://example.test/up" })
         {
-            var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PublicUploadBaseUrl = url));
+            var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PortalBaseUrl = url));
             var act = () => grants.MintAsync(order, UploaderKind.ExternalLab, CancellationToken.None);
-            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*PublicUploadBaseUrl*");
+            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*PortalBaseUrl*");
         }
     }
 
@@ -120,12 +120,12 @@ public class UploadGrantServiceTests
     }
 
     [Theory]
-    [InlineData("https://x.test/up/", "https://x.test/up")]
-    [InlineData("  http://x.test/up  ", "http://x.test/up")]
+    [InlineData("https://x.test/", "https://x.test/upload/lab")]
+    [InlineData("  http://x.test  ", "http://x.test/upload/lab")]
     public async Task The_Base_Url_Is_Trimmed(string configured, string expected)
     {
         var order = SeedOrder();
-        var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PublicUploadBaseUrl = configured));
+        var grants = Phase3TestKit.Grants(_db, Phase3TestKit.UploadOptions(o => o.PortalBaseUrl = configured));
 
         var minted = await grants.MintAsync(order, UploaderKind.Patient, CancellationToken.None);
 

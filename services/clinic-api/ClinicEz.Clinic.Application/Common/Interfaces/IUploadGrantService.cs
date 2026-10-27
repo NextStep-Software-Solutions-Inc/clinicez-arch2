@@ -25,7 +25,7 @@ public interface IUploadGrantService
 {
     /// <summary>
     /// Adds a new grant to the current unit of work (the caller saves) and revokes the order's earlier unused grants of
-    /// the same kind. Throws when <c>Clinic:PublicUploadBaseUrl</c> is not configured.
+    /// the same kind. Throws when <c>Clinic:PortalBaseUrl</c> (or <c>PORTAL_BASE_URL</c>) is not configured.
     /// </summary>
     Task<MintedUploadGrant> MintAsync(ClinicLabOrder order, UploaderKind kind, CancellationToken ct);
 

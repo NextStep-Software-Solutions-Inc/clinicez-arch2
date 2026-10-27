@@ -23,12 +23,13 @@ namespace ClinicEz.Clinic.Application.Tests;
 /// <summary>Collaborators for the Phase 3 clinical flows (grants, claims, document sync, intake) on an in-memory database.</summary>
 internal static class Phase3TestKit
 {
-    public const string UploadBaseUrl = "https://clinic.example.test/upload/lab";
+    public const string PortalBaseUrl = "https://clinic.example.test";
+    public static string UploadBaseUrl => $"{PortalBaseUrl}/upload/lab";
     public const string ClaimToken = "CLAIM-TOKEN-1234567890";
 
     public static IOptions<ClinicUploadOptions> UploadOptions(Action<ClinicUploadOptions>? configure = null)
     {
-        var options = new ClinicUploadOptions { PublicUploadBaseUrl = UploadBaseUrl };
+        var options = new ClinicUploadOptions { PortalBaseUrl = PortalBaseUrl };
         configure?.Invoke(options);
         return Options.Create(options);
     }

@@ -49,8 +49,8 @@ services:
       # built-in default. The previous public key is only set during a rotation, until every issued license was renewed.
       - FacilityLicense__PublicKeyPem=${FACILITY_LICENSE_PUBLIC_KEY:?FACILITY_LICENSE_PUBLIC_KEY must be set}
       - FacilityLicense__PreviousPublicKeyPem=${FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS:-}
-      # Public, absolute base URL of the upload page printed on lab slips ({base}/{token}). Required to issue lab orders.
-      - Clinic__PublicUploadBaseUrl=${CLINIC_PUBLIC_UPLOAD_BASE_URL:?CLINIC_PUBLIC_UPLOAD_BASE_URL must be set}
+      # Public, absolute base URL of the portal web app. Lab slips link to {PortalBaseUrl}/upload/lab/{token}.
+      - Clinic__PortalBaseUrl=${PORTAL_BASE_URL:?PORTAL_BASE_URL must be set}
       # Hangfire dashboard Basic Auth password. Required (there is no default).
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:?HANGFIRE_DASHBOARD_PASSWORD must be set}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
