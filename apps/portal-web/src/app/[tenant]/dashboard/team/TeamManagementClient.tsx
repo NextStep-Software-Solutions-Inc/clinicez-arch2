@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 import { 
     IconUsers, 
     IconUserPlus, 
@@ -37,6 +38,11 @@ import { staffService, TenantStaffResultDto, StaffMemberDto } from "@/services/s
 import { apiClient } from "@/transport/apiClient";
 import { apiErrorMessage } from "@/lib/apiError";
 import { toastApiError } from "@/lib/apiToast";
+import {
+    getWorkspaceMemberActionRestriction,
+    isSelfWorkspaceMember,
+    SELF_ACTION_MESSAGES,
+} from "@/lib/selfActionGuard";
 import { toast } from "sonner";
 
 interface FacilityOption {
@@ -109,6 +115,16 @@ const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; descript
 };
 
 export default function TeamManagementClient({ tenantSlug }: { tenantSlug: string }) {
+    const { user } = useUser();
+    const currentIdentity = React.useMemo(
+        () => ({
+            userId: user?.id ?? null,
+            email: user?.primaryEmailAddress?.emailAddress ?? null,
+            emails: user?.emailAddresses?.map((e) => e.emailAddress) ?? [],
+        }),
+        [user]
+    );
+
     const [staffData, setStaffData] = useState<TenantStaffResultDto | null>(null);
     const [facilities, setFacilities] = useState<FacilityOption[]>([]);
     const [loading, setLoading] = useState(true);
@@ -329,6 +345,10 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     };
 
     const handleSuspend = async (member: StaffMemberDto) => {
+        if (isSelfWorkspaceMember(member, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceSuspend);
+            return;
+        }
         try {
             setActionLoadingId(member.id);
             await staffService.suspendStaffMember(member.id, tenantSlug);
@@ -354,8 +374,21 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         }
     };
 
+    const handleOpenRevoke = (member: StaffMemberDto) => {
+        if (isSelfWorkspaceMember(member, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceRevoke);
+            return;
+        }
+        setRevokeTarget(member);
+    };
+
     const handleRevokeConfirm = async () => {
         if (!revokeTarget) return;
+        if (isSelfWorkspaceMember(revokeTarget, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceRevoke);
+            setRevokeTarget(null);
+            return;
+        }
         setSubmittingRevoke(true);
         try {
             await staffService.revokeStaffMember(revokeTarget.id, tenantSlug);
@@ -408,8 +441,21 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         }
     };
 
+    const handleOpenDelete = (member: StaffMemberDto) => {
+        if (isSelfWorkspaceMember(member, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceDelete);
+            return;
+        }
+        setDeleteTarget(member);
+    };
+
     const handlePermanentDeleteConfirm = async () => {
         if (!deleteTarget) return;
+        if (isSelfWorkspaceMember(deleteTarget, currentIdentity)) {
+            toast.error(SELF_ACTION_MESSAGES.workspaceDelete);
+            setDeleteTarget(null);
+            return;
+        }
         setSubmittingDelete(true);
         try {
             await staffService.deleteStaffMemberPermanently(deleteTarget.id, tenantSlug);
@@ -672,6 +718,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                         const isSuspended = member.status === "Suspended";
                                         const isRevoked = member.status === "Revoked";
                                         const isActive = member.status === "Active";
+                                        const restriction = getWorkspaceMemberActionRestriction(member, currentIdentity);
 
                                         // Initials for avatar
                                         const initials = member.fullName
@@ -694,8 +741,13 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                             {initials}
                                                         </div>
                                                         <div className="min-w-0">
-                                                            <div className="font-bold text-slate-900 dark:text-slate-100 truncate">
-                                                                {member.fullName}
+                                                            <div className="font-bold text-slate-900 dark:text-slate-100 truncate flex items-center gap-1.5">
+                                                                <span className="truncate">{member.fullName}</span>
+                                                                {restriction.isSelf && (
+                                                                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4 font-medium shrink-0">
+                                                                        You
+                                                                    </Badge>
+                                                                )}
                                                             </div>
                                                             <div className="text-[11px] text-slate-400 truncate flex items-center gap-1">
                                                                 <IconMail className="h-3 w-3 inline shrink-0" />
@@ -809,15 +861,23 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         )}
                                                                         <span className="hidden lg:inline">Resend</span>
                                                                     </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => setRevokeTarget(member)}
-                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    <span
+                                                                        title={restriction.revokeTooltip}
+                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                                                                     >
-                                                                        <IconTrash className="h-3.5 w-3.5" />
-                                                                        <span className="hidden sm:inline">Revoke</span>
-                                                                    </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={!restriction.canRevoke}
+                                                                            onClick={() => handleOpenRevoke(member)}
+                                                                            title={restriction.revokeTooltip}
+                                                                            aria-label={restriction.revokeTooltip}
+                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                        >
+                                                                            <IconTrash className="h-3.5 w-3.5" />
+                                                                            <span className="hidden sm:inline">Revoke</span>
+                                                                        </Button>
+                                                                    </span>
                                                                 </>
                                                             )}
 
@@ -838,15 +898,23 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         )}
                                                                         <span className="hidden lg:inline">Resend</span>
                                                                     </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => setRevokeTarget(member)}
-                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    <span
+                                                                        title={restriction.revokeTooltip}
+                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                                                                     >
-                                                                        <IconTrash className="h-3.5 w-3.5" />
-                                                                        <span className="hidden sm:inline">Revoke</span>
-                                                                    </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={!restriction.canRevoke}
+                                                                            onClick={() => handleOpenRevoke(member)}
+                                                                            title={restriction.revokeTooltip}
+                                                                            aria-label={restriction.revokeTooltip}
+                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                        >
+                                                                            <IconTrash className="h-3.5 w-3.5" />
+                                                                            <span className="hidden sm:inline">Revoke</span>
+                                                                        </Button>
+                                                                    </span>
                                                                 </>
                                                             )}
 
@@ -872,31 +940,44 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         <IconKey className="h-3.5 w-3.5" />
                                                                         <span className="hidden lg:inline">Reset Password</span>
                                                                     </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        disabled={actionLoadingId === member.id}
-                                                                        onClick={() => handleSuspend(member)}
-                                                                        title="Suspend Account"
-                                                                        className="h-8 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    <span
+                                                                        title={restriction.suspendTooltip}
+                                                                        className={!restriction.canSuspend ? "inline-flex cursor-not-allowed" : "inline-flex"}
                                                                     >
-                                                                        {actionLoadingId === member.id ? (
-                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                        ) : (
-                                                                            <IconPlayerPause className="h-3.5 w-3.5" />
-                                                                        )}
-                                                                        <span className="hidden sm:inline">Suspend</span>
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => setRevokeTarget(member)}
-                                                                        title="Revoke Workspace Access"
-                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={actionLoadingId === member.id || !restriction.canSuspend}
+                                                                            onClick={() => handleSuspend(member)}
+                                                                            title={restriction.suspendTooltip}
+                                                                            aria-label={restriction.suspendTooltip}
+                                                                            className="h-8 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                        >
+                                                                            {actionLoadingId === member.id ? (
+                                                                                <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                                            ) : (
+                                                                                <IconPlayerPause className="h-3.5 w-3.5" />
+                                                                            )}
+                                                                            <span className="hidden sm:inline">Suspend</span>
+                                                                        </Button>
+                                                                    </span>
+                                                                    <span
+                                                                        title={restriction.revokeTooltip}
+                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                                                                     >
-                                                                        <IconBan className="h-3.5 w-3.5" />
-                                                                        <span className="hidden sm:inline">Revoke</span>
-                                                                    </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={!restriction.canRevoke}
+                                                                            onClick={() => handleOpenRevoke(member)}
+                                                                            title={restriction.revokeTooltip}
+                                                                            aria-label={restriction.revokeTooltip}
+                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                        >
+                                                                            <IconBan className="h-3.5 w-3.5" />
+                                                                            <span className="hidden sm:inline">Revoke</span>
+                                                                        </Button>
+                                                                    </span>
                                                                 </>
                                                             )}
 
@@ -917,26 +998,40 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         )}
                                                                         <span>Reactivate</span>
                                                                     </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => setRevokeTarget(member)}
-                                                                        title="Revoke Workspace Access"
-                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    <span
+                                                                        title={restriction.revokeTooltip}
+                                                                        className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                                                                     >
-                                                                        <IconBan className="h-3.5 w-3.5" />
-                                                                        <span className="hidden sm:inline">Revoke</span>
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => setDeleteTarget(member)}
-                                                                        title="Permanently remove from workspace"
-                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={!restriction.canRevoke}
+                                                                            onClick={() => handleOpenRevoke(member)}
+                                                                            title={restriction.revokeTooltip}
+                                                                            aria-label={restriction.revokeTooltip}
+                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                        >
+                                                                            <IconBan className="h-3.5 w-3.5" />
+                                                                            <span className="hidden sm:inline">Revoke</span>
+                                                                        </Button>
+                                                                    </span>
+                                                                    <span
+                                                                        title={restriction.deleteTooltip}
+                                                                        className={!restriction.canDelete ? "inline-flex cursor-not-allowed" : "inline-flex"}
                                                                     >
-                                                                        <IconTrash className="h-3.5 w-3.5" />
-                                                                        <span className="hidden sm:inline">Remove</span>
-                                                                    </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={!restriction.canDelete}
+                                                                            onClick={() => handleOpenDelete(member)}
+                                                                            title={restriction.deleteTooltip}
+                                                                            aria-label={restriction.deleteTooltip}
+                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                        >
+                                                                            <IconTrash className="h-3.5 w-3.5" />
+                                                                            <span className="hidden sm:inline">Remove</span>
+                                                                        </Button>
+                                                                    </span>
                                                                 </>
                                                             )}
 
@@ -957,16 +1052,23 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         )}
                                                                         <span>Re-invite</span>
                                                                     </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => setDeleteTarget(member)}
-                                                                        title="Permanently remove from workspace"
-                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    <span
+                                                                        title={restriction.deleteTooltip}
+                                                                        className={!restriction.canDelete ? "inline-flex cursor-not-allowed" : "inline-flex"}
                                                                     >
-                                                                        <IconTrash className="h-3.5 w-3.5" />
-                                                                        <span className="hidden sm:inline">Remove</span>
-                                                                    </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            disabled={!restriction.canDelete}
+                                                                            onClick={() => handleOpenDelete(member)}
+                                                                            title={restriction.deleteTooltip}
+                                                                            aria-label={restriction.deleteTooltip}
+                                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 rounded-lg text-xs font-semibold gap-1"
+                                                                        >
+                                                                            <IconTrash className="h-3.5 w-3.5" />
+                                                                            <span className="hidden sm:inline">Remove</span>
+                                                                        </Button>
+                                                                    </span>
                                                                 </>
                                                             )}
                                                         </div>

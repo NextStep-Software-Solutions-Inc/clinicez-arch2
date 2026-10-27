@@ -2,6 +2,7 @@ using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Commands;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
+using ClinicEz.Portal.Application.Features.Tenants.Queries.GetTenantByOwner;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
@@ -535,5 +536,110 @@ public class StaffManagementTests : IDisposable
 
         Assert.Contains("active team member", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RevokeStaffMember_SelfRevocation_ThrowsInvalidOperationException_PreservesActiveMembershipAndPrevents404()
+    {
+        var selfAdmin = SeedMember(
+            "self.admin@metro.ph",
+            "Justine Admin",
+            WorkspaceMemberRole.Admin,
+            MemberStatus.Active,
+            userId: "clerk_self_admin_112");
+
+        var revokeHandler = new RevokeStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            revokeHandler.Handle(
+                new RevokeStaffMemberCommand(TenantSlug, selfAdmin.Id, "clerk_self_admin_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot revoke your own workspace access.", ex.Message);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(selfAdmin.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal(MemberStatus.Active, memberInDb.Status);
+        _clerkMock.Verify(c => c.SyncAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Regression check for Issue #112: refreshing the dashboard resolves workspace access instead of returning null (404)
+        var tenantResolver = new GetTenantByOwnerQueryHandler(_context);
+        var resolvedTenant = await tenantResolver.Handle(
+            new GetTenantByOwnerQuery("clerk_self_admin_112", TenantSlug),
+            CancellationToken.None);
+        Assert.NotNull(resolvedTenant);
+        Assert.Equal(TenantSlug, resolvedTenant.TenantSlug);
+        Assert.Equal("Admin", resolvedTenant.Role);
+        Assert.Equal("Active", resolvedTenant.Status);
+    }
+
+    [Fact]
+    public async Task SuspendStaffMember_SelfSuspension_ThrowsInvalidOperationException_AndPreservesActiveStatus()
+    {
+        var selfAdmin = SeedMember(
+            "self.suspend@metro.ph",
+            "Self Suspend Admin",
+            WorkspaceMemberRole.Admin,
+            MemberStatus.Active,
+            userId: "clerk_self_suspend_112");
+
+        var handler = new SuspendStaffMemberCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(
+                new SuspendStaffMemberCommand(TenantSlug, selfAdmin.Id, "clerk_self_suspend_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot suspend your own account.", ex.Message);
+
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(selfAdmin.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal(MemberStatus.Active, memberInDb.Status);
+        _clerkMock.Verify(c => c.SyncAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteStaffMember_SelfDeletion_ThrowsInvalidOperationException_AndPreservesMember()
+    {
+        var selfMember = SeedMember(
+            "self.delete@metro.ph",
+            "Self Delete Admin",
+            WorkspaceMemberRole.Admin,
+            MemberStatus.Revoked,
+            userId: "clerk_self_delete_112");
+
+        var handler = new DeleteStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(
+                new DeleteStaffMemberCommand(TenantSlug, selfMember.Id, "clerk_self_delete_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot remove your own account from the workspace.", ex.Message);
+        Assert.NotNull(await _context.WorkspaceMembers.FindAsync(selfMember.Id));
+        _clerkMock.Verify(c => c.SyncAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RevokeAndSuspendStaffMember_AdminActingOnOtherMember_SucceedsNormally()
+    {
+        var otherMember = SeedMember(
+            "other.staff@metro.ph",
+            "Other Staff",
+            WorkspaceMemberRole.Member,
+            MemberStatus.Active,
+            userId: "clerk_other_staff_200");
+
+        var suspendHandler = new SuspendStaffMemberCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
+        var suspended = await suspendHandler.Handle(
+            new SuspendStaffMemberCommand(TenantSlug, otherMember.Id, "clerk_caller_admin_100"),
+            CancellationToken.None);
+        Assert.Equal("Suspended", suspended.Status);
+
+        var revokeHandler = new RevokeStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var revoked = await revokeHandler.Handle(
+            new RevokeStaffMemberCommand(TenantSlug, otherMember.Id, "clerk_caller_admin_100"),
+            CancellationToken.None);
+        Assert.True(revoked);
+
+        var inDb = await _context.WorkspaceMembers.FindAsync(otherMember.Id);
+        Assert.Equal(MemberStatus.Revoked, inDb!.Status);
     }
 }

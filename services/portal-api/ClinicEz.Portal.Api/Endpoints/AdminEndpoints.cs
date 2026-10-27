@@ -533,6 +533,8 @@ public class AdminEndpoints : IEndpoint
             var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
             if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
 
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
             try
             {
                 var result = await sender.Send(new UpdateAdminUserCommand(
@@ -541,13 +543,18 @@ public class AdminEndpoints : IEndpoint
                     input.FullName,
                     input.RoleId,
                     input.IsActive,
-                    admin.FullName
+                    admin.FullName,
+                    clerkUserId
                 ));
                 return result != null ? Results.Ok(result) : Results.NotFound("Admin user not found");
             }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
             catch (Exception ex)
             {
-                return Results.BadRequest(ex.Message);
+                return Results.BadRequest(new { Message = ex.Message });
             }
         })
         .WithName("UpdateAdminUser")
@@ -565,9 +572,13 @@ public class AdminEndpoints : IEndpoint
                 var success = await sender.Send(new DeleteAdminUserCommand(id, clerkUserId));
                 return success ? Results.Ok(true) : Results.NotFound("Admin user not found");
             }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
             catch (Exception ex)
             {
-                return Results.BadRequest(ex.Message);
+                return Results.BadRequest(new { Message = ex.Message });
             }
         })
         .WithName("DeleteAdminUser")

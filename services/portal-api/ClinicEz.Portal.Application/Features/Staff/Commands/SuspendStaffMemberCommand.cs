@@ -12,7 +12,8 @@ namespace ClinicEz.Portal.Application.Features.Staff.Commands;
 
 public record SuspendStaffMemberCommand(
     string TenantSlug,
-    Guid StaffMemberId
+    Guid StaffMemberId,
+    string? CurrentUserId = null
 ) : IRequest<StaffMemberDto>;
 
 public class SuspendStaffMemberCommandValidator : AbstractValidator<SuspendStaffMemberCommand>
@@ -43,6 +44,13 @@ public class SuspendStaffMemberCommandHandler(
         if (member.Role == WorkspaceMemberRole.Owner)
         {
             throw new InvalidOperationException("The primary workspace owner cannot be suspended.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CurrentUserId) &&
+            !string.IsNullOrWhiteSpace(member.UserId) &&
+            string.Equals(member.UserId.Trim(), request.CurrentUserId.Trim(), StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("You cannot suspend your own account.");
         }
 
         member.Status = MemberStatus.Suspended;

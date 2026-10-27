@@ -12,7 +12,8 @@ namespace ClinicEz.Portal.Application.Features.Staff.Commands;
 
 public record DeleteStaffMemberCommand(
     string TenantSlug,
-    Guid StaffMemberId
+    Guid StaffMemberId,
+    string? CurrentUserId = null
 ) : IRequest<bool>;
 
 public class DeleteStaffMemberCommandValidator : AbstractValidator<DeleteStaffMemberCommand>
@@ -41,6 +42,13 @@ public class DeleteStaffMemberCommandHandler(
         if (member.Role == WorkspaceMemberRole.Owner)
         {
             throw new InvalidOperationException("The primary workspace owner cannot be removed.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CurrentUserId) &&
+            !string.IsNullOrWhiteSpace(member.UserId) &&
+            string.Equals(member.UserId.Trim(), request.CurrentUserId.Trim(), StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("You cannot remove your own account from the workspace.");
         }
 
         if (member.Status != MemberStatus.Revoked && member.Status != MemberStatus.Suspended)

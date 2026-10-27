@@ -1,7 +1,14 @@
 import { describe, test, expect, mock } from "bun:test";
 import { resolveAdminDisplayStatus } from "../src/app/admin/users/page";
 import { adminService } from "../src/services/admin.service";
+import * as fs from "fs";
+import * as path from "path";
 import { apiClient } from "../src/transport/apiClient";
+import {
+  getAdminUserActionRestriction,
+  isSelfAdminUser,
+  SELF_ACTION_MESSAGES,
+} from "../src/lib/selfActionGuard";
 
 describe("Admin User Invitations & Lifecycle Tracking", () => {
   describe("Proxy Middleware Whitelisting Logic", () => {
@@ -281,6 +288,68 @@ describe("Admin User Invitations & Lifecycle Tracking", () => {
       } finally {
         apiClient.post = originalPost;
       }
+    });
+  });
+
+  describe("Self-Action Restrictions in Super Admin Portal (#112)", () => {
+    test("matches self admin user by Clerk userId or case-insensitive email", () => {
+      expect(
+        isSelfAdminUser(
+          { clerkUserId: "user_admin_self_1", email: "admin1@clinicez.net" },
+          { userId: "user_admin_self_1", email: "other@clinicez.net" }
+        )
+      ).toBe(true);
+      expect(
+        isSelfAdminUser(
+          { clerkUserId: null, email: "  SuperAdmin@ClinicEZ.net " },
+          { userId: "user_admin_self_1", email: "superadmin@clinicez.net" }
+        )
+      ).toBe(true);
+      expect(
+        isSelfAdminUser(
+          { clerkUserId: "user_admin_other_2", email: "other@clinicez.net" },
+          { userId: "user_admin_self_1", email: "superadmin@clinicez.net" }
+        )
+      ).toBe(false);
+    });
+
+    test("disables Revoke, Suspend, and Delete with consistent tooltips for self admin account", () => {
+      const selfRestriction = getAdminUserActionRestriction(
+        { clerkUserId: "user_admin_self_1", email: "admin@clinicez.net", status: "Active", displayStatus: "Active" },
+        { userId: "user_admin_self_1", email: "admin@clinicez.net" }
+      );
+      expect(selfRestriction.isSelf).toBe(true);
+      expect(selfRestriction.canRevoke).toBe(false);
+      expect(selfRestriction.canSuspend).toBe(false);
+      expect(selfRestriction.canDelete).toBe(false);
+      expect(selfRestriction.revokeTooltip).toBe("You cannot revoke your own admin account.");
+      expect(selfRestriction.suspendTooltip).toBe(SELF_ACTION_MESSAGES.adminSuspend);
+      expect(selfRestriction.deleteTooltip).toBe(SELF_ACTION_MESSAGES.adminDelete);
+
+      const otherRestriction = getAdminUserActionRestriction(
+        { clerkUserId: "user_admin_other_2", email: "other@clinicez.net", status: "Active", displayStatus: "Active" },
+        { userId: "user_admin_self_1", email: "admin@clinicez.net" }
+      );
+      expect(otherRestriction.isSelf).toBe(false);
+      expect(otherRestriction.canRevoke).toBe(true);
+      expect(otherRestriction.canSuspend).toBe(true);
+      expect(otherRestriction.canDelete).toBe(true);
+      expect(otherRestriction.revokeTooltip).toBe("Revoke Admin Access");
+      expect(otherRestriction.suspendTooltip).toBe("Suspend Account");
+    });
+
+    test("AdminUsersPage wires getAdminUserActionRestriction, disables self actions, and locks Edit status toggle for self", () => {
+      const source = fs.readFileSync(
+        path.resolve(__dirname, "../src/app/admin/users/page.tsx"),
+        "utf-8"
+      );
+      expect(source).toContain("getAdminUserActionRestriction");
+      expect(source).toContain("!restriction.canRevoke");
+      expect(source).toContain("!restriction.canSuspend");
+      expect(source).toContain("!restriction.canDelete");
+      expect(source).toContain("disabled={isEditingSelf}");
+      expect(source).toContain("SELF_ACTION_MESSAGES.adminRevoke");
+      expect(source).toContain("SELF_ACTION_MESSAGES.adminSuspend");
     });
   });
 });

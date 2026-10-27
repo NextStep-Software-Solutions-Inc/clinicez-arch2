@@ -27,12 +27,14 @@ import { ADMIN_PERMISSIONS, AdminPermission } from "@/constants/permissions";
 
 interface AdminContextType {
   admin: AdminMeDto | null;
+  userId?: string | null;
   hasPermission: (permission: AdminPermission | string) => boolean;
   refreshAdmin: () => Promise<void>;
 }
 
 const AdminContext = createContext<AdminContextType>({
   admin: null,
+  userId: null,
   hasPermission: () => false,
   refreshAdmin: async () => {},
 });
@@ -284,7 +286,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   );
 
   return (
-    <AdminContext.Provider value={{ admin, hasPermission, refreshAdmin: fetchAdminProfile }}>
+    <AdminContext.Provider value={{ admin, userId, hasPermission, refreshAdmin: fetchAdminProfile }}>
       <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-foreground transition-colors duration-300">
 
         {/* Mobile Sidebar Overlay Backdrop */}

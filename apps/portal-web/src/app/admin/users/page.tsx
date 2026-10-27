@@ -4,6 +4,11 @@ import React, { useEffect, useState } from "react";
 import { useAdmin } from "../AdminLayoutClient";
 import { adminService, AdminUserDto, AdminRoleDto } from "@/services/admin.service";
 import { ADMIN_PERMISSIONS } from "@/constants/permissions";
+import {
+  getAdminUserActionRestriction,
+  isSelfAdminUser,
+  SELF_ACTION_MESSAGES,
+} from "@/lib/selfActionGuard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -53,8 +58,32 @@ export const resolveAdminDisplayStatus = (u: {
   return u.status || (u.isActive ? "Active" : "Suspended");
 };
 
+function extractAdminApiError(err: unknown, fallback: string): string {
+  if (typeof err === "object" && err !== null) {
+    const respData = (err as { response?: { data?: unknown } }).response?.data;
+    if (typeof respData === "string" && respData.trim()) return respData;
+    if (typeof respData === "object" && respData !== null) {
+      const msg =
+        (respData as { message?: string; Message?: string; detail?: string }).message ||
+        (respData as { message?: string; Message?: string; detail?: string }).Message ||
+        (respData as { message?: string; Message?: string; detail?: string }).detail;
+      if (msg) return msg;
+    }
+    const errMsg = (err as { message?: string }).message;
+    if (errMsg) return errMsg;
+  }
+  return fallback;
+}
+
 export default function AdminUsersPage() {
-  const { hasPermission } = useAdmin();
+  const { admin, userId, hasPermission } = useAdmin();
+  const currentAdminIdentity = React.useMemo(
+    () => ({
+      userId: userId ?? null,
+      email: admin?.email ?? null,
+    }),
+    [userId, admin?.email]
+  );
   const [users, setUsers] = useState<AdminUserDto[]>([]);
   const [roles, setRoles] = useState<AdminRoleDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,6 +139,10 @@ export default function AdminUsersPage() {
   } | null>(null);
 
   const canManage = hasPermission(ADMIN_PERMISSIONS.MANAGE_ADMINS);
+  const isEditingSelf = React.useMemo(
+    () => isSelfAdminUser(editingUser, currentAdminIdentity),
+    [editingUser, currentAdminIdentity]
+  );
 
   const loadData = async () => {
     try {
@@ -167,6 +200,11 @@ export default function AdminUsersPage() {
       return;
     }
 
+    if (editingUser && isSelfAdminUser(editingUser, currentAdminIdentity) && !formData.isActive) {
+      toast.error(SELF_ACTION_MESSAGES.adminSuspend);
+      return;
+    }
+
     try {
       setFormLoading(true);
       if (editingUser) {
@@ -204,8 +242,8 @@ export default function AdminUsersPage() {
           });
         }
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || "Failed to save admin user");
+    } catch (err: unknown) {
+      toast.error(extractAdminApiError(err, "Failed to save admin user"));
     } finally {
       setFormLoading(false);
     }
@@ -248,11 +286,20 @@ export default function AdminUsersPage() {
   };
 
   const handleRevoke = (u: AdminUserDto) => {
+    if (isSelfAdminUser(u, currentAdminIdentity)) {
+      toast.error(SELF_ACTION_MESSAGES.adminRevoke);
+      return;
+    }
     setRevokeTarget(u);
   };
 
   const handleRevokeConfirm = async () => {
     if (!revokeTarget) return;
+    if (isSelfAdminUser(revokeTarget, currentAdminIdentity)) {
+      toast.error(SELF_ACTION_MESSAGES.adminRevoke);
+      setRevokeTarget(null);
+      return;
+    }
     try {
       setSubmittingRevoke(true);
       setActionLoadingId(revokeTarget.id);
@@ -265,8 +312,8 @@ export default function AdminUsersPage() {
       );
       setRevokeTarget(null);
       loadData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || "Failed to revoke invitation");
+    } catch (err: unknown) {
+      toast.error(extractAdminApiError(err, "Failed to revoke admin access"));
     } finally {
       setSubmittingRevoke(false);
       setActionLoadingId(null);
@@ -312,14 +359,18 @@ export default function AdminUsersPage() {
   const existingEmailAdminStatus = existingEmailAdmin ? resolveAdminDisplayStatus(existingEmailAdmin) : null;
 
   const handleSuspend = async (u: AdminUserDto) => {
+    if (isSelfAdminUser(u, currentAdminIdentity)) {
+      toast.error(SELF_ACTION_MESSAGES.adminSuspend);
+      return;
+    }
     if (!confirm(`Are you sure you want to suspend admin access for ${u.fullName}?`)) return;
     try {
       setActionLoadingId(u.id);
       await adminService.suspendUser(u.id);
       toast.success("Admin user suspended.");
       loadData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || "Failed to suspend admin user");
+    } catch (err: unknown) {
+      toast.error(extractAdminApiError(err, "Failed to suspend admin user"));
     } finally {
       setActionLoadingId(null);
     }
@@ -331,19 +382,28 @@ export default function AdminUsersPage() {
       await adminService.reactivateUser(u.id);
       toast.success("Admin user reactivated.");
       loadData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || "Failed to reactivate admin user");
+    } catch (err: unknown) {
+      toast.error(extractAdminApiError(err, "Failed to reactivate admin user"));
     } finally {
       setActionLoadingId(null);
     }
   };
 
   const handleDelete = (user: AdminUserDto) => {
+    if (isSelfAdminUser(user, currentAdminIdentity)) {
+      toast.error(SELF_ACTION_MESSAGES.adminDelete);
+      return;
+    }
     setDeleteTarget(user);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
+    if (isSelfAdminUser(deleteTarget, currentAdminIdentity)) {
+      toast.error(SELF_ACTION_MESSAGES.adminDelete);
+      setDeleteTarget(null);
+      return;
+    }
     try {
       setSubmittingDelete(true);
       setActionLoadingId(deleteTarget.id);
@@ -351,8 +411,8 @@ export default function AdminUsersPage() {
       toast.success(`Permanently removed ${deleteTarget.fullName} from platform admins.`);
       setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
       setDeleteTarget(null);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || "Failed to delete admin user");
+    } catch (err: unknown) {
+      toast.error(extractAdminApiError(err, "Failed to delete admin user"));
     } finally {
       setSubmittingDelete(false);
       setActionLoadingId(null);
@@ -527,6 +587,10 @@ export default function AdminUsersPage() {
               {users.map((u) => {
                 const status = resolveAdminDisplayStatus(u);
                 const isBusy = actionLoadingId === u.id;
+                const restriction = getAdminUserActionRestriction(
+                  { ...u, displayStatus: status },
+                  currentAdminIdentity
+                );
 
                 return (
                   <TableRow key={u.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/20 transition-colors">
@@ -536,7 +600,14 @@ export default function AdminUsersPage() {
                           {u.fullName.split(" ").map(w => w[0]).join("")}
                         </div>
                         <div>
-                          <div>{u.fullName}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span>{u.fullName}</span>
+                            {restriction.isSelf && (
+                              <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4 font-medium shrink-0">
+                                You
+                              </Badge>
+                            )}
+                          </div>
                           {u.clerkUserId && (
                             <div className="text-[10px] text-muted-foreground font-mono font-normal">
                               Linked: {u.clerkUserId.substring(0, 12)}...
@@ -590,17 +661,23 @@ export default function AdminUsersPage() {
                                 <IconMailForward className="h-3.5 w-3.5" />
                                 <span>Resend</span>
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={isBusy}
-                                onClick={() => handleRevoke(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                                title="Revoke Invitation"
+                              <span
+                                title={restriction.revokeTooltip}
+                                className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                               >
-                                <IconBan className="h-3.5 w-3.5" />
-                                <span>Revoke</span>
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy || !restriction.canRevoke}
+                                  onClick={() => handleRevoke(u)}
+                                  className="h-7 px-2 text-xs rounded-lg gap-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-40"
+                                  title={restriction.revokeTooltip}
+                                  aria-label={restriction.revokeTooltip}
+                                >
+                                  <IconBan className="h-3.5 w-3.5" />
+                                  <span>Revoke</span>
+                                </Button>
+                              </span>
                             </>
                           )}
 
@@ -617,17 +694,23 @@ export default function AdminUsersPage() {
                                 <IconMailForward className="h-3.5 w-3.5" />
                                 <span>Resend</span>
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={isBusy}
-                                onClick={() => handleRevoke(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
-                                title="Revoke Expired Invitation"
+                              <span
+                                title={restriction.revokeTooltip}
+                                className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                               >
-                                <IconBan className="h-3.5 w-3.5" />
-                                <span>Revoke</span>
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy || !restriction.canRevoke}
+                                  onClick={() => handleRevoke(u)}
+                                  className="h-7 px-2 text-xs rounded-lg gap-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-40"
+                                  title={restriction.revokeTooltip}
+                                  aria-label={restriction.revokeTooltip}
+                                >
+                                  <IconBan className="h-3.5 w-3.5" />
+                                  <span>Revoke</span>
+                                </Button>
+                              </span>
                             </>
                           )}
 
@@ -653,28 +736,40 @@ export default function AdminUsersPage() {
                                 <IconKey className="h-3.5 w-3.5" />
                                 <span>Reset Password</span>
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={isBusy}
-                                onClick={() => handleSuspend(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                                title="Suspend Account"
+                              <span
+                                title={restriction.suspendTooltip}
+                                className={!restriction.canSuspend ? "inline-flex cursor-not-allowed" : "inline-flex"}
                               >
-                                <IconPlayerPause className="h-3.5 w-3.5" />
-                                <span>Suspend</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={isBusy}
-                                onClick={() => handleRevoke(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                title="Revoke Admin Access"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy || !restriction.canSuspend}
+                                  onClick={() => handleSuspend(u)}
+                                  className="h-7 px-2 text-xs rounded-lg gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-40"
+                                  title={restriction.suspendTooltip}
+                                  aria-label={restriction.suspendTooltip}
+                                >
+                                  <IconPlayerPause className="h-3.5 w-3.5" />
+                                  <span>Suspend</span>
+                                </Button>
+                              </span>
+                              <span
+                                title={restriction.revokeTooltip}
+                                className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                               >
-                                <IconBan className="h-3.5 w-3.5" />
-                                <span>Revoke</span>
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy || !restriction.canRevoke}
+                                  onClick={() => handleRevoke(u)}
+                                  className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-40"
+                                  title={restriction.revokeTooltip}
+                                  aria-label={restriction.revokeTooltip}
+                                >
+                                  <IconBan className="h-3.5 w-3.5" />
+                                  <span>Revoke</span>
+                                </Button>
+                              </span>
                             </>
                           )}
 
@@ -691,28 +786,40 @@ export default function AdminUsersPage() {
                                 <IconPlayerPlay className="h-3.5 w-3.5" />
                                 <span>Reactivate</span>
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={isBusy}
-                                onClick={() => handleRevoke(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                title="Revoke Admin Access"
+                              <span
+                                title={restriction.revokeTooltip}
+                                className={!restriction.canRevoke ? "inline-flex cursor-not-allowed" : "inline-flex"}
                               >
-                                <IconBan className="h-3.5 w-3.5" />
-                                <span>Revoke</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={isBusy}
-                                onClick={() => handleDelete(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                title="Permanently Delete Admin Profile"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy || !restriction.canRevoke}
+                                  onClick={() => handleRevoke(u)}
+                                  className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-40"
+                                  title={restriction.revokeTooltip}
+                                  aria-label={restriction.revokeTooltip}
+                                >
+                                  <IconBan className="h-3.5 w-3.5" />
+                                  <span>Revoke</span>
+                                </Button>
+                              </span>
+                              <span
+                                title={restriction.deleteTooltip}
+                                className={!restriction.canDelete ? "inline-flex cursor-not-allowed" : "inline-flex"}
                               >
-                                <IconTrash className="h-3.5 w-3.5" />
-                                <span>Remove</span>
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy || !restriction.canDelete}
+                                  onClick={() => handleDelete(u)}
+                                  className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-40"
+                                  title={restriction.deleteTooltip}
+                                  aria-label={restriction.deleteTooltip}
+                                >
+                                  <IconTrash className="h-3.5 w-3.5" />
+                                  <span>Remove</span>
+                                </Button>
+                              </span>
                             </>
                           )}
 
@@ -729,16 +836,23 @@ export default function AdminUsersPage() {
                                 <IconMailForward className="h-3.5 w-3.5" />
                                 <span>Re-invite</span>
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDelete(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                title="Permanently Delete Admin Profile"
+                              <span
+                                title={restriction.deleteTooltip}
+                                className={!restriction.canDelete ? "inline-flex cursor-not-allowed" : "inline-flex"}
                               >
-                                <IconTrash className="h-3.5 w-3.5" />
-                                <span>Remove</span>
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy || !restriction.canDelete}
+                                  onClick={() => handleDelete(u)}
+                                  className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-40"
+                                  title={restriction.deleteTooltip}
+                                  aria-label={restriction.deleteTooltip}
+                                >
+                                  <IconTrash className="h-3.5 w-3.5" />
+                                  <span>Remove</span>
+                                </Button>
+                              </span>
                             </>
                           )}
                         </div>
@@ -928,12 +1042,18 @@ export default function AdminUsersPage() {
                 <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/20">
                   <div className="space-y-0.5">
                     <span className="block text-xs font-bold text-slate-700 dark:text-slate-200">Account Active Status</span>
-                    <span className="block text-[10px] text-muted-foreground">Suspend this profile to instantly block API access.</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {isEditingSelf
+                        ? SELF_ACTION_MESSAGES.adminSuspend
+                        : "Suspend this profile to instantly block API access."}
+                    </span>
                   </div>
                   <select
                     value={formData.isActive ? "true" : "false"}
+                    disabled={isEditingSelf}
+                    title={isEditingSelf ? SELF_ACTION_MESSAGES.adminSuspend : "Account Active Status"}
                     onChange={e => setFormData(prev => ({ ...prev, isActive: e.target.value === "true" }))}
-                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold focus-visible:outline-hidden"
+                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold focus-visible:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="true">Active</option>
                     <option value="false">Suspended</option>

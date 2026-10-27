@@ -1,6 +1,13 @@
 import { describe, test, expect, mock } from "bun:test";
 import { staffService, StaffMemberStatus, StaffMemberDto } from "../src/services/staff.service";
+import * as fs from "fs";
+import * as path from "path";
 import { apiClient } from "../src/transport/apiClient";
+import {
+  getWorkspaceMemberActionRestriction,
+  isSelfWorkspaceMember,
+  SELF_ACTION_MESSAGES,
+} from "../src/lib/selfActionGuard";
 
 describe("Tenant Workspace Team Invitations & Member Lifecycle (Milestone 2)", () => {
   describe("Proxy Middleware Whitelisting Logic", () => {
@@ -417,6 +424,75 @@ describe("Tenant Workspace Team Invitations & Member Lifecycle (Milestone 2)", (
       } finally {
         apiClient.get = originalGet;
       }
+    });
+  });
+
+  describe("Self-Action Restrictions in Workspace Team (#112)", () => {
+    test("matches self workspace member by exact Clerk userId", () => {
+      expect(
+        isSelfWorkspaceMember(
+          { userId: "user_clerk_abc123", email: "member@clinic.ph" },
+          { userId: "user_clerk_abc123", email: "different@clinic.ph" }
+        )
+      ).toBe(true);
+    });
+
+    test("matches self workspace member case-insensitively by primary or secondary email with whitespace", () => {
+      expect(
+        isSelfWorkspaceMember(
+          { userId: null, email: "  Justine.Mae@ClinicEZ.net " },
+          { userId: "user_clerk_xyz", email: "primary@clinicez.net", emails: ["justine.mae@clinicez.net"] }
+        )
+      ).toBe(true);
+    });
+
+    test("returns false for distinct workspace members or missing identity", () => {
+      expect(
+        isSelfWorkspaceMember(
+          { userId: "user_other_999", email: "colleague@clinicez.net" },
+          { userId: "user_self_111", email: "me@clinicez.net", emails: ["me@clinicez.net"] }
+        )
+      ).toBe(false);
+      expect(isSelfWorkspaceMember(null, { userId: "user_self_111" })).toBe(false);
+      expect(isSelfWorkspaceMember({ userId: "user_self_111" }, null)).toBe(false);
+    });
+
+    test("disables Revoke, Suspend, and Delete with explicit tooltips for self row while keeping other rows enabled", () => {
+      const selfRestriction = getWorkspaceMemberActionRestriction(
+        { userId: "user_self_111", email: "me@clinicez.net", status: "Active" },
+        { userId: "user_self_111", email: "me@clinicez.net" }
+      );
+      expect(selfRestriction.isSelf).toBe(true);
+      expect(selfRestriction.canRevoke).toBe(false);
+      expect(selfRestriction.canSuspend).toBe(false);
+      expect(selfRestriction.canDelete).toBe(false);
+      expect(selfRestriction.revokeTooltip).toBe(SELF_ACTION_MESSAGES.workspaceRevoke);
+      expect(selfRestriction.suspendTooltip).toBe(SELF_ACTION_MESSAGES.workspaceSuspend);
+      expect(selfRestriction.deleteTooltip).toBe(SELF_ACTION_MESSAGES.workspaceDelete);
+
+      const otherRestriction = getWorkspaceMemberActionRestriction(
+        { userId: "user_other_222", email: "other@clinicez.net", status: "Active" },
+        { userId: "user_self_111", email: "me@clinicez.net" }
+      );
+      expect(otherRestriction.isSelf).toBe(false);
+      expect(otherRestriction.canRevoke).toBe(true);
+      expect(otherRestriction.canSuspend).toBe(true);
+      expect(otherRestriction.canDelete).toBe(true);
+      expect(otherRestriction.revokeTooltip).toBe("Revoke Workspace Access");
+      expect(otherRestriction.suspendTooltip).toBe("Suspend Account");
+    });
+
+    test("TeamManagementClient wires getWorkspaceMemberActionRestriction and disables self actions", () => {
+      const source = fs.readFileSync(
+        path.resolve(__dirname, "../src/app/[tenant]/dashboard/team/TeamManagementClient.tsx"),
+        "utf-8"
+      );
+      expect(source).toContain("getWorkspaceMemberActionRestriction");
+      expect(source).toContain("!restriction.canRevoke");
+      expect(source).toContain("!restriction.canSuspend");
+      expect(source).toContain("!restriction.canDelete");
+      expect(source).toContain("SELF_ACTION_MESSAGES.workspaceRevoke");
+      expect(source).toContain("SELF_ACTION_MESSAGES.workspaceSuspend");
     });
   });
 });
