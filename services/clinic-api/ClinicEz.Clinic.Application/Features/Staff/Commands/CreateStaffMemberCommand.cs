@@ -17,6 +17,7 @@ using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Documents.Configuration;
 using System.Security.Cryptography;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
@@ -60,6 +61,19 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
         When(x => !string.IsNullOrEmpty(x.PhilHealthPan), () =>
         {
             RuleFor(x => x.PhilHealthPan).MaximumLength(50);
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.Email), () =>
+        {
+            RuleFor(x => x.Email)
+                .MaximumLength(255);
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.Email) && string.IsNullOrEmpty(x.InitialPassword) && !x.SendInviteEmail, () =>
+        {
+            RuleFor(x => x.Email)
+                .EmailAddress()
+                .WithMessage("A valid email address is required.");
         });
 
         When(x => !string.IsNullOrEmpty(x.InitialPassword), () =>
@@ -140,6 +154,32 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             throw new ValidationException("Facility license has expired. The clinic is operating in Grace Read-Only mode. Staff management is locked.");
         }
 
+        var normalizedEmail = StaffEmailUniquenessHelper.NormalizeEmail(request.Email);
+
+        if (request.SendInviteEmail && normalizedEmail == null)
+        {
+            throw new ValidationException("A valid email address is required when sending an invitation email.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.InitialPassword) && normalizedEmail == null)
+        {
+            throw new ValidationException("An email address is required when provisioning login credentials for a staff member.");
+        }
+
+        if (normalizedEmail != null)
+        {
+            var duplicateEmail = await _staffRepository.Query(s =>
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.Email != null &&
+                s.Email.ToLower() == normalizedEmail)
+                .AnyAsync(cancellationToken);
+
+            if (duplicateEmail)
+            {
+                throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+            }
+        }
+
         // Security Hardening: Derive MaxStaff limit strictly from the validated cryptographic payload!
         int maxStaffLimit = licenseResult.Payload?.Limits?.MaxStaff ?? 5;
         int currentActiveStaff = await _staffRepository.Query(s => s.ClinicId == _clinicContext.ClinicId && s.IsActive)
@@ -149,6 +189,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         {
             throw new ValidationException($"Staff limit reached: Your facility license allows up to {maxStaffLimit} active staff members ({currentActiveStaff} currently active). Please upgrade your facility license to add more staff.");
         }
+
         Guid? assignedRoleId = request.ClinicRoleId;
         string? assignedRoleName = null;
 
@@ -178,8 +219,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
 
             if (defaultRoleName != null)
             {
-                var defaultRole = await _roleRepository.Query(r => 
-                    r.ClinicId == _clinicContext.ClinicId && 
+                var defaultRole = await _roleRepository.Query(r =>
+                    r.ClinicId == _clinicContext.ClinicId &&
                     r.Name == defaultRoleName)
                     .FirstOrDefaultAsync(cancellationToken);
 
@@ -221,24 +262,6 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
 
         if (!string.IsNullOrWhiteSpace(request.InitialPassword))
         {
-            if (string.IsNullOrWhiteSpace(request.Email))
-            {
-                throw new ValidationException("An email address is required when provisioning login credentials for a staff member.");
-            }
-
-            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-            var duplicateEmail = await _staffRepository.Query(s =>
-                s.ClinicId == _clinicContext.ClinicId &&
-                s.Email != null &&
-                s.Email.ToLower() == normalizedEmail &&
-                s.PasswordHash != null)
-                .AnyAsync(cancellationToken);
-
-            if (duplicateEmail)
-            {
-                throw new ValidationException($"Another staff member with email '{request.Email.Trim()}' already has login credentials.");
-            }
-
             var problems = _passwordHasher.ValidateStrength(request.InitialPassword, 8);
             if (problems.Count > 0)
             {
@@ -279,7 +302,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             MiddleName = request.MiddleName?.Trim(),
             Title = request.Title?.Trim(),
             Role = request.Role,
-            Email = request.Email?.Trim(),
+            Email = normalizedEmail,
             PhoneNumber = request.PhoneNumber?.Trim(),
             PrcLicenseNumber = request.PrcLicenseNumber?.Trim(),
             PtrNumber = request.PtrNumber?.Trim(),
@@ -318,7 +341,14 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         }
 
         await _staffRepository.AddAsync(staff, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (StaffEmailUniquenessHelper.IsStaffEmailUniqueViolation(ex))
+        {
+            throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+        }
 
         return new StaffMemberDto(
             staff.Id,

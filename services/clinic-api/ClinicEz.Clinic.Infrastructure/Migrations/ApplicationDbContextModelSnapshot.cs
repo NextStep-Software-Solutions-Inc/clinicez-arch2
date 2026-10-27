@@ -5163,7 +5163,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("InvitationToken")
                         .HasFilter("\"IsDeleted\" = false AND \"InvitationToken\" IS NOT NULL");
 
-                    b.HasIndex("ClinicId", "Email");
+                    b.HasIndex("ClinicId", "Email")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false AND \"Email\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "ClinicId");
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -56,6 +57,14 @@ public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<Update
         When(x => !string.IsNullOrEmpty(x.PhilHealthPan), () =>
         {
             RuleFor(x => x.PhilHealthPan).MaximumLength(50);
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.Email), () =>
+        {
+            RuleFor(x => x.Email)
+                .EmailAddress()
+                .WithMessage("A valid email address is required.")
+                .MaximumLength(255);
         });
     }
 }
@@ -114,6 +123,22 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             }
         }
 
+        var normalizedEmail = StaffEmailUniquenessHelper.NormalizeEmail(request.Email);
+        if (normalizedEmail != null)
+        {
+            var duplicateEmail = await _staffRepository.Query(s =>
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.Id != staff.Id &&
+                s.Email != null &&
+                s.Email.ToLower() == normalizedEmail)
+                .AnyAsync(cancellationToken);
+
+            if (duplicateEmail)
+            {
+                throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+            }
+        }
+
         // Guard: Cannot downgrade or deactivate the only active Administrator
         if (staff.Role == StaffRole.Admin && staff.IsActive && (request.Role != StaffRole.Admin || !request.IsActive))
         {
@@ -131,14 +156,14 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         }
 
         // Guard 1: Cannot downgrade, reassign, or deactivate the only active built-in System Administrator
-        bool isCurrentSystemAdmin = ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.IsSystemAdministrator(staff);
+        bool isCurrentSystemAdmin = GovernanceSafetyChecker.IsSystemAdministrator(staff);
         if (isCurrentSystemAdmin && staff.IsActive)
         {
             bool willLoseSystemAdmin = !request.IsActive ||
                 request.Role != StaffRole.Admin ||
                 (request.ClinicRoleId.HasValue && (staff.ClinicRole == null || request.ClinicRoleId.Value != staff.ClinicRoleId));
 
-            await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureActiveSystemAdminRemainsAsync(
+            await GovernanceSafetyChecker.EnsureActiveSystemAdminRemainsAsync(
                 _staffRepository,
                 _clinicContext.ClinicId,
                 staff.Id,
@@ -147,7 +172,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         }
 
         // Guard 2: Cannot reassign or deactivate the last active user holding critical governance permissions (roles:manage, staff:manage, settings:manage)
-        await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureGovernancePermissionsRemainOnStaffChangeAsync(
+        await GovernanceSafetyChecker.EnsureGovernancePermissionsRemainOnStaffChangeAsync(
             _staffRepository,
             _roleRepository,
             _clinicContext.ClinicId,
@@ -218,7 +243,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         staff.MiddleName = request.MiddleName?.Trim();
         staff.Title = request.Title?.Trim();
         staff.Role = request.Role;
-        staff.Email = request.Email?.Trim();
+        staff.Email = normalizedEmail;
         staff.PhoneNumber = request.PhoneNumber?.Trim();
         staff.PrcLicenseNumber = request.PrcLicenseNumber?.Trim();
         staff.PtrNumber = request.PtrNumber?.Trim();
@@ -238,7 +263,14 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
         _staffRepository.Update(staff);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (StaffEmailUniquenessHelper.IsStaffEmailUniqueViolation(ex))
+        {
+            throw new ValidationException(StaffEmailUniquenessHelper.DuplicateStaffEmailMessage);
+        }
 
         _accessCache?.Invalidate(staff.Id);
 

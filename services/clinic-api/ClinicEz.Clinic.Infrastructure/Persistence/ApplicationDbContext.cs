@@ -247,7 +247,9 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.InvitationToken).HasMaxLength(128);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
-            entity.HasIndex(e => new { e.ClinicId, e.Email });
+            entity.HasIndex(e => new { e.ClinicId, e.Email })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false AND \"Email\" IS NOT NULL");
             entity.HasIndex(e => e.InvitationToken)
                 .HasFilter("\"IsDeleted\" = false AND \"InvitationToken\" IS NOT NULL");
         });

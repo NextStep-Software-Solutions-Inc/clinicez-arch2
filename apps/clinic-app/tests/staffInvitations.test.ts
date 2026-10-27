@@ -114,7 +114,11 @@ mock.module('@expo-google-fonts/geist-mono', () => ({
 const { extractInviteToken } = await import('../utils/inviteUrl');
 const { resolveStaffBadge } = await import('../utils/staffStatus');
 const { validateWorkstationPassword } = await import('../utils/passwordValidation');
-const { buildStaffCreationPayload } = await import('../utils/staffManagement');
+const {
+  buildStaffCreationPayload,
+  validateStaffEmailNotInClinic,
+  DUPLICATE_CLINIC_STAFF_EMAIL_MESSAGE,
+} = await import('../utils/staffManagement');
 const { clinicService } = await import('../services/clinicService');
 const authSession = await import('../services/authSession');
 
@@ -412,6 +416,55 @@ describe('Staff Invitations & Facility Auth Suite', () => {
 
     it('exposes acceptInvitation function in authSession', () => {
       expect(typeof authSession.acceptInvitation).toBe('function');
+    });
+  });
+
+  describe('Duplicate Clinic Staff Email Validation (Issue #113)', () => {
+    const existingRoster: Array<{ id: string; email?: string | null }> = [
+      { id: 'staff-1', email: 'dr.santos@clinicez.ph' },
+      { id: 'staff-2', email: 'Pending.Invite@ClinicEz.ph' },
+      { id: 'staff-3', email: null },
+    ];
+
+    it('returns null when email is undefined, null, or blank', () => {
+      expect(validateStaffEmailNotInClinic(undefined, existingRoster)).toBeNull();
+      expect(validateStaffEmailNotInClinic(null, existingRoster)).toBeNull();
+      expect(validateStaffEmailNotInClinic('   ', existingRoster)).toBeNull();
+    });
+
+    it('returns null when email does not belong to any existing staff member in the clinic', () => {
+      expect(validateStaffEmailNotInClinic('new.nurse@clinicez.ph', existingRoster)).toBeNull();
+    });
+
+    it('rejects exact and case-insensitive/whitespace-padded duplicate emails with canonical message', () => {
+      expect(validateStaffEmailNotInClinic('dr.santos@clinicez.ph', existingRoster)).toBe(
+        'This email address is already associated with an existing staff member in this clinic.'
+      );
+      expect(validateStaffEmailNotInClinic('  DR.SANTOS@CLINICEZ.PH  ', existingRoster)).toBe(
+        DUPLICATE_CLINIC_STAFF_EMAIL_MESSAGE
+      );
+      expect(validateStaffEmailNotInClinic('pending.invite@clinicez.ph', existingRoster)).toBe(
+        DUPLICATE_CLINIC_STAFF_EMAIL_MESSAGE
+      );
+    });
+
+    it('allows keeping own email when excludeStaffId matches the edited staff record, while rejecting colleagues', () => {
+      expect(validateStaffEmailNotInClinic('DR.SANTOS@clinicez.ph', existingRoster, 'staff-1')).toBeNull();
+      expect(validateStaffEmailNotInClinic('pending.invite@clinicez.ph', existingRoster, 'staff-1')).toBe(
+        DUPLICATE_CLINIC_STAFF_EMAIL_MESSAGE
+      );
+    });
+
+    it('verifies StaffManagementTab integrates validateStaffEmailNotInClinic for create, edit, and inline blur', async () => {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const staffTabPath = path.resolve(__dirname, '../components/settings/StaffManagementTab.tsx');
+      const source = fs.readFileSync(staffTabPath, 'utf8');
+
+      expect(source).toContain('validateStaffEmailNotInClinic(deliveryPayload.email, staff)');
+      expect(source).toContain('validateStaffEmailNotInClinic(email, staff, editingStaff.id)');
+      expect(source).toContain('onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(');
+      expect(source).toContain('error={emailFieldError || undefined}');
     });
   });
 });

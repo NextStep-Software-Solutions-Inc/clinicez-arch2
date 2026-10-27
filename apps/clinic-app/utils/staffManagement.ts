@@ -6,6 +6,37 @@ export interface StaffCreationDeliveryPayload {
   initialPassword?: string;
 }
 
+export const DUPLICATE_CLINIC_STAFF_EMAIL_MESSAGE =
+  'This email address is already associated with an existing staff member in this clinic.';
+
+/**
+ * Validates that a candidate email address is not already registered to an existing
+ * staff member in the same clinic directory (case-insensitive, trimmed).
+ * Optionally excludes a specific staff member ID when editing an existing staff record.
+ */
+export function validateStaffEmailNotInClinic(
+  email: string | undefined | null,
+  existingStaff: ReadonlyArray<{ id?: string; email?: string | null }>,
+  excludeStaffId?: string
+): string | null {
+  if (!email) return null;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const duplicate = existingStaff.find(
+    (member) =>
+      (!excludeStaffId || member.id !== excludeStaffId) &&
+      typeof member.email === 'string' &&
+      member.email.trim().toLowerCase() === normalized
+  );
+
+  if (duplicate) {
+    return DUPLICATE_CLINIC_STAFF_EMAIL_MESSAGE;
+  }
+
+  return null;
+}
+
 /**
  * Builds and validates the invitation and credential payload for staff member creation.
  * Enforces email requirement for email invitations and credential provisioning,
