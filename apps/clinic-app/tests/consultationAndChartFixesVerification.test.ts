@@ -44,9 +44,17 @@ mock.module('react-native', () => ({
   RefreshControl: createMockComponent('RefreshControl'),
   Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
   useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
   AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
+  NativeModules: {},
+  NativeEventEmitter: class {
+    addListener() { return { remove: () => {} }; }
+    removeAllListeners() {}
+  },
   Alert: { alert: () => {} },
+  processColor: (c: any) => c,
   Animated: {
     Value: class {
       constructor(public val: any) {}
@@ -87,46 +95,63 @@ mock.module('../constants/fonts', () => ({
 }));
 
 let mockAuthUser: any = { id: 'u1', role: 'Admin', permissions: ['procedures:write'] };
-const mockAuth = {
-  useAuth: () => ({
-    user: mockAuthUser,
-    permissions: mockAuthUser ? mockAuthUser.permissions : [],
-    can: (p: string) => mockAuthUser?.permissions?.includes(p) ?? false,
-  }),
-  usePermission: (p: string) => mockAuthUser?.permissions?.includes(p) ?? false,
-};
-
-mock.module('../context/AuthContext', () => mockAuth);
-mock.module('../../context/AuthContext', () => mockAuth);
-
-let mockStaffList: any[] = [
+const mockStaffList: any[] = [
   { id: 'doc-1', firstName: 'Gregory', lastName: 'House', role: 'Doctor', prcLicenseNumber: '0098765', isActive: true },
   { id: 'nurse-1', firstName: 'Joy', lastName: 'Nurse', role: 'Nurse', isActive: true },
 ];
 
-const mockStaffContext = {
-  useStaff: () => ({
-    current: mockStaffList[1], // Nurse by default
-    staff: mockStaffList,
-    currentName: 'Joy Nurse',
-  }),
+const defaultAuthMock = {
+  state: 'signedIn',
+  user: null,
+  permissions: [],
+  offline: false,
+  notice: null,
+  login: async () => null,
+  bootstrap: async () => null,
+  changePassword: async () => null,
+  completeUnlock: () => {},
+  useDifferentAccount: async () => {},
+  logout: async () => {},
+  retry: () => {},
+  can: () => false,
 };
 
-mock.module('../context/StaffContext', () => mockStaffContext);
-mock.module('../../context/StaffContext', () => mockStaffContext);
+const authContextMockFactory = () => ({
+  useAuth: () => (globalThis as any).__mockAuthContext ?? defaultAuthMock,
+  usePermission: (perm: string) => {
+    const ctx = (globalThis as any).__mockAuthContext;
+    return ctx?.can ? Boolean(ctx.can(perm)) : true;
+  },
+  AuthProvider: ({ children }: any) => children,
+});
 
-const mockClinicContext = {
-  useClinic: () => ({
-    facilityName: 'Metro Health Center',
-    rooms: [
-      { id: 'rm-1', name: 'Treatment Bay 1', type: 'Treatment', isActive: true },
-      { id: 'rm-2', name: 'Treatment Bay 2', type: 'Treatment', isActive: true },
-    ],
-  }),
-};
+const staffContextMockFactory = () => ({
+  useStaff: () =>
+    (globalThis as any).__mockStaffContext ?? {
+      staff: [],
+      current: null,
+      currentName: '',
+      loading: false,
+      error: null,
+      reload: async () => {},
+    },
+  formatStaffName: (s?: any) => {
+    if (!s) return '';
+    return [s.title, s.firstName, s.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  },
+  staffInitials: (s?: any) => {
+    if (!s) return '?';
+    return `${s.firstName?.[0] ?? ''}${s.lastName?.[0] ?? ''}`.toUpperCase() || '?';
+  },
+  StaffProvider: ({ children }: any) => children,
+});
 
-mock.module('../context/ClinicContext', () => mockClinicContext);
-mock.module('../../context/ClinicContext', () => mockClinicContext);
+mock.module('../context/AuthContext', authContextMockFactory);
+mock.module('../../context/AuthContext', authContextMockFactory);
+mock.module('@context/AuthContext', authContextMockFactory);
+mock.module('../context/StaffContext', staffContextMockFactory);
+mock.module('../../context/StaffContext', staffContextMockFactory);
+mock.module('@context/StaffContext', staffContextMockFactory);
 
 const { default: NursingProceduresTab, ProcedureExecutionModal, OrderProcedureModal } =
   await import('../components/chart/NursingProceduresTab');
@@ -134,11 +159,41 @@ import type { ClinicalProcedureRecord } from '../services/clinicService';
 
 describe('Consultation Chart, Lab Reports & Dialog Fixes Verification Suite', () => {
   beforeEach(() => {
+    mock.module('../context/AuthContext', authContextMockFactory);
+    mock.module('../../context/AuthContext', authContextMockFactory);
+    mock.module('@context/AuthContext', authContextMockFactory);
+    mock.module('../context/StaffContext', staffContextMockFactory);
+    mock.module('../../context/StaffContext', staffContextMockFactory);
+    mock.module('@context/StaffContext', staffContextMockFactory);
     mockAuthUser = { id: 'u1', role: 'Admin', permissions: ['procedures:write'] };
+    (globalThis as any).__mockAuthContext = {
+      get user() {
+        return mockAuthUser;
+      },
+      get permissions() {
+        return mockAuthUser ? mockAuthUser.permissions : [];
+      },
+      can: (p: string) => mockAuthUser?.permissions?.includes(p) ?? false,
+    };
+    (globalThis as any).__mockStaffContext = {
+      current: mockStaffList[1], // Nurse by default
+      staff: mockStaffList,
+      currentName: 'Joy Nurse',
+    };
+    (globalThis as any).__mockClinicContext = {
+      facilityName: 'Metro Health Center',
+      rooms: [
+        { id: 'rm-1', name: 'Treatment Bay 1', type: 'Treatment', isActive: true },
+        { id: 'rm-2', name: 'Treatment Bay 2', type: 'Treatment', isActive: true },
+      ],
+    };
   });
 
   afterAll(() => {
     mockAuthUser = null;
+    delete (globalThis as any).__mockAuthContext;
+    delete (globalThis as any).__mockStaffContext;
+    delete (globalThis as any).__mockClinicContext;
   });
 
   describe('1. Role & Permission Gating for "+ Order Procedure"', () => {

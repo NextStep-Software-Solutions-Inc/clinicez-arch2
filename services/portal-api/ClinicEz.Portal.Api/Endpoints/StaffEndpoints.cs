@@ -155,13 +155,13 @@ public class StaffEndpoints : IEndpoint
             {
                 if (permanent == true)
                 {
-                    var deleted = await sender.Send(new DeleteStaffMemberCommand(tenantSlug, id));
+                    var deleted = await sender.Send(new DeleteStaffMemberCommand(tenantSlug, id, clerkUserId));
                     return deleted
                         ? Results.Ok(new { Success = true, Message = "Staff member permanently removed from workspace." })
                         : Results.BadRequest(new { Message = "Failed to remove staff member." });
                 }
 
-                var success = await sender.Send(new RevokeStaffMemberCommand(tenantSlug, id));
+                var success = await sender.Send(new RevokeStaffMemberCommand(tenantSlug, id, clerkUserId));
                 return success 
                     ? Results.Ok(new { Success = true, Message = "Staff member / invitation revoked successfully." }) 
                     : Results.BadRequest(new { Message = "Failed to revoke staff member." });
@@ -217,7 +217,7 @@ public class StaffEndpoints : IEndpoint
 
             try
             {
-                var deleted = await sender.Send(new DeleteStaffMemberCommand(tenantSlug, id));
+                var deleted = await sender.Send(new DeleteStaffMemberCommand(tenantSlug, id, clerkUserId));
                 return deleted
                     ? Results.Ok(new { Success = true, Message = "Staff member permanently removed from workspace." })
                     : Results.BadRequest(new { Message = "Failed to remove staff member." });
@@ -491,7 +491,7 @@ public class StaffEndpoints : IEndpoint
 
             try
             {
-                var result = await sender.Send(new SuspendStaffMemberCommand(tenantSlug, id));
+                var result = await sender.Send(new SuspendStaffMemberCommand(tenantSlug, id, clerkUserId));
                 return Results.Ok(result);
             }
             catch (KeyNotFoundException ex)

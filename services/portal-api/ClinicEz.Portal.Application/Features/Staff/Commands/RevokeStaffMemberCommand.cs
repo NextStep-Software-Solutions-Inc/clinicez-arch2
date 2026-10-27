@@ -11,7 +11,8 @@ namespace ClinicEz.Portal.Application.Features.Staff.Commands;
 
 public record RevokeStaffMemberCommand(
     string TenantSlug,
-    Guid StaffMemberId
+    Guid StaffMemberId,
+    string? CurrentUserId = null
 ) : IRequest<bool>;
 
 public class RevokeStaffMemberCommandValidator : AbstractValidator<RevokeStaffMemberCommand>
@@ -40,6 +41,13 @@ public class RevokeStaffMemberCommandHandler(
         if (member.Role == WorkspaceMemberRole.Owner)
         {
             throw new InvalidOperationException("The primary workspace owner cannot be revoked or removed.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CurrentUserId) &&
+            !string.IsNullOrWhiteSpace(member.UserId) &&
+            string.Equals(member.UserId.Trim(), request.CurrentUserId.Trim(), StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("You cannot revoke your own workspace access.");
         }
 
         member.Status = MemberStatus.Revoked;

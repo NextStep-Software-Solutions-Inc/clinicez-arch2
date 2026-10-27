@@ -838,4 +838,110 @@ public class AdminUserInvitationTests : IDisposable
         Assert.True(deleted);
         Assert.Null(await _context.AdminUsers.FindAsync(activeAdmin.Id));
     }
+
+    [Fact]
+    public async Task RevokeAdminInvitation_SelfRevocation_ThrowsInvalidOperationException_AndPreservesActiveStatus()
+    {
+        var selfAdmin = new AdminUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "self.revoke@clinicez.com",
+            FullName = "Self Revoke Admin",
+            RoleId = _roleId,
+            ClerkUserId = "user_clerk_self_revoke_112",
+            Status = AdminUserStatus.Active,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.AdminUsers.Add(selfAdmin);
+        await _context.SaveChangesAsync();
+
+        var handler = new RevokeAdminInvitationCommandHandler(_context, UrlProvider, TimeProvider.System);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(
+                new RevokeAdminInvitationCommand(selfAdmin.Id, "Self Revoke Admin", "user_clerk_self_revoke_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot revoke your own admin account.", ex.Message);
+
+        var dbUser = await _context.AdminUsers.FindAsync(selfAdmin.Id);
+        Assert.NotNull(dbUser);
+        Assert.Equal(AdminUserStatus.Active, dbUser.Status);
+        Assert.True(dbUser.IsActive);
+    }
+
+    [Fact]
+    public async Task DeleteAdminUser_SelfDeletion_ThrowsInvalidOperationException_AndPreservesRecord()
+    {
+        var selfAdmin = new AdminUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "self.delete@clinicez.com",
+            FullName = "Self Delete Admin",
+            RoleId = _roleId,
+            ClerkUserId = "user_clerk_self_delete_112",
+            Status = AdminUserStatus.Suspended,
+            IsActive = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.AdminUsers.Add(selfAdmin);
+        await _context.SaveChangesAsync();
+
+        var handler = new DeleteAdminUserCommandHandler(_context);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new DeleteAdminUserCommand(selfAdmin.Id, "user_clerk_self_delete_112"), CancellationToken.None));
+
+        Assert.Equal("You cannot delete your own admin account.", ex.Message);
+        Assert.NotNull(await _context.AdminUsers.FindAsync(selfAdmin.Id));
+    }
+
+    [Fact]
+    public async Task UpdateAdminUser_SelfDeactivation_ThrowsInvalidOperationException_WhileSelfProfileEditSucceeds()
+    {
+        var selfAdmin = new AdminUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "self.edit@clinicez.com",
+            FullName = "Original Name",
+            RoleId = _roleId,
+            ClerkUserId = "user_clerk_self_edit_112",
+            Status = AdminUserStatus.Active,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.AdminUsers.Add(selfAdmin);
+        await _context.SaveChangesAsync();
+
+        var handler = new UpdateAdminUserCommandHandler(_context);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(
+                new UpdateAdminUserCommand(
+                    selfAdmin.Id,
+                    "self.edit@clinicez.com",
+                    "Original Name",
+                    _roleId,
+                    IsActive: false,
+                    UpdatedBy: "Original Name",
+                    CurrentClerkUserId: "user_clerk_self_edit_112"),
+                CancellationToken.None));
+
+        Assert.Equal("You cannot suspend your own account.", ex.Message);
+        Assert.True((await _context.AdminUsers.FindAsync(selfAdmin.Id))!.IsActive);
+
+        var updated = await handler.Handle(
+            new UpdateAdminUserCommand(
+                selfAdmin.Id,
+                "self.edit@clinicez.com",
+                "Updated Self Name",
+                _roleId,
+                IsActive: true,
+                UpdatedBy: "Updated Self Name",
+                CurrentClerkUserId: "user_clerk_self_edit_112"),
+            CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal("Updated Self Name", updated.FullName);
+        Assert.True(updated.IsActive);
+    }
 }
