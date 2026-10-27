@@ -98,6 +98,28 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
                 "INVALID_TOKEN", "Invite token is required.");
         }
 
+        var cleanToken = inviteToken.Trim().ToLowerInvariant();
+        if (cleanToken.StartsWith("rx-") || cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-") || cleanToken.StartsWith("sec-sha256-"))
+        {
+            return new GuestVerificationResult(
+                Success: false, null, null, null, null, 0, false, false,
+                "DOCUMENT_KIND_MISMATCH", "The provided token is for a clinical document, not a teleconsultation invitation.");
+        }
+
+        if (cleanToken.Length == 65 && cleanToken[32] == '.')
+        {
+            return new GuestVerificationResult(
+                Success: false, null, null, null, null, 0, false, false,
+                "DOCUMENT_KIND_MISMATCH", "The provided token is an e-prescription verification token, not a teleconsultation invitation.");
+        }
+
+        if (cleanToken.Length >= 50 && cleanToken.Length <= 60 && cleanToken.IndexOf('.') == 32)
+        {
+            return new GuestVerificationResult(
+                Success: false, null, null, null, null, 0, false, false,
+                "DOCUMENT_KIND_MISMATCH", "The provided token is a laboratory upload token, not a teleconsultation invitation.");
+        }
+
         if (string.IsNullOrWhiteSpace(dateOfBirth) || !DobRegex().IsMatch(dateOfBirth))
         {
             return new GuestVerificationResult(

@@ -32,13 +32,34 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
     Member: "General workspace member with access to assigned workspace resources."
 };
 
+function getInitialInvitationError(token?: string): string | null {
+    if (!token || !token.trim()) {
+        return "Invitation token is missing or invalid.";
+    }
+    const cleanToken = token.trim();
+    const lower = cleanToken.toLowerCase();
+    if (
+        lower.startsWith("rx-") ||
+        lower.startsWith("mc-") ||
+        lower.startsWith("ref-") ||
+        lower.startsWith("lab-") ||
+        lower.startsWith("sec-sha256-") ||
+        (cleanToken.length === 65 && cleanToken[32] === ".") ||
+        (cleanToken.length >= 50 && cleanToken.length <= 60 && cleanToken.indexOf(".") === 32)
+    ) {
+        return "The provided link contains a token for a clinical document, not a workspace invitation.";
+    }
+    return null;
+}
+
 export default function InvitationAcceptClient({ token }: { token: string }) {
     const router = useRouter();
     const { isSignedIn, user, isLoaded } = useUser();
 
+    const initialError = getInitialInvitationError(token);
     const [invite, setInvite] = useState<InvitationDetailsDto | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(!initialError);
+    const [error, setError] = useState<string | null>(initialError);
     const [accepting, setAccepting] = useState(false);
     const autoAcceptAttemptedRef = useRef(false);
 
@@ -46,6 +67,13 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
         if (!token || !token.trim()) {
             clearPendingInvitationCookie();
             setError("Invitation token is missing or invalid.");
+            setLoading(false);
+            return;
+        }
+
+        if (initialError) {
+            clearPendingInvitationCookie();
+            setError(initialError);
             setLoading(false);
             return;
         }

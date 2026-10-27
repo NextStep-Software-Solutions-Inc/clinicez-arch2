@@ -19,6 +19,13 @@ mock.module("@/components/teleconsult/TeleconsultGuestFlow", () => ({
   ),
 }));
 
+mock.module("@clerk/nextjs", () => ({
+  useUser: () => ({ isSignedIn: false, user: null, isLoaded: true }),
+  useAuth: () => ({ getToken: async () => null }),
+  SignInButton: ({ children }: any) => <button>{children}</button>,
+  SignUpButton: ({ children }: any) => <button>{children}</button>,
+}));
+
 import React from "react";
 import { renderToString } from "react-dom/server";
 import DynamicVerifyPage, { generateMetadata } from "../src/app/verify/[kind]/[token]/page";
@@ -27,6 +34,10 @@ import LabUploadClient from "../src/app/upload/lab/[token]/LabUploadClient";
 import RxUploadClient from "../src/app/upload/rx/[token]/RxUploadClient";
 import ClaimPage from "../src/app/claim/page";
 import TeleconsultTokenPage from "../src/app/teleconsult/join/[token]/page";
+import InvitationAcceptClient from "../src/app/invitations/[token]/InvitationAcceptClient";
+import AdminInvitationAcceptClient from "../src/app/admin/invitations/[token]/AdminInvitationAcceptClient";
+import PasswordResetClient from "../src/app/reset-password/[token]/PasswordResetClient";
+import { joinService } from "../src/services/join.service";
 
 describe("Public Route Token & Kind Strict Validation", () => {
   const originalFetch = globalThis.fetch;
@@ -296,6 +307,66 @@ describe("Public Route Token & Kind Strict Validation", () => {
       const html = renderToString(jsx);
       expect(html).toContain("Date of Birth");
       expect(html).not.toContain("Invalid Teleconsultation Link");
+    });
+  });
+
+  describe("InvitationAcceptClient (/invitations/[token]) Strict Token Validation", () => {
+    test("rejects clinical document tokens without initiating network request", () => {
+      const htmlRx = renderToString(<InvitationAcceptClient token="rx-20261025-0042" />);
+      expect(htmlRx).toContain("token for a clinical document, not a workspace invitation");
+      expect(htmlRx).not.toContain("Loading Invitation...");
+
+      const labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
+      const htmlLab = renderToString(<InvitationAcceptClient token={labToken} />);
+      expect(htmlLab).toContain("token for a clinical document, not a workspace invitation");
+
+      const htmlEmpty = renderToString(<InvitationAcceptClient token="" />);
+      expect(htmlEmpty).toContain("Invitation token is missing or invalid.");
+    });
+  });
+
+  describe("AdminInvitationAcceptClient (/admin/invitations/[token]) Strict Token Validation", () => {
+    test("rejects clinical document tokens without initiating network request", () => {
+      const htmlMc = renderToString(<AdminInvitationAcceptClient token="mc-2026-0001" />);
+      expect(htmlMc).toContain("token for a clinical document, not an administrative invitation");
+
+      const labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
+      const htmlLab = renderToString(<AdminInvitationAcceptClient token={labToken} />);
+      expect(htmlLab).toContain("token for a clinical document, not an administrative invitation");
+
+      const htmlEmpty = renderToString(<AdminInvitationAcceptClient token="" />);
+      expect(htmlEmpty).toContain("Admin invitation token is missing or invalid.");
+    });
+  });
+
+  describe("PasswordResetClient (/reset-password/[token]) Strict Token Validation", () => {
+    test("rejects clinical document tokens and non-pwdreset tokens immediately", () => {
+      const htmlRx = renderToString(<PasswordResetClient token="rx-20261025-0042" />);
+      expect(htmlRx).toContain("token for a clinical document, not a password reset token");
+
+      const htmlRandom = renderToString(<PasswordResetClient token="random-unprefixed-token" />);
+      expect(htmlRandom).toContain("Password reset link is invalid or has already been used.");
+
+      const htmlEmpty = renderToString(<PasswordResetClient token="" />);
+      expect(htmlEmpty).toContain("Password reset token is missing or invalid.");
+    });
+  });
+
+  describe("joinService.validateJoinCode Strict Token Validation", () => {
+    test("rejects clinical document tokens and lab upload tokens with DOCUMENT_KIND_MISMATCH", async () => {
+      const resRx = await joinService.validateJoinCode("rx-20261025-0042");
+      expect(resRx.success).toBe(false);
+      expect(resRx.errorCode).toBe("DOCUMENT_KIND_MISMATCH");
+      expect(resRx.message).toContain("belongs to a clinical document");
+
+      const resMc = await joinService.validateJoinCode("mc-2026-0001");
+      expect(resMc.success).toBe(false);
+      expect(resMc.errorCode).toBe("DOCUMENT_KIND_MISMATCH");
+
+      const labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
+      const resLab = await joinService.validateJoinCode(labToken);
+      expect(resLab.success).toBe(false);
+      expect(resLab.errorCode).toBe("DOCUMENT_KIND_MISMATCH");
     });
   });
 });

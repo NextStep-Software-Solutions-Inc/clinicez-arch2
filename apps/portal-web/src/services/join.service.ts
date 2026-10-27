@@ -30,6 +30,25 @@ export const joinService = {
       };
     }
 
+    const cleanToken = code.trim();
+    const lower = cleanToken.toLowerCase();
+    if (
+      lower.startsWith("rx-") ||
+      lower.startsWith("mc-") ||
+      lower.startsWith("ref-") ||
+      lower.startsWith("lab-") ||
+      lower.startsWith("sec-sha256-") ||
+      (cleanToken.length === 65 && cleanToken[32] === ".") ||
+      (cleanToken.length >= 50 && cleanToken.length <= 60 && cleanToken.indexOf(".") === 32)
+    ) {
+      return {
+        success: false,
+        message: "The entered code belongs to a clinical document, not a clinic join intake passcode.",
+        errorCode: "DOCUMENT_KIND_MISMATCH",
+        statusCode: 400,
+      };
+    }
+
     const cleanCode = code.trim().toUpperCase();
     const portalApiUrl = getPortalApiUrl();
     const targetUrl = joinApiUrl(

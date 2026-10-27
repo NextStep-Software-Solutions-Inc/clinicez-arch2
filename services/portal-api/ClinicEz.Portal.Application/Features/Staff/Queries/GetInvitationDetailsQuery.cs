@@ -35,6 +35,22 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
             throw new KeyNotFoundException("Invitation token cannot be empty.");
         }
 
+        var cleanToken = request.Token.Trim().ToLowerInvariant();
+        if (cleanToken.StartsWith("rx-") || cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-") || cleanToken.StartsWith("sec-sha256-"))
+        {
+            throw new KeyNotFoundException("The provided token belongs to a clinical document, not a workspace invitation.");
+        }
+
+        if (cleanToken.Length == 65 && cleanToken[32] == '.')
+        {
+            throw new KeyNotFoundException("The provided token is an e-prescription verification token, not a workspace invitation.");
+        }
+
+        if (cleanToken.Length >= 50 && cleanToken.Length <= 60 && cleanToken.IndexOf('.') == 32)
+        {
+            throw new KeyNotFoundException("The provided token is a laboratory upload token, not a workspace invitation.");
+        }
+
         var member = await context.WorkspaceMembers
             .Include(m => m.Tenant)
             .FirstOrDefaultAsync(m => m.InvitationToken == request.Token, cancellationToken)

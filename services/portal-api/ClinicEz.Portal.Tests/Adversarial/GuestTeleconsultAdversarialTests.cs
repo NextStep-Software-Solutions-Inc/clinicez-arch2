@@ -560,4 +560,38 @@ public sealed class GuestTeleconsultAdversarialTests : IDisposable
         var lockedCrossIpRes = await client.SendAsync(lockedCrossIpMsg);
         Assert.Equal(HttpStatusCode.Locked, lockedCrossIpRes.StatusCode);
     }
+
+    [Theory]
+    [InlineData("mc-2026-0001")]
+    [InlineData("ref-2026-0001")]
+    [InlineData("rx-2026-0001")]
+    [InlineData("lab-2026-0001")]
+    [InlineData("sec-sha256-abcdef123456")]
+    public async Task VerifyGuest_WithMismatchedDocumentPrefix_ReturnsBadRequestAndDocumentKindMismatch(string mismatchedToken)
+    {
+        var result = await _verificationService.VerifyGuestAsync(mismatchedToken, "1990-01-01", "123456");
+        Assert.False(result.Success);
+        Assert.Equal("DOCUMENT_KIND_MISMATCH", result.ErrorCode);
+        Assert.Contains("clinical document", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task VerifyGuest_WithRxVerificationToken_ReturnsBadRequestAndDocumentKindMismatch()
+    {
+        var rxToken = "01938561726374829102938475610293.01938561726374829102938475610294";
+        var result = await _verificationService.VerifyGuestAsync(rxToken, "1990-01-01", "123456");
+        Assert.False(result.Success);
+        Assert.Equal("DOCUMENT_KIND_MISMATCH", result.ErrorCode);
+        Assert.Contains("e-prescription verification token", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task VerifyGuest_WithLabUploadToken_ReturnsBadRequestAndDocumentKindMismatch()
+    {
+        var labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
+        var result = await _verificationService.VerifyGuestAsync(labToken, "1990-01-01", "123456");
+        Assert.False(result.Success);
+        Assert.Equal("DOCUMENT_KIND_MISMATCH", result.ErrorCode);
+        Assert.Contains("laboratory upload token", result.ErrorMessage);
+    }
 }

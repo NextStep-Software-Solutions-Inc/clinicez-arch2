@@ -22,17 +22,43 @@ import { adminService, AdminInvitationDetailsDto } from "@/services/admin.servic
 import { toast } from "sonner";
 import { setPendingInvitationCookie, clearPendingInvitationCookie } from "@/lib/invitationCookie";
 
+function getInitialAdminInvitationError(token?: string): string | null {
+    if (!token || !token.trim()) {
+        return "Admin invitation token is missing or invalid.";
+    }
+    const cleanToken = token.trim();
+    const lower = cleanToken.toLowerCase();
+    if (
+        lower.startsWith("rx-") ||
+        lower.startsWith("mc-") ||
+        lower.startsWith("ref-") ||
+        lower.startsWith("lab-") ||
+        lower.startsWith("sec-sha256-") ||
+        (cleanToken.length === 65 && cleanToken[32] === ".") ||
+        (cleanToken.length >= 50 && cleanToken.length <= 60 && cleanToken.indexOf(".") === 32)
+    ) {
+        return "The provided link contains a token for a clinical document, not an administrative invitation.";
+    }
+    return null;
+}
+
 export default function AdminInvitationAcceptClient({ token }: { token: string }) {
     const router = useRouter();
     const { isSignedIn, user, isLoaded } = useUser();
 
+    const initialError = getInitialAdminInvitationError(token);
     const [invite, setInvite] = useState<AdminInvitationDetailsDto | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(!initialError);
+    const [error, setError] = useState<string | null>(initialError);
     const [accepting, setAccepting] = useState(false);
     const autoAcceptAttemptedRef = useRef(false);
 
     useEffect(() => {
+        if (initialError) {
+            clearPendingInvitationCookie();
+            return;
+        }
+
         const fetchDetails = async () => {
             try {
                 const data = await adminService.getInvitationDetails(token);
@@ -50,12 +76,7 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
             }
         };
 
-        if (token) {
-            fetchDetails();
-        } else {
-            clearPendingInvitationCookie();
-            setLoading(false);
-        }
+        fetchDetails();
     }, [token, isSignedIn]);
 
     const handleAccept = async () => {

@@ -115,7 +115,7 @@ public sealed class PublicGuestTeleconsultEndpoints : IEndpoint
                 statusCode: StatusCodes.Status410Gone);
         }
 
-        if (result.ErrorCode == "INVALID_FORMAT" || result.ErrorCode == "INVALID_TOKEN")
+        if (result.ErrorCode == "INVALID_FORMAT" || result.ErrorCode == "INVALID_TOKEN" || result.ErrorCode == "DOCUMENT_KIND_MISMATCH")
         {
             return Results.BadRequest(
                 ApiResponse<GuestTeleconsultVerifyResponse>.Fail(result.ErrorMessage ?? "Invalid format.", [], result.ErrorCode));

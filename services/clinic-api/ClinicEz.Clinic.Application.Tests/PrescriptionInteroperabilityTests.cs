@@ -266,4 +266,79 @@ public class PrescriptionInteroperabilityTests
         await duplicateAct.Should().ThrowAsync<BadRequestException>()
             .WithMessage("*already been dispensed*");
     }
+
+    [Theory]
+    [InlineData("mc-2026-0001")]
+    [InlineData("ref-2026-0001")]
+    [InlineData("lab-2026-0001")]
+    [InlineData("sec-sha256-abcdef123456")]
+    public async Task GetPublicRxVerificationInfo_WithMismatchedDocumentPrefix_ThrowsBadRequestException(string mismatchedToken)
+    {
+        var (db, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+
+        var handler = new GetPublicRxVerificationInfoQueryHandler(encounterRepo, patientRepo, staffRepo, settingsRepo);
+        var act = async () => await handler.Handle(new GetPublicRxVerificationInfoQuery(mismatchedToken), CancellationToken.None);
+
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*non-prescription clinical document*");
+    }
+
+    [Fact]
+    public async Task GetPublicRxVerificationInfo_WithLabUploadToken_ThrowsBadRequestException()
+    {
+        var (db, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+
+        var labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
+        var handler = new GetPublicRxVerificationInfoQueryHandler(encounterRepo, patientRepo, staffRepo, settingsRepo);
+        var act = async () => await handler.Handle(new GetPublicRxVerificationInfoQuery(labToken), CancellationToken.None);
+
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*laboratory upload token*");
+    }
+
+    [Theory]
+    [InlineData("mc-2026-0001")]
+    [InlineData("ref-2026-0001")]
+    [InlineData("lab-2026-0001")]
+    public async Task SubmitPublicRxDispense_WithMismatchedDocumentPrefix_ThrowsBadRequestException(string mismatchedToken)
+    {
+        var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
+        var sender = Substitute.For<ISender>();
+
+        var handler = new SubmitPublicRxDispenseCommandHandler(encounterRepo, uow, sender);
+        var command = new SubmitPublicRxDispenseCommand(
+            mismatchedToken, "Mercury Drug", null, null, null, null, null, null);
+
+        var act = async () => await handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*non-prescription clinical document*");
+    }
+
+    [Fact]
+    public async Task SubmitPublicRxDispense_WithLabUploadToken_ThrowsBadRequestException()
+    {
+        var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
+        var sender = Substitute.For<ISender>();
+
+        var labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
+        var handler = new SubmitPublicRxDispenseCommandHandler(encounterRepo, uow, sender);
+        var command = new SubmitPublicRxDispenseCommand(
+            labToken, "Mercury Drug", null, null, null, null, null, null);
+
+        var act = async () => await handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*laboratory upload token*");
+    }
 }

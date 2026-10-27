@@ -21,6 +21,12 @@ public class GetAdminInvitationDetailsQueryHandler(
         if (string.IsNullOrWhiteSpace(request.Token)) return null;
 
         var tokenLower = request.Token.Trim().ToLowerInvariant();
+        if (tokenLower.StartsWith("rx-") || tokenLower.StartsWith("mc-") || tokenLower.StartsWith("ref-") || tokenLower.StartsWith("lab-") || tokenLower.StartsWith("sec-sha256-") ||
+            (tokenLower.Length == 65 && tokenLower[32] == '.') ||
+            (tokenLower.Length >= 50 && tokenLower.Length <= 60 && tokenLower.IndexOf('.') == 32))
+        {
+            return null;
+        }
 
         var user = await context.AdminUsers
             .Include(u => u.Role)

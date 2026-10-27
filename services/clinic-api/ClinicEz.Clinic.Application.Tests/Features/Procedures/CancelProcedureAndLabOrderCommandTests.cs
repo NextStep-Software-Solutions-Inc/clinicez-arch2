@@ -157,6 +157,118 @@ public class CancelProcedureAndLabOrderCommandTests
     }
 
     [Fact]
+    public async Task RecordProcedureExecution_WithMultipleProcedures_KeepsPendingProcedureUntilAllCompleted()
+    {
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(db, sieve);
+
+        var doctorId = Guid.NewGuid();
+        var doctorRoom = new ClinicRoom
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            Name = "Consultation Room 1",
+            Code = "CR-1",
+            Type = ClinicRoomType.Consultation,
+            DisplayOrder = 1,
+            IsActive = true
+        };
+        await db.ClinicRooms.AddAsync(doctorRoom);
+
+        var doctor = new StaffMember
+        {
+            Id = doctorId,
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            FirstName = "Doctor",
+            LastName = "Who",
+            Role = StaffRole.Doctor,
+            IsActive = true
+        };
+        doctor.SetAssignedRoomIds(new[] { doctorRoom.Id });
+        await db.StaffMembers.AddAsync(doctor);
+
+        var queueItem = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            QueueNumber = "Q-002",
+            QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            PatientId = Guid.NewGuid(),
+            PatientName = "Abellana, Makisig S.",
+            Status = QueueStatus.PendingProcedure,
+            DoctorId = doctorId,
+            RoomId = Guid.NewGuid(),
+            RoomOrStation = "Treatment Room"
+        };
+        await db.QueueItems.AddAsync(queueItem);
+
+        var proc1 = new ClinicalProcedure
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = queueItem.PatientId,
+            PatientName = "Abellana, Makisig S.",
+            QueueItemId = queueItem.Id,
+            ProcedureName = "Surgical Odontectomy",
+            Category = "Dental",
+            Status = ProcedureStatus.Ordered,
+            OrderedByDoctorId = doctorId,
+            ScheduledAt = DateTime.UtcNow
+        };
+        var proc2 = new ClinicalProcedure
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = _clinicId,
+            TenantId = _tenantId,
+            PatientId = queueItem.PatientId,
+            PatientName = "Abellana, Makisig S.",
+            QueueItemId = queueItem.Id,
+            ProcedureName = "Oral Prophylaxis",
+            Category = "Dental",
+            Status = ProcedureStatus.Ordered,
+            OrderedByDoctorId = doctorId,
+            ScheduledAt = DateTime.UtcNow
+        };
+        await db.Procedures.AddRangeAsync(proc1, proc2);
+        await db.SaveChangesAsync();
+
+        var execHandler = new RecordProcedureExecutionCommandHandler(
+            procRepo,
+            unitOfWork,
+            _clinicContext,
+            queueRepo,
+            staffRepo,
+            roomRepo
+        );
+
+        // Step 1: Complete proc1 — proc2 is still pending, so status must remain PendingProcedure
+        await execHandler.Handle(
+            new RecordProcedureExecutionCommand(proc1.Id, RequiresDoctorReEvaluation: true),
+            CancellationToken.None
+        );
+
+        var qAfterFirst = await db.QueueItems.FindAsync(queueItem.Id);
+        qAfterFirst!.Status.Should().Be(QueueStatus.PendingProcedure, "because proc2 is still in Ordered status in the treatment room");
+
+        // Step 2: Complete proc2 — no more pending procedures, so status transitions to ReEvaluation
+        await execHandler.Handle(
+            new RecordProcedureExecutionCommand(proc2.Id, RequiresDoctorReEvaluation: true),
+            CancellationToken.None
+        );
+
+        var qAfterSecond = await db.QueueItems.FindAsync(queueItem.Id);
+        qAfterSecond!.Status.Should().Be(QueueStatus.ReEvaluation, "because all procedures are now completed");
+        qAfterSecond.RoomOrStation.Should().Be("Consultation Room 1");
+    }
+
+    [Fact]
     public async Task CancelClinicLabOrder_WhenOrdered_CancelsOrderAndAllPendingItems()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);

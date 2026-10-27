@@ -50,6 +50,22 @@ public class SubmitPublicRxDispenseCommandHandler : IRequestHandler<SubmitPublic
 
     public async Task<PublicRxVerificationInfoDto> Handle(SubmitPublicRxDispenseCommand request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            throw new BadRequestException("Verification token is required.");
+        }
+
+        var cleanToken = request.Token.Trim().ToLowerInvariant();
+        if (cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-") || cleanToken.StartsWith("sec-sha256-"))
+        {
+            throw new BadRequestException("The provided token is for a non-prescription clinical document.");
+        }
+
+        if (cleanToken.Length >= 50 && cleanToken.Length <= 60 && cleanToken.IndexOf('.') == 32)
+        {
+            throw new BadRequestException("The provided token is a laboratory upload token, not an e-prescription verification token.");
+        }
+
         var encounter = await _encounterRepo.Query(e => e.RxPublicVerificationToken == request.Token)
             .Include(e => e.Prescriptions)
             .FirstOrDefaultAsync(cancellationToken);
