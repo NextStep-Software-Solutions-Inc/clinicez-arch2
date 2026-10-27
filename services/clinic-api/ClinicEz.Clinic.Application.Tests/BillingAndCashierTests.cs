@@ -14,6 +14,7 @@ using ClinicEz.Clinic.Application.Features.ServicesCatalog.Commands;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -421,5 +422,91 @@ public class BillingAndCashierTests
         var allQueue = await handler.Handle(new GetQueueQuery(Date: todayDate, View: "All"), CancellationToken.None);
         allQueue.Should().HaveCount(3);
         allQueue.Select(q => q.Status).Should().Contain(QueueStatus.Completed);
+    }
+
+    [Fact]
+    public async Task RecordPayment_WhenAmountIsZeroAndBalanceDueIsZero_RecordsPhilHealthPaymentSuccessfully()
+    {
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
+
+        var invoice = new Invoice
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            InvoiceNumber = "INV-20261026-0099",
+            InvoiceDate = DateTime.UtcNow,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Makisig Abellana",
+            GrossAmount = 2800m,
+            DiscountType = DiscountType.PhilHealthKonsulta,
+            DiscountPercentage = 100m,
+            DiscountAmount = 2800m,
+            NetAmount = 0m,
+            BalanceDue = 0m,
+            AmountPaid = 0m,
+            Status = InvoiceStatus.Draft
+        };
+        await db.Invoices.AddAsync(invoice);
+        await db.SaveChangesAsync();
+
+        var handler = new RecordPaymentCommandHandler(invoiceRepo, unitOfWork, _clinicContext);
+        var command = new RecordPaymentCommand(invoice.Id, 0m, PaymentMethod.PhilHealthKonsulta, "23234235", "PhilHealth 100% capitation settlement");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.AmountPaid.Should().Be(0m);
+        result.BalanceDue.Should().Be(0m);
+        result.Status.Should().Be(InvoiceStatus.Paid);
+        result.Payments.Should().HaveCount(1);
+        result.Payments[0].PaymentNumber.Should().StartWith("OR-");
+        result.Payments[0].Method.Should().Be(PaymentMethod.PhilHealthKonsulta);
+        result.Payments[0].ReferenceNumber.Should().Be("23234235");
+        result.Payments[0].Amount.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task RecordPayment_WhenAmountIsZeroAndBalanceDueIsPositive_ThrowsBadRequestException()
+    {
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
+
+        var invoice = new Invoice
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            InvoiceNumber = "INV-20261026-0100",
+            InvoiceDate = DateTime.UtcNow,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Dexter Abellana",
+            GrossAmount = 1500m,
+            NetAmount = 1500m,
+            BalanceDue = 1500m,
+            AmountPaid = 0m,
+            Status = InvoiceStatus.Draft
+        };
+        await db.Invoices.AddAsync(invoice);
+        await db.SaveChangesAsync();
+
+        var handler = new RecordPaymentCommandHandler(invoiceRepo, unitOfWork, _clinicContext);
+        var command = new RecordPaymentCommand(invoice.Id, 0m, PaymentMethod.Cash);
+
+        Func<Task> act = async () => await handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*Payment amount must be greater than zero when an outstanding balance is due.*");
+    }
+
+    [Fact]
+    public async Task RecordPayment_WhenAmountIsNegative_ThrowsBadRequestException()
+    {
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
+
+        var handler = new RecordPaymentCommandHandler(invoiceRepo, unitOfWork, _clinicContext);
+        var command = new RecordPaymentCommand(Guid.NewGuid(), -100m, PaymentMethod.Cash);
+
+        Func<Task> act = async () => await handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*Payment amount cannot be negative.*");
     }
 }

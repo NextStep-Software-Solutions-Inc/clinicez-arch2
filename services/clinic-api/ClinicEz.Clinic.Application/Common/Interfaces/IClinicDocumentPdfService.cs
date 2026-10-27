@@ -16,6 +16,14 @@ public interface IClinicDocumentPdfService
         ClinicPatient? patient = null,
         string? queueNumber = null);
 
+    byte[] GenerateOfficialReceiptPdf(
+        Invoice invoice,
+        PaymentRecord? payment,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        ClinicPatient? patient = null,
+        string? queueNumber = null);
+
     byte[] GenerateInvoicePreviewPdf(
         InvoicePreviewRequest preview,
         ClinicSettings settings,

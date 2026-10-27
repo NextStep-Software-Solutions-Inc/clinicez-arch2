@@ -51,19 +51,59 @@ public class WalkInRetailBillingTests
                 new(null, "MED-PARACETAMOL", "Paracetamol 500mg", "Medicine", 10m, 5)
             },
             IsWalkInRetail: true,
-            WalkInCustomerName: null,
+            WalkInCustomerName: "Walk-In Customer",
             VisitType: VisitType.RetailPurchase);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.Should().NotBeNull();
-        result.PatientName.Should().Be("Walk-In Retail Guest");
+        result.PatientName.Should().Be("Walk-In Customer");
         result.GrossAmount.Should().Be(50m);
         result.NetAmount.Should().Be(50m);
         result.Status.Should().Be(InvoiceStatus.Draft);
 
         // Verify it was NOT forwarded to CashierCounter
         await publisher.DidNotReceiveWithAnyArgs().PublishInvoiceRequestedAsync(default!, default!);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", "")]
+    [InlineData("   ", "   ")]
+    public async Task CreateInvoice_WalkInRetail_WithoutCustomerName_ThrowsBadRequestException(string? walkInName, string? patientName)
+    {
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(_clinicId);
+        clinicContext.TenantId.Returns(_tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var publisher = Substitute.For<IBillingRequestPublisher>();
+
+        var handler = new CreateInvoiceCommandHandler(
+            invoiceRepo,
+            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
+            uow,
+            clinicContext,
+            publisher);
+
+        var command = new CreateInvoiceCommand(
+            PatientId: null,
+            PatientName: patientName,
+            DiscountType: DiscountType.None,
+            LineItems: new List<CreateInvoiceLineItemRequest>
+            {
+                new(null, "MED-PARACETAMOL", "Paracetamol 500mg", "Medicine", 10m, 5)
+            },
+            IsWalkInRetail: true,
+            WalkInCustomerName: walkInName,
+            VisitType: VisitType.RetailPurchase);
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*Customer name is required for Walk-In Retail POS invoices*");
     }
 
     [Fact]
@@ -132,7 +172,8 @@ public class WalkInRetailBillingTests
             {
                 new(null, "MED-ASPIRIN", "Aspirin 80mg", "Medicine", 50m, 2)
             },
-            IsWalkInRetail: true);
+            IsWalkInRetail: true,
+            WalkInCustomerName: "Senior Citizen Customer");
 
         var act = () => handler.Handle(command, CancellationToken.None);
 
@@ -167,7 +208,8 @@ public class WalkInRetailBillingTests
             {
                 new(null, "MED-METFORMIN", "Metformin 500mg", "Medicine", 100m, 1)
             },
-            IsWalkInRetail: true);
+            IsWalkInRetail: true,
+            WalkInCustomerName: "Senior Citizen Customer");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
