@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\packages\shared-dotnet\ClinicEz.Shared.csproj" />
     <ProjectReference Include="..\ClinicEz.Clinic.Application\ClinicEz.Clinic.Application.csproj" />
     <ProjectReference Include="..\ClinicEz.Clinic.Domain\ClinicEz.Clinic.Domain.csproj" />
     <ProjectReference Include="..\ClinicEz.Clinic.Infrastructure\ClinicEz.Clinic.Infrastructure.csproj" />

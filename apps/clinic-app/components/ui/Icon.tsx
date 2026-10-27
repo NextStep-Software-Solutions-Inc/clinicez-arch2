@@ -1,5 +1,6 @@
 // token-guard:ignore-file (contains the legacy emoji -> icon lookup table)
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Platform } from 'react-native';
 import {
   Accessibility,
   Activity,
@@ -270,6 +271,7 @@ export interface IconProps {
   size?: number;
   color?: string;
   strokeWidth?: number;
+  spin?: boolean;
 }
 
 export default function Icon({
@@ -277,9 +279,79 @@ export default function Icon({
   size = theme.sizes.iconMd,
   color = theme.colors.text,
   strokeWidth = 2,
+  spin = false,
 }: IconProps) {
   const Glyph = ICONS[name] ?? Circle;
+
+  if (spin) {
+    return (
+      <SpinningIconGlyph
+        Glyph={Glyph}
+        size={size}
+        color={color}
+        strokeWidth={strokeWidth}
+      />
+    );
+  }
+
   return <Glyph size={size} color={color} strokeWidth={strokeWidth} />;
+}
+
+function SpinningIconGlyph({
+  Glyph,
+  size,
+  color,
+  strokeWidth,
+}: {
+  Glyph: any;
+  size: number;
+  color: string;
+  strokeWidth: number;
+}) {
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
+    if (spinAnim && typeof spinAnim.setValue === 'function') {
+      spinAnim.setValue(0);
+    }
+    if (Animated && typeof Animated.loop === 'function' && typeof Animated.timing === 'function') {
+      loop = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: (t) => t,
+          useNativeDriver: Platform.OS !== 'web',
+        })
+      );
+      loop.start();
+    }
+    return () => {
+      if (loop && typeof loop.stop === 'function') loop.stop();
+    };
+  }, [spinAnim]);
+
+  const rotation =
+    spinAnim && typeof spinAnim.interpolate === 'function'
+      ? spinAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', '360deg'],
+        })
+      : '0deg';
+
+  return (
+    <Animated.View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: [{ rotate: rotation }],
+      }}
+    >
+      <Glyph size={size} color={color} strokeWidth={strokeWidth} />
+    </Animated.View>
+  );
 }
 
 /**
@@ -290,12 +362,14 @@ export function IconSlot({
   value,
   size = theme.sizes.iconSm,
   color,
+  spin = false,
 }: {
   value?: string | null;
   size?: number;
   color?: string;
+  spin?: boolean;
 }) {
   const name = resolveIconName(value);
   if (!name) return null;
-  return <Icon name={name} size={size} color={color} />;
+  return <Icon name={name} size={size} color={color} spin={spin} />;
 }

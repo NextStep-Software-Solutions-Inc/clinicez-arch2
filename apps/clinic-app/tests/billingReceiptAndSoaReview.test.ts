@@ -319,6 +319,11 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
       expect(billingSource).toContain('title="Print OR (PDF)"');
       expect(billingSource).toContain('openDocument(clinicService.getInvoicePdfUrl');
     });
+
+    test('5.6 Document separation: Print OR (PDF) targets receipt endpoint and View SOA (PDF) targets invoice SOA endpoint', () => {
+      expect(billingSource).toContain('clinicService.getReceiptPdfUrl');
+      expect(billingSource).toContain('clinicService.getInvoicePdfUrl');
+    });
   });
 
   describe('Suite 6: Multi-Doctor Line-Item Attribution & Document Separation Contracts (Tier 1 & Tier 4)', () => {

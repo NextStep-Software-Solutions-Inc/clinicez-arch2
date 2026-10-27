@@ -16,6 +16,7 @@ import {
   Printer,
   UploadCloud,
   FileCheck,
+  Lock,
 } from 'lucide-react';
 
 export interface PrescriptionItem {
@@ -63,6 +64,7 @@ export interface RxVerificationData {
   itemCount?: number;
   syncStatus?: string;
   isOfflinePending?: boolean;
+  status?: string | null;
 }
 
 interface RxVerifyClientProps {
@@ -144,7 +146,18 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
   const isDispensed =
     data.isAlreadyDispensed ||
     data.dispenseStatus === 'Dispensed' ||
-    data.dispenseStatus === 'DispensedExternally';
+    data.dispenseStatus === 'DispensedExternally' ||
+    data.status === 'DISPENSED';
+  const isExpired = Boolean(
+    data.isExpired ||
+    (data.expiresAt && new Date(data.expiresAt).getTime() < Date.now()) ||
+    data.status === 'EXPIRED'
+  );
+  const isRevoked = data.status === 'REVOKED';
+  const isNotFound =
+    data.clinicName === 'Not Found in Registry' ||
+    data.dispenseStatus === 'Unverified';
+  const isUnverified = (!data.isValid && !isDispensed && !isExpired) || isNotFound || isRevoked;
   const hasDangerousDrugs = Boolean(
     data.hasDangerousDrug || (data.items && data.items.some((item) => item.isDangerousDrug))
   );
@@ -299,15 +312,30 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <Printer className="w-3.5 h-3.5" />
               Print
             </button>
-            {data.isValid ? (
-              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-success/10 text-success border border-success/20">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Cryptographically Verified
+            {isRevoked ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+                <BadgeAlert className="w-3.5 h-3.5" />
+                Prescription Revoked
               </span>
-            ) : (
+            ) : isNotFound || (!data.isValid && !isDispensed && !isExpired) ? (
               <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-destructive/10 text-destructive border border-destructive/20">
                 <BadgeAlert className="w-3.5 h-3.5" />
                 Unverified Token
+              </span>
+            ) : isDispensed ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-warning/15 text-warning border border-warning/30">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Verified • Dispensed
+              </span>
+            ) : isExpired ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-warning/15 text-warning border border-warning/30">
+                <Clock className="w-3.5 h-3.5" />
+                Verified • Expired
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-success/10 text-success border border-success/20">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Cryptographically Verified
               </span>
             )}
           </div>
@@ -329,16 +357,16 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
         )}
 
         {/* Verification Status Banner */}
-        {!data.isValid ? (
+        {isRevoked ? (
           <div className="bg-destructive/10 border-2 border-destructive/30 rounded-xl p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <BadgeAlert className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h2 className="text-base font-bold text-destructive">
-                  UNVERIFIED OR INVALID PRESCRIPTION TOKEN
+                  PRESCRIPTION REVOKED BY PRESCRIBING CLINICIAN
                 </h2>
                 <p className="text-sm text-destructive/90">
-                  Unable to verify prescription token <span className="font-mono font-bold">{token}</span> against the Clinic EZ registry. Do not dispense based on an unverified electronic reference.
+                  This electronic prescription was formally cancelled or revoked by the prescribing physician. Do not dispense under any circumstances.
                 </p>
               </div>
             </div>
@@ -352,7 +380,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                   PRESCRIPTION ALREADY DISPENSED
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  This electronic prescription has already been fulfilled and is locked against duplicate dispensing.
+                  This electronic prescription has already been fulfilled and is permanently locked against duplicate dispensing under Philippine pharmacy laws and FDA e-Prescription regulations (RA 6675 &amp; RA 9165).
                 </p>
                 <div className="mt-2 text-xs font-medium text-foreground bg-warning/15 p-3 rounded-lg border border-warning/25 flex flex-wrap gap-x-6 gap-y-1">
                   <span>
@@ -368,7 +396,40 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                       <strong>Date:</strong> {new Date(data.dispensedAt).toLocaleString('en-PH')}
                     </span>
                   )}
+                  {data.dispenseNotes && (
+                    <span className="w-full mt-1 italic">
+                      <strong>Notes:</strong> {data.dispenseNotes}
+                    </span>
+                  )}
                 </div>
+              </div>
+            </div>
+          </div>
+        ) : isExpired ? (
+          <div className="bg-warning/10 border-2 border-warning/30 rounded-xl p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <Clock className="w-6 h-6 text-warning shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h2 className="text-base font-bold text-foreground">
+                  PRESCRIPTION EXPIRED
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  This electronic prescription expired{data.expiresAt ? ` on ${new Date(data.expiresAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}` : ''}. Prescriptions must be fulfilled within their validity window under DOH guidelines. Please advise the patient to consult their physician for a renewed prescription.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : isNotFound || !data.isValid ? (
+          <div className="bg-destructive/10 border-2 border-destructive/30 rounded-xl p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <BadgeAlert className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h2 className="text-base font-bold text-destructive">
+                  UNVERIFIED OR INVALID PRESCRIPTION TOKEN
+                </h2>
+                <p className="text-sm text-destructive/90">
+                  Unable to verify prescription token <span className="font-mono font-bold">{token}</span> against the Clinic EZ registry. Do not dispense based on an unverified electronic reference.
+                </p>
               </div>
             </div>
           </div>
@@ -378,7 +439,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <CheckCircle className="w-6 h-6 text-success shrink-0 mt-0.5" />
               <div>
                 <h2 className="text-base font-bold text-foreground">
-                  ACTIVE & UNFULFILLED PRESCRIPTION
+                  ACTIVE &amp; UNFULFILLED PRESCRIPTION
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   Authorized for one-time dispensing by any licensed pharmacist at an accredited drugstore.
@@ -389,53 +450,55 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
         )}
 
         {/* Medical Clinic & Prescribing Physician Details */}
-        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-          <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-primary" />
-              Originating Clinic & Prescribing Physician
-            </span>
-            <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
-              Rx No: {data.prescriptionNumber}
-            </span>
-          </div>
-
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Medical Clinic</p>
-              <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
-              {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
-              {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
+        {!isNotFound && (
+          <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+            <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-primary" />
+                Originating Clinic & Prescribing Physician
+              </span>
+              <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
+                Rx No: {data.prescriptionNumber}
+              </span>
             </div>
 
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Attending Physician</p>
-              <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Attending Physician'}</h3>
-              <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {data.doctorPrcLicense && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                    PRC No: {data.doctorPrcLicense}
-                  </span>
-                )}
-                {data.doctorPtr && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                    PTR: {data.doctorPtr}
-                  </span>
-                )}
-                {data.doctorS2License && (
-                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    PDEA S2: {data.doctorS2License}
-                  </span>
-                )}
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground font-semibold uppercase">Medical Clinic</p>
+                <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
+                {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
+                {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground font-semibold uppercase">Attending Physician</p>
+                <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Attending Physician'}</h3>
+                <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {data.doctorPrcLicense && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                      PRC No: {data.doctorPrcLicense}
+                    </span>
+                  )}
+                  {data.doctorPtr && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                      PTR: {data.doctorPtr}
+                    </span>
+                  )}
+                  {data.doctorS2License && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      PDEA S2: {data.doctorS2License}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Patient Demographics & Safety Alert */}
-        {(data.patientName || data.patientInitials || data.patientAge) && (
+        {!isNotFound && (data.patientName || data.patientInitials || data.patientAge) && (
           <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">

@@ -108,8 +108,14 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
                 style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
                 accessibilityRole="button"
                 accessibilityLabel="Refresh patient chart"
+                disabled={loadingChart}
               >
-                <Icon name="refresh" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+                <Icon
+                  name="refresh"
+                  size={theme.sizes.iconMd}
+                  color={theme.colors.textSecondary}
+                  spin={loadingChart}
+                />
               </Pressable>
             ) : null}
 
