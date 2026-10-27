@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useUser, SignInButton, SignUpButton } from "@clerk/nextjs";
+import { useUser, useClerk, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { 
     IconShieldCheck, 
     IconCheck, 
@@ -12,35 +12,52 @@ import {
     IconArrowRight, 
     IconLoader, 
     IconUser,
-    IconLock
+    IconLock,
+    IconSwitchHorizontal
 } from "@tabler/icons-react";
 import { Stethoscope, Sparkles } from "lucide-react";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { adminService, AdminInvitationDetailsDto } from "@/services/admin.service";
 import { toast } from "sonner";
 import { setPendingInvitationCookie, clearPendingInvitationCookie } from "@/lib/invitationCookie";
+import { isUserEmailMatched, INVITATION_EMAIL_MISMATCH_MESSAGE } from "@/lib/invitationEmailMatcher";
 
 export default function AdminInvitationAcceptClient({ token }: { token: string }) {
     const router = useRouter();
     const { isSignedIn, user, isLoaded } = useUser();
+    const { signOut } = useClerk();
 
     const [invite, setInvite] = useState<AdminInvitationDetailsDto | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [accepting, setAccepting] = useState(false);
-    const autoAcceptAttemptedRef = useRef(false);
+    const [switchingAccount, setSwitchingAccount] = useState(false);
+    const autoAcceptAttemptedRef = useRef<string | null>(null);
+
+    const isEmailMatched = Boolean(
+        isSignedIn &&
+        user &&
+        invite?.email &&
+        isUserEmailMatched(user, invite.email)
+    );
+    const isEmailMismatch = Boolean(isSignedIn && invite && !isEmailMatched);
 
     useEffect(() => {
+        if (!token || !token.trim()) {
+            clearPendingInvitationCookie();
+            setError("Invitation token is missing or invalid.");
+            setLoading(false);
+            return;
+        }
+
         const fetchDetails = async () => {
             try {
                 const data = await adminService.getInvitationDetails(token);
                 setInvite(data);
                 if (data.isSuspended || data.isRevoked || data.isExpired || data.isAlreadyAccepted) {
                     clearPendingInvitationCookie();
-                } else if (!isSignedIn) {
-                    setPendingInvitationCookie({ type: "admin", token: token.trim() });
                 }
             } catch (err: any) {
                 clearPendingInvitationCookie();
@@ -50,16 +67,21 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
             }
         };
 
-        if (token) {
-            fetchDetails();
-        } else {
+        fetchDetails();
+    }, [token]);
+
+    useEffect(() => {
+        if (!isLoaded || !invite) return;
+
+        if (invite.isSuspended || invite.isRevoked || invite.isExpired || invite.isAlreadyAccepted || isEmailMismatch) {
             clearPendingInvitationCookie();
-            setLoading(false);
+        } else if (!isSignedIn && token && token.trim()) {
+            setPendingInvitationCookie({ type: "admin", token: token.trim() });
         }
-    }, [token, isSignedIn]);
+    }, [isLoaded, isSignedIn, invite, isEmailMismatch, token]);
 
     const handleAccept = async () => {
-        if (!invite) return;
+        if (!invite || !isEmailMatched) return;
         setAccepting(true);
         try {
             await adminService.acceptInvitation(token);
@@ -74,8 +96,21 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
         }
     };
 
+    const handleSwitchAccount = async () => {
+        if (!token || !token.trim()) return;
+        setSwitchingAccount(true);
+        try {
+            const trimmedToken = token.trim();
+            setPendingInvitationCookie({ type: "admin", token: trimmedToken });
+            await signOut({ redirectUrl: `/admin/invitations/${encodeURIComponent(trimmedToken)}` });
+        } catch (err: any) {
+            toast.error(err?.message || "Failed to switch account. Please sign out and try again.");
+            setSwitchingAccount(false);
+        }
+    };
+
     useEffect(() => {
-        if (!isLoaded || loading || !isSignedIn || !invite || accepting) {
+        if (!isLoaded || loading || !isSignedIn || !invite || accepting || !isEmailMatched) {
             return;
         }
 
@@ -83,13 +118,14 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
             return;
         }
 
-        if (autoAcceptAttemptedRef.current) {
+        const currentUserKey = user?.id ?? "__signed_in__";
+        if (autoAcceptAttemptedRef.current === currentUserKey) {
             return;
         }
 
-        autoAcceptAttemptedRef.current = true;
+        autoAcceptAttemptedRef.current = currentUserKey;
         handleAccept();
-    }, [isLoaded, loading, isSignedIn, invite, accepting, error]);
+    }, [isLoaded, loading, isSignedIn, user?.id, invite, accepting, error, isEmailMatched]);
 
     const renderShell = (content: React.ReactNode) => (
         <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
@@ -171,8 +207,8 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
 
     if (invite.isExpired) {
         return renderShell(
-            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-amber-200 dark:border-amber-900/50 shadow-xs bg-amber-50/30 dark:bg-amber-950/20">
-                <div className="size-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-warning/30 shadow-xs bg-warning/5">
+                <div className="size-12 rounded-full bg-warning/15 text-warning flex items-center justify-center mx-auto mb-3">
                     <IconClock className="h-6 w-6" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Invitation Expired</h2>
@@ -188,8 +224,8 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
 
     if (invite.isAlreadyAccepted) {
         return renderShell(
-            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-emerald-200 dark:border-emerald-900/50 shadow-xs bg-emerald-50/30 dark:bg-emerald-950/20">
-                <div className="size-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-success/30 shadow-xs bg-success/5">
+                <div className="size-12 rounded-full bg-success/15 text-success flex items-center justify-center mx-auto mb-3">
                     <IconCheck className="h-6 w-6" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Already Accepted</h2>
@@ -224,7 +260,7 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
                     Hello <strong className="text-foreground">{invite.fullName}</strong>, you have been invited to join the Clinic EZ platform governance team as <strong className="text-foreground">{invite.roleName}</strong>.
                 </p>
 
-                {/* Role Details Card */}
+                {/* Role & Invitee Details Card */}
                 <div className="p-4 rounded-2xl border border-border/80 bg-muted/30 mb-6 space-y-3">
                     <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground font-semibold">Assigned Role</span>
@@ -232,6 +268,16 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
                     </div>
                     <div className="text-xs text-muted-foreground leading-relaxed">
                         {invite.roleDescription}
+                    </div>
+                    <div className="pt-2 border-t border-border/60">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Invitee
+                        </span>
+                        <div className="text-xs text-foreground font-medium mt-1 flex items-center gap-1.5">
+                            <IconUser className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span>{invite.fullName}</span>
+                            <span className="text-muted-foreground">({invite.email})</span>
+                        </div>
                     </div>
                     {invite.expiresAt && (
                         <div className="pt-2 border-t border-border/60 flex items-center justify-between text-[11px] text-muted-foreground">
@@ -243,42 +289,104 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
 
                 {/* Identity / Authentication Gate */}
                 {isSignedIn ? (
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-3.5 rounded-2xl border border-border/80 bg-card">
-                            <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                                {user?.firstName ? user.firstName[0] : <IconUser className="h-5 w-5" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="text-xs font-bold truncate text-foreground">
-                                    {user?.fullName || user?.primaryEmailAddress?.emailAddress}
+                    isEmailMismatch ? (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 p-3.5 rounded-2xl border border-border/80 bg-muted/40">
+                                <div className="size-10 rounded-full bg-warning/15 text-warning flex items-center justify-center font-bold text-sm shrink-0">
+                                    {user?.firstName ? user.firstName[0] : <IconUser className="h-5 w-5" />}
                                 </div>
-                                <div className="text-[11px] text-muted-foreground truncate">
-                                    {user?.primaryEmailAddress?.emailAddress}
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-xs font-bold truncate text-foreground">
+                                        {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Authenticated User"}
+                                    </div>
+                                    <div className="text-[11px] text-muted-foreground truncate">
+                                        {user?.primaryEmailAddress?.emailAddress || "No verified email"}
+                                    </div>
                                 </div>
+                                <Badge variant="outline" className="text-[10px] text-warning border-warning/25 bg-warning/10 shrink-0">
+                                    Account Mismatch
+                                </Badge>
                             </div>
-                            <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50">
-                                Authenticated
-                            </Badge>
-                        </div>
 
-                        <Button 
-                            onClick={handleAccept} 
-                            disabled={accepting}
-                            className="w-full h-11 rounded-2xl font-bold shadow-md gap-2"
-                        >
-                            {accepting ? (
-                                <>
-                                    <IconLoader className="h-4 w-4 animate-spin" />
-                                    <span>Activating Admin Profile...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span>Accept Invitation &amp; Enter Admin Portal</span>
-                                    <IconArrowRight className="h-4 w-4" />
-                                </>
-                            )}
-                        </Button>
-                    </div>
+                            <div role="alert" className="p-4 rounded-2xl bg-warning/10 border border-warning/25 space-y-2">
+                                <div className="flex items-start gap-2.5">
+                                    <IconAlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                                    <div className="space-y-1 text-xs leading-relaxed">
+                                        <p className="font-bold text-foreground">
+                                            Different Account Signed In
+                                        </p>
+                                        <p className="text-muted-foreground">
+                                            {INVITATION_EMAIL_MISMATCH_MESSAGE}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground pt-1">
+                                            Invited recipient: <span className="font-mono font-semibold text-foreground">{invite.email}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2.5">
+                                <Button
+                                    onClick={handleSwitchAccount}
+                                    disabled={switchingAccount}
+                                    className="w-full h-11 rounded-2xl font-bold shadow-md gap-2"
+                                >
+                                    {switchingAccount ? (
+                                        <>
+                                            <IconLoader className="h-4 w-4 animate-spin" />
+                                            <span>Signing Out to Switch Account...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <IconSwitchHorizontal className="h-4 w-4" />
+                                            <span>Switch Account &amp; Sign In</span>
+                                        </>
+                                    )}
+                                </Button>
+
+                                <Button asChild variant="outline" className="w-full h-10 rounded-2xl text-xs font-semibold">
+                                    <Link href="/">Return to Homepage</Link>
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 p-3.5 rounded-2xl border border-border/80 bg-card">
+                                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                                    {user?.firstName ? user.firstName[0] : <IconUser className="h-5 w-5" />}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-xs font-bold truncate text-foreground">
+                                        {user?.fullName || user?.primaryEmailAddress?.emailAddress}
+                                    </div>
+                                    <div className="text-[11px] text-muted-foreground truncate">
+                                        {user?.primaryEmailAddress?.emailAddress}
+                                    </div>
+                                </div>
+                                <Badge variant="outline" className="text-[10px] text-success border-success/25 bg-success/10">
+                                    Authenticated
+                                </Badge>
+                            </div>
+
+                            <Button 
+                                onClick={handleAccept} 
+                                disabled={accepting}
+                                className="w-full h-11 rounded-2xl font-bold shadow-md gap-2"
+                            >
+                                {accepting ? (
+                                    <>
+                                        <IconLoader className="h-4 w-4 animate-spin" />
+                                        <span>Activating Admin Profile...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>Accept Invitation &amp; Enter Admin Portal</span>
+                                        <IconArrowRight className="h-4 w-4" />
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    )
                 ) : (
                     <div className="space-y-4">
                         <div className="p-4 rounded-2xl border border-border/80 bg-muted/40 text-center space-y-1">
