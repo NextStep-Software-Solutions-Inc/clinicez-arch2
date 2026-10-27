@@ -189,29 +189,6 @@ export default function QueueDisplayClient({
     };
   }, [fetchQueue]);
 
-  // Physical keyboard listener for TV PIN keypad
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const isLocked = Boolean(data?.isPinRequired && !data?.isPinValid);
-    if (!isLocked) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key >= "0" && e.key <= "9") {
-        setPinEntry((prev) => (prev.length < 8 ? prev + e.key : prev));
-        setPinError(null);
-      } else if (e.key === "Backspace") {
-        setPinEntry((prev) => prev.slice(0, -1));
-      } else if (e.key === "Enter") {
-        if (pinEntry.length > 0) {
-          void handleUnlock(pinEntry);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [data?.isPinRequired, data?.isPinValid, pinEntry]);
-
   const handleUnlock = async (enteredPin: string) => {
     if (!enteredPin.trim()) return;
     setUnlocking(true);
@@ -242,6 +219,29 @@ export default function QueueDisplayClient({
       setPinError("Connection error verifying TV passcode.");
     }
   };
+
+  // Physical keyboard listener for TV PIN keypad
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isLocked = Boolean(data?.isPinRequired && !data?.isPinValid);
+    if (!isLocked) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= "0" && e.key <= "9") {
+        setPinEntry((prev) => (prev.length < 8 ? prev + e.key : prev));
+        setPinError(null);
+      } else if (e.key === "Backspace") {
+        setPinEntry((prev) => prev.slice(0, -1));
+      } else if (e.key === "Enter") {
+        if (pinEntry.length > 0) {
+          void handleUnlock(pinEntry);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [data?.isPinRequired, data?.isPinValid, pinEntry]);
 
   const handleLockBoard = () => {
     try {

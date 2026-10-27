@@ -22,11 +22,35 @@ import { Badge } from "@/components/ui/badge";
 import { staffService, PortalPasswordResetDetailsDto } from "@/services/staff.service";
 import { toast } from "sonner";
 
+function getInitialPasswordResetError(token?: string): string | null {
+  if (!token || !token.trim()) {
+    return "Password reset token is missing or invalid.";
+  }
+  const cleanToken = token.trim();
+  const lower = cleanToken.toLowerCase();
+  if (
+    lower.startsWith("rx-") ||
+    lower.startsWith("mc-") ||
+    lower.startsWith("ref-") ||
+    lower.startsWith("lab-") ||
+    lower.startsWith("sec-sha256-") ||
+    (cleanToken.length === 65 && cleanToken[32] === ".") ||
+    (cleanToken.length >= 50 && cleanToken.length <= 60 && cleanToken.indexOf(".") === 32)
+  ) {
+    return "The provided link contains a token for a clinical document, not a password reset token.";
+  }
+  if (!lower.startsWith("pwdreset_")) {
+    return "Password reset link is invalid or has already been used.";
+  }
+  return null;
+}
+
 export default function PasswordResetClient({ token }: { token: string }) {
   const router = useRouter();
+  const initialError = getInitialPasswordResetError(token);
   const [details, setDetails] = useState<PortalPasswordResetDetailsDto | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!initialError);
+  const [error, setError] = useState<string | null>(initialError);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,9 +60,7 @@ export default function PasswordResetClient({ token }: { token: string }) {
   const [completed, setCompleted] = useState(false);
 
   useEffect(() => {
-    if (!token || !token.trim()) {
-      setError("Password reset token is missing or invalid.");
-      setLoading(false);
+    if (initialError) {
       return;
     }
 

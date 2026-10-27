@@ -110,6 +110,20 @@ export default function NursingProceduresTab({
     }
   };
 
+  const handleCancelProcedure = async (procedure: ClinicalProcedureRecord) => {
+    const confirmed = typeof window !== 'undefined' && window.confirm
+      ? window.confirm(`Cancel procedure order "${procedure.procedureName}"?`)
+      : true;
+    if (!confirmed) return;
+    const [, err] = await clinicService.cancelProcedure(procedure.id);
+    if (err) {
+      notify.error(err.message || 'Failed to cancel procedure.');
+      return;
+    }
+    notify.success(`${procedure.procedureName} cancelled.`);
+    onRefreshChart?.();
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* ========================================================================= */}
@@ -296,8 +310,8 @@ export default function NursingProceduresTab({
                   </View>
                 ) : null}
 
-                {/* Nurse Execution Action */}
-                {!isCompleted ? (
+                {/* Nurse Execution & Cancellation Action */}
+                {!isCompleted && proc.status !== 'Cancelled' ? (
                   <View style={styles.procedureFooter}>
                     <Pressable
                       testID="execute-procedure-action"
@@ -315,6 +329,19 @@ export default function NursingProceduresTab({
                         Execute / Document Procedure
                       </ThemedText>
                     </Pressable>
+
+                    {hasProceduresWrite && proc.status === 'Ordered' ? (
+                      <Pressable
+                        testID="cancel-procedure-action"
+                        onPress={() => handleCancelProcedure(proc)}
+                        style={styles.cancelBtn}
+                      >
+                        <Icon name="close" size={14} color={theme.colors.emergencyText} />
+                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                          Cancel Order
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
                   </View>
                 ) : null}
               </View>
@@ -481,7 +508,10 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   executeBtn: {
     flexDirection: 'row',
@@ -493,6 +523,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primarySubtle,
     borderWidth: 1,
     borderColor: theme.colors.primaryBorder,
+  },
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
   },
   modalContent: {
     padding: theme.spacing.md,

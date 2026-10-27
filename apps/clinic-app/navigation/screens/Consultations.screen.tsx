@@ -154,6 +154,7 @@ export interface LocalProcedureOrder {
   handedOffAt?: string;
   toothNumber?: number;
   toothSurface?: string;
+  procedureId?: string;
 }
 
 export interface EditingOrderItemState {
@@ -1925,8 +1926,35 @@ export default function ConsultationsScreen() {
     });
   };
 
-  const handleRemoveProcedure = (procName: string, toothNumber?: number) => {
+  const handleRemoveProcedure = async (procName: string, toothNumber?: number) => {
     if (isSigned) return;
+    const target = orderedProcedures.find((p) => {
+      if (p.name.toLowerCase() !== procName.toLowerCase()) return false;
+      if (toothNumber !== undefined && p.toothNumber !== toothNumber) return false;
+      if (toothNumber === undefined && p.toothNumber !== undefined) return false;
+      return true;
+    });
+
+    if (target?.status === 'sent_to_room' && target.procedureId) {
+      const shouldCancel = typeof window !== 'undefined' && window?.confirm
+        ? window.confirm(
+            `Cancel procedure "${procName}"? This will cancel the active clinical order in ${target.targetRoomName || 'the Treatment Room'} and recall the patient if no other procedures are pending.`
+          )
+        : true;
+      if (!shouldCancel) return;
+
+      const [, cancelErr] = await clinicService.cancelProcedure(target.procedureId, 'Cancelled from Consultation workstation');
+      if (cancelErr) {
+        notify.error(cancelErr.message || `Failed to cancel ${procName}.`);
+        return;
+      }
+      notify.success(`Cancelled ${procName}.`);
+      if (selectedPatient?.patientId) {
+        await refreshPatientChart(selectedPatient.patientId).catch(() => {});
+      }
+      loadQueue();
+    }
+
     setOrderedProcedures((prev) =>
       prev.filter((p) => {
         if (p.name.toLowerCase() !== procName.toLowerCase()) return true;
@@ -2700,6 +2728,7 @@ export default function ConsultationsScreen() {
 
     setIsHandoffSending(true);
     const errors: string[] = [];
+    const newlyCreatedProcs: ClinicalProcedureRecord[] = [];
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     for (const proc of unhandedOff) {
@@ -2734,6 +2763,9 @@ export default function ConsultationsScreen() {
       if (procErr) {
         errors.push(`${proc.name}: ${procErr.message || 'failed'}`);
       } else {
+        if (orderedProc) {
+          newlyCreatedProcs.push(orderedProc);
+        }
         const finalRoomId = orderedProc?.targetRoomId || procTargetId;
         const finalRoom = orderedProc?.targetRoomName || procTargetName;
         setOrderedProcedures((prev) =>
@@ -2751,6 +2783,7 @@ export default function ConsultationsScreen() {
                   targetRoomName: finalRoom,
                   roomId: finalRoomId,
                   roomName: finalRoom,
+                  procedureId: orderedProc?.id,
                 }
               : item
           )
@@ -2776,6 +2809,21 @@ export default function ConsultationsScreen() {
       notify.success(
         `${unhandedOff.length} in-clinic procedure${unhandedOff.length > 1 ? 's' : ''} handed off to ${defaultResolvedName}.`
       );
+
+      // Immediate reflection in patient chart on the left without needing manual page refresh:
+      if (newlyCreatedProcs.length > 0) {
+        setPatientChart((prev) => {
+          if (!prev) return prev;
+          const existing = (prev.proceduresHistory || []).filter(
+            (p) => !newlyCreatedProcs.some((np) => np.id === p.id)
+          );
+          return {
+            ...prev,
+            proceduresHistory: [...newlyCreatedProcs, ...existing],
+          };
+        });
+      }
+      await refreshPatientChart(selectedPatient.patientId).catch(() => {});
       loadQueue();
     }
   };
@@ -2838,6 +2886,7 @@ export default function ConsultationsScreen() {
               targetRoomName: finalRoomName,
               roomId: finalRoomId,
               roomName: finalRoomName,
+              procedureId: proc?.id,
             }
           : item
       )
@@ -2853,6 +2902,19 @@ export default function ConsultationsScreen() {
         : null,
     );
     notify.success(`${procedureName} ordered. Patient routed to ${finalRoomName}.`);
+
+    // Immediate reflection in patient chart on the left without needing manual page refresh:
+    if (proc) {
+      setPatientChart((prev) =>
+        prev
+          ? {
+              ...prev,
+              proceduresHistory: [proc, ...(prev.proceduresHistory || []).filter((p) => p.id !== proc.id)],
+            }
+          : prev
+      );
+    }
+    await refreshPatientChart(selectedPatient.patientId).catch(() => {});
     loadQueue();
   };
 
@@ -2945,7 +3007,7 @@ export default function ConsultationsScreen() {
                       <ThemedText variant="bodyBold">{testName}</ThemedText>
                       <Badge
                         label={isFinal ? 'Final, verified' : humanize(order.status)}
-                        variant={isFinal ? 'success' : 'neutral'}
+                        variant={isFinal ? 'success' : order.status === 'SpecimenCollected' ? 'info' : 'neutral'}
                       />
                       {order.hasCriticalPanicAlert ? <Badge label="Critical value" variant="emergency" /> : null}
                     </View>

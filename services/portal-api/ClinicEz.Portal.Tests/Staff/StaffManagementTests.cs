@@ -229,6 +229,20 @@ public class StaffManagementTests : IDisposable
         Assert.False(result.IsAlreadyAccepted);
     }
 
+    [Theory]
+    [InlineData("mc-2026-0001")]
+    [InlineData("ref-2026-0001")]
+    [InlineData("rx-2026-0001")]
+    [InlineData("lab-2026-0001")]
+    [InlineData("sec-sha256-abcdef123456")]
+    public async Task GetInvitationDetails_MismatchedClinicalDocumentToken_ThrowsKeyNotFoundException(string mismatchedToken)
+    {
+        var handler = new GetInvitationDetailsQueryHandler(_context);
+        var act = async () => await handler.Handle(new GetInvitationDetailsQuery(mismatchedToken), CancellationToken.None);
+        var ex = await Assert.ThrowsAsync<KeyNotFoundException>(act);
+        Assert.Contains("clinical document", ex.Message);
+    }
+
     [Fact]
     public async Task AcceptInvitation_ValidToken_LinksClerkUserIdAndActivates_WithoutGrantingOwnership()
     {

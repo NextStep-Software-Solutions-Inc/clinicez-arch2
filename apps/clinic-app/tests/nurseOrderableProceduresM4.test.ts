@@ -118,7 +118,7 @@ mock.module('../services/apiClient', () => ({
 
 const { clinicService } = await import('../services/clinicService');
 const { default: NursingProceduresTab, ProcedureExecutionModal } = await import('../components/chart/NursingProceduresTab');
-const { default: DiagnosticLabTab, AttachExternalLabModal } = await import('../components/chart/DiagnosticLabTab');
+const { default: DiagnosticLabTab, AttachExternalLabModal, SpecimenIntakeModal } = await import('../components/chart/DiagnosticLabTab');
 const { default: AdministerVaccineModal } = await import('../components/chart/AdministerVaccineModal');
 import type { ClinicalProcedureRecord } from '../services/clinicService';
 
@@ -336,6 +336,82 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
         fileName: 'cbc_result.pdf',
         notes: 'Verified normal range',
       });
+    });
+
+    test('5.4 clinicService.collectLabOrderSpecimen posts to /lab-orders/:id/collect-specimen', async () => {
+      mockPostResponse = { id: 'lab-order-123', status: 'SpecimenCollected', stage: 'SpecimenCollected' };
+      const [res, err] = await clinicService.collectLabOrderSpecimen('lab-order-123', {
+        specimenType: 'Whole Blood (EDTA)',
+        containerType: 'Purple_EDTA',
+        accessionBarcode: 'SPEC-718400',
+        collectorName: 'Treatment Nurse',
+        notes: 'Adequate volume, unhemolyzed',
+      });
+
+      expect(err).toBeNull();
+      expect(lastPostUrl).toBe('/lab-orders/lab-order-123/collect-specimen');
+      expect(lastPostPayload).toEqual({
+        specimenType: 'Whole Blood (EDTA)',
+        containerType: 'Purple_EDTA',
+        accessionBarcode: 'SPEC-718400',
+        collectorName: 'Treatment Nurse',
+        notes: 'Adequate volume, unhemolyzed',
+      });
+      expect(res?.status).toBe('SpecimenCollected');
+    });
+
+    test('5.5 SpecimenIntakeModal renders target order info and specimen form fields', () => {
+      const targetOrder: any = {
+        id: 'lab-order-123',
+        orderNumber: 'LAB-20261027-002',
+        status: 'Ordered',
+        items: [{ testName: 'Complete Blood Count (CBC)', category: 'Hematology' }],
+      };
+
+      const element = React.createElement(SpecimenIntakeModal, {
+        visible: true,
+        targetOrder,
+        pendingOrders: [targetOrder],
+        onClose: () => {},
+        onSuccess: () => {},
+      });
+
+      expect(element).toBeDefined();
+      const markup = renderToStaticMarkup(element);
+      expect(markup).toContain('Ambulatory Specimen Collection');
+      expect(markup).toContain('Requisition #LAB-20261027-002');
+      expect(markup).toContain('Complete Blood Count (CBC)');
+      expect(markup).toContain('data-testid="confirm-intake-specimen-button"');
+    });
+
+    test('5.6 DiagnosticLabTab displays Log Specimen button for Ordered and Specimen Accessioned for SpecimenCollected', () => {
+      const orderedLab: any = {
+        id: 'lab-1',
+        orderNumber: 'LAB-001',
+        orderDate: '2026-10-27T00:00:00Z',
+        status: 'Ordered',
+        stage: 'Issued',
+        items: [{ testName: 'CBC', category: 'Hematology' }],
+      };
+      const collectedLab: any = {
+        id: 'lab-2',
+        orderNumber: 'LAB-002',
+        orderDate: '2026-10-27T00:00:00Z',
+        status: 'SpecimenCollected',
+        stage: 'SpecimenCollected',
+        stageReason: 'Specimen collected (Whole Blood (EDTA)). Barcode: SPEC-718400',
+        items: [{ testName: 'Lipid Profile', category: 'Chemistry' }],
+      };
+
+      const element = React.createElement(DiagnosticLabTab, {
+        labOrders: [orderedLab, collectedLab],
+        patientId: 'pat-1',
+      });
+
+      const markup = renderToStaticMarkup(element);
+      expect(markup).toContain('data-testid="collect-specimen-lab-1"');
+      expect(markup).toContain('Specimen Accessioned &amp; Logged');
+      expect(markup).toContain('Specimen collected (Whole Blood (EDTA)). Barcode: SPEC-718400');
     });
   });
 });

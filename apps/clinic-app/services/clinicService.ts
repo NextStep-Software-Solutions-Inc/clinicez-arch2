@@ -2608,6 +2608,10 @@ export const clinicService = {
     return clinicApiClient.post<ClinicalProcedureRecord>(`/procedures/${id}/complete`, payload);
   },
 
+  async cancelProcedure(id: string, reason?: string) {
+    return clinicApiClient.post<ClinicalProcedureRecord>(`/procedures/${id}/cancel`, { reason });
+  },
+
   // Lab Orders & Diagnostic Requisitions
   async getLabOrders(patientId?: string, status?: LabOrderStatus, date?: string) {
     const params = new URLSearchParams();
@@ -2629,6 +2633,23 @@ export const clinicService = {
     items?: Array<{ testName: string; category: string; instructions?: string }>;
   }) {
     return clinicApiClient.post<ClinicLabOrderRecord>('/lab-orders', payload);
+  },
+
+  async cancelLabOrder(id: string, reason?: string) {
+    return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${id}/cancel`, { reason });
+  },
+
+  async collectLabOrderSpecimen(
+    orderId: string,
+    payload: {
+      specimenType?: string;
+      containerType?: string;
+      accessionBarcode?: string;
+      collectorName?: string;
+      notes?: string;
+    }
+  ) {
+    return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${orderId}/collect-specimen`, payload);
   },
 
   async getLabOrderSlip(orderId: string) {

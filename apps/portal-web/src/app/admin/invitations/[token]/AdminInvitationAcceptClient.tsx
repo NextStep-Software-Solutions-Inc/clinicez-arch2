@@ -24,14 +24,35 @@ import { toast } from "sonner";
 import { setPendingInvitationCookie, clearPendingInvitationCookie } from "@/lib/invitationCookie";
 import { isUserEmailMatched, INVITATION_EMAIL_MISMATCH_MESSAGE } from "@/lib/invitationEmailMatcher";
 
+function getInitialAdminInvitationError(token?: string): string | null {
+    if (!token || !token.trim()) {
+        return "Admin invitation token is missing or invalid.";
+    }
+    const cleanToken = token.trim();
+    const lower = cleanToken.toLowerCase();
+    if (
+        lower.startsWith("rx-") ||
+        lower.startsWith("mc-") ||
+        lower.startsWith("ref-") ||
+        lower.startsWith("lab-") ||
+        lower.startsWith("sec-sha256-") ||
+        (cleanToken.length === 65 && cleanToken[32] === ".") ||
+        (cleanToken.length >= 50 && cleanToken.length <= 60 && cleanToken.indexOf(".") === 32)
+    ) {
+        return "The provided link contains a token for a clinical document, not an administrative invitation.";
+    }
+    return null;
+}
+
 export default function AdminInvitationAcceptClient({ token }: { token: string }) {
     const router = useRouter();
     const { isSignedIn, user, isLoaded } = useUser();
     const { signOut } = useClerk();
 
+    const initialError = getInitialAdminInvitationError(token);
     const [invite, setInvite] = useState<AdminInvitationDetailsDto | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(!initialError);
+    const [error, setError] = useState<string | null>(initialError);
     const [accepting, setAccepting] = useState(false);
     const [switchingAccount, setSwitchingAccount] = useState(false);
     const autoAcceptAttemptedRef = useRef<string | null>(null);
@@ -45,9 +66,9 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
     const isEmailMismatch = Boolean(isSignedIn && invite && !isEmailMatched);
 
     useEffect(() => {
-        if (!token || !token.trim()) {
+        if (initialError) {
             clearPendingInvitationCookie();
-            setError("Invitation token is missing or invalid.");
+            setError(initialError);
             setLoading(false);
             return;
         }
@@ -68,7 +89,7 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
         };
 
         fetchDetails();
-    }, [token]);
+    }, [token, initialError]);
 
     useEffect(() => {
         if (!isLoaded || !invite) return;

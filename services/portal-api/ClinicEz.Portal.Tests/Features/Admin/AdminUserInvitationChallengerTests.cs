@@ -66,6 +66,19 @@ public class AdminUserInvitationChallengerTests : IDisposable
     }
 
     [Theory]
+    [InlineData("mc-2026-0001")]
+    [InlineData("ref-2026-0001")]
+    [InlineData("rx-2026-0001")]
+    [InlineData("lab-2026-0001")]
+    [InlineData("sec-sha256-abcdef123456")]
+    public async Task GetAdminInvitationDetails_MismatchedClinicalDocumentToken_ReturnsNull(string mismatchedToken)
+    {
+        var handler = new GetAdminInvitationDetailsQueryHandler(_context, TimeProvider.System);
+        var result = await handler.Handle(new GetAdminInvitationDetailsQuery(mismatchedToken), CancellationToken.None);
+        Assert.Null(result);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
