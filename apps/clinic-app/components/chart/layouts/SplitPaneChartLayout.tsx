@@ -72,6 +72,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
   const {
     patient,
     patientChart,
+    loadingChart,
     patientAttachments = [],
     activeTab,
     onTabChange,

@@ -11,6 +11,9 @@ const URL_SCHEME_PATTERN = /^(blob:|data:|https?:|file:)/i;
 
 function isWebEnvironment(): boolean {
   if (typeof window !== 'undefined') return true;
+  if (typeof process !== 'undefined' && Boolean((process as { versions?: { bun?: string } }).versions?.bun)) {
+    return true;
+  }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('react-native').Platform?.OS === 'web';
@@ -39,7 +42,7 @@ export async function appendFilePart(form: FormData, field: string, file: Upload
         bytes.byteOffset,
         bytes.byteOffset + bytes.byteLength
       ) as ArrayBuffer;
-      form.append(field, new Blob([buffer], { type: contentType }), file.name);
+      form.append(field, new File([buffer], file.name, { type: contentType }), file.name);
       return;
     }
 

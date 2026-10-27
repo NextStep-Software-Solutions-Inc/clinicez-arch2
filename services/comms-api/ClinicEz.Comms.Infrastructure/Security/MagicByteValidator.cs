@@ -31,7 +31,9 @@ public static class MagicByteValidator
     public static string SanitizeFileName(string rawFileName)
     {
         if (string.IsNullOrWhiteSpace(rawFileName)) return "attachment";
-        var fileName = Path.GetFileName(rawFileName); // Strips path traversal
+        var normalized = rawFileName.Replace('\\', '/');
+        var fileName = Path.GetFileName(normalized); // Strips path traversal across Windows and Linux
+        if (string.IsNullOrWhiteSpace(fileName)) return "attachment";
         fileName = Regex.Replace(fileName, @"[^\w\.\-_]", "_");
         if (fileName.Length > 120) fileName = fileName[^120..];
         return fileName;
