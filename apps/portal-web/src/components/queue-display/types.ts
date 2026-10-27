@@ -28,4 +28,6 @@ export interface PublicQueueDisplayData {
   maskPatientNames: boolean;
   generatedAtUtc: string;
   patientsWaitingCount: number;
+  isPinRequired?: boolean;
+  isPinValid?: boolean;
 }

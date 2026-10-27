@@ -40,6 +40,7 @@ import DateRangePickerModal from '../../components/ui/DateRangePickerModal';
 import DatePickerModal from '../../components/ui/DatePickerModal';
 import { getPortalBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
+import { buildCloudTvDisplayUrl } from '../../utils/queueDisplayRoute';
 import {
   clinicService,
   PatientQueueItem,
@@ -252,9 +253,7 @@ export default function DashboardScreen() {
   const handleOpenTvDisplay = useCallback(() => {
     const portalBase = getPortalBaseUrl();
     const ctx = resolveTenantContext();
-    const tenantSlug = ctx.tenantSlug || settings?.tenantSlug || settings?.tenantId || 'clinic';
-    const facilitySlug = ctx.facilitySlug || settings?.facilitySlug || 'main';
-    const tvUrl = `${portalBase}/queue-display/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(facilitySlug)}`;
+    const tvUrl = buildCloudTvDisplayUrl(portalBase, settings, ctx, true);
 
     if (typeof window !== 'undefined' && window.open) {
       window.open(tvUrl, '_blank');

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { joinApiUrl } from '@shared/safe';
 import { getPortalApiUrl } from '@/utils/domain';
 import {
@@ -65,6 +66,7 @@ export interface RxVerificationData {
   syncStatus?: string;
   isOfflinePending?: boolean;
   status?: string | null;
+  errorMessage?: string | null;
 }
 
 interface RxVerifyClientProps {
@@ -428,7 +430,18 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                   UNVERIFIED OR INVALID PRESCRIPTION TOKEN
                 </h2>
                 <p className="text-sm text-destructive/90">
-                  Unable to verify prescription reference <span className="font-mono font-bold">{token}</span> against the registry. Please check the code or contact the issuing clinic.
+                  {data.errorMessage ? (
+                    <>
+                      {data.errorMessage}{' '}
+                      <span className="font-normal opacity-90">
+                        (Reference: <span className="font-mono font-bold">{token}</span>)
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Unable to verify prescription reference <span className="font-mono font-bold">{token}</span> against the registry. Please check the code or contact the issuing clinic.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -449,394 +462,430 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
           </div>
         )}
 
-        {/* Clinic & Doctor Details */}
-        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-          <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-primary" />
-              Clinic & Prescribing Doctor
-            </span>
-            <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
-              Rx No: {data.prescriptionNumber}
-            </span>
-          </div>
-
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Clinic</p>
-              <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
-              {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
-              {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
-            </div>
-
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Prescribing Doctor</p>
-              <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Prescribing Doctor'}</h3>
-              <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {data.doctorPrcLicense && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                    PRC No: {data.doctorPrcLicense}
-                  </span>
-                )}
-                {data.doctorPtr && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                    PTR: {data.doctorPtr}
-                  </span>
-                )}
-                {data.doctorS2License && (
-                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    PDEA S2: {data.doctorS2License}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Patient Demographics & Safety Alert */}
-        {(data.patientName || data.patientInitials || data.patientAge) && (
+        {isNotFound ? (
           <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <User className="w-4 h-4 text-primary" />
-                Patient Information
+                <Building2 className="w-4 h-4 text-primary" />
+                Registry Status
               </span>
-              <span className="text-xs text-muted-foreground font-medium">
-                Issued: {new Date(data.issuedAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Patient</p>
-                <p className="text-sm font-bold text-foreground">
-                  {data.patientName || data.patientInitials || 'Confidential Patient'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Age / Gender</p>
-                <p className="text-sm font-semibold text-foreground">
-                  {data.patientAge ? `${data.patientAge} years old` : '—'} • {data.patientGender || '—'}
-                </p>
-              </div>
-              <div className="sm:col-span-2">
-                <p className="text-xs text-muted-foreground font-medium">Diagnosis</p>
-                <p className="text-sm font-semibold text-foreground">{data.clinicalDiagnosis || 'Outpatient Consultation'}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-muted-foreground bg-muted px-2.5 py-0.5 rounded border border-border">
+                  Token: {token}
+                </span>
+                <span className="text-xs font-bold text-destructive bg-destructive/10 px-2.5 py-0.5 rounded border border-destructive/20">
+                  Not Found in Registry
+                </span>
               </div>
             </div>
-
-            {data.patientAllergies && (
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-center gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
-                <p className="text-xs font-bold text-destructive">
-                  Patient Allergies: <span className="underline">{data.patientAllergies}</span>
-                </p>
-              </div>
-            )}
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Lock className="w-4 h-4 text-muted-foreground" />
+              Prescription Security Notice
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              This electronic prescription token could not be verified against the national registry. If you were provided a printed prescription, please ensure you scanned the exact QR code or entered the complete verification token. Tokens belonging to other document types or unrecognized facilities cannot be processed here.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/verify"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                Return to Document Verification
+              </Link>
+            </div>
           </div>
-        )}
+        ) : (
+          <>
+            {/* Clinic & Doctor Details */}
+            <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+              <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 text-primary" />
+                  Clinic & Prescribing Doctor
+                </span>
+                <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
+                  Rx No: {data.prescriptionNumber}
+                </span>
+              </div>
 
-        {/* Prescribed Medications */}
-        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-            <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Pill className="w-4 h-4 text-primary" />
-                Prescribed Medications
-              </span>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">Clinic</p>
+                  <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
+                  {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
+                  {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase">Prescribing Doctor</p>
+                  <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Prescribing Doctor'}</h3>
+                  <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {data.doctorPrcLicense && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                        PRC No: {data.doctorPrcLicense}
+                      </span>
+                    )}
+                    {data.doctorPtr && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                        PTR: {data.doctorPtr}
+                      </span>
+                    )}
+                    {data.doctorS2License && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3" />
+                        PDEA S2: {data.doctorS2License}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {data.items && data.items.length > 0 ? (
-              <div className="divide-y divide-border">
-                {data.items.map((item, index) => (
-                  <div key={item.itemId || index} className="p-6 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <h4 className="text-base font-black text-foreground">
-                          {item.genericName}
-                        </h4>
-                        {item.brandName && (
-                          <p className="text-xs font-semibold text-muted-foreground italic">
-                            Brand name: {item.brandName}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold px-3 py-1 bg-muted text-foreground rounded-full border border-border">
-                          Qty: {item.quantity} {item.form}(s)
-                        </span>
-                        {item.isDangerousDrug && (
-                          <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            PDEA Dangerous Drug
-                          </span>
-                        )}
-                      </div>
-                    </div>
+            {/* Patient Demographics & Safety Alert */}
+            {(data.patientName || data.patientInitials || data.patientAge) && (
+              <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-primary" />
+                    Patient Information
+                  </span>
+                  <span className="text-xs text-muted-foreground font-medium">
+                    Issued: {new Date(data.issuedAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </span>
+                </div>
 
-                    <div className="bg-muted border-l-4 border-primary p-3 rounded-r-lg">
-                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                        Directions for Use
-                      </p>
-                      <p className="text-sm font-semibold text-foreground mt-0.5">
-                        {item.sig}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
-                      <span><strong>Dosage & Form:</strong> {item.dosage} • {item.form}</span>
-                      <span><strong>Refills Allowed:</strong> {item.refills}</span>
-                      {item.durationDays && <span><strong>Duration:</strong> {item.durationDays} days</span>}
-                      {item.remarks && <span className="italic">Note: {item.remarks}</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-6 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div>
-                    <h4 className="text-base font-black text-foreground">
-                      Prescription Summary
-                    </h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {data.itemCount ? `${data.itemCount} prescribed item${data.itemCount > 1 ? 's' : ''}` : '1 prescribed item'}
+                    <p className="text-xs text-muted-foreground font-medium">Patient</p>
+                    <p className="text-sm font-bold text-foreground">
+                      {data.patientName || data.patientInitials || 'Confidential Patient'}
                     </p>
                   </div>
-                  {hasDangerousDrugs && (
-                    <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" />
-                      PDEA Dangerous Drug
-                    </span>
-                  )}
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">Age / Gender</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {data.patientAge ? `${data.patientAge} years old` : '—'} • {data.patientGender || '—'}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-muted-foreground font-medium">Diagnosis</p>
+                    <p className="text-sm font-semibold text-foreground">{data.clinicalDiagnosis || 'Outpatient Consultation'}</p>
+                  </div>
                 </div>
-                <div className="bg-muted/60 p-4 rounded-xl border border-border text-xs text-muted-foreground space-y-1">
-                  <p className="font-semibold text-foreground">
-                    Medication Details Protected for Privacy
-                  </p>
-                  <p>
-                    To protect patient privacy, medication details are listed only on the printed prescription presented by the patient. Pharmacists can confirm and record dispensing using the form below.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
 
-        {/* Pharmacist Dispensing Section */}
-        {data.isValid && !isDispensed && !isExpired && !isRevoked && !isNotFound ? (
-          <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-5">
-            <div className="border-b border-border pb-3">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                Pharmacist Dispense Confirmation
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Fulfilling this prescription at a pharmacy? Enter the Official Receipt (OR) and pharmacist details below to record dispensing and notify the clinic.
-              </p>
-            </div>
-
-            {submitError && (
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-xs font-semibold text-destructive">
-                {submitError}
+                {data.patientAllergies && (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-center gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
+                    <p className="text-xs font-bold text-destructive">
+                      Patient Allergies: <span className="underline">{data.patientAllergies}</span>
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
-            <form onSubmit={handleDispenseSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">
-                    Drugstore Chain *
-                  </label>
-                  <select
-                    value={pharmacyName}
-                    onChange={(e) => setPharmacyName(e.target.value)}
-                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-                  >
-                    {COMMON_DRUGSTORES.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
+            {/* Prescribed Medications */}
+            <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+                <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Pill className="w-4 h-4 text-primary" />
+                    Prescribed Medications
+                  </span>
+                </div>
+
+                {data.items && data.items.length > 0 ? (
+                  <div className="divide-y divide-border">
+                    {data.items.map((item, index) => (
+                      <div key={item.itemId || index} className="p-6 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <h4 className="text-base font-black text-foreground">
+                              {item.genericName}
+                            </h4>
+                            {item.brandName && (
+                              <p className="text-xs font-semibold text-muted-foreground italic">
+                                Brand name: {item.brandName}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold px-3 py-1 bg-muted text-foreground rounded-full border border-border">
+                              Qty: {item.quantity} {item.form}(s)
+                            </span>
+                            {item.isDangerousDrug && (
+                              <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                PDEA Dangerous Drug
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="bg-muted border-l-4 border-primary p-3 rounded-r-lg">
+                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                            Directions for Use
+                          </p>
+                          <p className="text-sm font-semibold text-foreground mt-0.5">
+                            {item.sig}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+                          <span><strong>Dosage & Form:</strong> {item.dosage} • {item.form}</span>
+                          <span><strong>Refills Allowed:</strong> {item.refills}</span>
+                          {item.durationDays && <span><strong>Duration:</strong> {item.durationDays} days</span>}
+                          {item.remarks && <span className="italic">Note: {item.remarks}</span>}
+                        </div>
+                      </div>
                     ))}
-                  </select>
-                </div>
-
-                {pharmacyName === 'Other Drugstore' ? (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">
-                      Specify Drugstore Name *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Local Community Pharmacy"
-                      value={customPharmacy}
-                      onChange={(e) => setCustomPharmacy(e.target.value)}
-                      className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-                    />
                   </div>
                 ) : (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">
-                      Branch Location
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Ayala Center Cebu, Makati Ave Branch"
-                      value={branchLocation}
-                      onChange={(e) => setBranchLocation(e.target.value)}
-                      className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-                    />
+                  <div className="p-6 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-base font-black text-foreground">
+                          Prescription Summary
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {data.itemCount ? `${data.itemCount} prescribed item${data.itemCount > 1 ? 's' : ''}` : '1 prescribed item'}
+                        </p>
+                      </div>
+                      {hasDangerousDrugs && (
+                        <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          PDEA Dangerous Drug
+                        </span>
+                      )}
+                    </div>
+                    <div className="bg-muted/60 p-4 rounded-xl border border-border text-xs text-muted-foreground space-y-1">
+                      <p className="font-semibold text-foreground">
+                        Medication Details Protected for Privacy
+                      </p>
+                      <p>
+                        To protect patient privacy, medication details are listed only on the printed prescription presented by the patient. Pharmacists can confirm and record dispensing using the form below.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">
-                    Official Receipt (OR) Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. OR-2026-081923"
-                    value={officialReceiptNumber}
-                    onChange={(e) => setOfficialReceiptNumber(e.target.value)}
-                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary font-mono"
-                  />
+            {/* Pharmacist Dispensing Section */}
+            {data.isValid && !isDispensed && !isExpired && !isRevoked && !isNotFound ? (
+              <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-5">
+                <div className="border-b border-border pb-3">
+                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Pharmacist Dispense Confirmation
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Fulfilling this prescription at a pharmacy? Enter the Official Receipt (OR) and pharmacist details below to record dispensing and notify the clinic.
+                  </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">
-                    Dispensing Pharmacist Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Maria Clara Santos, RPh"
-                    value={pharmacistName}
-                    onChange={(e) => setPharmacistName(e.target.value)}
-                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-                  />
+                {submitError && (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-xs font-semibold text-destructive">
+                    {submitError}
+                  </div>
+                )}
+
+                <form onSubmit={handleDispenseSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground">
+                        Drugstore Chain *
+                      </label>
+                      <select
+                        value={pharmacyName}
+                        onChange={(e) => setPharmacyName(e.target.value)}
+                        className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                      >
+                        {COMMON_DRUGSTORES.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {pharmacyName === 'Other Drugstore' ? (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-foreground">
+                          Specify Drugstore Name *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Local Community Pharmacy"
+                          value={customPharmacy}
+                          onChange={(e) => setCustomPharmacy(e.target.value)}
+                          className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-foreground">
+                          Branch Location
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Ayala Center Cebu, Makati Ave Branch"
+                          value={branchLocation}
+                          onChange={(e) => setBranchLocation(e.target.value)}
+                          className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground">
+                        Official Receipt (OR) Number *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. OR-2026-081923"
+                        value={officialReceiptNumber}
+                        onChange={(e) => setOfficialReceiptNumber(e.target.value)}
+                        className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground">
+                        Dispensing Pharmacist Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Maria Clara Santos, RPh"
+                        value={pharmacistName}
+                        onChange={(e) => setPharmacistName(e.target.value)}
+                        className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground">
+                        Pharmacist PRC License No. *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. PRC-0089123"
+                        value={pharmacistPrcLicense}
+                        onChange={(e) => setPharmacistPrcLicense(e.target.value)}
+                        className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-foreground">
+                      Dispensing Notes / Counseling (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Advised patient on taking with meals; generic substitution explained."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+                    />
+                  </div>
+
+                  {/* Receipt Attachment (<= 5 MiB with client compression) */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <UploadCloud className="w-4 h-4 text-primary" />
+                      Attach Official Receipt Image or PDF (Optional, max 5 MiB)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={handleFileChange}
+                        className="text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:opacity-90 cursor-pointer"
+                      />
+                      {compressing && (
+                        <span className="text-xs text-muted-foreground animate-pulse">
+                          Optimizing receipt image...
+                        </span>
+                      )}
+                      {receiptFile && !compressing && (
+                        <span className="text-xs text-success font-semibold flex items-center gap-1">
+                          <FileCheck className="w-3.5 h-3.5" />
+                          Ready ({Math.round(receiptFile.size / 1024)} KB)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={submitting || compressing}
+                      className="w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground font-bold rounded-lg shadow-sm hover:opacity-95 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {submitting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                          Submitting Dispense Record...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          Confirm Dispense & Lock Prescription
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : isDispensed ? (
+              <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      Dispensing Form Locked
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      This prescription was previously fulfilled at <strong>{data.dispensedPharmacyName || 'an accredited pharmacy'}</strong>
+                      {data.dispensedReceiptNumber ? ` under Official Receipt #${data.dispensedReceiptNumber}` : ''}
+                      {data.dispensedAt ? ` on ${new Date(data.dispensedAt).toLocaleString('en-PH')}` : ''}.
+                      Prescriptions can only be dispensed once to prevent reuse.
+                    </p>
+                  </div>
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">
-                    Pharmacist PRC License No. *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. PRC-0089123"
-                    value={pharmacistPrcLicense}
-                    onChange={(e) => setPharmacistPrcLicense(e.target.value)}
-                    className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-                  />
+              </div>
+            ) : isExpired ? (
+              <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      Dispensing Locked (Expired)
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      This prescription has expired and cannot be fulfilled. The patient must request a new prescription from their doctor.
+                    </p>
+                  </div>
                 </div>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">
-                  Dispensing Notes / Counseling (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Advised patient on taking with meals; generic substitution explained."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-                />
-              </div>
-
-              {/* Receipt Attachment (<= 5 MiB with client compression) */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <UploadCloud className="w-4 h-4 text-primary" />
-                  Attach Official Receipt Image or PDF (Optional, max 5 MiB)
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    onChange={handleFileChange}
-                    className="text-xs text-muted-foreground file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:opacity-90 cursor-pointer"
-                  />
-                  {compressing && (
-                    <span className="text-xs text-muted-foreground animate-pulse">
-                      Optimizing receipt image...
-                    </span>
-                  )}
-                  {receiptFile && !compressing && (
-                    <span className="text-xs text-success font-semibold flex items-center gap-1">
-                      <FileCheck className="w-3.5 h-3.5" />
-                      Ready ({Math.round(receiptFile.size / 1024)} KB)
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting || compressing}
-                  className="w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground font-bold rounded-lg shadow-sm hover:opacity-95 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                      Submitting Dispense Record...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Confirm Dispense & Lock Prescription
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        ) : isDispensed ? (
-          <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
-            <div className="flex items-start gap-3">
-              <Lock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-bold text-foreground">
-                  Dispensing Form Locked
+            ) : submitSuccess ? (
+              <div className="bg-success/10 border border-success/20 rounded-xl p-5 text-center space-y-2">
+                <CheckCircle className="w-8 h-8 text-success mx-auto" />
+                <h3 className="text-base font-bold text-foreground">
+                  Dispensing Confirmed
                 </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  This prescription was previously fulfilled at <strong>{data.dispensedPharmacyName || 'an accredited pharmacy'}</strong>
-                  {data.dispensedReceiptNumber ? ` under Official Receipt #${data.dispensedReceiptNumber}` : ''}
-                  {data.dispensedAt ? ` on ${new Date(data.dispensedAt).toLocaleString('en-PH')}` : ''}.
-                  Prescriptions can only be dispensed once to prevent reuse.
+                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  The prescription has been recorded as dispensed and the clinic has been notified.
                 </p>
               </div>
-            </div>
-          </div>
-        ) : isExpired ? (
-          <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
-            <div className="flex items-start gap-3">
-              <Clock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-bold text-foreground">
-                  Dispensing Locked (Expired)
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  This prescription has expired and cannot be fulfilled. The patient must request a new prescription from their doctor.
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : submitSuccess ? (
-          <div className="bg-success/10 border border-success/20 rounded-xl p-5 text-center space-y-2">
-            <CheckCircle className="w-8 h-8 text-success mx-auto" />
-            <h3 className="text-base font-bold text-foreground">
-              Dispensing Confirmed
-            </h3>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto">
-              The prescription has been recorded as dispensed and the clinic has been notified.
-            </p>
-          </div>
-        ) : null}
+            ) : null}
+          </>
+        )}
 
         {/* Footer */}
         <footer className="text-center text-xs text-muted-foreground py-4 border-t border-border">

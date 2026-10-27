@@ -290,6 +290,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.EmergencyJson).HasColumnType("jsonb");
             entity.Property(e => e.IsAcceptingWalkIns).HasDefaultValue(true);
             entity.Property(e => e.PatientsWaitingCount).HasDefaultValue(0);
+            entity.Property(e => e.TvDisplayPin).HasMaxLength(50);
 
             entity.HasOne(e => e.Tenant)
                 .WithMany()

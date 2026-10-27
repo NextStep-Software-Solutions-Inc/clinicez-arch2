@@ -16,7 +16,8 @@ public sealed record GetPublicQueueDisplayQuery(
     Guid? ClinicId = null,
     string? TenantSlug = null,
     string? FacilitySlug = null,
-    DateOnly? Date = null
+    DateOnly? Date = null,
+    string? Pin = null
 ) : IRequest<PublicQueueDisplayDto?>;
 
 public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPublicQueueDisplayQuery, PublicQueueDisplayDto?>
@@ -92,6 +93,29 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             return null;
         }
 
+        var mask = clinic.TvDisplayMaskPatientNames;
+        bool isPinRequired = !string.IsNullOrWhiteSpace(clinic.TvDisplayPin);
+        bool isPinValid = !isPinRequired || (!string.IsNullOrWhiteSpace(request.Pin) && string.Equals(request.Pin.Trim(), clinic.TvDisplayPin!.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        // When PIN is required and not yet supplied or invalid, strictly zero tickets are returned
+        if (isPinRequired && !isPinValid)
+        {
+            return new PublicQueueDisplayDto(
+                ClinicId: clinic.ClinicId,
+                ClinicName: clinic.ClinicName,
+                TenantSlug: clinic.TenantSlug ?? "clinic",
+                FacilitySlug: clinic.FacilitySlug ?? "main",
+                NowServing: Array.Empty<ServingTicketDto>(),
+                UpNext: Array.Empty<UpcomingTicketDto>(),
+                MaskPatientNames: mask,
+                GeneratedAtUtc: DateTime.UtcNow,
+                PatientsWaitingCount: 0,
+                LogoUrl: clinic.PrimaryLogoUrl,
+                IsPinRequired: true,
+                IsPinValid: false
+            );
+        }
+
         var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
         // 2. Fetch queue items for this clinic on the target date
@@ -119,7 +143,7 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
 
         // 4. Up Next: upcoming tickets (Consultation visits in Waiting, Triaged, OnHold, or procedures/re-eval)
         // Diverted and DischargedNonDoctor tickets are strictly excluded from public lobby TV display!
-        var mask = clinic.TvDisplayMaskPatientNames;
+        mask = clinic.TvDisplayMaskPatientNames;
         var upNext = queueItems
             .Where(q => q.Status != QueueStatus.Diverted &&
                         q.Status != QueueStatus.DischargedNonDoctor &&
@@ -143,14 +167,16 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
         return new PublicQueueDisplayDto(
             ClinicId: clinic.ClinicId,
             ClinicName: clinic.ClinicName,
-            TenantSlug: clinic.TenantSlug ?? clinic.TenantId,
+            TenantSlug: clinic.TenantSlug ?? "clinic",
             FacilitySlug: clinic.FacilitySlug ?? "main",
             NowServing: nowServing,
             UpNext: upNext,
             MaskPatientNames: mask,
             GeneratedAtUtc: DateTime.UtcNow,
             PatientsWaitingCount: upNext.Count,
-            LogoUrl: clinic.PrimaryLogoUrl
+            LogoUrl: clinic.PrimaryLogoUrl,
+            IsPinRequired: isPinRequired,
+            IsPinValid: true
         );
     }
 

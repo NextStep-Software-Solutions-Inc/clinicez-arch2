@@ -66,6 +66,7 @@ public sealed class QueueBoardUpdatedHandler(
                 QueueDate = payload.QueueDate,
                 IsAcceptingWalkIns = payload.IsAcceptingWalkIns,
                 PatientsWaitingCount = payload.PatientsWaitingCount,
+                TvDisplayPin = payload.TvDisplayPin,
                 NowServingJson = nowServingJson,
                 UpNextJson = upNextJson,
                 EmergencyJson = emergencyJson,
@@ -79,6 +80,7 @@ public sealed class QueueBoardUpdatedHandler(
             existing.QueueDate = payload.QueueDate;
             existing.IsAcceptingWalkIns = payload.IsAcceptingWalkIns;
             existing.PatientsWaitingCount = payload.PatientsWaitingCount;
+            existing.TvDisplayPin = payload.TvDisplayPin;
             existing.NowServingJson = nowServingJson;
             existing.UpNextJson = upNextJson;
             existing.EmergencyJson = emergencyJson;

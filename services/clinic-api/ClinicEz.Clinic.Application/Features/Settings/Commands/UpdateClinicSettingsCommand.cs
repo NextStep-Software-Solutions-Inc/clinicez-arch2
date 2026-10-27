@@ -62,7 +62,8 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableStaffAppointmentNotifications = null,
     string? TimeZoneId = null,
     string? DateFormat = null,
-    string? TimeFormat = null) : IRequest<ClinicSettingsDto>;
+    string? TimeFormat = null,
+    string? TvDisplayPin = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -191,6 +192,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (request.TvDisplayMaskPatientNames.HasValue)
             settings.TvDisplayMaskPatientNames = request.TvDisplayMaskPatientNames.Value;
+
+        if (request.TvDisplayPin != null)
+            settings.TvDisplayPin = string.IsNullOrWhiteSpace(request.TvDisplayPin) ? null : request.TvDisplayPin.Trim();
 
         if (request.EnableQueuePushNotifications.HasValue)
             settings.EnableQueuePushNotifications = request.EnableQueuePushNotifications.Value;
@@ -362,7 +366,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             BranchPhilHealthAccreditationNumber: settings.BranchPhilHealthAccreditationNumber,
             BranchPmccNumber: settings.BranchPmccNumber,
             BranchSoftwareCertificateId: settings.BranchSoftwareCertificateId,
-            BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint);
+            BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint,
+            TenantSlug: settings.TenantSlug,
+            FacilitySlug: settings.FacilitySlug,
+            TvDisplayPin: settings.TvDisplayPin);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)

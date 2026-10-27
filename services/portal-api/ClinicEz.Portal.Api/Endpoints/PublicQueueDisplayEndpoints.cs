@@ -26,7 +26,9 @@ public sealed record PublicQueueDisplayData(
     bool MaskPatientNames,
     DateTime GeneratedAtUtc,
     int PatientsWaitingCount,
-    string? LogoUrl = null
+    string? LogoUrl = null,
+    bool IsPinRequired = false,
+    bool IsPinValid = true
 );
 
 public sealed class PublicQueueDisplayEndpoints : IEndpoint
@@ -52,28 +54,43 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
         string tenantSlug,
         string facilitySlug,
         IApplicationDbContext context,
+        [Microsoft.AspNetCore.Mvc.FromQuery] string? pin = null,
+        [Microsoft.AspNetCore.Mvc.FromHeader(Name = "X-Queue-Pin")] string? headerPin = null,
         CancellationToken ct = default)
     {
-        return await ResolveQueueBoardAsync(tenantSlug, facilitySlug, clinicId: null, context, ct);
+        var effectivePin = !string.IsNullOrWhiteSpace(headerPin) ? headerPin : pin;
+        return await ResolveQueueBoardAsync(tenantSlug, facilitySlug, clinicId: null, effectivePin, context, ct);
     }
 
     public static async Task<IResult> GetDisplayQueryAsync(
-        string? tenantSlug,
-        string? facilitySlug,
-        Guid? clinicId,
+        [Microsoft.AspNetCore.Mvc.FromQuery] string? tenantSlug,
+        [Microsoft.AspNetCore.Mvc.FromQuery] string? facilitySlug,
+        [Microsoft.AspNetCore.Mvc.FromQuery] Guid? clinicId,
         IApplicationDbContext context,
+        [Microsoft.AspNetCore.Mvc.FromQuery] string? pin = null,
+        [Microsoft.AspNetCore.Mvc.FromHeader(Name = "X-Queue-Pin")] string? headerPin = null,
         CancellationToken ct = default)
     {
-        return await ResolveQueueBoardAsync(tenantSlug, facilitySlug, clinicId, context, ct);
+        var effectivePin = !string.IsNullOrWhiteSpace(headerPin) ? headerPin : pin;
+        return await ResolveQueueBoardAsync(tenantSlug, facilitySlug, clinicId, effectivePin, context, ct);
     }
 
     private static async Task<IResult> ResolveQueueBoardAsync(
         string? tenantSlug,
         string? facilitySlug,
         Guid? clinicId,
+        string? pin,
         IApplicationDbContext context,
         CancellationToken ct)
     {
+        // STRICT ENFORCEMENT: No UUIDs permitted in slug fields - cannot be resolved (404 Not Found)
+        if ((!string.IsNullOrWhiteSpace(tenantSlug) && Guid.TryParse(tenantSlug, out _)) ||
+            (!string.IsNullOrWhiteSpace(facilitySlug) && Guid.TryParse(facilitySlug, out _)))
+        {
+            return Results.NotFound(ApiResponse<PublicQueueDisplayData>.Fail(
+                "Queue board not found or cannot be resolved.",
+                "NOT_FOUND"));
+        }
         Facility? facility = null;
 
         if (clinicId.HasValue && clinicId.Value != Guid.Empty)
@@ -121,10 +138,37 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
                 UpNext: Array.Empty<QueueBoardUpcomingItemDto>(),
                 MaskPatientNames: true,
                 GeneratedAtUtc: DateTime.UtcNow,
-                PatientsWaitingCount: 0
+                PatientsWaitingCount: 0,
+                LogoUrl: null,
+                IsPinRequired: false,
+                IsPinValid: true
             );
 
             return Results.Ok(ApiResponse<PublicQueueDisplayData>.Success(emptyData));
+        }
+
+        bool isPinRequired = !string.IsNullOrWhiteSpace(board.TvDisplayPin);
+        bool isPinValid = !isPinRequired || (!string.IsNullOrWhiteSpace(pin) && string.Equals(pin.Trim(), board.TvDisplayPin!.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        // When PIN is required and not yet supplied or invalid, strictly zero tickets are returned
+        if (isPinRequired && !isPinValid)
+        {
+            var lockedData = new PublicQueueDisplayData(
+                ClinicId: facility.Id,
+                ClinicName: facility.Name,
+                TenantSlug: facility.Tenant?.TenantSlug,
+                FacilitySlug: facility.Slug,
+                NowServing: Array.Empty<QueueBoardServingItemDto>(),
+                UpNext: Array.Empty<QueueBoardUpcomingItemDto>(),
+                MaskPatientNames: true,
+                GeneratedAtUtc: DateTime.UtcNow,
+                PatientsWaitingCount: 0,
+                LogoUrl: null,
+                IsPinRequired: true,
+                IsPinValid: false
+            );
+
+            return Results.Ok(ApiResponse<PublicQueueDisplayData>.Success(lockedData));
         }
 
         var nowServing = DeserializeList<QueueBoardServingItemDto>(board.NowServingJson);
@@ -142,7 +186,10 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
             UpNext: zeroPhiUpNext,
             MaskPatientNames: true,
             GeneratedAtUtc: board.GeneratedAtUtc,
-            PatientsWaitingCount: board.PatientsWaitingCount
+            PatientsWaitingCount: board.PatientsWaitingCount,
+            LogoUrl: null,
+            IsPinRequired: isPinRequired,
+            IsPinValid: true
         );
 
         return Results.Ok(ApiResponse<PublicQueueDisplayData>.Success(displayData));

@@ -128,6 +128,7 @@ public sealed record QueueBoardUpdatedPayload
     public DateTime GeneratedAtUtc { get; init; } = DateTime.UtcNow;
     public bool IsAcceptingWalkIns { get; init; } = true;
     public int PatientsWaitingCount { get; init; }
+    public string? TvDisplayPin { get; init; }
     public IReadOnlyList<QueueBoardServingItemDto> NowServing { get; init; } = Array.Empty<QueueBoardServingItemDto>();
     public IReadOnlyList<QueueBoardUpcomingItemDto> UpNext { get; init; } = Array.Empty<QueueBoardUpcomingItemDto>();
 }

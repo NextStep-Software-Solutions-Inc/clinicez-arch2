@@ -1956,6 +1956,7 @@ export interface ClinicSettingsRecord {
   enableStatVibrationAlert?: boolean;
   tenantSlug?: string;
   facilitySlug?: string;
+  tvDisplayPin?: string | null;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
@@ -3468,13 +3469,15 @@ export const clinicService = {
     return clinicApiUrl(`/settings/reception-placard-pdf${qs ? `?${qs}` : ''}`);
   },
 
-  async getPublicQueueDisplay(clinicId?: string, facilitySlug?: string, tenantSlug?: string) {
+  async getPublicQueueDisplay(clinicId?: string, facilitySlug?: string, tenantSlug?: string, pin?: string) {
     const params = new URLSearchParams();
     if (clinicId) params.append('clinicId', clinicId);
     if (facilitySlug) params.append('facilitySlug', facilitySlug);
     if (tenantSlug) params.append('tenantSlug', tenantSlug);
+    if (pin) params.append('pin', pin);
     const query = params.toString();
-    return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`);
+    const headers = pin ? { 'X-Queue-Pin': pin } : undefined;
+    return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`, { headers });
   },
 
   // PhilHealth Yakap (formerly Konsulta)

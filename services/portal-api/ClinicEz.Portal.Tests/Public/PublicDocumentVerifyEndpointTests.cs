@@ -231,4 +231,90 @@ public class PublicDocumentVerifyEndpointTests : IDisposable
         var notFound = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(StatusCodes.Status404NotFound, notFound.StatusCode);
     }
+
+    [Fact]
+    public async Task VerifyDocument_UnrecognizedKind_Returns400BadRequest()
+    {
+        var result = await PublicDocumentVerifyEndpoints.VerifyDocumentAsync("invalid-category", "ANY-TOKEN", null, _context);
+        var badRequest = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+    }
+
+    [Fact]
+    public async Task VerifyDocument_MismatchedKindByDocumentNumber_Returns400BadRequest()
+    {
+        var attestation = new DocumentAttestation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            FacilityId = _clinic.Id,
+            DocumentKind = "prescription",
+            DocumentNumber = "RX-20261025-0999",
+            SecurityDigest = "SEC-SHA256-RX9999999999",
+            ClinicName = "Asian Hospital",
+            IssuedAtUtc = DateTime.UtcNow,
+            Status = "VALID"
+        };
+        _context.DocumentAttestations.Add(attestation);
+        await _context.SaveChangesAsync();
+
+        // Querying an Rx document under "med-cert" kind
+        var result = await PublicDocumentVerifyEndpoints.VerifyDocumentAsync("med-cert", "RX-20261025-0999", null, _context);
+        var badRequest = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+    }
+
+    [Fact]
+    public async Task VerifyDocument_MismatchedKindBySecurityDigest_Returns400BadRequest()
+    {
+        var digest = "SEC-SHA256-REF111122223";
+        var attestation = new DocumentAttestation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            FacilityId = _clinic.Id,
+            DocumentKind = "referral",
+            DocumentNumber = "REF-20261025-0088",
+            SecurityDigest = digest,
+            ClinicName = "Asian Hospital",
+            IssuedAtUtc = DateTime.UtcNow,
+            Status = "VALID"
+        };
+        _context.DocumentAttestations.Add(attestation);
+        await _context.SaveChangesAsync();
+
+        // Querying a referral digest under "receipt" kind
+        var result = await PublicDocumentVerifyEndpoints.VerifyDocumentAsync("receipt", digest, null, _context);
+        var badRequest = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+    }
+
+    [Fact]
+    public async Task VerifyDocument_MismatchedKindByVerificationTokenHash_Returns400BadRequest()
+    {
+        var rawRxToken = "test-rx-token-secret-12345";
+        using var sha256 = SHA256.Create();
+        var tokenHash = Convert.ToHexString(sha256.ComputeHash(Encoding.UTF8.GetBytes(rawRxToken.ToLowerInvariant()))).ToLowerInvariant();
+
+        var attestation = new DocumentAttestation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            FacilityId = _clinic.Id,
+            DocumentKind = "prescription",
+            DocumentNumber = "RX-20261025-0777",
+            SecurityDigest = "SEC-SHA256-RX7777777777",
+            VerificationTokenHash = tokenHash,
+            ClinicName = "Asian Hospital",
+            IssuedAtUtc = DateTime.UtcNow,
+            Status = "VALID"
+        };
+        _context.DocumentAttestations.Add(attestation);
+        await _context.SaveChangesAsync();
+
+        // Querying an Rx verification token under "med-cert" kind
+        var result = await PublicDocumentVerifyEndpoints.VerifyDocumentAsync("med-cert", rawRxToken, null, _context);
+        var badRequest = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+    }
 }

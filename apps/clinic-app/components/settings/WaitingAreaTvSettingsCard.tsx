@@ -4,6 +4,7 @@ import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import Icon from '../ui/Icon';
+import Input from '../ui/Input';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { SkeletonList } from '../ui/Skeleton';
 import { ToggleSwitch } from './AddEditFieldModal';
@@ -12,6 +13,7 @@ import { notify } from '../../utils/feedback';
 import { clinicService, ClinicSettingsRecord } from '../../services/clinicService';
 import { getPortalBaseUrl, getApiBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
+import { buildCloudTvDisplayUrl } from '../../utils/queueDisplayRoute';
 
 export interface WaitingAreaTvSettingsCardProps {
   settings: ClinicSettingsRecord | null;
@@ -28,10 +30,14 @@ export default function WaitingAreaTvSettingsCard({
   const [, setSaving] = useState<boolean>(false);
   const [copiedLan, setCopiedLan] = useState<boolean>(false);
   const [copiedCloud, setCopiedCloud] = useState<boolean>(false);
+  const [copiedCloudPin, setCopiedCloudPin] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>(settings?.tvDisplayPin || '');
+  const [savingPin, setSavingPin] = useState<boolean>(false);
 
   useEffect(() => {
     if (settings) {
       setMaskNames(settings.tvDisplayMaskPatientNames ?? true);
+      setPinInput(settings.tvDisplayPin || '');
     }
   }, [settings]);
 
@@ -52,14 +58,17 @@ export default function WaitingAreaTvSettingsCard({
     return '/#/queue-display';
   }, []);
 
-  // 2. Public Cloud TV URL: routed via portal-web and portal-api
+  // 2. Public Cloud TV URL: routed via portal-web and portal-api (strictly NO UUIDs)
+  const portalBase = useMemo(() => getPortalBaseUrl(), []);
+  const ctx = useMemo(() => resolveTenantContext(), []);
+
   const publicCloudTvUrl = useMemo<string>(() => {
-    const portalBase = getPortalBaseUrl();
-    const ctx = resolveTenantContext();
-    const tenantSlug = ctx.tenantSlug || settings?.tenantSlug || settings?.tenantId || 'clinic';
-    const facilitySlug = ctx.facilitySlug || settings?.facilitySlug || 'main';
-    return `${portalBase}/queue-display/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(facilitySlug)}`;
-  }, [settings]);
+    return buildCloudTvDisplayUrl(portalBase, settings, ctx, false);
+  }, [portalBase, settings, ctx]);
+
+  const publicCloudTvUrlWithPin = useMemo<string>(() => {
+    return buildCloudTvDisplayUrl(portalBase, settings, ctx, true);
+  }, [portalBase, settings, ctx]);
 
   const handleToggleMask = useCallback(
     async (val: boolean) => {
@@ -90,6 +99,40 @@ export default function WaitingAreaTvSettingsCard({
     [onSettingsUpdated]
   );
 
+  const handleSavePin = useCallback(
+    async (pinToSave: string | null) => {
+      setSavingPin(true);
+      try {
+        const trimmed = pinToSave ? pinToSave.trim() : null;
+        const [updated, err] = await clinicService.updateSettings({
+          tvDisplayPin: trimmed,
+        });
+        if (err || !updated) {
+          notify.error(err?.message || 'Could not save TV display passcode.');
+          return;
+        }
+        setPinInput(trimmed || '');
+        notify.success(
+          trimmed
+            ? `TV Display Passcode set to "${trimmed}". Waiting area boards now require this PIN.`
+            : 'TV Display Passcode cleared. Display board is now public without PIN.'
+        );
+        onSettingsUpdated?.(updated);
+      } catch {
+        notify.error('Failed to update TV display passcode.');
+      } finally {
+        setSavingPin(false);
+      }
+    },
+    [onSettingsUpdated]
+  );
+
+  const handleGeneratePin = useCallback(() => {
+    const randomPin = String(Math.floor(1000 + Math.random() * 9000));
+    setPinInput(randomPin);
+    void handleSavePin(randomPin);
+  }, [handleSavePin]);
+
   const openUrl = useCallback((url: string) => {
     if (typeof window !== 'undefined' && window.open) {
       window.open(url, '_blank');
@@ -100,16 +143,19 @@ export default function WaitingAreaTvSettingsCard({
     }
   }, []);
 
-  const copyToClipboard = useCallback(async (text: string, isLan: boolean) => {
+  const copyToClipboard = useCallback(async (text: string, type: 'lan' | 'cloud' | 'cloudPin') => {
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        if (isLan) {
+        if (type === 'lan') {
           setCopiedLan(true);
           setTimeout(() => setCopiedLan(false), 2500);
-        } else {
+        } else if (type === 'cloud') {
           setCopiedCloud(true);
           setTimeout(() => setCopiedCloud(false), 2500);
+        } else {
+          setCopiedCloudPin(true);
+          setTimeout(() => setCopiedCloudPin(false), 2500);
         }
         notify.success('Display URL copied to clipboard!');
       } else {
@@ -120,11 +166,13 @@ export default function WaitingAreaTvSettingsCard({
     }
   }, []);
 
+  const isPinConfigured = Boolean(settings?.tvDisplayPin && settings.tvDisplayPin.trim().length > 0);
+
   return (
     <Card>
       <CardHeader
         title="Waiting Area Public TV Display Board"
-        subtitle="Configure public queue television display and patient privacy masking"
+        subtitle="Configure public queue television display, passcode locking, and patient privacy masking"
         rightAction={
           <Badge
             label={maskNames ? 'Privacy Masking Active' : 'Unmasked (Warning)'}
@@ -155,6 +203,107 @@ export default function WaitingAreaTvSettingsCard({
                 onValueChange={handleToggleMask}
                 accessibilityLabel="Toggle Patient Name Masking on TV Display"
               />
+            </View>
+
+            {/* TV Passcode / PIN Protection Card */}
+            <View style={styles.pinCard}>
+              <View style={styles.urlHeader}>
+                <View style={styles.iconWrapPin}>
+                  <Icon name="lock" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                </View>
+                <View style={styles.urlInfo}>
+                  <View style={styles.cardTitleBadgeRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      TV Display Board Passcode (PIN Protection)
+                    </ThemedText>
+                    <Badge
+                      label={isPinConfigured ? 'PIN Protection Active' : 'Public Access (No PIN)'}
+                      variant={isPinConfigured ? 'success' : 'neutral'}
+                    />
+                  </View>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.urlSubtitle}>
+                    Prevents leaked or shared links from displaying patient queue tickets. When a PIN is configured, both LAN kiosks and Cloud TVs require the passcode to unlock and reveal live tickets.
+                  </ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.pinInputRow}>
+                <View style={styles.pinInputContainer}>
+                  <Input
+                    label="TV Passcode / PIN"
+                    value={pinInput}
+                    onChangeText={setPinInput}
+                    placeholder="Enter 4-6 digit passcode (e.g. 1234)"
+                    maxLength={12}
+                    keyboardType="numeric"
+                    leftIcon="lock"
+                    helperText={
+                      isPinConfigured
+                        ? `Currently active PIN: "${settings?.tvDisplayPin}". Anyone without this PIN cannot see queue tickets.`
+                        : 'No PIN is currently configured. Anyone with the URL can view the queue display.'
+                    }
+                  />
+                </View>
+                <View style={styles.pinActionButtons}>
+                  <Button
+                    title="Save Passcode"
+                    variant="primary"
+                    icon="check"
+                    loading={savingPin}
+                    disabled={savingPin || pinInput.trim() === (settings?.tvDisplayPin || '')}
+                    onPress={() => handleSavePin(pinInput)}
+                  />
+                  <Button
+                    title="Generate 4-Digit PIN"
+                    variant="secondary"
+                    icon="refreshCw"
+                    disabled={savingPin}
+                    onPress={handleGeneratePin}
+                  />
+                  {isPinConfigured && (
+                    <Button
+                      title="Clear PIN"
+                      variant="outline"
+                      icon="x"
+                      disabled={savingPin}
+                      onPress={() => handleSavePin(null)}
+                    />
+                  )}
+                </View>
+              </View>
+
+              {isPinConfigured && (
+                <View style={styles.pinHelperBox}>
+                  <View style={styles.pinHelperHeader}>
+                    <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.success} />
+                    <ThemedText variant="captionBold" color={theme.colors.success}>
+                      Authorized Wall TV Setup Link Available
+                    </ThemedText>
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Use the auto-authenticated URL below when setting up physical wall TVs or kiosks so clinic staff don&apos;t have to enter the passcode on the TV remote.
+                  </ThemedText>
+                  <View style={styles.urlBadge}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
+                      {publicCloudTvUrlWithPin}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.actionRow}>
+                    <Button
+                      title={copiedCloudPin ? 'Copied with PIN' : 'Copy TV Setup Link with PIN'}
+                      variant="primary"
+                      icon="copy"
+                      onPress={() => copyToClipboard(publicCloudTvUrlWithPin, 'cloudPin')}
+                    />
+                    <Button
+                      title="Open with PIN"
+                      variant="outline"
+                      icon="maximize"
+                      onPress={() => openUrl(publicCloudTvUrlWithPin)}
+                    />
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* 1. Local LAN Kiosk URL Card */}
@@ -193,7 +342,7 @@ export default function WaitingAreaTvSettingsCard({
                   title={copiedLan ? 'Copied' : 'Copy LAN Link'}
                   variant="outline"
                   icon="copy"
-                  onPress={() => copyToClipboard(localLanUrl, true)}
+                  onPress={() => copyToClipboard(localLanUrl, 'lan')}
                 />
               </View>
             </View>
@@ -207,12 +356,12 @@ export default function WaitingAreaTvSettingsCard({
                 <View style={styles.urlInfo}>
                   <View style={styles.cardTitleBadgeRow}>
                     <ThemedText variant="bodyBold" color={theme.colors.text}>
-                      Public Cloud TV Board URL
+                      Public Cloud TV Board URL (Slugs Only)
                     </ThemedText>
                     <Badge label="Cloud Hosted" variant="neutral" />
                   </View>
                   <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.urlSubtitle}>
-                    For external waiting areas, patient companions, or multi-branch lobby monitors accessing the cloud-hosted ClinicEZ control plane via public internet.
+                    For external waiting areas, patient companions, or multi-branch lobby monitors accessing the cloud-hosted ClinicEZ control plane via public internet. Guarantees zero UUID exposure.
                   </ThemedText>
                 </View>
               </View>
@@ -234,7 +383,7 @@ export default function WaitingAreaTvSettingsCard({
                   title={copiedCloud ? 'Copied' : 'Copy Cloud Link'}
                   variant="outline"
                   icon="copy"
-                  onPress={() => copyToClipboard(publicCloudTvUrl, false)}
+                  onPress={() => copyToClipboard(publicCloudTvUrl, 'cloud')}
                 />
               </View>
             </View>
@@ -266,6 +415,48 @@ const styles = StyleSheet.create({
   },
   toggleSubtitle: {
     lineHeight: theme.spacing.lg,
+  },
+  pinCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  iconWrapPin: {
+    width: theme.sizes.iconLg,
+    height: theme.sizes.iconLg,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinInputRow: {
+    gap: theme.spacing.sm,
+  },
+  pinInputContainer: {
+    maxWidth: 420,
+  },
+  pinActionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    marginTop: theme.spacing.xs,
+  },
+  pinHelperBox: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  pinHelperHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   urlCard: {
     backgroundColor: theme.colors.surfaceMuted,

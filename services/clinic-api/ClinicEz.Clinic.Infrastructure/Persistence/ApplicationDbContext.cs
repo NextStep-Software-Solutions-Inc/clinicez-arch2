@@ -937,6 +937,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.EodReconciliationTime).HasMaxLength(10).HasDefaultValue("21:00");
             entity.Property(e => e.AutoEodEnabled).HasDefaultValue(true);
             entity.Property(e => e.TvDisplayMaskPatientNames).HasDefaultValue(true);
+            entity.Property(e => e.TvDisplayPin).HasMaxLength(50);
             entity.Property(e => e.EnableQueuePushNotifications).HasDefaultValue(true);
             entity.Property(e => e.QueuePushNotificationThreshold).HasDefaultValue(2);
             entity.Property(e => e.EnableChipLevelQueueCalling).HasDefaultValue(false);

@@ -13,6 +13,7 @@ import {
   MapPin,
   AlertCircle,
   RefreshCw,
+  Lock,
 } from "lucide-react";
 import { ClinicEzMark } from "@/components/ClinicEzLogo";
 import { PublicQueueDisplayData, ServingTicket, UpcomingTicket } from "./types";
@@ -30,6 +31,7 @@ interface QueueDisplayClientProps {
   facilitySlug?: string;
   clinicId?: string;
   logoUrl?: string;
+  initialPin?: string;
 }
 
 export default function QueueDisplayClient({
@@ -38,6 +40,7 @@ export default function QueueDisplayClient({
   facilitySlug,
   clinicId,
   logoUrl,
+  initialPin,
 }: QueueDisplayClientProps) {
   const [data, setData] = useState<PublicQueueDisplayData | undefined>(initialData);
   const [loading, setLoading] = useState<boolean>(!initialData);
@@ -49,6 +52,21 @@ export default function QueueDisplayClient({
   const [lastUpdatedTime, setLastUpdatedTime] = useState<number>(Date.now());
   const [pulseActive, setPulseActive] = useState<boolean>(false);
   const [logoError, setLogoError] = useState<boolean>(false);
+
+  // Storage key for wall TV / browser pin persistence
+  const storageKey = tenantSlug && facilitySlug ? `clinicez_tv_pin_${tenantSlug}_${facilitySlug}` : "clinicez_tv_pin_cloud";
+
+  // PIN / Passcode state
+  const [tvPin, setTvPin] = useState<string>(() => {
+    if (initialPin) return initialPin;
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(storageKey) || "";
+    }
+    return "";
+  });
+  const [pinEntry, setPinEntry] = useState<string>("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [unlocking, setUnlocking] = useState<boolean>(false);
 
   const clinicLogo = data?.logoUrl || logoUrl;
 
@@ -105,17 +123,25 @@ export default function QueueDisplayClient({
   }, []);
 
   // Poll function
-  const fetchQueue = useCallback(async () => {
+  const fetchQueue = useCallback(async (pinOverride?: string) => {
+    const activePin = pinOverride !== undefined ? pinOverride : tvPin;
     const res = await queueDisplayService.getDisplayData({
       tenantSlug,
       facilitySlug,
       clinicId,
+      pin: activePin || undefined,
     });
 
     if (res.success && res.data) {
       failureCountRef.current = 0;
       setError(null);
       setLastUpdatedTime(Date.now());
+
+      if (activePin && res.data.isPinValid) {
+        try {
+          localStorage.setItem(storageKey, activePin);
+        } catch {}
+      }
 
       const newServing = res.data.nowServing.map((s) => s.ticketNumber);
       const prevServing = prevServingRef.current;
@@ -134,9 +160,9 @@ export default function QueueDisplayClient({
     } else {
       failureCountRef.current += 1;
       setError(res.message || "Unable to sync queue updates.");
-      // Do not clear existing data during transient network errors
+      setLoading(false); // CRITICAL: Stop skeleton trap!
     }
-  }, [tenantSlug, facilitySlug, clinicId]);
+  }, [tenantSlug, facilitySlug, clinicId, tvPin, storageKey]);
 
   // Polling loop with exponential backoff on failure
   useEffect(() => {
@@ -163,6 +189,70 @@ export default function QueueDisplayClient({
     };
   }, [fetchQueue]);
 
+  // Physical keyboard listener for TV PIN keypad
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isLocked = Boolean(data?.isPinRequired && !data?.isPinValid);
+    if (!isLocked) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= "0" && e.key <= "9") {
+        setPinEntry((prev) => (prev.length < 8 ? prev + e.key : prev));
+        setPinError(null);
+      } else if (e.key === "Backspace") {
+        setPinEntry((prev) => prev.slice(0, -1));
+      } else if (e.key === "Enter") {
+        if (pinEntry.length > 0) {
+          void handleUnlock(pinEntry);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [data?.isPinRequired, data?.isPinValid, pinEntry]);
+
+  const handleUnlock = async (enteredPin: string) => {
+    if (!enteredPin.trim()) return;
+    setUnlocking(true);
+    setPinError(null);
+    try {
+      const res = await queueDisplayService.getDisplayData({
+        tenantSlug,
+        facilitySlug,
+        clinicId,
+        pin: enteredPin.trim(),
+      });
+      setUnlocking(false);
+      if (!res.success || !res.data) {
+        setPinError(res.message || "Unable to verify TV passcode.");
+        return;
+      }
+      if (res.data.isPinRequired && !res.data.isPinValid) {
+        setPinError("Incorrect TV passcode. Please verify in Clinic Settings.");
+        return;
+      }
+      setTvPin(enteredPin.trim());
+      setData(res.data);
+      try {
+        localStorage.setItem(storageKey, enteredPin.trim());
+      } catch {}
+    } catch {
+      setUnlocking(false);
+      setPinError("Connection error verifying TV passcode.");
+    }
+  };
+
+  const handleLockBoard = () => {
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {}
+    setTvPin("");
+    setPinEntry("");
+    setPinError(null);
+    void fetchQueue("");
+  };
+
   // First user interaction unlocks audio
   const handleUserInteraction = () => {
     unlockAudio();
@@ -187,6 +277,7 @@ export default function QueueDisplayClient({
   };
 
   const isStale = Date.now() - lastUpdatedTime > 60000;
+  const isLocked = Boolean(data?.isPinRequired && !data?.isPinValid);
 
   // Render Skeleton for initial loading
   if (loading && !data) {
@@ -202,6 +293,56 @@ export default function QueueDisplayClient({
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-8 mt-8">
           <div className="lg:col-span-3 rounded-2xl animate-pulse p-10" style={{ backgroundColor: darkColors.surface }} />
           <div className="lg:col-span-2 rounded-2xl animate-pulse p-10" style={{ backgroundColor: darkColors.surface }} />
+        </div>
+      </div>
+    );
+  }
+
+  // Render Error recovery screen if initial fetch failed
+  if (!data && error) {
+    return (
+      <div
+        className="min-h-screen w-full flex flex-col items-center justify-center p-6 sm:p-10 font-sans select-none"
+        style={{ backgroundColor: darkColors.background, color: darkColors.text }}
+      >
+        <div
+          className="w-full max-w-lg rounded-3xl border p-8 sm:p-10 flex flex-col items-center text-center shadow-2xl"
+          style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
+        >
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 border"
+            style={{
+              backgroundColor: darkColors.warningBg,
+              borderColor: darkColors.warningBorder,
+              color: darkColors.warningText,
+            }}
+          >
+            <AlertCircle className="w-8 h-8" />
+          </div>
+
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-3">
+            Unable to Load TV Queue Display
+          </h2>
+
+          <p className="text-sm sm:text-base mb-6 leading-relaxed" style={{ color: darkColors.textMuted }}>
+            {error}
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              void fetchQueue();
+            }}
+            className="px-6 py-3 rounded-2xl font-bold uppercase tracking-wider text-xs sm:text-sm transition-all duration-150 cursor-pointer shadow-md hover:opacity-90 active:scale-98 flex items-center gap-2"
+            style={{
+              backgroundColor: darkColors.primary,
+              color: "white",
+            }}
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Retry Connection</span>
+          </button>
         </div>
       </div>
     );
@@ -255,16 +396,26 @@ export default function QueueDisplayClient({
               <span
                 className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"
                 style={{
-                  backgroundColor: isStale ? darkColors.warningBg : darkColors.primaryLight,
-                  color: isStale ? darkColors.warningText : darkColors.primary,
+                  backgroundColor: isLocked
+                    ? darkColors.warningBg
+                    : isStale
+                    ? darkColors.warningBg
+                    : darkColors.primaryLight,
+                  color: isLocked
+                    ? darkColors.warningText
+                    : isStale
+                    ? darkColors.warningText
+                    : darkColors.primary,
                 }}
               >
                 <span className="w-2 h-2 rounded-full bg-current animate-ping" />
-                {isStale ? "Syncing..." : "Live Queue Board"}
+                {isLocked ? "Locked (PIN Required)" : isStale ? "Syncing..." : "Live Queue Board"}
               </span>
-              <span className="text-xs" style={{ color: darkColors.textMuted }}>
-                {data?.patientsWaitingCount || 0} waiting in line
-              </span>
+              {!isLocked && (
+                <span className="text-xs" style={{ color: darkColors.textMuted }}>
+                  {data?.patientsWaitingCount || 0} waiting in line
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -279,6 +430,24 @@ export default function QueueDisplayClient({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Lock Board Button */}
+            {!isLocked && data?.isPinRequired && (
+              <button
+                type="button"
+                onClick={handleLockBoard}
+                title="Lock TV Display Board (Clear Stored PIN)"
+                aria-label="Lock TV Board"
+                className="p-3 rounded-xl border transition-all duration-150 flex items-center justify-center cursor-pointer hover:opacity-90 active:scale-95"
+                style={{
+                  backgroundColor: darkColors.surfaceHighlight,
+                  borderColor: darkColors.border,
+                  color: darkColors.textSecondary,
+                }}
+              >
+                <Lock className="w-6 h-6" />
+              </button>
+            )}
+
             {/* Audio Mute/Unmute Toggle */}
             <button
               type="button"
@@ -328,8 +497,160 @@ export default function QueueDisplayClient({
         </div>
       )}
 
-      {/* Main 2-Column Split Layout */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-10">
+      {/* Main Content: Keypad or 2-Column Split Layout */}
+      {isLocked ? (
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div
+            className="w-full max-w-md rounded-3xl border p-8 sm:p-10 flex flex-col items-center shadow-2xl"
+            style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
+          >
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 border shadow-inner"
+              style={{
+                backgroundColor: darkColors.surfaceHighlight,
+                borderColor: darkColors.border,
+                color: darkColors.primary,
+              }}
+            >
+              <Lock className="w-8 h-8" />
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-center mb-2">
+              TV Queue Board Locked
+            </h2>
+            <p className="text-sm text-center mb-6 leading-relaxed" style={{ color: darkColors.textMuted }}>
+              This waiting area display board is protected. Enter the TV passcode configured in Clinic Settings to view live queue tickets.
+            </p>
+
+            {/* Masked PIN Dots Indicator */}
+            <div className="flex items-center justify-center gap-3 mb-6">
+              {[0, 1, 2, 3, 4, 5].map((idx) => {
+                const isFilled = idx < pinEntry.length;
+                return (
+                  <div
+                    key={idx}
+                    className={`w-4 h-4 rounded-full border-2 transition-all duration-150 flex items-center justify-center ${
+                      isFilled ? "scale-110" : ""
+                    }`}
+                    style={{
+                      borderColor: isFilled ? darkColors.primary : darkColors.border,
+                      backgroundColor: isFilled ? darkColors.primary : "transparent",
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Error Message */}
+            {pinError && (
+              <div
+                className="w-full mb-6 p-3 rounded-xl border flex items-center gap-2 text-xs font-medium"
+                style={{
+                  backgroundColor: darkColors.warningBg,
+                  borderColor: darkColors.warningBorder,
+                  color: darkColors.warningText,
+                }}
+              >
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{pinError}</span>
+              </div>
+            )}
+
+            {/* Numeric Keypad */}
+            <div className="grid grid-cols-3 gap-3 w-full max-w-xs mb-6">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                <button
+                  key={digit}
+                  type="button"
+                  onClick={() => {
+                    if (pinEntry.length < 8) {
+                      setPinEntry((prev) => prev + digit);
+                      setPinError(null);
+                    }
+                  }}
+                  className="h-14 rounded-2xl border text-xl font-bold font-mono flex items-center justify-center transition-all duration-100 hover:opacity-90 active:scale-95 cursor-pointer shadow-sm"
+                  style={{
+                    backgroundColor: darkColors.surfaceHighlight,
+                    borderColor: darkColors.border,
+                    color: darkColors.text,
+                  }}
+                >
+                  {digit}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setPinEntry("");
+                  setPinError(null);
+                }}
+                className="h-14 rounded-2xl border text-xs font-bold uppercase tracking-wider flex items-center justify-center transition-all duration-100 hover:opacity-90 active:scale-95 cursor-pointer shadow-sm"
+                style={{
+                  backgroundColor: darkColors.surface,
+                  borderColor: darkColors.border,
+                  color: darkColors.textMuted,
+                }}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pinEntry.length < 8) {
+                    setPinEntry((prev) => prev + "0");
+                    setPinError(null);
+                  }
+                }}
+                className="h-14 rounded-2xl border text-xl font-bold font-mono flex items-center justify-center transition-all duration-100 hover:opacity-90 active:scale-95 cursor-pointer shadow-sm"
+                style={{
+                  backgroundColor: darkColors.surfaceHighlight,
+                  borderColor: darkColors.border,
+                  color: darkColors.text,
+                }}
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPinEntry((prev) => prev.slice(0, -1));
+                  setPinError(null);
+                }}
+                className="h-14 rounded-2xl border text-lg font-bold flex items-center justify-center transition-all duration-100 hover:opacity-90 active:scale-95 cursor-pointer shadow-sm"
+                style={{
+                  backgroundColor: darkColors.surface,
+                  borderColor: darkColors.border,
+                  color: darkColors.textMuted,
+                }}
+              >
+                ⌫
+              </button>
+            </div>
+
+            {/* Submit / Unlock Button */}
+            <button
+              type="button"
+              disabled={pinEntry.length === 0 || unlocking}
+              onClick={() => handleUnlock(pinEntry)}
+              className="w-full py-4 rounded-2xl font-bold uppercase tracking-wider text-sm transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md hover:opacity-90 active:scale-98 flex items-center justify-center gap-2"
+              style={{
+                backgroundColor: darkColors.primary,
+                color: "white",
+              }}
+            >
+              {unlocking ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Verifying Passcode...</span>
+                </>
+              ) : (
+                <span>Unlock TV Display</span>
+              )}
+            </button>
+          </div>
+        </main>
+      ) : (
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-10">
         {/* Left Column (Flex 3 / 60%): NOW SERVING */}
         <section className="lg:col-span-3 flex flex-col gap-6">
           <div className="flex items-center justify-between">
@@ -604,6 +925,7 @@ export default function QueueDisplayClient({
           </div>
         </section>
       </main>
+      )}
 
       {/* Footer Ticker Bar */}
       <footer

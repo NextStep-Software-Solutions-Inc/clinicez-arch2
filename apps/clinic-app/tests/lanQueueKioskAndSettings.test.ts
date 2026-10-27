@@ -84,7 +84,13 @@ mock.module('../constants/fonts', () => ({
 }));
 
 
-import { isQueueDisplayPath, isCurrentRouteQueueDisplay } from '../utils/queueDisplayRoute';
+import {
+  isQueueDisplayPath,
+  isCurrentRouteQueueDisplay,
+  isGuidOrUuid,
+  resolveTvDisplaySlugs,
+  buildCloudTvDisplayUrl,
+} from '../utils/queueDisplayRoute';
 import { CHIME_CONFIG, isAudioMuted, setAudioMuted, playAlertChime, unlockAudio } from '../utils/audioChime';
 
 describe('Milestone 4: Clinic-App LAN Queue Kiosk & Route Detection', () => {
@@ -155,6 +161,75 @@ describe('Milestone 4: Clinic-App LAN Queue Kiosk & Route Detection', () => {
     test('WaitingAreaTvSettingsCard is exported as default', async () => {
       const mod = await import('../components/settings/WaitingAreaTvSettingsCard');
       expect(typeof mod.default).toBe('function');
+    });
+  });
+
+  describe('Strict Non-UUID Guarantee & TV Passcode PIN Protection (Anti-Leak)', () => {
+    const sampleGuid = '476a9086-c0eb-4aef-8ec6-49bb1cfd17c6';
+
+    test('isGuidOrUuid accurately identifies GUIDs and ignores valid slugs', () => {
+      expect(isGuidOrUuid(sampleGuid)).toBe(true);
+      expect(isGuidOrUuid('476A9086-C0EB-4AEF-8EC6-49BB1CFD17C6')).toBe(true);
+      expect(isGuidOrUuid('nextstep')).toBe(false);
+      expect(isGuidOrUuid('main-clinic')).toBe(false);
+      expect(isGuidOrUuid(null)).toBe(false);
+      expect(isGuidOrUuid(undefined)).toBe(false);
+    });
+
+    test('resolveTvDisplaySlugs NEVER outputs a UUID/GUID even if settings contain tenantId', () => {
+      // Case 1: settings has tenantId (UUID) but no tenantSlug, and ctx has facilitySlug "nextstep"
+      const result1 = resolveTvDisplaySlugs(
+        { tenantId: sampleGuid, tenantSlug: null, facilitySlug: null },
+        { facilitySlug: 'nextstep', tenantSlug: null }
+      );
+      expect(result1.tenantSlug).toBe('nextstep');
+      expect(result1.facilitySlug).toBe('main');
+      expect(isGuidOrUuid(result1.tenantSlug)).toBe(false);
+      expect(isGuidOrUuid(result1.facilitySlug)).toBe(false);
+
+      // Case 2: settings has tenantSlug as a GUID (misconfigured)
+      const result2 = resolveTvDisplaySlugs(
+        { tenantId: sampleGuid, tenantSlug: sampleGuid, facilitySlug: 'lobby' },
+        null
+      );
+      expect(result2.tenantSlug).toBe('lobby'); // Promoted from facilitySlug since tenantSlug was invalid GUID!
+      expect(result2.facilitySlug).toBe('main');
+      expect(isGuidOrUuid(result2.tenantSlug)).toBe(false);
+
+      // Case 3: complete fallback without any valid slugs defaults to "clinic" and "main"
+      const result3 = resolveTvDisplaySlugs(
+        { tenantId: sampleGuid, tenantSlug: sampleGuid, facilitySlug: sampleGuid },
+        { tenantSlug: sampleGuid, facilitySlug: sampleGuid }
+      );
+      expect(result3.tenantSlug).toBe('clinic');
+      expect(result3.facilitySlug).toBe('main');
+      expect(isGuidOrUuid(result3.tenantSlug)).toBe(false);
+      expect(isGuidOrUuid(result3.facilitySlug)).toBe(false);
+    });
+
+    test('buildCloudTvDisplayUrl constructs slug-based public URLs without UUIDs and appends PIN correctly', () => {
+      const portalBase = 'https://dev.clinicez.net';
+
+      // Clean URL for public / unauthorized users
+      const cleanUrl = buildCloudTvDisplayUrl(
+        portalBase,
+        { tenantSlug: 'nextstep', facilitySlug: 'main', tvDisplayPin: '4321' },
+        null,
+        false // Do NOT include PIN
+      );
+      expect(cleanUrl).toBe('https://dev.clinicez.net/queue-display/nextstep/main');
+      expect(cleanUrl).not.toContain(sampleGuid);
+      expect(cleanUrl).not.toContain('4321');
+
+      // Pre-authenticated URL for lobby wall TV hardware setup
+      const pinUrl = buildCloudTvDisplayUrl(
+        portalBase,
+        { tenantSlug: 'nextstep', facilitySlug: 'main', tvDisplayPin: '4321' },
+        null,
+        true // Include PIN
+      );
+      expect(pinUrl).toBe('https://dev.clinicez.net/queue-display/nextstep/main?pin=4321');
+      expect(pinUrl).not.toContain(sampleGuid);
     });
   });
 });

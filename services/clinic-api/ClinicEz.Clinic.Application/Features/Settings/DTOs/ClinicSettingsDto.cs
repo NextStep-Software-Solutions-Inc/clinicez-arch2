@@ -71,4 +71,7 @@ public sealed record ClinicSettingsDto(
     string? BranchPhilHealthAccreditationNumber = null,
     string? BranchPmccNumber = null,
     string? BranchSoftwareCertificateId = null,
-    string? BranchKonsultaEndpoint = null);
+    string? BranchKonsultaEndpoint = null,
+    string? TenantSlug = null,
+    string? FacilitySlug = null,
+    string? TvDisplayPin = null);

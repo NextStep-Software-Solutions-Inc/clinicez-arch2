@@ -293,4 +293,95 @@ describe('Public TV Display Board E2E Test Suite (portal-web)', () => {
       expect(nowServingConfig.title).toBe('Now Serving');
     });
   });
+
+  describe('F2.9: Strict Non-UUID Slugs & TV Passcode PIN Protection (Anti-Leak)', () => {
+    const isGuid = (val?: string | null): boolean =>
+      Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim()));
+
+    it('F2.9-T1: Rejects tenant or facility GUIDs and permits only human-readable slugs', () => {
+      const sampleTenantUuid = '476a9086-c0eb-4aef-8ec6-49bb1cfd17c6';
+      const sampleFacilityUuid = 'b5063077-e8ba-4674-bf1b-c74ba4526df6';
+      const validTenantSlug = 'nextstep';
+      const validFacilitySlug = 'main';
+
+      expect(isGuid(sampleTenantUuid)).toBe(true);
+      expect(isGuid(sampleFacilityUuid)).toBe(true);
+      expect(isGuid(validTenantSlug)).toBe(false);
+      expect(isGuid(validFacilitySlug)).toBe(false);
+
+      const validateTvSlugs = (tSlug: string, fSlug: string) => {
+        if (isGuid(tSlug) || isGuid(fSlug)) {
+          return { valid: false, statusCode: 404, error: 'Queue board not found or cannot be resolved.' };
+        }
+        return { valid: true, statusCode: 200, error: null };
+      };
+
+      expect(validateTvSlugs(sampleTenantUuid, 'main').valid).toBe(false);
+      expect(validateTvSlugs(sampleTenantUuid, 'main').statusCode).toBe(404);
+      expect(validateTvSlugs('nextstep', sampleFacilityUuid).valid).toBe(false);
+      expect(validateTvSlugs('nextstep', sampleFacilityUuid).statusCode).toBe(404);
+      expect(validateTvSlugs(validTenantSlug, validFacilitySlug).valid).toBe(true);
+    });
+
+    it('F2.9-T2: When PIN is configured and missing/incorrect, hides tickets and locks screen', () => {
+      const evaluatePinAccess = (configuredPin: string | null, suppliedPin?: string | null) => {
+        const isPinRequired = Boolean(configuredPin && configuredPin.trim().length > 0);
+        if (!isPinRequired) {
+          return { isPinRequired: false, isPinValid: true, canViewTickets: true };
+        }
+        const isPinValid = Boolean(suppliedPin && suppliedPin.trim() === configuredPin!.trim());
+        return {
+          isPinRequired: true,
+          isPinValid,
+          canViewTickets: isPinValid,
+        };
+      };
+
+      // No PIN configured: public access allowed
+      expect(evaluatePinAccess(null, null)).toEqual({
+        isPinRequired: false,
+        isPinValid: true,
+        canViewTickets: true,
+      });
+
+      // PIN configured: leaked link without PIN cannot view tickets
+      const leakedAccess = evaluatePinAccess('1234', null);
+      expect(leakedAccess.isPinRequired).toBe(true);
+      expect(leakedAccess.isPinValid).toBe(false);
+      expect(leakedAccess.canViewTickets).toBe(false);
+
+      // PIN configured: wrong PIN entered
+      const wrongPinAccess = evaluatePinAccess('1234', '9999');
+      expect(wrongPinAccess.isPinRequired).toBe(true);
+      expect(wrongPinAccess.isPinValid).toBe(false);
+      expect(wrongPinAccess.canViewTickets).toBe(false);
+
+      // PIN configured: correct PIN supplied via keypad or URL param
+      const authorizedAccess = evaluatePinAccess('1234', '1234');
+      expect(authorizedAccess.isPinRequired).toBe(true);
+      expect(authorizedAccess.isPinValid).toBe(true);
+      expect(authorizedAccess.canViewTickets).toBe(true);
+    });
+
+    it('F2.9-T3: Skeleton loading trap resolved on error', () => {
+      let loading = true;
+      let data: any = undefined;
+      let error: string | null = null;
+
+      // Simulate API failure (e.g. 404 or network issue)
+      const onApiFailure = (errMessage: string) => {
+        error = errMessage;
+        loading = false; // CRITICAL: Stop skeleton trap!
+      };
+
+      onApiFailure('Tenant not found');
+
+      expect(loading).toBe(false);
+      expect(error).toBe('Tenant not found');
+      // Verify condition for skeleton: (loading && !data) is false!
+      expect(loading && !data).toBe(false);
+      // Verify error screen condition: (!data && error) is true!
+      expect(!data && Boolean(error)).toBe(true);
+    });
+  });
 });

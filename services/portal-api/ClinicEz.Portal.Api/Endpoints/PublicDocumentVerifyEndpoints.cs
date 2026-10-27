@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -36,6 +37,15 @@ public sealed class PublicDocumentVerifyEndpoints : IEndpoint
 {
     public const string RateLimitPolicy = "PublicApi";
 
+    private static readonly HashSet<string> ValidKinds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "med-cert", "medical-certificate",
+        "rx", "prescription",
+        "referral",
+        "lab-order", "lab-report", "lab",
+        "receipt", "billing-receipt", "invoice"
+    };
+
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         string[] verifyRoutes = [
@@ -54,6 +64,23 @@ public sealed class PublicDocumentVerifyEndpoints : IEndpoint
         }
     }
 
+    public static string NormalizeKind(string kind) => kind.Trim().ToLowerInvariant() switch
+    {
+        "med-cert" or "medical-certificate" => "medical-certificate",
+        "rx" or "prescription" => "rx",
+        "referral" => "referral",
+        "lab-order" or "lab" => "lab-order",
+        "lab-report" => "lab-report",
+        "receipt" or "billing-receipt" or "invoice" => "receipt",
+        _ => kind.Trim().ToLowerInvariant()
+    };
+
+    public static bool KindsMatch(string? requestedKind, string documentKind)
+    {
+        if (string.IsNullOrWhiteSpace(requestedKind)) return true;
+        return string.Equals(NormalizeKind(requestedKind), NormalizeKind(documentKind), StringComparison.OrdinalIgnoreCase);
+    }
+
     public static async Task<IResult> VerifyDocumentAsync(
         string? kind,
         string token,
@@ -69,6 +96,11 @@ public sealed class PublicDocumentVerifyEndpoints : IEndpoint
         var cleanToken = token.Trim();
         var cleanKind = kind?.Trim().ToLowerInvariant();
 
+        if (!string.IsNullOrWhiteSpace(cleanKind) && !ValidKinds.Contains(cleanKind))
+        {
+            return Results.BadRequest(ApiResponse<DocumentVerificationResult>.Fail($"Unrecognized document category '{kind}'.", "INVALID_DOCUMENT_KIND"));
+        }
+
         // 1. Check if token is full SecurityDigest (or starts with SEC-SHA256-)
         string? searchDigest = cleanToken;
         if (!searchDigest.StartsWith(DocumentSecurityService.SecurityDigestPrefix, StringComparison.OrdinalIgnoreCase) && searchDigest.Length == 16)
@@ -76,12 +108,21 @@ public sealed class PublicDocumentVerifyEndpoints : IEndpoint
             searchDigest = $"{DocumentSecurityService.SecurityDigestPrefix}{searchDigest.ToUpperInvariant()}";
         }
 
-        var digestMatch = await context.DocumentAttestations.AsNoTracking()
-            .FirstOrDefaultAsync(d => d.SecurityDigest == searchDigest || d.SecurityDigest == cleanToken, ct);
+        var digestMatches = await context.DocumentAttestations.AsNoTracking()
+            .Where(d => d.SecurityDigest == searchDigest || d.SecurityDigest == cleanToken)
+            .ToListAsync(ct);
 
-        if (digestMatch != null)
+        if (digestMatches.Count > 0)
         {
-            return ReturnVerified(digestMatch);
+            var match = digestMatches.FirstOrDefault(d => KindsMatch(cleanKind, d.DocumentKind));
+            if (match != null)
+            {
+                return ReturnVerified(match);
+            }
+
+            return Results.BadRequest(ApiResponse<DocumentVerificationResult>.Fail(
+                $"The requested document reference is a {FormatDocumentKind(digestMatches[0].DocumentKind)}, not a {FormatDocumentKind(cleanKind!)}.",
+                "DOCUMENT_KIND_MISMATCH"));
         }
 
         // 2. Check if token is PublicVerificationTokenHash for prescriptions
@@ -93,67 +134,77 @@ public sealed class PublicDocumentVerifyEndpoints : IEndpoint
 
         if (rxMatch != null)
         {
+            if (!KindsMatch(cleanKind, rxMatch.DocumentKind))
+            {
+                return Results.BadRequest(ApiResponse<DocumentVerificationResult>.Fail(
+                    $"The requested verification token is for an Electronic Prescription, not a {FormatDocumentKind(cleanKind!)}.",
+                    "DOCUMENT_KIND_MISMATCH"));
+            }
+
             return ReturnVerified(rxMatch);
         }
 
         // 3. Check by DocumentNumber (e.g. "MC-20261025-0001", "RX-20261025-0042")
-        var candidatesQuery = context.DocumentAttestations.AsNoTracking()
-            .Where(d => d.DocumentNumber.ToUpper() == cleanToken.ToUpper());
+        var allCandidates = await context.DocumentAttestations.AsNoTracking()
+            .Where(d => d.DocumentNumber.ToUpper() == cleanToken.ToUpper())
+            .ToListAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(cleanKind))
+        if (allCandidates.Count > 0)
         {
-            candidatesQuery = candidatesQuery.Where(d => d.DocumentKind.ToLower() == cleanKind);
-        }
+            var candidates = allCandidates.Where(d => KindsMatch(cleanKind, d.DocumentKind)).ToList();
 
-        var candidates = await candidatesQuery.ToListAsync(ct);
-
-        if (candidates.Count == 0)
-        {
-            return Results.NotFound(ApiResponse<DocumentVerificationResult>.Fail(
-                "Unable to verify this document reference against the Clinic EZ registry.",
-                "NOT_FOUND"));
-        }
-
-        // Multi-tenant collision check
-        if (candidates.Select(c => c.TenantId).Distinct().Count() > 1)
-        {
-            if (string.IsNullOrWhiteSpace(sig))
-            {
-                return Results.Conflict(ApiResponse<DocumentVerificationResult>.Fail(
-                    "Ambiguous document number across multiple clinics. Please provide the security seal signature (?sig=) printed on the document.",
-                    "DOCUMENT_NUMBER_AMBIGUOUS"));
-            }
-
-            var verifiedMatches = candidates.Where(c => DocumentSecurityService.VerifyShortSignature(c.SecurityDigest, sig)).ToList();
-            if (verifiedMatches.Count == 1)
-            {
-                return ReturnVerified(verifiedMatches[0]);
-            }
-
-            if (verifiedMatches.Count > 1)
-            {
-                return Results.Conflict(ApiResponse<DocumentVerificationResult>.Fail(
-                    "Cryptographic collision detected for seal across multiple organizations.",
-                    "COLLISION_DETECTED"));
-            }
-
-            return Results.NotFound(ApiResponse<DocumentVerificationResult>.Fail(
-                "Document number verified but signature seal did not match.",
-                "SEAL_MISMATCH"));
-        }
-
-        var singleMatch = candidates[0];
-        if (!string.IsNullOrWhiteSpace(sig))
-        {
-            if (!DocumentSecurityService.VerifyShortSignature(singleMatch.SecurityDigest, sig))
+            if (candidates.Count == 0)
             {
                 return Results.BadRequest(ApiResponse<DocumentVerificationResult>.Fail(
-                    "Security signature seal does not match the official record.",
-                    "INVALID_SIGNATURE_SEAL"));
+                    $"Document reference '{cleanToken}' is a {FormatDocumentKind(allCandidates[0].DocumentKind)}, not a {FormatDocumentKind(cleanKind!)}.",
+                    "DOCUMENT_KIND_MISMATCH"));
             }
+
+            // Multi-tenant collision check
+            if (candidates.Select(c => c.TenantId).Distinct().Count() > 1)
+            {
+                if (string.IsNullOrWhiteSpace(sig))
+                {
+                    return Results.Conflict(ApiResponse<DocumentVerificationResult>.Fail(
+                        "Ambiguous document number across multiple clinics. Please provide the security seal signature (?sig=) printed on the document.",
+                        "DOCUMENT_NUMBER_AMBIGUOUS"));
+                }
+
+                var verifiedMatches = candidates.Where(c => DocumentSecurityService.VerifyShortSignature(c.SecurityDigest, sig)).ToList();
+                if (verifiedMatches.Count == 1)
+                {
+                    return ReturnVerified(verifiedMatches[0]);
+                }
+
+                if (verifiedMatches.Count > 1)
+                {
+                    return Results.Conflict(ApiResponse<DocumentVerificationResult>.Fail(
+                        "Cryptographic collision detected for seal across multiple organizations.",
+                        "COLLISION_DETECTED"));
+                }
+
+                return Results.NotFound(ApiResponse<DocumentVerificationResult>.Fail(
+                    "Document number verified but signature seal did not match.",
+                    "SEAL_MISMATCH"));
+            }
+
+            var singleMatch = candidates[0];
+            if (!string.IsNullOrWhiteSpace(sig))
+            {
+                if (!DocumentSecurityService.VerifyShortSignature(singleMatch.SecurityDigest, sig))
+                {
+                    return Results.BadRequest(ApiResponse<DocumentVerificationResult>.Fail(
+                        "Security signature seal does not match the official record.",
+                        "INVALID_SIGNATURE_SEAL"));
+                }
+            }
+
+            return ReturnVerified(singleMatch);
         }
 
-        return ReturnVerified(singleMatch);
+        return Results.NotFound(ApiResponse<DocumentVerificationResult>.Fail(
+            "Unable to verify this document reference against the Clinic EZ registry.",
+            "NOT_FOUND"));
     }
 
     private static IResult ReturnVerified(DocumentAttestation attestation)
@@ -180,14 +231,14 @@ public sealed class PublicDocumentVerifyEndpoints : IEndpoint
         return Results.Ok(ApiResponse<DocumentVerificationResult>.Success(result));
     }
 
-    private static string FormatDocumentKind(string kind) => kind.ToLowerInvariant() switch
+    public static string FormatDocumentKind(string kind) => kind.ToLowerInvariant() switch
     {
         "medical-certificate" or "med-cert" => "Medical Certificate",
         "rx" or "prescription" => "Electronic Prescription",
         "referral" => "Clinical Referral Letter",
-        "lab-order" => "Laboratory Requisition",
+        "lab-order" or "lab" => "Laboratory Requisition",
         "lab-report" => "Diagnostic Laboratory Report",
-        "receipt" => "Official Billing Receipt",
+        "receipt" or "billing-receipt" or "invoice" => "Official Billing Receipt",
         _ => "Clinical Healthcare Document"
     };
 }

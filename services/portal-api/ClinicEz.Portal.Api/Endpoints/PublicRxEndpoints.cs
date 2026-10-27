@@ -121,46 +121,51 @@ public sealed class PublicRxEndpoints : IEndpoint
         var cleanToken = token.Trim().ToLowerInvariant();
         var tokenHash = ComputeTokenHash(cleanToken);
 
-        // 1. Try DocumentAttestation lookup
+        // 1. Try DocumentAttestation lookup by verification token hash
         var attestation = await context.DocumentAttestations.AsNoTracking()
-            .FirstOrDefaultAsync(a => a.VerificationTokenHash == tokenHash &&
-                (a.DocumentKind == "prescription" || a.DocumentKind == "rx"), ct);
+            .FirstOrDefaultAsync(a => a.VerificationTokenHash == tokenHash, ct);
 
         if (attestation != null)
         {
-            var isRevoked = string.Equals(attestation.Status, "REVOKED", StringComparison.OrdinalIgnoreCase);
-            var isExpired = attestation.ExpiresAtUtc.HasValue && attestation.ExpiresAtUtc.Value < DateTime.UtcNow;
-            var isDispensed = attestation.IsAlreadyDispensed || string.Equals(attestation.Status, "DISPENSED", StringComparison.OrdinalIgnoreCase);
+            if (attestation.DocumentKind != "prescription" && attestation.DocumentKind != "rx")
+            {
+                return Results.BadRequest(ApiResponse<RxAttestationInfo>.Fail(
+                    $"This token belongs to a {attestation.DocumentKind} document, not an electronic prescription.",
+                    "DOCUMENT_KIND_MISMATCH"));
+            }
 
-            var info = new RxAttestationInfo(
-                PrescriptionNumber: attestation.DocumentNumber,
-                ClinicName: attestation.ClinicName,
-                ClinicAddress: attestation.ClinicAddress,
-                ClinicContact: attestation.ClinicContact,
-                DoctorName: attestation.DoctorName,
-                DoctorPrcLicense: attestation.DoctorPrcLicense,
-                DoctorPtr: attestation.DoctorPtr,
-                DoctorS2License: attestation.DoctorS2License,
-                IssuedAt: attestation.IssuedAtUtc,
-                ExpiresAt: attestation.ExpiresAtUtc,
-                IsExpired: isExpired,
-                Status: isRevoked ? "REVOKED" : (isDispensed ? "DISPENSED" : (isExpired ? "EXPIRED" : "ACTIVE")),
-                DispenseStatus: attestation.DispenseStatus ?? (isDispensed ? "DispensedExternally" : "Pending"),
-                IsValid: !isRevoked,
-                IsAlreadyDispensed: isDispensed,
-                DispensedPharmacyName: attestation.DispensedPharmacyName,
-                DispensedAt: attestation.DispensedAtUtc,
-                HasDangerousDrug: attestation.HasDangerousDrug,
-                ItemCount: attestation.ItemCount,
-                SyncStatus: "Synced",
-                IsOfflinePending: false
-            );
-
-            return Results.Ok(ApiResponse<RxAttestationInfo>.Success(info));
+            return ReturnAttestationInfo(attestation);
         }
 
-        // 2. Offline Edge Cell Fallback: Extract clinicId from token prefix {clinicId:N}.{secret}
-        if (cleanToken.Length >= 33 && cleanToken[32] == '.' && Guid.TryParseExact(cleanToken[..32], "N", out var clinicId))
+        // 2. Reject non-prescription document references by number or digest
+        var docByNumber = await context.DocumentAttestations.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.DocumentNumber.ToLower() == cleanToken || a.SecurityDigest.ToLower() == cleanToken, ct);
+
+        if (docByNumber != null)
+        {
+            if (docByNumber.DocumentKind != "prescription" && docByNumber.DocumentKind != "rx")
+            {
+                return Results.BadRequest(ApiResponse<RxAttestationInfo>.Fail(
+                    $"Document reference '{cleanToken}' was found, but it is a {docByNumber.DocumentKind}, not an electronic prescription.",
+                    "DOCUMENT_KIND_MISMATCH"));
+            }
+
+            return ReturnAttestationInfo(docByNumber);
+        }
+
+        if (cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("sec-sha256-"))
+        {
+            return Results.BadRequest(ApiResponse<RxAttestationInfo>.Fail(
+                "The provided reference is for a non-prescription clinical document.",
+                "DOCUMENT_KIND_MISMATCH"));
+        }
+
+        // 3. Offline Edge Cell Fallback: Extract clinicId from token format {clinicId:N}.{secret:N}
+        // Strict format validation: MUST be exactly 65 chars (32 hex + '.' + 32 hex GUID), NOT a lab token (length ~55, base64url)
+        if (cleanToken.Length == 65 && cleanToken[32] == '.' &&
+            Guid.TryParseExact(cleanToken[..32], "N", out var clinicId) &&
+            Guid.TryParseExact(cleanToken[33..], "N", out var secretGuid) &&
+            secretGuid != Guid.Empty)
         {
             var facility = await context.Facilities.AsNoTracking()
                 .Include(f => f.Tenant)
@@ -198,6 +203,39 @@ public sealed class PublicRxEndpoints : IEndpoint
         }
 
         return Results.NotFound(ApiResponse<RxAttestationInfo>.Fail("Prescription not found or invalid verification token.", "NOT_FOUND"));
+    }
+
+    private static IResult ReturnAttestationInfo(DocumentAttestation attestation)
+    {
+        var isRevoked = string.Equals(attestation.Status, "REVOKED", StringComparison.OrdinalIgnoreCase);
+        var isExpired = attestation.ExpiresAtUtc.HasValue && attestation.ExpiresAtUtc.Value < DateTime.UtcNow;
+        var isDispensed = attestation.IsAlreadyDispensed || string.Equals(attestation.Status, "DISPENSED", StringComparison.OrdinalIgnoreCase);
+
+        var info = new RxAttestationInfo(
+            PrescriptionNumber: attestation.DocumentNumber,
+            ClinicName: attestation.ClinicName,
+            ClinicAddress: attestation.ClinicAddress,
+            ClinicContact: attestation.ClinicContact,
+            DoctorName: attestation.DoctorName,
+            DoctorPrcLicense: attestation.DoctorPrcLicense,
+            DoctorPtr: attestation.DoctorPtr,
+            DoctorS2License: attestation.DoctorS2License,
+            IssuedAt: attestation.IssuedAtUtc,
+            ExpiresAt: attestation.ExpiresAtUtc,
+            IsExpired: isExpired,
+            Status: isRevoked ? "REVOKED" : (isDispensed ? "DISPENSED" : (isExpired ? "EXPIRED" : "ACTIVE")),
+            DispenseStatus: attestation.DispenseStatus ?? (isDispensed ? "DispensedExternally" : "Pending"),
+            IsValid: !isRevoked,
+            IsAlreadyDispensed: isDispensed,
+            DispensedPharmacyName: attestation.DispensedPharmacyName,
+            DispensedAt: attestation.DispensedAtUtc,
+            HasDangerousDrug: attestation.HasDangerousDrug,
+            ItemCount: attestation.ItemCount,
+            SyncStatus: "Synced",
+            IsOfflinePending: false
+        );
+
+        return Results.Ok(ApiResponse<RxAttestationInfo>.Success(info));
     }
 
     public static async Task<IResult> SubmitDispenseJsonAsync(

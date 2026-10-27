@@ -125,6 +125,12 @@ public sealed class ClinicSettings : BaseEntity
     public bool TvDisplayMaskPatientNames { get; set; } = true;
 
     /// <summary>
+    /// Optional PIN / passcode required to view the waiting area TV display (both LAN and Cloud).
+    /// If set, visitors opening the TV link must supply this PIN to unlock the live queue display.
+    /// </summary>
+    public string? TvDisplayPin { get; set; }
+
+    /// <summary>
     /// Controls whether mobile patient app push notifications are dispatched for queue events.
     /// </summary>
     public bool EnableQueuePushNotifications { get; set; } = true;

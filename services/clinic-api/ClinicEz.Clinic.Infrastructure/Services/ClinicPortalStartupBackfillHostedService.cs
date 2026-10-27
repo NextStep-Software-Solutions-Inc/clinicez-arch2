@@ -144,6 +144,7 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                         GeneratedAtUtc = DateTime.UtcNow,
                         IsAcceptingWalkIns = !clinic.IsOnlineBookingPaused,
                         PatientsWaitingCount = upNext.Count,
+                        TvDisplayPin = clinic.TvDisplayPin,
                         NowServing = nowServing,
                         UpNext = upNext
                     });

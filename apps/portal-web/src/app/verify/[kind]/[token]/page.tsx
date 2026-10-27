@@ -14,12 +14,27 @@ interface DynamicVerifyPageProps {
   }>;
 }
 
+const VALID_KINDS = new Set([
+  'med-cert', 'medical-certificate', 'medcert',
+  'rx', 'prescription',
+  'referral', 'ref',
+  'lab-order', 'lab', 'lab-report', 'laboratory',
+  'receipt', 'billing-receipt', 'invoice',
+]);
+
 export async function generateMetadata({ params }: DynamicVerifyPageProps) {
   const { kind: rawKind, token: rawToken } = await params;
   const kind = (rawKind || '').trim().toLowerCase();
   const token = (rawToken || '').trim();
 
-  if (kind === 'rx') {
+  if (!VALID_KINDS.has(kind)) {
+    return {
+      title: 'Invalid Document Kind - Clinic EZ Public Registry',
+      description: 'The requested document category is unrecognized.',
+    };
+  }
+
+  if (kind === 'rx' || kind === 'prescription') {
     return {
       title: `Verify Prescription (${token}) - Clinic EZ Interop Portal`,
       description: `Official Philippine electronic prescription verification for external pharmacists. Token: ${token}`,
@@ -42,14 +57,18 @@ export default async function DynamicVerifyPage({ params, searchParams }: Dynami
   const kind = rawKind.trim().toLowerCase();
   const token = rawToken.trim();
 
+  if (!VALID_KINDS.has(kind)) {
+    notFound();
+  }
+
   const sp = searchParams ? await searchParams : {};
   const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;
   const sig = rawSig ? rawSig.trim().replace(/^SEC-SHA256-/i, '') : undefined;
 
   const portalApiUrl = getPortalApiUrl();
 
-  // Branch 1: kind === 'rx' delegates to RxVerifyClient (Pharmacist Verification & Dispense Flow)
-  if (kind === 'rx') {
+  // Branch 1: kind === 'rx' or 'prescription' delegates to RxVerifyClient (Pharmacist Verification & Dispense Flow)
+  if (kind === 'rx' || kind === 'prescription') {
     let rxData: RxVerificationData;
 
     try {
@@ -62,9 +81,16 @@ export default async function DynamicVerifyPage({ params, searchParams }: Dynami
         const payload = await response.json();
         rxData = payload.data || payload;
       } else {
-        throw new Error(`API returned ${response.status}`);
+        const errorJson = await response.json().catch(() => null);
+        const errMsg = errorJson?.message || `API returned ${response.status}`;
+        throw new Error(errMsg);
       }
-    } catch {
+    } catch (err: any) {
+      const errorMsg =
+        err?.message && !err.message.startsWith('API returned')
+          ? err.message
+          : 'Unable to verify prescription reference against the Clinic EZ registry.';
+
       rxData = {
         prescriptionNumber: token,
         issuedAt: new Date().toISOString(),
@@ -89,6 +115,7 @@ export default async function DynamicVerifyPage({ params, searchParams }: Dynami
         itemCount: 0,
         syncStatus: 'Unknown',
         isOfflinePending: false,
+        errorMessage: errorMsg,
       };
     }
 
@@ -131,9 +158,16 @@ export default async function DynamicVerifyPage({ params, searchParams }: Dynami
         notes: null,
       };
     } else {
-      throw new Error(`API returned ${response.status}`);
+      const errorJson = await response.json().catch(() => null);
+      const errMsg = errorJson?.message || `API returned ${response.status}`;
+      throw new Error(errMsg);
     }
-  } catch {
+  } catch (err: any) {
+    const errorMsg =
+      err?.message && !err.message.startsWith('API returned')
+        ? err.message
+        : 'Unable to verify this document reference against the Clinic EZ registry. Please confirm the verification token on the printed document or contact the issuing healthcare facility directly.';
+
     verificationData = {
       isVerified: false,
       documentType: `${kind.toUpperCase()} Document`,
@@ -146,8 +180,7 @@ export default async function DynamicVerifyPage({ params, searchParams }: Dynami
       issueDate: '—',
       status: 'Unverified / Record Not Found',
       securityDigest: token,
-      verificationMessage:
-        'Unable to verify this document reference against the Clinic EZ registry. Please confirm the verification token on the printed document or contact the issuing healthcare facility directly.',
+      verificationMessage: errorMsg,
       notes: null,
     };
   }

@@ -219,6 +219,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                     GeneratedAtUtc = DateTime.UtcNow,
                     IsAcceptingWalkIns = isAcceptingWalkIns,
                     PatientsWaitingCount = upNext.Count,
+                    TvDisplayPin = settings?.TvDisplayPin,
                     NowServing = nowServing,
                     UpNext = upNext
                 };

@@ -130,6 +130,9 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             BranchPhilHealthAccreditationNumber: settings.BranchPhilHealthAccreditationNumber,
             BranchPmccNumber: settings.BranchPmccNumber,
             BranchSoftwareCertificateId: settings.BranchSoftwareCertificateId,
-            BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint);
+            BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint,
+            TenantSlug: settings.TenantSlug,
+            FacilitySlug: settings.FacilitySlug,
+            TvDisplayPin: settings.TvDisplayPin);
     }
 }

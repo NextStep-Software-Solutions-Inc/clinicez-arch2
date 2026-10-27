@@ -282,4 +282,137 @@ public class PublicQueueDisplayTests
         var retrieved = await queryHandler.Handle(new GetClinicSettingsQuery(), CancellationToken.None);
         retrieved.TvDisplayMaskPatientNames.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task Handle_WhenPinConfigured_AndPinMissingOrIncorrect_ReturnsZeroTicketsAndPinRequired()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var clinicSettings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            ClinicName = "Secure Medical",
+            TenantSlug = "secure-med",
+            FacilitySlug = "main",
+            TvDisplayPin = "8421"
+        };
+        await settingsRepo.AddAsync(clinicSettings, CancellationToken.None);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var serving = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            QueueNumber = "S-101",
+            SequenceNumber = 1,
+            QueueDate = today,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Private Patient",
+            Status = QueueStatus.InConsultation
+        };
+        await queueRepo.AddAsync(serving, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new GetPublicQueueDisplayQueryHandler(queueRepo, settingsRepo, _clinicContext);
+
+        // Act 1: No PIN provided (leaked link scenario)
+        var leakedResult = await handler.Handle(new GetPublicQueueDisplayQuery(ClinicId: _clinicId, Date: today, Pin: null), CancellationToken.None);
+
+        // Assert 1: Leaked link must not reveal tickets
+        leakedResult.Should().NotBeNull();
+        leakedResult!.IsPinRequired.Should().BeTrue();
+        leakedResult.IsPinValid.Should().BeFalse();
+        leakedResult.NowServing.Should().BeEmpty();
+        leakedResult.UpNext.Should().BeEmpty();
+        leakedResult.PatientsWaitingCount.Should().Be(0);
+
+        // Act 2: Wrong PIN provided
+        var wrongPinResult = await handler.Handle(new GetPublicQueueDisplayQuery(ClinicId: _clinicId, Date: today, Pin: "9999"), CancellationToken.None);
+
+        // Assert 2: Wrong PIN must not reveal tickets
+        wrongPinResult.Should().NotBeNull();
+        wrongPinResult!.IsPinRequired.Should().BeTrue();
+        wrongPinResult.IsPinValid.Should().BeFalse();
+        wrongPinResult.NowServing.Should().BeEmpty();
+
+        // Act 3: Correct PIN provided
+        var unlockedResult = await handler.Handle(new GetPublicQueueDisplayQuery(ClinicId: _clinicId, Date: today, Pin: "8421"), CancellationToken.None);
+
+        // Assert 3: Correct PIN reveals live tickets
+        unlockedResult.Should().NotBeNull();
+        unlockedResult!.IsPinRequired.Should().BeTrue();
+        unlockedResult.IsPinValid.Should().BeTrue();
+        unlockedResult.NowServing.Should().HaveCount(1);
+        unlockedResult.NowServing[0].TicketNumber.Should().Be("S-101");
+    }
+
+    [Fact]
+    public async Task Handle_TenantSlugNeverFallsBackToGuid()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var clinicSettings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "476a9086-c0eb-4aef-8ec6-49bb1cfd17c6",
+            ClinicId = _clinicId,
+            ClinicName = "Nextstep Clinic",
+            TenantSlug = null, // Empty tenant slug
+            FacilitySlug = null
+        };
+        await settingsRepo.AddAsync(clinicSettings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new GetPublicQueueDisplayQueryHandler(queueRepo, settingsRepo, _clinicContext);
+        var result = await handler.Handle(new GetPublicQueueDisplayQuery(ClinicId: _clinicId), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.TenantSlug.Should().NotBe("476a9086-c0eb-4aef-8ec6-49bb1cfd17c6");
+        result.TenantSlug.Should().Be("clinic");
+    }
+
+    [Fact]
+    public async Task UpdateClinicSettings_PersistsTvDisplayPin()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var initialSettings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            ClinicName = "PIN Test Clinic",
+            TenantSlug = "pin-clinic",
+            FacilitySlug = "main",
+            TvDisplayPin = null
+        };
+        await settingsRepo.AddAsync(initialSettings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var updateHandler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
+
+        // Act: Save PIN 4321
+        var updated = await updateHandler.Handle(new UpdateClinicSettingsCommand(
+            TvDisplayPin: "4321"
+        ), CancellationToken.None);
+
+        updated.TvDisplayPin.Should().Be("4321");
+        updated.TenantSlug.Should().Be("pin-clinic");
+        updated.FacilitySlug.Should().Be("main");
+
+        var queryHandler = new GetClinicSettingsQueryHandler(settingsRepo, _clinicContext, uow);
+        var retrieved = await queryHandler.Handle(new GetClinicSettingsQuery(), CancellationToken.None);
+        retrieved.TvDisplayPin.Should().Be("4321");
+        retrieved.TenantSlug.Should().Be("pin-clinic");
+        retrieved.FacilitySlug.Should().Be("main");
+    }
 }

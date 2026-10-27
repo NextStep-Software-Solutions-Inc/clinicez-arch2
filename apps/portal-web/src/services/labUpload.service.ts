@@ -10,10 +10,13 @@ export const LAB_UPLOAD_MAX_BYTES = Number.isFinite(configuredMax) && configured
 /** Mirrors `LabUploads:AllowedContentTypes` in portal-api. */
 export const LAB_UPLOAD_CONTENT_TYPES: readonly string[] = ["application/pdf", "image/jpeg", "image/png"];
 
-/**
- * What the relay answered. `accepted` is shown identically whether or not the link named a live clinic: the API
- * deliberately cannot be asked whether a token is valid.
- */
+export interface LabUploadInfo {
+  isValid: boolean;
+  clinicName: string;
+  clinicAddress?: string | null;
+  clinicContact?: string | null;
+}
+
 export type LabUploadOutcome =
   | { kind: "accepted" }
   | { kind: "too_large" }
@@ -23,6 +26,18 @@ export type LabUploadOutcome =
   | { kind: "failed" };
 
 export const labUploadService = {
+  /** Queries portal-api to validate whether the upload token is active, valid, and issued for laboratory results. */
+  getLabUploadInfo: async (token: string): Promise<LabUploadInfo> => {
+    const res = await axios.get<{ succeeded?: boolean; data?: LabUploadInfo; message?: string } & LabUploadInfo>(
+      `${apiBaseUrl}/public/lab-uploads/${encodeURIComponent(token)}/info`
+    );
+    const body = res.data;
+    if (body.succeeded === false) {
+      throw new Error(body.message || "Invalid or unrecognized laboratory upload token.");
+    }
+    return (body.data || body) as LabUploadInfo;
+  },
+
   /** Anonymous multipart upload (`file`, optional `labName`). Never sends credentials. */
   submit: async (token: string, file: File, labName: string, onProgress?: (percent: number) => void): Promise<LabUploadOutcome> => {
     const form = new FormData();
@@ -40,7 +55,7 @@ export const labUploadService = {
       if (res.status === 202) return { kind: "accepted" };
       if (res.status === 413) return { kind: "too_large" };
       if (res.status === 415) return { kind: "unsupported_type" };
-      if (res.status === 400) return { kind: "invalid", message: res.data?.message || "The file is empty or does not match its type." };
+      if (res.status === 400 || res.status === 404) return { kind: "invalid", message: res.data?.message || "Invalid or unrecognized laboratory upload token." };
       if (res.status === 429) return { kind: "rate_limited" };
       return { kind: "failed" };
     } catch {

@@ -6,6 +6,7 @@ export interface QueueDisplayQueryParams {
   tenantSlug?: string;
   facilitySlug?: string;
   clinicId?: string;
+  pin?: string;
 }
 
 export const queueDisplayService = {
@@ -17,26 +18,37 @@ export const queueDisplayService = {
     params: QueueDisplayQueryParams
   ): Promise<{ success: boolean; data?: PublicQueueDisplayData; message?: string }> => {
     let endpoint = "/public/queue/display";
+    const searchParams = new URLSearchParams();
+
+    if (params.pin) {
+      searchParams.set("pin", params.pin);
+    }
+
     if (params.tenantSlug && params.facilitySlug) {
       endpoint = `/public/queue/display/${encodeURIComponent(params.tenantSlug)}/${encodeURIComponent(params.facilitySlug)}`;
     } else {
-      const searchParams = new URLSearchParams();
       if (params.tenantSlug) searchParams.set("tenantSlug", params.tenantSlug);
       if (params.facilitySlug) searchParams.set("facilitySlug", params.facilitySlug);
       if (params.clinicId) searchParams.set("clinicId", params.clinicId);
-      const queryStr = searchParams.toString();
-      if (queryStr) {
-        endpoint = `${endpoint}?${queryStr}`;
-      }
+    }
+
+    const queryStr = searchParams.toString();
+    if (queryStr) {
+      endpoint = `${endpoint}?${queryStr}`;
     }
 
     const portalApiUrl = getPortalApiUrl();
     const targetUrl = joinApiUrl(portalApiUrl, endpoint);
 
     try {
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (params.pin) {
+        headers["X-Queue-Pin"] = params.pin;
+      }
+
       const res = await fetch(targetUrl, {
         cache: "no-store",
-        headers: { Accept: "application/json" },
+        headers,
       });
 
       const json = await res.json().catch(() => ({}));

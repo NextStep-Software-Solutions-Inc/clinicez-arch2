@@ -45,11 +45,33 @@ export interface PublicQueueDisplayData {
   generatedAtUtc: string;
   patientsWaitingCount: number;
   logoUrl?: string | null;
+  isPinRequired?: boolean;
+  isPinValid?: boolean;
+}
+
+const PIN_STORAGE_KEY = 'clinicez_tv_pin_lan';
+
+function getStoredPin(): string {
+  if (typeof window !== 'undefined') {
+    try {
+      const url = new URL(window.location.href);
+      const qPin = url.searchParams.get('pin');
+      if (qPin) return qPin;
+      if (window.location.hash.includes('?')) {
+        const hashSearch = window.location.hash.split('?')[1];
+        const hashParams = new URLSearchParams(hashSearch);
+        const hPin = hashParams.get('pin');
+        if (hPin) return hPin;
+      }
+      return localStorage.getItem(PIN_STORAGE_KEY) || '';
+    } catch {}
+  }
+  return '';
 }
 
 export default function PublicQueueDisplayScreen() {
   const [data, setData] = useState<PublicQueueDisplayData | null>(null);
-  const [, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [muted, setMuted] = useState<boolean>(isAudioMuted);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -57,6 +79,12 @@ export default function PublicQueueDisplayScreen() {
   const [currentDate, setCurrentDate] = useState<string>('');
   const [lastUpdatedTime, setLastUpdatedTime] = useState<number>(Date.now());
   const [pulseActive, setPulseActive] = useState<boolean>(false);
+
+  // PIN / Passcode state
+  const [pin, setPin] = useState<string>(getStoredPin);
+  const [pinEntry, setPinEntry] = useState<string>('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [unlocking, setUnlocking] = useState<boolean>(false);
 
   const prevServingRef = useRef<string[]>([]);
   const failureCountRef = useRef<number>(0);
@@ -100,18 +128,27 @@ export default function PublicQueueDisplayScreen() {
   }, []);
 
   // Data fetching and ticket advancement detection
-  const fetchQueue = useCallback(async () => {
+  const fetchQueue = useCallback(async (pinOverride?: string) => {
+    const activePin = pinOverride !== undefined ? pinOverride : pin;
     try {
-      const [res, err] = await clinicService.getPublicQueueDisplay();
+      const [res, err] = await clinicService.getPublicQueueDisplay(undefined, undefined, undefined, activePin || undefined);
       if (err || !res) {
         failureCountRef.current += 1;
         setError(err?.message || 'Unable to sync queue updates.');
+        setLoading(false);
         return;
       }
 
       failureCountRef.current = 0;
       setError(null);
       setLastUpdatedTime(Date.now());
+
+      // If valid PIN was supplied, persist it
+      if (activePin && res.isPinValid) {
+        try {
+          localStorage.setItem(PIN_STORAGE_KEY, activePin);
+        } catch {}
+      }
 
       const newServing: string[] = res.nowServing?.map((s: ServingTicket) => s.ticketNumber) || [];
       const prevServing = prevServingRef.current;
@@ -130,8 +167,9 @@ export default function PublicQueueDisplayScreen() {
     } catch (e: any) {
       failureCountRef.current += 1;
       setError(e?.message || 'Network error fetching queue.');
+      setLoading(false);
     }
-  }, []);
+  }, [pin]);
 
   // Polling loop with exponential backoff on failure (4s base)
   useEffect(() => {
@@ -158,6 +196,65 @@ export default function PublicQueueDisplayScreen() {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, [fetchQueue]);
+
+  // Physical keyboard support on web for PIN entry
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const isLocked = Boolean(data?.isPinRequired && !data?.isPinValid);
+    if (!isLocked) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        setPinEntry((prev) => (prev.length < 8 ? prev + e.key : prev));
+        setPinError(null);
+      } else if (e.key === 'Backspace') {
+        setPinEntry((prev) => prev.slice(0, -1));
+      } else if (e.key === 'Enter') {
+        if (pinEntry.length > 0) {
+          void handleUnlock(pinEntry);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [data?.isPinRequired, data?.isPinValid, pinEntry]);
+
+  const handleUnlock = async (enteredPin: string) => {
+    if (!enteredPin.trim()) return;
+    setUnlocking(true);
+    setPinError(null);
+    try {
+      const [res, err] = await clinicService.getPublicQueueDisplay(undefined, undefined, undefined, enteredPin.trim());
+      setUnlocking(false);
+      if (err || !res) {
+        setPinError(err?.message || 'Unable to verify TV passcode.');
+        return;
+      }
+      if (res.isPinRequired && !res.isPinValid) {
+        setPinError('Incorrect TV passcode. Please verify in Clinic Settings.');
+        return;
+      }
+      setPin(enteredPin.trim());
+      setData(res);
+      try {
+        localStorage.setItem(PIN_STORAGE_KEY, enteredPin.trim());
+      } catch {}
+    } catch {
+      setUnlocking(false);
+      setPinError('Connection error verifying TV passcode.');
+    }
+  };
+
+  const handleLockBoard = () => {
+    try {
+      localStorage.removeItem(PIN_STORAGE_KEY);
+    } catch {}
+    setPin('');
+    setPinEntry('');
+    setPinError(null);
+    void fetchQueue('');
+  };
 
   const handleUserInteraction = () => {
     unlockAudio();
@@ -190,6 +287,7 @@ export default function PublicQueueDisplayScreen() {
   };
 
   const isStale = Date.now() - lastUpdatedTime > 60000;
+  const isLocked = Boolean(data?.isPinRequired && !data?.isPinValid);
   const primaryServing = data?.nowServing?.[0];
   const otherServing = data?.nowServing?.slice(1) || [];
   const upNextList = data?.upNext || [];
@@ -223,7 +321,11 @@ export default function PublicQueueDisplayScreen() {
                 style={[
                   styles.livePill,
                   {
-                    backgroundColor: isStale ? darkColors.warningBg : darkColors.primaryLight,
+                    backgroundColor: isLocked
+                      ? darkColors.warningBg
+                      : isStale
+                      ? darkColors.warningBg
+                      : darkColors.primaryLight,
                   },
                 ]}
               >
@@ -231,7 +333,11 @@ export default function PublicQueueDisplayScreen() {
                   style={[
                     styles.pingDot,
                     {
-                      backgroundColor: isStale ? darkColors.warningText : darkColors.primary,
+                      backgroundColor: isLocked
+                        ? darkColors.warningText
+                        : isStale
+                        ? darkColors.warningText
+                        : darkColors.primary,
                     },
                   ]}
                 />
@@ -239,16 +345,22 @@ export default function PublicQueueDisplayScreen() {
                   style={[
                     styles.livePillText,
                     {
-                      color: isStale ? darkColors.warningText : darkColors.primary,
+                      color: isLocked
+                        ? darkColors.warningText
+                        : isStale
+                        ? darkColors.warningText
+                        : darkColors.primary,
                     },
                   ]}
                 >
-                  {isStale ? 'Syncing...' : 'Live LAN Queue Kiosk'}
+                  {isLocked ? 'Locked (PIN Required)' : isStale ? 'Syncing...' : 'Live LAN Queue Kiosk'}
                 </Text>
               </View>
-              <Text style={styles.waitingCountText}>
-                {data?.patientsWaitingCount || 0} waiting in line
-              </Text>
+              {!isLocked && (
+                <Text style={styles.waitingCountText}>
+                  {data?.patientsWaitingCount || 0} waiting in line
+                </Text>
+              )}
             </View>
           </View>
         </View>
@@ -260,6 +372,21 @@ export default function PublicQueueDisplayScreen() {
           </View>
 
           <View style={styles.actionsBox}>
+            {/* Lock / Relock Button */}
+            {!isLocked && data?.isPinRequired && (
+              <TouchableOpacity
+                style={styles.controlBtn}
+                onPress={handleLockBoard}
+                accessibilityLabel="Lock TV Display Board"
+              >
+                <Icon
+                  name="lock"
+                  size={20}
+                  color={darkColors.textSecondary}
+                />
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={[
                 styles.controlBtn,
@@ -303,8 +430,107 @@ export default function PublicQueueDisplayScreen() {
         </View>
       )}
 
-      {/* Main 2-Column Split Layout */}
-      <View style={styles.mainGrid}>
+      {/* Main Content: Lock Keypad or 2-Column Split Layout */}
+      {isLocked ? (
+        <View style={styles.lockContainer}>
+          <View style={styles.lockCard}>
+            <View style={styles.lockIconBox}>
+              <Icon name="lock" size={36} color={darkColors.primary} />
+            </View>
+            <Text style={styles.lockTitle}>TV Display Board Locked</Text>
+            <Text style={styles.lockSubtitle}>
+              This waiting area queue board is protected. Enter the TV passcode configured in Clinic Settings to view live queue tickets.
+            </Text>
+
+            {/* PIN Dots */}
+            <View style={styles.pinDotsRow}>
+              {[0, 1, 2, 3, 4, 5].map((idx) => {
+                const isFilled = idx < pinEntry.length;
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.pinDot,
+                      isFilled && styles.pinDotFilled,
+                    ]}
+                  >
+                    {isFilled && <View style={styles.pinDotInner} />}
+                  </View>
+                );
+              })}
+            </View>
+
+            {pinError && (
+              <View style={styles.lockErrorBanner}>
+                <Icon name="alertCircle" size={16} color={darkColors.warningText} />
+                <Text style={styles.lockErrorText}>{pinError}</Text>
+              </View>
+            )}
+
+            {/* Numeric Keypad */}
+            <View style={styles.keypadGrid}>
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                <TouchableOpacity
+                  key={digit}
+                  style={styles.keypadBtn}
+                  onPress={() => {
+                    if (pinEntry.length < 8) {
+                      setPinEntry((prev) => prev + digit);
+                      setPinError(null);
+                    }
+                  }}
+                >
+                  <Text style={styles.keypadDigit}>{digit}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.keypadActionBtn}
+                onPress={() => {
+                  setPinEntry('');
+                  setPinError(null);
+                }}
+              >
+                <Text style={styles.keypadActionText}>Clear</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.keypadBtn}
+                onPress={() => {
+                  if (pinEntry.length < 8) {
+                    setPinEntry((prev) => prev + '0');
+                    setPinError(null);
+                  }
+                }}
+              >
+                <Text style={styles.keypadDigit}>0</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.keypadActionBtn}
+                onPress={() => {
+                  setPinEntry((prev) => prev.slice(0, -1));
+                  setPinError(null);
+                }}
+              >
+                <Text style={styles.keypadActionText}>⌫</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Submit / Unlock Button */}
+            <TouchableOpacity
+              style={[
+                styles.unlockBtn,
+                (pinEntry.length === 0 || unlocking) && styles.unlockBtnDisabled,
+              ]}
+              disabled={pinEntry.length === 0 || unlocking}
+              onPress={() => handleUnlock(pinEntry)}
+            >
+              <Text style={styles.unlockBtnText}>
+                {unlocking ? 'Verifying Passcode...' : 'Unlock TV Display'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.mainGrid}>
         {/* Left Column (60%): NOW SERVING */}
         <View style={styles.servingCol}>
           <View style={styles.sectionHeader}>
@@ -491,6 +717,7 @@ export default function PublicQueueDisplayScreen() {
           </View>
         </View>
       </View>
+      )}
 
       {/* Footer Ticker */}
       <View style={styles.footer}>
@@ -965,5 +1192,146 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.xs,
     color: darkColors.textMuted,
     textDecorationLine: 'underline',
+  },
+  lockContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  lockCard: {
+    width: '100%',
+    maxWidth: 440,
+    backgroundColor: darkColors.surface,
+    borderColor: darkColors.border,
+    borderWidth: 1,
+    borderRadius: theme.radii['2xl'],
+    padding: 32,
+    alignItems: 'center',
+  },
+  lockIconBox: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: darkColors.surfaceHighlight,
+    borderWidth: 1,
+    borderColor: darkColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  lockTitle: {
+    fontSize: theme.fontSizes['2xl'],
+    fontWeight: '800',
+    color: darkColors.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  lockSubtitle: {
+    fontSize: theme.fontSizes.sm,
+    color: darkColors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  pinDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  pinDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: darkColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  pinDotFilled: {
+    borderColor: darkColors.primary,
+  },
+  pinDotInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: darkColors.primary,
+  },
+  lockErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: darkColors.emergencyBg,
+    borderColor: darkColors.emergencyBorder,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: theme.radii.md,
+    marginBottom: 16,
+    width: '100%',
+  },
+  lockErrorText: {
+    fontSize: theme.fontSizes.xs,
+    color: darkColors.emergencyText,
+    fontWeight: '600',
+    flex: 1,
+  },
+  keypadGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    width: '100%',
+    maxWidth: 320,
+    marginBottom: 20,
+  },
+  keypadBtn: {
+    width: 80,
+    height: 56,
+    borderRadius: theme.radii.lg,
+    backgroundColor: darkColors.surfaceHighlight,
+    borderWidth: 1,
+    borderColor: darkColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keypadDigit: {
+    fontSize: theme.fontSizes['2xl'],
+    fontWeight: '700',
+    color: darkColors.text,
+  },
+  keypadActionBtn: {
+    width: 80,
+    height: 56,
+    borderRadius: theme.radii.lg,
+    backgroundColor: darkColors.surface,
+    borderWidth: 1,
+    borderColor: darkColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keypadActionText: {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: '700',
+    color: darkColors.textSecondary,
+  },
+  unlockBtn: {
+    width: '100%',
+    backgroundColor: darkColors.primary,
+    paddingVertical: 14,
+    borderRadius: theme.radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unlockBtnDisabled: {
+    opacity: 0.5,
+  },
+  unlockBtnText: {
+    fontSize: theme.fontSizes.base,
+    fontWeight: '700',
+    color: darkColors.text,
   },
 });

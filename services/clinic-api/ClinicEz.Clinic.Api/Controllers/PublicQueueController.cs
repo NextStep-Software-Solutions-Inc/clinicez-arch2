@@ -33,9 +33,12 @@ public sealed class PublicQueueController : ControllerBase
         [FromQuery] string? tenantSlug,
         [FromQuery] string? facilitySlug,
         [FromQuery] DateOnly? date,
+        [FromQuery] string? pin,
+        [FromHeader(Name = "X-Queue-Pin")] string? headerPin,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetPublicQueueDisplayQuery(clinicId, tenantSlug, facilitySlug, date), ct);
+        var effectivePin = !string.IsNullOrWhiteSpace(headerPin) ? headerPin : pin;
+        var result = await _sender.Send(new GetPublicQueueDisplayQuery(clinicId, tenantSlug, facilitySlug, date, effectivePin), ct);
         if (result == null)
         {
             return NotFound(ApiResponse<PublicQueueDisplayDto>.Fail("Clinic not found for public TV display."));

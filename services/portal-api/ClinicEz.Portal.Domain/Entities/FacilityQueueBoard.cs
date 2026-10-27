@@ -25,6 +25,12 @@ public class FacilityQueueBoard
     public int PatientsWaitingCount { get; set; }
 
     /// <summary>
+    /// Optional PIN / passcode required to view this queue board on waiting area TV displays.
+    /// Synchronized from clinic-api. Leaked links without this PIN cannot see queue details.
+    /// </summary>
+    public string? TvDisplayPin { get; set; }
+
+    /// <summary>
     /// JSON array of active serving tickets (QueueBoardServingItemDto).
     /// </summary>
     public string NowServingJson { get; set; } = "[]";
