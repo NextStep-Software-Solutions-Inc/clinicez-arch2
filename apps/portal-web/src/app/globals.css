@@ -162,4 +162,26 @@
 .animate-serving-pulse {
   animation: servingPulse 1.2s ease-in-out 3;
 }
-
+
+
+/* ClinicEZ manages workspace subscriptions natively (/dashboard/billing); Clerk Billing API is unused */
+.cl-navbarButton__billing,
+.cl-menuItem__billing,
+.cl-profilePage__billing,
+.cl-profileSection__subscriptionsList,
+.cl-profileSection__paymentMethods,
+.cl-profileSection__accountCredits,
+button[data-localization-key="userProfile.navbar.billing"],
+button:has([data-localization-key="userProfile.navbar.billing"]),
+a[data-localization-key="userProfile.navbar.billing"],
+a:has([data-localization-key="userProfile.navbar.billing"]),
+[role="menuitem"][data-localization-key="userProfile.navbar.billing"],
+[role="menuitem"]:has([data-localization-key="userProfile.navbar.billing"]),
+button[data-localization-key="organizationProfile.navbar.billing"],
+button:has([data-localization-key="organizationProfile.navbar.billing"]),
+a[data-localization-key="organizationProfile.navbar.billing"],
+a:has([data-localization-key="organizationProfile.navbar.billing"]),
+[role="menuitem"][data-localization-key="organizationProfile.navbar.billing"],
+[role="menuitem"]:has([data-localization-key="organizationProfile.navbar.billing"]) {
+  display: none !important;
+}

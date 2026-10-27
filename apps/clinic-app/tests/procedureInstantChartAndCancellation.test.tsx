@@ -1,5 +1,5 @@
 // token-guard:ignore-file
-import { describe, expect, test, mock, afterAll } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterEach, afterAll } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -84,42 +84,64 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
-const realAuthContext = { ...(await import('../context/AuthContext')) };
-const realClinicContext = { ...(await import('../context/ClinicContext')) };
-const realStaffContext = { ...(await import('../context/StaffContext')) };
+const defaultAuthMock = {
+  state: 'booting' as const,
+  user: null,
+  permissions: [] as string[],
+  offline: false,
+  notice: null,
+  login: async () => null,
+  bootstrap: async () => null,
+  changePassword: async () => null,
+  completeUnlock: () => {},
+  useDifferentAccount: async () => {},
+  logout: async () => {},
+  retry: () => {},
+  can: () => false,
+};
 
 const authContextMockFactory = () => ({
-  useAuth: () => ({
-    user: { id: 'user-admin', name: 'Admin User', role: 'Admin' },
-  }),
-  usePermission: () => true,
+  useAuth: () => (globalThis as any).__mockAuthContext ?? defaultAuthMock,
+  usePermission: (perm: string) => {
+    const ctx = (globalThis as any).__mockAuthContext;
+    if (typeof ctx?.can === 'function') return Boolean(ctx.can(perm));
+    const perms: readonly string[] | undefined = ctx?.permissions ?? ctx?.user?.permissions;
+    if (Array.isArray(perms)) {
+      return perms.includes('*') || perms.some((p) => p.toLowerCase() === perm.toLowerCase());
+    }
+    return false;
+  },
+  AuthProvider: ({ children }: any) => children,
 });
 
 mock.module('../context/AuthContext', authContextMockFactory);
 mock.module('../../context/AuthContext', authContextMockFactory);
 mock.module('@context/AuthContext', authContextMockFactory);
 
-const clinicContextMockFactory = () => ({
-  useClinic: () => ({
-    rooms: [
-      { id: 'room-tx-1', name: 'Treatment Room 1', type: 'Treatment' },
-    ],
-  }),
-});
-
-mock.module('../context/ClinicContext', clinicContextMockFactory);
-mock.module('../../context/ClinicContext', clinicContextMockFactory);
-
 const staffContextMockFactory = () => ({
-  useStaff: () => ({
-    staff: [],
-    loading: false,
-    error: null,
-  }),
+  useStaff: () =>
+    (globalThis as any).__mockStaffContext ?? {
+      staff: [],
+      current: null,
+      currentName: '',
+      loading: false,
+      error: null,
+      reload: async () => {},
+    },
+  formatStaffName: (s?: any) => {
+    if (!s) return '';
+    return s.name || [s.title, s.firstName, s.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  },
+  staffInitials: (s?: any) => {
+    if (!s) return '?';
+    return `${s.firstName?.[0] ?? ''}${s.lastName?.[0] ?? ''}`.toUpperCase() || '?';
+  },
+  StaffProvider: ({ children }: any) => children,
 });
 
 mock.module('../context/StaffContext', staffContextMockFactory);
 mock.module('../../context/StaffContext', staffContextMockFactory);
+mock.module('@context/StaffContext', staffContextMockFactory);
 
 const { clinicService } = await import('../services/clinicService');
 const { clinicApiClient } = await import('../services/apiClient');
@@ -130,14 +152,44 @@ const { default: NursingProceduresTab } = await import('../components/chart/Nurs
 const { default: DiagnosticLabTab } = await import('../components/chart/DiagnosticLabTab');
 
 describe('Procedure Instant Chart Reflection & Cancellation Suite', () => {
+  beforeEach(() => {
+    mock.module('../context/AuthContext', authContextMockFactory);
+    mock.module('../../context/AuthContext', authContextMockFactory);
+    mock.module('@context/AuthContext', authContextMockFactory);
+    mock.module('../context/StaffContext', staffContextMockFactory);
+    mock.module('../../context/StaffContext', staffContextMockFactory);
+    mock.module('@context/StaffContext', staffContextMockFactory);
+    (globalThis as any).__mockAuthContext = {
+      state: 'signedIn',
+      user: { id: 'user-admin', name: 'Admin User', role: 'Admin', permissions: ['*'] },
+      permissions: ['*'],
+      can: () => true,
+    };
+    (globalThis as any).__mockClinicContext = {
+      rooms: [
+        { id: 'room-tx-1', name: 'Treatment Room 1', type: 'Treatment', isActive: true },
+      ],
+    };
+    (globalThis as any).__mockStaffContext = {
+      staff: [],
+      current: null,
+      currentName: '',
+      loading: false,
+      error: null,
+      reload: async () => {},
+    };
+  });
+
+  afterEach(() => {
+    delete (globalThis as any).__mockAuthContext;
+    delete (globalThis as any).__mockClinicContext;
+    delete (globalThis as any).__mockStaffContext;
+  });
+
   afterAll(() => {
-    mock.module('../context/AuthContext', () => realAuthContext);
-    mock.module('../../context/AuthContext', () => realAuthContext);
-    mock.module('@context/AuthContext', () => realAuthContext);
-    mock.module('../context/ClinicContext', () => realClinicContext);
-    mock.module('../../context/ClinicContext', () => realClinicContext);
-    mock.module('../context/StaffContext', () => realStaffContext);
-    mock.module('../../context/StaffContext', () => realStaffContext);
+    delete (globalThis as any).__mockAuthContext;
+    delete (globalThis as any).__mockClinicContext;
+    delete (globalThis as any).__mockStaffContext;
   });
 
   describe('1. clinicService API Contracts for Cancellation', () => {

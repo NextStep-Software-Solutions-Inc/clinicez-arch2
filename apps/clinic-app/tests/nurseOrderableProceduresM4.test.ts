@@ -1,5 +1,5 @@
 // token-guard:ignore-file
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -84,25 +84,39 @@ mock.module('../constants/fonts', () => ({
 
 
 
-const mockAuthContext = {
-  useAuth: () => (globalThis as any).__mockAuthContext || ({
-    state: 'signedIn',
-    user: { id: 'staff-nurse-1', role: 'Nurse', permissions: ['procedures:write', 'laborders:write'] },
-    permissions: ['procedures:write', 'laborders:write'],
-    can: () => true,
-  }),
+const defaultAuthMock = {
+  state: 'booting' as const,
+  user: null,
+  permissions: [] as string[],
+  offline: false,
+  notice: null,
+  login: async () => null,
+  bootstrap: async () => null,
+  changePassword: async () => null,
+  completeUnlock: () => {},
+  useDifferentAccount: async () => {},
+  logout: async () => {},
+  retry: () => {},
+  can: () => false,
+};
+
+const authContextMockFactory = () => ({
+  useAuth: () => (globalThis as any).__mockAuthContext ?? defaultAuthMock,
   usePermission: (perm: string) => {
     const ctx = (globalThis as any).__mockAuthContext;
-    if (!ctx) return true;
-    if (Array.isArray(ctx.permissions)) return ctx.permissions.includes(perm) || ctx.permissions.includes('*');
-    if (typeof ctx.can === 'function') return Boolean(ctx.can(perm));
+    if (typeof ctx?.can === 'function') return Boolean(ctx.can(perm));
+    const perms: readonly string[] | undefined = ctx?.permissions ?? ctx?.user?.permissions;
+    if (Array.isArray(perms)) {
+      return perms.includes('*') || perms.some((p) => p.toLowerCase() === perm.toLowerCase());
+    }
     return false;
   },
   AuthProvider: ({ children }: any) => children,
-};
-mock.module('../context/AuthContext', () => mockAuthContext);
-mock.module('../../context/AuthContext', () => mockAuthContext);
-mock.module('@context/AuthContext', () => mockAuthContext);
+});
+
+mock.module('../context/AuthContext', authContextMockFactory);
+mock.module('../../context/AuthContext', authContextMockFactory);
+mock.module('@context/AuthContext', authContextMockFactory);
 
 const mockStaffContext = {
   useStaff: () => (globalThis as any).__mockStaffContext || ({
@@ -145,10 +159,20 @@ import type { ClinicalProcedureRecord } from '../services/clinicService';
 
 describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory Lab Intake Suite', () => {
   beforeEach(() => {
+    mock.module('../context/AuthContext', authContextMockFactory);
+    mock.module('../../context/AuthContext', authContextMockFactory);
+    mock.module('@context/AuthContext', authContextMockFactory);
+    mock.module('../context/StaffContext', () => mockStaffContext);
+    mock.module('../../context/StaffContext', () => mockStaffContext);
     lastPostUrl = '';
     lastPostPayload = null;
     mockPostResponse = null;
     mockPostError = null;
+    delete (globalThis as any).__mockAuthContext;
+    delete (globalThis as any).__mockStaffContext;
+  });
+
+  afterAll(() => {
     delete (globalThis as any).__mockAuthContext;
     delete (globalThis as any).__mockStaffContext;
   });
