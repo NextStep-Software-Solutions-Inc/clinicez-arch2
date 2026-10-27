@@ -123,6 +123,10 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
+mock.module('../components/comms/ClinicChatDrawerHost', () => ({
+  default: () => null,
+}));
+
 mock.module('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {} }),
   useRoute: () => ({ params: {} }),

@@ -1334,7 +1334,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   unlockBtnText: {
-    fontSize: theme.fontSizes.base,
+    fontSize: theme.fontSizes.md,
     fontWeight: '700',
     color: darkColors.text,
   },

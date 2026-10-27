@@ -301,7 +301,7 @@ export default function DiagnosticLabTab({
             testID="order-diagnostic-prc-required"
             style={[styles.orderDiagnosticBtn, styles.orderDiagnosticBtn_disabled]}
           >
-            <Icon name="warning" size={14} color={theme.colors.emergencyText} />
+            <Icon name="alert" size={14} color={theme.colors.emergencyText} />
             <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
               PRC License Required
             </ThemedText>
@@ -417,7 +417,7 @@ export default function DiagnosticLabTab({
                     <Pressable
                       testID={`attach-external-result-${order.id}`}
                       onPress={() => handleAttachAction(order.id)}
-                      style={[styles.actionBtn, styles.actionBtn_primary]}
+                      style={styles.actionBtn}
                     >
                       <Icon name="upload" size={14} color={theme.colors.primaryDark} />
                       <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
