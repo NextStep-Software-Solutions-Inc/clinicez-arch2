@@ -450,55 +450,53 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
         )}
 
         {/* Medical Clinic & Prescribing Physician Details */}
-        {!isNotFound && (
-          <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-            <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 className="w-4 h-4 text-primary" />
-                Originating Clinic & Prescribing Physician
-              </span>
-              <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
-                Rx No: {data.prescriptionNumber}
-              </span>
+        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+          <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 text-primary" />
+              Originating Clinic & Prescribing Physician
+            </span>
+            <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
+              Rx No: {data.prescriptionNumber}
+            </span>
+          </div>
+
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Medical Clinic</p>
+              <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
+              {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
+              {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground font-semibold uppercase">Medical Clinic</p>
-                <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
-                {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
-                {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground font-semibold uppercase">Attending Physician</p>
-                <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Attending Physician'}</h3>
-                <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {data.doctorPrcLicense && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                      PRC No: {data.doctorPrcLicense}
-                    </span>
-                  )}
-                  {data.doctorPtr && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                      PTR: {data.doctorPtr}
-                    </span>
-                  )}
-                  {data.doctorS2License && (
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" />
-                      PDEA S2: {data.doctorS2License}
-                    </span>
-                  )}
-                </div>
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Attending Physician</p>
+              <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Attending Physician'}</h3>
+              <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {data.doctorPrcLicense && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                    PRC No: {data.doctorPrcLicense}
+                  </span>
+                )}
+                {data.doctorPtr && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                    PTR: {data.doctorPtr}
+                  </span>
+                )}
+                {data.doctorS2License && (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    PDEA S2: {data.doctorS2License}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Patient Demographics & Safety Alert */}
-        {!isNotFound && (data.patientName || data.patientInitials || data.patientAge) && (
+        {(data.patientName || data.patientInitials || data.patientAge) && (
           <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -542,94 +540,94 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
 
         {/* Prescribed Medications Table or Zero-PHI Summary */}
         <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-          <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Pill className="w-4 h-4 text-primary" />
-              Prescribed Medications
-            </span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-success/15 text-success border border-success/25">
-              Generics Act of 1988 (RA 6675)
-            </span>
-          </div>
-
-          {data.items && data.items.length > 0 ? (
-            <div className="divide-y divide-border">
-              {data.items.map((item, index) => (
-                <div key={item.itemId || index} className="p-6 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <h4 className="text-base font-black text-foreground">
-                        {item.genericName}
-                      </h4>
-                      {item.brandName && (
-                        <p className="text-xs font-semibold text-muted-foreground italic">
-                          Brand name: {item.brandName}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-3 py-1 bg-muted text-foreground rounded-full border border-border">
-                        Qty: {item.quantity} {item.form}(s)
-                      </span>
-                      {item.isDangerousDrug && (
-                        <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          PDEA Dangerous Drug
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-muted border-l-4 border-primary p-3 rounded-r-lg">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      Directions for Use (Sig)
-                    </p>
-                    <p className="text-sm font-semibold text-foreground mt-0.5">
-                      {item.sig}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
-                    <span><strong>Dosage & Form:</strong> {item.dosage} • {item.form}</span>
-                    <span><strong>Refills Allowed:</strong> {item.refills}</span>
-                    {item.durationDays && <span><strong>Duration:</strong> {item.durationDays} days</span>}
-                    {item.remarks && <span className="italic">Note: {item.remarks}</span>}
-                  </div>
-                </div>
-              ))}
+            <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Pill className="w-4 h-4 text-primary" />
+                Prescribed Medications
+              </span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-success/15 text-success border border-success/25">
+                Generics Act of 1988 (RA 6675)
+              </span>
             </div>
-          ) : (
-            <div className="p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-base font-black text-foreground">
-                    Authorized Electronic Prescription
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Authorized for {data.itemCount || 1} prescribed medication line item(s).
+
+            {data.items && data.items.length > 0 ? (
+              <div className="divide-y divide-border">
+                {data.items.map((item, index) => (
+                  <div key={item.itemId || index} className="p-6 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="text-base font-black text-foreground">
+                          {item.genericName}
+                        </h4>
+                        {item.brandName && (
+                          <p className="text-xs font-semibold text-muted-foreground italic">
+                            Brand name: {item.brandName}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold px-3 py-1 bg-muted text-foreground rounded-full border border-border">
+                          Qty: {item.quantity} {item.form}(s)
+                        </span>
+                        {item.isDangerousDrug && (
+                          <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            PDEA Dangerous Drug
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-muted border-l-4 border-primary p-3 rounded-r-lg">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                        Directions for Use (Sig)
+                      </p>
+                      <p className="text-sm font-semibold text-foreground mt-0.5">
+                        {item.sig}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+                      <span><strong>Dosage & Form:</strong> {item.dosage} • {item.form}</span>
+                      <span><strong>Refills Allowed:</strong> {item.refills}</span>
+                      {item.durationDays && <span><strong>Duration:</strong> {item.durationDays} days</span>}
+                      {item.remarks && <span className="italic">Note: {item.remarks}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-base font-black text-foreground">
+                      Authorized Electronic Prescription
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Authorized for {data.itemCount || 1} prescribed medication line item(s).
+                    </p>
+                  </div>
+                  {hasDangerousDrugs && (
+                    <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      PDEA Dangerous Drug Flagged
+                    </span>
+                  )}
+                </div>
+                <div className="bg-muted/60 p-4 rounded-xl border border-border text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Zero-PHI Attestation Model (RA 10173 Compliance)
+                  </p>
+                  <p>
+                    Itemized medication line details are securely restricted to the physical printed prescription presented by the patient. Pharmacists may fulfill and lock this prescription using the official receipt form below.
                   </p>
                 </div>
-                {hasDangerousDrugs && (
-                  <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    PDEA Dangerous Drug Flagged
-                  </span>
-                )}
               </div>
-              <div className="bg-muted/60 p-4 rounded-xl border border-border text-xs text-muted-foreground space-y-1">
-                <p className="font-semibold text-foreground">
-                  Zero-PHI Attestation Model (RA 10173 Compliance)
-                </p>
-                <p>
-                  Itemized medication line details are securely restricted to the physical printed prescription presented by the patient. Pharmacists may fulfill and lock this prescription using the official receipt form below.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
         {/* External Pharmacist Dispensing Section */}
-        {data.isValid && !isDispensed ? (
+        {data.isValid && !isDispensed && !isExpired && !isRevoked && !isNotFound ? (
           <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-5">
             <div className="border-b border-border pb-3">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
@@ -799,6 +797,37 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                 </button>
               </div>
             </form>
+          </div>
+        ) : isDispensed ? (
+          <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
+            <div className="flex items-start gap-3">
+              <Lock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  Dispensing Form Locked
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  This electronic prescription was previously fulfilled at <strong>{data.dispensedPharmacyName || 'an accredited pharmacy'}</strong>
+                  {data.dispensedReceiptNumber ? ` under Official Receipt #${data.dispensedReceiptNumber}` : ''}
+                  {data.dispensedAt ? ` on ${new Date(data.dispensedAt).toLocaleString('en-PH')}` : ''}.
+                  Re-dispensing is permanently locked to prevent duplicate claims and medication diversion.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : isExpired ? (
+          <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
+            <div className="flex items-start gap-3">
+              <Clock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  Dispensing Locked (Expired)
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  This electronic prescription has expired and cannot be fulfilled. The patient must request a fresh prescription from their attending physician.
+                </p>
+              </div>
+            </div>
           </div>
         ) : submitSuccess ? (
           <div className="bg-success/10 border border-success/20 rounded-xl p-5 text-center space-y-2">
