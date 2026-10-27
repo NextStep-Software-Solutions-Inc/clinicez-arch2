@@ -196,13 +196,13 @@ describe('Milestone 4: Clinic-App LAN Queue Kiosk & Route Detection', () => {
       expect(result2.facilitySlug).toBe('lobby');
       expect(isGuidOrUuid(result2.tenantSlug)).toBe(false);
 
-      // Case 3: complete fallback without any valid slugs defaults to "clinic" and "main"
+      // Case 3: when no valid slugs exist, returns empty slugs without hardcoded fallbacks
       const result3 = resolveTvDisplaySlugs(
         { tenantId: sampleGuid, tenantSlug: sampleGuid, facilitySlug: sampleGuid },
         { tenantSlug: sampleGuid, facilitySlug: sampleGuid }
       );
-      expect(result3.tenantSlug).toBe('clinic');
-      expect(result3.facilitySlug).toBe('main');
+      expect(result3.tenantSlug).toBe('');
+      expect(result3.facilitySlug).toBe('');
       expect(isGuidOrUuid(result3.tenantSlug)).toBe(false);
       expect(isGuidOrUuid(result3.facilitySlug)).toBe(false);
 
@@ -238,6 +238,9 @@ describe('Milestone 4: Clinic-App LAN Queue Kiosk & Route Detection', () => {
       );
       expect(pinUrl).toBe('https://dev.clinicez.net/queue-display/nextstep/main?pin=4321');
       expect(pinUrl).not.toContain(sampleGuid);
+
+      // Returns empty string if slugs are missing (no hardcoded fallback)
+      expect(buildCloudTvDisplayUrl(portalBase, null, null)).toBe('');
     });
   });
 });

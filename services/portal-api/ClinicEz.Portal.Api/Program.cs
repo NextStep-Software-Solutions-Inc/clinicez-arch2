@@ -162,33 +162,6 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[ClinicEz.Portal] Warning: Migration encountered an issue during startup; continuing application execution.");
     }
 
-    // Idempotent assurance of portal projection tables (e.g. FacilityQueueBoards with TvDisplayPin)
-    try
-    {
-        dbContext.Database.ExecuteSqlRaw("""
-            CREATE TABLE IF NOT EXISTS public."FacilityQueueBoards" (
-                "TenantId" uuid NOT NULL,
-                "FacilityId" uuid NOT NULL,
-                "QueueDate" date NOT NULL,
-                "IsAcceptingWalkIns" boolean NOT NULL DEFAULT true,
-                "PatientsWaitingCount" integer NOT NULL DEFAULT 0,
-                "NowServingJson" jsonb NOT NULL DEFAULT '[]'::jsonb,
-                "UpNextJson" jsonb NOT NULL DEFAULT '[]'::jsonb,
-                "EmergencyJson" jsonb NULL,
-                "TvDisplayPin" character varying(50) NULL,
-                "GeneratedAtUtc" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                "UpdatedAtUtc" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                CONSTRAINT "PK_FacilityQueueBoards" PRIMARY KEY ("TenantId", "FacilityId")
-            );
-            ALTER TABLE public."FacilityQueueBoards" ADD COLUMN IF NOT EXISTS "TvDisplayPin" character varying(50) NULL;
-            CREATE INDEX IF NOT EXISTS "IX_FacilityQueueBoards_FacilityId_QueueDate" ON public."FacilityQueueBoards" ("FacilityId", "QueueDate");
-        """);
-    }
-    catch (Exception schemaEx)
-    {
-        Console.WriteLine($"[ClinicEz.Portal] Warning: Ensuring FacilityQueueBoards schema failed: {schemaEx.Message}");
-    }
-
     // The plan catalogue (Billing:Plans) and Admin RBAC roles/bootstrap Super Admin are production data: seeded in every environment.
     scope.ServiceProvider.GetRequiredService<ClinicEz.Portal.Infrastructure.Persistence.Seeders.PlanSeeder>().SeedAsync().GetAwaiter().GetResult();
     scope.ServiceProvider.GetRequiredService<ClinicEz.Portal.Infrastructure.Persistence.Seeders.AdminRBACSeeder>().SeedAsync().GetAwaiter().GetResult();

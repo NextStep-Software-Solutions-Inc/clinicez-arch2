@@ -300,7 +300,7 @@ export default function WaitingAreaTvSettingsCard({
                   </ThemedText>
                   <View style={styles.urlBadge}>
                     <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
-                      {publicCloudTvUrlWithPin}
+                      {publicCloudTvUrlWithPin || 'Cloud display URL will appear once clinic and facility slugs are configured.'}
                     </ThemedText>
                   </View>
                   <View style={styles.actionRow}>
@@ -308,13 +308,15 @@ export default function WaitingAreaTvSettingsCard({
                       title={copiedCloudPin ? 'Copied with PIN' : 'Copy TV Setup Link with PIN'}
                       variant="primary"
                       icon="copy"
-                      onPress={() => copyToClipboard(publicCloudTvUrlWithPin, 'cloudPin')}
+                      disabled={!publicCloudTvUrlWithPin}
+                      onPress={() => publicCloudTvUrlWithPin && copyToClipboard(publicCloudTvUrlWithPin, 'cloudPin')}
                     />
                     <Button
                       title="Open with PIN"
                       variant="outline"
                       icon="maximize"
-                      onPress={() => openUrl(publicCloudTvUrlWithPin)}
+                      disabled={!publicCloudTvUrlWithPin}
+                      onPress={() => publicCloudTvUrlWithPin && openUrl(publicCloudTvUrlWithPin)}
                     />
                   </View>
                 </View>
@@ -383,7 +385,7 @@ export default function WaitingAreaTvSettingsCard({
 
               <View style={styles.urlBadge}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
-                  {publicCloudTvUrl}
+                  {publicCloudTvUrl || 'Cloud display URL will appear once clinic and facility slugs are configured.'}
                 </ThemedText>
               </View>
 
@@ -392,13 +394,15 @@ export default function WaitingAreaTvSettingsCard({
                   title="Open Cloud Board"
                   variant="secondary"
                   icon="maximize"
-                  onPress={() => openUrl(publicCloudTvUrl)}
+                  disabled={!publicCloudTvUrl}
+                  onPress={() => publicCloudTvUrl && openUrl(publicCloudTvUrl)}
                 />
                 <Button
                   title={copiedCloud ? 'Copied' : 'Copy Cloud Link'}
                   variant="outline"
                   icon="copy"
-                  onPress={() => copyToClipboard(publicCloudTvUrl, 'cloud')}
+                  disabled={!publicCloudTvUrl}
+                  onPress={() => publicCloudTvUrl && copyToClipboard(publicCloudTvUrl, 'cloud')}
                 />
               </View>
             </View>

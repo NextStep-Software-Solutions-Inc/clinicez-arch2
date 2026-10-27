@@ -112,35 +112,6 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
                 facility = await context.Facilities.AsNoTracking()
                     .Include(f => f.Tenant)
                     .FirstOrDefaultAsync(f => f.TenantId == tenant.Id && f.Slug.ToLower() == normFacility && !f.IsDeleted, ct);
-
-                if (facility == null)
-                {
-                    // Fallback: If facilitySlug in URL was 'main' or mistyped, but the tenant has exactly one active facility
-                    var singleTenantFacility = await context.Facilities.AsNoTracking()
-                        .Include(f => f.Tenant)
-                        .Where(f => f.TenantId == tenant.Id && !f.IsDeleted)
-                        .Take(2)
-                        .ToListAsync(ct);
-
-                    if (singleTenantFacility.Count == 1)
-                    {
-                        facility = singleTenantFacility[0];
-                    }
-                }
-            }
-            else
-            {
-                // Fallback: If tenant slug has a minor discrepancy (e.g. nextstep vs nexstep), resolve facility by unique slug
-                var matchedFacilities = await context.Facilities.AsNoTracking()
-                    .Include(f => f.Tenant)
-                    .Where(f => !f.IsDeleted && f.Tenant != null && f.Tenant.ArchivedAt == null && f.Slug.ToLower() == normFacility)
-                    .Take(2)
-                    .ToListAsync(ct);
-
-                if (matchedFacilities.Count == 1)
-                {
-                    facility = matchedFacilities[0];
-                }
             }
         }
 
@@ -152,17 +123,8 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
         var nowManila = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, ManilaTimeZone);
         var todayManila = DateOnly.FromDateTime(nowManila);
 
-        FacilityQueueBoard? board = null;
-        try
-        {
-            board = await context.FacilityQueueBoards.AsNoTracking()
-                .FirstOrDefaultAsync(b => b.TenantId == facility.TenantId && b.FacilityId == facility.Id, ct);
-        }
-        catch (Exception)
-        {
-            // If the queue board projection table is temporarily unmigrated or unreadable, fall back gracefully
-            board = null;
-        }
+        var board = await context.FacilityQueueBoards.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.TenantId == facility.TenantId && b.FacilityId == facility.Id, ct);
 
         // Manila midnight invalidation: Stale yesterday tickets must never show
         if (board == null || board.QueueDate < todayManila)
