@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Modal from '../ui/Modal';
 import { useClinic } from '../../context/ClinicContext';
 import type { ClinicPatient } from '../../services/clinicService';
@@ -143,10 +143,31 @@ export default function PatientChartModal({
     }
   };
 
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+  const isRefreshing = Boolean(loadingChart || isLocalRefreshing);
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing || !onRefreshChart) return;
+    setIsLocalRefreshing(true);
+    try {
+      const minDurationPromise = new Promise((resolve) => setTimeout(resolve, 600));
+      const res = (onRefreshChart as any)();
+      if (Boolean(res) && typeof (res as any)?.then === 'function') {
+        await Promise.all([res, minDurationPromise]);
+      } else {
+        await minDurationPromise;
+      }
+    } catch {
+      // Handled upstream
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  }, [isRefreshing, onRefreshChart]);
+
   const handleDemographicsSaved = (updated: ClinicPatient) => {
     setCurrentPatient(updated);
     onPatientUpdated?.(updated);
-    onRefreshChart?.();
+    handleRefresh();
   };
 
   const displayPatient = currentPatient || patient;
@@ -164,13 +185,13 @@ export default function PatientChartModal({
   const layoutProps: ChartLayoutProps = {
     patient: displayPatient,
     patientChart,
-    loadingChart,
+    loadingChart: isRefreshing,
     chartError,
     patientAttachments,
     activeTab,
     onTabChange: handleTabChange,
     onClose,
-    onRefreshChart,
+    onRefreshChart: handleRefresh,
     onEditDemographics: handleEditPress,
     currentLayout: activeLayout,
     onSwitchLayout: setActiveLayout,

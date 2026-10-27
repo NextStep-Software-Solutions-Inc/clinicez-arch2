@@ -100,7 +100,7 @@ export interface ChartLayoutProps {
   activeTab: ChartTab;
   onTabChange: (tab: ChartTab) => void;
   onClose: () => void;
-  onRefreshChart?: () => void;
+  onRefreshChart?: () => void | Promise<void>;
   onEditDemographics: () => void;
 
   // In-modal quick layout switcher
@@ -138,7 +138,7 @@ export interface PatientChartModalProps {
   activeTab?: ChartTab;
   onTabChange?: (tab: ChartTab) => void;
   onClose: () => void;
-  onRefreshChart?: () => void;
+  onRefreshChart?: () => void | Promise<void>;
   onPatientUpdated?: (updated: ClinicPatient) => void;
   onPressEdit?: () => void;
   /** Override layout mode; falls back to clinic setting or 'modal' */

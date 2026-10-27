@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Linking } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
 import {
@@ -8,6 +8,8 @@ import {
   type MedicalCertificateRecord,
   type ReferralLetterRecord,
 } from '../../services/clinicService';
+import { openDocument } from '../../services/documentOpener';
+import { notify } from '../../utils/feedback';
 
 export interface AdministrativeDocumentsTabProps {
   patient?: ClinicPatient | null;
@@ -48,13 +50,12 @@ export default function AdministrativeDocumentsTab({
   const handleOpenPdf = async (url: string, docId: string) => {
     try {
       setActioningDocId(docId);
-      if (typeof window !== 'undefined' && window.open) {
-        window.open(url, '_blank');
-      } else {
-        await Linking.openURL(url);
+      const opened = await openDocument(url);
+      if (!opened) {
+        notify.error('Could not open document PDF. Please check connection or popup blocker.');
       }
-    } catch {
-      // Graceful fallback
+    } catch (err: any) {
+      notify.error(err?.message || 'Could not open document PDF. Please check connection and try again.');
     } finally {
       setActioningDocId(null);
     }

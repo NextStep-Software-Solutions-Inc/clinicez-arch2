@@ -919,7 +919,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setChartVisible(true);
     setLoadingChart(true);
     setLoadingAttachments(true);
-    setPatientChart(null);
+    if (selectedPatient?.id !== patient.id) {
+      setPatientChart(null);
+      setPatientAttachments([]);
+    }
     const [chartData, chartErr] = await clinicService.getPatientChart(patient.id);
     if (chartData) {
       if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
@@ -2333,7 +2336,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         focusToothNumber={focusToothNumber}
         onTabChange={handleChartTabChange}
         onClose={handleCloseChart}
-        onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient, activeChartTab)}
+        onRefreshChart={() => (selectedPatient ? handleOpenChart(selectedPatient, activeChartTab) : Promise.resolve())}
         onViewPrescriptionSlip={handleViewPrescriptionSlip}
         onOpenExternalDispense={handleOpenExternalDispense}
         onViewLabSlip={handleViewSlip}

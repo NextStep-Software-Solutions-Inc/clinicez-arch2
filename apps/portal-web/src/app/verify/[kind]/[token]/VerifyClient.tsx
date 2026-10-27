@@ -83,8 +83,8 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
               Ez
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Clinic EZ Document Registry</h1>
-              <p className="text-xs text-muted-foreground">Official Philippine Healthcare Document Verification</p>
+              <h1 className="text-xl font-bold text-foreground">ClinicEZ Document Verification</h1>
+              <p className="text-xs text-muted-foreground">Official healthcare document verification portal</p>
             </div>
           </div>
           <Link
@@ -106,7 +106,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
                   SECURITY SEAL CONFIRMATION REQUIRED
                 </h2>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Document number <span className="font-mono font-bold">{data.documentNumber}</span> matches records in multiple health facilities. To disambiguate and view the authentic certified record, please enter the printed Security Seal or Signature printed on the physical document.
+                  Document number <span className="font-mono font-bold">{data.documentNumber}</span> matches records in multiple health facilities. To view the authentic certified record, please enter the printed Security Seal or Signature printed on the physical document.
                 </p>
               </div>
             </div>
@@ -181,7 +181,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
-                Cryptographic HMAC-SHA256 Verification Seal
+                Digital Verification Seal
               </span>
               <span className="font-mono text-xs sm:text-sm font-semibold text-foreground break-all">
                 {data.securityDigest || token}
@@ -202,7 +202,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
           <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-6">
             <h3 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2 border-b border-border pb-3">
               <FileText className="h-4 w-4 text-primary" />
-              Official Certified Details
+              Document Details
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -210,7 +210,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
               <div className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  Issuing Healthcare Facility
+                  Clinic / Health Facility
                 </span>
                 <p className="text-sm font-bold text-foreground">{data.facilityName}</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">{data.facilityAddress}</p>
@@ -220,7 +220,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
               <div className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
-                  Attending / Prescribing Physician
+                  Attending Doctor
                 </span>
                 <p className="text-sm font-bold text-foreground">{data.doctorName || 'Attending Physician'}</p>
                 <p className="text-xs text-muted-foreground">PRC License: {data.doctorPrcLicense || '—'}</p>
@@ -230,11 +230,11 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
               <div className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                  Patient Identity (Protected)
+                  Patient Name
                 </span>
                 <p className="text-sm font-bold text-foreground tracking-wide font-mono">{data.patientMaskedName || 'Prescription Bearer'}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Name is masked in compliance with RA 10173 (Philippine Data Privacy Act).
+                  Name is partially hidden to protect patient privacy.
                 </p>
               </div>
 
@@ -242,7 +242,7 @@ export default function VerifyClient({ token, kind, data, initialSig = '' }: Ver
               <div className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  Date Issued & Validity
+                  Date Issued
                 </span>
                 <p className="text-sm font-bold text-foreground">{data.issueDate}</p>
                 <span className="inline-flex items-center text-xs font-semibold text-success bg-success/10 px-2 py-0.5 rounded border border-success/20">

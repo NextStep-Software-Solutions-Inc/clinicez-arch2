@@ -1,6 +1,23 @@
 import { clinicApiClient } from './apiClient';
 import { getApiBaseUrl } from './runtimeConfig';
 
+function triggerDownload(objectUrl: string, fallbackName?: string) {
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.target = '_blank';
+    const match = fallbackName?.match(/\/([^/?#]+)(?:[?#]|$)/);
+    if (match && match[1]) {
+      a.download = match[1].endsWith('.pdf') ? match[1] : `${match[1]}.pdf`;
+    }
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch {
+    // Graceful fallback if DOM is unavailable
+  }
+}
+
 /**
  * Opens a document (PDF, attachment) from the clinic API in a new tab.
  *
@@ -12,7 +29,8 @@ export async function openDocument(url: string, _contentType?: string): Promise<
   if (typeof window === 'undefined') return false;
 
   const base = getApiBaseUrl();
-  if (!base || !url.startsWith(base)) {
+  const isClinicApi = (Boolean(base) && url.startsWith(base!)) || url.startsWith('/');
+  if (!isClinicApi) {
     window.open(url, '_blank', 'noopener,noreferrer');
     return true;
   }
@@ -28,10 +46,20 @@ export async function openDocument(url: string, _contentType?: string): Promise<
   const mimeType = _contentType || blob.type || 'application/pdf';
   const typedBlob = blob.type === mimeType ? blob : new Blob([blob], { type: mimeType });
   const objectUrl = URL.createObjectURL(typedBlob);
-  if (reserved) {
-    reserved.location.href = objectUrl;
+  if (reserved && !reserved.closed) {
+    try {
+      reserved.location.href = objectUrl;
+    } catch {
+      const opened = window.open(objectUrl, '_blank');
+      if (!opened) {
+        triggerDownload(objectUrl, url);
+      }
+    }
   } else {
-    window.open(objectUrl, '_blank');
+    const opened = window.open(objectUrl, '_blank');
+    if (!opened) {
+      triggerDownload(objectUrl, url);
+    }
   }
   setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
   return true;
@@ -45,7 +73,10 @@ export function openDocumentBlob(blob: Blob, _contentType?: string): boolean {
   const mimeType = _contentType || blob.type || 'application/pdf';
   const typedBlob = blob.type === mimeType ? blob : new Blob([blob], { type: mimeType });
   const objectUrl = URL.createObjectURL(typedBlob);
-  window.open(objectUrl, '_blank', 'noopener,noreferrer');
+  const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    triggerDownload(objectUrl, 'document.pdf');
+  }
   setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
   return true;
 }

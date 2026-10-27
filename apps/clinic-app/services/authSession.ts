@@ -17,6 +17,7 @@ import { getApiBaseUrl, getOfflineGraceHours } from './runtimeConfig';
 export interface AuthUser {
   id: string;
   name: string;
+  email?: string | null;
   role: string;
   roleName?: string | null;
   clinicId: string;
@@ -129,14 +130,18 @@ async function post<T>(path: string, body: unknown, authorized = false): Promise
   }
 }
 
-async function persist(tokens: AuthTokens) {
+async function persist(tokens: AuthTokens, fallbackEmail?: string | null) {
+  const resolvedEmail = tokens.user.email ?? fallbackEmail ?? user?.email ?? null;
+  const normalizedUser: AuthUser = resolvedEmail
+    ? { ...tokens.user, email: resolvedEmail }
+    : tokens.user;
   accessToken = tokens.accessToken;
   accessExpiresAt = Date.parse(tokens.accessTokenExpiresAtUtc) || Date.now() + 10 * 60_000;
   refreshToken = tokens.refreshToken;
-  user = tokens.user;
+  user = normalizedUser;
   offline = false;
   await setSecureItem(REFRESH_KEY, tokens.refreshToken);
-  await setSecureItem(USER_KEY, JSON.stringify(tokens.user));
+  await setSecureItem(USER_KEY, JSON.stringify(normalizedUser));
   await setSecureItem(LAST_ONLINE_KEY, String(Date.now()));
   emit();
 }
@@ -171,14 +176,15 @@ export async function getAuthStatus(): Promise<AuthResult<AuthStatus>> {
 }
 
 export async function login(email: string, password: string): Promise<AuthResult<AuthUser>> {
+  const trimmedEmail = email.trim();
   const [tokens, error] = await post<AuthTokens>('/auth/login', {
-    email: email.trim(),
+    email: trimmedEmail,
     password,
     deviceLabel: deviceLabel(),
   });
   if (error || !tokens) return [null, error ?? new ApiError('Sign-in failed.', 0)];
-  await persist(tokens);
-  return [tokens.user, null];
+  await persist(tokens, trimmedEmail || null);
+  return [user!, null];
 }
 
 export interface BootstrapInput {
@@ -191,16 +197,17 @@ export interface BootstrapInput {
 
 /** Creates the first administrator of a freshly activated facility (proof of license possession required). */
 export async function bootstrapAdmin(input: BootstrapInput): Promise<AuthResult<AuthUser>> {
+  const trimmedEmail = input.email.trim();
   const [tokens, error] = await post<AuthTokens>('/auth/bootstrap', {
     licenseToken: input.licenseToken.trim(),
-    email: input.email.trim(),
+    email: trimmedEmail,
     password: input.password,
     fullName: input.fullName.trim(),
     workspace: input.workspace || undefined,
   });
   if (error || !tokens) return [null, error ?? new ApiError('Setup failed.', 0)];
-  await persist(tokens);
-  return [tokens.user, null];
+  await persist(tokens, trimmedEmail || null);
+  return [user!, null];
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<AuthResult<AuthUser>> {
@@ -208,7 +215,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
   const [tokens, error] = await post<AuthTokens>('/auth/change-password', { currentPassword, newPassword }, true);
   if (error || !tokens) return [null, error ?? new ApiError('Could not change the password.', 0)];
   await persist(tokens);
-  return [tokens.user, null];
+  return [user!, null];
 }
 
 /**
