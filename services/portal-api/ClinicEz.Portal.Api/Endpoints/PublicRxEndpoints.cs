@@ -153,19 +153,15 @@ public sealed class PublicRxEndpoints : IEndpoint
             return ReturnAttestationInfo(docByNumber);
         }
 
-        if (cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("sec-sha256-"))
+        if (cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-") || cleanToken.StartsWith("sec-sha256-"))
         {
             return Results.BadRequest(ApiResponse<RxAttestationInfo>.Fail(
                 "The provided reference is for a non-prescription clinical document.",
                 "DOCUMENT_KIND_MISMATCH"));
         }
 
-        // 3. Offline Edge Cell Fallback: Extract clinicId from token format {clinicId:N}.{secret:N}
-        // Strict format validation: MUST be exactly 65 chars (32 hex + '.' + 32 hex GUID), NOT a lab token (length ~55, base64url)
-        if (cleanToken.Length == 65 && cleanToken[32] == '.' &&
-            Guid.TryParseExact(cleanToken[..32], "N", out var clinicId) &&
-            Guid.TryParseExact(cleanToken[33..], "N", out var secretGuid) &&
-            secretGuid != Guid.Empty)
+        // 3. Offline Edge Cell Fallback: Extract clinicId from token prefix {clinicId:N}.{secret}
+        if (cleanToken.Length >= 33 && cleanToken[32] == '.' && Guid.TryParseExact(cleanToken[..32], "N", out var clinicId))
         {
             var facility = await context.Facilities.AsNoTracking()
                 .Include(f => f.Tenant)
@@ -370,16 +366,33 @@ public sealed class PublicRxEndpoints : IEndpoint
         CancellationToken ct)
     {
         var cleanToken = token.Trim().ToLowerInvariant();
+
+        if (cleanToken.StartsWith("mc-") || cleanToken.StartsWith("ref-") || cleanToken.StartsWith("lab-"))
+        {
+            return Results.BadRequest(ApiResponse<object>.Fail("The provided token is for a clinical document, not an e-prescription.", "DOCUMENT_KIND_MISMATCH"));
+        }
+
         var tokenHash = ComputeTokenHash(cleanToken);
+
+        // Check if token belongs to another document kind
+        var anyAttestation = await context.DocumentAttestations.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.VerificationTokenHash == tokenHash, ct);
+
+        if (anyAttestation != null && anyAttestation.DocumentKind != "prescription" && anyAttestation.DocumentKind != "rx")
+        {
+            return Results.BadRequest(ApiResponse<object>.Fail(
+                $"Token belongs to a {PublicDocumentVerifyEndpoints.FormatDocumentKind(anyAttestation.DocumentKind)}, not an e-prescription.",
+                "DOCUMENT_KIND_MISMATCH"));
+        }
 
         Guid targetFacilityId = Guid.Empty;
         string targetTenantId = string.Empty;
         Guid prescriptionId = Guid.Empty;
         string prescriptionNumber = "RX-DISPENSED";
 
-        var attestation = await context.DocumentAttestations
-            .FirstOrDefaultAsync(a => a.VerificationTokenHash == tokenHash &&
-                (a.DocumentKind == "prescription" || a.DocumentKind == "rx"), ct);
+        var attestation = (anyAttestation != null && (anyAttestation.DocumentKind == "prescription" || anyAttestation.DocumentKind == "rx"))
+            ? await context.DocumentAttestations.FirstOrDefaultAsync(a => a.Id == anyAttestation.Id, ct)
+            : null;
 
         if (attestation != null)
         {
@@ -411,7 +424,7 @@ public sealed class PublicRxEndpoints : IEndpoint
         else if (cleanToken.Length >= 33 && cleanToken[32] == '.' && Guid.TryParseExact(cleanToken[..32], "N", out var parsedClinicId))
         {
             var facility = await context.Facilities.AsNoTracking()
-                .FirstOrDefaultAsync(f => f.Id == parsedClinicId && !f.IsDeleted, ct);
+                .FirstOrDefaultAsync(f => f.Id == parsedClinicId && !f.IsDeleted && f.FacilityType == FacilityType.Clinic && f.Status == FacilityStatus.Active, ct);
 
             if (facility == null)
             {

@@ -26,11 +26,34 @@ function tryParseClaimTokenPayload(token: string) {
   }
 }
 
+function isClinicalDocumentToken(token: string): boolean {
+  const lower = token.toLowerCase();
+  if (
+    lower.startsWith("rx-") ||
+    lower.startsWith("mc-") ||
+    lower.startsWith("ref-") ||
+    lower.startsWith("lab-") ||
+    lower.startsWith("sec-sha256-")
+  ) {
+    return true;
+  }
+  // 32-hex clinicId + '.' + 32-hex secret (Rx verification token)
+  if (token.length === 65 && token[32] === ".") {
+    return true;
+  }
+  // 32-hex clinicId + '.' + base64url (~22 chars) (Lab upload token)
+  if (token.length >= 50 && token.length <= 60 && token.indexOf(".") === 32) {
+    return true;
+  }
+  return false;
+}
+
 export default async function ClaimPage({ searchParams }: ClaimPageProps) {
   const { token } = (await searchParams) || {};
   const cleanToken = token ? token.trim() : "";
+  const isClinicalDoc = cleanToken ? isClinicalDocumentToken(cleanToken) : false;
 
-  if (cleanToken) {
+  if (cleanToken && !isClinicalDoc) {
     const payload = tryParseClaimTokenPayload(cleanToken);
     const patientName = payload
       ? `${payload.FirstName || ""} ${payload.LastName || ""}`.trim()
@@ -85,7 +108,7 @@ export default async function ClaimPage({ searchParams }: ClaimPageProps) {
     );
   }
 
-  // Missing or Invalid Token State (Accessible, semantic HTTP 200 view)
+  // Missing or Mismatched Token State (Accessible, semantic HTTP 200 view)
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col justify-between p-4 sm:p-6 lg:p-8">
       <div className="max-w-md w-full mx-auto my-auto space-y-6 pt-6 sm:pt-10 text-center">
@@ -100,10 +123,12 @@ export default async function ClaimPage({ searchParams }: ClaimPageProps) {
 
           <div className="space-y-2">
             <h1 className="text-xl font-black tracking-tight text-foreground">
-              Claim Token Required
+              {isClinicalDoc ? "Invalid Claim Token" : "Claim Token Required"}
             </h1>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              No account claim token was found in the link. Claim links are sent to your email or generated after completing patient intake.
+              {isClinicalDoc
+                ? "The token in this link belongs to a clinical document (e-Prescription, Medical Certificate, or Lab Order) rather than an account claim link. Please verify your link or complete patient registration again."
+                : "No account claim token was found in the link. Claim links are sent to your email or generated after completing patient intake."}
             </p>
           </div>
 

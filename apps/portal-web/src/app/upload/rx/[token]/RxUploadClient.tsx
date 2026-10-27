@@ -75,10 +75,34 @@ async function compressImage(file: File): Promise<File> {
   });
 }
 
+function getInitialRxTokenError(token: string): string | null {
+  const clean = (token || "").trim();
+  if (!clean) return "e-Prescription verification token is missing.";
+
+  const lower = clean.toLowerCase();
+  if (lower.startsWith("mc-") || lower.startsWith("ref-") || lower.startsWith("lab-")) {
+    return "The provided token is for a non-prescription clinical document.";
+  }
+
+  // Lab upload token format: {clinicId:N}.{base64url} (dot at index 32, secret is base64url ~22 chars, not a 32-hex GUID)
+  if (
+    clean.indexOf(".") === 32 &&
+    clean.length >= 50 &&
+    clean.length <= 60 &&
+    !/^[0-9a-fA-F]{32}$/.test(clean.slice(33)) &&
+    /^[A-Za-z0-9_-]{20,28}$/.test(clean.slice(33))
+  ) {
+    return "The provided token is a laboratory upload token, not an e-prescription verification token.";
+  }
+
+  return null;
+}
+
 export default function RxUploadClient({ token }: { token: string }) {
-  const [loading, setLoading] = useState(true);
+  const initialError = getInitialRxTokenError(token);
+  const [loading, setLoading] = useState(!initialError);
   const [rxInfo, setRxInfo] = useState<PublicRxUploadInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
 
   // Form Fields
   const [pharmacyName, setPharmacyName] = useState("");
@@ -104,9 +128,17 @@ export default function RxUploadClient({ token }: { token: string }) {
 
   useEffect(() => {
     const fetchInfo = async () => {
+      const clean = (token || "").trim();
+      const err = getInitialRxTokenError(clean);
+      if (err) {
+        setError(err);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        const data = await dropzoneService.getRxUploadInfo(token);
+        const data = await dropzoneService.getRxUploadInfo(clean);
         setRxInfo(data);
       } catch (err: any) {
         setError(err.response?.data?.message || err.message || "Invalid or expired e-prescription verification link.");

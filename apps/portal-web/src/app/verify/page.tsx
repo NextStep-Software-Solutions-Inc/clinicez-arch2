@@ -78,9 +78,16 @@ export default async function VerifyIndexPage({ searchParams }: VerifyIndexPageP
           notes: null,
         };
       } else {
-        throw new Error(`API returned ${response.status}`);
+        const errorJson = await response.json().catch(() => null);
+        const errMsg = errorJson?.message || `API returned ${response.status}`;
+        throw new Error(errMsg);
       }
-    } catch {
+    } catch (err: any) {
+      const errorMsg =
+        err?.message && !err.message.startsWith('API returned')
+          ? err.message
+          : 'Unable to verify this document reference against the Clinic EZ registry. Please confirm the verification token on the printed document or contact the issuing healthcare facility directly.';
+
       verificationData = {
         isVerified: false,
         documentType: 'Unverified Clinical Document',
@@ -93,8 +100,7 @@ export default async function VerifyIndexPage({ searchParams }: VerifyIndexPageP
         issueDate: '—',
         status: 'Unverified / Record Not Found',
         securityDigest: ref,
-        verificationMessage:
-          'Unable to verify this document reference against the Clinic EZ registry. Please confirm the verification token on the printed document or contact the issuing healthcare facility directly.',
+        verificationMessage: errorMsg,
         notes: null,
       };
     }
