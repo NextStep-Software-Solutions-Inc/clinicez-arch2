@@ -252,25 +252,8 @@ public class StaffEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var emails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            void CollectClaim(string type)
-            {
-                foreach (var c in httpContext.User.FindAll(type))
-                {
-                    if (!string.IsNullOrWhiteSpace(c.Value))
-                    {
-                        emails.Add(c.Value.Trim());
-                    }
-                }
-            }
-
-            CollectClaim(ClaimTypes.Email);
-            CollectClaim("email");
-            CollectClaim("emails");
-            CollectClaim("email_address");
-            CollectClaim("primary_email_address");
-
-            var query = new GetPendingSelfInvitationQuery(clerkUserId, emails.ToList());
+            var verifiedEmails = ClinicEz.Portal.Api.Auth.ClaimEmailExtractor.ExtractVerifiedEmails(httpContext.User);
+            var query = new GetPendingSelfInvitationQuery(clerkUserId, verifiedEmails);
             var result = await sender.Send(query, cancellationToken);
 
             return result != null
@@ -326,11 +309,12 @@ public class StaffEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
+            var verifiedEmails = ClinicEz.Portal.Api.Auth.ClaimEmailExtractor.ExtractVerifiedEmails(httpContext.User);
+            var email = verifiedEmails.Count > 0 ? verifiedEmails[0] : null;
 
             try
             {
-                var result = await sender.Send(new AcceptInvitationCommand(token, clerkUserId, email));
+                var result = await sender.Send(new AcceptInvitationCommand(token, clerkUserId, email, verifiedEmails));
                 return Results.Ok(result);
             }
             catch (KeyNotFoundException ex)

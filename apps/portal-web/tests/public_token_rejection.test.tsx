@@ -22,6 +22,7 @@ mock.module("@/components/teleconsult/TeleconsultGuestFlow", () => ({
 mock.module("@clerk/nextjs", () => ({
   useUser: () => ({ isSignedIn: false, user: null, isLoaded: true }),
   useAuth: () => ({ getToken: async () => null }),
+  useClerk: () => ({ signOut: async () => {} }),
   SignInButton: ({ children }: any) => <button>{children}</button>,
   SignUpButton: ({ children }: any) => <button>{children}</button>,
 }));

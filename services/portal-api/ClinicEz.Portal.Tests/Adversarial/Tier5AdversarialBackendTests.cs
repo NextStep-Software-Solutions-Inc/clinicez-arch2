@@ -145,12 +145,12 @@ public class Tier5AdversarialBackendTests : IDisposable
         var handler = new AcceptAdminInvitationCommandHandler(_context, _urlProvider, TimeProvider.System);
 
         // First accept attempt by User A
-        var result1 = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_user_alpha"), CancellationToken.None);
+        var result1 = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_user_alpha", "admin.concurrent@clinicez.test"), CancellationToken.None);
         Assert.Equal(AdminUserStatus.Active, result1.Status);
         Assert.Equal("clerk_user_alpha", result1.ClerkUserId);
 
         // Second accept attempt by User A (same Clerk identity -> idempotent success)
-        var result2 = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_user_alpha"), CancellationToken.None);
+        var result2 = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_user_alpha", "admin.concurrent@clinicez.test"), CancellationToken.None);
         Assert.Equal(AdminUserStatus.Active, result2.Status);
         Assert.Equal("clerk_user_alpha", result2.ClerkUserId);
 
@@ -255,7 +255,7 @@ public class Tier5AdversarialBackendTests : IDisposable
             acceptHandler.Handle(new AcceptAdminInvitationCommand(oldToken, "clerk_new_target"), CancellationToken.None));
 
         // New token can be accepted successfully
-        var acceptedDto = await acceptHandler.Handle(new AcceptAdminInvitationCommand(updatedDto.InvitationToken!, "clerk_new_target"), CancellationToken.None);
+        var acceptedDto = await acceptHandler.Handle(new AcceptAdminInvitationCommand(updatedDto.InvitationToken!, "clerk_new_target", "admin.resend@clinicez.test"), CancellationToken.None);
         Assert.Equal(AdminUserStatus.Active, acceptedDto.Status);
     }
 
@@ -424,7 +424,7 @@ public class Tier5AdversarialBackendTests : IDisposable
         var handler = new AcceptInvitationCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
 
         // First user accepts
-        var res1 = await handler.Handle(new AcceptInvitationCommand(token, "clerk_accepted_first"), CancellationToken.None);
+        var res1 = await handler.Handle(new AcceptInvitationCommand(token, "clerk_accepted_first", "concurrent.member@clinicez.test"), CancellationToken.None);
         Assert.Equal(TenantSlug, res1.TenantSlug);
 
         // Second user attempts to accept the same token

@@ -229,7 +229,7 @@ public class AdminUserChallengerTests : IDisposable
         await _context.SaveChangesAsync();
 
         var handler = new AcceptAdminInvitationCommandHandler(_context, _urlProvider, TimeProvider.System);
-        var result = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_usr_trans"), CancellationToken.None);
+        var result = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_usr_trans", "accept_transition@clinicez.test"), CancellationToken.None);
 
         Assert.Equal(AdminUserStatus.Active, result.Status);
         Assert.Equal("Active", result.DisplayStatus);
@@ -334,7 +334,7 @@ public class AdminUserChallengerTests : IDisposable
 
         // Now acceptance with the fresh token must succeed
         var acceptHandler = new AcceptAdminInvitationCommandHandler(_context, _urlProvider, TimeProvider.System);
-        var acceptResult = await acceptHandler.Handle(new AcceptAdminInvitationCommand(resendResult.InvitationToken, "clerk_newly_accepted"), CancellationToken.None);
+        var acceptResult = await acceptHandler.Handle(new AcceptAdminInvitationCommand(resendResult.InvitationToken, "clerk_newly_accepted", "expired_resend@clinicez.test"), CancellationToken.None);
         Assert.Equal(AdminUserStatus.Active, acceptResult.Status);
         Assert.Equal("Active", acceptResult.DisplayStatus);
     }
@@ -372,7 +372,7 @@ public class AdminUserChallengerTests : IDisposable
 
         // Accept query with uppercase token
         var acceptHandler = new AcceptAdminInvitationCommandHandler(_context, _urlProvider, TimeProvider.System);
-        var accepted = await acceptHandler.Handle(new AcceptAdminInvitationCommand(upperToken, "clerk_case_user"), CancellationToken.None);
+        var accepted = await acceptHandler.Handle(new AcceptAdminInvitationCommand(upperToken, "clerk_case_user", "case_test@clinicez.test"), CancellationToken.None);
         Assert.Equal(AdminUserStatus.Active, accepted.Status);
     }
 
@@ -398,7 +398,7 @@ public class AdminUserChallengerTests : IDisposable
         var handler = new AcceptAdminInvitationCommandHandler(_context, _urlProvider, TimeProvider.System);
 
         // First acceptance succeeds
-        var first = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_first_claimer"), CancellationToken.None);
+        var first = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_first_claimer", "double_accept@clinicez.test"), CancellationToken.None);
         Assert.Equal(AdminUserStatus.Active, first.Status);
 
         // Second acceptance by different user MUST throw

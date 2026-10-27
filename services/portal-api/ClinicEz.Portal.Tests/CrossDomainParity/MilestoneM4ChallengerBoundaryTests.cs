@@ -255,7 +255,7 @@ public class MilestoneM4ChallengerBoundaryTests : IDisposable
         await _context.SaveChangesAsync();
 
         var handler = new AcceptAdminInvitationCommandHandler(_context, _urlProvider, TimeProvider.System);
-        var result = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_audit_user"), CancellationToken.None);
+        var result = await handler.Handle(new AcceptAdminInvitationCommand(token, "clerk_audit_user", "audit.admin@clinicez.test"), CancellationToken.None);
 
         Assert.Equal(AdminUserStatus.Active, result.Status);
         Assert.Equal(originalCreated, result.CreatedAt);
