@@ -203,7 +203,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
       return;
     }
     if (!officialReceiptNumber.trim()) {
-      setSubmitError('Official Receipt (OR) Number is required for legal dispense audit.');
+      setSubmitError('Official Receipt (OR) Number is required to record dispensing.');
       return;
     }
     if (!pharmacistName.trim() || !pharmacistPrcLicense.trim()) {
@@ -288,7 +288,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
   return (
     <div className="min-h-screen bg-background text-foreground py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Top Official Portal Header */}
+        {/* Top Header */}
         <header className="bg-card rounded-xl shadow-sm border border-border p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-black text-2xl shadow-sm">
@@ -296,10 +296,10 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-foreground tracking-tight">
-                Clinic EZ e-Prescription Verification Portal
+                Prescription Verification
               </h1>
               <p className="text-xs text-muted-foreground font-medium">
-                Philippine Digital Health Interoperability Network • RA 6675 & RA 9165 Verified
+                Official electronic prescription verification • ClinicEZ
               </p>
             </div>
           </div>
@@ -315,12 +315,12 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
             {isRevoked ? (
               <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-destructive/10 text-destructive border border-destructive/20">
                 <BadgeAlert className="w-3.5 h-3.5" />
-                Prescription Revoked
+                Prescription Cancelled
               </span>
             ) : isNotFound || (!data.isValid && !isDispensed && !isExpired) ? (
               <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-destructive/10 text-destructive border border-destructive/20">
                 <BadgeAlert className="w-3.5 h-3.5" />
-                Unverified Token
+                Unverified Reference
               </span>
             ) : isDispensed ? (
               <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-warning/15 text-warning border border-warning/30">
@@ -335,22 +335,22 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
             ) : (
               <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-success/10 text-success border border-success/20">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                Cryptographically Verified
+                Valid Prescription
               </span>
             )}
           </div>
         </header>
 
-        {/* Edge Cell Offline Pending Clinic Sync Banner */}
+        {/* Offline Issued Banner */}
         {isOfflinePending && (
           <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 shadow-sm text-foreground flex items-start gap-3">
             <Clock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
             <div className="space-y-0.5 text-xs">
               <p className="font-bold uppercase tracking-wider text-warning">
-                Authorized Offline Prescription (Edge Clinic Mode)
+                Valid Offline Prescription
               </p>
               <p className="text-muted-foreground">
-                This electronic prescription was legitimately issued by an accredited clinic facility operating in local Edge mode. Dispensing is fully authorized; fulfillment records will automatically synchronize across the Hub once connectivity is restored.
+                This prescription was issued while the clinic was offline. It is valid for dispensing, and the record will sync automatically once the clinic reconnects.
               </p>
             </div>
           </div>
@@ -363,10 +363,10 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <BadgeAlert className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h2 className="text-base font-bold text-destructive">
-                  PRESCRIPTION REVOKED BY PRESCRIBING CLINICIAN
+                  PRESCRIPTION CANCELLED
                 </h2>
                 <p className="text-sm text-destructive/90">
-                  This electronic prescription was formally cancelled or revoked by the prescribing physician. Do not dispense under any circumstances.
+                  This prescription was cancelled by the prescribing doctor and cannot be dispensed.
                 </p>
               </div>
             </div>
@@ -380,7 +380,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                   PRESCRIPTION ALREADY DISPENSED
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  This electronic prescription has already been fulfilled and is permanently locked against duplicate dispensing under Philippine pharmacy laws and FDA e-Prescription regulations (RA 6675 &amp; RA 9165).
+                  This prescription has already been fulfilled and cannot be dispensed again.
                 </p>
                 <div className="mt-2 text-xs font-medium text-foreground bg-warning/15 p-3 rounded-lg border border-warning/25 flex flex-wrap gap-x-6 gap-y-1">
                   <span>
@@ -414,7 +414,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                   PRESCRIPTION EXPIRED
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  This electronic prescription expired{data.expiresAt ? ` on ${new Date(data.expiresAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}` : ''}. Prescriptions must be fulfilled within their validity window under DOH guidelines. Please advise the patient to consult their physician for a renewed prescription.
+                  This prescription expired{data.expiresAt ? ` on ${new Date(data.expiresAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}` : ''}. It can no longer be dispensed. Please consult the prescribing doctor for a new prescription.
                 </p>
               </div>
             </div>
@@ -428,7 +428,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                   UNVERIFIED OR INVALID PRESCRIPTION TOKEN
                 </h2>
                 <p className="text-sm text-destructive/90">
-                  Unable to verify prescription token <span className="font-mono font-bold">{token}</span> against the Clinic EZ registry. Do not dispense based on an unverified electronic reference.
+                  Unable to verify prescription reference <span className="font-mono font-bold">{token}</span> against the registry. Please check the code or contact the issuing clinic.
                 </p>
               </div>
             </div>
@@ -439,66 +439,64 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <CheckCircle className="w-6 h-6 text-success shrink-0 mt-0.5" />
               <div>
                 <h2 className="text-base font-bold text-foreground">
-                  ACTIVE &amp; UNFULFILLED PRESCRIPTION
+                  VALID PRESCRIPTION
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Authorized for one-time dispensing by any licensed pharmacist at an accredited drugstore.
+                  This prescription is authentic and ready to be dispensed by a licensed pharmacist.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Medical Clinic & Prescribing Physician Details */}
-        {!isNotFound && (
-          <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-            <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 className="w-4 h-4 text-primary" />
-                Originating Clinic & Prescribing Physician
-              </span>
-              <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
-                Rx No: {data.prescriptionNumber}
-              </span>
+        {/* Clinic & Doctor Details */}
+        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+          <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 text-primary" />
+              Clinic & Prescribing Doctor
+            </span>
+            <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
+              Rx No: {data.prescriptionNumber}
+            </span>
+          </div>
+
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Clinic</p>
+              <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
+              {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
+              {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground font-semibold uppercase">Medical Clinic</p>
-                <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
-                {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
-                {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground font-semibold uppercase">Attending Physician</p>
-                <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Attending Physician'}</h3>
-                <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {data.doctorPrcLicense && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                      PRC No: {data.doctorPrcLicense}
-                    </span>
-                  )}
-                  {data.doctorPtr && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                      PTR: {data.doctorPtr}
-                    </span>
-                  )}
-                  {data.doctorS2License && (
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" />
-                      PDEA S2: {data.doctorS2License}
-                    </span>
-                  )}
-                </div>
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Prescribing Doctor</p>
+              <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Prescribing Doctor'}</h3>
+              <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {data.doctorPrcLicense && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                    PRC No: {data.doctorPrcLicense}
+                  </span>
+                )}
+                {data.doctorPtr && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                    PTR: {data.doctorPtr}
+                  </span>
+                )}
+                {data.doctorS2License && (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    PDEA S2: {data.doctorS2License}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Patient Demographics & Safety Alert */}
-        {!isNotFound && (data.patientName || data.patientInitials || data.patientAge) && (
+        {(data.patientName || data.patientInitials || data.patientAge) && (
           <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -514,7 +512,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Patient</p>
                 <p className="text-sm font-bold text-foreground">
-                  {data.patientName || data.patientInitials || 'Confidential Patient Record'}
+                  {data.patientName || data.patientInitials || 'Confidential Patient'}
                 </p>
               </div>
               <div>
@@ -524,7 +522,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                 </p>
               </div>
               <div className="sm:col-span-2">
-                <p className="text-xs text-muted-foreground font-medium">Clinical Diagnosis</p>
+                <p className="text-xs text-muted-foreground font-medium">Diagnosis</p>
                 <p className="text-sm font-semibold text-foreground">{data.clinicalDiagnosis || 'Outpatient Consultation'}</p>
               </div>
             </div>
@@ -533,111 +531,108 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-center gap-2.5">
                 <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
                 <p className="text-xs font-bold text-destructive">
-                  PATIENT ALLERGIES: <span className="underline">{data.patientAllergies}</span> (Screen for cross-sensitivity before dispensing).
+                  Patient Allergies: <span className="underline">{data.patientAllergies}</span>
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {/* Prescribed Medications Table or Zero-PHI Summary */}
+        {/* Prescribed Medications */}
         <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-          <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Pill className="w-4 h-4 text-primary" />
-              Prescribed Medications
-            </span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-success/15 text-success border border-success/25">
-              Generics Act of 1988 (RA 6675)
-            </span>
-          </div>
-
-          {data.items && data.items.length > 0 ? (
-            <div className="divide-y divide-border">
-              {data.items.map((item, index) => (
-                <div key={item.itemId || index} className="p-6 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <h4 className="text-base font-black text-foreground">
-                        {item.genericName}
-                      </h4>
-                      {item.brandName && (
-                        <p className="text-xs font-semibold text-muted-foreground italic">
-                          Brand name: {item.brandName}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-3 py-1 bg-muted text-foreground rounded-full border border-border">
-                        Qty: {item.quantity} {item.form}(s)
-                      </span>
-                      {item.isDangerousDrug && (
-                        <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          PDEA Dangerous Drug
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-muted border-l-4 border-primary p-3 rounded-r-lg">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      Directions for Use (Sig)
-                    </p>
-                    <p className="text-sm font-semibold text-foreground mt-0.5">
-                      {item.sig}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
-                    <span><strong>Dosage & Form:</strong> {item.dosage} • {item.form}</span>
-                    <span><strong>Refills Allowed:</strong> {item.refills}</span>
-                    {item.durationDays && <span><strong>Duration:</strong> {item.durationDays} days</span>}
-                    {item.remarks && <span className="italic">Note: {item.remarks}</span>}
-                  </div>
-                </div>
-              ))}
+            <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Pill className="w-4 h-4 text-primary" />
+                Prescribed Medications
+              </span>
             </div>
-          ) : (
-            <div className="p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-base font-black text-foreground">
-                    Authorized Electronic Prescription
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Authorized for {data.itemCount || 1} prescribed medication line item(s).
+
+            {data.items && data.items.length > 0 ? (
+              <div className="divide-y divide-border">
+                {data.items.map((item, index) => (
+                  <div key={item.itemId || index} className="p-6 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="text-base font-black text-foreground">
+                          {item.genericName}
+                        </h4>
+                        {item.brandName && (
+                          <p className="text-xs font-semibold text-muted-foreground italic">
+                            Brand name: {item.brandName}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold px-3 py-1 bg-muted text-foreground rounded-full border border-border">
+                          Qty: {item.quantity} {item.form}(s)
+                        </span>
+                        {item.isDangerousDrug && (
+                          <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            PDEA Dangerous Drug
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-muted border-l-4 border-primary p-3 rounded-r-lg">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                        Directions for Use
+                      </p>
+                      <p className="text-sm font-semibold text-foreground mt-0.5">
+                        {item.sig}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
+                      <span><strong>Dosage & Form:</strong> {item.dosage} • {item.form}</span>
+                      <span><strong>Refills Allowed:</strong> {item.refills}</span>
+                      {item.durationDays && <span><strong>Duration:</strong> {item.durationDays} days</span>}
+                      {item.remarks && <span className="italic">Note: {item.remarks}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-base font-black text-foreground">
+                      Prescription Summary
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {data.itemCount ? `${data.itemCount} prescribed item${data.itemCount > 1 ? 's' : ''}` : '1 prescribed item'}
+                    </p>
+                  </div>
+                  {hasDangerousDrugs && (
+                    <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      PDEA Dangerous Drug
+                    </span>
+                  )}
+                </div>
+                <div className="bg-muted/60 p-4 rounded-xl border border-border text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Medication Details Protected for Privacy
+                  </p>
+                  <p>
+                    To protect patient privacy, medication details are listed only on the printed prescription presented by the patient. Pharmacists can confirm and record dispensing using the form below.
                   </p>
                 </div>
-                {hasDangerousDrugs && (
-                  <span className="text-xs font-black px-2.5 py-1 bg-destructive/10 text-destructive rounded-full border border-destructive/20 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    PDEA Dangerous Drug Flagged
-                  </span>
-                )}
               </div>
-              <div className="bg-muted/60 p-4 rounded-xl border border-border text-xs text-muted-foreground space-y-1">
-                <p className="font-semibold text-foreground">
-                  Zero-PHI Attestation Model (RA 10173 Compliance)
-                </p>
-                <p>
-                  Itemized medication line details are securely restricted to the physical printed prescription presented by the patient. Pharmacists may fulfill and lock this prescription using the official receipt form below.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* External Pharmacist Dispensing Section */}
-        {data.isValid && !isDispensed ? (
+        {/* Pharmacist Dispensing Section */}
+        {data.isValid && !isDispensed && !isExpired && !isRevoked && !isNotFound ? (
           <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-5">
             <div className="border-b border-border pb-3">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
-                Pharmacist Dispense Confirmation (Path B)
+                Pharmacist Dispense Confirmation
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Fulfilling this prescription at Mercury Drug, Watsons, Rose Pharmacy, or another drugstore? Log the Official Receipt (OR) to prevent re-dispensing and notify the clinic doctor.
+                Fulfilling this prescription at a pharmacy? Enter the Official Receipt (OR) and pharmacist details below to record dispensing and notify the clinic.
               </p>
             </div>
 
@@ -741,7 +736,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-foreground">
-                  Dispensing Notes / Special Counseling Given
+                  Dispensing Notes / Counseling (Optional)
                 </label>
                 <input
                   type="text"
@@ -800,21 +795,52 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               </div>
             </form>
           </div>
+        ) : isDispensed ? (
+          <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
+            <div className="flex items-start gap-3">
+              <Lock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  Dispensing Form Locked
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  This prescription was previously fulfilled at <strong>{data.dispensedPharmacyName || 'an accredited pharmacy'}</strong>
+                  {data.dispensedReceiptNumber ? ` under Official Receipt #${data.dispensedReceiptNumber}` : ''}
+                  {data.dispensedAt ? ` on ${new Date(data.dispensedAt).toLocaleString('en-PH')}` : ''}.
+                  Prescriptions can only be dispensed once to prevent reuse.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : isExpired ? (
+          <div className="bg-card rounded-xl shadow-sm border border-warning/30 p-6 space-y-3">
+            <div className="flex items-start gap-3">
+              <Clock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  Dispensing Locked (Expired)
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  This prescription has expired and cannot be fulfilled. The patient must request a new prescription from their doctor.
+                </p>
+              </div>
+            </div>
+          </div>
         ) : submitSuccess ? (
           <div className="bg-success/10 border border-success/20 rounded-xl p-5 text-center space-y-2">
             <CheckCircle className="w-8 h-8 text-success mx-auto" />
             <h3 className="text-base font-bold text-foreground">
-              Dispensing Confirmed & Recorded
+              Dispensing Confirmed
             </h3>
             <p className="text-xs text-muted-foreground max-w-md mx-auto">
-              The electronic prescription is now permanently locked. Official receipt details have been transmitted to the prescribing doctor’s Clinic EMR.
+              The prescription has been recorded as dispensed and the clinic has been notified.
             </p>
           </div>
         ) : null}
 
-        {/* Footer Regulatory Notice */}
+        {/* Footer */}
         <footer className="text-center text-xs text-muted-foreground py-4 border-t border-border">
-          This digital portal verifies official electronic prescriptions authorized under the Philippine Food and Drug Administration (FDA) & Department of Health (DOH) e-Prescription Circulars. Tampering or illegal duplication is punishable under the Philippine Penal Code and Republic Act 10173 (Data Privacy Act of 2012).
+          Official prescription verification powered by ClinicEZ. Compliant with Department of Health (DOH) and FDA guidelines.
         </footer>
       </div>
     </div>

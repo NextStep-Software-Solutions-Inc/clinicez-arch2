@@ -111,7 +111,7 @@ export default function SlideOverDrawerChartLayout(props: ChartLayoutProps) {
                 <Icon
                   name="refresh"
                   size={theme.sizes.iconMd}
-                  color={theme.colors.textSecondary}
+                  color={loadingChart ? theme.colors.primary : theme.colors.textSecondary}
                   spin={loadingChart}
                 />
               </Pressable>

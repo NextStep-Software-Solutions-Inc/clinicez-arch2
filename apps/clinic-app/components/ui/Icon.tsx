@@ -308,9 +308,11 @@ function SpinningIconGlyph({
   color: string;
   strokeWidth: number;
 }) {
+  const isWeb = Platform.OS === 'web';
   const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (isWeb) return;
     let loop: Animated.CompositeAnimation | null = null;
     if (spinAnim && typeof spinAnim.setValue === 'function') {
       spinAnim.setValue(0);
@@ -319,9 +321,9 @@ function SpinningIconGlyph({
       loop = Animated.loop(
         Animated.timing(spinAnim, {
           toValue: 1,
-          duration: 900,
+          duration: 850,
           easing: (t) => t,
-          useNativeDriver: Platform.OS !== 'web',
+          useNativeDriver: true,
         })
       );
       loop.start();
@@ -329,25 +331,63 @@ function SpinningIconGlyph({
     return () => {
       if (loop && typeof loop.stop === 'function') loop.stop();
     };
-  }, [spinAnim]);
+  }, [spinAnim, isWeb]);
 
   const rotation =
-    spinAnim && typeof spinAnim.interpolate === 'function'
+    !isWeb && spinAnim && typeof spinAnim.interpolate === 'function'
       ? spinAnim.interpolate({
           inputRange: [0, 1],
           outputRange: ['0deg', '360deg'],
         })
       : '0deg';
 
+  useEffect(() => {
+    if (isWeb && typeof document !== 'undefined') {
+      if (!document.getElementById('clinicez-spin-style')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'clinicez-spin-style';
+        styleEl.textContent = `
+          @keyframes clinicez-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          .clinicez-spin-glyph {
+            animation: clinicez-spin 0.85s linear infinite !important;
+            transform-origin: center center !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+        `;
+        document.head.appendChild(styleEl);
+      }
+    }
+  }, [isWeb]);
+
   return (
     <Animated.View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
-        transform: [{ rotate: rotation }],
-      }}
+      accessibilityRole="image"
+      // @ts-ignore React Native Web supports className
+      className={isWeb ? 'clinicez-spin-glyph' : undefined}
+      style={[
+        {
+          width: size,
+          height: size,
+          alignItems: 'center',
+          justifyContent: 'center',
+          transform: isWeb ? undefined : [{ rotate: rotation }],
+        },
+        isWeb && ({
+          animationKeyframes: {
+            '0%': { transform: [{ rotate: '0deg' }] },
+            '100%': { transform: [{ rotate: '360deg' }] },
+          },
+          animationDuration: '0.85s',
+          animationIterationCount: 'infinite',
+          animationTimingFunction: 'linear',
+          transformOrigin: 'center center',
+        } as any),
+      ]}
     >
       <Glyph size={size} color={color} strokeWidth={strokeWidth} />
     </Animated.View>

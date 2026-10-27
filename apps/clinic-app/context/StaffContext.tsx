@@ -1,7 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { clinicService, StaffMember } from '../services/clinicService';
+import {
+  normalizeStaffLoadError,
+  resolveCurrentStaffMember,
+  shouldFetchStaffDirectory,
+} from '../services/staffProfileResolver';
 import { useAuth } from './AuthContext';
 import { useClinic } from './ClinicContext';
+
+export { normalizeStaffLoadError, resolveCurrentStaffMember, shouldFetchStaffDirectory };
 
 export function formatStaffName(staff: Pick<StaffMember, 'title' | 'firstName' | 'lastName'>): string {
   return [staff.title, staff.firstName, staff.lastName].filter(Boolean).join(' ').trim();
@@ -14,7 +21,7 @@ export function staffInitials(staff: Pick<StaffMember, 'firstName' | 'lastName'>
 export interface StaffContextValue {
   /** Active staff for the facility, from GET /staff. */
   staff: StaffMember[];
-  /** The authenticated staff member (matched against the facility's staff list). */
+  /** The authenticated staff member (resolved from /staff/me and/or the facility's staff list). */
   current: StaffMember | null;
   /** Display name for the current staff member, or empty string. */
   currentName: string;
@@ -23,7 +30,7 @@ export interface StaffContextValue {
   reload: () => Promise<void>;
 }
 
-const StaffContext = createContext<StaffContextValue>({
+export const StaffContext = createContext<StaffContextValue>({
   staff: [],
   current: null,
   currentName: '',
@@ -32,56 +39,77 @@ const StaffContext = createContext<StaffContextValue>({
   reload: async () => {},
 });
 
-export const useStaff = () => useContext(StaffContext);
+export const useStaff = (): StaffContextValue => {
+  const globalMock = (globalThis as any).__mockStaffContext;
+  if (globalMock) return globalMock;
+  return useContext(StaffContext);
+};
 
 /**
  * Facility staff directory plus the signed-in user. Identity comes from the session (see AuthContext), so
- * every action is attributed to the authenticated account. When the signed-in account lacks `staff:view`
- * (and the directory cannot be listed), `current` falls back to a minimal record built from the session.
+ * every action is attributed to the authenticated account. The signed-in user's full staff record (email,
+ * clinical credentials, signature specimen) is loaded from `GET /staff/me`, ensuring full profile fidelity
+ * even when the signed-in role lacks `staff:read` directory permissions.
  */
 export function StaffProvider({ children }: { children: React.ReactNode }) {
   const { license } = useClinic();
   const { user } = useAuth();
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [myProfile, setMyProfile] = useState<StaffMember | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const reload = useCallback(async () => {
-    setLoading(true);
-    const [data, err] = await clinicService.getStaff(undefined, true);
-    if (err) {
-      setError(err.message || 'Unable to load staff.');
-    } else {
-      setStaff(data ?? []);
+    const reqId = ++requestIdRef.current;
+
+    if (!user) {
+      setStaff([]);
+      setMyProfile(null);
       setError(null);
+      setLoading(false);
+      return;
     }
+
+    setLoading(true);
+
+    const canReadDirectory = shouldFetchStaffDirectory(user);
+
+    const [[profileData], [staffData, staffErr]] = await Promise.all([
+      clinicService.getMyProfile(),
+      canReadDirectory
+        ? clinicService.getStaff(undefined, true)
+        : Promise.resolve([null, null] as const),
+    ]);
+
+    if (reqId !== requestIdRef.current) return;
+
+    if (profileData && profileData.id === user.id) {
+      setMyProfile(profileData);
+    } else {
+      setMyProfile((prev) => (prev && prev.id === user.id ? prev : null));
+    }
+
+    if (staffData) {
+      setStaff(staffData);
+      setError(null);
+    } else {
+      setStaff([]);
+      setError(normalizeStaffLoadError(staffErr));
+    }
+
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    reload();
+    void reload();
   }, [reload, license?.clinicId, user?.id]);
 
-  const current = useMemo<StaffMember | null>(() => {
-    if (!user) return null;
-    const match = staff.find((s) => s.id === user.id);
-    if (match) return match;
-    const parts = (user?.name ?? '').trim().split(/\s+/).filter(Boolean);
-    const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
-    const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] ?? '';
-    return {
-      id: user.id,
-      tenantId: user.tenantId,
-      clinicId: user.clinicId,
-      roleName: user.roleName ?? undefined,
-      firstName,
-      lastName,
-      role: user.role as StaffMember['role'],
-      isActive: true,
-      createdAt: '',
-    };
-  }, [staff, user]);
+  const current = useMemo<StaffMember | null>(
+    () => resolveCurrentStaffMember(user, staff, myProfile),
+    [user, staff, myProfile],
+  );
 
   const value = useMemo<StaffContextValue>(
     () => ({

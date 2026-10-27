@@ -27,7 +27,8 @@ public sealed record AuthUserDto(
     string TenantId,
     string ClinicName,
     IReadOnlyList<string> Permissions,
-    bool MustChangePassword);
+    bool MustChangePassword,
+    string? Email = null);
 
 public sealed record AuthTokensDto(
     string AccessToken,
