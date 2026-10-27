@@ -143,10 +143,14 @@ export default function PublicQueueDisplayScreen() {
       setError(null);
       setLastUpdatedTime(Date.now());
 
-      // If valid PIN was supplied, persist it
+      // If valid PIN was supplied, persist it; if invalid or required, clear stale storage
       if (activePin && res.isPinValid) {
         try {
           localStorage.setItem(PIN_STORAGE_KEY, activePin);
+        } catch {}
+      } else if (res.isPinRequired && !res.isPinValid) {
+        try {
+          localStorage.removeItem(PIN_STORAGE_KEY);
         } catch {}
       }
 
@@ -1330,7 +1334,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   unlockBtnText: {
-    fontSize: theme.fontSizes.lg,
+    fontSize: theme.fontSizes.md,
     fontWeight: '700',
     color: darkColors.text,
   },

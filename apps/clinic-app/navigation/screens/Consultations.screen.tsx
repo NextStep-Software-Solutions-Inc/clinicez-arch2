@@ -3187,6 +3187,11 @@ export default function ConsultationsScreen() {
     setOrderSearchModalVisible(true);
   };
 
+  const handleOpenOrderDiagnosticModal = () => {
+    setOrderSearchInitialCategory('Diagnostic');
+    setOrderSearchModalVisible(true);
+  };
+
   const renderLongitudinalChartContent = () => (
     <View style={styles.longitudinalChartContainer}>
       <Card>
@@ -3257,6 +3262,7 @@ export default function ConsultationsScreen() {
           onRefreshChart={refreshDiagnosticsTab}
           onOpenLabSlip={handleOpenLabSlip}
           onViewLabSlip={handleOpenLabSlip}
+          onOrderDiagnostic={handleOpenOrderDiagnosticModal}
         />
       )}
       {activeChartTab === 'procedures' && (

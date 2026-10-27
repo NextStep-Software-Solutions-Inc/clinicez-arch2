@@ -166,23 +166,4 @@ public sealed class LabOrdersController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Lab requisition cancelled successfully."));
     }
-
-    [HttpPost("{id:guid}/collect-specimen")]
-    [HasPermission(ClinicPermissions.LabOrdersWrite)]
-    public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> CollectSpecimen(
-        [FromRoute] Guid id,
-        [FromBody] CollectSpecimenRequest? request,
-        CancellationToken ct)
-    {
-        var command = new CollectSpecimenLabOrderCommand(
-            id,
-            request?.SpecimenType,
-            request?.ContainerType,
-            request?.AccessionBarcode,
-            request?.CollectorName,
-            request?.Notes
-        );
-        var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Specimen collection recorded successfully."));
-    }
 }

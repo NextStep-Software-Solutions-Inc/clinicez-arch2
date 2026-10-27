@@ -48,25 +48,18 @@ export function resolveTvDisplaySlugs(
   } else if (ctx?.tenantSlug && !isGuidOrUuid(ctx.tenantSlug)) {
     tenantSlug = ctx.tenantSlug.trim();
   } else if (ctx?.facilitySlug && !isGuidOrUuid(ctx.facilitySlug)) {
-    // In clinic subdomains like nextstep.clinic.dev.clinicez.net, resolveTenantContext sets facilitySlug = "nextstep"
     tenantSlug = ctx.facilitySlug.trim();
   } else if (settings?.facilitySlug && !isGuidOrUuid(settings.facilitySlug)) {
     tenantSlug = settings.facilitySlug.trim();
   }
 
-  if (!tenantSlug || isGuidOrUuid(tenantSlug)) {
-    tenantSlug = 'clinic';
-  }
-
   let facilitySlug = '';
-  if (settings?.facilitySlug && !isGuidOrUuid(settings.facilitySlug) && settings.facilitySlug.trim() !== tenantSlug) {
+  if (settings?.facilitySlug && !isGuidOrUuid(settings.facilitySlug)) {
     facilitySlug = settings.facilitySlug.trim();
-  } else if (ctx?.facilitySlug && !isGuidOrUuid(ctx.facilitySlug) && ctx.facilitySlug.trim() !== tenantSlug) {
+  } else if (ctx?.facilitySlug && !isGuidOrUuid(ctx.facilitySlug)) {
     facilitySlug = ctx.facilitySlug.trim();
-  }
-
-  if (!facilitySlug || isGuidOrUuid(facilitySlug)) {
-    facilitySlug = 'main';
+  } else if (tenantSlug && !isGuidOrUuid(tenantSlug)) {
+    facilitySlug = tenantSlug;
   }
 
   return { tenantSlug, facilitySlug };
@@ -75,6 +68,7 @@ export function resolveTvDisplaySlugs(
 /**
  * Constructs the canonical public Cloud TV display URL.
  * Guarantees zero UUID exposure and optionally appends configured PIN for authenticated setup.
+ * Returns empty string if either tenantSlug or facilitySlug is unresolved.
  */
 export function buildCloudTvDisplayUrl(
   portalBase: string,
@@ -83,6 +77,9 @@ export function buildCloudTvDisplayUrl(
   includePin: boolean = false
 ): string {
   const { tenantSlug, facilitySlug } = resolveTvDisplaySlugs(settings, ctx);
+  if (!tenantSlug || !facilitySlug) {
+    return '';
+  }
   const base = `${portalBase.replace(/\/+$/, '')}/queue-display/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(facilitySlug)}`;
   if (includePin && settings?.tvDisplayPin && settings.tvDisplayPin.trim()) {
     return `${base}?pin=${encodeURIComponent(settings.tvDisplayPin.trim())}`;

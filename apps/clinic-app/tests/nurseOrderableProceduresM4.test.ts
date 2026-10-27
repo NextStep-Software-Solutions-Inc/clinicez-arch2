@@ -84,8 +84,29 @@ mock.module('../constants/fonts', () => ({
 
 
 
+const mockAuthContext = {
+  useAuth: () => (globalThis as any).__mockAuthContext || ({
+    state: 'signedIn',
+    user: { id: 'staff-nurse-1', role: 'Nurse', permissions: ['procedures:write', 'laborders:write'] },
+    permissions: ['procedures:write', 'laborders:write'],
+    can: () => true,
+  }),
+  usePermission: (perm: string) => {
+    const ctx = (globalThis as any).__mockAuthContext;
+    if (!ctx) return true;
+    if (Array.isArray(ctx.permissions)) return ctx.permissions.includes(perm) || ctx.permissions.includes('*');
+    if (typeof ctx.can === 'function') return Boolean(ctx.can(perm));
+    return false;
+  },
+  AuthProvider: ({ children }: any) => children,
+};
+mock.module('../context/AuthContext', () => mockAuthContext);
+mock.module('../../context/AuthContext', () => mockAuthContext);
+mock.module('@context/AuthContext', () => mockAuthContext);
+
 const mockStaffContext = {
-  useStaff: () => ({
+  useStaff: () => (globalThis as any).__mockStaffContext || ({
+    current: { id: 'staff-nurse-1', name: 'Nurse Joy', role: 'Nurse' },
     currentStaff: { id: 'staff-nurse-1', name: 'Nurse Joy', role: 'Nurse' },
     staff: [],
   }),
@@ -118,7 +139,7 @@ mock.module('../services/apiClient', () => ({
 
 const { clinicService } = await import('../services/clinicService');
 const { default: NursingProceduresTab, ProcedureExecutionModal } = await import('../components/chart/NursingProceduresTab');
-const { default: DiagnosticLabTab, AttachExternalLabModal, SpecimenIntakeModal } = await import('../components/chart/DiagnosticLabTab');
+const { default: DiagnosticLabTab, AttachExternalLabModal } = await import('../components/chart/DiagnosticLabTab');
 const { default: AdministerVaccineModal } = await import('../components/chart/AdministerVaccineModal');
 import type { ClinicalProcedureRecord } from '../services/clinicService';
 
@@ -128,6 +149,8 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
     lastPostPayload = null;
     mockPostResponse = null;
     mockPostError = null;
+    delete (globalThis as any).__mockAuthContext;
+    delete (globalThis as any).__mockStaffContext;
   });
 
   describe('1. clinicService API Contracts for Procedures & Vaccines', () => {
@@ -286,21 +309,103 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
     });
   });
 
-  describe('5. DiagnosticLabTab Specimen Intake Accessioning', () => {
-    test('5.1 renders lab orders tab with intake specimen capability', () => {
+  describe('5. DiagnosticLabTab Diagnostic Ordering & External Attach', () => {
+    test('5.1 DiagnosticLabTab renders Order Diagnostic button when doctor holds laborders:write and valid PRC', () => {
+      (globalThis as any).__mockAuthContext = {
+        state: 'signedIn',
+        user: { id: 'u1', role: 'Doctor', permissions: ['laborders:write'] },
+        permissions: ['laborders:write'],
+      };
+      (globalThis as any).__mockStaffContext = {
+        current: { id: 'staff-doc-1', name: 'Dr. Gregory House', role: 'Doctor', prcLicenseNumber: 'PRC-1234567' },
+        currentStaff: { id: 'staff-doc-1', name: 'Dr. Gregory House', role: 'Doctor', prcLicenseNumber: 'PRC-1234567' },
+        staff: [],
+      };
+
       const element = React.createElement(DiagnosticLabTab, {
         labOrders: [],
         patientId: 'pat-1',
         patientName: 'Juan Dela Cruz',
-        onIntakeSpecimen: () => {},
+        onOrderDiagnostic: () => {},
       });
 
       expect(element).toBeDefined();
       const markup = renderToStaticMarkup(element);
-      expect(markup).toContain('data-testid="intake-specimen-button"');
+      expect(markup).toContain('data-testid="order-diagnostic-button"');
+      expect(markup).toContain('Order Diagnostic');
     });
 
-    test('5.2 AttachExternalLabModal renders file attachment selector with auto-detected format', () => {
+    test('5.2 DiagnosticLabTab gates Order Diagnostic button when doctor lacks PRC license', () => {
+      (globalThis as any).__mockAuthContext = {
+        state: 'signedIn',
+        user: { id: 'u2', role: 'Doctor', permissions: ['laborders:write'] },
+        permissions: ['laborders:write'],
+      };
+      (globalThis as any).__mockStaffContext = {
+        current: { id: 'staff-doc-2', name: 'Dr. Unlicensed', role: 'Doctor', prcLicenseNumber: '' },
+        currentStaff: { id: 'staff-doc-2', name: 'Dr. Unlicensed', role: 'Doctor', prcLicenseNumber: '' },
+        staff: [],
+      };
+
+      const element = React.createElement(DiagnosticLabTab, {
+        labOrders: [],
+        patientId: 'pat-1',
+        patientName: 'Juan Dela Cruz',
+      });
+
+      const markup = renderToStaticMarkup(element);
+      expect(markup).not.toContain('data-testid="order-diagnostic-button"');
+      expect(markup).toContain('PRC License Required');
+    });
+
+    test('5.3 DiagnosticLabTab allows non-doctor with laborders:write to order diagnostics without PRC license', () => {
+      (globalThis as any).__mockAuthContext = {
+        state: 'signedIn',
+        user: { id: 'u3', role: 'Nurse', permissions: ['laborders:write'] },
+        permissions: ['laborders:write'],
+      };
+      (globalThis as any).__mockStaffContext = {
+        current: { id: 'staff-nurse-1', name: 'Nurse Joy', role: 'Nurse' },
+        currentStaff: { id: 'staff-nurse-1', name: 'Nurse Joy', role: 'Nurse' },
+        staff: [],
+      };
+
+      const element = React.createElement(DiagnosticLabTab, {
+        labOrders: [],
+        patientId: 'pat-1',
+        patientName: 'Juan Dela Cruz',
+        onOrderDiagnostic: () => {},
+      });
+
+      const markup = renderToStaticMarkup(element);
+      expect(markup).toContain('data-testid="order-diagnostic-button"');
+      expect(markup).toContain('Order Diagnostic');
+    });
+
+    test('5.4 DiagnosticLabTab hides Order Diagnostic button when user lacks laborders:write permission', () => {
+      (globalThis as any).__mockAuthContext = {
+        state: 'signedIn',
+        user: { id: 'u4', role: 'Nurse', permissions: ['laborders:read'] },
+        permissions: ['laborders:read'],
+      };
+      (globalThis as any).__mockStaffContext = {
+        current: { id: 'staff-nurse-1', name: 'Nurse Joy', role: 'Nurse' },
+        currentStaff: { id: 'staff-nurse-1', name: 'Nurse Joy', role: 'Nurse' },
+        staff: [],
+      };
+
+      const element = React.createElement(DiagnosticLabTab, {
+        labOrders: [],
+        patientId: 'pat-1',
+        patientName: 'Juan Dela Cruz',
+      });
+
+      const markup = renderToStaticMarkup(element);
+      expect(markup).not.toContain('data-testid="order-diagnostic-button"');
+      expect(markup).not.toContain('PRC License Required');
+    });
+
+    test('5.5 AttachExternalLabModal renders file attachment selector with auto-detected format', () => {
       const element = React.createElement(AttachExternalLabModal, {
         visible: true,
         orderId: 'lab-order-123',
@@ -315,7 +420,7 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       expect(markup).toContain('Auto-detected format');
     });
 
-    test('5.3 clinicService.attachExternalLabResult transmits base64 file and metadata', async () => {
+    test('5.6 clinicService.attachExternalLabResult transmits base64 file and metadata', async () => {
       mockPostResponse = { id: 'lab-order-123', status: 'CompletedWithExternalReport' };
       const [res, err] = await clinicService.attachExternalLabResult('lab-order-123', {
         externalLabName: 'Hi-Precision Diagnostics',
@@ -338,53 +443,7 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       });
     });
 
-    test('5.4 clinicService.collectLabOrderSpecimen posts to /lab-orders/:id/collect-specimen', async () => {
-      mockPostResponse = { id: 'lab-order-123', status: 'SpecimenCollected', stage: 'SpecimenCollected' };
-      const [res, err] = await clinicService.collectLabOrderSpecimen('lab-order-123', {
-        specimenType: 'Whole Blood (EDTA)',
-        containerType: 'Purple_EDTA',
-        accessionBarcode: 'SPEC-718400',
-        collectorName: 'Treatment Nurse',
-        notes: 'Adequate volume, unhemolyzed',
-      });
-
-      expect(err).toBeNull();
-      expect(lastPostUrl).toBe('/lab-orders/lab-order-123/collect-specimen');
-      expect(lastPostPayload).toEqual({
-        specimenType: 'Whole Blood (EDTA)',
-        containerType: 'Purple_EDTA',
-        accessionBarcode: 'SPEC-718400',
-        collectorName: 'Treatment Nurse',
-        notes: 'Adequate volume, unhemolyzed',
-      });
-      expect(res?.status).toBe('SpecimenCollected');
-    });
-
-    test('5.5 SpecimenIntakeModal renders target order info and specimen form fields', () => {
-      const targetOrder: any = {
-        id: 'lab-order-123',
-        orderNumber: 'LAB-20261027-002',
-        status: 'Ordered',
-        items: [{ testName: 'Complete Blood Count (CBC)', category: 'Hematology' }],
-      };
-
-      const element = React.createElement(SpecimenIntakeModal, {
-        visible: true,
-        targetOrder,
-        pendingOrders: [targetOrder],
-        onClose: () => {},
-        onSuccess: () => {},
-      });
-
-      expect(element).toBeDefined();
-      const markup = renderToStaticMarkup(element);
-      expect(markup).toContain('Ambulatory Specimen Collection');
-      expect(markup).toContain('Requisition #LAB-20261027-002');
-      expect(markup).toContain('Complete Blood Count (CBC)');
-      expect(markup).toContain('data-testid="confirm-intake-specimen-button"');
-    });
-
-    test('5.6 DiagnosticLabTab displays Log Specimen button for Ordered and Specimen Accessioned for SpecimenCollected', () => {
+    test('5.7 DiagnosticLabTab displays Attach External Result for Ordered labs and does not render specimen intake', () => {
       const orderedLab: any = {
         id: 'lab-1',
         orderNumber: 'LAB-001',
@@ -409,9 +468,12 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       });
 
       const markup = renderToStaticMarkup(element);
-      expect(markup).toContain('data-testid="collect-specimen-lab-1"');
-      expect(markup).toContain('Specimen Accessioned &amp; Logged');
-      expect(markup).toContain('Specimen collected (Whole Blood (EDTA)). Barcode: SPEC-718400');
+      // Clinical attach action is rendered for active lab orders
+      expect(markup).toContain('data-testid="attach-external-result-lab-1"');
+      // Backward compatibility: SpecimenCollected orders render their status chip gracefully
+      expect(markup).toContain('Specimen Collected');
+      // Non-clinical phlebotomy intake button is NOT rendered
+      expect(markup).not.toContain('data-testid="collect-specimen-lab-1"');
     });
   });
 });

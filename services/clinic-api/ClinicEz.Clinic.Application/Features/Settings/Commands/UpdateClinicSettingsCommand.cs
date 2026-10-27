@@ -63,7 +63,8 @@ public sealed record UpdateClinicSettingsCommand(
     string? TimeZoneId = null,
     string? DateFormat = null,
     string? TimeFormat = null,
-    string? TvDisplayPin = null) : IRequest<ClinicSettingsDto>;
+    string? TvDisplayPin = null,
+    bool ClearTvDisplayPin = false) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -193,8 +194,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.TvDisplayMaskPatientNames.HasValue)
             settings.TvDisplayMaskPatientNames = request.TvDisplayMaskPatientNames.Value;
 
-        if (request.TvDisplayPin != null)
-            settings.TvDisplayPin = string.IsNullOrWhiteSpace(request.TvDisplayPin) ? null : request.TvDisplayPin.Trim();
+        if (request.ClearTvDisplayPin || (request.TvDisplayPin != null && string.IsNullOrWhiteSpace(request.TvDisplayPin)))
+            settings.TvDisplayPin = null;
+        else if (!string.IsNullOrWhiteSpace(request.TvDisplayPin))
+            settings.TvDisplayPin = request.TvDisplayPin.Trim();
 
         if (request.EnableQueuePushNotifications.HasValue)
             settings.EnableQueuePushNotifications = request.EnableQueuePushNotifications.Value;

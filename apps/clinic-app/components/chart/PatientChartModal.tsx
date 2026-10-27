@@ -61,7 +61,7 @@ export default function PatientChartModal({
   onOrderDentalProcedure,
   onVoidDentalCondition,
   onOrderProcedure,
-  onIntakeSpecimen,
+  onOrderDiagnostic,
   queueItemId,
 }: PatientChartModalProps) {
   const { settings } = useClinic();
@@ -210,7 +210,7 @@ export default function PatientChartModal({
     onOrderDentalProcedure,
     onVoidDentalCondition,
     onOrderProcedure,
-    onIntakeSpecimen,
+    onOrderDiagnostic,
     queueItemId: queueItemId ?? (patientChart as any)?.queueItemId ?? (displayPatient as any)?.queueItemId ?? null,
   };
 

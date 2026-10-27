@@ -1957,6 +1957,7 @@ export interface ClinicSettingsRecord {
   tenantSlug?: string;
   facilitySlug?: string;
   tvDisplayPin?: string | null;
+  clearTvDisplayPin?: boolean;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
@@ -2637,19 +2638,6 @@ export const clinicService = {
 
   async cancelLabOrder(id: string, reason?: string) {
     return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${id}/cancel`, { reason });
-  },
-
-  async collectLabOrderSpecimen(
-    orderId: string,
-    payload: {
-      specimenType?: string;
-      containerType?: string;
-      accessionBarcode?: string;
-      collectorName?: string;
-      notes?: string;
-    }
-  ) {
-    return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${orderId}/collect-specimen`, payload);
   },
 
   async getLabOrderSlip(orderId: string) {
