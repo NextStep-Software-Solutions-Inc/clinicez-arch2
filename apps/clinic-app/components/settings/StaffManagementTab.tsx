@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -39,7 +39,7 @@ import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
 import { resolveStaffBadge, getAvailableStaffActions } from '../../utils/staffStatus';
-import { buildStaffCreationPayload } from '../../utils/staffManagement';
+import { buildStaffCreationPayload, validateStaffEmailNotInClinic } from '../../utils/staffManagement';
 
 interface StaffManagementTabProps {
   staff: StaffMember[];
@@ -123,6 +123,8 @@ export default function StaffManagementTab({
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [addingStaff, setAddingStaff] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [emailFieldError, setEmailFieldError] = useState<string | null>(null);
+  const prevShowAddModalRef = useRef(false);
 
   // Success Credentials Modal State
   const [credentialsModal, setCredentialsModal] = useState<{
@@ -256,6 +258,8 @@ export default function StaffManagementTab({
     setSignatureSpecimen(null);
     setDefaultSignatureMode('ESignatureSpecimen');
     setAddError(null);
+    setEmailFieldError(null);
+    prevShowAddModalRef.current = true;
     setShowAddModal(true);
   };
 
@@ -275,8 +279,39 @@ export default function StaffManagementTab({
     }
   }, [showAddModal, temporaryPassword, selectedRoleId, systemRoleOptions]);
 
+  useEffect(() => {
+    if (showAddModal && !prevShowAddModalRef.current) {
+      setFirstName('');
+      setLastName('');
+      setMiddleName('');
+      setTitle('Dr.');
+      const defaultDoctor =
+        systemRoleOptions.find((r) => r.staffRole === 'Doctor') ||
+        systemRoleOptions[0] ||
+        FALLBACK_SYSTEM_ROLES[0];
+      setSelectedRoleId(defaultDoctor.id);
+      setRole(defaultDoctor.staffRole);
+      setEmail('');
+      setPhone('');
+      setPrc('');
+      setPtr('');
+      setS2('');
+      setPan('');
+      setSpecialty('');
+      setAssignedRoomIds([]);
+      setInviteDeliveryMode('email');
+      setTemporaryPassword(generateRandomPassword());
+      setSignatureSpecimen(null);
+      setDefaultSignatureMode('ESignatureSpecimen');
+      setAddError(null);
+      setEmailFieldError(null);
+    }
+    prevShowAddModalRef.current = showAddModal;
+  }, [showAddModal, systemRoleOptions]);
+
   const handleOpenEditModal = (s: StaffMember) => {
     setEditingStaff(s);
+    setEmailFieldError(null);
     setFirstName(s.firstName || '');
     setLastName(s.lastName || '');
     setMiddleName(s.middleName || '');
@@ -336,6 +371,13 @@ export default function StaffManagementTab({
       return;
     }
 
+    const duplicateEditEmailError = validateStaffEmailNotInClinic(email, staff, editingStaff.id);
+    if (duplicateEditEmailError) {
+      setEmailFieldError(duplicateEditEmailError);
+      setEditError(duplicateEditEmailError);
+      return;
+    }
+
     setSavingEdit(true);
     setEditError(null);
 
@@ -392,9 +434,20 @@ export default function StaffManagementTab({
 
     let deliveryPayload: ReturnType<typeof buildStaffCreationPayload>;
     try {
-      deliveryPayload = buildStaffCreationPayload(inviteDeliveryMode, email, temporaryPassword);
+      deliveryPayload = buildStaffCreationPayload(
+        inviteDeliveryMode,
+        inviteDeliveryMode === 'none' ? '' : email,
+        temporaryPassword
+      );
     } catch (err: any) {
       setAddError(err.message || 'Invalid staff invitation settings.');
+      return;
+    }
+
+    const duplicateAddEmailError = validateStaffEmailNotInClinic(deliveryPayload.email, staff);
+    if (duplicateAddEmailError) {
+      setEmailFieldError(duplicateAddEmailError);
+      setAddError(duplicateAddEmailError);
       return;
     }
 
@@ -1410,7 +1463,13 @@ export default function StaffManagementTab({
           <View style={{ marginVertical: theme.spacing.xs }}>
             <SegmentedControl<'email' | 'link' | 'password' | 'none'>
               value={inviteDeliveryMode}
-              onChange={setInviteDeliveryMode}
+              onChange={(mode) => {
+                setInviteDeliveryMode(mode);
+                if (mode === 'none') {
+                  setEmailFieldError(null);
+                  setAddError(null);
+                }
+              }}
               options={[
                 { value: 'email', label: 'Email Invite' },
                 { value: 'link', label: 'Copy Link' },
@@ -1426,7 +1485,13 @@ export default function StaffManagementTab({
                 label="Sign-in email address"
                 required
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(val) => {
+                  setEmail(val);
+                  if (emailFieldError) setEmailFieldError(null);
+                  if (addError) setAddError(null);
+                }}
+                onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff))}
+                error={emailFieldError || undefined}
                 placeholder="doctor@clinic.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -1438,7 +1503,13 @@ export default function StaffManagementTab({
               <Input
                 label="Sign-in email address (Optional)"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(val) => {
+                  setEmail(val);
+                  if (emailFieldError) setEmailFieldError(null);
+                  if (addError) setAddError(null);
+                }}
+                onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff))}
+                error={emailFieldError || undefined}
                 placeholder="doctor@clinic.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -1451,7 +1522,13 @@ export default function StaffManagementTab({
                 label="Sign-in email address"
                 required
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(val) => {
+                  setEmail(val);
+                  if (emailFieldError) setEmailFieldError(null);
+                  if (addError) setAddError(null);
+                }}
+                onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff))}
+                error={emailFieldError || undefined}
                 placeholder="doctor@clinic.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -1686,7 +1763,13 @@ export default function StaffManagementTab({
               containerStyle={styles.flexWide}
               label="Email address"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(val) => {
+                setEmail(val);
+                if (emailFieldError) setEmailFieldError(null);
+                if (editError) setEditError(null);
+              }}
+              onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff, editingStaff.id))}
+              error={emailFieldError || undefined}
               placeholder="doctor@clinic.com"
               keyboardType="email-address"
               autoCapitalize="none"
