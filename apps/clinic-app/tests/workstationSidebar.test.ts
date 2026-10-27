@@ -285,6 +285,20 @@ describe('WorkstationSidebar Component', () => {
     }
   });
 
+  test('does not include "Scan patient QR" in workstation navigation items (accessible directly on Patients screen)', () => {
+    const hasScanQr = WORKSTATION_NAV_ITEMS.some((item) => item.key === 'ShareImport' || item.label === 'Scan patient QR');
+    expect(hasScanQr).toBe(false);
+
+    const html = renderToStaticMarkup(
+      React.createElement(WorkstationSidebar, {
+        currentRoute: 'Patients',
+        onNavigate: () => {},
+        mode: 'open',
+      })
+    );
+    expect(html).not.toContain('Scan patient QR');
+  });
+
   test('renders compact icon-rail mode (72px) without label texts', () => {
     const html = renderToStaticMarkup(
       React.createElement(WorkstationSidebar, {

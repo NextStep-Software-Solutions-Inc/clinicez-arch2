@@ -15,6 +15,7 @@ import { useNavigation, useFocusEffect, type StaticScreenProps } from '@react-na
 import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
+import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
 import {
   PatientSummarySpine,
   PatientChartModal,
@@ -381,6 +382,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [externalLabName, setExternalLabName] = useState('');
   const [externalFileType, setExternalFileType] = useState<'Photo' | 'PDF'>('PDF');
   const [externalNotes, setExternalNotes] = useState('');
+  const [pickedExternalFile, setPickedExternalFile] = useState<PickedDocumentResult | null>(null);
+  const [pickingExternalFile, setPickingExternalFile] = useState(false);
   const [attaching, setAttaching] = useState(false);
 
   // External Physical Attachments & Verification (School Clinic & 80/20) state
@@ -1279,27 +1282,59 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
   const handleOpenAttach = (orderId: string) => {
     setTargetOrderId(orderId);
+    setExternalLabName('');
+    setExternalFileType('PDF');
+    setExternalNotes('');
+    setPickedExternalFile(null);
     setAttachModalVisible(true);
+  };
+
+  const handlePickExternalFile = async () => {
+    setPickingExternalFile(true);
+    try {
+      const res = await pickLabResultDocument();
+      if (res) {
+        setPickedExternalFile(res);
+        setExternalFileType(res.documentType);
+      }
+    } catch (err: any) {
+      notify.error(err?.message || 'Failed to select document file.');
+    } finally {
+      setPickingExternalFile(false);
+    }
   };
 
   const handleConfirmAttach = async () => {
     if (!targetOrderId) return;
+    if (!externalLabName.trim()) {
+      notify.error('Diagnostic laboratory name is required.');
+      return;
+    }
+    if (!pickedExternalFile?.base64) {
+      notify.error('A result file is required. Please choose a PDF or image.');
+      return;
+    }
+
     setAttaching(true);
     const [updated, err] = await clinicService.attachExternalLabResult(targetOrderId, {
-      externalLabName,
+      externalLabName: externalLabName.trim(),
       documentType: externalFileType,
-      notes: externalNotes,
+      fileBase64: pickedExternalFile.base64,
+      contentType: pickedExternalFile.mimeType,
+      fileName: pickedExternalFile.name,
+      notes: externalNotes.trim() || undefined,
       documentUrl: [getSetting('EXPO_PUBLIC_STORAGE_PUBLIC_URL'), 'external-labs', 'lab-result.pdf'].filter(Boolean).join('/'),
       uploadedBy: currentName || undefined
     });
     setAttaching(false);
-    setAttachModalVisible(false);
 
     if (err) {
       notify.error(err.message || 'Could not attach the laboratory result.');
-    } else {
-      notify.success('External laboratory result attached. Requisition marked as completed.');
+      return;
     }
+
+    setAttachModalVisible(false);
+    notify.success('External laboratory result attached. Requisition marked as completed.');
     if (selectedPatient) {
       handleOpenChart(selectedPatient);
     }
@@ -1644,10 +1679,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
         placeholder="Search by name, patient code, phone or ID number"
         leftIcon="search"
-        rightIcon={searchTerm ? 'close' : undefined}
+        rightIcon={searchTerm ? 'close' : (canImportPatient ? 'scan' : undefined)}
         onRightIconPress={() => {
-          setSearchTerm('');
-          setDebouncedSearchTerm('');
+          if (searchTerm) {
+            setSearchTerm('');
+            setDebouncedSearchTerm('');
+          } else if (canImportPatient) {
+            navigation.navigate('ShareImport');
+          }
         }}
         returnKeyType="search"
         containerStyle={styles.searchInput}
@@ -2529,6 +2568,57 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     </Pressable>
                   ))}
                 </View>
+              </View>
+
+              <View>
+                <ThemedText style={styles.inputLabel}>Result File Attachment * (PDF, JPEG, PNG)</ThemedText>
+                {pickedExternalFile ? (
+                  <View style={styles.pickedFileBox}>
+                    <View style={styles.pickedFileInfo}>
+                      <Icon
+                        name={externalFileType === 'PDF' ? 'file' : 'camera'}
+                        size={theme.sizes.iconMd}
+                        color={theme.colors.primary}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
+                          {pickedExternalFile.name}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          {pickedExternalFile.size ? `${(pickedExternalFile.size / 1024).toFixed(1)} KB • ` : ''}
+                          Ready to attach
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <Pressable
+                        style={styles.changeFileBtn}
+                        onPress={handlePickExternalFile}
+                        disabled={pickingExternalFile || attaching}
+                      >
+                        <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
+                      </Pressable>
+                      <Pressable
+                        style={styles.removeFileBtn}
+                        onPress={() => setPickedExternalFile(null)}
+                        disabled={attaching}
+                      >
+                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={styles.pickFileBtn}
+                    onPress={handlePickExternalFile}
+                    disabled={pickingExternalFile || attaching}
+                  >
+                    <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                    <ThemedText variant="captionBold" color={theme.colors.primary}>
+                      {pickingExternalFile ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
+                    </ThemedText>
+                  </Pressable>
+                )}
               </View>
 
               <View>
