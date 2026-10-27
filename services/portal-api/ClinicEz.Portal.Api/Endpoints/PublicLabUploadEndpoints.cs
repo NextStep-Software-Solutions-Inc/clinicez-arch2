@@ -40,19 +40,17 @@ public sealed class PublicLabUploadEndpoints : IEndpoint
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        string[] infoRoutes = [
-            "/public/lab-uploads/{token}",
-            "/public/lab-uploads/{token}/info"
-        ];
+        app.MapGet("/public/lab-uploads/{token}", ValidateLabUploadTokenAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting(RateLimitPolicy)
+            .WithName("ValidateLabUploadToken")
+            .WithTags("Public");
 
-        foreach (var route in infoRoutes)
-        {
-            app.MapGet(route, ValidateLabUploadTokenAsync)
-                .AllowAnonymous()
-                .RequireRateLimiting(RateLimitPolicy)
-                .WithName("ValidateLabUploadToken")
-                .WithTags("Public");
-        }
+        app.MapGet("/public/lab-uploads/{token}/info", ValidateLabUploadTokenAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting(RateLimitPolicy)
+            .WithName("ValidateLabUploadTokenInfo")
+            .WithTags("Public");
 
         app.MapPost("/public/lab-uploads/{token}", async (
             string token,

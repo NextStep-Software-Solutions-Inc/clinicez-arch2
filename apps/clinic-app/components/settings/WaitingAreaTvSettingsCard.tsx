@@ -31,13 +31,17 @@ export default function WaitingAreaTvSettingsCard({
   const [copiedLan, setCopiedLan] = useState<boolean>(false);
   const [copiedCloud, setCopiedCloud] = useState<boolean>(false);
   const [copiedCloudPin, setCopiedCloudPin] = useState<boolean>(false);
+  const [savedPin, setSavedPin] = useState<string | null>(settings?.tvDisplayPin || null);
   const [pinInput, setPinInput] = useState<string>(settings?.tvDisplayPin || '');
   const [savingPin, setSavingPin] = useState<boolean>(false);
 
   useEffect(() => {
     if (settings) {
       setMaskNames(settings.tvDisplayMaskPatientNames ?? true);
-      setPinInput(settings.tvDisplayPin || '');
+      if (settings.tvDisplayPin !== undefined) {
+        setSavedPin(settings.tvDisplayPin || null);
+        setPinInput(settings.tvDisplayPin || '');
+      }
     }
   }, [settings]);
 
@@ -62,13 +66,18 @@ export default function WaitingAreaTvSettingsCard({
   const portalBase = useMemo(() => getPortalBaseUrl(), []);
   const ctx = useMemo(() => resolveTenantContext(), []);
 
+  const activePin = savedPin ?? settings?.tvDisplayPin ?? null;
+  const isPinConfigured = Boolean(activePin && activePin.trim().length > 0);
+
   const publicCloudTvUrl = useMemo<string>(() => {
-    return buildCloudTvDisplayUrl(portalBase, settings, ctx, false);
-  }, [portalBase, settings, ctx]);
+    const effectiveSettings = settings ? { ...settings, tvDisplayPin: activePin } : { tvDisplayPin: activePin };
+    return buildCloudTvDisplayUrl(portalBase, effectiveSettings, ctx, false);
+  }, [portalBase, settings, activePin, ctx]);
 
   const publicCloudTvUrlWithPin = useMemo<string>(() => {
-    return buildCloudTvDisplayUrl(portalBase, settings, ctx, true);
-  }, [portalBase, settings, ctx]);
+    const effectiveSettings = settings ? { ...settings, tvDisplayPin: activePin } : { tvDisplayPin: activePin };
+    return buildCloudTvDisplayUrl(portalBase, effectiveSettings, ctx, true);
+  }, [portalBase, settings, activePin, ctx]);
 
   const handleToggleMask = useCallback(
     async (val: boolean) => {
@@ -106,25 +115,33 @@ export default function WaitingAreaTvSettingsCard({
         const trimmed = pinToSave ? pinToSave.trim() : null;
         const [updated, err] = await clinicService.updateSettings({
           tvDisplayPin: trimmed,
+          clearTvDisplayPin: !trimmed,
         });
-        if (err || !updated) {
-          notify.error(err?.message || 'Could not save TV display passcode.');
+        if (err) {
+          notify.error(err.message || 'Could not save TV display passcode.');
           return;
         }
-        setPinInput(trimmed || '');
+        const effectivePin = updated?.tvDisplayPin !== undefined ? updated.tvDisplayPin : trimmed;
+        setSavedPin(effectivePin);
+        setPinInput(effectivePin || '');
         notify.success(
-          trimmed
-            ? `TV Display Passcode set to "${trimmed}". Waiting area boards now require this PIN.`
+          effectivePin
+            ? `TV Display Passcode set to "${effectivePin}". Waiting area boards now require this PIN.`
             : 'TV Display Passcode cleared. Display board is now public without PIN.'
         );
-        onSettingsUpdated?.(updated);
+        const resolvedSettings: ClinicSettingsRecord = {
+          ...(settings || ({} as ClinicSettingsRecord)),
+          ...(updated || {}),
+          tvDisplayPin: effectivePin,
+        };
+        onSettingsUpdated?.(resolvedSettings);
       } catch {
         notify.error('Failed to update TV display passcode.');
       } finally {
         setSavingPin(false);
       }
     },
-    [onSettingsUpdated]
+    [onSettingsUpdated, settings]
   );
 
   const handleGeneratePin = useCallback(() => {
@@ -165,8 +182,6 @@ export default function WaitingAreaTvSettingsCard({
       notify.error('Could not copy TV display URL to clipboard.');
     }
   }, []);
-
-  const isPinConfigured = Boolean(settings?.tvDisplayPin && settings.tvDisplayPin.trim().length > 0);
 
   return (
     <Card>
@@ -239,7 +254,7 @@ export default function WaitingAreaTvSettingsCard({
                     leftIcon="lock"
                     helperText={
                       isPinConfigured
-                        ? `Currently active PIN: "${settings?.tvDisplayPin}". Anyone without this PIN cannot see queue tickets.`
+                        ? `Currently active PIN: "${activePin}". Anyone without this PIN cannot see queue tickets.`
                         : 'No PIN is currently configured. Anyone with the URL can view the queue display.'
                     }
                   />
@@ -250,7 +265,7 @@ export default function WaitingAreaTvSettingsCard({
                     variant="primary"
                     icon="check"
                     loading={savingPin}
-                    disabled={savingPin || pinInput.trim() === (settings?.tvDisplayPin || '')}
+                    disabled={savingPin || pinInput.trim() === (activePin || '')}
                     onPress={() => handleSavePin(pinInput)}
                   />
                   <Button

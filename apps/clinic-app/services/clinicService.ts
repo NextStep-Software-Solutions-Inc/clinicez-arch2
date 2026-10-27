@@ -1957,6 +1957,7 @@ export interface ClinicSettingsRecord {
   tenantSlug?: string;
   facilitySlug?: string;
   tvDisplayPin?: string | null;
+  clearTvDisplayPin?: boolean;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';

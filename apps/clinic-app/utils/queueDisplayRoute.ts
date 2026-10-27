@@ -48,7 +48,6 @@ export function resolveTvDisplaySlugs(
   } else if (ctx?.tenantSlug && !isGuidOrUuid(ctx.tenantSlug)) {
     tenantSlug = ctx.tenantSlug.trim();
   } else if (ctx?.facilitySlug && !isGuidOrUuid(ctx.facilitySlug)) {
-    // In clinic subdomains like nextstep.clinic.dev.clinicez.net, resolveTenantContext sets facilitySlug = "nextstep"
     tenantSlug = ctx.facilitySlug.trim();
   } else if (settings?.facilitySlug && !isGuidOrUuid(settings.facilitySlug)) {
     tenantSlug = settings.facilitySlug.trim();
@@ -59,14 +58,15 @@ export function resolveTvDisplaySlugs(
   }
 
   let facilitySlug = '';
-  if (settings?.facilitySlug && !isGuidOrUuid(settings.facilitySlug) && settings.facilitySlug.trim() !== tenantSlug) {
+  if (settings?.facilitySlug && !isGuidOrUuid(settings.facilitySlug)) {
     facilitySlug = settings.facilitySlug.trim();
-  } else if (ctx?.facilitySlug && !isGuidOrUuid(ctx.facilitySlug) && ctx.facilitySlug.trim() !== tenantSlug) {
+  } else if (ctx?.facilitySlug && !isGuidOrUuid(ctx.facilitySlug)) {
     facilitySlug = ctx.facilitySlug.trim();
   }
 
   if (!facilitySlug || isGuidOrUuid(facilitySlug)) {
-    facilitySlug = 'main';
+    // If tenantSlug is known and distinct from generic fallback, use tenantSlug as facilitySlug
+    facilitySlug = tenantSlug !== 'clinic' ? tenantSlug : 'main';
   }
 
   return { tenantSlug, facilitySlug };

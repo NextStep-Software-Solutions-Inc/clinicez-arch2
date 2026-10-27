@@ -183,7 +183,7 @@ describe('Milestone 4: Clinic-App LAN Queue Kiosk & Route Detection', () => {
         { facilitySlug: 'nextstep', tenantSlug: null }
       );
       expect(result1.tenantSlug).toBe('nextstep');
-      expect(result1.facilitySlug).toBe('main');
+      expect(result1.facilitySlug).toBe('nextstep');
       expect(isGuidOrUuid(result1.tenantSlug)).toBe(false);
       expect(isGuidOrUuid(result1.facilitySlug)).toBe(false);
 
@@ -193,7 +193,7 @@ describe('Milestone 4: Clinic-App LAN Queue Kiosk & Route Detection', () => {
         null
       );
       expect(result2.tenantSlug).toBe('lobby'); // Promoted from facilitySlug since tenantSlug was invalid GUID!
-      expect(result2.facilitySlug).toBe('main');
+      expect(result2.facilitySlug).toBe('lobby');
       expect(isGuidOrUuid(result2.tenantSlug)).toBe(false);
 
       // Case 3: complete fallback without any valid slugs defaults to "clinic" and "main"
@@ -205,6 +205,14 @@ describe('Milestone 4: Clinic-App LAN Queue Kiosk & Route Detection', () => {
       expect(result3.facilitySlug).toBe('main');
       expect(isGuidOrUuid(result3.tenantSlug)).toBe(false);
       expect(isGuidOrUuid(result3.facilitySlug)).toBe(false);
+
+      // Case 4: tenant is "nexstep" and facility is "nextstep"
+      const result4 = resolveTvDisplaySlugs(
+        { tenantSlug: 'nexstep', facilitySlug: 'nextstep' },
+        null
+      );
+      expect(result4.tenantSlug).toBe('nexstep');
+      expect(result4.facilitySlug).toBe('nextstep');
     });
 
     test('buildCloudTvDisplayUrl constructs slug-based public URLs without UUIDs and appends PIN correctly', () => {
