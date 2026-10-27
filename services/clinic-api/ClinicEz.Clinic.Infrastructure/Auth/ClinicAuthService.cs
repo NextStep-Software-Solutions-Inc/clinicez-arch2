@@ -592,6 +592,7 @@ public sealed class ClinicAuthService : IClinicAuthService
             new("jti", Guid.NewGuid().ToString("N"))
         };
         if (staff.ClinicRoleId is { } roleId) claims.Add(new Claim(ClinicClaimTypes.RoleId, roleId.ToString()));
+        if (!string.IsNullOrWhiteSpace(staff.Email)) claims.Add(new Claim(ClinicClaimTypes.Email, staff.Email));
 
         var access = _tokens.CreateAccessToken(claims);
 
@@ -631,7 +632,8 @@ public sealed class ClinicAuthService : IClinicAuthService
         staff.TenantId,
         clinicName,
         StaffPermissions.For(staff),
-        staff.MustChangePassword);
+        staff.MustChangePassword,
+        staff.Email);
 
     private async Task RevokeFamilyAsync(Guid familyId, DateTime now, CancellationToken ct)
     {

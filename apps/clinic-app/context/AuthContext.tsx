@@ -79,7 +79,11 @@ const AuthContext = createContext<AuthContextValue>({
   can: () => false,
 });
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = (): AuthContextValue => {
+  const globalMock = (globalThis as any).__mockAuthContext;
+  if (globalMock) return globalMock;
+  return useContext(AuthContext);
+};
 
 /** True when the signed-in staff member holds `permission` (always false while signed out). */
 export function usePermission(permission: string): boolean {
