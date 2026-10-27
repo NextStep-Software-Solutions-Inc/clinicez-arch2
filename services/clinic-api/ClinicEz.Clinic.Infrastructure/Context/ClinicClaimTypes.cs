@@ -12,4 +12,5 @@ public static class ClinicClaimTypes
     public const string RoleId = "role_id";
     public const string StaffRole = "staff_role";
     public const string Name = "name";
+    public const string Email = "email";
 }

@@ -429,4 +429,73 @@ public class ClinicRoleSeederTests
         var thirdRun = await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
         thirdRun.Should().Be(0);
     }
+
+    [Fact]
+    public void CanonicalSystemRoleTemplates_GrantStaffReadPermissionToAllClinicalAndOperationalRoles()
+    {
+        var templates = ClinicRoleSeeder.GetCanonicalSystemRoleTemplates();
+
+        var roleNamesRequiringStaffRead = new[]
+        {
+            ClinicRoleSeeder.SystemAdminRoleName,
+            ClinicRoleSeeder.DoctorRoleName,
+            ClinicRoleSeeder.NurseRoleName,
+            ClinicRoleSeeder.ReceptionistRoleName,
+            ClinicRoleSeeder.CashierRoleName,
+            ClinicRoleSeeder.DpoRoleName
+        };
+
+        foreach (var roleName in roleNamesRequiringStaffRead)
+        {
+            var template = templates.SingleOrDefault(t => t.Name == roleName);
+            template.Should().NotBeNull($"Expected canonical system role '{roleName}' to exist");
+            template!.Permissions.Should().Contain(ClinicPermissions.StaffRead,
+                $"Role '{roleName}' must include '{ClinicPermissions.StaffRead}' so workstation roster and profile directory queries do not fail with 403 Forbidden");
+        }
+    }
+
+    [Fact]
+    public async Task SeedOrUpdateAllClinicsAsync_BackfillsStaffReadPermissionToExistingDoctorAndNurseRoles()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_issue_106";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+
+        var legacyDoctorRole = new ClinicRole
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = ClinicRoleSeeder.DoctorRoleName,
+            IsSystem = true,
+            Permissions = new List<string> { ClinicPermissions.ConsultationsRead, ClinicPermissions.ConsultationsWrite }
+        };
+
+        var legacyNurseRole = new ClinicRole
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = ClinicRoleSeeder.NurseRoleName,
+            IsSystem = true,
+            Permissions = new List<string> { ClinicPermissions.TriageRead, ClinicPermissions.TriageWrite }
+        };
+
+        await context.ClinicRoles.AddRangeAsync(legacyDoctorRole, legacyNurseRole);
+        await context.SaveChangesAsync();
+
+        var updatedCount = await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
+
+        updatedCount.Should().Be(1);
+
+        var refreshedDoctor = await context.ClinicRoles.SingleAsync(r => r.Id == legacyDoctorRole.Id);
+        refreshedDoctor.Permissions.Should().Contain(ClinicPermissions.StaffRead);
+
+        var refreshedNurse = await context.ClinicRoles.SingleAsync(r => r.Id == legacyNurseRole.Id);
+        refreshedNurse.Permissions.Should().Contain(ClinicPermissions.StaffRead);
+    }
 }

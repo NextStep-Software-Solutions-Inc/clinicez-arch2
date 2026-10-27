@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -23,7 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useConnection } from '../../components/connection/ConnectionGate';
-import { clinicService, SignatureMode } from '../../services/clinicService';
+import { clinicService, SignatureMode, StaffMember } from '../../services/clinicService';
 import SignatureSpecimenModal from '../../components/settings/SignatureSpecimenModal';
 import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
@@ -44,21 +44,37 @@ export default function ProfileScreen() {
   const { density, setDensity } = useUiDensity();
   const { preset, scale, setPreset, stepDown, stepUp } = useTextScale();
 
-  // Profile Form State
-  const [title, setTitle] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [middleName, setMiddleName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [specialty, setSpecialty] = useState('');
-  const [prc, setPrc] = useState('');
-  const [ptr, setPtr] = useState('');
-  const [s2, setS2] = useState('');
-  const [pan, setPan] = useState('');
+  // Authoritative profile record fetched directly from GET /staff/me
+  const [selfStaff, setSelfStaff] = useState<StaffMember | null>(null);
+  const effectiveStaff = (selfStaff && selfStaff.id === user?.id ? selfStaff : null) ?? staffCurrent;
+
+  const resolveDefaultNames = (s: StaffMember | null, u: typeof user) => {
+    const parts = (u?.name || '').trim().split(/\s+/).filter(Boolean);
+    const defaultLastName = parts.length > 1 ? parts[parts.length - 1] : '';
+    const defaultFirstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] ?? '';
+    return {
+      firstName: s?.firstName || defaultFirstName,
+      lastName: s?.lastName || defaultLastName,
+    };
+  };
+
+  // Profile Form State (pre-populated from effectiveStaff to avoid empty flash)
+  const [title, setTitle] = useState(() => effectiveStaff?.title || (user?.role === 'Doctor' ? 'Dr.' : ''));
+  const [firstName, setFirstName] = useState(() => resolveDefaultNames(effectiveStaff, user).firstName);
+  const [middleName, setMiddleName] = useState(() => effectiveStaff?.middleName || '');
+  const [lastName, setLastName] = useState(() => resolveDefaultNames(effectiveStaff, user).lastName);
+  const [phone, setPhone] = useState(() => effectiveStaff?.phoneNumber || '');
+  const [specialty, setSpecialty] = useState(() => effectiveStaff?.specialty || '');
+  const [prc, setPrc] = useState(() => effectiveStaff?.prcLicenseNumber || '');
+  const [ptr, setPtr] = useState(() => effectiveStaff?.ptrNumber || '');
+  const [s2, setS2] = useState(() => effectiveStaff?.s2LicenseNumber || '');
+  const [pan, setPan] = useState(() => effectiveStaff?.philHealthPan || '');
 
   // Clinician E-Signature Specimen State
-  const [signatureSpecimen, setSignatureSpecimen] = useState<string | null>(null);
-  const [defaultSignatureMode, setDefaultSignatureMode] = useState<SignatureMode>('ESignatureSpecimen');
+  const [signatureSpecimen, setSignatureSpecimen] = useState<string | null>(() => effectiveStaff?.signatureSpecimen || null);
+  const [defaultSignatureMode, setDefaultSignatureMode] = useState<SignatureMode>(
+    () => effectiveStaff?.defaultSignatureMode || 'ESignatureSpecimen',
+  );
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
 
   // Status & Feedback States
@@ -72,16 +88,28 @@ export default function ProfileScreen() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  // Sync form with current staff record
+  // Load authoritative staff record from GET /staff/me on mount / user switch
+  const loadMyProfile = useCallback(async () => {
+    if (!user?.id || offline) return;
+    const [data] = await clinicService.getMyProfile();
+    if (data && data.id === user.id) {
+      setSelfStaff(data);
+    }
+  }, [user?.id, offline]);
+
   useEffect(() => {
-    const s = staffCurrent;
-    const parts = (user?.name || '').trim().split(/\s+/).filter(Boolean);
-    const defaultLastName = parts.length > 1 ? parts[parts.length - 1] : '';
-    const defaultFirstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] ?? '';
+    setSelfStaff((prev) => (prev && prev.id === user?.id ? prev : null));
+    void loadMyProfile();
+  }, [loadMyProfile, user?.id]);
+
+  // Sync form with authoritative staff record
+  useEffect(() => {
+    const s = effectiveStaff;
+    const { firstName: nextFirst, lastName: nextLast } = resolveDefaultNames(s, user);
 
     setTitle(s?.title || (user?.role === 'Doctor' ? 'Dr.' : ''));
-    setFirstName(s?.firstName || defaultFirstName);
-    setLastName(s?.lastName || defaultLastName);
+    setFirstName(nextFirst);
+    setLastName(nextLast);
     setMiddleName(s?.middleName || '');
     setPhone(s?.phoneNumber || '');
     setSpecialty(s?.specialty || '');
@@ -91,13 +119,14 @@ export default function ProfileScreen() {
     setPan(s?.philHealthPan || '');
     setSignatureSpecimen(s?.signatureSpecimen || null);
     setDefaultSignatureMode(s?.defaultSignatureMode || 'ESignatureSpecimen');
-  }, [staffCurrent, user]);
+  }, [effectiveStaff, user]);
 
   if (!user) return null;
 
   const role = user.roleName || user.role;
-  const isDoctor = user.role === 'Doctor' || staffCurrent?.role === 'Doctor';
-  const displayName = staffCurrent ? formatStaffName(staffCurrent) : user.name;
+  const isDoctor = user.role === 'Doctor' || effectiveStaff?.role === 'Doctor';
+  const displayName = effectiveStaff ? formatStaffName(effectiveStaff) : user.name;
+  const accountEmail = effectiveStaff?.email?.trim() || user.email?.trim() || '';
 
   const handleSaveProfile = async () => {
     if (!firstName.trim() || !lastName.trim()) {
@@ -135,6 +164,7 @@ export default function ProfileScreen() {
       return;
     }
 
+    setSelfStaff(updated);
     await reloadStaff();
     notify.success('Profile and credentials updated successfully.');
   };
@@ -197,9 +227,9 @@ export default function ProfileScreen() {
                     variant={isDoctor ? 'primary' : 'purple'}
                     size="md"
                   />
-                  {staffCurrent?.roleName && staffCurrent.roleName !== role ? (
+                  {effectiveStaff?.roleName && effectiveStaff.roleName !== role ? (
                     <Badge
-                      label={staffCurrent.roleName}
+                      label={effectiveStaff.roleName}
                       variant="neutral"
                       size="sm"
                     />
@@ -223,9 +253,9 @@ export default function ProfileScreen() {
                   </View>
                 </View>
 
-                {staffCurrent?.email ? (
+                {accountEmail ? (
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Account: {staffCurrent.email}
+                    Account: {accountEmail}
                   </ThemedText>
                 ) : null}
               </View>
@@ -287,7 +317,7 @@ export default function ProfileScreen() {
               <Input
                 containerStyle={styles.flexWide}
                 label="Sign-in email address"
-                value={staffCurrent?.email || ''}
+                value={accountEmail}
                 editable={false}
                 placeholder="doctor@clinic.com"
                 helperText="Primary workstation account login identity (managed by administrator)."

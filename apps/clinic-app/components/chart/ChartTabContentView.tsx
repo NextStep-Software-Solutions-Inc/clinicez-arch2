@@ -41,7 +41,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
     onIntakeSpecimen,
   } = props;
 
-  if (loadingChart) {
+  if (loadingChart && !patientChart) {
     return (
       <View style={styles.loadingContainer}>
         <SkeletonList rows={6} />

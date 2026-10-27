@@ -35,7 +35,8 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.AuditExport,
                 ClinicPermissions.ReportsRead,
                 ClinicPermissions.SettingsRead,
-                ClinicPermissions.PatientsRead
+                ClinicPermissions.PatientsRead,
+                ClinicPermissions.StaffRead
             }
         ),
         new(
@@ -63,7 +64,8 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.LabOrdersRead,
                 ClinicPermissions.LabOrdersWrite,
                 ClinicPermissions.LabResultsReview,
-                ClinicPermissions.ServicesRead
+                ClinicPermissions.ServicesRead,
+                ClinicPermissions.StaffRead
             }
         ),
         new(
@@ -86,7 +88,8 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.ProceduresWrite,
                 ClinicPermissions.LabOrdersRead,
                 ClinicPermissions.LabOrdersWrite,
-                ClinicPermissions.ServicesRead
+                ClinicPermissions.ServicesRead,
+                ClinicPermissions.StaffRead
             }
         ),
         new(
@@ -125,7 +128,8 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.BillingWrite,
                 ClinicPermissions.BillingVoid,
                 ClinicPermissions.ServicesRead,
-                ClinicPermissions.ReportsRead
+                ClinicPermissions.ReportsRead,
+                ClinicPermissions.StaffRead
             }
         )
     };

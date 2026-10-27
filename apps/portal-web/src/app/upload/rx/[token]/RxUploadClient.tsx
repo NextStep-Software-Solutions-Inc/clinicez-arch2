@@ -459,7 +459,7 @@ export default function RxUploadClient({ token }: { token: string }) {
                   Authorized e-Prescription ({rxInfo.itemCount || 1} line item(s))
                 </p>
                 <p>
-                  In accordance with RA 10173 and clinical privacy policies, medication line items are listed on the physical/printed copy provided to the patient.
+                  To protect patient privacy, medication details are listed only on the printed prescription provided to the patient.
                 </p>
               </div>
             )}

@@ -460,6 +460,54 @@ describe("Tier 1: Canonical Public Route Existence & Happy Path", () => {
 
       const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-DISPENSED-01", initialData: rxData as any }));
       expect(html).toContain("PRESCRIPTION ALREADY DISPENSED");
+      expect(html).toContain("Verified • Dispensed");
+      expect(html).toContain("Dispensing Form Locked");
+      expect(html).not.toContain("UNVERIFIED OR INVALID PRESCRIPTION TOKEN");
+    });
+
+    test("T1.5.5b: Already-dispensed prescription with legacy isValid:false still renders dispensed warning (anti-regression)", () => {
+      const rxData = {
+        prescriptionNumber: "RX-LEGACY-DISPENSED-01",
+        issuedAt: new Date().toISOString(),
+        clinicName: "Clinic",
+        doctorName: "Dr. Doctor",
+        items: [],
+        dispenseStatus: "DispensedExternally",
+        isValid: false,
+        isAlreadyDispensed: true,
+        dispensedPharmacyName: "Mercury Drug",
+        dispensedReceiptNumber: "OR-998877",
+      };
+
+      const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-LEGACY-DISPENSED-01", initialData: rxData as any }));
+      expect(html).toContain("PRESCRIPTION ALREADY DISPENSED");
+      expect(html).toContain("Verified • Dispensed");
+      expect(html).toContain("Mercury Drug");
+      expect(html).toContain("OR-998877");
+      expect(html).toContain("Dispensing Form Locked");
+      expect(html).not.toContain("UNVERIFIED OR INVALID PRESCRIPTION TOKEN");
+      expect(html).not.toContain("Unverified Token");
+    });
+
+    test("T1.5.5c: Expired prescription renders expiration banner and lock", () => {
+      const rxData = {
+        prescriptionNumber: "RX-EXPIRED-01",
+        issuedAt: new Date().toISOString(),
+        clinicName: "Clinic",
+        doctorName: "Dr. Doctor",
+        items: [],
+        dispenseStatus: "Pending",
+        isValid: true,
+        isAlreadyDispensed: false,
+        isExpired: true,
+        expiresAt: new Date(Date.now() - 86400000).toISOString(),
+      };
+
+      const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-EXPIRED-01", initialData: rxData as any }));
+      expect(html).toContain("PRESCRIPTION EXPIRED");
+      expect(html).toContain("Verified • Expired");
+      expect(html).toContain("Dispensing Locked (Expired)");
+      expect(html).not.toContain("UNVERIFIED OR INVALID PRESCRIPTION TOKEN");
     });
 
     test("T1.5.6: Dispense form requires pharmacy name input before confirmation", () => {
@@ -481,7 +529,7 @@ describe("Tier 1: Canonical Public Route Existence & Happy Path", () => {
       };
 
       const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-DISPENSE-FORM", initialData: rxData as any }));
-      expect(html).toContain("Pharmacist Dispense Confirmation (Path B)");
+      expect(html).toContain("Pharmacist Dispense Confirmation");
       expect(html).toContain("Drugstore Chain *");
       expect(html).toContain("Confirm Dispense &amp; Lock Prescription");
     });
@@ -1044,7 +1092,7 @@ describe("Tier 2: Boundary Value Analysis & Corner Cases", () => {
         });
         const html = renderToString(jsx);
         expect(html).toContain("RX-NONEXISTENT");
-        expect(html).toContain("UNVERIFIED OR INVALID PRESCRIPTION TOKEN");
+        expect(html).toContain("Not Found in Registry");
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -1464,7 +1512,7 @@ describe("Tier 3: Cross-Feature Combinations & Pairwise Interactions", () => {
       };
 
       const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-ACTIVE-01", initialData: rxData as any }));
-      expect(html).toContain("Pharmacist Dispense Confirmation (Path B)");
+      expect(html).toContain("Pharmacist Dispense Confirmation");
       expect(html).toContain("Confirm Dispense &amp; Lock Prescription");
     });
 

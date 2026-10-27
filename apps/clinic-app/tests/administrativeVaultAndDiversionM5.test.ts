@@ -194,4 +194,34 @@ describe('Milestone 5: Admin Vault & Audited ER Diversion Frontend Test Suite', 
       expect(chart.referralLetters![0].securityDigest).toBe('b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890a1');
     });
   });
+
+  describe('3. Administrative Vault Authenticated PDF Opening', () => {
+    test('3.1 getMedicalCertificatePdfUrl generates correct streaming path', () => {
+      const url = clinicService.getMedicalCertificatePdfUrl('d6c564e8-b89e-4f94-a78c-dee5e0b61b97');
+      expect(url).toContain('/api/v1/documents/medical-certificates/d6c564e8-b89e-4f94-a78c-dee5e0b61b97/pdf');
+    });
+
+    test('3.2 getReferralLetterPdfUrl generates correct streaming path', () => {
+      const url = clinicService.getReferralLetterPdfUrl('ref-uuid-001');
+      expect(url).toContain('/api/v1/documents/referrals/ref-uuid-001/pdf');
+    });
+
+    test('3.3 AdministrativeDocumentsTab imports and utilizes openDocument for authenticated viewing', async () => {
+      const source = await Bun.file('apps/clinic-app/components/chart/AdministrativeDocumentsTab.tsx').text();
+      expect(source).toContain("import { openDocument } from '../../services/documentOpener'");
+      expect(source).toContain('await openDocument(url)');
+      // Zero unauthenticated direct window.open or Linking.openURL on raw clinic API URLs
+      expect(source).not.toContain("window.open(url, '_blank')");
+      expect(source).not.toContain('Linking.openURL(url)');
+    });
+
+    test('3.4 documentOpener.native provides parity with authenticated downloads and system sharing', async () => {
+      const nativeSource = await Bun.file('apps/clinic-app/services/documentOpener.native.ts').text();
+      expect(nativeSource).toContain('export async function openDocument');
+      expect(nativeSource).toContain('export async function openDocumentBlob');
+      expect(nativeSource).toContain('File.downloadFileAsync');
+      expect(nativeSource).toContain('Sharing.shareAsync');
+      expect(nativeSource).toContain('Authorization');
+    });
+  });
 });
