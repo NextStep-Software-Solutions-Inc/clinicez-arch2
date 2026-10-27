@@ -87,6 +87,10 @@ public static class ClinicPermissions
     public const string AuditRead = "audit:read";
     public const string AuditExport = "audit:export";
 
+    // Teleconsultation & Media
+    public const string TeleconsultCall = "teleconsult:call";
+    public const string TeleconsultRecord = "teleconsult:record";
+
     /// <summary>
     /// Minimal permission set granted to trusted internal services (authenticated by the shared internal key),
     /// e.g. portal-api forwarding Yakap transmittal operations. Never includes staff/role/settings management.
@@ -145,6 +149,8 @@ public static class ClinicPermissions
         SchedulesRead,
         SchedulesManage,
         AuditRead,
-        AuditExport
+        AuditExport,
+        TeleconsultCall,
+        TeleconsultRecord
     }.AsReadOnly();
 }

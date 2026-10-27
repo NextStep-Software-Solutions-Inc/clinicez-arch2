@@ -67,9 +67,12 @@ internal sealed class PatientInteropHarness : IDisposable
         services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
         services.AddScoped<IShareCodeRepository, ShareCodeRepository>();
         services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
+        services.AddScoped<IPatientCommunicationsRepository, PatientCommunicationsRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IDeviceSessionRepository, DeviceSessionRepository>();
         services.AddSingleton<IPushNotificationService>(Substitute.For<IPushNotificationService>());
+        services.AddSingleton<ISyncNotificationService>(Substitute.For<ISyncNotificationService>());
+        services.AddScoped<IImageConversionService, ClinicEz.Patient.Infrastructure.Services.ImageConversionService>();
         services.AddSingleton(Storage);
         services.AddSingleton(sp => PatientEncryptionKeyRing.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddScoped<IPatientEncryptionService, PatientEncryptionService>();

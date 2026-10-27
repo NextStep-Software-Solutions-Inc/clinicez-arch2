@@ -63,6 +63,17 @@ public static class DependencyInjection
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0
                     }));
+
+            // Rate limit guest teleconsult verification: 10 requests per minute per client IP.
+            options.AddPolicy("GuestVerifyRateLimiter", httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
         });
         return services;
     }

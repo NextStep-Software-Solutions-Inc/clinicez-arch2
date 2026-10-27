@@ -210,6 +210,39 @@ public sealed class ClinicSettings : BaseEntity
     /// </summary>
     public string? TimeFormat { get; set; }
 
+    // ── Teleconsultation Recording & Payment Policies (Milestone M4) ─────────
+    /// <summary>
+    /// Clinic teleconsultation recording policy: "Disabled" (default), "WorkspaceVaultOnly", "LocalDeviceOnly", "Both".
+    /// </summary>
+    public string TeleconsultRecordingPolicy { get; set; } = "Disabled";
+
+    /// <summary>
+    /// Retention period in days for teleconsultation recordings: 30, 90, 365, or 0 (indefinite).
+    /// Default is 90 days.
+    /// </summary>
+    public int TeleconsultRecordingRetentionDays { get; set; } = 90;
+
+    /// <summary>
+    /// Enforces mandatory live dual consent before recording can begin. Default is true (RA 10173 & RA 4200 compliance).
+    /// </summary>
+    public bool TeleconsultRecordingConsentRequired { get; set; } = true;
+
+    /// <summary>
+    /// Default payment policy for teleconsultations: "Prepaid" (default), "Postpaid", "Exempt".
+    /// </summary>
+    public string TeleconsultPaymentPolicy { get; set; } = "Prepaid";
+
+    /// <summary>
+    /// Default consultation fee for teleconsultations. Defaults to 400.00m (PHP).
+    /// </summary>
+    public decimal TeleconsultDefaultFee { get; set; } = 400.00m;
+
+    /// <summary>
+    /// Automatically exempts registered PhilHealth Konsulta (YAKAP) beneficiaries from teleconsult prepayment.
+    /// Default is true.
+    /// </summary>
+    public bool TeleconsultAutoExemptYakap { get; set; } = true;
+
 }
 
 /// <summary>

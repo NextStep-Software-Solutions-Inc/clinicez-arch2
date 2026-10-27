@@ -30,9 +30,23 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AdmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AdmittedByDoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppointmentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("AttachedFileIdsJson")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("CallId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
@@ -62,10 +76,34 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<int>("DurationMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("EmergencyOverrideAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("EmergencyOverrideDoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EmergencyOverrideDoctorName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EmergencyOverrideReasonCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EmergencyOverrideReasonNote")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("EndTimeUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InvoiceRequestId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsEmergencyOverride")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastReminderSentAt")
@@ -77,6 +115,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("PaidAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
@@ -84,6 +128,22 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PaymentMethod")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentPolicy")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PaymentReceiptNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(255)
@@ -1573,6 +1633,26 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("TaxIdentificationNumber")
                         .HasColumnType("text");
+
+                    b.Property<bool>("TeleconsultAutoExemptYakap")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("TeleconsultDefaultFee")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("TeleconsultPaymentPolicy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("TeleconsultRecordingConsentRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TeleconsultRecordingPolicy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("TeleconsultRecordingRetentionDays")
+                        .HasColumnType("integer");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -5086,6 +5166,268 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.ToTable("StaffMembers", "public");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TeleconsultRecordingSegment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IvBase64")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SegmentIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Sha256Checksum")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("TagBase64")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId", "SegmentIndex")
+                        .IsUnique();
+
+                    b.ToTable("teleconsult_recording_segments", "public");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TeleconsultRecordingSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CallId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClinicianConsentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConsentStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("ConsultationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContainerFormat")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("DoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DoctorName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("EncryptionAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("EncryptionKeyId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("HasGaps")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsLegalHold")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPurged")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LegalHoldPlacedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LegalHoldPlacedByStaffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LegalHoldPlacedByStaffName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ManifestStorageKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTime?>("PatientConsentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PatientConsentIpAddress")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PatientConsentUserAgent")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PatientName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("PurgedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PurgedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("RecordingState")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RetentionPolicyDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SegmentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StoppedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StoragePolicy")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("TotalDurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("TotalSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("ConsultationId");
+
+                    b.HasIndex("ExpiresAtUtc")
+                        .HasFilter("\"IsPurged\" = false AND \"IsLegalHold\" = false");
+
+                    b.HasIndex("ClinicId", "CallId")
+                        .IsUnique();
+
+                    b.HasIndex("ClinicId", "ConsultationId");
+
+                    b.HasIndex("ClinicId", "PatientId");
+
+                    b.ToTable("teleconsult_recording_sessions", "public");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TriageVitals", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5829,6 +6171,32 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Navigation("ClinicRole");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TeleconsultRecordingSegment", b =>
+                {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.TeleconsultRecordingSession", "Session")
+                        .WithMany("Segments")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TeleconsultRecordingSession", b =>
+                {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.Appointment", "Appointment")
+                        .WithMany()
+                        .HasForeignKey("AppointmentId");
+
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", "Consultation")
+                        .WithMany()
+                        .HasForeignKey("ConsultationId");
+
+                    b.Navigation("Appointment");
+
+                    b.Navigation("Consultation");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TriageVitals", b =>
                 {
                     b.HasOne("ClinicEz.Clinic.Domain.Entities.QueueItem", "QueueItem")
@@ -5922,6 +6290,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Navigation("Consultation");
 
                     b.Navigation("TriageVitals");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TeleconsultRecordingSession", b =>
+                {
+                    b.Navigation("Segments");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.YakapTransmittal", b =>

@@ -97,6 +97,7 @@ public static class DependencyInjection
         services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
         services.AddScoped<IShareCodeRepository, ShareCodeRepository>();
         services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
+        services.AddScoped<IPatientCommunicationsRepository, PatientCommunicationsRepository>();
 
         // ── Application Services ──────────────────────────────────────────────
         services.AddSingleton<IStorageService, R2StorageService>();
@@ -108,6 +109,7 @@ public static class DependencyInjection
         services.AddSingleton<IPushNotificationService, FirebasePushNotificationService>();
         services.AddClaimTokenService();
         services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Patient");
+        services.AddScoped<ClinicEz.Patient.Application.Common.Interfaces.IImageConversionService, ClinicEz.Patient.Infrastructure.Services.ImageConversionService>();
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core
@@ -146,6 +148,9 @@ public static class DependencyInjection
         services.AddScoped<ISyncPayloadProcessor, SyncPayloadProcessor>();
         services.AddScoped<ISyncPayloadJob, SyncPayloadJobProcessor>();
 
+        // ── Delivery Retention Sweeper ─────────────────────────────────────────
+        services.AddHostedService<ClinicEz.Patient.Infrastructure.BackgroundServices.DeliveryRetentionSweeper>();
+
         // ── Clerk JWT Bearer Authentication ───────────────────────────────────
         services.AddClerkAuthentication(configuration);
 
@@ -182,7 +187,12 @@ public static class DependencyInjection
             .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed)
             .Handle<ClinicalImmunizationAdministeredPayload, ClinicalImmunizationAdministeredInteropHandler>(InteropTypes.ClinicalImmunizationAdministered)
             .Handle<PatientQueueAlertPayload, PatientQueueAlertInteropHandler>(InteropTypes.PatientQueueAlert)
-            .Handle<PatientAppointmentAlertPayload, PatientAppointmentAlertInteropHandler>(InteropTypes.PatientAppointmentAlert));
+            .Handle<PatientAppointmentAlertPayload, PatientAppointmentAlertInteropHandler>(InteropTypes.PatientAppointmentAlert)
+            .Handle<CommsMessageReplicatePayload, CommsMessageReplicateInteropHandler>(InteropTypes.CommsMessageReplicate)
+            .Handle<CommsMessageReceivedPayload, CommsMessageReceivedInteropHandler>(InteropTypes.CommsMessageReceived)
+            .Handle<CommsThreadStateChangedPayload, CommsThreadStateChangedInteropHandler>(InteropTypes.CommsThreadStateChanged)
+            .Handle<CommsEligibilitySyncedPayload, CommsEligibilitySyncedInteropHandler>(InteropTypes.CommsEligibilitySynced)
+            .Handle<CommsCallStateChangedPayload, CommsCallStateChangedInteropHandler>(InteropTypes.CommsCallStateChanged));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

@@ -88,6 +88,8 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.AppointmentReminderBackgroundService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Persistence.ClinicRoleSeederHostedService>();
         services.AddHostedService<ClinicPortalStartupBackfillHostedService>();
+        services.AddSingleton<ClinicEz.Clinic.Infrastructure.Services.IRecordingRetentionSweeper, ClinicEz.Clinic.Infrastructure.Services.RecordingRetentionSweeper>();
+        services.AddHostedService(sp => (ClinicEz.Clinic.Infrastructure.Services.RecordingRetentionSweeper)sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.Services.IRecordingRetentionSweeper>());
 
         // Audit Logging & Forensic Activity Trail Pipeline (M1)
         services.AddSingleton<IPhiRedactionService, PhiRedactionService>();

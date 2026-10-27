@@ -949,6 +949,9 @@ public sealed class PatientInteropFlowTests
             InteropTypes.FacilityDirectoryUpdated, InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated,
             InteropTypes.PatientShareRedeem, InteropTypes.PatientDocumentIssued, InteropTypes.LabOrderStatusChanged,
             InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered,
-            InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert);
+            InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert,
+            InteropTypes.CommsMessageReplicate, InteropTypes.CommsMessageReceived,
+            InteropTypes.CommsThreadStateChanged, InteropTypes.CommsEligibilitySynced,
+            InteropTypes.CommsCallStateChanged);
     }
 }
