@@ -799,4 +799,22 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).toContain('Tooth #16');
     expect(markup).toContain('Upper Right First Molar');
   });
+
+  test('26. PatientChartModal renders spinning refresh buttons when loadingChart is true', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: mockChart,
+        loadingChart: true,
+        onClose: () => {},
+        onRefreshChart: () => {},
+      })
+    );
+
+    // Refresh buttons have refresh icon and image role for spinning glyph
+    expect(markup).toContain('aria-label="Refresh patient chart"');
+    expect(markup).toContain('lucide-refresh-cw');
+    expect(markup).toContain('role="image"');
+  });
 });

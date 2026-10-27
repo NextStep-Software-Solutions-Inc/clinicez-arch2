@@ -80,6 +80,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
     onEditDemographics,
     currentLayout,
     onSwitchLayout,
+    loadingChart,
   } = props;
 
   const { isCompact } = useBreakpoint();
@@ -344,12 +345,12 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                 <Icon
                   name="refresh"
                   size={theme.sizes.iconSm}
-                  color={theme.colors.textSecondary}
+                  color={loadingChart ? theme.colors.primary : theme.colors.textSecondary}
                   spin={loadingChart}
                 />
                 <ThemedText
                   variant="caption"
-                  color={theme.colors.textSecondary}
+                  color={loadingChart ? theme.colors.primary : theme.colors.textSecondary}
                   numberOfLines={1}
                   ellipsizeMode="tail"
                   style={styles.footerBtnText}
@@ -402,8 +403,14 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                   style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
                   accessibilityRole="button"
                   accessibilityLabel="Refresh patient chart"
+                  disabled={loadingChart}
                 >
-                  <Icon name="refresh" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+                  <Icon
+                    name="refresh"
+                    size={theme.sizes.iconMd}
+                    color={loadingChart ? theme.colors.primary : theme.colors.textSecondary}
+                    spin={loadingChart}
+                  />
                 </Pressable>
               ) : null}
 

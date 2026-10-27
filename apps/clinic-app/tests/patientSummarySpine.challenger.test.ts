@@ -916,5 +916,36 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
       const recordVitalsMatches = spineMarkup.match(/Record Vitals/g) || [];
       expect(recordVitalsMatches.length).toBe(0);
     });
+
+    test('11.3 PatientSummarySpine refresh button renders spin glyph when loading is true', () => {
+      const basePatient = {
+        id: 'p-1',
+        clinicId: 'c-1',
+        tenantId: 't-1',
+        patientCode: 'CE-2026-0001',
+        fullName: 'Juan Dela Cruz',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        age: 35,
+        contactNumber: '09171234567',
+        dateOfBirth: '1991-01-01',
+        gender: 'Male',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      const spineMarkup = renderToStaticMarkup(
+        React.createElement(PatientSummarySpine, {
+          variant: 'workstation',
+          patient: basePatient,
+          chart: null,
+          vitals: null,
+          loading: true,
+          onPressRefresh: () => {},
+        })
+      );
+
+      expect(spineMarkup).toContain('Refresh patient chart');
+      expect(spineMarkup).toContain('clinicez-spin-glyph');
+    });
   });
 });

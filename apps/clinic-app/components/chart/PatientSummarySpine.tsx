@@ -58,7 +58,7 @@ export interface PatientSummarySpineProps {
   /** Optional callback when clicking edit demographics */
   onPressEdit?: () => void;
   /** Optional callback to refresh patient data */
-  onPressRefresh?: () => void;
+  onPressRefresh?: () => void | Promise<void>;
   /** Optional callback to record/update triage vitals */
   onPressRecordVitals?: () => void;
 }
@@ -312,11 +312,12 @@ export default function PatientSummarySpine({
     if (onPressRefresh) {
       try {
         setIsLocalRefreshing(true);
-        const res = onPressRefresh();
-        if (res && typeof (res as any).then === 'function') {
-          await res;
+        const minDurationPromise = new Promise((resolve) => setTimeout(resolve, 600));
+        const res = (onPressRefresh as any)();
+        if (Boolean(res) && typeof (res as any)?.then === 'function') {
+          await Promise.all([res, minDurationPromise]);
         } else {
-          setTimeout(() => setIsLocalRefreshing(false), 750);
+          await minDurationPromise;
         }
       } catch {
         // Handled upstream
