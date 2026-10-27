@@ -42,7 +42,7 @@ export default function VerifyLookupClient() {
             Philippine National Health Document Registry
           </h1>
           <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
-            Verify the cryptographic authenticity of digital Medical Certificates, Clinical Referral Letters, Electronic Prescriptions, and Diagnostic Requests.
+            Verify the authenticity of digital Medical Certificates, Clinical Referral Letters, Electronic Prescriptions, and Diagnostic Requests.
           </p>
         </div>
 
@@ -159,7 +159,7 @@ export default function VerifyLookupClient() {
               >
                 <div className="flex items-center gap-2">
                   <Pill className="h-4 w-4 text-primary" />
-                  <span className="font-bold text-foreground text-xs block">e-Prescriptions (RA 6675)</span>
+                  <span className="font-bold text-foreground text-xs block">e-Prescriptions</span>
                 </div>
                 <span className="text-muted-foreground text-[11px] mt-1 block">Format: RX-YYYYMMDD-XXXX</span>
               </button>
@@ -185,11 +185,11 @@ export default function VerifyLookupClient() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-success" />
-            <span>Anti-Fraud HMAC-SHA256 Cryptographic Seals</span>
+            <span>Tamper-Proof Verification Seals</span>
           </div>
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <span>RA 10173 (Data Privacy Act) Compliant Masking</span>
+            <span>Privacy Protected & Secure</span>
           </div>
         </div>
       </div>

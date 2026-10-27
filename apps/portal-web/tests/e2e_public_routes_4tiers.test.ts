@@ -529,7 +529,7 @@ describe("Tier 1: Canonical Public Route Existence & Happy Path", () => {
       };
 
       const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-DISPENSE-FORM", initialData: rxData as any }));
-      expect(html).toContain("Pharmacist Dispense Confirmation (Path B)");
+      expect(html).toContain("Pharmacist Dispense Confirmation");
       expect(html).toContain("Drugstore Chain *");
       expect(html).toContain("Confirm Dispense &amp; Lock Prescription");
     });
@@ -1512,7 +1512,7 @@ describe("Tier 3: Cross-Feature Combinations & Pairwise Interactions", () => {
       };
 
       const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-ACTIVE-01", initialData: rxData as any }));
-      expect(html).toContain("Pharmacist Dispense Confirmation (Path B)");
+      expect(html).toContain("Pharmacist Dispense Confirmation");
       expect(html).toContain("Confirm Dispense &amp; Lock Prescription");
     });
 
