@@ -503,6 +503,7 @@ export interface ClinicServiceItem {
   philHealthCode?: string;
   philHealthDescription?: string;
   isPhilHealthFormulary?: boolean;
+  isNurseOrderable?: boolean;
 }
 
 export interface BulkImportServiceItem {
@@ -514,6 +515,7 @@ export interface BulkImportServiceItem {
   philHealthCode?: string;
   philHealthDescription?: string;
   isPhilHealthFormulary?: boolean;
+  isNurseOrderable?: boolean;
 }
 
 export interface BulkImportResult {

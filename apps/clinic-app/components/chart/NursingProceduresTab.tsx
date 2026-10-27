@@ -1,18 +1,42 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState, Input, Button, Modal, ValidatedDateInput, validateDateString } from '../ui';
+import {
+  ThemedText,
+  Badge,
+  Icon,
+  EmptyState,
+  Input,
+  Button,
+  Modal,
+  Select,
+  SelectOption,
+  ValidatedDateInput,
+  validateDateString,
+} from '../ui';
 import { notify } from '@utils/feedback';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { useClinic } from '../../context/ClinicContext';
 import { useStaff } from '../../context/StaffContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
   ClinicPatient,
   ClinicalProcedureRecord,
+  ClinicServiceItem,
+  StaffMember,
 } from '../../services/clinicService';
+
+function formatStaffDisplayName(staff?: Pick<StaffMember, 'title' | 'firstName' | 'lastName'> | null): string {
+  if (!staff) return '';
+  return [staff.title, staff.firstName, staff.lastName].filter(Boolean).join(' ').trim();
+}
 
 export interface NursingProceduresTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
+  patientName?: string;
+  queueItemId?: string;
   procedures: ClinicalProcedureRecord[];
   onOrderProcedure?: () => void;
   onExecuteProcedure?: (procedure: ClinicalProcedureRecord) => void;
@@ -40,11 +64,17 @@ export function lookupStatutoryManagementCode(procedureName: string): { code: st
 export default function NursingProceduresTab({
   patient,
   patientId,
+  patientName,
+  queueItemId,
   procedures = [],
   onOrderProcedure,
   onExecuteProcedure,
   onRefreshChart,
 }: NursingProceduresTabProps) {
+  const { user } = useAuth();
+  const hasProceduresWrite = usePermission(PERMISSIONS.proceduresWrite) || user?.role === 'Admin';
+  const canOrderProcedures = user ? hasProceduresWrite : true;
+
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [executingProc, setExecutingProc] = useState<ClinicalProcedureRecord | null>(null);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
@@ -133,16 +163,18 @@ export default function NursingProceduresTab({
           </Pressable>
         </View>
 
-        <Pressable
-          testID="order-procedure-button"
-          onPress={onOrderProcedure || (() => setOrderModalVisible(true))}
-          style={styles.orderProcedureBtn}
-        >
-          <Icon name="plus" size={14} color={theme.colors.onPrimary} />
-          <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-            Order Procedure
-          </ThemedText>
-        </Pressable>
+        {canOrderProcedures ? (
+          <Pressable
+            testID="order-procedure-button"
+            onPress={onOrderProcedure || (() => setOrderModalVisible(true))}
+            style={styles.orderProcedureBtn}
+          >
+            <Icon name="plus" size={14} color={theme.colors.onPrimary} />
+            <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+              Order Procedure
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </View>
 
       {/* ========================================================================= */}
@@ -165,7 +197,19 @@ export default function NursingProceduresTab({
                       <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {proc.procedureName}
                       </ThemedText>
-                      <Badge label="PhilHealth Covered" variant="purple" size="sm" />
+                      {Boolean(
+                        (patient?.philHealthNumber || (patient as any)?.isYakapEligible) &&
+                        (proc.procedureCode?.startsWith('PH-') ||
+                          proc.procedureCode?.startsWith('YAKAP-') ||
+                          ['1', '2', '3', '4'].includes(proc.procedureCode || '') ||
+                          statMgmt.code !== 'X' ||
+                          proc.procedureName.toLowerCase().includes('counseling') ||
+                          proc.procedureName.toLowerCase().includes('counselling') ||
+                          proc.procedureName.toLowerCase().includes('breastfeeding') ||
+                          proc.procedureName.toLowerCase().includes('prophylaxis'))
+                      ) ? (
+                        <Badge label="PhilHealth Covered" variant="purple" size="sm" />
+                      ) : null}
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textMuted}>
                       Scheduled: {new Date(proc.scheduledAt).toLocaleDateString()} • {new Date(proc.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -302,6 +346,7 @@ export default function NursingProceduresTab({
         visible={orderModalVisible}
         patient={patient}
         patientId={patientId || patient?.id}
+        patientName={patientName || (patient ? `${patient.firstName} ${patient.lastName}` : undefined)}
         onClose={() => setOrderModalVisible(false)}
         onSuccess={() => {
           setOrderModalVisible(false);
@@ -453,6 +498,60 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     gap: theme.spacing.md,
   },
+  modalBodyFlow: {
+    gap: theme.spacing.md,
+  },
+  modalFooterActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  procedureDetailsPreview: {
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    gap: 4,
+    marginTop: -2,
+    marginBottom: 4,
+  },
+  detailRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  doctorAutoAssignedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+  },
+  doctorSelectionBox: {
+    gap: 6,
+  },
+  doctorWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    padding: theme.spacing.xs,
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.warningBorder,
+  },
   modalSection: {
     backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.radii.md,
@@ -506,6 +605,7 @@ export interface ProcedureExecutionModalProps {
   patient?: ClinicPatient | null;
   onClose: () => void;
   onSuccess?: (updatedProc?: ClinicalProcedureRecord) => void;
+  onSubmit?: (payload: any) => Promise<void> | void;
 }
 
 export function ProcedureExecutionModal({
@@ -514,6 +614,7 @@ export function ProcedureExecutionModal({
   patient,
   onClose,
   onSuccess,
+  onSubmit,
 }: ProcedureExecutionModalProps) {
   const { current: currentStaff } = useStaff();
   const [submitting, setSubmitting] = useState(false);
@@ -578,7 +679,7 @@ export function ProcedureExecutionModal({
       oxygenSaturationPercent: postSpo2 ? Number(postSpo2) : undefined,
     };
 
-    const [updated, err] = await clinicService.completeProcedure(procedure.id, {
+    const payload = {
       performedByStaffId: currentStaff?.id,
       performedByStaffName: currentStaff ? `${currentStaff.firstName} ${currentStaff.lastName}` : 'Treatment Nurse',
       preProcedureVitalsJson: JSON.stringify(preVitals),
@@ -590,7 +691,17 @@ export function ProcedureExecutionModal({
       clinicalNotes: clinicalNotes.trim() || undefined,
       complications: complications.trim() || 'None',
       requiresDoctorReEvaluation,
-    });
+    };
+
+    if (onSubmit) {
+      await onSubmit(payload);
+      setSubmitting(false);
+      onSuccess?.();
+      onClose();
+      return;
+    }
+
+    const [updated, err] = await clinicService.completeProcedure(procedure.id, payload);
 
     setSubmitting(false);
     if (err) {
@@ -612,8 +723,25 @@ export function ProcedureExecutionModal({
       visible={visible}
       title={`Execute Procedure: ${procedure?.procedureName || ''}`}
       onClose={onClose}
+      footer={
+        <View style={styles.modalFooterActions}>
+          <Button
+            title="Cancel"
+            variant="ghost"
+            onPress={onClose}
+            disabled={submitting}
+          />
+          <Button
+            title={requiresDoctorReEvaluation ? 'Complete & Return for Re-Evaluation' : 'Complete & Discharge Patient'}
+            variant="primary"
+            icon="check"
+            loading={submitting}
+            onPress={handleComplete}
+          />
+        </View>
+      }
     >
-      <ScrollView contentContainerStyle={styles.modalContent}>
+      <View style={styles.modalBodyFlow}>
         {/* Section 1: Pre-Procedure Vitals */}
         <View style={styles.modalSection}>
           <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
@@ -829,23 +957,7 @@ export function ProcedureExecutionModal({
             </Pressable>
           </View>
         </View>
-
-        {/* Action Buttons */}
-        <View style={styles.modalActionRow}>
-          <Button
-            title="Cancel"
-            variant="ghost"
-            onPress={onClose}
-          />
-          <Button
-            title={requiresDoctorReEvaluation ? 'Complete & Return for Re-Evaluation' : 'Complete & Discharge Patient'}
-            variant="primary"
-            icon="check"
-            loading={submitting}
-            onPress={handleComplete}
-          />
-        </View>
-      </ScrollView>
+      </View>
     </Modal>
   );
 }
@@ -854,6 +966,7 @@ export interface OrderProcedureModalProps {
   visible: boolean;
   patient?: ClinicPatient | null;
   patientId?: string;
+  patientName?: string;
   onClose: () => void;
   onSuccess?: () => void;
 }
@@ -862,16 +975,170 @@ export function OrderProcedureModal({
   visible,
   patient,
   patientId,
+  patientName,
   onClose,
   onSuccess,
 }: OrderProcedureModalProps) {
-  const { current: currentStaff } = useStaff();
+  const clinic = useClinic();
+  const { current: currentStaff, staff = [] } = useStaff();
+
+  const [services, setServices] = useState<ClinicServiceItem[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+
+  // Form State
   const [procedureCode, setProcedureCode] = useState('PROC-NEB');
   const [procedureName, setProcedureName] = useState('Nebulization Therapy');
-  const [category, setCategory] = useState('Nursing Procedures');
+  const [category, setCategory] = useState('Procedure');
+  const [selectedService, setSelectedService] = useState<ClinicServiceItem | null>(null);
+
   const [targetRoomName, setTargetRoomName] = useState('Treatment Bay 1');
+  const [targetRoomId, setTargetRoomId] = useState<string | undefined>(undefined);
   const [clinicalNotes, setClinicalNotes] = useState('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [ordering, setOrdering] = useState(false);
+
+  // Load services catalog on modal visibility
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    setLoadingServices(true);
+    clinicService.getServices(undefined, true).then(([data, err]) => {
+      if (cancelled) return;
+      setLoadingServices(false);
+      if (!err && data && data.length > 0) {
+        setServices(data);
+        const match = data.find((s) => s.code === procedureCode || s.name === procedureName);
+        if (match) {
+          setSelectedService(match);
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  // Determine active rooms
+  const activeRooms = useMemo(() => {
+    const list = clinic?.rooms && clinic.rooms.length > 0 ? clinic.rooms : [];
+    const active = list.filter((r) => r.isActive);
+    const treatment = active.filter((r) => r.type === 'Treatment');
+    return treatment.length > 0 ? treatment : active;
+  }, [clinic?.rooms]);
+
+  // Determine active doctors in facility
+  const activeDoctors = useMemo(() => {
+    return staff.filter((s) => s.isActive && (s.role === 'Doctor' || Boolean(s.prcLicenseNumber)));
+  }, [staff]);
+
+  const isCurrentStaffDoctor = Boolean(
+    currentStaff && (currentStaff.role === 'Doctor' || Boolean(currentStaff.prcLicenseNumber))
+  );
+
+  // Check if procedure is nurse-orderable
+  const isNurseOrderable = useMemo(() => {
+    if (selectedService && typeof selectedService.isNurseOrderable === 'boolean') {
+      return selectedService.isNurseOrderable;
+    }
+    const normCode = procedureCode.trim().toUpperCase();
+    return ['PROC-NEB', 'PROC-WOUND', 'PROC-VAX', 'LAB-RBS'].includes(normCode);
+  }, [selectedService, procedureCode]);
+
+  // Effective ordering doctor
+  const effectiveDoctorId = isCurrentStaffDoctor
+    ? currentStaff?.id
+    : selectedDoctorId || undefined;
+
+  const effectiveDoctorName = isCurrentStaffDoctor
+    ? (currentStaff ? formatStaffDisplayName(currentStaff) : undefined)
+    : (activeDoctors.find((d) => d.id === selectedDoctorId)
+        ? formatStaffDisplayName(activeDoctors.find((d) => d.id === selectedDoctorId)!)
+        : undefined);
+
+  // Doctor order is required when non-doctor user orders a non-nurse-orderable procedure
+  const doctorOrderRequired = !isCurrentStaffDoctor && !isNurseOrderable;
+
+  // Procedure options
+  const procedureOptions = useMemo<SelectOption[]>(() => {
+    const catalogList = services.length > 0 ? services : [
+      { id: '1', code: 'PROC-NEB', name: 'Nebulization Therapy', category: 'Procedure', standardPrice: 250, isActive: true, isNurseOrderable: true },
+      { id: '2', code: 'PROC-WOUND', name: 'Wound Dressing & Debridement', category: 'Procedure', standardPrice: 350, isActive: true, isNurseOrderable: true },
+      { id: '3', code: 'PROC-VAX', name: 'Vaccine Administration Fee', category: 'NursingService', standardPrice: 250, isActive: true, isNurseOrderable: true },
+      { id: '4', code: 'LAB-RBS', name: 'Random Blood Sugar (RBS) Rapid Test', category: 'Diagnostic', standardPrice: 150, isActive: true, isNurseOrderable: true },
+    ];
+    return catalogList.map((s) => ({
+      label: `${s.name} (${s.code})`,
+      value: s.code,
+      description: `₱${(s.standardPrice || 0).toLocaleString()} • ${s.category}`,
+      badge: s.isNurseOrderable ? 'Nurse-Orderable' : 'Doctor Order',
+    }));
+  }, [services]);
+
+  // Room options
+  const roomOptions = useMemo<SelectOption[]>(() => {
+    if (activeRooms.length > 0) {
+      return activeRooms.map((r) => ({
+        label: r.name,
+        value: r.id,
+        description: r.type ? `${r.type} Room` : undefined,
+      }));
+    }
+    return [
+      { label: 'Treatment Bay 1', value: 'Treatment Bay 1' },
+      { label: 'Treatment Bay 2', value: 'Treatment Bay 2' },
+      { label: 'Minor Procedure Room', value: 'Minor Procedure Room' },
+      { label: 'Triage Room', value: 'Triage Room' },
+    ];
+  }, [activeRooms]);
+
+  // Doctor options
+  const doctorOptions = useMemo<SelectOption[]>(() => {
+    const opts: SelectOption[] = [
+      {
+        label: 'None / Protocol (Nurse Order)',
+        value: '',
+        description: 'Order initiated under standing clinic nursing protocols',
+      },
+    ];
+    activeDoctors.forEach((doc) => {
+      opts.push({
+        label: `Dr. ${doc.firstName} ${doc.lastName}`,
+        value: doc.id,
+        description: doc.specialty || (doc.prcLicenseNumber ? `PRC #${doc.prcLicenseNumber}` : 'Licensed Physician'),
+        badge: doc.prcLicenseNumber ? 'PRC Verified' : undefined,
+      });
+    });
+    return opts;
+  }, [activeDoctors]);
+
+  const handleSelectProcedure = (codeOrCustom: string) => {
+    setProcedureCode(codeOrCustom);
+    const match = services.find((s) => s.code.toUpperCase() === codeOrCustom.toUpperCase() || s.name.toLowerCase() === codeOrCustom.toLowerCase());
+    if (match) {
+      setProcedureName(match.name);
+      setCategory(match.category || 'Procedure');
+      setSelectedService(match);
+    } else {
+      const defaultMatch = procedureOptions.find((o) => o.value === codeOrCustom);
+      if (defaultMatch) {
+        setProcedureName(defaultMatch.label.split(' (')[0]);
+      } else {
+        setProcedureName(codeOrCustom);
+      }
+      setSelectedService(null);
+    }
+  };
+
+  const handleSelectRoom = (val: string) => {
+    const roomObj = activeRooms.find((r) => r.id === val || r.name === val);
+    if (roomObj) {
+      setTargetRoomId(roomObj.id);
+      setTargetRoomName(roomObj.name);
+    } else {
+      setTargetRoomId(undefined);
+      setTargetRoomName(val);
+    }
+  };
 
   const handleOrder = async () => {
     const targetPatId = patientId || patient?.id;
@@ -883,17 +1150,23 @@ export function OrderProcedureModal({
       notify.error('Procedure name is required.');
       return;
     }
+    if (doctorOrderRequired && !effectiveDoctorId) {
+      notify.error('This procedure is restricted to physician orders. Please select an attending physician.');
+      return;
+    }
+
     setOrdering(true);
     const [created, err] = await clinicService.orderProcedure({
       patientId: targetPatId,
-      patientName: patient ? `${patient.firstName} ${patient.lastName}` : 'Walk-in Patient',
+      patientName: patientName || (patient ? `${patient.firstName} ${patient.lastName}` : 'Walk-in Patient'),
       procedureCode: procedureCode.trim() || undefined,
       procedureName: procedureName.trim(),
-      category: category.trim() || 'Nursing Procedures',
+      category: category.trim() || 'Procedure',
       targetRoomName: targetRoomName.trim() || undefined,
+      targetRoomId: targetRoomId || undefined,
       clinicalNotes: clinicalNotes.trim() || undefined,
-      orderedByDoctorId: currentStaff?.role === 'Doctor' ? currentStaff.id : undefined,
-      orderedByDoctorName: currentStaff?.role === 'Doctor' ? `${currentStaff.firstName} ${currentStaff.lastName}` : undefined,
+      orderedByDoctorId: effectiveDoctorId,
+      orderedByDoctorName: effectiveDoctorName,
     });
     setOrdering(false);
     if (err) {
@@ -906,36 +1179,103 @@ export function OrderProcedureModal({
   };
 
   return (
-    <Modal visible={visible} title="Order Clinical Procedure" onClose={onClose}>
-      <ScrollView contentContainerStyle={styles.modalContent}>
+    <Modal
+      visible={visible}
+      title="Order Clinical Procedure"
+      onClose={onClose}
+      footer={
+        <View style={styles.modalFooterActions}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={ordering} />
+          <Button
+            testID="confirm-order-procedure-button"
+            title={ordering ? 'Ordering...' : 'Confirm Order'}
+            variant="primary"
+            icon="plus"
+            loading={ordering}
+            disabled={doctorOrderRequired && !effectiveDoctorId}
+            onPress={handleOrder}
+          />
+        </View>
+      }
+    >
+      <View style={styles.modalBodyFlow}>
         <View style={styles.modalSection}>
           <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-            PROCEDURE DETAILS
+            PROCEDURE CATALOG SELECTION
           </ThemedText>
-          <Input
-            label="Procedure Code"
+
+          <Select
+            label="Procedure Item *"
             value={procedureCode}
-            onChangeText={setProcedureCode}
-            placeholder="e.g. PROC-NEB, PROC-WOUND"
+            options={procedureOptions}
+            onSelect={handleSelectProcedure}
+            placeholder="Select procedure from catalog..."
+            modalTitle="Select Clinical Procedure"
+            modalSubtitle="Choose standard procedure from fee schedule catalog"
           />
-          <Input
-            label="Procedure Name *"
-            value={procedureName}
-            onChangeText={setProcedureName}
-            placeholder="e.g. Nebulization Therapy"
+
+          <View style={styles.procedureDetailsPreview}>
+            <View style={styles.detailRowInline}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>Selected Name:</ThemedText>
+              <ThemedText variant="captionBold" color={theme.colors.text}>{procedureName}</ThemedText>
+            </View>
+            <View style={styles.detailRowInline}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>Category:</ThemedText>
+              <ThemedText variant="caption" color={theme.colors.text}>{category}</ThemedText>
+            </View>
+            <View style={styles.badgeRow}>
+              {isNurseOrderable ? (
+                <Badge label="Nurse-Orderable Protocol" variant="success" size="sm" />
+              ) : (
+                <Badge label="Doctor Order Required" variant="warning" size="sm" />
+              )}
+            </View>
+          </View>
+
+          <Select
+            label="Target Treatment Bay / Room"
+            value={targetRoomId || targetRoomName}
+            options={roomOptions}
+            onSelect={handleSelectRoom}
+            placeholder="Select treatment bay or procedure room..."
+            modalTitle="Select Destination Room"
+            modalSubtitle="Choose treatment bay or clinic operatory"
           />
-          <Input
-            label="Category"
-            value={category}
-            onChangeText={setCategory}
-            placeholder="Nursing Procedures"
-          />
-          <Input
-            label="Treatment Bay / Room"
-            value={targetRoomName}
-            onChangeText={setTargetRoomName}
-            placeholder="e.g. Treatment Bay 1"
-          />
+
+          {isCurrentStaffDoctor ? (
+            <View style={styles.doctorAutoAssignedBox}>
+              <Icon name="medical" size={16} color={theme.colors.primaryDark} />
+              <View style={{ flex: 1 }}>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                  Ordering Physician: Dr. {currentStaff?.firstName} {currentStaff?.lastName}
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {currentStaff?.prcLicenseNumber ? `PRC License #${currentStaff.prcLicenseNumber}` : 'Licensed Physician'}
+                </ThemedText>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.doctorSelectionBox}>
+              <Select
+                label="Attending Physician (Doctor Order)"
+                value={selectedDoctorId}
+                options={doctorOptions}
+                onSelect={setSelectedDoctorId}
+                placeholder="Select ordering doctor..."
+                modalTitle="Select Ordering Doctor"
+                modalSubtitle="Select the physician authorizing this clinical order"
+              />
+              {doctorOrderRequired && !selectedDoctorId ? (
+                <View style={styles.doctorWarningBanner}>
+                  <Icon name="alert" size={14} color={theme.colors.warningText} />
+                  <ThemedText variant="caption" color={theme.colors.warningText}>
+                    Doctor order required: This procedure is not flagged as nurse-orderable. Please select the ordering doctor above.
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          )}
+
           <Input
             label="Clinical Notes / Indication"
             value={clinicalNotes}
@@ -944,18 +1284,7 @@ export function OrderProcedureModal({
             multiline
           />
         </View>
-        <View style={styles.modalActionRow}>
-          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={ordering} />
-          <Button
-            testID="confirm-order-procedure-button"
-            title={ordering ? 'Ordering...' : 'Confirm Order'}
-            variant="primary"
-            icon="plus"
-            loading={ordering}
-            onPress={handleOrder}
-          />
-        </View>
-      </ScrollView>
+      </View>
     </Modal>
   );
 }

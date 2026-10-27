@@ -1640,24 +1640,58 @@ export default function ConsultationsScreen() {
     notify.success('Critical value readback recorded in the patient record.');
   };
 
+  const handleOpenLabSlip = async (orderOrId: ClinicLabOrderRecord | string) => {
+    const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
+    const url = clinicService.getLabOrderSlipPdfUrl(orderId);
+    try {
+      if (!(await openDocument(url))) {
+        throw new Error('Could not open the requisition slip');
+      }
+    } catch (e: any) {
+      notify.error(e?.message || 'Unable to open laboratory requisition slip.');
+    }
+  };
+
   const handleOpenLabPdf = (orderOrId: ClinicLabOrderRecord | string) => {
     const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
     const found = typeof orderOrId === 'string' ? labOrders.find((o) => o.id === orderOrId) : orderOrId;
-    const url = clinicService.getLabReportPdfUrl(orderId);
-    openDocument(url).then((opened) => {
-      if (!opened) throw new Error('Could not open the document');
-    }).catch(() => {
+    const isCompleted = found?.status === 'Completed' || found?.status === 'CompletedWithExternalReport';
+
+    if (found && !isCompleted) {
       Alert.alert(
-        'Could not open the PDF report',
+        'Official Lab Report Pending',
+        `The official signed laboratory report is not yet available for Accession #${found.orderNumber ?? orderId.slice(0, 8)}.\n\nStatus: ${humanize(found.status)}.\nResults have not yet been released by the laboratory.\n\nWould you like to open the official Requisition Slip instead?`,
         [
-          `Accession #${found?.orderNumber ?? orderId.slice(0, 8)}`,
-          found?.verifiedByPathologist ? `Verified by: ${found.verifiedByPathologist}` : null,
-          found?.pathologistImpression ? `Pathologist impression:\n${found.pathologistImpression}` : null,
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'View Requisition Slip',
+            onPress: () => {
+              handleOpenLabSlip(orderId);
+            },
+          },
         ]
-          .filter(Boolean)
-          .join('\n'),
       );
-    });
+      return;
+    }
+
+    const url = clinicService.getLabReportPdfUrl(orderId);
+    openDocument(url)
+      .then((opened) => {
+        if (!opened) throw new Error('Could not open the document');
+      })
+      .catch((err: any) => {
+        Alert.alert(
+          'Could not open the PDF report',
+          [
+            `Accession #${found?.orderNumber ?? orderId.slice(0, 8)}`,
+            found?.verifiedByPathologist ? `Verified by: ${found.verifiedByPathologist}` : null,
+            found?.pathologistImpression ? `Pathologist impression:\n${found.pathologistImpression}` : null,
+            err?.message ? `Details: ${err.message}` : 'Please verify that the lab report has been finalized and uploaded.',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        );
+      });
   };
 
   // Search ICD-10 codes
@@ -2283,13 +2317,16 @@ export default function ConsultationsScreen() {
     // Complete queue item
     await clinicService.completeQueueItem(selectedPatient.id);
 
-    // Update local state immediately and refetch queue & longitudinal patient chart in background
+    // Update local state immediately and await full refresh of queue & longitudinal patient chart
     setSelectedPatient((prev) => (prev ? { ...prev, status: 'Completed' } : null));
     setPatients((prev) =>
       prev.map((p) => (p.id === selectedPatient.id ? { ...p, status: 'Completed' } : p))
     );
-    loadQueue().catch(() => {});
-    refreshPatientChart(selectedPatient.patientId).catch(() => {});
+    await Promise.all([
+      loadQueue().catch(() => {}),
+      refreshPatientChart(selectedPatient.patientId).catch(() => {}),
+      refreshDiagnosticsTab().catch(() => {}),
+    ]);
 
     setIsSigning(false);
     setIsSigned(true);
@@ -2920,11 +2957,11 @@ export default function ConsultationsScreen() {
                     <LabOrderStageChip order={order} />
                   </View>
                   <Button
-                    title="PDF report"
+                    title={isFinal ? 'PDF report' : 'View Lab Slip'}
                     icon="file"
                     variant="outline"
                     size="sm"
-                    onPress={() => handleOpenLabPdf(order.id)}
+                    onPress={() => (isFinal ? handleOpenLabPdf(order.id) : handleOpenLabSlip(order.id))}
                   />
                 </View>
 
@@ -3008,7 +3045,15 @@ export default function ConsultationsScreen() {
   const refreshPatientChart = useCallback(async (explicitPatientId?: string) => {
     const patientId = explicitPatientId || selectedPatient?.patientId || patientRecord?.id;
     if (!patientId) return;
-    const [chartData, chartErr] = await clinicService.getPatientChart(patientId);
+    const [chartRes, labRes] = await Promise.all([
+      clinicService.getPatientChart(patientId),
+      clinicService.getLabOrders(patientId),
+    ]);
+    const [chartData, chartErr] = chartRes;
+    const [labData, labErr] = labRes;
+    if (!labErr && labData) {
+      setLabOrders(labData);
+    }
     if (!chartErr && chartData) {
       if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
         const [dentalData] = await clinicService.getPatientDentalChart(patientId);
@@ -3074,6 +3119,11 @@ export default function ConsultationsScreen() {
     const [labData, labErr] = labRes;
     if (!labErr && labData) setLabOrders(labData);
   }, [selectedPatient?.patientId, patientRecord?.id]);
+
+  const handleOpenOrderProcedureModal = () => {
+    setOrderSearchInitialCategory('Procedure');
+    setOrderSearchModalVisible(true);
+  };
 
   const renderLongitudinalChartContent = () => (
     <View style={styles.longitudinalChartContainer}>
@@ -3143,6 +3193,8 @@ export default function ConsultationsScreen() {
           patientId={selectedPatient?.patientId}
           labOrders={labOrders}
           onRefreshChart={refreshDiagnosticsTab}
+          onOpenLabSlip={handleOpenLabSlip}
+          onViewLabSlip={handleOpenLabSlip}
         />
       )}
       {activeChartTab === 'procedures' && (
@@ -3151,6 +3203,7 @@ export default function ConsultationsScreen() {
           patientId={selectedPatient?.patientId}
           procedures={patientChart?.proceduresHistory || []}
           onRefreshChart={refreshPatientChart}
+          onOrderProcedure={handleOpenOrderProcedureModal}
         />
       )}
       {activeChartTab === 'immunizations' && (
