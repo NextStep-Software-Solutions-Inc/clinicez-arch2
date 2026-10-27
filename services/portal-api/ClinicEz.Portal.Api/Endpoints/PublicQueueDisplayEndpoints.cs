@@ -152,8 +152,17 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
         var nowManila = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, ManilaTimeZone);
         var todayManila = DateOnly.FromDateTime(nowManila);
 
-        var board = await context.FacilityQueueBoards.AsNoTracking()
-            .FirstOrDefaultAsync(b => b.TenantId == facility.TenantId && b.FacilityId == facility.Id, ct);
+        FacilityQueueBoard? board = null;
+        try
+        {
+            board = await context.FacilityQueueBoards.AsNoTracking()
+                .FirstOrDefaultAsync(b => b.TenantId == facility.TenantId && b.FacilityId == facility.Id, ct);
+        }
+        catch (Exception)
+        {
+            // If the queue board projection table is temporarily unmigrated or unreadable, fall back gracefully
+            board = null;
+        }
 
         // Manila midnight invalidation: Stale yesterday tickets must never show
         if (board == null || board.QueueDate < todayManila)
