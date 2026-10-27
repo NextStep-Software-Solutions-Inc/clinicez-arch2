@@ -450,53 +450,55 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
         )}
 
         {/* Medical Clinic & Prescribing Physician Details */}
-        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-          <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-primary" />
-              Originating Clinic & Prescribing Physician
-            </span>
-            <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
-              Rx No: {data.prescriptionNumber}
-            </span>
-          </div>
-
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Medical Clinic</p>
-              <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
-              {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
-              {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
+        {!isNotFound && (
+          <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+            <div className="bg-muted border-b border-border px-6 py-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-primary" />
+                Originating Clinic & Prescribing Physician
+              </span>
+              <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded border border-primary/20">
+                Rx No: {data.prescriptionNumber}
+              </span>
             </div>
 
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Attending Physician</p>
-              <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Attending Physician'}</h3>
-              <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {data.doctorPrcLicense && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                    PRC No: {data.doctorPrcLicense}
-                  </span>
-                )}
-                {data.doctorPtr && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                    PTR: {data.doctorPtr}
-                  </span>
-                )}
-                {data.doctorS2License && (
-                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    PDEA S2: {data.doctorS2License}
-                  </span>
-                )}
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground font-semibold uppercase">Medical Clinic</p>
+                <h3 className="text-base font-bold text-foreground">{data.clinicName}</h3>
+                {data.clinicAddress && <p className="text-xs text-muted-foreground">{data.clinicAddress}</p>}
+                {data.clinicContact && <p className="text-xs text-muted-foreground">{data.clinicContact}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground font-semibold uppercase">Attending Physician</p>
+                <h3 className="text-base font-bold text-foreground">{data.doctorName || 'Attending Physician'}</h3>
+                <p className="text-xs text-muted-foreground">{data.doctorSpecialization || 'General Outpatient Medicine'}</p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {data.doctorPrcLicense && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                      PRC No: {data.doctorPrcLicense}
+                    </span>
+                  )}
+                  {data.doctorPtr && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                      PTR: {data.doctorPtr}
+                    </span>
+                  )}
+                  {data.doctorS2License && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      PDEA S2: {data.doctorS2License}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Patient Demographics & Safety Alert */}
-        {(data.patientName || data.patientInitials || data.patientAge) && (
+        {!isNotFound && (data.patientName || data.patientInitials || data.patientAge) && (
           <div className="bg-card rounded-xl shadow-sm border border-border p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
