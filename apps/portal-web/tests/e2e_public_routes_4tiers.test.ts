@@ -1044,7 +1044,7 @@ describe("Tier 2: Boundary Value Analysis & Corner Cases", () => {
         });
         const html = renderToString(jsx);
         expect(html).toContain("RX-NONEXISTENT");
-        expect(html).toContain("Not Found in Registry");
+        expect(html).toContain("UNVERIFIED OR INVALID PRESCRIPTION TOKEN");
       } finally {
         globalThis.fetch = originalFetch;
       }
