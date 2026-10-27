@@ -287,7 +287,7 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
   });
 
   describe('5. DiagnosticLabTab Specimen Intake Accessioning', () => {
-    test('5.1 renders lab orders tab with intake specimen capability', () => {
+    test('5.1 renders lab orders tab with attach external result capability', () => {
       const element = React.createElement(DiagnosticLabTab, {
         labOrders: [],
         patientId: 'pat-1',
@@ -297,7 +297,7 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
 
       expect(element).toBeDefined();
       const markup = renderToStaticMarkup(element);
-      expect(markup).toContain('data-testid="intake-specimen-button"');
+      expect(markup).toContain('data-testid="attach-external-lab-button"');
     });
 
     test('5.2 AttachExternalLabModal renders file attachment selector with auto-detected format', () => {
@@ -384,7 +384,7 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       expect(markup).toContain('data-testid="confirm-intake-specimen-button"');
     });
 
-    test('5.6 DiagnosticLabTab displays Log Specimen button for Ordered and Specimen Accessioned for SpecimenCollected', () => {
+    test('5.6 DiagnosticLabTab displays Attach External Result for Ordered labs and gracefully renders backward-compatible SpecimenCollected', () => {
       const orderedLab: any = {
         id: 'lab-1',
         orderNumber: 'LAB-001',
@@ -409,9 +409,12 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       });
 
       const markup = renderToStaticMarkup(element);
-      expect(markup).toContain('data-testid="collect-specimen-lab-1"');
-      expect(markup).toContain('Specimen Accessioned &amp; Logged');
-      expect(markup).toContain('Specimen collected (Whole Blood (EDTA)). Barcode: SPEC-718400');
+      // Clinical attach action is rendered for active lab orders
+      expect(markup).toContain('data-testid="attach-external-result-lab-1"');
+      // Backward compatibility: SpecimenCollected orders render their status chip gracefully
+      expect(markup).toContain('Specimen Collected');
+      // Non-clinical phlebotomy intake button is NOT rendered
+      expect(markup).not.toContain('data-testid="collect-specimen-lab-1"');
     });
   });
 });

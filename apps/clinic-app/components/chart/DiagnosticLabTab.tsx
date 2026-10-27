@@ -22,6 +22,7 @@ export interface DiagnosticLabTabProps {
   onAttachExternalLab?: (orderId: string) => void;
   onAcknowledgePanic?: (orderId: string, readbackNotes: string) => Promise<void>;
   onRefreshChart?: () => void;
+  /** @deprecated Non-clinical laboratory accessioning procedure; maintained for backward compatibility. */
   onIntakeSpecimen?: () => void;
 }
 
@@ -74,8 +75,6 @@ export default function DiagnosticLabTab({
 }: DiagnosticLabTabProps) {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'EXTERNAL' | 'PANIC'>('ALL');
   const [panicModalVisible, setPanicModalVisible] = useState(false);
-  const [intakeModalVisible, setIntakeModalVisible] = useState(false);
-  const [targetSpecimenOrder, setTargetSpecimenOrder] = useState<ClinicLabOrderRecord | null>(null);
   const [attachModalVisible, setAttachModalVisible] = useState(false);
   const [targetAttachOrderId, setTargetAttachOrderId] = useState<string | null>(null);
   const [targetPanicOrder, setTargetPanicOrder] = useState<any | null>(null);
@@ -270,21 +269,18 @@ export default function DiagnosticLabTab({
         </View>
 
         <Pressable
-          testID="intake-specimen-button"
+          testID="attach-external-lab-button"
           onPress={() => {
-            const firstPending = labOrders.find((o) => o.status === 'Ordered');
-            setTargetSpecimenOrder(firstPending || null);
-            if (onIntakeSpecimen) {
-              onIntakeSpecimen();
-            } else {
-              setIntakeModalVisible(true);
-            }
+            const pending = labOrders.find(
+              (o) => o.status !== 'Completed' && o.status !== 'CompletedWithExternalReport' && o.status !== 'Cancelled'
+            );
+            handleAttachAction(pending?.id || null);
           }}
           style={styles.intakeSpecimenBtn}
         >
-          <Icon name="lab" size={14} color={theme.colors.onPrimary} />
+          <Icon name="upload" size={14} color={theme.colors.onPrimary} />
           <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-            Log Specimen Collection
+            Attach External Result
           </ThemedText>
         </Pressable>
       </View>
@@ -381,23 +377,6 @@ export default function DiagnosticLabTab({
                   </View>
                 ) : null}
 
-                {/* Specimen Collected Info */}
-                {order.status === 'SpecimenCollected' ? (
-                  <View style={styles.specimenCollectedBlock}>
-                    <Icon name="checkCircle" size={14} color={theme.colors.successText || theme.colors.primaryDark} />
-                    <View style={{ flex: 1 }}>
-                      <ThemedText variant="captionBold" color={theme.colors.text}>
-                        Specimen Accessioned & Logged
-                      </ThemedText>
-                      {order.stageReason ? (
-                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                          {order.stageReason}
-                        </ThemedText>
-                      ) : null}
-                    </View>
-                  </View>
-                ) : null}
-
                 {/* Actions */}
                 <View style={styles.orderFooter}>
                   <Pressable
@@ -410,26 +389,11 @@ export default function DiagnosticLabTab({
                     </ThemedText>
                   </Pressable>
 
-                  {!isCompleted && order.status === 'Ordered' ? (
-                    <Pressable
-                      testID={`collect-specimen-${order.id}`}
-                      onPress={() => {
-                        setTargetSpecimenOrder(order);
-                        setIntakeModalVisible(true);
-                      }}
-                      style={styles.actionBtn}
-                    >
-                      <Icon name="lab" size={14} color={theme.colors.primaryDark} />
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        Log Specimen
-                      </ThemedText>
-                    </Pressable>
-                  ) : null}
-
                   {!isCompleted && order.status !== 'Cancelled' ? (
                     <Pressable
+                      testID={`attach-external-result-${order.id}`}
                       onPress={() => handleAttachAction(order.id)}
-                      style={styles.actionBtn}
+                      style={[styles.actionBtn, styles.actionBtn_primary]}
                     >
                       <Icon name="upload" size={14} color={theme.colors.primaryDark} />
                       <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
@@ -523,29 +487,13 @@ export default function DiagnosticLabTab({
         </View>
       </Modal>
 
-      {/* Ambulatory Specimen Collection Modal */}
-      <SpecimenIntakeModal
-        visible={intakeModalVisible}
-        targetOrder={targetSpecimenOrder}
-        pendingOrders={labOrders.filter((o) => o.status === 'Ordered')}
-        patient={patient}
-        patientId={patientId || patient?.id}
-        onClose={() => {
-          setIntakeModalVisible(false);
-          setTargetSpecimenOrder(null);
-        }}
-        onSuccess={() => {
-          setIntakeModalVisible(false);
-          setTargetSpecimenOrder(null);
-          onRefreshChart?.();
-        }}
-        onRefreshChart={onRefreshChart}
-      />
-
       {/* Attach External Lab Result Modal */}
       <AttachExternalLabModal
         visible={attachModalVisible}
         orderId={targetAttachOrderId}
+        pendingOrders={labOrders.filter(
+          (o) => o.status !== 'Completed' && o.status !== 'CompletedWithExternalReport' && o.status !== 'Cancelled'
+        )}
         onClose={() => {
           setAttachModalVisible(false);
           setTargetAttachOrderId(null);
@@ -889,6 +837,7 @@ const styles = StyleSheet.create({
   },
 });
 
+/** @deprecated Non-clinical laboratory accessioning procedure; removed from clinical workflow. Maintained for backward compatibility. */
 export interface SpecimenIntakeModalProps {
   visible: boolean;
   targetOrder?: ClinicLabOrderRecord | null;
@@ -900,6 +849,7 @@ export interface SpecimenIntakeModalProps {
   onRefreshChart?: () => void;
 }
 
+/** @deprecated Non-clinical laboratory accessioning procedure; removed from clinical workflow. Maintained for backward compatibility. */
 export function SpecimenIntakeModal({
   visible,
   targetOrder,
@@ -1075,14 +1025,17 @@ export function SpecimenIntakeModal({
 export function AttachExternalLabModal({
   visible,
   orderId,
+  pendingOrders = [],
   onClose,
   onSuccess,
 }: {
   visible: boolean;
   orderId: string | null;
+  pendingOrders?: ClinicLabOrderRecord[];
   onClose: () => void;
   onSuccess?: () => void;
 }) {
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(orderId || '');
   const [labName, setLabName] = useState('');
   const [docType, setDocType] = useState<'PDF' | 'Photo'>('PDF');
   const [notes, setNotes] = useState('');
@@ -1092,6 +1045,8 @@ export function AttachExternalLabModal({
 
   useEffect(() => {
     if (visible) {
+      const activeId = orderId || (pendingOrders.length > 0 ? pendingOrders[0].id : '');
+      setSelectedOrderId(activeId);
       setLabName('');
       setDocType('PDF');
       setNotes('');
@@ -1099,7 +1054,10 @@ export function AttachExternalLabModal({
       setSaving(false);
       setPicking(false);
     }
-  }, [visible]);
+  }, [visible, orderId, pendingOrders]);
+
+  const activeTargetOrder = (pendingOrders || []).find((o) => o.id === selectedOrderId) ||
+    (orderId ? (pendingOrders || []).find((o) => o.id === orderId) : (pendingOrders || [])[0]);
 
   const handlePick = async () => {
     setPicking(true);
@@ -1117,7 +1075,11 @@ export function AttachExternalLabModal({
   };
 
   const handleSave = async () => {
-    if (!orderId) return;
+    const finalOrderId = selectedOrderId || orderId || activeTargetOrder?.id;
+    if (!finalOrderId) {
+      notify.error('Please select an active laboratory requisition to attach results.');
+      return;
+    }
     if (!labName.trim()) {
       notify.error('Diagnostic laboratory name is required.');
       return;
@@ -1127,7 +1089,7 @@ export function AttachExternalLabModal({
       return;
     }
     setSaving(true);
-    const [, err] = await clinicService.attachExternalLabResult(orderId, {
+    const [, err] = await clinicService.attachExternalLabResult(finalOrderId, {
       externalLabName: labName.trim(),
       documentType: docType,
       fileBase64: pickedFile.base64,
@@ -1156,6 +1118,7 @@ export function AttachExternalLabModal({
         <View style={styles.modalActions}>
           <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
           <Button
+            testID="confirm-attach-result-button"
             title={saving ? 'Attaching...' : 'Attach Result'}
             variant="primary"
             icon="upload"
@@ -1166,6 +1129,47 @@ export function AttachExternalLabModal({
       }
     >
       <View style={styles.modalSection}>
+        {activeTargetOrder ? (
+          <View style={styles.orderSummaryBox}>
+            <Icon name="lab" size={16} color={theme.colors.primaryDark} />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="captionBold" color={theme.colors.text}>
+                Requisition #{activeTargetOrder.orderNumber}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                {(activeTargetOrder.items || []).map((i: any) => i.testName).join(', ') || 'Diagnostic Panel'}
+              </ThemedText>
+            </View>
+          </View>
+        ) : null}
+
+        {!orderId && pendingOrders.length > 1 ? (
+          <View style={{ marginBottom: theme.spacing.sm }}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+              Select Requisition to Attach to:
+            </ThemedText>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {pendingOrders.map((o) => (
+                <Pressable
+                  key={o.id}
+                  onPress={() => setSelectedOrderId(o.id)}
+                  style={[
+                    styles.orderSelectChip,
+                    (selectedOrderId || activeTargetOrder?.id) === o.id && styles.orderSelectChip_active,
+                  ]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    color={(selectedOrderId || activeTargetOrder?.id) === o.id ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    #{o.orderNumber}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
           EXTERNAL LABORATORY DETAILS
         </ThemedText>
