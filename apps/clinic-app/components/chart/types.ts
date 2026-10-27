@@ -123,7 +123,7 @@ export interface ChartLayoutProps {
   onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
   onVoidDentalCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
   onOrderProcedure?: () => void;
-  onIntakeSpecimen?: () => void;
+  onOrderDiagnostic?: () => void;
   queueItemId?: string | null;
 }
 
@@ -148,7 +148,7 @@ export interface PatientChartModalProps {
   onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
   onVoidDentalCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
   onOrderProcedure?: () => void;
-  onIntakeSpecimen?: () => void;
+  onOrderDiagnostic?: () => void;
   queueItemId?: string | null;
 
   // Tab Action Handlers

@@ -7,6 +7,9 @@ import { clinicService } from '../../services/clinicService';
 import { openDocument } from '../../services/documentOpener';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
 import { LabOrderStageChip } from '../interop/InteropBadges';
+import { PERMISSIONS } from '../../constants/permissions';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { useStaff } from '../../context/StaffContext';
 import type {
   ClinicPatient,
   ClinicLabOrderRecord,
@@ -15,15 +18,15 @@ import type {
 export interface DiagnosticLabTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
+  patientName?: string;
   labOrders: ClinicLabOrderRecord[];
   onViewLabSlip?: (orderId: string) => void;
   onOpenLabSlip?: (order: ClinicLabOrderRecord) => void;
   onAttachExternalResult?: (orderId: string) => void;
   onAttachExternalLab?: (orderId: string) => void;
+  onOrderDiagnostic?: () => void;
   onAcknowledgePanic?: (orderId: string, readbackNotes: string) => Promise<void>;
   onRefreshChart?: () => void;
-  /** @deprecated Non-clinical laboratory accessioning procedure; maintained for backward compatibility. */
-  onIntakeSpecimen?: () => void;
 }
 
 // Statutory mapping for PhilHealth lib_diagnostic
@@ -64,15 +67,29 @@ export function lookupStatutoryDiagnosticCode(testName: string): { code: string;
 export default function DiagnosticLabTab({
   patient,
   patientId,
+  patientName,
   labOrders = [],
   onViewLabSlip,
   onOpenLabSlip,
   onAttachExternalResult,
   onAttachExternalLab,
+  onOrderDiagnostic,
   onAcknowledgePanic,
   onRefreshChart,
-  onIntakeSpecimen,
 }: DiagnosticLabTabProps) {
+  const { user } = useAuth();
+  const staffCtx = useStaff();
+  const currentStaff = staffCtx?.current || (staffCtx as any)?.currentStaff;
+
+  const hasLabOrdersWrite = usePermission(PERMISSIONS.labOrdersWrite) || user?.role === 'Admin';
+  const effectiveRole = currentStaff?.role || user?.role;
+  const isDoctor = effectiveRole?.toLowerCase() === 'doctor';
+  const prcNumber = currentStaff?.prcLicenseNumber || (user as any)?.prcLicenseNumber;
+  const hasPrcLicense = Boolean(prcNumber && prcNumber.trim().length > 0);
+
+  // Gated by permission + PRC license if doctor only
+  const canOrderDiagnostic = (user ? hasLabOrdersWrite : true) && (!isDoctor || hasPrcLicense);
+
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'EXTERNAL' | 'PANIC'>('ALL');
   const [panicModalVisible, setPanicModalVisible] = useState(false);
   const [attachModalVisible, setAttachModalVisible] = useState(false);
@@ -268,21 +285,28 @@ export default function DiagnosticLabTab({
           </Pressable>
         </View>
 
-        <Pressable
-          testID="attach-external-lab-button"
-          onPress={() => {
-            const pending = labOrders.find(
-              (o) => o.status !== 'Completed' && o.status !== 'CompletedWithExternalReport' && o.status !== 'Cancelled'
-            );
-            handleAttachAction(pending?.id || null);
-          }}
-          style={styles.intakeSpecimenBtn}
-        >
-          <Icon name="upload" size={14} color={theme.colors.onPrimary} />
-          <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-            Attach External Result
-          </ThemedText>
-        </Pressable>
+        {canOrderDiagnostic ? (
+          <Pressable
+            testID="order-diagnostic-button"
+            onPress={() => onOrderDiagnostic?.()}
+            style={styles.orderDiagnosticBtn}
+          >
+            <Icon name="plus" size={14} color={theme.colors.onPrimary} />
+            <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+              Order Diagnostic
+            </ThemedText>
+          </Pressable>
+        ) : isDoctor && (user ? hasLabOrdersWrite : true) && !hasPrcLicense ? (
+          <View
+            testID="order-diagnostic-prc-required"
+            style={[styles.orderDiagnosticBtn, styles.orderDiagnosticBtn_disabled]}
+          >
+            <Icon name="warning" size={14} color={theme.colors.emergencyText} />
+            <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+              PRC License Required
+            </ThemedText>
+          </View>
+        ) : null}
       </View>
 
       {/* ========================================================================= */}
@@ -704,6 +728,20 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     marginBottom: theme.spacing.md,
   },
+  orderDiagnosticBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.radii.sm,
+  },
+  orderDiagnosticBtn_disabled: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
+  },
   intakeSpecimenBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -828,199 +866,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: theme.colors.successBg,
     padding: theme.spacing.sm,
     borderRadius: theme.radii.sm,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: theme.colors.successBorder,
     marginTop: theme.spacing.xs,
   },
 });
-
-/** @deprecated Non-clinical laboratory accessioning procedure; removed from clinical workflow. Maintained for backward compatibility. */
-export interface SpecimenIntakeModalProps {
-  visible: boolean;
-  targetOrder?: ClinicLabOrderRecord | null;
-  pendingOrders?: ClinicLabOrderRecord[];
-  patient?: ClinicPatient | null;
-  patientId?: string;
-  onClose: () => void;
-  onSuccess?: (updatedOrder?: ClinicLabOrderRecord) => void;
-  onRefreshChart?: () => void;
-}
-
-/** @deprecated Non-clinical laboratory accessioning procedure; removed from clinical workflow. Maintained for backward compatibility. */
-export function SpecimenIntakeModal({
-  visible,
-  targetOrder,
-  pendingOrders = [],
-  patient,
-  patientId,
-  onClose,
-  onSuccess,
-  onRefreshChart,
-}: SpecimenIntakeModalProps) {
-  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
-  const [specimenType, setSpecimenType] = useState('Whole Blood (EDTA)');
-  const [containerType, setContainerType] = useState('Purple_EDTA');
-  const [phlebName, setPhlebName] = useState('Treatment Nurse');
-  const [barcode, setBarcode] = useState(`SPEC-${Date.now().toString().slice(-6)}`);
-  const [notes, setNotes] = useState('Specimen accessioned for in-house laboratory processing.');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      const activeId = targetOrder?.id || pendingOrders.find(o => o.status === 'Ordered')?.id || pendingOrders[0]?.id || '';
-      setSelectedOrderId(activeId);
-      setBarcode(`SPEC-${Date.now().toString().slice(-6)}`);
-
-      const activeOrder = targetOrder || pendingOrders.find(o => o.id === activeId) || pendingOrders[0];
-      if (activeOrder) {
-        const tests = (activeOrder.items || []).map(i => (i.testName || '').toLowerCase());
-        const hasUrine = tests.some(t => t.includes('urine') || t.includes('urinalysis'));
-        const hasStool = tests.some(t => t.includes('fecal') || t.includes('stool'));
-        if (hasUrine) {
-          setSpecimenType('Clean Catch Urine');
-          setContainerType('Sterile_Urine_Cup');
-        } else if (hasStool) {
-          setSpecimenType('Stool Specimen');
-          setContainerType('Stool_Container');
-        } else {
-          setSpecimenType('Whole Blood (EDTA)');
-          setContainerType('Purple_EDTA');
-        }
-      }
-    }
-  }, [visible, targetOrder, pendingOrders]);
-
-  const activeTargetOrder = targetOrder || pendingOrders.find(o => o.id === selectedOrderId) || pendingOrders[0];
-
-  const handleIntake = async () => {
-    const finalOrderId = selectedOrderId || activeTargetOrder?.id;
-    if (!finalOrderId) {
-      notify.error('Please select an active laboratory requisition to log specimen collection.');
-      return;
-    }
-    setSaving(true);
-    const [res, err] = await clinicService.collectLabOrderSpecimen(finalOrderId, {
-      specimenType,
-      containerType,
-      accessionBarcode: barcode,
-      collectorName: phlebName,
-      notes,
-    });
-    setSaving(false);
-    if (err) {
-      notify.error(err.message || 'Failed to log specimen collection.');
-      return;
-    }
-    notify.success(`Specimen ${barcode} intake completed for ${res?.orderNumber ? `Order #${res.orderNumber}` : (patient ? `${patient.firstName} ${patient.lastName}` : 'Patient')}.`);
-    onSuccess?.(res ?? undefined);
-    onRefreshChart?.();
-    onClose();
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      title="Ambulatory Specimen Collection"
-      subtitle="Treatment Room / Phlebotomy On-Site Intake"
-      onClose={onClose}
-      footer={
-        <View style={styles.modalActions}>
-          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
-          <Button
-            testID="confirm-intake-specimen-button"
-            title={saving ? 'Logging...' : 'Log Specimen Collection'}
-            variant="primary"
-            icon="check"
-            loading={saving}
-            onPress={handleIntake}
-          />
-        </View>
-      }
-    >
-      <View style={styles.modalSection}>
-        {activeTargetOrder ? (
-          <View style={styles.orderSummaryBox}>
-            <Icon name="lab" size={16} color={theme.colors.primaryDark} />
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="captionBold" color={theme.colors.text}>
-                Requisition #{activeTargetOrder.orderNumber}
-              </ThemedText>
-              <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                {(activeTargetOrder.items || []).map((i: any) => i.testName).join(', ') || 'Diagnostic Panel'}
-              </ThemedText>
-            </View>
-          </View>
-        ) : null}
-
-        {/* If multiple pending orders and no explicit single target, allow switching */}
-        {!targetOrder && pendingOrders.length > 1 ? (
-          <View style={{ marginBottom: theme.spacing.sm }}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
-              Select Order to Accession:
-            </ThemedText>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {pendingOrders.map((o) => (
-                <Pressable
-                  key={o.id}
-                  onPress={() => setSelectedOrderId(o.id)}
-                  style={[
-                    styles.orderSelectChip,
-                    selectedOrderId === o.id && styles.orderSelectChip_active,
-                  ]}
-                >
-                  <ThemedText
-                    variant="captionBold"
-                    color={selectedOrderId === o.id ? theme.colors.primaryDark : theme.colors.textSecondary}
-                  >
-                    #{o.orderNumber}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-          SPECIMEN COLLECTION DETAILS
-        </ThemedText>
-        <Input
-          label="Specimen Type"
-          value={specimenType}
-          onChangeText={setSpecimenType}
-          placeholder="e.g. Whole Blood, Urine, Stool"
-        />
-        <Input
-          label="Container / Tube Type"
-          value={containerType}
-          onChangeText={setContainerType}
-          placeholder="Purple_EDTA / Yellow_SST / Urine_Cup"
-        />
-        <Input
-          label="Accession Barcode / Label"
-          value={barcode}
-          onChangeText={setBarcode}
-          placeholder="SPEC-XXXXXX"
-        />
-        <Input
-          label="Phlebotomist / Collector Name"
-          value={phlebName}
-          onChangeText={setPhlebName}
-          placeholder="Staff Name"
-        />
-        <Input
-          label="Specimen Quality Notes"
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Adequate volume, unhemolyzed, properly labeled..."
-          multiline
-        />
-      </View>
-    </Modal>
-  );
-}
 
 export function AttachExternalLabModal({
   visible,

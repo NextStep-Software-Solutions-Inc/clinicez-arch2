@@ -1212,7 +1212,7 @@ const styles = StyleSheet.create({
   lockIconBox: {
     width: 68,
     height: 68,
-    borderRadius: 34,
+    borderRadius: theme.radii.full,
     backgroundColor: darkColors.surfaceHighlight,
     borderWidth: 1,
     borderColor: darkColors.border,
@@ -1244,7 +1244,7 @@ const styles = StyleSheet.create({
   pinDot: {
     width: 18,
     height: 18,
-    borderRadius: 9,
+    borderRadius: theme.radii.full,
     borderWidth: 2,
     borderColor: darkColors.border,
     alignItems: 'center',
@@ -1257,7 +1257,7 @@ const styles = StyleSheet.create({
   pinDotInner: {
     width: 10,
     height: 10,
-    borderRadius: 5,
+    borderRadius: theme.radii.full,
     backgroundColor: darkColors.primary,
   },
   lockErrorBanner: {

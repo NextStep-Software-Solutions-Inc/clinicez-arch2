@@ -384,28 +384,6 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         order.ClaimToken,
         (results ?? Enumerable.Empty<ClinicLabResult>())
             .Select(r => new ClinicLabResultSummaryDto(r.Id, r.Source, r.Verification))
-            .ToList(),
-        ExtractSpecimenType(order)
+            .ToList()
     );
-
-    private static string? ExtractSpecimenType(ClinicLabOrder order)
-    {
-        if (string.IsNullOrWhiteSpace(order.StageReason)) return null;
-        const string prefix = "Specimen collected (";
-        if (order.StageReason.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var open = prefix.Length;
-            var barcodeIdx = order.StageReason.IndexOf("). Barcode:", StringComparison.OrdinalIgnoreCase);
-            if (barcodeIdx > open)
-            {
-                return order.StageReason.Substring(open, barcodeIdx - open).Trim();
-            }
-            var close = order.StageReason.LastIndexOf(')');
-            if (close > open)
-            {
-                return order.StageReason.Substring(open, close - open).Trim();
-            }
-        }
-        return null;
-    }
 }

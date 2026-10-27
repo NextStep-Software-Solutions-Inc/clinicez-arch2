@@ -38,7 +38,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
     onRecordHistoricalVaccine,
     onRecordAefi,
     onOrderProcedure,
-    onIntakeSpecimen,
+    onOrderDiagnostic,
   } = props;
 
   if (loadingChart && !patientChart) {
@@ -90,7 +90,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onOpenLabSlip={(order: any) => onViewLabSlip?.(order.id)}
           onAttachExternalResult={onAttachExternalResult}
           onRefreshChart={onRefreshChart}
-          onIntakeSpecimen={onIntakeSpecimen}
+          onOrderDiagnostic={onOrderDiagnostic}
         />
       )}
       {activeTab === 'procedures' && (

@@ -56,8 +56,7 @@ public record ClinicLabOrderDto(
     bool PaymentRequired = false,
     string? LaboratoryName = null,
     string? ClaimToken = null,
-    List<ClinicLabResultSummaryDto>? Results = null,
-    string? SpecimenType = null
+    List<ClinicLabResultSummaryDto>? Results = null
 );
 
 public record AcknowledgePanicAlertRequest(

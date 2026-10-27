@@ -2639,19 +2639,6 @@ export const clinicService = {
     return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${id}/cancel`, { reason });
   },
 
-  async collectLabOrderSpecimen(
-    orderId: string,
-    payload: {
-      specimenType?: string;
-      containerType?: string;
-      accessionBarcode?: string;
-      collectorName?: string;
-      notes?: string;
-    }
-  ) {
-    return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${orderId}/collect-specimen`, payload);
-  },
-
   async getLabOrderSlip(orderId: string) {
     return clinicApiClient.get<LabOrderSlipData>(`/lab-orders/${orderId}/slip`);
   },
