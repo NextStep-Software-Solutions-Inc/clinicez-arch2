@@ -16,4 +16,5 @@ public interface ICommsClient
     Task OnThreadStateChanged(Guid conversationId, RequestStatus newStatus, TriageDisposition? disposition, string? assignedStaffId, string? assignedStaffName);
     Task OnConversationCreated(ConversationDto conversation);
     Task OnConversationUpdated(ConversationDto conversation);
+    Task OnTenantMigrationStateChanged(TenantMigrationStatusDto status);
 }

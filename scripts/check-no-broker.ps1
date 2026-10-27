@@ -69,6 +69,7 @@ if (Test-Path "docs/deployment-configuration.md") {
 # Files that are allowed to MENTION the removed technologies (history / rationale), never to use them.
 $allowedPathspecs = @(
     ':(exclude)docs/architecture/**',
+    ':(exclude)docs/comms/**',
     ':(exclude).agents/**',
     ':(exclude)**/Migrations/**',
     ':(exclude)scripts/check-no-broker.ps1',

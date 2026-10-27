@@ -163,6 +163,8 @@ describe("Route Tree Discovery & @shared/safe publicRoutes Builder Parity", () =
     join: publicRoutes.join,
     facilityJoin: publicRoutes.facilityJoin,
     claim: publicRoutes.claim,
+    teleconsultJoin: publicRoutes.teleconsultJoin,
+    teleconsultInvite: publicRoutes.teleconsultInvite,
     verifyLookup: publicRoutes.verifyLookup,
     verifyDocument: (publicRoutes as any).verifyDocument ?? publicRoutes.verifyKind,
     rxVerify: (publicRoutes as any).rxVerify ?? publicRoutes.verifyRx,
@@ -176,6 +178,8 @@ describe("Route Tree Discovery & @shared/safe publicRoutes Builder Parity", () =
       "/claim",
       "/join",
       "/join/[tenantSlug]/[facilitySlug]",
+      "/teleconsult/join",
+      "/teleconsult/join/[token]",
       "/verify",
       "/verify/[kind]/[token]",
     ]);
@@ -261,6 +265,11 @@ describe("Route Tree Discovery & @shared/safe publicRoutes Builder Parity", () =
       { label: "rxVerify(rxToken)", url: builders.rxVerify("RX-20261025-0001"), expected: "/verify/[kind]/[token]" },
       { label: "rxVerify(rxToken, { baseUrl })", url: builders.rxVerify("RX-SECRET-99", { baseUrl: "https://portal.clinicez.ph" }), expected: "/verify/[kind]/[token]" },
       { label: "verifyRx(rxToken)", url: builders.verifyRx("RX-20261025-0001"), expected: "/verify/[kind]/[token]" },
+
+      // 7. teleconsultJoin & teleconsultInvite
+      { label: "teleconsultJoin()", url: builders.teleconsultJoin(), expected: "/teleconsult/join" },
+      { label: "teleconsultJoin({ token })", url: builders.teleconsultJoin({ token: "INV-01" }), expected: "/teleconsult/join" },
+      { label: "teleconsultInvite(token)", url: builders.teleconsultInvite("INV-01"), expected: "/teleconsult/join/[token]" },
     ];
 
     for (const tc of testMatrix) {
@@ -281,6 +290,8 @@ describe("Route Tree Discovery & @shared/safe publicRoutes Builder Parity", () =
       builders.join(),
       builders.facilityJoin("tenant", "facility"),
       builders.claim("token"),
+      builders.teleconsultJoin(),
+      builders.teleconsultInvite("token"),
       builders.verifyLookup(),
       builders.verifyDocument("med-cert", "token"),
       builders.rxVerify("token"),

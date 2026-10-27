@@ -148,8 +148,10 @@ A facility service does **not** register itself. The portal is the directory aut
 
 What exists today is carried **inside the signed license** and enforced offline by the facility:
 
-- **Limits** ([`FacilityLimits`](../../packages/shared-dotnet/Licensing/FacilityLimits.cs)): `maxStaff`, `maxBeds`, `maxAnalyzers`, `maxMonthlyConsultations`, `maxStorageMb`, `concurrentTerminals`.
-- **Features** (`EnabledFeatures`, keys in [`FacilityFeatureKeys`](../../packages/shared-dotnet/Licensing/FacilityFeatureKeys.cs)): `Teleconsultation`, `ElectronicPrescriptions`, `LisIntegration`, `InventoryManagement`, `PhilHealthKonsulta`, `MultiTerminalSync`, `AdvancedAnalytics`, `CustomLetterhead`.
+- **Limits** ([`FacilityLimits`](../../packages/shared-dotnet/Licensing/FacilityLimits.cs)): `maxStaff`, `maxBeds`, `maxAnalyzers`, `maxMonthlyConsultations`, `maxStorageMb`, `concurrentTerminals`, `callMinutesMonthly` (default `0` — metered WebRTC participant-minute quota enforced by `media-broker`).
+- **Features** (`EnabledFeatures`, keys in [`FacilityFeatureKeys`](../../packages/shared-dotnet/Licensing/FacilityFeatureKeys.cs)): `Teleconsultation`, `ElectronicPrescriptions`, `LisIntegration`, `InventoryManagement`, `PhilHealthKonsulta`, `MultiTerminalSync`, `AdvancedAnalytics`, `CustomLetterhead`, `WorkspaceChat`, `PatientMessaging`.
+- **Off-by-default communications posture:** `WorkspaceChat`, `PatientMessaging`, and `callMinutesMonthly` default to disabled / `0` until explicitly enabled on the workspace or facility license, ensuring zero unexpected background traffic or media spend on existing deployments.
+- **Staff SignalR ticket endpoint:** Every facility service (`clinic-api`, `laboratory-api`, `pharmacy-api`, `billing-api`, `organization-api`) exposes `POST /api/v1/comms/ticket`, which validates the caller's facility-local JWT and mints a short-lived HMAC-signed `CommsTicket` (`<base64url-claims>.<base64url-sig>`) scoped to the staff member's `tenant_id`, `facility_id`, `branch_id`, and permissions so workstations connect directly to their cell's `comms-api` SignalR hubs (`/hubs/chat`, `/hubs/calls`) without sharing facility JWT signing keys.
 - Tier defaults (`Community`, `Standard`, `Enterprise`) in [`PlanTierDefaults`](../../packages/shared-dotnet/Licensing/PlanTierDefaults.cs).
 
 A new type adds its own limit property and feature key constants there and checks them from the validated license payload (never from the request).
@@ -239,7 +241,11 @@ h.Respond<GamotLookupRequestedPayload, GamotLookupRespondedPayload, GamotRespond
 | Instances | The requester keeps pending calls in memory: run **one instance per service mailbox** (the compose files do). Behind several replicas a reply can be consumed by an instance that did not ask. |
 | Logging | The SDK logs message type, ids and timeouts only. Do not log request or reply payloads (PHI, credentials). |
 
-**Platform services.** A few services are not facilities: the PhilHealth proxy (`philhealth`, `Party.PhilHealth`) is a hub client of kind `PlatformService` in the cloud cell. Facilities may address it only with `philhealth.request`; the proxy answers with `philhealth.response`; its credential traffic with the portal is closed to everyone else. The proxy derives the tenant and facility from the verified `From`, never from the payload. Rules: [`interop-hub.md`](interop-hub.md#platform-services); messages: [`message-matrix.md`](message-matrix.md#platform-services-requestreply).
+**Platform services.** Two cloud-cell services run as `PlatformService` hub clients rather than facility services:
+- **PhilHealth proxy** (`philhealth`, `Party.PhilHealth`): facilities address it only with `philhealth.request`; the proxy answers with `philhealth.response`; its credential traffic with `portal-api` (`philhealth.config.*`) is closed to everyone else.
+- **Media broker** (`media`, `Party.Media`): facilities and `comms-api` (both cloud and on-premise edge cells) address it with `media.room.requested` to obtain short-lived, zero-PHI WebRTC/LiveKit room tokens (`media.room.responded`); `portal-api` pushes quota updates via `media.entitlement.updated` and receives zero-PHI participant-minute usage via `media.usage.recorded`.
+
+Both platform services derive the tenant and facility strictly from the verified `From` envelope header, never from the payload. Rules: [`interop-hub.md`](interop-hub.md#platform-services); messages: [`message-matrix.md`](message-matrix.md#platform-services-requestreply).
 ---
 ## Add a new service: checklist
 

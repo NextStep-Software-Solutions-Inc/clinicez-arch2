@@ -58,7 +58,7 @@ export default function QueueDisplayClient({
 
   // Failure backoff counter
   const failureCountRef = useRef<number>(0);
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Tracking previously serving ticket numbers to detect call advancement
   const prevServingRef = useRef<string[]>(initialData?.nowServing.map((s) => s.ticketNumber) || []);

@@ -76,6 +76,14 @@ import ExternalDispenseScreen from '../screens/documents/ExternalDispense.screen
 import LabResultDetailScreen from '../screens/documents/LabResultDetail.screen';
 import MedicalCertificateDetailScreen from '../screens/documents/MedicalCertificateDetail.screen';
 
+// Communications & Teleconsultation
+import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
+import ConversationThreadScreen from '../screens/messages/ConversationThread.screen';
+import NewMessageInquiryScreen from '../screens/messages/NewMessageInquiry.screen';
+import TeleconsultWaitingRoomScreen from '../screens/teleconsult/TeleconsultWaitingRoom.screen';
+import TeleconsultCallScreen from '../screens/teleconsult/TeleconsultCall.screen';
+import PrivacySettingsScreen from '../screens/settings/PrivacySettings.screen';
+
 const MainStack = createNativeStackNavigator({
   screenOptions: {
     headerStyle: {
@@ -379,6 +387,31 @@ const MainStack = createNativeStackNavigator({
     MedicalCertificateDetailScreen: createNativeStackScreen({
       screen: MedicalCertificateDetailScreen,
       options: { title: 'Medical certificate' },
+    }),
+    // ── Communications & Teleconsultation ────────────────────────────────────
+    MessagesInboxScreen: createNativeStackScreen({
+      screen: MessagesInboxScreen,
+      options: { title: 'Messages', headerLargeTitleEnabled: true },
+    }),
+    ConversationThreadScreen: createNativeStackScreen({
+      screen: ConversationThreadScreen,
+      options: { title: 'Conversation', headerShown: false },
+    }),
+    NewMessageInquiryScreen: createNativeStackScreen({
+      screen: NewMessageInquiryScreen,
+      options: { title: 'New Message', headerLargeTitleEnabled: true },
+    }),
+    TeleconsultWaitingRoomScreen: createNativeStackScreen({
+      screen: TeleconsultWaitingRoomScreen,
+      options: { title: 'Waiting Room', headerShown: false },
+    }),
+    TeleconsultCallScreen: createNativeStackScreen({
+      screen: TeleconsultCallScreen,
+      options: { title: 'Teleconsultation', headerShown: false },
+    }),
+    PrivacySettingsScreen: createNativeStackScreen({
+      screen: PrivacySettingsScreen,
+      options: { title: 'Privacy & Communications', headerLargeTitleEnabled: true },
     }),
   },
 });

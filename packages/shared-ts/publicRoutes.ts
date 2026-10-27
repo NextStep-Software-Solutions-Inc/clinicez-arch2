@@ -111,6 +111,30 @@ export const publicRoutes = {
   },
 
   /**
+   * Generates canonical guest teleconsultation landing URL:
+   * - /teleconsult/join
+   * - /teleconsult/join?token=...
+   */
+  teleconsultJoin(options?: { baseUrl?: string | null; token?: string | null }): string {
+    const base = cleanBaseUrl(options?.baseUrl);
+    const token = options?.token?.trim();
+    const query = token ? `?token=${encodeURIComponent(token)}` : '';
+    return `${base}/teleconsult/join${query}`;
+  },
+
+  /**
+   * Generates canonical guest teleconsultation invitation URL:
+   * - /teleconsult/join/{token}
+   */
+  teleconsultInvite(token: string, options?: { baseUrl?: string | null }): string {
+    if (!token?.trim()) {
+      throw new Error('token is required');
+    }
+    const base = cleanBaseUrl(options?.baseUrl);
+    return `${base}/teleconsult/join/${encodeURIComponent(token.trim())}`;
+  },
+
+  /**
    * Generates mobile app deep link for clinic join intake:
    * - clinicez://join
    * - clinicez://join?code=...

@@ -9,6 +9,7 @@ import { ConnectionGate } from './components/connection/ConnectionGate';
 import { AuthGate } from './components/auth/AuthGate';
 import { ClinicProvider } from './context/ClinicContext';
 import { StaffProvider } from './context/StaffContext';
+import { ClinicCommsProvider } from './context/ClinicCommsContext';
 import { SidebarProvider } from './context/SidebarContext';
 import { FeedbackHost, initModalStackObserver } from './components/ui';
 import { VercelInsights } from './components/analytics/VercelInsights';
@@ -68,12 +69,14 @@ export default function App() {
                   <AuthGate>
                     <ClinicProvider>
                       <StaffProvider>
-                        <SidebarProvider>
-                          <OfflineSyncRunner />
-                          <GlobalSearchProvider>
-                            <Navigation linking={linkingOptions} theme={navigationTheme} />
-                          </GlobalSearchProvider>
-                        </SidebarProvider>
+                        <ClinicCommsProvider>
+                          <SidebarProvider>
+                            <OfflineSyncRunner />
+                            <GlobalSearchProvider>
+                              <Navigation linking={linkingOptions} theme={navigationTheme} />
+                            </GlobalSearchProvider>
+                          </SidebarProvider>
+                        </ClinicCommsProvider>
                       </StaffProvider>
                     </ClinicProvider>
                   </AuthGate>

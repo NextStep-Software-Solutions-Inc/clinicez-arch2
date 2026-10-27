@@ -13,6 +13,7 @@ const isProtectedRoute = createRouteMatcher([
 export const PUBLIC_ROUTE_PATTERNS = [
     '/claim(.*)',
     '/join(.*)',
+    '/teleconsult(.*)',
     '/verify(.*)',
     '/upload(.*)',
     '/admin/invitations(.*)',

@@ -27,6 +27,7 @@ export type WebSectionKey =
   | 'HomeScreen'
   | 'AppointmentsScreen'
   | 'FilesScreen'
+  | 'MessagesInboxScreen'
   | 'ProfileScreen'
   | 'NotificationScreen'
   | 'SettingsScreen';
@@ -43,6 +44,7 @@ export const WEB_PRIMARY_NAV: WebNavItem[] = [
   { key: 'HomeScreen', label: 'Home', icon: 'home', shortcut: 'H' },
   { key: 'AppointmentsScreen', label: 'Appointments', icon: 'appointments', shortcut: 'A' },
   { key: 'FilesScreen', label: 'Records', icon: 'files', shortcut: 'F' },
+  { key: 'MessagesInboxScreen', label: 'Messages', icon: 'chat', shortcut: 'M' },
   { key: 'ProfileScreen', label: 'My Profile', icon: 'profile', shortcut: 'P' },
 ];
 
@@ -84,6 +86,7 @@ const ROOT_TAB_HEADERS: Record<string, { title: string; subtitle: string }> = {
   HomeScreen: { title: 'Clinic EZ', subtitle: 'Patient Portal' },
   AppointmentsScreen: { title: 'My Appointments', subtitle: 'Patient Portal' },
   FilesScreen: { title: 'Health Records', subtitle: 'Patient Portal' },
+  MessagesInboxScreen: { title: 'Messages', subtitle: 'Patient Portal' },
   ProfileScreen: { title: 'My Profile', subtitle: 'Patient Portal' },
 };
 
@@ -186,6 +189,9 @@ export function resolveActiveSection(state: NavigationState<ParamListBase>): Web
   if (route.name.endsWith('SettingsScreen') || route.name === 'ChangePINScreen' || route.name === 'ChangePasswordScreen') {
     return 'SettingsScreen';
   }
+  if (route.name.startsWith('Messages') || route.name === 'ConversationThreadScreen' || route.name === 'NewMessageInquiryScreen') {
+    return 'MessagesInboxScreen';
+  }
   if (APPOINTMENT_ROUTES.has(route.name)) return 'AppointmentsScreen';
   if (PROFILE_ROUTES.has(route.name)) return 'ProfileScreen';
   return 'HomeScreen';
@@ -205,6 +211,7 @@ export function navigateToSection(
   switch (key) {
     case 'NotificationScreen':
     case 'SettingsScreen':
+    case 'MessagesInboxScreen':
       navigation.navigate(key);
       return;
     case 'FilesScreen':

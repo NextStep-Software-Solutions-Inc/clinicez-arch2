@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@shared/safe"],
+  transpilePackages: ["@shared/safe", "@clinicez/comms-sdk", "@clinicez/design-tokens"],
   images: {
     remotePatterns: [
       {

@@ -34,6 +34,12 @@
       ],
       "@clinicez/design-tokens/*": [
         "../../packages/design-tokens/src/*"
+      ],
+      "@clinicez/comms-sdk": [
+        "../../packages/comms-sdk/src/index.ts"
+      ],
+      "@clinicez/comms-sdk/*": [
+        "../../packages/comms-sdk/src/*"
       ]
     }
   },

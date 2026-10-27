@@ -11,6 +11,7 @@
   "dependencies": {
     "@callstack/liquid-glass": "^0.8.0",
     "@clerk/expo": "^3.3.0",
+    "@clinicez/comms-sdk": "workspace:*",
     "@clinicez/design-tokens": "workspace:*",
     "@expo-google-fonts/geist": "^0.4.2",
     "@expo-google-fonts/geist-mono": "^0.4.3",

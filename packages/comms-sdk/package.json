@@ -1,0 +1,61 @@
+{
+  "name": "@clinicez/comms-sdk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ClinicEZ workspace communications client SDK (SignalR client, offline queue, delivery truth, attachments, React hooks, native & web UI)",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./core": {
+      "types": "./src/core/index.ts",
+      "import": "./src/core/index.ts"
+    },
+    "./react": {
+      "types": "./src/react/index.ts",
+      "import": "./src/react/index.ts"
+    },
+    "./native-ui": {
+      "types": "./src/native-ui/index.ts",
+      "import": "./src/native-ui/index.ts"
+    },
+    "./web-ui": {
+      "types": "./src/web-ui/index.ts",
+      "import": "./src/web-ui/index.ts"
+    }
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.11",
+    "@shared/safe": "workspace:*"
+  },
+  "peerDependencies": {
+    "@clinicez/design-tokens": "workspace:*",
+    "react": ">=18.0.0",
+    "react-native": "*"
+  },
+  "peerDependenciesMeta": {
+    "@clinicez/design-tokens": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@clinicez/design-tokens": "workspace:*",
+    "@types/node": "^24.19.2",
+    "@types/react": "~19.2.3",
+    "react": "19.2.3",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "test": "bun test tests",
+    "typecheck": "tsc --noEmit"
+  }
+}

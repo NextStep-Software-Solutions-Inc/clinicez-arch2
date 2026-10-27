@@ -9,6 +9,8 @@
     "react-dom": "19.2.3"
   },
   "dependencies": {
+    "@clinicez/comms-sdk": "workspace:*",
+    "@clinicez/design-tokens": "workspace:*",
     "@expo/metro-runtime": "~56.0.21",
     "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
     "@react-navigation/core": "8.0.0-alpha.26",

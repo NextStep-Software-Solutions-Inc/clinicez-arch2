@@ -9,6 +9,7 @@ on:
       - 'apps/**'
       - 'packages/shared-ts/**'
       - 'packages/design-tokens/**'
+      - 'packages/comms-sdk/**'
       - 'package.json'
       - 'bun.lock'
       - 'scripts/check-no-broker.ps1'
@@ -24,6 +25,7 @@ on:
       - 'apps/**'
       - 'packages/shared-ts/**'
       - 'packages/design-tokens/**'
+      - 'packages/comms-sdk/**'
       - 'package.json'
       - 'bun.lock'
       - 'scripts/check-no-broker.ps1'
@@ -65,8 +67,23 @@ jobs:
         shell: pwsh
         run: ./scripts/check-no-turnstile.ps1
 
-      - name: Type check all apps
+      - name: Type check all apps and packages
         run: bun run typecheck:all
+
+      - name: Test design tokens
+        run: bun run test:tokens
+
+      - name: Comms SDK token and host gates
+        run: bun run lint:comms
+
+      - name: Test comms SDK
+        run: bun run test:comms
+
+      - name: Patient app token gate
+        run: bun run lint:patient-tokens
+
+      - name: Test patient app
+        run: bun run test:patient
 
       - name: Test clinic app
         run: bun run test:clinic

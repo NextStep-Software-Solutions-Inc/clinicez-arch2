@@ -4,6 +4,23 @@
 
 import { validatePhilHealthPinMod11 } from "./philhealth";
 
+export function isProxyPublicRoute(pathname: string): boolean {
+  // Canonical unauthenticated public routes whitelisted from Clerk auth middleware
+  const publicPatterns = [
+    /^\/claim(\/.*)?$/,
+    /^\/join(\/.*)?$/,
+    /^\/teleconsult(\/.*)?$/,
+    /^\/verify(\/.*)?$/,
+    /^\/upload(\/.*)?$/,
+    /^\/admin\/invitations(\/.*)?$/,
+    /^\/invitations(\/.*)?$/,
+    /^\/reset-password(\/.*)?$/,
+    /^\/favicon\.ico$/,
+  ];
+  return publicPatterns.some((pattern) => pattern.test(pathname));
+}
+
+
 export interface CustomFieldDefinition {
   fieldKey: string;
   label: string;

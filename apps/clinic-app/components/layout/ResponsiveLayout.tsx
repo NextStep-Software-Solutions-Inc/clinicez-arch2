@@ -10,6 +10,8 @@ import { useSidebar } from '../../context/SidebarContext';
 import { useSafeInsets } from '../../utils/useSafeInsets';
 import { useUiDensity } from '../../context/UiDensityContext';
 import { useGlobalSearch } from '../search/GlobalSearchProvider';
+import ClinicChatDrawerHost from '../comms/ClinicChatDrawerHost';
+import TeleconsultWaitingRoomModal from '../teleconsult/TeleconsultWaitingRoomModal';
 
 export interface ResponsiveLayoutProps {
   children: React.ReactNode;
@@ -96,6 +98,8 @@ export default function ResponsiveLayout({
           />
         ) : null}
         <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>
+        <ClinicChatDrawerHost />
+        <TeleconsultWaitingRoomModal />
       </View>
     );
   }
@@ -133,6 +137,8 @@ export default function ResponsiveLayout({
         )}
         <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>
       </View>
+      <ClinicChatDrawerHost />
+      <TeleconsultWaitingRoomModal />
     </View>
   );
 }

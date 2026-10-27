@@ -1,6 +1,7 @@
 using ClinicEz.Comms.Application;
 using ClinicEz.Comms.Infrastructure;
 using ClinicEz.Comms.Infrastructure.Hubs;
+using ClinicEz.Comms.Infrastructure.Middleware;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -40,6 +41,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<TenantMigrationWritePauseMiddleware>();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "comms-api" })).AllowAnonymous();
 app.MapControllers();

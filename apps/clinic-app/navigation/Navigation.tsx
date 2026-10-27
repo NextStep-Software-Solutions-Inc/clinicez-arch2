@@ -18,6 +18,7 @@ import ProfileScreen from './screens/Profile.screen';
 import ResultReviewScreen from './screens/ResultReview.screen';
 import ShareImportScreen from './screens/ShareImport.screen';
 import AuditScreen from './screens/Audit.screen';
+import TriageScreen from './screens/Triage.screen';
 
 /**
  * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
@@ -86,6 +87,15 @@ const Tab = createBottomTabNavigator({
         title: 'Appointments',
         tabBarLabel: 'Appts',
         tabBarIcon: tabIcon('appointments'),
+      },
+    },
+    Triage: {
+      screen: TriageScreen,
+      linking: 'triage',
+      options: {
+        title: 'Triage desk',
+        tabBarLabel: 'Triage',
+        tabBarIcon: tabIcon('activity'),
       },
     },
     Billing: {

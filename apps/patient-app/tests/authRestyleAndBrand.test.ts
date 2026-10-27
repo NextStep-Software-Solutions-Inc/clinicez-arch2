@@ -122,12 +122,13 @@ describe('Patient App & Portal Web Auth Restyling and Brand Verification', () =>
   describe('Portal Web Clerk Username Enforce & Logo Alignment', () => {
     test('Portal CustomSignUpForm enforces username validation and complete-requirements step', () => {
       const source = readRepo('apps/portal-web/src/app/sign-up/_components/CustomSignUpForm.tsx');
+      const flowSource = readRepo('apps/portal-web/src/app/sign-up/_lib/signUpFlow.ts');
       expect(source.includes('username')).toBe(true);
       expect(source.includes('signUp.create')).toBe(true);
       expect(source.includes('username: username.trim().toLowerCase()')).toBe(true);
       expect(source.includes('complete-requirements')).toBe(true);
       expect(source.includes('signUp.update')).toBe(true);
-      expect(source.includes('form_username_exists')).toBe(true);
+      expect(flowSource.includes('form_username_exists') || source.includes('form_username_exists')).toBe(true);
     });
 
     test('Portal CustomSignInForm supports Email or Username identifier', () => {

@@ -35,6 +35,7 @@ Thumbs.db
 /out/
 dist/
 web-build/
+*.tsbuildinfo
 
 # Test results
 TestResults/

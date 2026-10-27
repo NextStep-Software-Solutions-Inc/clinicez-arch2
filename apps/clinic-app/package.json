@@ -9,6 +9,7 @@
     "react-dom": "19.2.3"
   },
   "dependencies": {
+    "@clinicez/comms-sdk": "workspace:*",
     "@clinicez/design-tokens": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",

@@ -149,7 +149,7 @@ export default function FacilityOnboardingWizard({
   const [isSlugCustomized, setIsSlugCustomized] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
-  const slugCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const slugCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // If selected branch already has the current facility type, auto-switch to first free slot
   useEffect(() => {

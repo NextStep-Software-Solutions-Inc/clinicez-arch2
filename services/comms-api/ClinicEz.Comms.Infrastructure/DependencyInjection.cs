@@ -11,6 +11,7 @@ using ClinicEz.Comms.Infrastructure.Storage;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Persistence;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,6 +44,9 @@ public static class DependencyInjection
         services.AddScoped<ICommsStorageService, LocalCommsStorageService>();
         services.AddScoped<ICommsRealtimeNotifier, CommsRealtimeNotifier>();
         services.AddScoped<ITranscriptSerializer, TranscriptSerializer>();
+        services.AddSingleton<ITenantMigrationGate, TenantMigrationGate>();
+        services.AddScoped<IOutboxDrainService, OutboxDrainService>();
+        services.AddScoped<IAttachmentCryptoService, AttachmentCryptoService>();
 
         services.AddHostedService<DeliveryRetentionSweeper>();
 
@@ -55,7 +59,10 @@ public static class DependencyInjection
             CommsTicketAuthenticationDefaults.AuthenticationScheme,
             _ => { });
 
-        services.AddSignalR();
+        services.AddSignalR(options =>
+        {
+            options.AddFilter<TenantMigrationHubFilter>();
+        });
 
         services.AddInterop<CommsDbContext>(configuration, handlers => handlers
             .Handle<CommsEligibilityGrantedPayload, CommsEligibilityGrantedHandler>(InteropTypes.CommsEligibilityGranted)
