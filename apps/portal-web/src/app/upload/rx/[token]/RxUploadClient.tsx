@@ -27,9 +27,53 @@ import { toast } from "sonner";
 import { dropzoneService, PublicRxUploadInfo } from "@/services/dropzone.service";
 import PrintableDropzoneReceipt, { ReceiptData } from "@/components/dropzone/PrintableDropzoneReceipt";
 
-const MAX_FILE_SIZE_MB = 15;
+const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
+const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg", "image/webp"];
+
+async function compressImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        const maxDim = 2048;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(file);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob && blob.size < file.size) {
+              resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+            } else {
+              resolve(file);
+            }
+          },
+          "image/jpeg",
+          0.8
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function RxUploadClient({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
@@ -103,20 +147,21 @@ export default function RxUploadClient({ token }: { token: string }) {
     return () => clearInterval(interval);
   }, [rxInfo?.expiresAt]);
 
-  const validateAndSetFile = (selectedFile: File) => {
+  const validateAndSetFile = async (selectedFile: File) => {
     setFileError(null);
 
     if (!ALLOWED_MIME_TYPES.includes(selectedFile.type)) {
-      setFileError("Invalid format. Only PDF, JPEG, and PNG files are permitted.");
+      setFileError("Invalid format. Only PDF, JPEG, PNG, and WebP files are permitted.");
       return;
     }
 
-    if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
-      setFileError(`File size exceeds ${MAX_FILE_SIZE_MB}MB limit (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB).`);
+    const processed = await compressImage(selectedFile);
+    if (processed.size > MAX_FILE_SIZE_BYTES) {
+      setFileError(`File size exceeds ${MAX_FILE_SIZE_MB}MB limit (${(processed.size / 1024 / 1024).toFixed(1)}MB).`);
       return;
     }
 
-    setFile(selectedFile);
+    setFile(processed);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -132,13 +177,13 @@ export default function RxUploadClient({ token }: { token: string }) {
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      validateAndSetFile(e.dataTransfer.files[0]);
+      void validateAndSetFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      validateAndSetFile(e.target.files[0]);
+      void validateAndSetFile(e.target.files[0]);
     }
   };
 
@@ -177,7 +222,7 @@ export default function RxUploadClient({ token }: { token: string }) {
         orderNumber: rxInfo?.prescriptionNumber || "RX-000",
         facilityName: rxInfo?.clinicName || "Prescribing Clinic",
         doctorName: rxInfo?.doctorName || "Prescribing Physician",
-        doctorPrc: rxInfo?.doctorPrcLicense,
+        doctorPrc: rxInfo?.doctorPrcLicense || undefined,
         patientInitials: rxInfo?.patientInitials || "P***",
         patientAge: rxInfo?.patientAge || 0,
         patientGender: rxInfo?.patientGender || "Unknown",
@@ -188,7 +233,7 @@ export default function RxUploadClient({ token }: { token: string }) {
         notes: notes.trim() || undefined,
         documentType: isPdf ? "PDF" : "Image",
         fileName: file?.name || "Official-Dispense-Receipt.pdf",
-        items: rxInfo?.items.map((i) => `${i.genericName} ${i.dosage} (Qty: ${i.quantity})`) || [],
+        items: (rxInfo?.items || []).map((i) => `${i.genericName} ${i.dosage} (Qty: ${i.quantity})`),
         submittedAt: new Date().toISOString(),
       };
 
@@ -204,7 +249,7 @@ export default function RxUploadClient({ token }: { token: string }) {
   const renderShell = (content: React.ReactNode) => (
     <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
       {/* Ambient background glows */}
-      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-500/10 blur-[130px] pointer-events-none -z-10" />
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[130px] pointer-events-none -z-10" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-primary/15 blur-[130px] pointer-events-none -z-10" />
 
       {/* Header */}
@@ -215,7 +260,7 @@ export default function RxUploadClient({ token }: { token: string }) {
           </div>
           <span className="text-xl font-bold tracking-tight text-foreground">Clinic EZ</span>
         </Link>
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-semibold">
           <Sparkles className="h-3.5 w-3.5" />
           <span>e-Prescription Verification &amp; Dispense Portal</span>
         </div>
@@ -259,8 +304,8 @@ export default function RxUploadClient({ token }: { token: string }) {
 
   if (rxInfo.isExpired) {
     return renderShell(
-      <Card className="w-full max-w-md p-8 text-center rounded-3xl border-amber-200 dark:border-amber-900 bg-amber-50/30 dark:bg-amber-950/20 shadow-sm">
-        <div className="size-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+      <Card className="w-full max-w-md p-8 text-center rounded-3xl border-warning/30 bg-warning/5 shadow-sm">
+        <div className="size-12 rounded-full bg-warning/15 text-warning flex items-center justify-center mx-auto mb-3">
           <IconClock className="h-6 w-6" />
         </div>
         <h2 className="text-lg font-bold text-foreground">e-Prescription Expired</h2>
@@ -288,7 +333,9 @@ export default function RxUploadClient({ token }: { token: string }) {
     );
   }
 
-  const hasDangerousDrugs = rxInfo.items.some((i) => i.isDangerousDrug);
+  const hasDangerousDrugs = Boolean(
+    rxInfo.hasDangerousDrug || (rxInfo.items && rxInfo.items.some((i) => i.isDangerousDrug))
+  );
 
   return renderShell(
     <div className="w-full max-w-3xl space-y-6">
@@ -297,7 +344,7 @@ export default function RxUploadClient({ token }: { token: string }) {
         <div className="p-6 sm:p-8 border-b border-border/70 bg-gradient-to-b from-primary/5 via-primary/[0.02] to-transparent space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-[11px] font-bold text-primary border border-primary/20 mb-1">
                 e-Prescription #{rxInfo.prescriptionNumber}
               </div>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
@@ -306,7 +353,7 @@ export default function RxUploadClient({ token }: { token: string }) {
             </div>
 
             {timeLeft && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-bold shrink-0">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-warning/10 text-warning border border-warning/20 text-xs font-bold shrink-0">
                 <IconClock className="h-3.5 w-3.5 shrink-0" />
                 <span>Valid for: {timeLeft.days}d {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s</span>
               </div>
@@ -321,10 +368,12 @@ export default function RxUploadClient({ token }: { token: string }) {
               </span>
               <div className="font-bold text-foreground text-sm flex items-center gap-1.5 mt-0.5">
                 <IconUser className="h-4 w-4 text-primary shrink-0" />
-                <span>{rxInfo.patientInitials}</span>
-                <span className="text-[11px] text-muted-foreground font-normal">
-                  ({rxInfo.patientAge}y, {rxInfo.patientGender})
-                </span>
+                <span>{rxInfo.patientInitials || rxInfo.patientName || "Confidential Patient"}</span>
+                {(rxInfo.patientAge || rxInfo.patientGender) && (
+                  <span className="text-[11px] text-muted-foreground font-normal">
+                    ({[rxInfo.patientAge ? `${rxInfo.patientAge}y` : null, rxInfo.patientGender].filter(Boolean).join(", ")})
+                  </span>
+                )}
               </div>
             </div>
 
@@ -343,9 +392,9 @@ export default function RxUploadClient({ token }: { token: string }) {
                 Prescribing Physician
               </span>
               <div className="font-bold text-foreground mt-0.5">
-                {rxInfo.doctorName}
+                {rxInfo.doctorName || "Attending Physician"}
                 <div className="text-[11px] font-normal text-muted-foreground">
-                  PRC #{rxInfo.doctorPrcLicense}
+                  {rxInfo.doctorPrcLicense && <span>PRC #{rxInfo.doctorPrcLicense}</span>}
                   {rxInfo.doctorS2License && <span> &bull; S2 #{rxInfo.doctorS2License}</span>}
                 </div>
               </div>
@@ -361,56 +410,67 @@ export default function RxUploadClient({ token }: { token: string }) {
             )}
           </div>
 
-          {/* Medication Items List */}
+          {/* Medication Items List or Zero-PHI Summary */}
           <div className="space-y-2 pt-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Prescribed Medications &amp; Dosage Instructions
             </span>
-            <div className="divide-y divide-border/60 rounded-2xl border border-border/80 bg-background/60 overflow-hidden">
-              {rxInfo.items.map((item, idx) => (
-                <div key={idx} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-start gap-2.5">
-                    <div className="size-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                      <IconPill className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-xs text-foreground flex items-center gap-2">
-                        <span>{item.genericName}</span>
-                        {item.brandName && (
-                          <span className="text-[11px] text-muted-foreground font-normal">({item.brandName})</span>
-                        )}
-                        {item.isDangerousDrug && (
-                          <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
-                            S2 Drug
-                          </Badge>
-                        )}
+            {rxInfo.items && rxInfo.items.length > 0 ? (
+              <div className="divide-y divide-border/60 rounded-2xl border border-border/80 bg-background/60 overflow-hidden">
+                {rxInfo.items.map((item, idx) => (
+                  <div key={idx} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-start gap-2.5">
+                      <div className="size-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                        <IconPill className="h-4 w-4" />
                       </div>
-                      <div className="text-[11px] text-primary font-medium mt-0.5">
-                        Sig: {item.sig}
-                      </div>
-                      {item.remarks && (
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          Note: {item.remarks}
+                      <div>
+                        <div className="font-bold text-xs text-foreground flex items-center gap-2">
+                          <span>{item.genericName}</span>
+                          {item.brandName && (
+                            <span className="text-[11px] text-muted-foreground font-normal">({item.brandName})</span>
+                          )}
+                          {item.isDangerousDrug && (
+                            <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
+                              S2 Drug
+                            </Badge>
+                          )}
                         </div>
-                      )}
+                        <div className="text-[11px] text-primary font-medium mt-0.5">
+                          Sig: {item.sig}
+                        </div>
+                        {item.remarks && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            Note: {item.remarks}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right sm:shrink-0 text-xs font-semibold text-foreground">
+                      <span className="text-muted-foreground text-[10px] block">Quantity:</span>
+                      <span>{item.quantity} {item.form}</span>
                     </div>
                   </div>
-
-                  <div className="text-right sm:shrink-0 text-xs font-semibold text-foreground">
-                    <span className="text-muted-foreground text-[10px] block">Quantity:</span>
-                    <span>{item.quantity} {item.form}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl border border-border/80 bg-background/60 text-xs text-muted-foreground space-y-1">
+                <p className="font-bold text-foreground">
+                  Authorized e-Prescription ({rxInfo.itemCount || 1} line item(s))
+                </p>
+                <p>
+                  In accordance with RA 10173 and clinical privacy policies, medication line items are listed on the physical/printed copy provided to the patient.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Pharmacy Dispense Submission Form */}
         <CardContent className="p-6 sm:p-8 space-y-6">
           {rxInfo.isAlreadyDispensed ? (
-            <div className="p-6 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-center space-y-2">
-              <div className="size-10 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <div className="p-6 rounded-2xl bg-warning/10 border border-warning/20 text-center space-y-2">
+              <div className="size-10 rounded-full bg-warning/15 text-warning flex items-center justify-center mx-auto">
                 <IconCheck className="h-5 w-5" />
               </div>
               <h3 className="font-bold text-sm text-foreground">Already Dispensed</h3>
@@ -511,7 +571,7 @@ export default function RxUploadClient({ token }: { token: string }) {
                     isDragOver
                       ? "border-primary bg-primary/10 scale-[1.01]"
                       : file
-                      ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/20 dark:bg-emerald-950/20"
+                      ? "border-primary/40 bg-primary/5"
                       : "border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40"
                   }`}
                 >
@@ -525,7 +585,7 @@ export default function RxUploadClient({ token }: { token: string }) {
 
                   {file ? (
                     <div className="flex flex-col items-center justify-center space-y-2">
-                      <div className="size-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                      <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
                         {file.type === "application/pdf" ? (
                           <IconFileTypePdf className="h-6 w-6" />
                         ) : (
@@ -552,7 +612,7 @@ export default function RxUploadClient({ token }: { token: string }) {
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center space-y-2 py-4">
-                      <div className="size-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
+                      <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-1">
                         <IconUpload className="h-6 w-6" />
                       </div>
                       <div className="text-xs font-bold text-foreground">
@@ -582,7 +642,7 @@ export default function RxUploadClient({ token }: { token: string }) {
                   </div>
                   <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                     <div
-                      className="h-full bg-emerald-500 transition-all duration-300"
+                      className="h-full bg-primary transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
@@ -592,14 +652,14 @@ export default function RxUploadClient({ token }: { token: string }) {
               {/* Submit Action */}
               <div className="pt-4 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <IconShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <IconShieldCheck className="h-4 w-4 text-primary shrink-0" />
                   <span>FDA Philippines &amp; DOH e-Prescription Compliance</span>
                 </div>
 
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full sm:w-auto rounded-xl text-xs font-bold px-6 h-10 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-md"
+                  className="w-full sm:w-auto rounded-xl text-xs font-bold px-6 h-10 bg-primary hover:bg-primary/90 text-primary-foreground gap-2 shadow-md"
                 >
                   {isSubmitting ? (
                     <>

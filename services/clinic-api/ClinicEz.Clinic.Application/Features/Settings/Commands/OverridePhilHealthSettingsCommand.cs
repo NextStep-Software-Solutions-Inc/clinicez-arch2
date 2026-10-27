@@ -7,7 +7,6 @@ using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
-using ClinicEz.Shared.Security.Turnstile;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,20 +27,17 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPhilHealthProxyClient _proxyClient;
-    private readonly ITurnstileSettingResolver? _turnstileResolver;
 
     public OverridePhilHealthSettingsCommandHandler(
         IRepository<ClinicSettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
-        IPhilHealthProxyClient proxyClient,
-        ITurnstileSettingResolver? turnstileResolver = null)
+        IPhilHealthProxyClient proxyClient)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _proxyClient = proxyClient;
-        _turnstileResolver = turnstileResolver;
     }
 
     public async Task<ClinicSettingsDto> Handle(OverridePhilHealthSettingsCommand request, CancellationToken ct)
@@ -100,10 +96,6 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
         settings.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.SaveChangesAsync(ct);
-
-        var (isOverridden, overrideVal) = _turnstileResolver?.GetEnvironmentOverride() ?? (false, null);
-        var effectiveTurnstile = _turnstileResolver?.IsEnabled(settings.TurnstileEnabled) ?? settings.TurnstileEnabled;
-        var effectiveSiteKey = _turnstileResolver?.GetSiteKey(settings.TurnstileSiteKey) ?? settings.TurnstileSiteKey;
 
         return new ClinicSettingsDto(
             settings.Id,
@@ -164,10 +156,6 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
             AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
             AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
             EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications,
-            TurnstileEnabled: effectiveTurnstile,
-            TurnstileSiteKey: effectiveSiteKey,
-            IsTurnstileOverriddenByEnv: isOverridden,
-            TurnstileEnvOverrideValue: overrideVal,
             TimeZoneId: settings.TimeZoneId,
             DateFormat: settings.DateFormat,
             TimeFormat: settings.TimeFormat,

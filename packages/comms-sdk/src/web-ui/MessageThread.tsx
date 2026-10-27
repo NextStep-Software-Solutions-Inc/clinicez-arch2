@@ -43,28 +43,28 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
       case 'Sending':
         return (
           <span className="flex items-center gap-1 text-[11px] text-white/80" title="Sending to comms hub...">
-            <span>⏱️</span>
+            <span>...</span>
             <span>Sending...</span>
           </span>
         );
       case 'Waiting':
         return (
           <span className="flex items-center gap-1 text-[11px] text-white/80" title="Delivered to hub, awaiting recipient storage ACK">
-            <span>✓</span>
+            <span>OK</span>
             <span>Sent, waiting</span>
           </span>
         );
       case 'Received':
         return (
           <span className="flex items-center gap-1 text-[11px] text-white font-semibold" title="Recipient device confirmed storage">
-            <span>✓✓</span>
+            <span>ACK</span>
             <span>Delivered</span>
           </span>
         );
       case 'NotReceived':
         return (
           <span className="flex items-center gap-1.5 text-[11px] text-red-200 font-bold" title="Retention deadline expired without receipt confirmation">
-            <span>⚠️</span>
+            <span>!</span>
             <span>Not delivered</span>
             <button
               type="button"
@@ -97,7 +97,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
           }`}
           aria-label={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
         >
-          <span>{privacyBlurEnabled ? '👁️' : '🔒'}</span>
+          <span>{privacyBlurEnabled ? 'ON' : 'LOCK'}</span>
           <span>{privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}</span>
         </button>
       </div>
@@ -105,18 +105,18 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
       {/* Content States */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
-          <div className="animate-spin text-3xl mb-2">⏳</div>
+          <div className="animate-spin text-3xl mb-2">...</div>
           <p className="text-sm">Loading message thread...</p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <div className="text-3xl mb-2">⚠️</div>
+          <div className="text-3xl mb-2">!</div>
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">Error Loading Thread</p>
           <p className="text-xs text-slate-500">{error}</p>
         </div>
       ) : messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
-          <div className="text-3xl mb-2">🛡️</div>
+          <div className="text-3xl mb-2">E2EE</div>
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Secure Communication
           </p>
@@ -143,7 +143,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-1.5 text-xs font-bold mb-1 text-amber-800 dark:text-amber-300">
-                    <span>🔒</span>
+                    <span>LOCK</span>
                     <span>INTERNAL CLINICAL NOTE — NEVER VISIBLE TO PATIENT</span>
                   </div>
                   <p className={`text-sm leading-relaxed ${isObscured ? 'blur-sm select-none' : ''}`}>
@@ -193,7 +193,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                           }`}
                         >
                           <span className={`truncate max-w-[180px] ${isObscured ? 'blur-sm select-none' : ''}`}>
-                            📎 {att.fileName}
+                            File: {att.fileName}
                           </span>
                           {onFileToChart && isMe && (
                             <button
@@ -214,7 +214,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                     <div className="mt-2 pt-2 border-t border-black/10 dark:border-white/10 text-xs">
                       {msg.isAcknowledged ? (
                         <span className="text-emerald-300 font-medium">
-                          ✓ Understood by {msg.acknowledgedByName ?? 'recipient'}
+                          Understood by {msg.acknowledgedByName ?? 'recipient'}
                         </span>
                       ) : onAcknowledgeMessage && !isMe ? (
                         <button
@@ -259,7 +259,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
               }`}
             >
-              {isInternal ? '🔒 Internal Note Mode: ACTIVE' : '📝 Internal Note'}
+              {isInternal ? 'Internal Note Mode: ACTIVE' : 'Internal Note'}
             </button>
           </div>
         )}

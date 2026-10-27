@@ -5,9 +5,12 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Documents.Security;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Prescriptions.Queries;
 
@@ -20,19 +23,22 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IRepository<ClinicSettings> _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IConfiguration? _configuration;
 
     public GetPrescriptionSlipQueryHandler(
         IRepository<ConsultationEncounter> encounterRepo,
         IRepository<ClinicPatient> patientRepo,
         IRepository<StaffMember> staffRepo,
         IRepository<ClinicSettings> settingsRepo,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IConfiguration? configuration = null)
     {
         _encounterRepo = encounterRepo;
         _patientRepo = patientRepo;
         _staffRepo = staffRepo;
         _settingsRepo = settingsRepo;
         _unitOfWork = unitOfWork;
+        _configuration = configuration;
     }
 
     public async Task<PrescriptionSlipDto> Handle(GetPrescriptionSlipQuery request, CancellationToken cancellationToken)
@@ -72,7 +78,7 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
 
         if (string.IsNullOrWhiteSpace(encounter.RxPublicVerificationToken))
         {
-            encounter.RxPublicVerificationToken = Guid.NewGuid().ToString("N");
+            encounter.RxPublicVerificationToken = $"{encounter.ClinicId:N}.{Guid.NewGuid():N}";
             needsUpdate = true;
         }
 
@@ -83,8 +89,10 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
         }
 
         var token = encounter.RxPublicVerificationToken;
-        var uploadUrl = $"/api/v1/public/rx-verify/{token}";
-        var qrPayload = $"CLINICEZ:RX:{encounter.PrescriptionNumber}:{token}";
+        var portalBase = VerificationUrlResolver.Resolve(_configuration);
+        var rxVerifyUrl = PublicRoutes.VerifyRx(token!, portalBase);
+        var uploadUrl = rxVerifyUrl;
+        var qrPayload = rxVerifyUrl;
 
         var patientAge = patient != null ? Math.Max(0, DateTime.UtcNow.Year - patient.DateOfBirth.Year) : 35;
 

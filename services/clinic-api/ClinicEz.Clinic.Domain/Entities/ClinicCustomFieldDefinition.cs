@@ -75,4 +75,10 @@ public sealed class ClinicCustomFieldDefinition : BaseEntity
     /// }
     /// </summary>
     public string? ConditionalOptionsJson { get; set; }
+
+    /// <summary>
+    /// For Date fields: boundary constraint mode ("pastOrToday", "futureOrToday", "futureOnly", "any").
+    /// Nullable, defaults to null (which resolves in UI/validator according to category rules).
+    /// </summary>
+    public string? BoundaryMode { get; set; }
 }

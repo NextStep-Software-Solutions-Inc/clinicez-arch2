@@ -54,7 +54,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
               className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
               aria-label="Close drawer"
             >
-              ✕
+              ×
             </button>
           </div>
         </div>
@@ -69,7 +69,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
             }`}
             role="status"
           >
-            <span>{connectionState === 'Reconnecting' ? '🔄' : '⚠️'}</span>
+            <span>{connectionState === 'Reconnecting' ? '...' : '!'}</span>
             <span>
               {connectionState === 'Reconnecting'
                 ? 'Reconnecting to comms hub...'
@@ -80,7 +80,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
 
         {/* Search */}
         <div className="relative mb-3">
-          <span className="absolute left-3 top-3 text-sm text-slate-400">🔍</span>
+          <span className="absolute left-3 top-3 text-sm text-slate-400">Search</span>
           <input
             type="text"
             value={searchQuery}
@@ -122,12 +122,12 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
       {/* Content States */}
       {loading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-slate-400" role="status">
-          <div className="animate-spin text-2xl mb-2">⏳</div>
+          <div className="animate-spin text-2xl mb-2">...</div>
           <p className="text-sm">Loading conversations...</p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center" role="alert">
-          <div className="text-3xl mb-2">⚠️</div>
+          <div className="text-3xl mb-2">!</div>
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">
             Error Loading Conversations
           </p>
@@ -135,7 +135,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
         </div>
       ) : items.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-500">
-          <div className="text-3xl mb-2">💬</div>
+          <div className="text-3xl mb-2">Chat</div>
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
             No Conversations
           </p>
@@ -194,12 +194,12 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
                 <div className="flex items-center gap-1.5">
                   {item.isEmergency && (
                     <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-200 dark:border-red-800">
-                      🚨 STAT
+                      STAT
                     </span>
                   )}
                   {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
                     <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-200 dark:border-orange-800">
-                      ⚡ Urgent
+                      Urgent
                     </span>
                   )}
                   {item.unreadCount > 0 && (

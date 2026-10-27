@@ -2,6 +2,7 @@
 
 import React, { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { TeleconsultGuestFlow } from "@/components/teleconsult/TeleconsultGuestFlow";
 
 function TeleconsultJoinContent() {
@@ -23,7 +24,7 @@ export default function TeleconsultJoinPage() {
       fallback={
         <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
           <div className="w-full max-w-md p-8 rounded-2xl bg-card border border-border text-center space-y-3">
-            <div className="animate-spin text-3xl mx-auto">⏳</div>
+            <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
             <p className="text-sm font-semibold text-foreground">
               Preparing secure teleconsultation session...
             </p>

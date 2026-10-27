@@ -72,7 +72,12 @@ Shared library: [`AddFacilityLocalAuth(configuration, audience)`](../../packages
 
 ## 3. Envelope handlers and the outbox/inbox
 
-All cross-service and cross-facility traffic is an [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) relayed by the hub. There is no broker and no direct HTTP between services (see [interop-hub.md](interop-hub.md)).
+All cross-service and cross-facility traffic is an [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) relayed by the hub. Direct inter-service HTTP communication is strictly forbidden across all services **except `portal <-> patient`**. Facility services (`clinic-api`, `laboratory-api`, `pharmacy-api`, `organization-api`, `billing-api`) run in outbound-only on-premise Edge Cells (`Hub:Mode=Local`, zero inbound ports) and MUST communicate exclusively via `services/interop-hub`. Next.js BFF proxy routes (`src/app/api/...`) over `portal-api` or `patient-api` are strictly forbidden in `apps/portal-web`.
+
+### Service boundary mandates and frontend integration
+
+- **No Inter-Service HTTP Between Facility Services**: Direct HTTP communication between microservices is an architectural violation. With the sole exception of cloud control plane `portal <-> patient` coordination, all services must use the Interop Hub. Facility services deployed in on-premise Edge Cells maintain zero open inbound ports and make only outbound HTTPS calls.
+- **Zero BFF Proxy Routes**: In `apps/portal-web`, Next.js BFF route handlers (`src/app/api/...`) proxying requests to `portal-api` or `patient-api` are strictly forbidden. Frontend clients connect directly to `portal-api` and `patient-api` using Clerk bearer authentication and domain-derived URLs.
 
 ### Wire up
 
@@ -143,8 +148,10 @@ A facility service does **not** register itself. The portal is the directory aut
 
 What exists today is carried **inside the signed license** and enforced offline by the facility:
 
-- **Limits** ([`FacilityLimits`](../../packages/shared-dotnet/Licensing/FacilityLimits.cs)): `maxStaff`, `maxBeds`, `maxAnalyzers`, `maxMonthlyConsultations`, `maxStorageMb`, `concurrentTerminals`.
-- **Features** (`EnabledFeatures`, keys in [`FacilityFeatureKeys`](../../packages/shared-dotnet/Licensing/FacilityFeatureKeys.cs)): `Teleconsultation`, `ElectronicPrescriptions`, `LisIntegration`, `InventoryManagement`, `PhilHealthKonsulta`, `MultiTerminalSync`, `AdvancedAnalytics`, `CustomLetterhead`.
+- **Limits** ([`FacilityLimits`](../../packages/shared-dotnet/Licensing/FacilityLimits.cs)): `maxStaff`, `maxBeds`, `maxAnalyzers`, `maxMonthlyConsultations`, `maxStorageMb`, `concurrentTerminals`, `callMinutesMonthly` (default `0` — metered WebRTC participant-minute quota enforced by `media-broker`).
+- **Features** (`EnabledFeatures`, keys in [`FacilityFeatureKeys`](../../packages/shared-dotnet/Licensing/FacilityFeatureKeys.cs)): `Teleconsultation`, `ElectronicPrescriptions`, `LisIntegration`, `InventoryManagement`, `PhilHealthKonsulta`, `MultiTerminalSync`, `AdvancedAnalytics`, `CustomLetterhead`, `WorkspaceChat`, `PatientMessaging`.
+- **Off-by-default communications posture:** `WorkspaceChat`, `PatientMessaging`, and `callMinutesMonthly` default to disabled / `0` until explicitly enabled on the workspace or facility license, ensuring zero unexpected background traffic or media spend on existing deployments.
+- **Staff SignalR ticket endpoint:** Every facility service (`clinic-api`, `laboratory-api`, `pharmacy-api`, `billing-api`, `organization-api`) exposes `POST /api/v1/comms/ticket`, which validates the caller's facility-local JWT and mints a short-lived HMAC-signed `CommsTicket` (`<base64url-claims>.<base64url-sig>`) scoped to the staff member's `tenant_id`, `facility_id`, `branch_id`, and permissions so workstations connect directly to their cell's `comms-api` SignalR hubs (`/hubs/chat`, `/hubs/calls`) without sharing facility JWT signing keys.
 - Tier defaults (`Community`, `Standard`, `Enterprise`) in [`PlanTierDefaults`](../../packages/shared-dotnet/Licensing/PlanTierDefaults.cs).
 
 A new type adds its own limit property and feature key constants there and checks them from the validated license payload (never from the request).
@@ -199,7 +206,7 @@ The shared handler accepts the message only from the portal and only when addres
 
 ### Request-reply
 
-A service never calls another service over HTTP. When it needs an answer (GAMOT lookups clinic -> pharmacy, PhilHealth operations clinic -> proxy, PhilHealth credentials proxy -> portal) it sends a request envelope and awaits the reply envelope that carries the same `CorrelationId`. Both halves are normal outbox/hub messages, so signing, routing rules, at-least-once delivery and the edge store-and-forward path apply unchanged.
+A service never calls another service over HTTP (with the sole exception of cloud `portal <-> patient` coordination). When any facility service needs an answer (GAMOT lookups clinic -> pharmacy, PhilHealth operations clinic -> proxy, PhilHealth credentials proxy -> portal) it sends a request envelope and awaits the reply envelope that carries the same `CorrelationId`. Both halves are normal outbox/hub messages, so signing, routing rules, at-least-once delivery and the edge store-and-forward path apply unchanged.
 
 Requester (the type pair is declared in [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs), payloads in [`PlatformServiceContracts.cs`](../../packages/shared-dotnet/Interoperability/PlatformServiceContracts.cs)):
 
@@ -234,7 +241,11 @@ h.Respond<GamotLookupRequestedPayload, GamotLookupRespondedPayload, GamotRespond
 | Instances | The requester keeps pending calls in memory: run **one instance per service mailbox** (the compose files do). Behind several replicas a reply can be consumed by an instance that did not ask. |
 | Logging | The SDK logs message type, ids and timeouts only. Do not log request or reply payloads (PHI, credentials). |
 
-**Platform services.** A few services are not facilities: the PhilHealth proxy (`philhealth`, `Party.PhilHealth`) is a hub client of kind `PlatformService` in the cloud cell. Facilities may address it only with `philhealth.request`; the proxy answers with `philhealth.response`; its credential traffic with the portal is closed to everyone else. The proxy derives the tenant and facility from the verified `From`, never from the payload. Rules: [`interop-hub.md`](interop-hub.md#platform-services); messages: [`message-matrix.md`](message-matrix.md#platform-services-requestreply).
+**Platform services.** Two cloud-cell services run as `PlatformService` hub clients rather than facility services:
+- **PhilHealth proxy** (`philhealth`, `Party.PhilHealth`): facilities address it only with `philhealth.request`; the proxy answers with `philhealth.response`; its credential traffic with `portal-api` (`philhealth.config.*`) is closed to everyone else.
+- **Media broker** (`media`, `Party.Media`): facilities and `comms-api` (both cloud and on-premise edge cells) address it with `media.room.requested` to obtain short-lived, zero-PHI WebRTC/LiveKit room tokens (`media.room.responded`); `portal-api` pushes quota updates via `media.entitlement.updated` and receives zero-PHI participant-minute usage via `media.usage.recorded`.
+
+Both platform services derive the tenant and facility strictly from the verified `From` envelope header, never from the payload. Rules: [`interop-hub.md`](interop-hub.md#platform-services); messages: [`message-matrix.md`](message-matrix.md#platform-services-requestreply).
 ---
 ## Add a new service: checklist
 

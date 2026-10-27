@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import {
   GuestJoinPage,
   CallWaitingRoom,
@@ -8,7 +8,8 @@ import {
   type GuestVerificationResult,
   type ThreadMessage,
 } from "@clinicez/comms-sdk/web-ui";
-import { MessageSquare, Video, Mic, MicOff, VideoOff, PhoneOff, Lock } from "lucide-react";
+import { Check, Lock, MessageSquare, Mic, MicOff, PhoneOff, Stethoscope, Video, VideoOff } from "lucide-react";
+import { getPortalApiUrl } from "@/utils/domain";
 
 export interface TeleconsultGuestFlowProps {
   inviteToken?: string;
@@ -42,7 +43,7 @@ export function TeleconsultGuestFlow({
   const [stage, setStage] = useState<"verify" | "waiting_room" | "in_call" | "ended">(initialStage);
   const [session, setSession] = useState<GuestVerificationResult | null>(initialActiveSession ?? null);
   const [recordingConsent, setRecordingConsent] = useState<"Pending" | "Approved" | "Rejected" | "Disabled">("Pending");
-  const [isReadyToAdmit, setIsReadyToAdmit] = useState(true);
+  const [isReadyToAdmit] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [privacyBlurEnabled, setPrivacyBlurEnabled] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(true);
@@ -65,38 +66,6 @@ export function TeleconsultGuestFlow({
     },
   ]);
 
-  // Intercept fetch calls to /api/v1/guest/verify when in verify stage
-  useEffect(() => {
-    if (stage !== "verify") return;
-
-    const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
-      const res = await originalFetch(...args);
-      try {
-        const url = typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url;
-        if (url && url.includes("/api/v1/guest/verify") && res.ok) {
-          const cloned = res.clone();
-          cloned
-            .json()
-            .then((data) => {
-              const payload: GuestVerificationResult = data.data ?? data;
-              setSession(payload);
-              setStage("waiting_room");
-            })
-            .catch(() => {});
-        }
-      } catch {
-        // Ignore JSON clone errors
-      }
-      return res;
-    };
-
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, [stage]);
-
-  // Handle mock verification or test handler
   const handleMockVerification = async (dob: string, otp: string): Promise<GuestVerificationResult> => {
     if (mockVerificationHandler) {
       const res = await mockVerificationHandler(dob, otp);
@@ -134,8 +103,6 @@ export function TeleconsultGuestFlow({
 
     setMessages((prev) => [...prev, newMsg]);
 
-    // Simulated network delivery truth state transitions:
-    // Sending -> Waiting -> Received
     setTimeout(() => {
       setMessages((prev) =>
         prev.map((m) => (m.id === newId ? { ...m, state: "Waiting" } : m))
@@ -160,16 +127,20 @@ export function TeleconsultGuestFlow({
     }, 600);
   };
 
-  // State 1: Verification Form (GuestJoinPage)
+  // State 1: Verification Form (GuestJoinPage directly targeting portal-api)
   if (stage === "verify") {
     return (
       <GuestJoinPage
         inviteToken={inviteToken}
-        apiBaseUrl=""
+        apiBaseUrl={getPortalApiUrl()}
         clinicName={clinicName}
         clinicLogoUrl={clinicLogoUrl}
         clinicSupportPhone={clinicSupportPhone}
         mockVerificationHandler={mockVerificationHandler ? handleMockVerification : undefined}
+        onSessionVerified={(verified) => {
+          setSession(verified);
+          setStage("waiting_room");
+        }}
         onSessionEnded={() => setStage("ended")}
         className={className}
       />
@@ -260,8 +231,8 @@ export function TeleconsultGuestFlow({
           <div className="flex-1 flex flex-col items-center justify-center p-4 relative bg-muted/40">
             <div className="w-full max-w-4xl aspect-video rounded-2xl bg-card border border-border shadow-lg flex flex-col items-center justify-center relative overflow-hidden">
               <div className="text-center space-y-2 p-6">
-                <div className="w-16 h-16 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center text-3xl">
-                  👨‍⚕️
+                <div className="w-16 h-16 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                  <Stethoscope className="w-8 h-8" />
                 </div>
                 <h2 className="text-base font-bold text-foreground">
                   Clinician Video Feed Active
@@ -337,8 +308,8 @@ export function TeleconsultGuestFlow({
   return (
     <main className={`min-h-screen flex items-center justify-center p-4 bg-background text-foreground ${className}`}>
       <div className="w-full max-w-md p-8 rounded-3xl bg-card border border-border text-center shadow-lg space-y-4">
-        <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center text-2xl font-bold">
-          ✓
+        <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center">
+          <Check className="w-8 h-8" />
         </div>
         <h1 className="text-xl font-bold text-foreground">
           Consultation Concluded

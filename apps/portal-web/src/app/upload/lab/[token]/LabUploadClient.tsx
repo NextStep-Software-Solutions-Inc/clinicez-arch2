@@ -80,7 +80,7 @@ export default function LabUploadClient({ token }: { token: string }) {
       <Card className="w-full max-w-lg rounded-3xl shadow-sm">
         {done ? (
           <CardContent className="flex flex-col items-center text-center gap-4 py-12 px-6">
-            <IconCircleCheck className="h-14 w-14 text-emerald-500" aria-hidden />
+            <IconCircleCheck className="h-14 w-14 text-success" aria-hidden />
             <h1 className="text-xl font-bold">Thanks</h1>
             <p className="text-sm text-muted-foreground">
               If the link was valid, the clinic will receive your file. You can close this page.

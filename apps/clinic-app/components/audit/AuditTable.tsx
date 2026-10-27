@@ -9,6 +9,7 @@ import AuditTableSkeleton from './AuditTableSkeleton';
 import AuditEmptyState from './AuditEmptyState';
 import { useVirtualList } from '../../utils/useVirtualList';
 import { useBreakpoint } from '../../utils/useBreakpoint';
+import { useClinic } from '../../context/ClinicContext';
 import type { ClinicAuditEntryDto } from '../../services/clinicService';
 
 export interface AuditTableProps {
@@ -31,6 +32,9 @@ export interface AuditTableProps {
   listTopOffset?: number;
   viewMode?: 'cards' | 'table';
   onViewModeChange?: (mode: 'cards' | 'table') => void;
+  dateFormat?: string;
+  timeFormat?: string;
+  timeZoneId?: string;
 }
 
 export function AuditTable({
@@ -53,7 +57,15 @@ export function AuditTable({
   listTopOffset = 0,
   viewMode: controlledViewMode,
   onViewModeChange,
+  dateFormat: propDateFormat,
+  timeFormat: propTimeFormat,
+  timeZoneId: propTimeZoneId,
 }: AuditTableProps) {
+  const clinic = useClinic();
+  const effectiveDateFormat = propDateFormat || clinic?.dateFormat;
+  const effectiveTimeFormat = propTimeFormat || clinic?.timeFormat;
+  const effectiveTimeZoneId = propTimeZoneId || clinic?.timeZoneId;
+
   const { isCompact } = useBreakpoint();
   const [internalViewMode, setInternalViewMode] = useState<'cards' | 'table'>(
     isCompact ? 'cards' : 'table'
@@ -198,6 +210,9 @@ export function AuditTable({
                     onInspect={onInspect}
                     isEven={globalIndex % 2 === 1}
                     mode="table"
+                    dateFormat={effectiveDateFormat}
+                    timeFormat={effectiveTimeFormat}
+                    timeZoneId={effectiveTimeZoneId}
                   />
                 );
               })}
@@ -222,6 +237,9 @@ export function AuditTable({
                 onInspect={onInspect}
                 isEven={globalIndex % 2 === 1}
                 mode="card"
+                dateFormat={effectiveDateFormat}
+                timeFormat={effectiveTimeFormat}
+                timeZoneId={effectiveTimeZoneId}
               />
             );
           })}
@@ -331,7 +349,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   colTimestamp: {
-    width: 160,
+    width: 175,
     flexShrink: 0,
   },
   colCategory: {

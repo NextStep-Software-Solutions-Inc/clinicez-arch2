@@ -8,7 +8,7 @@ import {
 
 function formatSlaCountdown(item: TriageQueueItem): string {
   if (item.slaBreached) {
-    return '⚠️ SLA Breached';
+    return 'SLA Breached';
   }
 
   let remainingSec: number | null = null;
@@ -22,27 +22,27 @@ function formatSlaCountdown(item: TriageQueueItem): string {
   }
 
   if (remainingSec === null) {
-    return '⏳ Target: Queued';
+    return 'Target: Queued';
   }
 
   if (remainingSec <= 0) {
-    return '⚠️ SLA Breached';
+    return 'SLA Breached';
   }
 
   if (remainingSec < 60) {
-    return '⏳ Target: < 1m remaining';
+    return 'Target: < 1m remaining';
   }
 
   const totalMinutes = Math.floor(remainingSec / 60);
   if (totalMinutes < 60) {
-    return `⏳ Target: ${totalMinutes}m remaining`;
+    return `Target: ${totalMinutes}m remaining`;
   }
 
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return minutes > 0
-    ? `⏳ Target: ${hours}h ${minutes}m remaining`
-    : `⏳ Target: ${hours}h remaining`;
+    ? `Target: ${hours}h ${minutes}m remaining`
+    : `Target: ${hours}h remaining`;
 }
 
 const DECLINE_REASONS = [
@@ -143,7 +143,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
             onClick={onRefresh}
             className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 transition-colors"
           >
-            🔄 Refresh
+            Refresh
           </button>
         </div>
 
@@ -165,7 +165,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
                   }`}
                 >
-                  {filter === 'Emergency' ? '🚨 STAT' : filter === 'Urgent' ? '⚡ Urgent' : filter}
+                  {filter === 'Emergency' ? 'STAT' : filter === 'Urgent' ? 'Urgent' : filter}
                 </button>
               );
             })}
@@ -176,12 +176,12 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
       {/* Content States */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
-          <div className="animate-spin text-3xl mb-2">⏳</div>
+          <div className="animate-spin text-3xl mb-2">...</div>
           <p className="text-sm">Loading triage queue...</p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <div className="text-3xl mb-2">⚠️</div>
+          <div className="text-3xl mb-2">!</div>
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">
             Error Loading Triage
           </p>
@@ -189,7 +189,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
-          <div className="text-3xl mb-2">📋</div>
+          <div className="text-3xl mb-2">OK</div>
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Triage Queue Clear
           </p>
@@ -212,15 +212,15 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                   <div className="flex items-center gap-2">
                     {isStat ? (
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-300">
-                        🚨 STAT
+                        STAT
                       </span>
                     ) : isUrgent ? (
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-300">
-                        ⚡ Urgent
+                        Urgent
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200 border border-teal-300">
-                        ✓ Routine
+                        Routine
                       </span>
                     )}
 
@@ -248,7 +248,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                   </span>
                   {item.isEmergencyConfirmed && (
                     <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300">
-                      ✓ Non-Emergency Confirmed
+                      Non-Emergency Confirmed
                     </span>
                   )}
                 </div>
@@ -263,7 +263,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                     onClick={() => handleOpenAction(item, 'Answer')}
                     className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-teal-700 text-white hover:bg-teal-800 transition-colors"
                   >
-                    💬 Answer
+                    Answer
                   </button>
 
                   <button
@@ -271,7 +271,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                     onClick={() => handle1ClickNeedsVisit(item)}
                     className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
                   >
-                    🏥 Needs Visit
+                    Needs Visit
                   </button>
 
                   <button
@@ -279,7 +279,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                     onClick={() => handleOpenAction(item, 'Route')}
                     className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 transition-colors"
                   >
-                    ↪ Route
+                    Route
                   </button>
 
                   <button
@@ -287,7 +287,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                     onClick={() => handleOpenAction(item, 'Decline')}
                     className="min-h-[44px] px-3.5 rounded text-xs font-semibold bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 transition-colors"
                   >
-                    ✕ Decline
+                    Decline
                   </button>
                 </div>
               </div>

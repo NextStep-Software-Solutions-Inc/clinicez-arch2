@@ -18,7 +18,6 @@ public sealed record CreateBookingDraftCommand(
     string ShareFieldsJson,
     string AttachedFileIdsJson,
     IReadOnlyList<string>? ShareSections = null,
-    string? TurnstileToken = null,
     string? RemoteIp = null) : IRequest<Guid>;
 
 public sealed class CreateBookingDraftCommandValidator : AbstractValidator<CreateBookingDraftCommand>

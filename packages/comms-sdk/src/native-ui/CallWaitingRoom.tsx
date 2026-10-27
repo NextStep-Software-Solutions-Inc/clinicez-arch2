@@ -9,6 +9,7 @@ import {
   View
 } from 'react-native';
 import {
+  fontSizeScale,
   lightColors,
   radiusScale,
   sizes,
@@ -76,7 +77,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
         </View>
       ) : error ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorIcon}>!</Text>
           <Text style={styles.errorTitle}>Hardware or Connection Error</Text>
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
@@ -85,7 +86,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
           {/* Video Preview Box */}
           <View style={styles.previewBox}>
             <View style={styles.videoPlaceholder}>
-              <Text style={styles.videoPlaceholderIcon}>{isCameraActive ? '📹' : '🚫'}</Text>
+              <Text style={styles.videoPlaceholderIcon}>{isCameraActive ? 'CAM' : 'OFF'}</Text>
               <Text style={styles.videoPlaceholderText}>
                 {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
               </Text>
@@ -106,7 +107,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 onPress={() => setIsMicActive((prev) => !prev)}
                 accessibilityLabel={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
               >
-                <Text style={styles.mediaButtonText}>{isMicActive ? '🎤' : '🔇'}</Text>
+                <Text style={styles.mediaButtonText}>{isMicActive ? 'MIC' : 'MUTE'}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -114,7 +115,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 onPress={() => setIsCameraActive((prev) => !prev)}
                 accessibilityLabel={isCameraActive ? 'Stop video' : 'Start video'}
               >
-                <Text style={styles.mediaButtonText}>{isCameraActive ? '📷' : '🚫'}</Text>
+                <Text style={styles.mediaButtonText}>{isCameraActive ? 'CAM' : 'OFF'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -134,7 +135,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
           {/* Payment Gate Banner */}
           {isYakapExempt ? (
             <View style={styles.exemptCard}>
-              <Text style={styles.exemptIcon}>✓</Text>
+              <Text style={styles.exemptIcon}>OK</Text>
               <View style={styles.gateTextContainer}>
                 <Text style={styles.exemptTitle}>Admission Cleared • YAKAP Auto-Exempt</Text>
                 <Text style={styles.exemptSubtitle}>
@@ -144,7 +145,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
             </View>
           ) : isPrepaidBlocked ? (
             <View style={styles.blockedCard}>
-              <Text style={styles.blockedIcon}>🔒</Text>
+              <Text style={styles.blockedIcon}>LOCK</Text>
               <View style={styles.gateTextContainer}>
                 <Text style={styles.blockedTitle}>Prepayment Gate: Settlement Required</Text>
                 <Text style={styles.blockedSubtitle}>
@@ -155,14 +156,14 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                     style={styles.overrideButton}
                     onPress={() => setOverrideModalVisible(true)}
                   >
-                    <Text style={styles.overrideButtonText}>🚨 Emergency Clinical Override</Text>
+                    <Text style={styles.overrideButtonText}>Emergency Clinical Override</Text>
                   </TouchableOpacity>
                 )}
               </View>
             </View>
           ) : (
             <View style={styles.clearedCard}>
-              <Text style={styles.clearedIcon}>✓</Text>
+              <Text style={styles.clearedIcon}>OK</Text>
               <View style={styles.gateTextContainer}>
                 <Text style={styles.clearedTitle}>Payment Cleared</Text>
                 <Text style={styles.clearedSubtitle}>Payment confirmed. Ready for consultation.</Text>
@@ -192,7 +193,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                     recordingConsentStatus === 'Approved' && styles.consentButtonTextApproved
                   ]}
                 >
-                  ✓ Consent to Recording
+                  Consent to Recording
                 </Text>
               </TouchableOpacity>
 
@@ -210,7 +211,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                     recordingConsentStatus === 'Rejected' && styles.consentButtonTextRejected
                   ]}
                 >
-                  ✕ Consult Without Recording
+                  Consult Without Recording
                 </Text>
               </TouchableOpacity>
             </View>
@@ -308,12 +309,12 @@ const styles = StyleSheet.create({
     borderBottomColor: lightColors.border
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: fontSizeScale.xl,
     fontWeight: '700',
     color: lightColors.text
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary,
     marginTop: 2
   },
@@ -336,11 +337,11 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   videoPlaceholderIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.xs
   },
   videoPlaceholderText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textSecondary
   },
   audioMeterContainer: {
@@ -355,14 +356,14 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   audioMeterLabel: {
-    fontSize: 10,
+    fontSize: fontSizeScale.xs,
     color: lightColors.onPrimary,
     marginRight: 4
   },
   audioMeterBar: {
     width: 60,
     height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: lightColors.surfaceHighlight,
     borderRadius: radiusScale.full,
     overflow: 'hidden'
   },
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.emergencyBg
   },
   mediaButtonText: {
-    fontSize: 16
+    fontSize: fontSizeScale.lg
   },
   detailsCard: {
     backgroundColor: lightColors.surface,
@@ -408,11 +409,11 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.xs
   },
   detailsLabel: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textMuted
   },
   detailsValue: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.text
   },
@@ -427,7 +428,7 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.md
   },
   exemptIcon: {
-    fontSize: 18,
+    fontSize: fontSizeScale.xl,
     color: lightColors.routineText,
     marginRight: spaceScale.sm
   },
@@ -442,7 +443,7 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.md
   },
   blockedIcon: {
-    fontSize: 18,
+    fontSize: fontSizeScale.xl,
     marginRight: spaceScale.sm
   },
   clearedCard: {
@@ -456,7 +457,7 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.md
   },
   clearedIcon: {
-    fontSize: 18,
+    fontSize: fontSizeScale.xl,
     color: lightColors.successText,
     marginRight: spaceScale.sm
   },
@@ -464,32 +465,32 @@ const styles = StyleSheet.create({
     flex: 1
   },
   exemptTitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.routineText
   },
   exemptSubtitle: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.routineText,
     marginTop: 2
   },
   blockedTitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.warningText
   },
   blockedSubtitle: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.warningText,
     marginTop: 2
   },
   clearedTitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.successText
   },
   clearedSubtitle: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.successText,
     marginTop: 2
   },
@@ -504,7 +505,7 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   overrideButtonText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.emergencyText
   },
@@ -517,13 +518,13 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.md
   },
   consentTitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.text,
     marginBottom: 2
   },
   consentSubtitle: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary,
     marginBottom: spaceScale.sm
   },
@@ -551,7 +552,7 @@ const styles = StyleSheet.create({
     borderColor: lightColors.border
   },
   consentButtonText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.textSecondary,
     textAlign: 'center'
@@ -578,7 +579,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelButtonText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '600',
     color: lightColors.textSecondary
   },
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
     opacity: 0.5
   },
   admitButtonText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.onPrimary
   },
@@ -613,13 +614,13 @@ const styles = StyleSheet.create({
     padding: spaceScale.lg
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '700',
     color: lightColors.emergencyText,
     marginBottom: spaceScale.xs
   },
   modalDescription: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary,
     lineHeight: 16,
     marginBottom: spaceScale.md
@@ -630,7 +631,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radiusScale.sm,
     padding: spaceScale.md,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.text,
     marginBottom: spaceScale.md,
     textAlignVertical: 'top'
@@ -649,7 +650,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   modalCancelText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '600',
     color: lightColors.textSecondary
   },
@@ -662,7 +663,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   modalSubmitText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.onPrimary
   },
@@ -674,21 +675,21 @@ const styles = StyleSheet.create({
   },
   stateText: {
     marginTop: spaceScale.sm,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted
   },
   errorIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.sm
   },
   errorTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '600',
     color: lightColors.emergencyText,
     marginBottom: spaceScale.xs
   },
   errorSubtitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
   }

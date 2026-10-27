@@ -144,7 +144,7 @@ public class PublicJoinEndpointsTests : IDisposable
         Assert.Contains("Metro Main Clinic", emailPayload.Subject);
         Assert.Equal("Juan Dela Cruz", emailPayload.Model["patientName"]);
         Assert.Equal("Metro Main Clinic", emailPayload.Model["facilityName"]);
-        Assert.Contains("/join/claim?token=", emailPayload.Model["claimUrl"]);
+        Assert.Contains("/claim?token=", emailPayload.Model["claimUrl"]);
         Assert.Contains(Uri.EscapeDataString(claimTokenProp), emailPayload.Model["claimUrl"]);
 
         // Explicitly verify ZERO SMS messages were dispatched
@@ -319,5 +319,130 @@ public class PublicJoinEndpointsTests : IDisposable
 
         Assert.NotEmpty(endpoints);
         Assert.Contains(endpoints, e => e.DisplayName?.Contains("/api/v1/public/join") == true);
+    }
+
+    [Fact]
+    public async Task ValidateJoinCode_ValidCode_Returns200WithJoinData()
+    {
+        _clinic.JoinCode = "METRO99";
+        _clinic.IsJoinEnabled = true;
+        _clinic.OperatingHours = "8am - 5pm";
+        _clinic.StreetAddress = "123 Medical St";
+        await _context.SaveChangesAsync();
+
+        var result = await PublicJoinEndpoints.ValidateJoinCodeAsync("metro99", _context);
+        var okResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var response = Assert.IsAssignableFrom<ApiResponse<PublicFacilityJoinData>>(okResult.Value);
+        Assert.True(response.Succeeded);
+        Assert.NotNull(response.Data);
+        Assert.True(response.Data.IsValid);
+        Assert.Equal("metro-health", response.Data.TenantSlug);
+        Assert.Equal("main-clinic", response.Data.FacilitySlug);
+        Assert.Equal("123 Medical St", response.Data.FacilityAddress);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task ValidateJoinCode_EmptyOrWhitespaceCode_Returns400(string? code)
+    {
+        var result = await PublicJoinEndpoints.ValidateJoinCodeAsync(code!, _context);
+        var badRequest = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateJoinCode_UnknownCode_Returns404()
+    {
+        var result = await PublicJoinEndpoints.ValidateJoinCodeAsync("NONEXISTENT", _context);
+        var notFound = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status404NotFound, notFound.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateJoinCode_DisabledJoin_Returns403()
+    {
+        _clinic.JoinCode = "DISABLED1";
+        _clinic.IsJoinEnabled = false;
+        await _context.SaveChangesAsync();
+
+        var result = await PublicJoinEndpoints.ValidateJoinCodeAsync("DISABLED1", _context);
+        var forbidden = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateJoinCode_ExpiredCode_Returns410()
+    {
+        _clinic.JoinCode = "EXPIRED1";
+        _clinic.IsJoinEnabled = true;
+        _clinic.JoinCodeExpiresAtUtc = DateTime.UtcNow.AddMinutes(-10);
+        await _context.SaveChangesAsync();
+
+        var result = await PublicJoinEndpoints.ValidateJoinCodeAsync("EXPIRED1", _context);
+        var gone = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status410Gone, gone.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateJoinCode_AmbiguousMultiTenantCode_Returns409Conflict()
+    {
+        var otherTenant = new Tenant
+        {
+            Id = Guid.NewGuid(),
+            TenantSlug = "other-health",
+            Name = "Other Health",
+            OwnerId = "owner-2",
+            Email = "admin@other.ph"
+        };
+        var otherClinic = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = otherTenant.Id,
+            Slug = "other-branch",
+            Name = "Other Branch",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            JoinCode = "SHAREDCODE",
+            IsJoinEnabled = true
+        };
+
+        _clinic.JoinCode = "SHAREDCODE";
+        _clinic.IsJoinEnabled = true;
+
+        _context.Tenants.Add(otherTenant);
+        _context.Facilities.Add(otherClinic);
+        await _context.SaveChangesAsync();
+
+        var result = await PublicJoinEndpoints.ValidateJoinCodeAsync("SHAREDCODE", _context);
+        var conflict = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetFacilityJoinData_ValidSlugs_Returns200WithJoinData()
+    {
+        _clinic.IsJoinEnabled = true;
+        _clinic.StreetAddress = "456 Avenue";
+        await _context.SaveChangesAsync();
+
+        var result = await PublicJoinEndpoints.GetFacilityJoinDataAsync("metro-health", "main-clinic", _context);
+        var okResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var response = Assert.IsAssignableFrom<ApiResponse<PublicFacilityJoinData>>(okResult.Value);
+        Assert.True(response.Succeeded);
+        Assert.NotNull(response.Data);
+        Assert.Equal("Metro Main Clinic", response.Data.FacilityName);
+    }
+
+    [Fact]
+    public async Task GetFacilityJoinData_DisabledJoin_Returns403()
+    {
+        _clinic.IsJoinEnabled = false;
+        await _context.SaveChangesAsync();
+
+        var result = await PublicJoinEndpoints.GetFacilityJoinDataAsync("metro-health", "main-clinic", _context);
+        var forbidden = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
     }
 }

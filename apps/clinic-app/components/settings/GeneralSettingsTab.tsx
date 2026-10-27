@@ -11,7 +11,6 @@ import EmptyState from '../ui/EmptyState';
 import ErrorState from '../ui/ErrorState';
 import { SkeletonList } from '../ui/Skeleton';
 import SecuritySection from './SecuritySection';
-import BotProtectionSettingsCard from './BotProtectionSettingsCard';
 import AppUpdatesSettingsCard from './AppUpdatesSettingsCard';
 import EdgeServerSwitcherSection from './EdgeServerSwitcherSection';
 import { theme } from '../../constants/theme';
@@ -818,9 +817,6 @@ export default function GeneralSettingsTab({
 
       {/* Security PIN for offline devices */}
       <SecuritySection />
-
-      {/* Bot Challenge Protection (Turnstile) */}
-      <BotProtectionSettingsCard settings={settings} onSettingsUpdated={onSettingsUpdated} />
 
       {/* Over-The-Air (OTA) App Updates */}
       <AppUpdatesSettingsCard />

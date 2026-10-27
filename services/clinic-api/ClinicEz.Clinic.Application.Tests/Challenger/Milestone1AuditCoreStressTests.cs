@@ -40,6 +40,7 @@ namespace ClinicEz.Clinic.Application.Tests.Challenger;
 /// 3. WORM immutability guardrails against direct EF Core mutation attempts: Attach + State.Modified,
 ///    Property.IsModified = true, RemoveRange, UpdateRange, soft-delete, and multi-tenant isolation.
 /// </summary>
+[Collection("NonParallelStressTests")]
 public class Milestone1AuditCoreStressTests
 {
     private static ApplicationDbContext CreateTestDbContext(Guid clinicId, string tenantId = "tenant_challenger_m1")

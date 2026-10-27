@@ -43,6 +43,7 @@ using Xunit;
 /// 3. CSV export RFC 4180 compliance, UTF-8 BOM bytes (0xEF, 0xBB, 0xBF), zero exposed plaintext PHI, and formula injection behavior.
 /// 4. Non-blocking behavior and bounded capacity semantics of IAuditLogQueue under pressure.
 /// </summary>
+[Collection("NonParallelStressTests")]
 public sealed class AuditChallengerM4EmpiricalTests
 {
     private readonly IPhiRedactionService _redactionService = new PhiRedactionService();

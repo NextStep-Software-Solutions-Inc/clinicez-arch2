@@ -9,6 +9,7 @@ import {
   View
 } from 'react-native';
 import {
+  fontSizeScale,
   lightColors,
   radiusScale,
   sizes,
@@ -61,28 +62,28 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
       case 'Sending':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIcon}>⏱️</Text>
+            <Text style={styles.deliveryIcon}>...</Text>
             <Text style={styles.deliveryTextMuted}>Sending...</Text>
           </View>
         );
       case 'Waiting':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIcon}>✓</Text>
+            <Text style={styles.deliveryIcon}>OK</Text>
             <Text style={styles.deliveryTextMuted}>Sent, waiting</Text>
           </View>
         );
       case 'Received':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIconTeal}>✓✓</Text>
+            <Text style={styles.deliveryIconTeal}>ACK</Text>
             <Text style={styles.deliveryTextTeal}>Delivered</Text>
           </View>
         );
       case 'NotReceived':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIconRed}>⚠️</Text>
+            <Text style={styles.deliveryIconRed}>!</Text>
             <Text style={styles.deliveryTextRed}>Not delivered</Text>
             <TouchableOpacity
               style={styles.resendButton}
@@ -115,7 +116,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
           accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
         >
           <Text style={[styles.privacyButtonText, privacyBlurEnabled && styles.privacyButtonTextActive]}>
-            {privacyBlurEnabled ? '👁️ Peek Mode: ON' : '🔒 Privacy Blur'}
+            {privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -128,13 +129,13 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         </View>
       ) : error ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorIcon}>!</Text>
           <Text style={styles.errorTitle}>Error Loading Thread</Text>
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : messages.length === 0 ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>🛡️</Text>
+          <Text style={styles.emptyIcon}>E2EE</Text>
           <Text style={styles.emptyTitle}>Secure Communication</Text>
           <Text style={styles.emptySubtitle}>
             This is the start of your medical communication thread. Messages are encrypted in transit.
@@ -162,7 +163,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                   onTouchEnd={() => setPeekingMessageId(null)}
                 >
                   <View style={styles.internalHeader}>
-                    <Text style={styles.internalHeaderIcon}>🔒</Text>
+                    <Text style={styles.internalHeaderIcon}>LOCK</Text>
                     <Text style={styles.internalHeaderText}>
                       INTERNAL NOTE — NEVER VISIBLE TO PATIENT
                     </Text>
@@ -204,7 +205,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                     <View style={styles.ackBox}>
                       {msg.isAcknowledged ? (
                         <Text style={styles.ackConfirmedText}>
-                          ✓ Understood by {msg.acknowledgedByName ?? 'recipient'}
+                          Understood by {msg.acknowledgedByName ?? 'recipient'}
                         </Text>
                       ) : onAcknowledgeMessage && !isMe ? (
                         <TouchableOpacity
@@ -242,7 +243,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             accessibilityLabel="Toggle internal staff note"
           >
             <Text style={[styles.internalToggleText, isInternal && styles.internalToggleTextActive]}>
-              {isInternal ? '🔒 Internal Note: ACTIVE' : '📝 Note'}
+              {isInternal ? 'Internal Note: ACTIVE' : 'Note'}
             </Text>
           </TouchableOpacity>
         )}
@@ -290,12 +291,12 @@ const styles = StyleSheet.create({
     flex: 1
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '700',
     color: lightColors.text
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textMuted,
     marginTop: 2
   },
@@ -313,7 +314,7 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   privacyButtonText: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.textSecondary
   },
@@ -333,7 +334,7 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.md
   },
   loadMoreText: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.primary,
     fontWeight: '600'
   },
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start'
   },
   senderName: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary,
     marginBottom: 2,
     marginLeft: spaceScale.xs
@@ -369,12 +370,12 @@ const styles = StyleSheet.create({
   },
   bubbleTextMe: {
     color: lightColors.onPrimary,
-    fontSize: 14,
+    fontSize: fontSizeScale.md,
     lineHeight: 20
   },
   bubbleTextOther: {
     color: lightColors.text,
-    fontSize: 14,
+    fontSize: fontSizeScale.md,
     lineHeight: 20
   },
   obscuredText: {
@@ -389,12 +390,12 @@ const styles = StyleSheet.create({
     gap: spaceScale.xs
   },
   timeTextMe: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.onPrimary,
     opacity: 0.8
   },
   timeTextOther: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textMuted
   },
   deliveryRow: {
@@ -403,27 +404,27 @@ const styles = StyleSheet.create({
     gap: 2
   },
   deliveryIcon: {
-    fontSize: 10
+    fontSize: fontSizeScale.xs
   },
   deliveryIconTeal: {
-    fontSize: 10,
+    fontSize: fontSizeScale.xs,
     color: lightColors.onPrimary
   },
   deliveryIconRed: {
-    fontSize: 10
+    fontSize: fontSizeScale.xs
   },
   deliveryTextMuted: {
-    fontSize: 10,
+    fontSize: fontSizeScale.xs,
     color: lightColors.onPrimary,
     opacity: 0.8
   },
   deliveryTextTeal: {
-    fontSize: 10,
+    fontSize: fontSizeScale.xs,
     color: lightColors.onPrimary,
     fontWeight: '600'
   },
   deliveryTextRed: {
-    fontSize: 10,
+    fontSize: fontSizeScale.xs,
     color: lightColors.onPrimary,
     fontWeight: '700'
   },
@@ -436,7 +437,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   resendButtonText: {
-    fontSize: 10,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.emergencyText
   },
@@ -457,20 +458,20 @@ const styles = StyleSheet.create({
     gap: spaceScale.xs
   },
   internalHeaderIcon: {
-    fontSize: 12
+    fontSize: fontSizeScale.xs
   },
   internalHeaderText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.warningText
   },
   internalText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.warningText,
     lineHeight: 18
   },
   internalMeta: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.warningText,
     marginTop: spaceScale.xs,
     opacity: 0.8
@@ -492,16 +493,16 @@ const styles = StyleSheet.create({
   },
   ackButtonText: {
     color: lightColors.routineText,
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600'
   },
   ackConfirmedText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.routineText,
     fontWeight: '600'
   },
   ackPendingText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textMuted
   },
   inputContainer: {
@@ -524,7 +525,7 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   internalToggleText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.textSecondary
   },
@@ -544,7 +545,7 @@ const styles = StyleSheet.create({
     paddingVertical: spaceScale.sm,
     minHeight: sizes.touchTarget,
     maxHeight: 120,
-    fontSize: 14,
+    fontSize: fontSizeScale.md,
     color: lightColors.text
   },
   inputInternal: {
@@ -568,7 +569,7 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: lightColors.onPrimary,
     fontWeight: '700',
-    fontSize: 13
+    fontSize: fontSizeScale.sm
   },
   stateContainer: {
     flex: 1,
@@ -578,36 +579,36 @@ const styles = StyleSheet.create({
   },
   stateText: {
     marginTop: spaceScale.sm,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted
   },
   emptyIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.sm
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '600',
     color: lightColors.text,
     marginBottom: spaceScale.xs
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
   },
   errorIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.sm
   },
   errorTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '600',
     color: lightColors.emergencyText,
     marginBottom: spaceScale.xs
   },
   errorSubtitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
   }

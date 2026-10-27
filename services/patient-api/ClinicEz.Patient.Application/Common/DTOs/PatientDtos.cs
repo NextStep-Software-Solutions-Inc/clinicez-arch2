@@ -195,3 +195,25 @@ public sealed record PatientFullRecordDto(
     PatientDentalVisionDto? DentalVision,
     PatientMentalHealthProfileDto? MentalHealthProfile,
     PatientNcdQuestionnaireDto? NcdQuestionnaire = null);
+
+// ── Caller-scoped Intake Autofill (Me) ───────────────────────────────────
+
+public sealed record PatientMeDto(
+    Guid Id,
+    string ClinicEzId,
+    string FirstName,
+    string? MiddleName,
+    string LastName,
+    string? Suffix,
+    string? Sex,
+    DateOnly? DateOfBirth,
+    string? CivilStatus,
+    string? ContactNumber,
+    string? Mobile,
+    string? Email,
+    string? Address,
+    IReadOnlyList<PatientAddressDto> Addresses,
+    string? PhilHealthPin,
+    IReadOnlyList<PatientGovernmentIdDto> GovernmentIds,
+    IReadOnlyList<PatientAllergyDto> Allergies
+);

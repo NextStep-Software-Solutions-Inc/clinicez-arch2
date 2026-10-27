@@ -21,16 +21,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async rewrites() {
-    const rawClinicApiUrl = (process.env.NEXT_PUBLIC_CLINIC_API_URL || process.env.CLINIC_API_URL || "http://localhost:5245").replace(/\/+$/, "");
-    const clinicOrigin = rawClinicApiUrl.replace(/\/api\/v1\/?$/i, "");
-    return [
-      {
-        source: "/api/v1/public/:path*",
-        destination: `${clinicOrigin}/api/v1/public/:path*`,
-      },
-    ];
-  }
 };
 
 export default nextConfig;

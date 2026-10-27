@@ -39,7 +39,6 @@ public static class DependencyInjection
             "/api/v1/license",
             "/api/v1/clinic/license",
             "/api/v1/public",
-            "/api/v1/documents/verify",
             "/api/v1/patients/public",
             "/health",
             "/hangfire");

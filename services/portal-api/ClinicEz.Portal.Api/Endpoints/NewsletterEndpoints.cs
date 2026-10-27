@@ -19,19 +19,8 @@ public sealed class NewsletterEndpoints : IEndpoint
         app.MapPost("/public/newsletter", async (
             SubscribeNewsletterCommand command,
             ISender sender,
-            ITurnstileValidator turnstileValidator,
-            HttpContext httpContext,
             CancellationToken ct) =>
         {
-            var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString();
-            var isTurnstileValid = await turnstileValidator.ValidateAsync(command.TurnstileToken, remoteIp, ct);
-            if (!isTurnstileValid)
-            {
-                return Results.Json(
-                    new { Success = false, Message = "Bot verification failed. Please complete the security challenge." },
-                    statusCode: StatusCodes.Status403Forbidden);
-            }
-
             var result = await sender.Send(command, ct);
             if (!result.Success)
             {
@@ -45,7 +34,7 @@ public sealed class NewsletterEndpoints : IEndpoint
         .AllowAnonymous()
         .RequireRateLimiting(RateLimitPolicy)
         .WithName("SubscribeNewsletter")
-        .WithDescription("Subscribes an email to Clinic EZ updates and newsletter. Bot verified.")
+        .WithDescription("Subscribes an email to Clinic EZ updates and newsletter.")
         .WithTags("Newsletter");
 
         // Admin subscriber management endpoint

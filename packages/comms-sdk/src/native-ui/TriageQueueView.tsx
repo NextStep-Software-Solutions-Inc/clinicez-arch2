@@ -10,6 +10,7 @@ import {
   View
 } from 'react-native';
 import {
+  fontSizeScale,
   lightColors,
   radiusScale,
   sizes,
@@ -23,7 +24,7 @@ import {
 
 function formatSlaCountdown(item: TriageQueueItem): string {
   if (item.slaBreached || item.isSlaBreached) {
-    return '⚠️ SLA Breached';
+    return 'SLA Breached';
   }
 
   let remainingSec: number | null = null;
@@ -37,27 +38,27 @@ function formatSlaCountdown(item: TriageQueueItem): string {
   }
 
   if (remainingSec === null) {
-    return '⏳ Target: Queued';
+    return 'Target: Queued';
   }
 
   if (remainingSec <= 0) {
-    return '⚠️ SLA Breached';
+    return 'SLA Breached';
   }
 
   if (remainingSec < 60) {
-    return '⏳ Target: < 1m remaining';
+    return 'Target: < 1m remaining';
   }
 
   const totalMinutes = Math.floor(remainingSec / 60);
   if (totalMinutes < 60) {
-    return `⏳ Target: ${totalMinutes}m remaining`;
+    return `Target: ${totalMinutes}m remaining`;
   }
 
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return minutes > 0
-    ? `⏳ Target: ${hours}h ${minutes}m remaining`
-    : `⏳ Target: ${hours}h remaining`;
+    ? `Target: ${hours}h ${minutes}m remaining`
+    : `Target: ${hours}h remaining`;
 }
 
 const DECLINE_REASONS = [
@@ -165,7 +166,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
             onPress={onRefresh}
             accessibilityLabel="Refresh triage queue"
           >
-            <Text style={styles.refreshButtonText}>🔄 Refresh</Text>
+            <Text style={styles.refreshButtonText}>Refresh</Text>
           </TouchableOpacity>
         </View>
 
@@ -183,7 +184,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                   accessibilityState={{ selected: isActive }}
                 >
                   <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                    {filter === 'Emergency' ? '🚨 STAT' : filter === 'Urgent' ? '⚡ Urgent' : filter}
+                    {filter === 'Emergency' ? 'STAT' : filter === 'Urgent' ? 'Urgent' : filter}
                   </Text>
                 </TouchableOpacity>
               );
@@ -200,13 +201,13 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
         </View>
       ) : error ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorIcon}>!</Text>
           <Text style={styles.errorTitle}>Error Loading Triage</Text>
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : filteredItems.length === 0 ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>📋</Text>
+          <Text style={styles.emptyIcon}>OK</Text>
           <Text style={styles.emptyTitle}>Triage Queue Clear</Text>
           <Text style={styles.emptySubtitle}>
             No patient inquiries require triage disposition at this time.
@@ -225,15 +226,15 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                   <View style={styles.badgesRow}>
                     {isStat ? (
                       <View style={styles.statBadge}>
-                        <Text style={styles.statBadgeText}>🚨 STAT</Text>
+                        <Text style={styles.statBadgeText}>STAT</Text>
                       </View>
                     ) : isUrgent ? (
                       <View style={styles.urgentBadge}>
-                        <Text style={styles.urgentBadgeText}>⚡ Urgent</Text>
+                        <Text style={styles.urgentBadgeText}>Urgent</Text>
                       </View>
                     ) : (
                       <View style={styles.routineBadge}>
-                        <Text style={styles.routineBadgeText}>✓ Routine</Text>
+                        <Text style={styles.routineBadgeText}>Routine</Text>
                       </View>
                     )}
                     <View style={styles.categoryBadge}>
@@ -272,7 +273,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                   <Text style={styles.patientName}>{item.patientNameMasked || 'Patient Inquiry'}</Text>
                   {item.isEmergencyConfirmed && (
                     <View style={styles.screenedBadge}>
-                      <Text style={styles.screenedBadgeText}>✓ Non-Emergency Confirmed</Text>
+                      <Text style={styles.screenedBadgeText}>Non-Emergency Confirmed</Text>
                     </View>
                   )}
                 </View>
@@ -287,7 +288,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                     onPress={() => handleOpenAction(item, 'Answer')}
                     accessibilityLabel="Answer inquiry"
                   >
-                    <Text style={styles.answerButtonText}>💬 Answer</Text>
+                    <Text style={styles.answerButtonText}>Answer</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -295,7 +296,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                     onPress={() => handle1ClickNeedsVisit(item)}
                     accessibilityLabel="Flag as needs visit"
                   >
-                    <Text style={styles.visitButtonText}>🏥 Needs Visit</Text>
+                    <Text style={styles.visitButtonText}>Needs Visit</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -303,7 +304,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                     onPress={() => handleOpenAction(item, 'Route')}
                     accessibilityLabel="Route to provider"
                   >
-                    <Text style={styles.routeButtonText}>↪ Route</Text>
+                    <Text style={styles.routeButtonText}>Route</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -311,7 +312,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                     onPress={() => handleOpenAction(item, 'Decline')}
                     accessibilityLabel="Decline inquiry"
                   >
-                    <Text style={styles.declineButtonText}>✕ Decline</Text>
+                    <Text style={styles.declineButtonText}>Decline</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -429,12 +430,12 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.sm
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: fontSizeScale.xl,
     fontWeight: '700',
     color: lightColors.text
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary,
     marginTop: 2
   },
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   refreshButtonText: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.text
   },
@@ -467,7 +468,7 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.primary
   },
   filterPillText: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     fontWeight: '500',
     color: lightColors.textSecondary
   },
@@ -507,7 +508,7 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   statBadgeText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.emergencyText
   },
@@ -520,7 +521,7 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   urgentBadgeText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.urgentText
   },
@@ -533,7 +534,7 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   routineBadgeText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.routineText
   },
@@ -544,7 +545,7 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   categoryBadgeText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary
   },
   slaPill: {
@@ -566,7 +567,7 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   slaPillText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600'
   },
   slaPillTextNormal: {
@@ -585,7 +586,7 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.xs
   },
   patientName: {
-    fontSize: 14,
+    fontSize: fontSizeScale.md,
     fontWeight: '700',
     color: lightColors.text
   },
@@ -598,12 +599,12 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   screenedBadgeText: {
-    fontSize: 10,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.successText
   },
   contentText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textSecondary,
     lineHeight: 18,
     marginBottom: spaceScale.md
@@ -624,7 +625,7 @@ const styles = StyleSheet.create({
   answerButtonText: {
     color: lightColors.onPrimary,
     fontWeight: '600',
-    fontSize: 12
+    fontSize: fontSizeScale.xs
   },
   visitButton: {
     minHeight: sizes.touchTarget,
@@ -639,7 +640,7 @@ const styles = StyleSheet.create({
   visitButtonText: {
     color: lightColors.text,
     fontWeight: '600',
-    fontSize: 12
+    fontSize: fontSizeScale.xs
   },
   routeButton: {
     minHeight: sizes.touchTarget,
@@ -652,7 +653,7 @@ const styles = StyleSheet.create({
   routeButtonText: {
     color: lightColors.textSecondary,
     fontWeight: '600',
-    fontSize: 12
+    fontSize: fontSizeScale.xs
   },
   declineButton: {
     minHeight: sizes.touchTarget,
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
   declineButtonText: {
     color: lightColors.emergencyText,
     fontWeight: '600',
-    fontSize: 12
+    fontSize: fontSizeScale.xs
   },
   modalOverlay: {
     flex: 1,
@@ -686,18 +687,18 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '700',
     color: lightColors.text,
     marginBottom: spaceScale.md
   },
   modalDescription: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textSecondary,
     marginBottom: spaceScale.md
   },
   modalFieldLabel: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.text,
     marginBottom: spaceScale.xs
@@ -722,7 +723,7 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   reasonPillText: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary
   },
   reasonPillTextActive: {
@@ -735,7 +736,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radiusScale.sm,
     padding: spaceScale.md,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.text,
     marginBottom: spaceScale.md,
     textAlignVertical: 'top'
@@ -754,7 +755,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   modalCancelText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '600',
     color: lightColors.textSecondary
   },
@@ -767,7 +768,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   modalSubmitText: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.onPrimary
   },
@@ -779,36 +780,36 @@ const styles = StyleSheet.create({
   },
   stateText: {
     marginTop: spaceScale.sm,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted
   },
   emptyIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.sm
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '600',
     color: lightColors.text,
     marginBottom: spaceScale.xs
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
   },
   errorIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.sm
   },
   errorTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '600',
     color: lightColors.emergencyText,
     marginBottom: spaceScale.xs
   },
   errorSubtitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
   }

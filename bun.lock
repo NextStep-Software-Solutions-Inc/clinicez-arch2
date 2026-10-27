@@ -12,6 +12,8 @@
       "name": "@clinicez/cashier-app",
       "version": "1.0.0",
       "dependencies": {
+        "@clinicez/comms-sdk": "workspace:*",
+        "@clinicez/design-tokens": "workspace:*",
         "@expo/metro-runtime": "~56.0.21",
         "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
         "@react-navigation/core": "8.0.0-alpha.26",
@@ -93,6 +95,8 @@
       "name": "@clinicez/laboratory-app",
       "version": "1.0.0",
       "dependencies": {
+        "@clinicez/comms-sdk": "workspace:*",
+        "@clinicez/design-tokens": "workspace:*",
         "@expo/metro-runtime": "~56.0.21",
         "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
         "@react-navigation/core": "8.0.0-alpha.26",
@@ -202,6 +206,8 @@
       "name": "@clinicez/pharmacy-app",
       "version": "1.0.0",
       "dependencies": {
+        "@clinicez/comms-sdk": "workspace:*",
+        "@clinicez/design-tokens": "workspace:*",
         "@expo/metro-runtime": "~56.0.21",
         "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
         "@react-navigation/core": "8.0.0-alpha.26",

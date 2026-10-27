@@ -58,12 +58,12 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
       {/* Content States */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
-          <div className="animate-spin text-3xl mb-2">⏳</div>
+          <div className="animate-spin text-3xl mb-2">...</div>
           <p className="text-sm">Staging teleconsultation hardware...</p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <div className="text-3xl mb-2">⚠️</div>
+          <div className="text-3xl mb-2">!</div>
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">
             Hardware or Media Connection Error
           </p>
@@ -74,7 +74,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           {/* 16:9 Video Preview */}
           <div className="relative aspect-video w-full rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden shadow-inner">
             <div className="text-center text-slate-400">
-              <div className="text-4xl mb-2">{isCameraActive ? '📹' : '🚫'}</div>
+              <div className="text-4xl mb-2">{isCameraActive ? 'CAM' : 'OFF'}</div>
               <p className="text-sm font-medium">
                 {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
               </p>
@@ -102,7 +102,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 }`}
                 aria-label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
               >
-                {isMicActive ? '🎤' : '🔇'}
+                {isMicActive ? 'MIC' : 'MUTE'}
               </button>
 
               <button
@@ -115,7 +115,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 }`}
                 aria-label={isCameraActive ? 'Stop video' : 'Start video'}
               >
-                {isCameraActive ? '📷' : '🚫'}
+                {isCameraActive ? 'CAM' : 'OFF'}
               </button>
             </div>
           </div>
@@ -135,7 +135,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           {/* Payment Gate Banner */}
           {isYakapExempt ? (
             <div className="p-3.5 rounded-lg border border-teal-300 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-teal-900 dark:text-teal-200 flex items-start gap-3">
-              <span className="text-base text-teal-700 font-bold">✓</span>
+              <span className="text-base text-teal-700 font-bold">OK</span>
               <div>
                 <p className="text-xs font-bold text-teal-700 dark:text-teal-300">
                   Admission Cleared • YAKAP Auto-Exempt
@@ -147,7 +147,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
             </div>
           ) : isPrepaidBlocked ? (
             <div className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex items-start gap-3">
-              <span className="text-base">🔒</span>
+              <span className="text-base">LOCK</span>
               <div className="flex-1">
                 <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
                   Prepayment Gate: Settlement Required
@@ -161,14 +161,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     onClick={() => setOverrideModalVisible(true)}
                     className="mt-2.5 px-3 py-1.5 rounded text-xs font-bold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-800 hover:bg-red-200"
                   >
-                    🚨 Emergency Clinical Override
+                    Emergency Clinical Override
                   </button>
                 )}
               </div>
             </div>
           ) : (
             <div className="p-3.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 flex items-start gap-3">
-              <span className="text-base text-emerald-600 font-bold">✓</span>
+              <span className="text-base text-emerald-600 font-bold">OK</span>
               <div>
                 <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
                   Payment Cleared
@@ -202,7 +202,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                 }`}
               >
-                ✓ Consent to Recording
+                Consent to Recording
               </button>
 
               <button
@@ -215,7 +215,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                 }`}
               >
-                ✕ Consult Without Recording
+                Consult Without Recording
               </button>
             </div>
           </div>

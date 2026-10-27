@@ -9,8 +9,11 @@ on:
       - 'apps/**'
       - 'packages/shared-ts/**'
       - 'packages/design-tokens/**'
+      - 'packages/comms-sdk/**'
       - 'package.json'
       - 'bun.lock'
+      - 'scripts/check-no-broker.ps1'
+      - 'scripts/check-no-turnstile.ps1'
       - '.nvmrc'
       - '.node-version'
       - '.github/workflows/apps-ci.yml'
@@ -22,8 +25,11 @@ on:
       - 'apps/**'
       - 'packages/shared-ts/**'
       - 'packages/design-tokens/**'
+      - 'packages/comms-sdk/**'
       - 'package.json'
       - 'bun.lock'
+      - 'scripts/check-no-broker.ps1'
+      - 'scripts/check-no-turnstile.ps1'
       - '.nvmrc'
       - '.node-version'
       - '.github/workflows/apps-ci.yml'
@@ -53,11 +59,37 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Type check all apps
+      - name: Guard against message brokers and portal-to-clinic dependencies
+        shell: pwsh
+        run: ./scripts/check-no-broker.ps1
+
+      - name: Guard against Cloudflare Turnstile residue
+        shell: pwsh
+        run: ./scripts/check-no-turnstile.ps1
+
+      - name: Type check all apps and packages
         run: bun run typecheck:all
+
+      - name: Test design tokens
+        run: bun run test:tokens
+
+      - name: Comms SDK token and host gates
+        run: bun run lint:comms
+
+      - name: Test comms SDK
+        run: bun run test:comms
+
+      - name: Patient app token gate
+        run: bun run lint:patient-tokens
+
+      - name: Test patient app
+        run: bun run test:patient
 
       - name: Test clinic app
         run: bun run test:clinic
+
+      - name: Test portal web
+        run: bun run test:portal
 
       - name: Clinic app token and host/catalog gates
         run: bun run lint:clinic

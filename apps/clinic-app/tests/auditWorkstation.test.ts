@@ -595,7 +595,7 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
       expect(markup).toContain('aria-label="Clear search"');
     });
 
-    test('3.3 AuditFilterBar renders date presets group (today, 7d, 30d, all)', () => {
+    test('3.3 AuditFilterBar renders date presets group (today, 7d, 30d, all, custom)', () => {
       const markup = renderToStaticMarkup(
         React.createElement(AuditFilterBar, {
           selectedCategory: 'All',
@@ -613,11 +613,40 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
         })
       );
 
-      expect(DATE_PRESETS.length).toBe(4);
+      expect(DATE_PRESETS.length).toBe(5);
       for (const preset of DATE_PRESETS) {
         expect(markup).toContain(preset.label);
         expect(markup).toContain(`aria-label="Date preset ${preset.label}"`);
       }
+    });
+
+    test('3.3b Custom date filter displays active range with Change button and omits center inputs', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditFilterBar, {
+          selectedCategory: 'All',
+          onSelectCategory: () => {},
+          search: '',
+          onSearchChange: () => {},
+          startDate: '2026-10-01',
+          onStartDateChange: () => {},
+          endDate: '2026-10-26',
+          onEndDateChange: () => {},
+          severityFilter: 'All',
+          onSeverityFilterChange: () => {},
+          datePreset: 'custom',
+          onResetFilters: () => {},
+          onOpenDateRangePicker: () => {},
+        })
+      );
+
+      // Verify custom date range badge is interactive and separate Change button is omitted
+      expect(markup).toContain('2026-10-01 → 2026-10-26');
+      expect(markup).toContain('Selected date range: 2026-10-01 → 2026-10-26. Tap to change.');
+      expect(markup).not.toContain('aria-label="Change date range"');
+
+      // Verify old center inputs are removed
+      expect(markup).not.toContain('audit-start-date');
+      expect(markup).not.toContain('audit-end-date');
     });
 
     test('3.4 AuditFilterBar renders severity pills including Emergency (STAT), Urgent, Routine', () => {
@@ -1262,6 +1291,77 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
           expect(radiusMatches.length).toBe(0);
         }
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // DIMENSION 10: Clinic Regional Settings Integration & Timestamp Display
+  // ---------------------------------------------------------------------------
+  describe('Dimension 10: Clinic Regional Settings Integration & Timestamp Display', () => {
+    test('10.1 AuditTableRow renders formatted timestamp respecting default clinic settings', () => {
+      const entry = MOCK_AUDIT_ENTRIES[1]; // '2026-10-17T04:15:00Z'
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditTableRow, {
+          entry,
+          onInspect: () => {},
+        })
+      );
+
+      // In Asia/Manila (UTC+8), 04:15:00Z is 12:15 PM
+      expect(markup).toContain('Oct 17, 2026, 12:15 PM');
+    });
+
+    test('10.2 AuditTableRow respects custom date and time format overrides', () => {
+      const entry = MOCK_AUDIT_ENTRIES[1]; // '2026-10-17T04:15:00Z'
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditTableRow, {
+          entry,
+          onInspect: () => {},
+          dateFormat: 'dd/MM/yyyy',
+          timeFormat: '24h',
+        })
+      );
+
+      expect(markup).toContain('17/10/2026, 12:15');
+    });
+
+    test('10.3 AuditTable forwards regional configuration props to all rows', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditTable, {
+          items: [MOCK_AUDIT_ENTRIES[1]],
+          loading: false,
+          totalCount: 1,
+          pageNumber: 1,
+          onInspect: () => {},
+          onResetFilters: () => {},
+          dateFormat: 'yyyy-MM-dd',
+          timeFormat: '24h',
+          timeZoneId: 'UTC',
+        })
+      );
+
+      // In UTC 24h: 04:15
+      expect(markup).toContain('2026-10-17, 04:15');
+    });
+
+    test('10.4 AuditInspectionDrawer renders formatted Clinic Timestamp alongside UTC Timestamp', () => {
+      const entry = MOCK_AUDIT_ENTRIES[1];
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditInspectionDrawer, {
+          entry,
+          detail: null,
+          loadingDetail: false,
+          onClose: () => {},
+          dateFormat: 'd MMM yyyy',
+          timeFormat: '12h',
+          timeZoneId: 'Asia/Manila',
+        })
+      );
+
+      expect(markup).toContain('UTC Timestamp');
+      expect(markup).toContain(entry.timestamp);
+      expect(markup).toContain('Clinic Timestamp');
+      expect(markup).toContain('17 Oct 2026, 12:15 PM');
     });
   });
 });

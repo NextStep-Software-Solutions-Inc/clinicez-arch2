@@ -23,10 +23,13 @@ import { initGlobalErrorHandlers } from './services/crashReporter';
 import { useOTAUpdate } from './hooks/useOTAUpdate';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
 import { theme } from './constants/theme';
+import { useQueueDisplayRoute } from './hooks/useQueueDisplayRoute';
+import PublicQueueDisplayScreen from './screens/public/PublicQueueDisplayScreen';
 
 export default function App() {
   useOTAUpdate();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
+  const isQueueDisplay = useQueueDisplayRoute();
 
   React.useEffect(() => {
     const unhookErrors = initGlobalErrorHandlers();
@@ -59,22 +62,26 @@ export default function App() {
           <UiDensityProvider>
             <CrashRecoveryBanner />
             <ConnectionGate>
-              <FacilityActivationGate>
-                <AuthGate>
-                  <ClinicProvider>
-                    <StaffProvider>
-                      <ClinicCommsProvider>
-                        <SidebarProvider>
-                          <OfflineSyncRunner />
-                          <GlobalSearchProvider>
-                            <Navigation linking={linkingOptions} theme={navigationTheme} />
-                          </GlobalSearchProvider>
-                        </SidebarProvider>
-                      </ClinicCommsProvider>
-                    </StaffProvider>
-                  </ClinicProvider>
-                </AuthGate>
-              </FacilityActivationGate>
+              {isQueueDisplay ? (
+                <PublicQueueDisplayScreen />
+              ) : (
+                <FacilityActivationGate>
+                  <AuthGate>
+                    <ClinicProvider>
+                      <StaffProvider>
+                        <ClinicCommsProvider>
+                          <SidebarProvider>
+                            <OfflineSyncRunner />
+                            <GlobalSearchProvider>
+                              <Navigation linking={linkingOptions} theme={navigationTheme} />
+                            </GlobalSearchProvider>
+                          </SidebarProvider>
+                        </ClinicCommsProvider>
+                      </StaffProvider>
+                    </ClinicProvider>
+                  </AuthGate>
+                </FacilityActivationGate>
+              )}
             </ConnectionGate>
           </UiDensityProvider>
         </TextScaleProvider>

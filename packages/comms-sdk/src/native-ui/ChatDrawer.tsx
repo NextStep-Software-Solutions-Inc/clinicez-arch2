@@ -9,6 +9,7 @@ import {
   View
 } from 'react-native';
 import {
+  fontSizeScale,
   lightColors,
   radiusScale,
   sizes,
@@ -52,7 +53,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           onPress={onToggleCollapse}
           accessibilityLabel="Expand communication drawer"
         >
-          <Text style={styles.iconText}>💬</Text>
+          <Text style={styles.iconText}>Chat</Text>
         </TouchableOpacity>
         {items.some((i) => i.unreadCount > 0) && (
           <View style={styles.collapsedBadge}>
@@ -99,14 +100,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             ]}
           >
             <Text style={styles.connectionText}>
-              {connectionState === 'Reconnecting' ? '🔄 Reconnecting to comms...' : '⚠️ Disconnected from comms'}
+              {connectionState === 'Reconnecting' ? 'Reconnecting to comms...' : 'Disconnected from comms'}
             </Text>
           </View>
         )}
 
         {/* Search */}
         <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={styles.searchIcon}>Search</Text>
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
@@ -150,13 +151,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         </View>
       ) : error ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorIcon}>!</Text>
           <Text style={styles.errorTitle}>Error Loading Conversations</Text>
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : items.length === 0 ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>💬</Text>
+          <Text style={styles.emptyIcon}>Chat</Text>
           <Text style={styles.emptyTitle}>No Conversations</Text>
           <Text style={styles.emptySubtitle}>No messages match your selected filter.</Text>
           {onNewConversation && (
@@ -198,12 +199,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 <View style={styles.cardMeta}>
                   {item.isEmergency && (
                     <View style={styles.statBadge}>
-                      <Text style={styles.statBadgeText}>🚨 STAT</Text>
+                      <Text style={styles.statBadgeText}>STAT</Text>
                     </View>
                   )}
                   {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
                     <View style={styles.urgentBadge}>
-                      <Text style={styles.urgentBadgeText}>⚡ Urgent</Text>
+                      <Text style={styles.urgentBadgeText}>Urgent</Text>
                     </View>
                   )}
                   {item.unreadCount > 0 && (
@@ -264,7 +265,7 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.sm
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: fontSizeScale.xl,
     fontWeight: '700',
     color: lightColors.text
   },
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
   },
   headerButtonText: {
     color: lightColors.textSecondary,
-    fontSize: 14
+    fontSize: fontSizeScale.md
   },
   primaryIconButton: {
     minHeight: sizes.touchTarget,
@@ -295,7 +296,7 @@ const styles = StyleSheet.create({
   },
   primaryIconButtonText: {
     color: lightColors.onPrimary,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     fontWeight: '600'
   },
   connectionBanner: {
@@ -315,7 +316,7 @@ const styles = StyleSheet.create({
     borderWidth: 1
   },
   connectionText: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.text
   },
   searchContainer: {
@@ -329,11 +330,11 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     marginRight: spaceScale.xs,
-    fontSize: 14
+    fontSize: fontSizeScale.md
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.text
   },
   scopesScroll: {
@@ -353,7 +354,7 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.primary
   },
   scopePillText: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     fontWeight: '500',
     color: lightColors.textSecondary
   },
@@ -382,7 +383,7 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.xs
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: fontSizeScale.md,
     fontWeight: '600',
     color: lightColors.text,
     flex: 1
@@ -391,12 +392,12 @@ const styles = StyleSheet.create({
     color: lightColors.primary
   },
   cardTime: {
-    fontSize: 12,
+    fontSize: fontSizeScale.xs,
     color: lightColors.textMuted,
     marginLeft: spaceScale.xs
   },
   cardSnippet: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textSecondary,
     marginBottom: spaceScale.xs
   },
@@ -414,7 +415,7 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   statBadgeText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.emergencyText
   },
@@ -427,7 +428,7 @@ const styles = StyleSheet.create({
     borderRadius: radiusScale.xs
   },
   urgentBadgeText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.urgentText
   },
@@ -439,7 +440,7 @@ const styles = StyleSheet.create({
     marginLeft: 'auto'
   },
   unreadBadgeText: {
-    fontSize: 11,
+    fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.onPrimary
   },
@@ -451,21 +452,21 @@ const styles = StyleSheet.create({
   },
   stateText: {
     marginTop: spaceScale.sm,
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted
   },
   emptyIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.sm
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '600',
     color: lightColors.text,
     marginBottom: spaceScale.xs
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center',
     marginBottom: spaceScale.md
@@ -481,24 +482,24 @@ const styles = StyleSheet.create({
   emptyCtaText: {
     color: lightColors.onPrimary,
     fontWeight: '600',
-    fontSize: 13
+    fontSize: fontSizeScale.sm
   },
   errorIcon: {
-    fontSize: 32,
+    fontSize: fontSizeScale['3xl'],
     marginBottom: spaceScale.sm
   },
   errorTitle: {
-    fontSize: 16,
+    fontSize: fontSizeScale.lg,
     fontWeight: '600',
     color: lightColors.emergencyText,
     marginBottom: spaceScale.xs
   },
   errorSubtitle: {
-    fontSize: 13,
+    fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
   },
   iconText: {
-    fontSize: 20
+    fontSize: fontSizeScale['2xl']
   }
 });

@@ -188,52 +188,8 @@ public class MedicalCertificateFitnessStatusVerificationTests
     }
 
     // =========================================================================
-    // 3. DocumentsController.VerifyDocument & VERTICAL END-TO-END FLOW TESTS
+    // 3. DocumentsController VERTICAL END-TO-END FLOW TESTS
     // =========================================================================
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_MedicalCertificate_ByCertificateNumber_ShouldReturnFormattedNotes()
-    {
-        var (controller, cert, _) = await SetupControllerWithCertAsync("FitToWork", 3);
-
-        var result = await controller.VerifyDocument(cert.CertificateNumber, CancellationToken.None);
-
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.IsVerified.Should().BeTrue();
-        resp.Data.Notes.Should().Be("Fitness Status: FIT TO WORK • Rest Recommended: 3 day(s)");
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_MedicalCertificate_BySecurityDigest_ShouldReturnFormattedNotes()
-    {
-        var (controller, _, digest) = await SetupControllerWithCertAsync("UnfitToWork", 5);
-
-        var result = await controller.VerifyDocument(digest, CancellationToken.None);
-
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.IsVerified.Should().BeTrue();
-        resp.Data.Notes.Should().Be("Fitness Status: UNFIT TO WORK • Rest Recommended: 5 day(s)");
-    }
-
-    [Fact]
-    public async Task DocumentsController_VerifyDocument_MedicalCertificate_WhenRestDaysNull_ShouldDefaultTo0Days()
-    {
-        var (controller, cert, _) = await SetupControllerWithCertAsync("LightDuty", null);
-
-        var result = await controller.VerifyDocument(cert.CertificateNumber, CancellationToken.None);
-
-        result.Result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result.Result!;
-        var resp = (ApiResponse<DocumentVerificationResultDto>)okResult.Value!;
-        resp.Data.Should().NotBeNull();
-        resp.Data!.Notes.Should().Be("Fitness Status: LIGHT DUTY • Rest Recommended: 0 day(s)");
-    }
 
     [Theory]
     [InlineData("FitToWork", "FIT TO WORK", "FITTOWORK")]
@@ -241,7 +197,7 @@ public class MedicalCertificateFitnessStatusVerificationTests
     [InlineData("FitToSchool", "FIT TO SCHOOL", "FITTOSCHOOL")]
     [InlineData("LightDuty", "LIGHT DUTY", "LIGHTDUTY")]
     [InlineData("FitWithRestrictions", "FIT WITH RESTRICTIONS", "FITWITHRESTRICTIONS")]
-    public async Task EndToEnd_IssueCommand_DownloadPdf_And_VerifyDocument_ShouldPreserveWireCodeAndFormatOutputs(
+    public async Task EndToEnd_IssueCommand_And_DownloadPdf_ShouldPreserveWireCodeAndFormatOutputs(
         string selectedFitnessCode, string expectedDisplay, string unspacedAntiPattern)
     {
         var clinicId = Guid.NewGuid();
@@ -254,8 +210,6 @@ public class MedicalCertificateFitnessStatusVerificationTests
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
         var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
 
@@ -290,7 +244,7 @@ public class MedicalCertificateFitnessStatusVerificationTests
 
         var controller = new DocumentsController(
             Substitute.For<ISender>(), _pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo, uow);
+            settingsRepo, patientRepo, uow);
 
         // 2. Download generated OMC PDF via controller endpoint
         var downloadAction = await controller.DownloadMedicalCertificatePdf(dto.Id, wet: null, CancellationToken.None);
@@ -300,14 +254,6 @@ public class MedicalCertificateFitnessStatusVerificationTests
         var pdfText = ExtractExactPdfText(fileContent.FileContents);
         pdfText.Should().Contain($"Fitness Status: {expectedDisplay}");
         pdfText.Should().NotContain(unspacedAntiPattern);
-
-        // 3. Verify QR / security digest public lookup
-        var verifyAction = await controller.VerifyDocument(persisted.SecurityDigest!, CancellationToken.None);
-        verifyAction.Result.Should().BeOfType<OkObjectResult>();
-        var okVerify = (OkObjectResult)verifyAction.Result!;
-        var verifyResp = (ApiResponse<DocumentVerificationResultDto>)okVerify.Value!;
-        verifyResp.Data.Should().NotBeNull();
-        verifyResp.Data!.Notes.Should().Be($"Fitness Status: {expectedDisplay} • Rest Recommended: 2 day(s)");
     }
 
     // =========================================================================
@@ -343,55 +289,6 @@ public class MedicalCertificateFitnessStatusVerificationTests
         SignedAt = DateTime.UtcNow
     };
 
-    private static async Task<(DocumentsController Controller, MedicalCertificate Cert, string Digest)> SetupControllerWithCertAsync(
-        string fitnessStatus, int? restDays)
-    {
-        var testDigest = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
-        var clinicId = Guid.NewGuid();
-        var clinicContext = Substitute.For<IClinicContext>();
-        clinicContext.ClinicId.Returns(clinicId);
-        clinicContext.TenantId.Returns("tenant-001");
-
-        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
-        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var sender = Substitute.For<ISender>();
-        var pdfService = Substitute.For<IClinicDocumentPdfService>();
-
-        var cert = new MedicalCertificate
-        {
-            Id = Guid.NewGuid(),
-            TenantId = "tenant-001",
-            ClinicId = clinicId,
-            CertificateNumber = "MC-20261024-9999",
-            PatientId = Guid.NewGuid(),
-            PatientName = "Maria Clara",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Allan Ramos",
-            PrcLicenseNumber = "PRC-0056789",
-            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            Diagnosis = "Acute Bronchitis",
-            FitnessStatus = fitnessStatus,
-            RecommendedRestDays = restDays,
-            SecurityDigest = testDigest
-        };
-
-        await medCertRepo.AddAsync(cert, CancellationToken.None);
-        await settingsRepo.AddAsync(new ClinicSettings { ClinicId = clinicId, TenantId = "tenant-001", ClinicName = "St. Jude Clinic" }, CancellationToken.None);
-        await uow.SaveChangesAsync(CancellationToken.None);
-
-        var controller = new DocumentsController(
-            sender, pdfService, medCertRepo, referralRepo, staffRepo,
-            encounterRepo, labOrderRepo, settingsRepo, patientRepo);
-
-        return (controller, cert, testDigest);
-    }
-
     /// <summary>
     /// Resolves PDF indirect objects, per-font /ToUnicode CMap streams (/Font &lt;&lt; /F* N 0 R &gt;&gt; -&gt; /ToUnicode M 0 R),
     /// and decodes content streams sequentially across Tf, Tj, and TJ operators with exact U+0020 space preservation.
@@ -417,9 +314,19 @@ public class MedicalCertificateFitnessStatusVerificationTests
                 int endStreamInBody = body.LastIndexOf("endstream", StringComparison.Ordinal);
                 if (endStreamInBody > streamPos)
                 {
-                    int dataEnd = objMatch.Groups[2].Index + endStreamInBody;
-                    while (dataEnd > dataStart && (pdfBytes[dataEnd - 1] == '\r' || pdfBytes[dataEnd - 1] == '\n'))
+                    int rawEnd = objMatch.Groups[2].Index + endStreamInBody;
+                    int rawLen = rawEnd - dataStart;
+                    int dataEnd = rawEnd;
+                    if (dataEnd > dataStart && pdfBytes[dataEnd - 1] == '\n')
+                    {
                         dataEnd--;
+                        if (dataEnd > dataStart && pdfBytes[dataEnd - 1] == '\r')
+                            dataEnd--;
+                    }
+                    else if (dataEnd > dataStart && pdfBytes[dataEnd - 1] == '\r')
+                    {
+                        dataEnd--;
+                    }
 
                     int len = dataEnd - dataStart;
                     if (len > 0)
@@ -433,7 +340,24 @@ public class MedicalCertificateFitnessStatusVerificationTests
                         }
                         catch
                         {
-                            // Non-Flate stream (e.g. raw image data); safely ignore.
+                            if (rawLen > 6 &&
+                                (pdfBytes[dataStart] & 0x0F) == 8 &&
+                                (pdfBytes[dataStart] >> 4) <= 7 &&
+                                ((pdfBytes[dataStart] * 256 + pdfBytes[dataStart + 1]) % 31) == 0 &&
+                                (pdfBytes[dataStart + 1] & 0x20) == 0)
+                            {
+                                try
+                                {
+                                    using var deflateMem = new MemoryStream(pdfBytes, dataStart + 2, rawLen - 2);
+                                    using var deflate = new DeflateStream(deflateMem, CompressionMode.Decompress);
+                                    using var reader = new StreamReader(deflate, Encoding.UTF8);
+                                    objectStreams[objId] = reader.ReadToEnd();
+                                }
+                                catch
+                                {
+                                    // Non-Flate stream (e.g. raw image data); safely ignore.
+                                }
+                            }
                         }
                     }
                 }
@@ -556,10 +480,11 @@ public class MedicalCertificateFitnessStatusVerificationTests
                 var dstSb = new StringBuilder();
                 for (int i = 0; i + 4 <= dstHex.Length; i += 4)
                 {
-                    if (int.TryParse(dstHex.Substring(i, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int cp))
+                    if (int.TryParse(dstHex.Substring(i, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int cp) && cp != 0)
                         dstSb.Append((char)cp);
                 }
-                cmap[src] = dstSb.ToString();
+                if (dstSb.Length > 0)
+                    cmap[src] = dstSb.ToString();
             }
             idx = end + 9;
         }
@@ -577,7 +502,10 @@ public class MedicalCertificateFitnessStatusVerificationTests
                     int.TryParse(m.Groups[3].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int sDst))
                 {
                     for (int s = sSrc, d = sDst; s <= eSrc; s++, d++)
-                        cmap[s.ToString("X4")] = ((char)d).ToString();
+                    {
+                        if (d != 0)
+                            cmap[s.ToString("X4")] = ((char)d).ToString();
+                    }
                 }
             }
             idx = end + 10;

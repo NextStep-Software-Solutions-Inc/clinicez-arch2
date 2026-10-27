@@ -8,6 +8,7 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
   clinicName = 'ClinicEZ Healthcare',
   clinicLogoUrl,
   clinicSupportPhone = '(02) 8123-4567',
+  onSessionVerified,
   onSessionEnded,
   mockVerificationHandler,
   className = ''
@@ -82,10 +83,16 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
       if (mockVerificationHandler) {
         const result = await mockVerificationHandler(dob, fullOtp);
         setActiveSession(result);
+        onSessionVerified?.(result);
         return;
       }
 
-      const res = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/v1/guest/verify`, {
+      const normalizedBase = apiBaseUrl.replace(/\/+$/, '');
+      const verifyUrl = normalizedBase.endsWith('/api/v1')
+        ? `${normalizedBase}/portal/guest/teleconsult/verify`
+        : `${normalizedBase}/api/v1/portal/guest/teleconsult/verify`;
+
+      const res = await fetch(verifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -118,7 +125,9 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
       }
 
       const json = await res.json();
-      setActiveSession(json.data ?? json);
+      const verifiedPayload: GuestVerificationResult = json.data ?? json;
+      setActiveSession(verifiedPayload);
+      onSessionVerified?.(verifiedPayload);
     } catch (err: any) {
       setErrorMessage(err?.message ?? 'Network error during verification.');
     } finally {
@@ -132,7 +141,7 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
       <main className={`min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 ${className}`}>
         <div className="w-full max-w-md p-8 rounded-xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 text-center shadow-lg">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center text-3xl">
-            🛡️
+            LOCKED
           </div>
           <h1 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">
             Teleconsultation Link Locked
@@ -154,7 +163,7 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
     return (
       <main className={`min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 ${className}`}>
         <div className="w-full max-w-md p-8 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 text-center shadow-lg">
-          <div className="text-4xl mb-4">⏳</div>
+          <div className="text-4xl mb-4">...</div>
           <h1 className="text-xl font-bold text-amber-800 dark:text-amber-300 mb-2">
             Consultation Link Expired
           </h1>
@@ -189,7 +198,7 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
         <div className="flex-1 flex items-center justify-center p-4 relative">
           <div className="w-full max-w-4xl aspect-video rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-2xl overflow-hidden relative">
             <div className="text-center text-slate-400">
-              <div className="text-5xl mb-3">👨‍⚕️</div>
+              <div className="text-5xl mb-3">MD</div>
               <p className="text-sm font-medium">Clinician Video Feed Active</p>
               <p className="text-xs text-emerald-400 mt-1">● End-to-End Encrypted</p>
             </div>

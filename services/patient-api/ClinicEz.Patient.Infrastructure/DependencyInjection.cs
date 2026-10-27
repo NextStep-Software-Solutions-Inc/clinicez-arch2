@@ -109,11 +109,6 @@ public static class DependencyInjection
         services.AddSingleton<IPushNotificationService, FirebasePushNotificationService>();
         services.AddClaimTokenService();
         services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Patient");
-        services.AddSingleton<ClinicEz.Shared.Security.Turnstile.ITurnstileSettingResolver, ClinicEz.Shared.Security.Turnstile.TurnstileSettingResolver>();
-        services.AddHttpClient<ClinicEz.Shared.Security.Turnstile.ITurnstileValidator, ClinicEz.Shared.Security.Turnstile.CloudflareTurnstileValidator>(client =>
-        {
-            client.Timeout = System.TimeSpan.FromSeconds(5);
-        });
         services.AddScoped<ClinicEz.Patient.Application.Common.Interfaces.IImageConversionService, ClinicEz.Patient.Infrastructure.Services.ImageConversionService>();
 
         // ── Sync entity processors ────────────────────────────────────────────

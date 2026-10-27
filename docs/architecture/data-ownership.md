@@ -26,6 +26,10 @@ Related: [interop-hub.md](interop-hub.md) · [platform-contract.md](platform-con
 | Facility PhilHealth credentials (accreditation and certificate ids, username, password, cipher key, Konsulta endpoint) | **portal-api** (per branch) | Secrets. They leave the portal only in `philhealth.config.responded`, addressed to the PhilHealth proxy and nobody else (the hub accepts that type only from the portal to the proxy). The proxy keeps them in memory for an hour at most and never sends them to a facility. |
 | Workspace finance rollup (amounts and counts, no PHI) | **portal-api** read model (planned) | Reporting only, not a book of record. |
 | Mailboxes, outbound queue, conversations, claims, directory read model, client credentials (hashes) | **interop hub** | Transient routing state. Directory rows are a copy of the portal's. |
+| Workspace communications: staff 1:1 & group threads, branch channels, internal clinical notes, P2C triage queue, active P2C threads, delivery state machine | **comms-api** of the tenant's home cell (on-prem Edge Cell or Cloud Shared Cell) | Sovereign to the tenant workspace (`CLINICEZ_COMMS_DB`). `InternalNote` messages never leave the tenant database. Delivery receipts track truthful client receipt (`Sending` -> `Waiting` -> `Received`); unreceived messages past the 7-day retention window transition to `NotReceived` and notify the sender. |
+| Patient's cross-tenant copy of P2C conversations | **patient-api** (cloud) | Durable replica of `Public` messages across every tenant workspace the patient has communicated with (`comms.message.replicate`). Patient "Hide My Copy" (`IsHiddenByPatient`) hides only the patient's view and never deletes the facility's medico-legal record. |
+| Teleconsultation `.cez` call recordings & WORM chat transcripts | **clinic-api** of the consulting clinic (on-prem or cloud) | Segmented WebM chunks encrypted client/server-side into `.cez` AES-256-GCM envelopes (`tenants/{tenantId}/clinics/{clinicId}/recordings/{callId}/...`) only after explicit dual-party consent (`comms.recording.consent.logged`), protected by `IsLegalHold` and retention policy. Closed clinical P2C threads archive WORM SHA-256-verified transcripts (`comms.transcript.archived`) into `clinic-api`. |
+| WebRTC room token brokering & participant-minute metering | **media-broker** (cloud platform service) | Zero-PHI transient broker: stores no clinical content, no chat, no recordings, and no patient names — only opaque `CallId` / `FacilityId` counters and monthly quota ledgers. |
 | Per-service outbox/inbox | The service's own database | Outbox rows are purged `OutboxRetentionDays` (7) after shipping; inbox ids after `InboxRetentionDays` (14). |
 | Staff accounts and permissions of a facility | The facility service (facility-local auth) | The portal tracks workspace membership, not facility staff. |
 
@@ -35,7 +39,7 @@ patient-api's database now declares `LabRequestSlip`, `PrescriptionDocument`, `L
 
 ## What crosses the hub, and in what form
 
-All payloads are JSON records serialised by `InteropJson`, wrapped in an envelope (`MessageId`, `CorrelationId`, `Type`, `SchemaVersion`, `From`, `To`, `SentAtUtc`, `ExpiresAtUtc`, `Payload`). The envelope is capped at `Hub:MaxEnvelopeBytes` (1 MiB). In v1 payloads are readable by the hub (TLS in transit, optional AES-256-GCM at rest); sealed payloads are reserved but not implemented. See the [message catalog](platform-contract.md#message-type-catalog).
+All payloads are JSON records serialised by `InteropJson`, wrapped in an envelope (`MessageId`, `CorrelationId`, `Type`, `SchemaVersion`, `From`, `To`, `SentAtUtc`, `ExpiresAtUtc`, `Payload`). The envelope is capped at `Hub:MaxEnvelopeBytes` (8 MiB). In v1 payloads are readable by the hub (TLS in transit, optional AES-256-GCM at rest); sealed payloads are reserved but not implemented. See the [message catalog](platform-contract.md#message-type-catalog).
 
 | Flow | Direction | Personal data in the payload |
 |---|---|---|
@@ -56,6 +60,10 @@ All payloads are JSON records serialised by `InteropJson`, wrapped in an envelop
 | `billing.invoice.requested`, `billing.payment.confirmed` | lab and pharmacy produce requests, billing-api produces confirmations; within a cell | Patient name (and id when a Clinic EZ patient) and invoice lines; payment amounts and receipt numbers. |
 | `billing.invoice.paid`, `billing.invoice.voided` (portal copy) | billing-api produces; no portal handler yet | **No patient data**: tenant, facility, branch, invoice id, source type, total, currency, time (void adds kind and amount reversed). |
 | `notification.email.requested` | portal to itself today | Recipient email, subject, template values (HTML-encoded by the portal). |
+| `comms.request.submit`, `comms.message.submit`, `comms.message.replicate` | patient-api <-> tenant `comms-api` | Structured P2C triage category/chief-complaint and `Public` message body + `.cez` encrypted attachment references. `InternalNote` staff notes are strictly excluded from replication. |
+| `comms.transcript.archived`, `comms.attachment.filed` | `comms-api` to `clinic-api` (same cell) | Canonical closed-thread transcript with SHA-256 digest, or clinician-selected attachment reference for permanent EMR chart filing. |
+| `comms.guest.call.join.requested` | `portal-api` to `comms-api` | Verified guest invite id and opaque session correlation after 6-digit OTP + ISO DOB verification (zero clinical chart data). |
+| `media.room.requested` / `.responded`, `media.entitlement.updated`, `media.usage.recorded` | facility/`comms-api` <-> `media-broker` <-> `portal-api` | **Zero PHI**: opaque `CallId`, `TenantId`, `FacilityId`, room name, short-lived WebRTC relay URL/tokens, and integer participant-minutes. |
 
 Minimisation rule: put in a payload only what the receiver needs for its purpose. The hub never needs to interpret clinical content; it routes on `To`, `Type` and `CorrelationId`.
 

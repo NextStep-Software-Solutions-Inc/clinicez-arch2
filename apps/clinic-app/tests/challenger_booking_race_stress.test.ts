@@ -264,7 +264,7 @@ describe('CHALLENGER 2: Booking Race Conditions & Month View Desktop Clipping St
       const formState = {
         patient: { id: 'pat-juan', fullName: 'Juan Dela Cruz', patientCode: 'PAT-001' } as ClinicPatient | null,
         doctorId: null as string | null,
-        date: '2026-10-25',
+        date: getManilaTodayStr(),
         time: '14:30',
         serviceTypes: ['Consultation'],
         reason: 'General Consultation',
@@ -416,7 +416,7 @@ describe('CHALLENGER 2: Booking Race Conditions & Month View Desktop Clipping St
         expect(harness.formState.patient).not.toBeNull();
         expect(harness.formState.patient?.id).toBe('pat-juan');
         expect(harness.formState.patient?.fullName).toBe('Juan Dela Cruz');
-        expect(harness.formState.date).toBe('2026-10-25');
+        expect(harness.formState.date).toBe(getManilaTodayStr());
         expect(harness.formState.time).toBe('14:30');
         expect(harness.formState.reason).toBe('General Consultation');
         // Verify lock is actively held during transit
@@ -475,7 +475,7 @@ describe('CHALLENGER 2: Booking Race Conditions & Month View Desktop Clipping St
       // Form state MUST be retained so the user does NOT have to re-enter all fields
       expect(harness.formState.patient).not.toBeNull();
       expect(harness.formState.patient?.id).toBe('pat-juan');
-      expect(harness.formState.date).toBe('2026-10-25');
+      expect(harness.formState.date).toBe(getManilaTodayStr());
       expect(harness.formState.time).toBe('14:30');
 
       // Now simulate network restored: user retries with a rapid double-click

@@ -98,6 +98,7 @@ export interface GuestJoinPageProps {
   clinicName?: string;
   clinicLogoUrl?: string;
   clinicSupportPhone?: string;
+  onSessionVerified?: (result: GuestVerificationResult) => void;
   onSessionEnded?: () => void;
   mockVerificationHandler?: (dob: string, otp: string) => Promise<GuestVerificationResult>;
   className?: string;

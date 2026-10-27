@@ -649,7 +649,10 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     }
   };
 
-  const handleCancelAppointment = async (item: AppointmentItem) => {
+  const [cancelingAppointment, setCancelingAppointment] = useState<AppointmentItem | null>(null);
+  const [cancelingInProgress, setCancelingInProgress] = useState<boolean>(false);
+
+  const executeCancelAppointment = async (item: AppointmentItem) => {
     const [, err] = await clinicService.cancelAppointment(item.id, 'Cancelled by clinic desk');
     if (err) {
       notify.error(err.message || 'The appointment could not be cancelled.');
@@ -659,6 +662,18 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       prev.map((a) => (a.id === item.id ? { ...a, status: 'Cancelled' as AppointmentStatus } : a))
     );
     notify.success(`Appointment for ${item.patientName} was cancelled.`);
+  };
+
+  const handleCancelAppointment = (item: AppointmentItem) => {
+    setCancelingAppointment(item);
+  };
+
+  const handleConfirmCancelAppointment = async () => {
+    if (!cancelingAppointment) return;
+    setCancelingInProgress(true);
+    await executeCancelAppointment(cancelingAppointment);
+    setCancelingInProgress(false);
+    setCancelingAppointment(null);
   };
 
   const handleOpenCheckInModal = (item: AppointmentItem) => {
@@ -1094,7 +1109,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         }}
         onCancel={(appt) => {
           setInspectedAppointment(null);
-          handleCancelAppointment(appt);
+          executeCancelAppointment(appt);
         }}
       />
 
@@ -1102,6 +1117,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       <AppointmentRescheduleModal
         visible={!!rescheduleAppointment}
         appointment={rescheduleAppointment}
+        doctors={activeDoctors.map((d) => ({ id: d.id, name: formatStaffName(d) }))}
         onClose={() => setRescheduleAppointment(null)}
         onSuccess={(updated) => {
           setAppointments((prev) =>
@@ -1111,6 +1127,43 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           fetchAppointments();
         }}
       />
+
+      {/* Cancel Appointment Confirmation Modal */}
+      <Modal
+        visible={!!cancelingAppointment}
+        onClose={() => !cancelingInProgress && setCancelingAppointment(null)}
+        title="Cancel Appointment?"
+        maxWidth={440}
+        testID="appointments-cancel-confirmation-modal"
+        footer={
+          <>
+            <Button
+              title="Keep Appointment"
+              variant="ghost"
+              testID="btn-abort-cancel-modal"
+              onPress={() => setCancelingAppointment(null)}
+              disabled={cancelingInProgress}
+            />
+            <Button
+              title="Yes, Cancel Appointment"
+              variant="danger"
+              testID="btn-confirm-cancel-modal"
+              onPress={handleConfirmCancelAppointment}
+              loading={cancelingInProgress}
+            />
+          </>
+        }
+      >
+        <View style={{ gap: theme.spacing.sm }}>
+          <ThemedText variant="body" color={theme.colors.text}>
+            Are you sure you want to cancel the appointment for{' '}
+            <ThemedText variant="bodyBold">{cancelingAppointment?.patientName}</ThemedText>?
+          </ThemedText>
+          <ThemedText variant="small" color={theme.colors.textMuted}>
+            This action cannot be undone. The appointment will be marked as Cancelled.
+          </ThemedText>
+        </View>
+      </Modal>
     </ResponsiveLayout>
   );
 }

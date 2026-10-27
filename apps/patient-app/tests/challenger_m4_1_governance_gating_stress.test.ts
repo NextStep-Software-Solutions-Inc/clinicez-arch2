@@ -243,24 +243,30 @@ describe('Empirical Challenger M4.1 — Two-Tier Governance & Gated Access Stres
     });
 
     test('2C: Placard QR scan parsing across multiple formats', () => {
-      // 1. App custom URI scheme
-      expect(parseReceptionQr('clinicez://join/VIP888')).toBe('VIP888');
+      // 1. App custom URI scheme with query param
       expect(parseReceptionQr('clinicez://join?code=VIP888')).toBe('VIP888');
+      expect(parseReceptionQr('clinicez://clinics/cdo/unlock?code=VIP888')).toBe('VIP888');
 
-      // 2. HTTPS Web portal URLs (single & nested segments)
-      expect(parseReceptionQr('https://portal.clinicez.com/join/VIP888')).toBe('VIP888');
-      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-cdo/VIP888')).toBe('VIP888');
-      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-cdo/clinic-1/VIP888')).toBe('VIP888');
+      // 2. HTTPS Web portal URLs (query param ?code= or ?joinCode=)
+      expect(parseReceptionQr('https://portal.clinicez.com/join?code=VIP888')).toBe('VIP888');
+      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-cdo/clinic-1?code=VIP888')).toBe('VIP888');
       expect(parseReceptionQr('https://portal.clinicez.com/clinics/cdo/unlock?joinCode=VIP888')).toBe('VIP888');
 
-      // 3. Raw 6-character code
+      // 3. Raw valid code
       expect(parseReceptionQr('VIP888')).toBe('VIP888');
       expect(parseReceptionQr('  vip888  ')).toBe('VIP888');
 
-      // 4. Invalid or non-matching inputs
+      // 4. Legacy path-only URLs without query parameter return null (dropped path segment scanning)
+      expect(parseReceptionQr('clinicez://join/VIP888')).toBe(null);
+      expect(parseReceptionQr('https://portal.clinicez.com/join/VIP888')).toBe(null);
+      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-cdo/VIP888')).toBe(null);
+      expect(parseReceptionQr('https://portal.clinicez.com/join/tenant-cdo/clinic-1/VIP888')).toBe(null);
+
+      // 5. Invalid or non-matching inputs
       expect(parseReceptionQr('https://random.com/something')).toBe(null);
       expect(parseReceptionQr('INVALID_LONG_STRING')).toBe(null);
       expect(parseReceptionQr('')).toBe(null);
+      expect(parseReceptionQr('X'.repeat(55))).toBe(null);
     });
 
     test('2D: Unlocking transitions state: renders unredacted service catalog and booking buttons', () => {
