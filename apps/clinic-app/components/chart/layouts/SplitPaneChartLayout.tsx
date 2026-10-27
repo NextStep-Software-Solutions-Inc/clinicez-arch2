@@ -339,8 +339,14 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                 style={({ pressed }) => [styles.footerBtn, pressed && styles.footerBtnPressed]}
                 accessibilityRole="button"
                 accessibilityLabel="Refresh Chart"
+                disabled={loadingChart}
               >
-                <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                <Icon
+                  name="refresh"
+                  size={theme.sizes.iconSm}
+                  color={theme.colors.textSecondary}
+                  spin={loadingChart}
+                />
                 <ThemedText
                   variant="caption"
                   color={theme.colors.textSecondary}

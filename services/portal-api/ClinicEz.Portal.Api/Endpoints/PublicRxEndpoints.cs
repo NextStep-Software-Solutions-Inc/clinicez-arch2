@@ -128,6 +128,7 @@ public sealed class PublicRxEndpoints : IEndpoint
 
         if (attestation != null)
         {
+            var isRevoked = string.Equals(attestation.Status, "REVOKED", StringComparison.OrdinalIgnoreCase);
             var isExpired = attestation.ExpiresAtUtc.HasValue && attestation.ExpiresAtUtc.Value < DateTime.UtcNow;
             var isDispensed = attestation.IsAlreadyDispensed || string.Equals(attestation.Status, "DISPENSED", StringComparison.OrdinalIgnoreCase);
 
@@ -143,9 +144,9 @@ public sealed class PublicRxEndpoints : IEndpoint
                 IssuedAt: attestation.IssuedAtUtc,
                 ExpiresAt: attestation.ExpiresAtUtc,
                 IsExpired: isExpired,
-                Status: isDispensed ? "DISPENSED" : (isExpired ? "EXPIRED" : "ACTIVE"),
+                Status: isRevoked ? "REVOKED" : (isDispensed ? "DISPENSED" : (isExpired ? "EXPIRED" : "ACTIVE")),
                 DispenseStatus: attestation.DispenseStatus ?? (isDispensed ? "DispensedExternally" : "Pending"),
-                IsValid: !isExpired && !isDispensed,
+                IsValid: !isRevoked,
                 IsAlreadyDispensed: isDispensed,
                 DispensedPharmacyName: attestation.DispensedPharmacyName,
                 DispensedAt: attestation.DispensedAtUtc,

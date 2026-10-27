@@ -304,6 +304,27 @@ export default function PatientSummarySpine({
   onPressRecordVitals,
 }: PatientSummarySpineProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed || compact || variant === 'compact');
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+  const isRefreshing = Boolean(loading || isLocalRefreshing);
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    if (onPressRefresh) {
+      try {
+        setIsLocalRefreshing(true);
+        const res = onPressRefresh();
+        if (res && typeof (res as any).then === 'function') {
+          await res;
+        } else {
+          setTimeout(() => setIsLocalRefreshing(false), 750);
+        }
+      } catch {
+        // Handled upstream
+      } finally {
+        setIsLocalRefreshing(false);
+      }
+    }
+  };
 
   // Consolidated demographics
   const demo = demoProp || chart?.demographics;
@@ -569,8 +590,19 @@ export default function PatientSummarySpine({
             </Pressable>
           ) : null}
           {onPressRefresh ? (
-            <Pressable onPress={onPressRefresh} style={styles.actionIconBtn}>
-              <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+            <Pressable
+              onPress={handleRefresh}
+              style={styles.actionIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh patient chart"
+              disabled={isRefreshing}
+            >
+              <Icon
+                name="refresh"
+                size={theme.sizes.iconSm}
+                color={isRefreshing ? theme.colors.primary : theme.colors.textSecondary}
+                spin={isRefreshing}
+              />
             </Pressable>
           ) : null}
           <Pressable onPress={() => setCollapsed(!collapsed)} style={styles.toggleCollapseBtn}>
@@ -903,23 +935,10 @@ export default function PatientSummarySpine({
                 </View>
               </View>
             ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2 }}>
                 <ThemedText variant="caption" color={theme.colors.textMuted} style={{ fontStyle: 'italic' }}>
                   No triage vitals recorded for today.
                 </ThemedText>
-                {onPressRecordVitals ? (
-                  <Pressable
-                    onPress={onPressRecordVitals}
-                    style={styles.editDemographicsBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Record Vitals"
-                  >
-                    <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    <ThemedText variant="captionBold" color={theme.colors.primary}>
-                      Record Vitals
-                    </ThemedText>
-                  </Pressable>
-                ) : null}
               </View>
             )}
 

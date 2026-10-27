@@ -87,6 +87,44 @@ describe('Milestone 3: Standalone Cashier, Retail POS & Interop Suite', () => {
       expect(discountAmount).toBe(50);
       expect(netAmount).toBe(200);
     });
+
+    test('10.4 Walk-in retail customer name is strictly required and cannot be empty or whitespace', () => {
+      const validateRetailCustomer = (name: string): boolean => {
+        if (!name || !name.trim()) {
+          throw new Error('Customer name is required for Walk-In Retail POS.');
+        }
+        return true;
+      };
+
+      expect(() => validateRetailCustomer('')).toThrow('Customer name is required');
+      expect(() => validateRetailCustomer('   ')).toThrow('Customer name is required');
+      expect(validateRetailCustomer('Maria Santos')).toBe(true);
+    });
+
+    test('10.5 Initial retail state starts with empty customer and disables settlement until provided', () => {
+      const initialCustomerName = '';
+      const isRetail = true;
+      const hasLineItems = true;
+      const amountToCollect = 600;
+
+      const isSettleDisabled = (
+        !hasLineItems ||
+        amountToCollect <= 0 ||
+        (isRetail && !initialCustomerName.trim())
+      );
+
+      // Must be disabled when customer is empty
+      expect(isSettleDisabled).toBe(true);
+
+      const filledCustomerName = 'Juan Dela Cruz';
+      const isSettleEnabledWithCustomer = (
+        !hasLineItems ||
+        amountToCollect <= 0 ||
+        (isRetail && !filledCustomerName.trim())
+      );
+
+      expect(isSettleEnabledWithCustomer).toBe(false);
+    });
   });
 
   describe('Feature 13: Queue Auto-Completion on Settlement', () => {

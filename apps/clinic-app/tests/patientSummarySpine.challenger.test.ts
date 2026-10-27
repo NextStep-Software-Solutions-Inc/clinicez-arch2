@@ -1,5 +1,7 @@
 // token-guard:ignore-file
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 (globalThis as any).__DEV__ = true;
 
@@ -73,6 +75,7 @@ mock.module('../constants/fonts', () => ({
 }));
 
 const {
+  default: PatientSummarySpine,
   evaluateBloodPressure,
   evaluateHeartRate,
   evaluateRespiratoryRate,
@@ -831,6 +834,87 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
       expect(isMobilityAssist('Wheelchair / Mobility Assist')).toBe(true);
       expect(isMobilityAssist('Requires wheelchair')).toBe(true);
       expect(isMobilityAssist('Mobility assistance needed')).toBe(true);
+    });
+  });
+
+  describe('11. Vitals Action Button Deduplication & Refresh Icon Spin Behavior', () => {
+    test('11.1 PatientSummarySpine renders strictly 1 "Record Vitals" button when no vitals exist', () => {
+      const basePatient = {
+        id: 'p-1',
+        clinicId: 'c-1',
+        tenantId: 't-1',
+        patientCode: 'CE-2026-0001',
+        fullName: 'Juan Dela Cruz',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        age: 35,
+        contactNumber: '09171234567',
+        dateOfBirth: '1991-01-01',
+        gender: 'Male',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      const spineMarkup = renderToStaticMarkup(
+        React.createElement(PatientSummarySpine, {
+          variant: 'workstation',
+          patient: basePatient,
+          chart: null,
+          vitals: null,
+          loading: false,
+          onPressRecordVitals: () => {},
+          onPressRefresh: () => {},
+        })
+      );
+
+      // Exactly 1 Pressable button with accessibilitylabel="Record Vitals"
+      const buttonMatches = spineMarkup.match(/accessibilitylabel="Record Vitals"/gi) || [];
+      expect(buttonMatches.length).toBe(1);
+      // Visible string appears once as accessibilityLabel and once as text inside the single button
+      const recordVitalsMatches = spineMarkup.match(/Record Vitals/g) || [];
+      expect(recordVitalsMatches.length).toBe(2);
+      expect(spineMarkup).toContain('No triage vitals recorded for today.');
+    });
+
+    test('11.2 PatientSummarySpine renders strictly 1 "Update Vitals" button when vitals exist', () => {
+      const basePatient = {
+        id: 'p-1',
+        clinicId: 'c-1',
+        tenantId: 't-1',
+        patientCode: 'CE-2026-0001',
+        fullName: 'Juan Dela Cruz',
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        age: 35,
+        contactNumber: '09171234567',
+        dateOfBirth: '1991-01-01',
+        gender: 'Male',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      const spineMarkup = renderToStaticMarkup(
+        React.createElement(PatientSummarySpine, {
+          variant: 'workstation',
+          patient: basePatient,
+          chart: null,
+          vitals: {
+            id: 'v-1',
+            queueItemId: 'q-1',
+            systolicBp: 120,
+            diastolicBp: 80,
+            recordedAt: '2026-10-26T08:00:00Z',
+          } as any,
+          loading: false,
+          onPressRecordVitals: () => {},
+          onPressRefresh: () => {},
+        })
+      );
+
+      const buttonMatches = spineMarkup.match(/accessibilitylabel="Update Vitals"/gi) || [];
+      expect(buttonMatches.length).toBe(1);
+      const updateVitalsMatches = spineMarkup.match(/Update Vitals/g) || [];
+      expect(updateVitalsMatches.length).toBe(2);
+      const recordVitalsMatches = spineMarkup.match(/Record Vitals/g) || [];
+      expect(recordVitalsMatches.length).toBe(0);
     });
   });
 });

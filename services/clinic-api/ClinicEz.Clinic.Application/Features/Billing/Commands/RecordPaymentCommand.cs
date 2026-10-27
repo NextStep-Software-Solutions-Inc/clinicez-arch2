@@ -66,9 +66,9 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
 
     public async Task<InvoiceDto> Handle(RecordPaymentCommand request, CancellationToken cancellationToken)
     {
-        if (request.Amount <= 0)
+        if (request.Amount < 0)
         {
-            throw new BadRequestException("Payment amount must be greater than zero.");
+            throw new BadRequestException("Payment amount cannot be negative.");
         }
 
         var invoice = await _invoiceRepo.Query(i => i.Id == request.InvoiceId)
@@ -89,6 +89,16 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         if (invoice.Status == InvoiceStatus.Refunded)
         {
             throw new BadRequestException("Cannot accept payment for a refunded invoice.");
+        }
+
+        if (request.Amount == 0 && invoice.BalanceDue > 0)
+        {
+            throw new BadRequestException("Payment amount must be greater than zero when an outstanding balance is due.");
+        }
+
+        if (invoice.Status == InvoiceStatus.Paid && invoice.BalanceDue <= 0 && invoice.Payments.Any())
+        {
+            throw new BadRequestException("This invoice has already been settled and paid.");
         }
 
         // The shared billing counter collects what was requested to it; a local payment would charge the patient twice.

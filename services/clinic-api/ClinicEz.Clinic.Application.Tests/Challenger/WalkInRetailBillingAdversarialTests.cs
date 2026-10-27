@@ -122,7 +122,7 @@ public class WalkInRetailBillingAdversarialTests
     }
 
     [Fact]
-    public async Task Challenge_03_RetailWalkIn_OmittedNames_FallsBackToDefaultGuestName()
+    public async Task Challenge_03_RetailWalkIn_OmittedNames_ThrowsBadRequestException()
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
@@ -147,10 +147,45 @@ public class WalkInRetailBillingAdversarialTests
             IsWalkInRetail: true,
             WalkInCustomerName: null);
 
-        var result = await handler.Handle(command, CancellationToken.None);
+        var act = () => handler.Handle(command, CancellationToken.None);
 
-        result.Should().NotBeNull();
-        result.PatientName.Should().Be("Walk-In Retail Guest", "Null customer and patient names must fall back to Walk-In Retail Guest");
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*Customer name is required for Walk-In Retail POS invoices*");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t\n")]
+    public async Task Challenge_03b_RetailWalkIn_WhitespaceNames_ThrowsBadRequestException(string blankName)
+    {
+        var (clinicId, tenantId, clinicContext) = SetupClinicContext();
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+
+        var handler = new CreateInvoiceCommandHandler(
+            invoiceRepo,
+            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
+            uow,
+            clinicContext,
+            Substitute.For<IBillingRequestPublisher>());
+
+        var command = new CreateInvoiceCommand(
+            PatientId: null,
+            PatientName: blankName,
+            DiscountType: DiscountType.None,
+            LineItems: new List<CreateInvoiceLineItemRequest>
+            {
+                new(null, "OTC-ALCOHOL", "70% Isopropyl Alcohol 500ml", "Supply", 85m, 1)
+            },
+            IsWalkInRetail: true,
+            WalkInCustomerName: blankName);
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*Customer name is required for Walk-In Retail POS invoices*");
     }
 
     [Fact]
@@ -226,6 +261,7 @@ public class WalkInRetailBillingAdversarialTests
             DiscountType: DiscountType.SeniorCitizen,
             DiscountIdNumber: invalidId,
             IsWalkInRetail: true,
+            WalkInCustomerName: "Customer With Senior Discount",
             LineItems: new List<CreateInvoiceLineItemRequest>
             {
                 new(null, "MED-AMLO", "Amlodipine 5mg", "Medicine", 15m, 30)
@@ -259,6 +295,7 @@ public class WalkInRetailBillingAdversarialTests
             DiscountType: DiscountType.SeniorCitizen,
             DiscountIdNumber: shortId,
             IsWalkInRetail: true,
+            WalkInCustomerName: "Customer With Senior Discount",
             LineItems: new List<CreateInvoiceLineItemRequest>
             {
                 new(null, "MED-AMLO", "Amlodipine 5mg", "Medicine", 15m, 30)
@@ -273,6 +310,7 @@ public class WalkInRetailBillingAdversarialTests
             DiscountType: DiscountType.Pwd,
             DiscountIdNumber: shortId,
             IsWalkInRetail: true,
+            WalkInCustomerName: "Customer With PWD Discount",
             LineItems: new List<CreateInvoiceLineItemRequest>
             {
                 new(null, "MED-AMLO", "Amlodipine 5mg", "Medicine", 15m, 30)
