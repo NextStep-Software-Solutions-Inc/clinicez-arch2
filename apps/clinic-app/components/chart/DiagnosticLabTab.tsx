@@ -3,6 +3,8 @@ import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button, Modal, Input } from '../ui';
 import { notify } from '@utils/feedback';
+import { clinicService } from '../../services/clinicService';
+import { openDocument } from '../../services/documentOpener';
 import type {
   ClinicPatient,
   ClinicLabOrderRecord,
@@ -71,6 +73,8 @@ export default function DiagnosticLabTab({
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'EXTERNAL' | 'PANIC'>('ALL');
   const [panicModalVisible, setPanicModalVisible] = useState(false);
   const [intakeModalVisible, setIntakeModalVisible] = useState(false);
+  const [attachModalVisible, setAttachModalVisible] = useState(false);
+  const [targetAttachOrderId, setTargetAttachOrderId] = useState<string | null>(null);
   const [targetPanicOrder, setTargetPanicOrder] = useState<any | null>(null);
   const [readbackNotes, setReadbackNotes] = useState('');
   const [submittingPanic, setSubmittingPanic] = useState(false);
@@ -119,11 +123,20 @@ export default function DiagnosticLabTab({
     }
   };
 
-  const handleSlipAction = (order: ClinicLabOrderRecord) => {
+  const handleSlipAction = async (order: ClinicLabOrderRecord) => {
     if (onOpenLabSlip) {
       onOpenLabSlip(order);
     } else if (onViewLabSlip) {
       onViewLabSlip(order.id);
+    } else {
+      const url = clinicService.getLabOrderSlipPdfUrl(order.id);
+      try {
+        if (!(await openDocument(url))) {
+          throw new Error('Could not open requisition slip');
+        }
+      } catch (err: any) {
+        notify.error(err?.message || 'Unable to open laboratory requisition slip.');
+      }
     }
   };
 
@@ -132,6 +145,9 @@ export default function DiagnosticLabTab({
       onAttachExternalLab(orderId);
     } else if (onAttachExternalResult) {
       onAttachExternalResult(orderId);
+    } else {
+      setTargetAttachOrderId(orderId);
+      setAttachModalVisible(true);
     }
   };
 
@@ -249,7 +265,7 @@ export default function DiagnosticLabTab({
         >
           <Icon name="lab" size={14} color={theme.colors.onPrimary} />
           <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-            Intake Specimen
+            Log Specimen Collection
           </ThemedText>
         </Pressable>
       </View>
@@ -441,7 +457,7 @@ export default function DiagnosticLabTab({
         </View>
       </Modal>
 
-      {/* Ambulatory Specimen Accession Modal */}
+      {/* Ambulatory Specimen Collection Modal */}
       <SpecimenIntakeModal
         visible={intakeModalVisible}
         patient={patient}
@@ -452,6 +468,21 @@ export default function DiagnosticLabTab({
           onRefreshChart?.();
         }}
         onRefreshChart={onRefreshChart}
+      />
+
+      {/* Attach External Lab Result Modal */}
+      <AttachExternalLabModal
+        visible={attachModalVisible}
+        orderId={targetAttachOrderId}
+        onClose={() => {
+          setAttachModalVisible(false);
+          setTargetAttachOrderId(null);
+        }}
+        onSuccess={() => {
+          setAttachModalVisible(false);
+          setTargetAttachOrderId(null);
+          onRefreshChart?.();
+        }}
       />
     </ScrollView>
   );
@@ -710,56 +741,141 @@ export function SpecimenIntakeModal({
   };
 
   return (
-    <Modal visible={visible} title="Ambulatory Specimen Accession" onClose={onClose}>
-      <ScrollView contentContainerStyle={styles.modalContent}>
-        <View style={styles.modalSection}>
-          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-            SPECIMEN ACCESSIONING DETAILS
-          </ThemedText>
-          <Input
-            label="Specimen Type"
-            value={specimenType}
-            onChangeText={setSpecimenType}
-            placeholder="e.g. Whole Blood, Urine, Stool"
-          />
-          <Input
-            label="Container / Tube Type"
-            value={containerType}
-            onChangeText={setContainerType}
-            placeholder="Purple_EDTA / Yellow_SST / Urine_Cup"
-          />
-          <Input
-            label="Accession Barcode / Label"
-            value={barcode}
-            onChangeText={setBarcode}
-            placeholder="SPEC-XXXXXX"
-          />
-          <Input
-            label="Phlebotomist / Collector Name"
-            value={phlebName}
-            onChangeText={setPhlebName}
-            placeholder="Staff Name"
-          />
-          <Input
-            label="Specimen Quality Notes"
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Adequate volume, unhemolyzed, properly labeled..."
-            multiline
-          />
-        </View>
+    <Modal
+      visible={visible}
+      title="Ambulatory Specimen Collection"
+      subtitle="Treatment Room / Phlebotomy On-Site Intake"
+      onClose={onClose}
+      footer={
         <View style={styles.modalActions}>
           <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
           <Button
             testID="confirm-intake-specimen-button"
-            title={saving ? 'Accessioning...' : 'Complete Specimen Intake'}
+            title={saving ? 'Logging...' : 'Log Specimen Collection'}
             variant="primary"
             icon="check"
             loading={saving}
             onPress={handleIntake}
           />
         </View>
-      </ScrollView>
+      }
+    >
+      <View style={styles.modalSection}>
+        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+          SPECIMEN COLLECTION DETAILS
+        </ThemedText>
+        <Input
+          label="Specimen Type"
+          value={specimenType}
+          onChangeText={setSpecimenType}
+          placeholder="e.g. Whole Blood, Urine, Stool"
+        />
+        <Input
+          label="Container / Tube Type"
+          value={containerType}
+          onChangeText={setContainerType}
+          placeholder="Purple_EDTA / Yellow_SST / Urine_Cup"
+        />
+        <Input
+          label="Accession Barcode / Label"
+          value={barcode}
+          onChangeText={setBarcode}
+          placeholder="SPEC-XXXXXX"
+        />
+        <Input
+          label="Phlebotomist / Collector Name"
+          value={phlebName}
+          onChangeText={setPhlebName}
+          placeholder="Staff Name"
+        />
+        <Input
+          label="Specimen Quality Notes"
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Adequate volume, unhemolyzed, properly labeled..."
+          multiline
+        />
+      </View>
+    </Modal>
+  );
+}
+
+export function AttachExternalLabModal({
+  visible,
+  orderId,
+  onClose,
+  onSuccess,
+}: {
+  visible: boolean;
+  orderId: string | null;
+  onClose: () => void;
+  onSuccess?: () => void;
+}) {
+  const [labName, setLabName] = useState('');
+  const [docType] = useState<'PDF' | 'Photo'>('PDF');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!orderId) return;
+    if (!labName.trim()) {
+      notify.error('Diagnostic laboratory name is required.');
+      return;
+    }
+    setSaving(true);
+    const [, err] = await clinicService.attachExternalLabResult(orderId, {
+      externalLabName: labName.trim(),
+      documentType: docType,
+      notes: notes.trim() || undefined,
+      documentUrl: 'external-labs/lab-result.pdf',
+    });
+    setSaving(false);
+    if (err) {
+      notify.error(err.message || 'Could not attach the laboratory result.');
+      return;
+    }
+    notify.success('External laboratory result attached. Requisition marked as completed.');
+    onSuccess?.();
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      title="Attach External Lab Result"
+      subtitle="Upload outside laboratory findings to complete the patient record"
+      onClose={onClose}
+      footer={
+        <View style={styles.modalActions}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
+          <Button
+            title={saving ? 'Attaching...' : 'Attach Result'}
+            variant="primary"
+            icon="upload"
+            loading={saving}
+            onPress={handleSave}
+          />
+        </View>
+      }
+    >
+      <View style={styles.modalSection}>
+        <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+          EXTERNAL LABORATORY DETAILS
+        </ThemedText>
+        <Input
+          label="Diagnostic Laboratory Name *"
+          value={labName}
+          onChangeText={setLabName}
+          placeholder="e.g. Hi-Precision Diagnostics / St. Luke's"
+        />
+        <Input
+          label="Clinical Notes / Findings Summary"
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Pathologist findings, reference range values, notes..."
+          multiline
+        />
+      </View>
     </Modal>
   );
 }
