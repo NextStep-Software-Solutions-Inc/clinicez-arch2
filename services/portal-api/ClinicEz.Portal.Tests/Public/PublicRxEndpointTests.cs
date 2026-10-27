@@ -164,10 +164,43 @@ public class PublicRxEndpointTests : IDisposable
 
         Assert.True(response.Succeeded);
         Assert.NotNull(response.Data);
+        Assert.True(response.Data.IsValid);
         Assert.True(response.Data.IsAlreadyDispensed);
         Assert.Equal("DISPENSED", response.Data.Status);
         Assert.Equal("DispensedExternally", response.Data.DispenseStatus);
         Assert.Equal("Mercury Drug", response.Data.DispensedPharmacyName);
+    }
+
+    [Fact]
+    public async Task GetRxAttestationInfo_RevokedPrescription_ReturnsIsValidFalseAndRevokedStatus()
+    {
+        var attestation = new DocumentAttestation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            FacilityId = _clinic.Id,
+            DocumentKind = "prescription",
+            DocumentNumber = "RX-REVOKED-01",
+            SecurityDigest = "SEC-SHA256-4A5B6C7D8E9F",
+            VerificationTokenHash = _tokenHash,
+            ClinicName = _clinic.Name,
+            IssuedAtUtc = DateTime.UtcNow,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
+            Status = "REVOKED",
+            IsAlreadyDispensed = false,
+            DispenseStatus = "Pending"
+        };
+        _context.DocumentAttestations.Add(attestation);
+        await _context.SaveChangesAsync();
+
+        var result = await PublicRxEndpoints.GetRxAttestationInfoAsync(_validToken, _context);
+        var okResult = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var response = Assert.IsAssignableFrom<ApiResponse<RxAttestationInfo>>(okResult.Value);
+
+        Assert.True(response.Succeeded);
+        Assert.NotNull(response.Data);
+        Assert.False(response.Data.IsValid);
+        Assert.Equal("REVOKED", response.Data.Status);
     }
 
     [Fact]
