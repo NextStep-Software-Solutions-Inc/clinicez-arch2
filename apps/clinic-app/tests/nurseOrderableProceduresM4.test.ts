@@ -300,7 +300,7 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       expect(markup).toContain('data-testid="intake-specimen-button"');
     });
 
-    test('5.2 AttachExternalLabModal renders file attachment selector and format options', () => {
+    test('5.2 AttachExternalLabModal renders file attachment selector with auto-detected format', () => {
       const element = React.createElement(AttachExternalLabModal, {
         visible: true,
         orderId: 'lab-order-123',
@@ -312,8 +312,7 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       const markup = renderToStaticMarkup(element);
       expect(markup).toContain('Attach External Lab Result');
       expect(markup).toContain('Select Result Document (PDF / Photo)');
-      expect(markup).toContain('Official PDF');
-      expect(markup).toContain('Scanned Photo');
+      expect(markup).toContain('Auto-detected format');
     });
 
     test('5.3 clinicService.attachExternalLabResult transmits base64 file and metadata', async () => {

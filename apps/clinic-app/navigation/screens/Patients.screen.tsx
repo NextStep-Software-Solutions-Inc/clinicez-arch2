@@ -2548,63 +2548,68 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               </View>
 
               <View>
-                <ThemedText style={styles.inputLabel}>Document Format</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  {(['PDF', 'Photo'] as const).map(fmt => (
-                    <Pressable
-                      key={fmt}
-                      style={[
-                        styles.formatChip,
-                        externalFileType === fmt && styles.formatChipActive
-                      ]}
-                      onPress={() => setExternalFileType(fmt)}
-                    >
-                      <ThemedText style={[
-                        styles.formatChipText,
-                        externalFileType === fmt && styles.formatChipTextActive
-                      ]}>
-                        {fmt === 'PDF' ? 'Official PDF' : 'Scanned Photo'}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
                 <ThemedText style={styles.inputLabel}>Result File Attachment * (PDF, JPEG, PNG)</ThemedText>
                 {pickedExternalFile ? (
-                  <View style={styles.pickedFileBox}>
-                    <View style={styles.pickedFileInfo}>
-                      <Icon
-                        name={externalFileType === 'PDF' ? 'file' : 'camera'}
-                        size={theme.sizes.iconMd}
-                        color={theme.colors.primary}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
-                          {pickedExternalFile.name}
-                        </ThemedText>
-                        <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          {pickedExternalFile.size ? `${(pickedExternalFile.size / 1024).toFixed(1)} KB • ` : ''}
-                          Ready to attach
-                        </ThemedText>
+                  <View style={{ gap: 6 }}>
+                    <View style={styles.pickedFileBox}>
+                      <View style={styles.pickedFileInfo}>
+                        <Icon
+                          name={externalFileType === 'PDF' ? 'file' : 'camera'}
+                          size={theme.sizes.iconMd}
+                          color={theme.colors.primary}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
+                            {pickedExternalFile.name}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {pickedExternalFile.size ? `${(pickedExternalFile.size / 1024).toFixed(1)} KB • ` : ''}
+                            Ready to attach
+                          </ThemedText>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <Pressable
+                          style={styles.changeFileBtn}
+                          onPress={handlePickExternalFile}
+                          disabled={pickingExternalFile || attaching}
+                        >
+                          <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
+                        </Pressable>
+                        <Pressable
+                          style={styles.removeFileBtn}
+                          onPress={() => setPickedExternalFile(null)}
+                          disabled={attaching}
+                        >
+                          <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
+                        </Pressable>
                       </View>
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <Pressable
-                        style={styles.changeFileBtn}
-                        onPress={handlePickExternalFile}
-                        disabled={pickingExternalFile || attaching}
-                      >
-                        <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
-                      </Pressable>
-                      <Pressable
-                        style={styles.removeFileBtn}
-                        onPress={() => setPickedExternalFile(null)}
-                        disabled={attaching}
-                      >
-                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
-                      </Pressable>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                      <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textSecondary }}>
+                        Document Format:
+                      </ThemedText>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {(['PDF', 'Photo'] as const).map(fmt => (
+                          <Pressable
+                            key={fmt}
+                            style={[
+                              styles.formatChip,
+                              { paddingVertical: 4, paddingHorizontal: 10 },
+                              externalFileType === fmt && styles.formatChipActive
+                            ]}
+                            onPress={() => setExternalFileType(fmt)}
+                          >
+                            <ThemedText style={[
+                              styles.formatChipText,
+                              externalFileType === fmt && styles.formatChipTextActive
+                            ]}>
+                              {fmt === 'PDF' ? 'Official PDF' : 'Scanned Photo'}
+                            </ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
                     </View>
                   </View>
                 ) : (

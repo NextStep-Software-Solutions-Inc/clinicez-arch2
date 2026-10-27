@@ -709,13 +709,19 @@ const styles = StyleSheet.create({
   fieldBlock: {
     gap: 6,
   },
+  classificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
   formatChipRow: {
     flexDirection: 'row',
     gap: 8,
   },
   formatChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
@@ -724,6 +730,9 @@ const styles = StyleSheet.create({
   formatChip_active: {
     backgroundColor: theme.colors.primarySubtle,
     borderColor: theme.colors.primaryBorder,
+  },
+  pickedFileBox: {
+    gap: 4,
   },
   pickedFileCard: {
     flexDirection: 'row',
@@ -974,70 +983,72 @@ export function AttachExternalLabModal({
 
         <View style={styles.fieldBlock}>
           <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-            Document Format
-          </ThemedText>
-          <View style={styles.formatChipRow}>
-            {(['PDF', 'Photo'] as const).map((fmt) => (
-              <Pressable
-                key={fmt}
-                style={[
-                  styles.formatChip,
-                  docType === fmt && styles.formatChip_active,
-                ]}
-                onPress={() => setDocType(fmt)}
-              >
-                <ThemedText
-                  variant="captionBold"
-                  color={docType === fmt ? theme.colors.primaryDark : theme.colors.textSecondary}
-                >
-                  {fmt === 'PDF' ? 'Official PDF' : 'Scanned Photo'}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.fieldBlock}>
-          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
             Result File Attachment * (PDF, JPEG, PNG)
           </ThemedText>
           {pickedFile ? (
-            <View style={styles.pickedFileCard}>
-              <View style={styles.pickedFileInfo}>
-                <Icon
-                  name={docType === 'PDF' ? 'file' : 'camera'}
-                  size={theme.sizes.iconMd}
-                  color={theme.colors.primary}
-                />
-                <View style={{ flex: 1 }}>
-                  <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
-                    {pickedFile.name}
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    {pickedFile.size ? `${(pickedFile.size / 1024).toFixed(1)} KB • ` : ''}
-                    Ready to attach
-                  </ThemedText>
+            <View style={styles.pickedFileBox}>
+              <View style={styles.pickedFileCard}>
+                <View style={styles.pickedFileInfo}>
+                  <Icon
+                    name={docType === 'PDF' ? 'file' : 'camera'}
+                    size={theme.sizes.iconMd}
+                    color={theme.colors.primary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
+                      {pickedFile.name}
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {pickedFile.size ? `${(pickedFile.size / 1024).toFixed(1)} KB • ` : ''}
+                      Ready to attach
+                    </ThemedText>
+                  </View>
+                </View>
+                <View style={styles.pickedFileActions}>
+                  <Pressable
+                    style={styles.changeFileBtn}
+                    onPress={handlePick}
+                    disabled={picking || saving}
+                  >
+                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                      Change
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={styles.clearFileBtn}
+                    onPress={() => setPickedFile(null)}
+                    disabled={saving}
+                  >
+                    <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                      Remove
+                    </ThemedText>
+                  </Pressable>
                 </View>
               </View>
-              <View style={styles.pickedFileActions}>
-                <Pressable
-                  style={styles.changeFileBtn}
-                  onPress={handlePick}
-                  disabled={picking || saving}
-                >
-                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                    Change
-                  </ThemedText>
-                </Pressable>
-                <Pressable
-                  style={styles.clearFileBtn}
-                  onPress={() => setPickedFile(null)}
-                  disabled={saving}
-                >
-                  <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                    Remove
-                  </ThemedText>
-                </Pressable>
+
+              <View style={styles.classificationRow}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Document Format:
+                </ThemedText>
+                <View style={styles.formatChipRow}>
+                  {(['PDF', 'Photo'] as const).map((fmt) => (
+                    <Pressable
+                      key={fmt}
+                      style={[
+                        styles.formatChip,
+                        docType === fmt && styles.formatChip_active,
+                      ]}
+                      onPress={() => setDocType(fmt)}
+                    >
+                      <ThemedText
+                        variant="captionBold"
+                        color={docType === fmt ? theme.colors.primaryDark : theme.colors.textSecondary}
+                      >
+                        {fmt === 'PDF' ? 'Official PDF' : 'Scanned Photo'}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
             </View>
           ) : (
@@ -1051,7 +1062,7 @@ export function AttachExternalLabModal({
                 {picking ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                PDF, JPG, or PNG up to 15 MB
+                PDF, JPG, or PNG up to 15 MB • Auto-detected format
               </ThemedText>
             </Pressable>
           )}
