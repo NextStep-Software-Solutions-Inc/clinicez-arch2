@@ -107,6 +107,52 @@ public static class InteropTypes
     /// <summary>Clinic -> portal. Payload: <c>YakapTransmittalRespondedPayload</c>.</summary>
     public const string YakapTransmittalResponded = "yakap.transmittal.responded";
 
+    // Communications (comms-api <-> facilities / patient-api / portal-api)
+    /// <summary>Facility service -> comms. Payload: <c>CommsEligibilityGrantedPayload</c>.</summary>
+    public const string CommsEligibilityGranted = "comms.eligibility.granted";
+    /// <summary>Facility service -> comms. Payload: <c>CommsEligibilityRevokedPayload</c>.</summary>
+    public const string CommsEligibilityRevoked = "comms.eligibility.revoked";
+    /// <summary>Comms -> patient-api. Payload: <c>CommsEligibilitySyncedPayload</c>.</summary>
+    public const string CommsEligibilitySynced = "comms.eligibility.synced";
+    /// <summary>Patient-api -> comms. Payload: <c>CommsRequestSubmitPayload</c>.</summary>
+    public const string CommsRequestSubmit = "comms.request.submit";
+    /// <summary>Patient-api or cell replica -> home comms. Payload: <c>CommsMessageSubmitPayload</c>.</summary>
+    public const string CommsMessageSubmit = "comms.message.submit";
+    /// <summary>Home comms -> replicas. Payload: <c>CommsMessageReplicatePayload</c>.</summary>
+    public const string CommsMessageReplicate = "comms.message.replicate";
+    /// <summary>Recipient -> sender. Payload: <c>CommsMessageReceivedPayload</c>.</summary>
+    public const string CommsMessageReceived = "comms.message.received";
+    /// <summary>Patient-api -> comms. Payload: <c>CommsMessageAcknowledgedPayload</c>.</summary>
+    public const string CommsMessageAcknowledged = "comms.message.acknowledged";
+    /// <summary>Home comms -> replicas. Payload: <c>CommsThreadStateChangedPayload</c>.</summary>
+    public const string CommsThreadStateChanged = "comms.thread.state.changed";
+    /// <summary>Comms <-> patient-api / guest relay. Payload: <c>CommsCallStateChangedPayload</c>.</summary>
+    public const string CommsCallStateChanged = "comms.call.state.changed";
+    /// <summary>Patient-api -> comms. Payload: <c>CommsCallEventPayload</c>.</summary>
+    public const string CommsCallEvent = "comms.call.event";
+    /// <summary>Clinic -> comms. Payload: <c>CommsCallPaymentClearedPayload</c>.</summary>
+    public const string CommsCallPaymentCleared = "comms.call.payment.cleared";
+    /// <summary>Comms -> clinic. Payload: <c>CommsRecordingConsentLoggedPayload</c>.</summary>
+    public const string CommsRecordingConsentLogged = "comms.recording.consent.logged";
+    /// <summary>Comms -> facility. Payload: <c>CommsConversationArchivedPayload</c>.</summary>
+    public const string CommsConversationArchived = "comms.conversation.archived";
+    /// <summary>Comms -> facility. Auto-archival of closed patient conversation transcript. Payload: <c>CommsTranscriptArchivedPayload</c>.</summary>
+    public const string CommsTranscriptArchived = "comms.transcript.archived";
+    /// <summary>Comms -> clinic. Explicit clinician filing of attachment into EMR chart. Payload: <c>CommsAttachmentFiledPayload</c>.</summary>
+    public const string CommsAttachmentFiled = "comms.attachment.filed";
+    /// <summary>Portal -> comms. Payload: <c>GuestCallJoinRequestedPayload</c>.</summary>
+    public const string GuestCallJoinRequested = "comms.guest.call.join.requested";
+
+    // Media broker (cloud platform service: room tokens & metering)
+    /// <summary>Comms -> Media. Payload: <c>MediaRoomRequestedPayload</c>. Reply type: <see cref="MediaRoomResponded"/>.</summary>
+    public const string MediaRoomRequested = "media.room.requested";
+    /// <summary>Media -> comms. Payload: <c>MediaRoomRespondedPayload</c>.</summary>
+    public const string MediaRoomResponded = "media.room.responded";
+    /// <summary>Portal -> Media. Payload: <c>MediaEntitlementUpdatedPayload</c>.</summary>
+    public const string MediaEntitlementUpdated = "media.entitlement.updated";
+    /// <summary>Media -> Portal. Payload: <c>MediaUsageRecordedPayload</c>.</summary>
+    public const string MediaUsageRecorded = "media.usage.recorded";
+
     /// <summary>Marker type so catalog consumers can detect hub-internal messages.</summary>
     public static bool IsHubInternal(string type) => type.StartsWith("directory.", StringComparison.Ordinal);
 }

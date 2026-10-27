@@ -6,7 +6,9 @@ using ClinicEz.Clinic.Application.Features.Appointments.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -30,17 +32,20 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IAppointmentNotificationDispatcher? _dispatcher;
+    private readonly IInteropPublisher? _publisher;
 
     public CreateAppointmentCommandHandler(
         IRepository<Appointment> appointmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IAppointmentNotificationDispatcher? dispatcher = null)
+        IAppointmentNotificationDispatcher? dispatcher = null,
+        IInteropPublisher? publisher = null)
     {
         _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _dispatcher = dispatcher;
+        _publisher = publisher;
     }
 
     public async Task<AppointmentDto> Handle(CreateAppointmentCommand request, CancellationToken ct)
@@ -94,6 +99,26 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
                 await _dispatcher.DispatchAlertAsync(appointment, AppointmentAlertKinds.Booked, ct);
                 await _dispatcher.DispatchStaffNotificationAsync(appointment, "booked", ct);
             }
+
+            if (_publisher != null)
+            {
+                var grantId = CommsGrantIdGenerator.Create(appointment.TenantId, appointment.ClinicId.ToString(), "Appointment", appointment.Id.ToString());
+                var from = Party.ForFacility(appointment.TenantId, appointment.ClinicId.ToString(), FacilityType.Clinic);
+                var to = Party.ForFacility(appointment.TenantId, appointment.ClinicId.ToString(), FacilityType.Clinic, service: InteropServices.Comms);
+                var grantPayload = new CommsEligibilityGrantedPayload(
+                    GrantId: grantId,
+                    TenantId: appointment.TenantId,
+                    FacilityId: appointment.ClinicId.ToString(),
+                    FacilityType: "Clinic",
+                    PatientId: appointment.PatientId,
+                    ContextType: "Appointment",
+                    ContextId: appointment.Id.ToString(),
+                    WindowStartUtc: DateTime.UtcNow,
+                    WindowEndUtc: appointment.ScheduledAt.AddDays(7),
+                    Version: 1);
+                _publisher.Enqueue(InteropTypes.CommsEligibilityGranted, from, to, correlationId: grantId, grantPayload);
+            }
+
             await _unitOfWork.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23P01" })

@@ -10,4 +10,6 @@ public static class FacilityFeatureKeys
     public const string MultiTerminalSync = "MultiTerminalSync";
     public const string AdvancedAnalytics = "AdvancedAnalytics";
     public const string CustomLetterhead = "CustomLetterhead";
+    public const string WorkspaceChat = "WorkspaceChat";
+    public const string PatientMessaging = "PatientMessaging";
 }

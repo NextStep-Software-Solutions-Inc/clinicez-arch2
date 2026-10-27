@@ -24,6 +24,8 @@ public static class PlatformMessageRules
         var to = envelope.To;
         var fromProxy = IsControlPlaneService(from, InteropServices.Philhealth);
         var toProxy = IsControlPlaneService(to, InteropServices.Philhealth);
+        var fromMedia = IsControlPlaneService(from, InteropServices.Media);
+        var toMedia = IsControlPlaneService(to, InteropServices.Media);
         var fromPortal = from.Kind == PartyKind.ControlPlane && (from.Service ?? InteropServices.Portal) == InteropServices.Portal;
         var toPortal = to.Kind == PartyKind.ControlPlane && (to.Service ?? InteropServices.Portal) == InteropServices.Portal;
 
@@ -49,9 +51,31 @@ public static class PlatformMessageRules
                     ? null
                     : $"'{t}' must be sent by the portal to the '{InteropServices.Philhealth}' service.";
 
+            case var t when t == InteropTypes.MediaRoomRequested:
+                return from.Kind == PartyKind.Facility && toMedia && (sender.Kind is HubClientKind.CloudService or HubClientKind.EdgeCell)
+                    ? null
+                    : $"'{t}' must be sent by a facility to the '{InteropServices.Media}' service.";
+
+            case var t when t == InteropTypes.MediaRoomResponded:
+                return fromMedia && to.Kind == PartyKind.Facility
+                    ? null
+                    : $"'{t}' must be sent by the '{InteropServices.Media}' service to a facility.";
+
+            case var t when t == InteropTypes.MediaEntitlementUpdated:
+                return fromPortal && toMedia
+                    ? null
+                    : $"'{t}' must be sent by the portal to the '{InteropServices.Media}' service.";
+
+            case var t when t == InteropTypes.MediaUsageRecorded:
+                return fromMedia && toPortal
+                    ? null
+                    : $"'{t}' must be sent by the '{InteropServices.Media}' service to the portal.";
+
             default:
                 if (toProxy) return $"The '{InteropServices.Philhealth}' service accepts only philhealth.* messages, not '{envelope.Type}'.";
                 if (fromProxy) return $"The '{InteropServices.Philhealth}' service may only send philhealth.* messages, not '{envelope.Type}'.";
+                if (toMedia) return $"The '{InteropServices.Media}' service accepts only media.* messages, not '{envelope.Type}'.";
+                if (fromMedia) return $"The '{InteropServices.Media}' service may only send media.* messages, not '{envelope.Type}'.";
                 return null;
         }
     }

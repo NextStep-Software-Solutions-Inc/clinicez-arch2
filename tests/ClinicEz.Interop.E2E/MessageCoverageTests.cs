@@ -22,6 +22,8 @@ public class MessageCoverageTests
     private const string Organization = InteropServices.Organization;
     private const string PhilHealth = InteropServices.Philhealth;
     private const string Hub = InteropServices.Hub;
+    private const string Comms = InteropServices.Comms;
+    private const string Media = InteropServices.Media;
 
     private sealed record Route(string Type, string[] Senders, string[] Receivers);
 
@@ -84,7 +86,30 @@ public class MessageCoverageTests
         new(InteropTypes.BillingInvoicePaid, [Billing], [Portal]),
         new(InteropTypes.BillingInvoiceVoided, [Billing], [Clinic, Lab, Pharmacy, Portal]),
 
-        new(InteropTypes.NotificationEmailRequested, [Portal], [Portal])
+        new(InteropTypes.NotificationEmailRequested, [Portal], [Portal]),
+
+        new(InteropTypes.CommsEligibilityGranted, [Clinic, Lab, Pharmacy], [Comms]),
+        new(InteropTypes.CommsEligibilityRevoked, [Clinic, Lab, Pharmacy], [Comms]),
+        new(InteropTypes.CommsEligibilitySynced, [Comms], [Comms]),
+        new(InteropTypes.CommsRequestSubmit, [Patient], [Comms]),
+        new(InteropTypes.CommsMessageSubmit, [Patient, Comms], [Comms]),
+        new(InteropTypes.CommsMessageReplicate, [Comms], [Comms]),
+        new(InteropTypes.CommsMessageReceived, [Clinic, Lab, Pharmacy, Patient, Comms], [Comms]),
+        new(InteropTypes.CommsMessageAcknowledged, [Patient], [Comms]),
+        new(InteropTypes.CommsThreadStateChanged, [Comms], [Comms]),
+        new(InteropTypes.CommsCallStateChanged, [Comms], [Comms]),
+        new(InteropTypes.CommsCallEvent, [Patient], [Comms]),
+        new(InteropTypes.CommsCallPaymentCleared, [Clinic], [Comms]),
+        new(InteropTypes.CommsRecordingConsentLogged, [Comms], [Comms]),
+        new(InteropTypes.CommsConversationArchived, [Comms], [Comms]),
+        new(InteropTypes.CommsTranscriptArchived, [Comms], [Clinic]),
+        new(InteropTypes.CommsAttachmentFiled, [Comms], [Clinic]),
+        new(InteropTypes.GuestCallJoinRequested, [Portal], [Comms]),
+
+        new(InteropTypes.MediaRoomRequested, [Clinic, Lab, Pharmacy, Comms], [Media]),
+        new(InteropTypes.MediaRoomResponded, [Media], [Comms]),
+        new(InteropTypes.MediaEntitlementUpdated, [Portal], [Media]),
+        new(InteropTypes.MediaUsageRecorded, [Media], [Portal])
     ];
 
     [Fact]

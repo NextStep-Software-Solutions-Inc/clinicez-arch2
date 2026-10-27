@@ -2,6 +2,7 @@ using Scalar.AspNetCore;
 using ClinicEz.Organization.Api;
 using ClinicEz.Organization.Application;
 using ClinicEz.Organization.Infrastructure;
+using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Middlewares;
 using Hangfire;
 
@@ -19,6 +20,10 @@ builder.Services
     .AddApplicationServices()
     .AddInfrastructureServices(builder.Configuration, builder.Environment)
     .AddClinicEzCors(builder.Configuration, builder.Environment);
+
+builder.Services.AddFacilityLocalAuth(
+    builder.Configuration,
+    audience: "clinicez-organization");
 
 var app = builder.Build();
 

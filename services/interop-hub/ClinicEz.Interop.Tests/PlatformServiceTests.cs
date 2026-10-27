@@ -188,4 +188,92 @@ public class PlatformServiceTests
 
         (await hub.RawAs(Proxy).GetAsync("/v1/directory/facilities")).StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound);
     }
+
+    [Fact]
+    public async Task A_facility_asks_the_media_broker_and_the_broker_answers_that_facility()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        var callId = Guid.NewGuid();
+        var requestPayload = new MediaRoomRequestedPayload(W.TenantA, callId, "teleconsult-room-1", ["staff-1", "patient-1"]);
+        var request = W.Env(InteropTypes.MediaRoomRequested, W.A1Clinic, Party.Media, callId, requestPayload);
+
+        (await hub.SendAsync("clinic", request)).Status.Should().Be(SendResult.Accepted);
+        var pulled = await hub.PullAsync("media", "media");
+        pulled.Should().ContainSingle().Which.Envelope.From.Should().Be(W.A1Clinic);
+
+        var responsePayload = new MediaRoomRespondedPayload(
+            callId,
+            "teleconsult-room-1",
+            "wss://relay.clinicez.internal",
+            new Dictionary<string, string> { ["staff-1"] = "token-1", ["patient-1"] = "token-2" },
+            true,
+            null);
+        var response = W.Env(InteropTypes.MediaRoomResponded, Party.Media, W.A1Clinic, callId, responsePayload);
+
+        (await hub.SendAsync("media", response)).Status.Should().Be(SendResult.Accepted);
+        (await hub.PullAsync("clinic", "clinic")).Should().ContainSingle().Which.Envelope.MessageId.Should().Be(response.MessageId);
+    }
+
+    [Fact]
+    public async Task Non_facility_clients_cannot_request_media_room()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        var callId = Guid.NewGuid();
+        var payload = new MediaRoomRequestedPayload(W.TenantA, callId, "room-1", ["user-1"]);
+
+        // Portal cannot request room
+        var fromPortal = W.Env(InteropTypes.MediaRoomRequested, Party.Portal, Party.Media, callId, payload);
+        (await hub.SendAsync("portal", fromPortal)).Status.Should().Be(SendResult.Rejected);
+
+        // Patient plane cannot request room
+        var patientParty = Party.ForPatient("patient-1");
+        var fromPatient = W.Env(InteropTypes.MediaRoomRequested, patientParty, Party.Media, callId, payload);
+        (await hub.SendAsync("patient", fromPatient)).Status.Should().Be(SendResult.Rejected);
+
+        (await hub.PullAsync("media", "media")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Portal_updates_media_entitlements_and_facility_is_rejected()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        var payload = new MediaEntitlementUpdatedPayload(W.TenantA, 500, true, 1, DateTime.UtcNow);
+
+        // Portal can update entitlements on Media
+        var fromPortal = W.Env(InteropTypes.MediaEntitlementUpdated, Party.Portal, Party.Media, Guid.NewGuid(), payload);
+        (await hub.SendAsync("portal", fromPortal)).Status.Should().Be(SendResult.Accepted);
+        (await hub.PullAsync("media", "media")).Should().ContainSingle().Which.Envelope.MessageId.Should().Be(fromPortal.MessageId);
+
+        // Facility caller is rejected
+        var fromClinic = W.Env(InteropTypes.MediaEntitlementUpdated, W.A1Clinic, Party.Media, Guid.NewGuid(), payload);
+        (await hub.SendAsync("clinic", fromClinic)).Status.Should().Be(SendResult.Rejected);
+    }
+
+    [Fact]
+    public async Task Media_broker_records_usage_to_portal_and_facility_is_rejected()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        var payload = new MediaUsageRecordedPayload(Guid.NewGuid(), W.TenantA, 15, DateTime.UtcNow.AddMinutes(-15), DateTime.UtcNow);
+
+        // Media broker can record usage to portal
+        var fromMedia = W.Env(InteropTypes.MediaUsageRecorded, Party.Media, Party.Portal, Guid.NewGuid(), payload);
+        (await hub.SendAsync("media", fromMedia)).Status.Should().Be(SendResult.Accepted);
+        (await hub.PullAsync("portal", "portal")).Should().ContainSingle().Which.Envelope.MessageId.Should().Be(fromMedia.MessageId);
+
+        // Facility cannot record usage to portal
+        var fromClinic = W.Env(InteropTypes.MediaUsageRecorded, W.A1Clinic, Party.Portal, Guid.NewGuid(), payload);
+        (await hub.SendAsync("clinic", fromClinic)).Status.Should().Be(SendResult.Rejected);
+    }
+
+    [Fact]
+    public async Task Media_broker_sends_only_media_messages()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+
+        var invalid = W.Env("test.ping", Party.Media, Party.Portal);
+        var result = await hub.SendAsync("media", invalid);
+
+        result.Status.Should().Be(SendResult.Rejected);
+        result.Reason.Should().Contain("media.*");
+    }
 }

@@ -3,6 +3,7 @@ using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
+using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
@@ -229,6 +230,8 @@ public static class DependencyInjection
             .Handle<ExternalPrescriptionDispensedEvent, ExternalPrescriptionDispensedHandler>(InteropTypes.RxExternalDispensed)
             .Handle<RxStatusChangedPayload, RxStatusChangedHandler>(InteropTypes.RxStatusChanged)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .Handle<CommsTranscriptArchivedPayload, CommsTranscriptArchivedHandler>(InteropTypes.CommsTranscriptArchived)
+            .Handle<CommsAttachmentFiledPayload, CommsAttachmentFiledHandler>(InteropTypes.CommsAttachmentFiled)
             .Respond<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.YakapTransmittalResponder>(
                 InteropTypes.YakapTransmittalRequested, InteropTypes.YakapTransmittalResponded)
             .HandleReply(InteropTypes.GamotLookupResponded)

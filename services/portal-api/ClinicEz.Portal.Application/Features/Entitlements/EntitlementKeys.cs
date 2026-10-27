@@ -20,6 +20,7 @@ public static class EntitlementKeys
     public const string LimitMonthlyConsultations = "limit.monthly_consultations";
     public const string LimitApiRequestsMonthly = "limit.api_requests_monthly";
     public const string LimitPatients = "limit.patients";
+    public const string LimitCallMinutesMonthly = "limit.call_minutes_monthly";
 
     // Workspace pools: divided among the workspace's facilities through FacilityAllocation.
     public const string PoolStaff = "limit.staff";
@@ -36,19 +37,21 @@ public static class EntitlementKeys
     public const string FeatureAdvancedAnalytics = "feature.advanced_analytics";
     public const string FeatureCustomLetterhead = "feature.custom_letterhead";
     public const string FeatureOnPrem = "feature.on_prem";
+    public const string FeatureWorkspaceChat = "feature.workspace_chat";
+    public const string FeaturePatientMessaging = "feature.patient_messaging";
 
     public static readonly IReadOnlyList<string> Limits =
     [
         LimitClinics, LimitLaboratories, LimitPharmacies, LimitOrganizations, LimitBranches, LimitMembers,
         PoolStaff, PoolStorageGb, PoolTerminals, LimitBeds, LimitAnalyzers, LimitMonthlyConsultations,
-        LimitApiRequestsMonthly, LimitPatients
+        LimitApiRequestsMonthly, LimitPatients, LimitCallMinutesMonthly
     ];
 
     public static readonly IReadOnlyList<string> Features =
     [
         FeatureCrossTenantInterop, FeatureTeleconsultation, FeatureElectronicPrescriptions, FeatureLisIntegration,
         FeatureInventoryManagement, FeaturePhilHealthKonsulta, FeatureMultiTerminalSync, FeatureAdvancedAnalytics,
-        FeatureCustomLetterhead, FeatureOnPrem
+        FeatureCustomLetterhead, FeatureOnPrem, FeatureWorkspaceChat, FeaturePatientMessaging
     ];
 
     public static bool IsKnown(string key) => Limits.Contains(key) || Features.Contains(key);
@@ -73,6 +76,8 @@ public static class EntitlementKeys
         [FeaturePhilHealthKonsulta] = FacilityFeatureKeys.PhilHealthKonsulta,
         [FeatureMultiTerminalSync] = FacilityFeatureKeys.MultiTerminalSync,
         [FeatureAdvancedAnalytics] = FacilityFeatureKeys.AdvancedAnalytics,
-        [FeatureCustomLetterhead] = FacilityFeatureKeys.CustomLetterhead
+        [FeatureCustomLetterhead] = FacilityFeatureKeys.CustomLetterhead,
+        [FeatureWorkspaceChat] = FacilityFeatureKeys.WorkspaceChat,
+        [FeaturePatientMessaging] = FacilityFeatureKeys.PatientMessaging
     };
 }

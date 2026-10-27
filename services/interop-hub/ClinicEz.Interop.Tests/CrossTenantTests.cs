@@ -218,6 +218,49 @@ public class CrossTenantPolicyTests
         (await hub.AckCellInboxAsync("edge-hub", labDelivery)).StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await hub.DbAsync(db => db.Messages.CountAsync(m => m.AckedAtUtc != null))).Should().Be(0);
     }
+
+    [Fact]
+    public async Task Staff_comms_across_different_tenants_is_rejected_even_with_an_active_link()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        await hub.UpsertLinkAsync(Guid.NewGuid(), W.A1Clinic, W.B1Lab, LinkStatus.Active, LinkScopes.All);
+
+        var result = await hub.SendAsync("clinic", W.Env(InteropTypes.CommsMessageSubmit, W.A1Clinic, W.B1Lab));
+
+        result.Status.Should().Be(SendResult.Rejected);
+        result.Reason.Should().Contain("Cross-tenant messages of type 'comms.message.submit' are prohibited.");
+        (await hub.MessageCountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Staff_comms_across_different_tenants_is_rejected_even_with_prior_conversation()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        await hub.UpsertLinkAsync(Guid.NewGuid(), W.A1Clinic, W.B1Lab, LinkStatus.Active, LinkScopes.LabOrder);
+        var correlation = Guid.NewGuid();
+
+        // 1. Initial order establishes conversation
+        (await OrderAsync(hub, W.A1Clinic, W.B1Lab, correlation)).Status.Should().Be(SendResult.Accepted);
+
+        // 2. Comms message referencing that correlation is still strictly prohibited
+        var result = await hub.SendAsync("lab", W.Env(InteropTypes.CommsMessageSubmit, W.B1Lab, W.A1Clinic, correlation));
+        result.Status.Should().Be(SendResult.Rejected);
+        result.Reason.Should().Contain("Cross-tenant messages of type 'comms.message.submit' are prohibited.");
+    }
+
+    [Fact]
+    public async Task Patient_plane_comms_request_to_facility_is_accepted_without_link()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        var patientParty = Party.ForPatient(Guid.NewGuid().ToString());
+
+        var envelope = W.Env(InteropTypes.CommsRequestSubmit, patientParty, W.B2Clinic);
+        var result = await hub.SendAsync("patient", envelope);
+
+        result.Status.Should().Be(SendResult.Accepted, result.Reason);
+        var pulled = (await hub.PullAsync("clinic", "clinic")).Single();
+        pulled.Envelope.From.Should().BeEquivalentTo(patientParty);
+    }
 }
 
 public class RoutingUnitTests
@@ -230,6 +273,8 @@ public class RoutingUnitTests
     [InlineData("lab.result.finalized", LinkScopes.Result)]
     [InlineData("patient.record.shared", LinkScopes.None)]
     [InlineData("billing.invoice.requested", LinkScopes.None)]
+    [InlineData("comms.message.submit", LinkScopes.None)]
+    [InlineData("comms.request.submit", LinkScopes.None)]
     public void Envelope_types_map_to_link_scopes(string type, LinkScopes expected) =>
         MessageScopes.For(type).Should().Be(expected);
 

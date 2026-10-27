@@ -95,6 +95,14 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             correlationId,
             licensedEvent);
 
+        // The cell's comms service is licensed with the facility, so it receives the same license from its own mailbox.
+        publisher.Enqueue(
+            InteropTypes.FacilityLicenseIssued,
+            Party.Portal,
+            Party.ForFacility(licensedEvent.TenantId, licensedEvent.ResourceId.ToString(), licensedEvent.FacilityType, InteropServices.Comms),
+            correlationId,
+            licensedEvent);
+
         // The new facility starts with the workspace profile instead of having to ask for it.
         var settings = await WorkspaceSettingsStore.GetOrCreateAsync(context, tenant, cancellationToken);
         publisher.Enqueue(

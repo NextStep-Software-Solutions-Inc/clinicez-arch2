@@ -480,9 +480,9 @@ public class WorkspaceEntitlementOverridesAdversarialChallengeTests : IDisposabl
         Assert.Contains(FacilityFeatureKeys.Teleconsultation, valLab.Payload.EnabledFeatures);
 
         // Verify outbox messages enqueued:
-        // 3 routable facilities * 2 services (own service + billing service) = 6 outbox events
+        // 3 routable facilities * 3 services (own service + billing service + comms service) = 9 outbox events
         var outboxEvents = TestSupport.OutboxPayloads<EntitlementsChangedEvent>(_context, InteropTypes.EntitlementsChanged);
-        Assert.Equal(6, outboxEvents.Count);
+        Assert.Equal(9, outboxEvents.Count);
 
         Assert.Contains(outboxEvents, e => e.FacilityId == mainClinic.Id && e.EntitlementVersion == dto.EntitlementVersion);
         Assert.Contains(outboxEvents, e => e.FacilityId == branchClinic.Id && e.EntitlementVersion == dto.EntitlementVersion);
