@@ -47,7 +47,7 @@ mock.module('react-native', () => ({
     Text: createMockComponent('Animated.Text'),
   },
 }));
-import {
+const {
   buildRedeemRequest,
   decidePoll,
   DEFAULT_SHARE_PURPOSE,
@@ -60,8 +60,8 @@ import {
   POLL_INTERVAL_MS,
   POLL_TIMEOUT_MS,
   scopeLabels,
-} from '../services/shareImport';
-import { formatDateTime, isPast } from '../utils/formatDateTime';
+} = await import('../services/shareImport');
+const { formatDateTime, isPast } = await import('../utils/formatDateTime');
 
 describe('normalizeShareToken', () => {
   test('returns a bare token unchanged', () => {

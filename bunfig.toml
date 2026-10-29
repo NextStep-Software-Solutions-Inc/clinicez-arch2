@@ -2,3 +2,6 @@
 # Required for Expo / React Native / EAS Build / Metro / Gradle / CocoaPods in Bun 1.3+ monorepos
 # so dependencies install in a flat hoisted node_modules tree instead of node_modules/.bun/.
 linker = "hoisted"
+
+[test]
+isolate = true

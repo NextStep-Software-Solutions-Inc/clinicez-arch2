@@ -17,6 +17,7 @@ mock.module('react-native', () => ({
   SectionList: 'SectionList',
   Switch: 'Switch',
   TouchableOpacity: 'TouchableOpacity',
+  Touchable: { Mixin: {} },
   TouchableHighlight: 'TouchableHighlight',
   Image: 'Image',
   Dimensions: {
@@ -47,8 +48,29 @@ mock.module('react-native', () => ({
     roundToNearestPixel: (size: number) => size,
   },
   I18nManager: { isRTL: false, allowRTL: () => {}, forceRTL: () => {} },
+  processColor: (c: any) => c,
 }));
 
+mock.module('react-native-svg', () => ({
+  Svg: 'Svg',
+  Path: 'Path',
+  Circle: 'Circle',
+  Rect: 'Rect',
+  Line: 'Line',
+  default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
+}));
+
+
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
+}));
 
 const {
   DEFAULT_PHYSICAL_EXAM_NORMAL,
