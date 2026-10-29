@@ -54,6 +54,36 @@ export const nativeBlobStorage: IBlobStorage = {
     return file.uri;
   },
 
+  async saveBlobFromUri(blobKey: string, sourceUri: string): Promise<string> {
+    const { patientId, subfolder, fileName } = parseBlobKey(blobKey);
+    const dir = getPatientDir(patientId, subfolder);
+    const destFile = new File(dir, fileName);
+
+    // If already at permanent destination, return existing URI
+    if (sourceUri === destFile.uri) {
+      return destFile.uri;
+    }
+
+    // 1. Attempt modern File.copy if source exists as File
+    try {
+      const sourceFile = new File(sourceUri);
+      if (sourceFile.exists && typeof (sourceFile as any).copy === 'function') {
+        await (sourceFile as any).copy(destFile);
+        return destFile.uri;
+      }
+    } catch {
+      // Fall back to FileSystemLegacy
+    }
+
+    // 2. Reliable cross-platform copy via expo-file-system/legacy
+    await FileSystemLegacy.copyAsync({
+      from: sourceUri,
+      to: destFile.uri,
+    });
+
+    return destFile.uri;
+  },
+
   async downloadAndSaveBlob(blobKey: string, remoteUrl: string, token: string | null): Promise<string> {
     const { patientId, subfolder, fileName } = parseBlobKey(blobKey);
     const dir = getPatientDir(patientId, subfolder);

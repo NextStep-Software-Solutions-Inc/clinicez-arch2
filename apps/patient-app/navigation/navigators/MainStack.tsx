@@ -160,11 +160,11 @@ const MainStack = createNativeStackNavigator({
     }),
     OrganizationDetailsScreen: createNativeStackScreen({
       screen: OrganizationDetailsScreen,
-      options: { title: 'Organization Details', headerLargeTitleEnabled: true },
+      options: { title: 'Organization Details', headerLargeTitleEnabled: false },
     }),
     ClinicDetailsScreen: createNativeStackScreen({
       screen: ClinicDetailsScreen,
-      options: { title: 'Clinic Details', headerLargeTitleEnabled: true },
+      options: { title: 'Clinic Details', headerLargeTitleEnabled: false },
     }),
     YakapDetailsScreen: createNativeStackScreen({
       screen: YakapDetailsScreen,

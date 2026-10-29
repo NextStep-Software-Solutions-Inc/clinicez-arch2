@@ -95,22 +95,6 @@ export default function UnlockScreen() {
     setError('');
   }, [shaking]);
 
-  // Web hardware keyboard listener
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key >= '0' && e.key <= '9') {
-        handleDigit(e.key);
-      } else if (e.key === 'Backspace') {
-        handleDelete();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDigit, handleDelete]);
-
   const biometricLabel = Platform.select({ ios: 'Use Face ID', default: 'Use Biometrics' });
 
   return (

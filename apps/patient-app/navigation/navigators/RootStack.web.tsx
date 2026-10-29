@@ -24,14 +24,14 @@ export const useIsSettingUpPINWeb = () => {
   const auth = useAuth();
   const isAppLoading = useIsAppLoading();
   if (isAppLoading) return false;
-  return auth.isAuthenticated && !auth.hasPIN;
+  return auth.isAuthenticated && auth.isInitialized && !auth.hasPIN;
 };
 
 export const useIsMainReadyWeb = () => {
   const auth = useAuth();
   const isAppLoading = useIsAppLoading();
   if (isAppLoading) return false;
-  return auth.isAuthenticated && auth.hasPIN;
+  return auth.isAuthenticated && auth.isInitialized && auth.hasPIN;
 };
 
 const RootStackWeb = createNativeStackNavigator({

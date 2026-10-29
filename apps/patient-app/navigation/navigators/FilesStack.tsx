@@ -1,7 +1,7 @@
 import { createNativeStackNavigator, createNativeStackScreen } from '@react-navigation/native-stack';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
 
-import FilesScreen from '../screens/files/Files.screen';
+import RecordsScreen from '../screens/records/Records.screen';
 import FilesUploadScreen from '../screens/files/FilesUpload.screen';
 import FileViewerScreen from '../screens/files/FileViewer.screen';
 import ExternalOpenConsentScreen from '../screens/files/ExternalOpenConsent.screen';
@@ -14,7 +14,7 @@ const FilesStack = createNativeStackNavigator({
   },
   screens: {
     FilesBrowserScreen: createNativeStackScreen({
-      screen: FilesScreen,
+      screen: RecordsScreen,
       options: { title: 'Health Records & Documents', headerLargeTitleEnabled: true },
     }),
     FilesUploadScreen: createNativeStackScreen({

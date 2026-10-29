@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────────
+# Root .easignore – Monorepo EAS Build Exclusions
+# ─────────────────────────────────────────────────────────────────
+
+# ── .NET Backend Services (DO NOT UPLOAD TO EAS) ─────────────────
+services/
+**/bin/
+**/obj/
+*.sln
+*.csproj
+.vs/
+
+# ── Non-EAS Web Frontend Apps (Keep EAS mobile apps & shared packages) ────
+apps/portal-web/
+apps/admin-web/
+apps/laboratory-app/
+apps/pharmacy-app/
+apps/cashier-app/
+
+# ── Local Database & Secrets ──────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+.env.*.local
+credentials*.txt
+keys/
+
+# ── Dev tooling, agent metadata, docs & tests ─────────────────────
+.agents/
+.github/
+.git/
+.vscode/
+.idea/
+coverage/
+*.md
+!README.md
+*.tsbuildinfo
+
+# ── Lockfile & Workspace Inclusions (MANDATORY) ───────────────────
+!bun.lock
+!packages/
+!apps/patient-app/
+!apps/clinic-app/

@@ -124,6 +124,35 @@ export async function getUncachedDocumentTargets(patientId: string, dbOverride?:
     });
   }
 
+  // 3. Uncached filesMetadata with a serverId
+  const uncachedFiles = await targetDb
+    .select()
+    .from(filesMetadata)
+    .where(
+      and(
+        eq(filesMetadata.patientId, patientId),
+        isNotNull(filesMetadata.serverId),
+        isNull(filesMetadata.deletedAt),
+        or(isNull(filesMetadata.localPath), eq(filesMetadata.isCached, false))
+      )
+    )
+    .limit(20);
+
+  for (const file of uncachedFiles) {
+    if (!file.serverId) continue;
+    if (targets.some((t) => t.id === file.id || t.serverId === file.serverId)) continue;
+    const streamUrl = getPatientRecordStreamUrl(patientId, file.serverId);
+    targets.push({
+      id: file.id,
+      kind: 'health_record',
+      patientId,
+      streamUrl,
+      fileName: file.name,
+      mimeType: file.mimeType ?? 'application/octet-stream',
+      serverId: file.serverId,
+    });
+  }
+
   return targets;
 }
 

@@ -8,6 +8,9 @@ export interface IBlobStorage {
   /** Saves binary data to local offline sandbox, returning a consumable local path/key */
   saveBlob(blobKey: string, data: ArrayBuffer | Uint8Array | Blob, mimeType: string): Promise<string>;
 
+  /** Copies a local filesystem URI or fetches a local blob URL into permanent sandbox storage */
+  saveBlobFromUri(blobKey: string, sourceUri: string): Promise<string>;
+
   /** Downloads a remote binary stream directly to local offline sandbox */
   downloadAndSaveBlob(blobKey: string, remoteUrl: string, token: string | null): Promise<string>;
 

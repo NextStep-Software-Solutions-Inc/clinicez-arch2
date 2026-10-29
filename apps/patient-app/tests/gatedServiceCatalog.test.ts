@@ -22,6 +22,18 @@ mock.module('react-native', () => ({
 }));
 
 mock.module('expo-crypto', () => ({
+  getRandomBytes: (n: number) => {
+    const bytes = new Uint8Array(n);
+    globalThis.crypto.getRandomValues(bytes);
+    return bytes;
+  },
+  digestStringAsync: async (_algo: string, s: string) => {
+    const h = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(h))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  },
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   randomUUID: () => 'mock-uuid-12345',
 }));
 
@@ -31,8 +43,10 @@ mock.module('../utils/haptics', () => ({
 
 mock.module('@react-native-community/netinfo', () => ({
   default: {
-    fetch: async () => ({ isConnected: true }),
+    fetch: async () => ({ isConnected: true, isInternetReachable: true }),
+    addEventListener: () => () => {},
   },
+  fetch: async () => ({ isConnected: true, isInternetReachable: true }),
 }));
 
 // Re-export string dictionary for external consumers

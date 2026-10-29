@@ -5,6 +5,7 @@ import type { FileMetadata } from '@db/schema/filesMetadata';
 import { documentTypes, type DocumentType } from '@db/schema/documentTypes';
 import { fetchDocumentTypes, fetchPatientRecords, hasFileApi } from '../api/filesApi';
 import { pushSyncPayload, type SyncItemRequest } from '../api/patientApi';
+import { preCacheUncachedDocuments } from '../sync/preCachingService';
 import { formatRecordCategoryLabel, resolveDocumentTypeId } from './documentTypeMapping';
 import {
   DEFAULT_MAX_FILE_SIZE_BYTES,
@@ -23,74 +24,7 @@ import {
 
 export const DEFAULT_NATIVE_PREVIEW_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'webp', 'pdf'];
 
-export const DEFAULT_FILE_TYPES: DocumentTypeResponse[] = [
-  {
-    id: '11111111-1111-1111-1111-111111111111',
-    code: 'xray',
-    label: 'X-ray',
-    description: 'Radiology images and x-ray reports.',
-    supportedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'dcm'],
-    supportedMimeTypes: ['image/*', 'application/pdf'],
-    nativePreviewKind: 'image',
-    sortOrder: 10,
-    isActive: true,
-  },
-  {
-    id: '22222222-2222-2222-2222-222222222222',
-    code: 'lab-result',
-    label: 'Lab result',
-    description: 'Laboratory result PDFs or images.',
-    supportedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-    supportedMimeTypes: ['application/pdf', 'image/*'],
-    nativePreviewKind: 'pdf',
-    sortOrder: 20,
-    isActive: true,
-  },
-  {
-    id: '33333333-3333-3333-3333-333333333333',
-    code: 'medical-certificate',
-    label: 'Medical certificate',
-    description: 'Medical certificates and fit-to-work documents.',
-    supportedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
-    supportedMimeTypes: ['application/pdf', 'image/*', 'application/msword'],
-    nativePreviewKind: 'pdf',
-    sortOrder: 30,
-    isActive: true,
-  },
-  {
-    id: '44444444-4444-4444-4444-444444444444',
-    code: 'prescription',
-    label: 'Prescription',
-    description: 'Prescription scans, images, and PDFs.',
-    supportedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-    supportedMimeTypes: ['application/pdf', 'image/*'],
-    nativePreviewKind: 'pdf',
-    sortOrder: 40,
-    isActive: true,
-  },
-  {
-    id: '55555555-5555-5555-5555-555555555555',
-    code: 'id',
-    label: 'Government ID',
-    description: 'IDs and identity verification documents.',
-    supportedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-    supportedMimeTypes: ['application/pdf', 'image/*'],
-    nativePreviewKind: 'image',
-    sortOrder: 50,
-    isActive: true,
-  },
-  {
-    id: '66666666-6666-6666-6666-666666666666',
-    code: 'other',
-    label: 'Other medical file',
-    description: 'Other health-related documents.',
-    supportedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
-    supportedMimeTypes: ['*/*'],
-    nativePreviewKind: 'external',
-    sortOrder: 100,
-    isActive: true,
-  },
-];
+export const DEFAULT_FILE_TYPES: DocumentTypeResponse[] = [];
 
 function resolveDb(dbOverride?: any) {
   if (dbOverride) return dbOverride;
@@ -318,13 +252,6 @@ export async function reconcileDocumentTypes(
 
 export async function getCachedDocumentTypes(dbOverride?: any): Promise<DocumentType[]> {
   const targetDb = resolveDb(dbOverride);
-  const rows = await targetDb
-    .select()
-    .from(documentTypes)
-    .orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
-  if (rows.length > 0) return rows;
-
-  await upsertDocumentTypes(DEFAULT_FILE_TYPES, targetDb);
   return targetDb
     .select()
     .from(documentTypes)
@@ -340,6 +267,7 @@ export interface RefreshDocumentTypesOptions {
   force?: boolean;
   db?: any;
   fetchFn?: () => Promise<DocumentTypeResponse[]>;
+  throwOnError?: boolean;
 }
 
 let inFlightDocumentTypesRefresh: Promise<DocumentType[]> | null = null;
@@ -377,7 +305,11 @@ export async function refreshDocumentTypes(
   );
 
   if (!canFetchRemote) {
-    return getCachedDocumentTypes(targetDb);
+    const cached = await getCachedDocumentTypes(targetDb);
+    if (options?.throwOnError && cached.length === 0 && (options?.fetchFn || hasFileApi())) {
+      throw new Error('Internet connection is required to download app configuration.');
+    }
+    return cached;
   }
 
   const runSync = async (): Promise<DocumentType[]> => {
@@ -393,14 +325,27 @@ export async function refreshDocumentTypes(
         }
         return reconciled;
       }
+
+      if (options?.throwOnError) {
+        const cached = await getCachedDocumentTypes(targetDb);
+        if (cached.length === 0) {
+          throw new Error('Unable to download required document configuration.');
+        }
+        return cached;
+      }
     } catch (err) {
+      if (options?.throwOnError) {
+        throw err instanceof Error
+          ? err
+          : new Error('Unable to download required app configuration.');
+      }
       console.warn('Failed to refresh document types from backend; using local SQLite cache.', err);
     }
 
     return getCachedDocumentTypes(targetDb);
   };
 
-  if (isCustomRun) {
+  if (isCustomRun || options?.throwOnError) {
     return runSync();
   }
 
@@ -590,11 +535,23 @@ export async function pullRemoteChanges(
 
     for (const remoteFile of records) {
       try {
-        const [existing] = await targetDb.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
+        const whereConds = [
+          eq(filesMetadata.id, remoteFile.id),
+          eq(filesMetadata.serverId, remoteFile.id),
+        ];
+        if (remoteFile.clientId) {
+          whereConds.push(eq(filesMetadata.id, remoteFile.clientId));
+        }
+
+        const [existing] = await targetDb
+          .select()
+          .from(filesMetadata)
+          .where(or(...whereConds))
+          .limit(1);
 
         if (!existing) {
           await targetDb.insert(filesMetadata).values({
-            id: remoteFile.id,
+            id: remoteFile.clientId || remoteFile.id,
             patientId,
             clinicId: null,
             documentTypeId: remoteFile.documentTypeId,
@@ -618,28 +575,48 @@ export async function pullRemoteChanges(
             serverId: remoteFile.id,
           });
           synced++;
-        } else if (
-          existing.name !== remoteFile.fileName ||
-          existing.documentTypeId !== remoteFile.documentTypeId ||
-          (remoteFile.sizeBytes > 0 && existing.sizeBytes !== remoteFile.sizeBytes) ||
-          existing.deletedAt !== null
-        ) {
-          // Protect local pending changes from being overwritten by downstream pull
-          if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
-            continue;
+        } else {
+          // Record already exists: update existing row in-place
+          const updates: Record<string, any> = {};
+          if (!existing.serverId) {
+            updates.serverId = remoteFile.id;
           }
-          // Protect against eventual consistency: don't overwrite if local is newer
-          if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.uploadedAt).getTime()) {
-            continue;
+          if (!existing.cloudObjectKey && remoteFile.storageKey) {
+            updates.cloudObjectKey = remoteFile.storageKey;
           }
-          await targetDb.update(filesMetadata).set({
-            name: remoteFile.fileName,
-            documentTypeId: remoteFile.documentTypeId,
-            sizeBytes: remoteFile.sizeBytes > 0 ? remoteFile.sizeBytes : existing.sizeBytes,
-            deletedAt: null,
-            syncStatus: 'synced',
-          }).where(eq(filesMetadata.id, remoteFile.id));
-          synced++;
+
+          if (
+            existing.name !== remoteFile.fileName ||
+            existing.documentTypeId !== remoteFile.documentTypeId ||
+            (remoteFile.sizeBytes > 0 && existing.sizeBytes !== remoteFile.sizeBytes) ||
+            existing.deletedAt !== null
+          ) {
+            // Protect local pending changes from being overwritten by downstream pull
+            if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+              if (Object.keys(updates).length > 0) {
+                await targetDb.update(filesMetadata).set(updates).where(eq(filesMetadata.id, existing.id));
+              }
+              continue;
+            }
+            // Protect against eventual consistency: don't overwrite if local is newer
+            if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.uploadedAt).getTime()) {
+              if (Object.keys(updates).length > 0) {
+                await targetDb.update(filesMetadata).set(updates).where(eq(filesMetadata.id, existing.id));
+              }
+              continue;
+            }
+
+            updates.name = remoteFile.fileName;
+            updates.documentTypeId = remoteFile.documentTypeId;
+            updates.sizeBytes = remoteFile.sizeBytes > 0 ? remoteFile.sizeBytes : existing.sizeBytes;
+            updates.deletedAt = null;
+            updates.syncStatus = 'synced';
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await targetDb.update(filesMetadata).set(updates).where(eq(filesMetadata.id, existing.id));
+            synced++;
+          }
         }
       } catch (err) {
         console.warn(`Failed to downstream sync file ${remoteFile.id}`, err);
@@ -648,6 +625,7 @@ export async function pullRemoteChanges(
 
     if (synced > 0) {
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
+      void preCacheUncachedDocuments(patientId, getToken).catch(() => {});
     }
   } catch (err) {
     console.warn("Downstream sync failed", err);
@@ -695,7 +673,7 @@ export async function pushPendingMetadata(
       const op = file.syncOperation === 'insert' && file.serverId ? 'update' : file.syncOperation;
       syncRequests.push({
         idempotencyKey: generateUuid(),
-        entityType: 'file',
+        entityType: 'file_records',
         operation: op,
         clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
         entityId: file.id,

@@ -68,12 +68,228 @@ function extractIdFromCondition(cond: any): string | null {
   return null;
 }
 
+export function translateLocalToSyncPayload(
+  tableName: string,
+  values: Record<string, any>
+): Record<string, any> {
+  const payload: Record<string, any> = { ...values };
+
+  switch (tableName) {
+    case 'patient_allergies': {
+      if (values.allergen !== undefined && payload.allergenName === undefined) {
+        payload.allergenName = values.allergen;
+      }
+      if (values.reactionType !== undefined && payload.reaction === undefined) {
+        payload.reaction = values.reactionType;
+      }
+      if (values.management !== undefined && payload.notes === undefined) {
+        payload.notes = values.management;
+      }
+      if (values.isActive !== undefined) {
+        payload.isActive = Boolean(values.isActive);
+      }
+      break;
+    }
+    case 'patient_medications': {
+      if (values.drugName !== undefined && payload.medicationName === undefined) {
+        payload.medicationName = values.drugName;
+      }
+      if (values.dosageForm !== undefined && payload.route === undefined) {
+        payload.route = values.dosageForm;
+      }
+      if (values.prescribingPhysician !== undefined && payload.prescribedBy === undefined) {
+        payload.prescribedBy = values.prescribingPhysician;
+      }
+      if (values.indication !== undefined && payload.purpose === undefined) {
+        payload.purpose = values.indication;
+      }
+      if (values.isActive !== undefined) {
+        payload.isActive = Boolean(values.isActive);
+        if (payload.isCurrentlyTaking === undefined) {
+          payload.isCurrentlyTaking = Boolean(values.isActive);
+        }
+      }
+      break;
+    }
+    case 'patient_surgical_history': {
+      if (values.procedure !== undefined && payload.procedureName === undefined) {
+        payload.procedureName = values.procedure;
+      }
+      if (values.surgeon !== undefined && payload.surgeonName === undefined) {
+        payload.surgeonName = values.surgeon;
+      }
+      if (values.facility !== undefined && payload.hospital === undefined) {
+        payload.hospital = values.facility;
+      }
+      if (values.date !== undefined && payload.surgeryDate === undefined) {
+        payload.surgeryDate = values.date;
+      }
+      break;
+    }
+    case 'patient_past_illnesses': {
+      if (values.diagnosis !== undefined && payload.illnessName === undefined) {
+        payload.illnessName = values.diagnosis;
+      }
+      if (values.duration !== undefined && payload.notes === undefined) {
+        payload.notes = values.duration;
+      }
+      if (values.complications !== undefined && payload.treatmentReceived === undefined) {
+        payload.treatmentReceived = values.complications;
+      }
+      break;
+    }
+    case 'patient_chronic_conditions': {
+      if (values.diagnosis !== undefined && payload.conditionName === undefined) {
+        payload.conditionName = values.diagnosis;
+      }
+      if (values.controlStatus !== undefined) {
+        payload.controlStatus = values.controlStatus;
+        if (payload.isControlled === undefined) {
+          payload.isControlled = String(values.controlStatus).trim().toLowerCase() === 'controlled';
+        }
+      } else if (payload.isControlled !== undefined && payload.controlStatus === undefined) {
+        payload.controlStatus = payload.isControlled ? 'Controlled' : 'Uncontrolled';
+      }
+      if (values.monitoringFrequency !== undefined && payload.treatmentNotes === undefined) {
+        payload.treatmentNotes = values.monitoringFrequency;
+      }
+      break;
+    }
+    case 'patient_family_history': {
+      if (values.condition !== undefined && payload.conditionName === undefined) {
+        payload.conditionName = values.condition;
+      }
+      if (values.affectedRelative !== undefined && payload.relation === undefined) {
+        payload.relation = values.affectedRelative;
+      }
+      if (values.isDeceased !== undefined) {
+        payload.isDeceased = Boolean(values.isDeceased);
+      }
+      break;
+    }
+    case 'emergency_contacts': {
+      if (values.name !== undefined && payload.fullName === undefined) {
+        payload.fullName = values.name;
+      }
+      if (values.phone !== undefined && payload.mobile === undefined) {
+        payload.mobile = values.phone;
+      }
+      if (values.sortOrder !== undefined && payload.isPrimary === undefined) {
+        payload.isPrimary = values.sortOrder === 1;
+      }
+      break;
+    }
+    case 'patient_addresses': {
+      if (values.houseStreet !== undefined && payload.street === undefined) {
+        payload.street = values.houseStreet;
+      }
+      if (values.cityMunicipality !== undefined && payload.city === undefined) {
+        payload.city = values.cityMunicipality;
+      }
+      if (values.zipCode !== undefined && payload.postalCode === undefined) {
+        payload.postalCode = values.zipCode;
+      }
+      if (values.type !== undefined && payload.isPrimary === undefined) {
+        payload.isPrimary = values.type === 'primary';
+      }
+      if (values.country === undefined) {
+        payload.country = 'Philippines';
+      }
+      break;
+    }
+    case 'patient_social_history': {
+      if (values.tobaccoStatus !== undefined && payload.smokingStatus === undefined) {
+        payload.smokingStatus = values.tobaccoStatus;
+      }
+      if (values.alcoholUseLevel !== undefined && payload.alcoholUse === undefined) {
+        payload.alcoholUse = values.alcoholUseLevel;
+      }
+      if (values.substanceUse !== undefined && payload.usesSubstances === undefined) {
+        payload.usesSubstances = Boolean(values.substanceUse);
+      }
+      break;
+    }
+    case 'patient_obstetric_profile': {
+      if (values.abortion !== undefined && payload.abortusCount === undefined) {
+        payload.abortusCount = values.abortion;
+      }
+      if (values.cycleLength !== undefined && payload.menstrualCycleLengthDays === undefined) {
+        payload.menstrualCycleLengthDays = values.cycleLength;
+      }
+      if (values.lmp !== undefined && payload.lastMenstrualPeriod === undefined) {
+        payload.lastMenstrualPeriod = values.lmp;
+      }
+      if (values.dysmenorrheaSeverity !== undefined && payload.hasDysmenorrhea === undefined) {
+        payload.hasDysmenorrhea = values.dysmenorrheaSeverity !== 'None';
+      }
+      if (values.menstruationApplicable !== undefined) {
+        payload.menstruationApplicable = Boolean(values.menstruationApplicable);
+      }
+      if (values.pregnancyApplicable !== undefined) {
+        payload.pregnancyApplicable = Boolean(values.pregnancyApplicable);
+      }
+      break;
+    }
+    case 'patient_mental_health_profile': {
+      if (values.hasPriorDiagnosis !== undefined && payload.hasDiagnosis === undefined) {
+        payload.hasDiagnosis = Boolean(values.hasPriorDiagnosis);
+      }
+      if (values.providerName !== undefined && payload.therapistName === undefined) {
+        payload.therapistName = values.providerName;
+      }
+      if (values.providerSpecialty !== undefined && payload.therapyType === undefined) {
+        payload.therapyType = values.providerSpecialty;
+      }
+      if (values.providerClinic !== undefined && payload.notes === undefined) {
+        payload.notes = values.providerClinic;
+      }
+      if (values.psychotherapyStatus !== undefined && payload.sessionFrequency === undefined) {
+        payload.sessionFrequency = values.psychotherapyStatus;
+      }
+      break;
+    }
+    case 'patient_disabilities': {
+      if (values.isPwdCertified !== undefined) {
+        payload.isPwdCertified = Boolean(values.isPwdCertified);
+      }
+      break;
+    }
+    case 'patient_contraceptive_history': {
+      if (values.isCurrent !== undefined) {
+        payload.isCurrent = Boolean(values.isCurrent);
+      }
+      break;
+    }
+    case 'patient_male_reproductive': {
+      if (values.hasVasectomy !== undefined) {
+        payload.hasVasectomy = Boolean(values.hasVasectomy);
+      }
+      break;
+    }
+    case 'patients': {
+      if (values.dob !== undefined && payload.dateOfBirth === undefined) {
+        payload.dateOfBirth = values.dob;
+      }
+      if (values.bloodType !== undefined) {
+        payload.bloodType = toBackendBloodType(values.bloodType);
+      }
+      if (values.consentToShareInfo !== undefined) {
+        payload.consentToShareInfo = Boolean(values.consentToShareInfo);
+      }
+      break;
+    }
+  }
+
+  return payload;
+}
+
 async function handleInterceptWrite(
   originalDb: any,
   tableName: string,
   operation: 'create' | 'update' | 'delete',
   values: any,
-  condition?: any
+  condition?: any,
+  preCapturedRow?: any
 ) {
   const entityType = TABLE_TO_ENTITY_TYPE[tableName];
   if (!entityType) return;
@@ -82,7 +298,7 @@ async function handleInterceptWrite(
   const isSingleton = SINGLETON_TABLES.has(tableName);
 
   // Extract patientId
-  let targetPatientId = values?.patientId;
+  let targetPatientId = values?.patientId || preCapturedRow?.patientId;
   if (!targetPatientId && condition) {
     const condId = extractIdFromCondition(condition);
     if (condId && (tableName.startsWith('patient_') || tableName === 'emergency_contacts')) {
@@ -90,7 +306,7 @@ async function handleInterceptWrite(
     }
   }
   if (!targetPatientId && tableName === 'patients') {
-    targetPatientId = values?.id || (condition ? extractIdFromCondition(condition) : null);
+    targetPatientId = values?.id || preCapturedRow?.id || (condition ? extractIdFromCondition(condition) : null);
   }
 
   try {
@@ -99,7 +315,7 @@ async function handleInterceptWrite(
       const patientId = targetPatientId || values?.id;
       let idMap: Record<string, { id: string; clientId: string }> = {};
       try {
-        let mapStr = values?.serverId;
+        let mapStr = values?.serverId || preCapturedRow?.serverId;
         if (!mapStr && originalDb.query?.patientGovernmentIds?.findFirst) {
           const existingRow = await originalDb.query.patientGovernmentIds.findFirst({
             where: (t: any, { eq }: any) => eq(t.patientId, patientId),
@@ -174,12 +390,18 @@ async function handleInterceptWrite(
           await originalDb.insert(syncQueue).values(syncItem);
           queuedCount++;
         } else if (existingServer?.id && isValidGuid(existingServer.id)) {
+          const deletePayload = {
+            id: existingServer.id,
+            patientId,
+            idType: def.idType,
+            clientId: existingServer.clientId,
+          };
           const syncItem = {
             id: randomUUID(),
             entityType: 'patient_government_ids' as const,
             entityId: existingServer.id,
             operation: 'delete' as const,
-            payloadJson: null,
+            payloadJson: JSON.stringify(deletePayload),
             status: 'pending' as const,
             retryCount: 0,
             createdAt: now,
@@ -196,10 +418,10 @@ async function handleInterceptWrite(
 
     // ── 2. SINGLETON TABLES ──────────────────────────────────────────────────
     if (isSingleton) {
-      let existingLocalRow: any = null;
+      let existingLocalRow: any = preCapturedRow || null;
       try {
         const queryName = tableNameToDrizzleQueryKey(tableName);
-        if (originalDb.query?.[queryName]?.findFirst) {
+        if (!existingLocalRow && originalDb.query?.[queryName]?.findFirst) {
           existingLocalRow = await originalDb.query[queryName].findFirst({
             where: (t: any, { eq }: any) => eq(t.patientId, targetPatientId),
           });
@@ -247,12 +469,22 @@ async function handleInterceptWrite(
         entityIdForSync = existingLocalRow.id;
       }
 
+      const rawDeletePayload = {
+        id: entityIdForSync || clientUuid,
+        patientId: targetPatientId,
+        serverId: existingLocalRow?.serverId ?? (isSyncedOnServer ? entityIdForSync : null),
+        ...(existingLocalRow || preCapturedRow || values || {}),
+      };
+      const finalPayload = effectiveOperation === 'delete'
+        ? translateLocalToSyncPayload(tableName, rawDeletePayload)
+        : translateLocalToSyncPayload(tableName, syncPayload);
+
       const syncItem = {
         id: randomUUID(),
         entityType: entityType as any,
-        entityId: entityIdForSync,
+        entityId: entityIdForSync || clientUuid,
         operation: effectiveOperation,
-        payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
+        payloadJson: JSON.stringify(finalPayload),
         status: 'pending' as const,
         retryCount: 0,
         createdAt: now,
@@ -266,7 +498,7 @@ async function handleInterceptWrite(
 
     // ── 3. patients table ───────────────────────────────────────────────────
     if (tableName === 'patients') {
-      const pId = targetPatientId || values?.id;
+      const pId = targetPatientId || values?.id || preCapturedRow?.id;
       if (!pId) return;
 
       const effectiveOperation: 'create' | 'update' | 'delete' = values?.deletedAt ? 'delete' : operation;
@@ -283,12 +515,16 @@ async function handleInterceptWrite(
       }
       delete syncPayload.syncedAt;
 
+      const finalPayload = effectiveOperation === 'delete'
+        ? { id: pId, patientId: pId, ...(preCapturedRow || values || {}) }
+        : translateLocalToSyncPayload('patients', syncPayload);
+
       const syncItem = {
         id: randomUUID(),
         entityType: 'patient' as const,
         entityId: isValidGuid(pId) ? pId : undefined,
         operation: effectiveOperation,
-        payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
+        payloadJson: JSON.stringify(finalPayload),
         status: 'pending' as const,
         retryCount: 0,
         createdAt: now,
@@ -301,15 +537,15 @@ async function handleInterceptWrite(
     }
 
     // ── 4. LIST TABLES ──────────────────────────────────────────────────────
-    let rawEntityId = values?.id || values?.clientId;
+    let rawEntityId = values?.id || values?.clientId || preCapturedRow?.id;
     if (!rawEntityId && condition) {
       rawEntityId = extractIdFromCondition(condition);
     }
 
-    let existingItem: any = null;
+    let existingItem: any = preCapturedRow || null;
     try {
       const queryName = tableNameToDrizzleQueryKey(tableName);
-      if (rawEntityId && originalDb.query?.[queryName]?.findFirst) {
+      if (!existingItem && rawEntityId && originalDb.query?.[queryName]?.findFirst) {
         existingItem = await originalDb.query[queryName].findFirst({
           where: (t: any, { eq }: any) => eq(t.id, rawEntityId),
         });
@@ -353,12 +589,22 @@ async function handleInterceptWrite(
       entityIdForSync = existingItem?.serverId || (isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:') ? rawEntityId : undefined);
     }
 
+    const rawDeletePayload = {
+      id: entityIdForSync || clientUuid,
+      serverId: existingItem?.serverId ?? null,
+      patientId: targetPatientId || existingItem?.patientId,
+      ...(existingItem || preCapturedRow || values || {}),
+    };
+    const finalPayload = effectiveOperation === 'delete'
+      ? translateLocalToSyncPayload(tableName, rawDeletePayload)
+      : translateLocalToSyncPayload(tableName, syncPayload);
+
     const syncItem = {
       id: randomUUID(),
       entityType: entityType as any,
       entityId: entityIdForSync || clientUuid,
       operation: effectiveOperation,
-      payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
+      payloadJson: JSON.stringify(finalPayload),
       status: 'pending' as const,
       retryCount: 0,
       createdAt: now,
@@ -384,28 +630,50 @@ function createQueryProxy(
     get(target, prop, receiver) {
       if (prop === 'then') {
         return function (onfulfilled?: any, onrejected?: any) {
-          return target.then(
-            async (result: any) => {
-              let tableName: string | null = null;
-              try {
-                tableName = getTableName(table);
-              } catch {
-                const nameSymbol = Object.getOwnPropertySymbols(table).find(
-                  (s) => s.description === 'drizzle:Name'
-                );
-                tableName = nameSymbol ? table[nameSymbol] : null;
+          let tableName: string | null = null;
+          try {
+            tableName = getTableName(table);
+          } catch {
+            const nameSymbol = Object.getOwnPropertySymbols(table).find(
+              (s) => s.description === 'drizzle:Name'
+            );
+            tableName = nameSymbol ? table[nameSymbol] : null;
+          }
+
+          let preCapturedPromise: Promise<any> = Promise.resolve(null);
+          if (tableName && TABLE_TO_ENTITY_TYPE[tableName] && operation === 'delete') {
+            try {
+              const queryName = tableNameToDrizzleQueryKey(tableName);
+              const entityId = extractIdFromCondition(condition);
+              if (entityId && originalDb.query?.[queryName]?.findFirst) {
+                preCapturedPromise = originalDb.query[queryName].findFirst({
+                  where: (t: any, { eq }: any) => eq(t.id, entityId),
+                }).catch(() => null);
+              } else if (condition && originalDb.select) {
+                preCapturedPromise = originalDb.select().from(table).where(condition).limit(1)
+                  .then((rows: any[]) => (rows && rows.length > 0 ? rows[0] : null))
+                  .catch(() => null);
               }
-              if (tableName && TABLE_TO_ENTITY_TYPE[tableName]) {
-                await handleInterceptWrite(originalDb, String(tableName), operation, values, condition);
-              }
-              if (onfulfilled) return onfulfilled(result);
-              return result;
-            },
-            (err: any) => {
-              if (onrejected) return onrejected(err);
-              throw err;
+            } catch (err) {
+              console.warn(`[DB Interceptor] Failed to initiate pre-capture for delete on ${tableName}:`, err);
             }
-          );
+          }
+
+          return preCapturedPromise.then((preCapturedRow) => {
+            return target.then(
+              async (result: any) => {
+                if (tableName && TABLE_TO_ENTITY_TYPE[tableName]) {
+                  await handleInterceptWrite(originalDb, String(tableName), operation, values, condition, preCapturedRow);
+                }
+                if (onfulfilled) return onfulfilled(result);
+                return result;
+              },
+              (err: any) => {
+                if (onrejected) return onrejected(err);
+                throw err;
+              }
+            );
+          });
         };
       }
 

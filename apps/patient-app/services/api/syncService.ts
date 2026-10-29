@@ -226,11 +226,45 @@ async function executePushSync(
       }
     }
 
-    // 5. Delete synced items from SQLite
-    await originalDb.delete(syncQueue).where(inArray(syncQueue.id, ids));
+    // 5. Partition pendingItems into accepted vs rejected
+    const acceptedIds: string[] = [];
+    const resultMap = new Map<string, any>();
+    if (ack.items && Array.isArray(ack.items)) {
+      for (const res of ack.items) {
+        if (res.idempotencyKey) {
+          resultMap.set(res.idempotencyKey, res);
+        }
+      }
+    }
+
+    for (const item of pendingItems) {
+      const serverResult = resultMap.get(item.id);
+      if (serverResult && serverResult.status === 'Rejected') {
+        const errorMsg = serverResult.conflictDetail || 'Rejected by server';
+        await originalDb
+          .update(syncQueue)
+          .set({
+            status: 'rejected',
+            errorMessage: errorMsg,
+          })
+          .where(eq(syncQueue.id, item.id));
+      } else {
+        acceptedIds.push(item.id);
+      }
+    }
+
+    // Delete only accepted items from SQLite
+    if (acceptedIds.length > 0) {
+      await originalDb.delete(syncQueue).where(inArray(syncQueue.id, acceptedIds));
+    }
     await flushDatabaseSnapshot();
 
-    return { success: true, synced: ack.accepted, failed: 0, skipped: false };
+    return {
+      success: true,
+      synced: ack.accepted,
+      failed: pendingItems.length - acceptedIds.length,
+      skipped: false,
+    };
   } catch (apiError: any) {
     console.error('[SyncService] API push failed:', apiError);
 

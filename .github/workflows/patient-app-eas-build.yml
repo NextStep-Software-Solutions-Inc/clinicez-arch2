@@ -17,6 +17,7 @@ on:
         type: choice
         options:
           - development
+          - development-device
           - preview
           - staging
           - production
@@ -30,16 +31,54 @@ on:
           - android
           - ios
 
-defaults:
-  run:
-    working-directory: apps/patient-app
-
 env:
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  APP_BRANCH: ${{ github.ref_name }}
 
 jobs:
+  quality-gates:
+    name: Quality Gates (Typecheck, Tokens, Tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.1'
+
+      - name: Restore Bun Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check patient app
+        run: bun run --cwd apps/patient-app typecheck
+
+      - name: Design token check
+        run: node apps/patient-app/scripts/check-tokens.mjs --strict
+
+      - name: Test design tokens
+        run: bun test packages/design-tokens/src/tokens.test.ts
+
+      - name: Run automated patient app tests
+        run: bun run --cwd apps/patient-app test
+
   eas-build:
     name: EAS Build (${{ inputs.profile }} / ${{ inputs.platform }})
+    needs: quality-gates
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,8 +97,16 @@ jobs:
         with:
           node-version: '24.22.1'
 
+      - name: Restore Bun Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Setup EAS CLI
         uses: expo/expo-github-action@v8
@@ -68,6 +115,10 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Build with EAS
+        working-directory: apps/patient-app
+        env:
+          APP_BRANCH: ${{ github.ref_name }}
+          APP_VARIANT: ${{ inputs.profile == 'development-device' && 'development' || inputs.profile }}
         run: |
           eas build \
             --profile ${{ inputs.profile }} \

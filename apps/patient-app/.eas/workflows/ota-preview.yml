@@ -8,10 +8,30 @@ on:
       - '!development'
 
 jobs:
+  quality_gate:
+    name: Typecheck, Token Lint & Tests
+    runs-on: linux-medium
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Typecheck
+        run: bun run --cwd apps/patient-app typecheck
+      - name: Design Token Check
+        run: bun run --cwd apps/patient-app lint:tokens
+      - name: Automated Tests
+        run: bun run --cwd apps/patient-app test
+      - id: resolve_channel
+        name: Resolve Sanitized Per-Branch Channel
+        run: |
+          CHANNEL=$(APP_BRANCH="${{ github.ref_name || 'preview' }}" bun -e 'import getConfig from "./apps/patient-app/app.config.ts"; const cfg = getConfig({ projectRoot: "apps/patient-app", staticConfig: {} }); console.log(cfg.updates?.requestHeaders?.["expo-channel-name"] ?? "br-preview");')
+          set-output channel "$CHANNEL"
+    outputs:
+      channel: ${{ steps.resolve_channel.outputs.channel }}
+
   update:
-    name: Publish Preview
+    name: Publish Branch OTA Update
+    needs: [quality_gate]
     type: update
     environment: preview
     params:
-      # branch: ${{ github.ref_name || 'preview' }}
-      branch: preview
+      channel: ${{ needs.quality_gate.outputs.channel }}

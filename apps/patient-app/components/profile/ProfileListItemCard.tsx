@@ -148,6 +148,36 @@ export default function ProfileListItemCard({
                 </ThemedText>
               </View>
             )}
+
+            {/* Desktop / Pointer-accessible inline actions (>=44px touch target) */}
+            <View style={styles.desktopActions}>
+              <Pressable
+                onPress={handleEdit}
+                accessibilityRole="button"
+                accessibilityLabel="Edit entry"
+                style={({ pressed, hovered }: any) => [
+                  styles.desktopActionBtn,
+                  { borderRadius: radii.md },
+                  hovered && { backgroundColor: colors.primarySubtle },
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <AppIcon name="edit" size={sizes.iconSm} color="primary" />
+              </Pressable>
+              <Pressable
+                onPress={handleDelete}
+                accessibilityRole="button"
+                accessibilityLabel="Delete entry"
+                style={({ pressed, hovered }: any) => [
+                  styles.desktopActionBtn,
+                  { borderRadius: radii.md },
+                  hovered && { backgroundColor: colors.emergencyBg },
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <AppIcon name="trash" size={sizes.iconSm} color="emergency" />
+              </Pressable>
+            </View>
           </View>
         </Animated.View>
       </GestureDetector>
@@ -198,5 +228,16 @@ const styles = StyleSheet.create({
   },
   actionDivider: {
     width: StyleSheet.hairlineWidth,
+  },
+  desktopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  desktopActionBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

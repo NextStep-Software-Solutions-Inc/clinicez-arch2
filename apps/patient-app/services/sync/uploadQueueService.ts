@@ -147,10 +147,21 @@ export async function enqueueOfflineRecordUpload(
   const blobKey = `${params.patientId}/records/${recordId}.${extension}`;
   const targetDb = getDatabase(options?.db);
 
-  // 1. Save binary into local offline sandbox
-  let savedLocalPath = params.localUri ?? '';
+  // 1. Save binary into permanent local offline sandbox
+  let savedLocalPath = '';
   if (params.fileBlob) {
     savedLocalPath = await blobStorage.saveBlob(blobKey, params.fileBlob, params.mimeType);
+  } else if (params.localUri) {
+    if (typeof (blobStorage as any).saveBlobFromUri === 'function') {
+      try {
+        savedLocalPath = await (blobStorage as any).saveBlobFromUri(blobKey, params.localUri);
+      } catch (err) {
+        console.warn('[uploadQueueService] Failed to copy localUri to permanent sandbox, falling back to localUri:', err);
+        savedLocalPath = params.localUri;
+      }
+    } else {
+      savedLocalPath = params.localUri;
+    }
   }
 
   // 2. Insert into localHealthRecords for immediate 0ms offline preview

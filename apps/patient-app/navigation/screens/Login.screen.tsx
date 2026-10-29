@@ -271,7 +271,7 @@ export default function LoginScreen() {
         <View style={[styles.trustRow, { gap: spacing.xs }]}>
           <AppIcon name="shield" size={14} color="textMuted" />
           <ThemedText variant="caption" color="textMuted">
-            256-bit encrypted health data • HIPAA & PhilHealth compliant
+            256-bit encrypted health data • Data Privacy Act of 2012 (RA 10173) & PhilHealth compliant
           </ThemedText>
         </View>
       </ScrollView>

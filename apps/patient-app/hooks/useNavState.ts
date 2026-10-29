@@ -7,6 +7,17 @@ export const useIsAppLoading = () => {
   const auth = useAuth();
   const onboarding = useOnboarding();
   const clerkAuth = useClerkAuth();
+
+  // If already initialized with a verified patient vault and PIN, do not block offline on Clerk
+  if (auth.isInitialized && auth.internalPatientId && auth.hasPIN) {
+    return auth.isLoading || onboarding.isLoading;
+  }
+
+  // Keep LoadingScreen active (and ready to show calm reconnect UI) whenever signed in but bootstrap hasn't finished
+  if (auth.isAuthenticated && !auth.isInitialized) {
+    return true;
+  }
+
   return auth.isLoading || onboarding.isLoading || !clerkAuth.isLoaded;
 };
 
@@ -33,7 +44,7 @@ export const useIsSettingUpPIN = () => {
   const onboarding = useOnboarding();
   const isAuthLoading = useIsAppLoading();
   if (isAuthLoading) return false;
-  return onboarding.isComplete && auth.isAuthenticated && !auth.hasPIN;
+  return onboarding.isComplete && auth.isAuthenticated && auth.isInitialized && !auth.hasPIN;
 };
 
 /** PIN is set and the app is currently locked */
@@ -42,7 +53,13 @@ export const useIsLocked = () => {
   const onboarding = useOnboarding();
   const isAuthLoading = useIsAppLoading();
   if (isAuthLoading) return false;
-  return onboarding.isComplete && auth.isAuthenticated && auth.hasPIN && auth.isLocked;
+  return (
+    onboarding.isComplete &&
+    auth.isAuthenticated &&
+    auth.isInitialized &&
+    auth.hasPIN &&
+    auth.isLocked
+  );
 };
 
 /** Fully authenticated with a PIN — show main app, with lock UI overlaid if needed */
@@ -51,7 +68,12 @@ export const useIsMainReady = () => {
   const onboarding = useOnboarding();
   const isAuthLoading = useIsAppLoading();
   if (isAuthLoading) return false;
-  return onboarding.isComplete && auth.isAuthenticated && auth.hasPIN;
+  return (
+    onboarding.isComplete &&
+    auth.isAuthenticated &&
+    auth.isInitialized &&
+    auth.hasPIN
+  );
 };
 
 /** Fully authenticated, PIN set, and unlocked */

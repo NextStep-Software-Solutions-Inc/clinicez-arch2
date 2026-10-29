@@ -1436,6 +1436,11 @@ export async function clearAllData(currentPatientId?: string, clerkUserId?: stri
         schema.appointments,
         schema.notifications,
         schema.notificationPreferences,
+        schema.inboxLabRequests,
+        schema.inboxPrescriptions,
+        schema.inboxLabResults,
+        schema.inboxMedicalCertificates,
+        schema.syncCursors,
     ];
 
     await db.transaction(async (tx) => {

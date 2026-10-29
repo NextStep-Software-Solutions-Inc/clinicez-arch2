@@ -23,11 +23,11 @@ type Props = StaticScreenProps<{
 }>;
 
 export default function TeleconsultWaitingRoomScreen({ route }: Props) {
-  const { colors, spacing } = useAppTheme();
+  const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const { user } = useUser();
 
-  const appointmentId = route.params?.appointmentId ?? 'APT-TC-001';
+  const appointmentId = route.params?.appointmentId ?? '';
   const callId = route.params?.callId ?? `call-${appointmentId}`;
   const patientName = route.params?.patientName ?? user?.fullName ?? 'Patient';
   const clinicianName = route.params?.clinicianName ?? 'Attending Clinician';
@@ -39,20 +39,27 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
   const [recordingConsent, setRecordingConsent] = useState<'Pending' | 'Approved' | 'Rejected' | 'Disabled'>('Pending');
   const [isReadyToAdmit, setIsReadyToAdmit] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const isDemo =
+    process.env.EXPO_PUBLIC_ENABLE_DEMO_TELECONSULT === 'true' ||
+    process.env.EXPO_PUBLIC_DEMO_TELECONSULT === 'true';
 
-  // Simulate or listen for doctor admission
+  // Doctor admission gating
   useEffect(() => {
     // If prepaid blocked and not yakap exempt, cannot admit
     const isBlocked = paymentPolicy === 'Prepaid' && paymentStatus === 'Unpaid' && !isYakapExempt;
     if (isBlocked) return;
 
-    // Simulate doctor ready to admit after 3 seconds for smooth UX
-    const timer = setTimeout(() => {
-      setIsReadyToAdmit(true);
-    }, 2500);
+    if (isDemo) {
+      // Simulate doctor ready to admit after 2.5 seconds for demo/preview mode
+      const timer = setTimeout(() => {
+        setIsReadyToAdmit(true);
+      }, 2500);
 
-    return () => clearTimeout(timer);
-  }, [isYakapExempt, paymentPolicy, paymentStatus]);
+      return () => clearTimeout(timer);
+    } else {
+      setIsReadyToAdmit(false);
+    }
+  }, [isDemo, isYakapExempt, paymentPolicy, paymentStatus]);
 
   const handleSubmitConsent = useCallback(async (approved: boolean, reason?: string) => {
     setRecordingConsent(approved ? 'Approved' : 'Rejected');
@@ -110,6 +117,27 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
         </ThemedText>
       </View>
 
+      {!isDemo && (
+        <View
+          style={[
+            styles.sessionNotice,
+            {
+              backgroundColor: colors.surfaceSubtle,
+              borderColor: colors.borderLight,
+              borderRadius: radii.md,
+              padding: spacing.md,
+              marginHorizontal: spacing.md,
+              marginTop: spacing.sm,
+              borderWidth: StyleSheet.hairlineWidth,
+            },
+          ]}
+        >
+          <ThemedText variant="small" color="textSecondary" style={{ textAlign: 'center' }}>
+            Teleconsultation session will connect once your physician initiates the call room
+          </ThemedText>
+        </View>
+      )}
+
       <CallWaitingRoom
         callId={callId}
         appointmentId={appointmentId}
@@ -149,4 +177,5 @@ const styles = StyleSheet.create({
   waitingRoomContent: {
     flex: 1,
   },
+  sessionNotice: {},
 });

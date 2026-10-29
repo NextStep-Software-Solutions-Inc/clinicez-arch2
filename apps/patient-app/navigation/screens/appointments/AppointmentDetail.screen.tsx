@@ -16,11 +16,12 @@ import { useAppTheme } from '../../../contexts/ThemeContext';
 import { db } from '../../../db/index';
 import { getAppointmentDetail } from '../../../services/appointments/appointmentsService';
 import type { AppointmentItem, AttachedDocument, AffiliatedClinic, ProviderSnapshot } from '../../../services/appointments/types';
+import AfterVisitSummaryCard from '../../../components/records/AfterVisitSummaryCard';
 import { dialog } from '../../../utils/dialog';
 import { usePatientId } from '../../../hooks/usePatientId';
 import TeleconsultRecordingPlayerModal from '../../../components/teleconsult/TeleconsultRecordingPlayerModal';
 
-type Props = StaticScreenProps<{ appointmentId: string }>;
+type Props = StaticScreenProps<{ appointmentId?: string; id?: string }>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -229,7 +230,7 @@ function ProviderSection({
 export default function AppointmentDetailScreen({ route }: Props) {
   const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
-  const { appointmentId } = route.params;
+  const appointmentId = route.params?.appointmentId ?? (route.params as any)?.id ?? '';
 
   const [item, setItem] = useState<AppointmentItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -467,11 +468,32 @@ export default function AppointmentDetailScreen({ route }: Props) {
         </Card>
       )}
 
+      {/* After-Visit Summary (AVS) for Completed Visits */}
+      {item.status === 'completed' && (
+        <AfterVisitSummaryCard
+          consultation={{
+            id: `consult-${item.id}`,
+            visitDate: item.scheduledAt ? item.scheduledAt.split('T')[0] : format(new Date(), 'yyyy-MM-dd'),
+            visitType: item.serviceType === 'teleconsult' || item.serviceType === 'virtual' ? 'Telehealth' : 'WalkIn',
+            clinicName: item.clinic.name,
+            clinicId: item.clinic.id,
+            doctorName: item.provider.name,
+            doctorSpecialty: item.provider.specialty,
+            chiefComplaint: item.chiefComplaint || item.notes,
+            primaryDiagnosis: item.clinicalAssessment || 'Outpatient clinical evaluation completed',
+            treatmentPlan: item.doctorPlan,
+            homeInstructions: item.doctorPlan || 'Follow home care instructions as advised by your physician.',
+          }}
+          onBookFollowUp={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
+          onMessageClinic={() => navigation.navigate('MainBottomTabs', { screen: 'MessagesScreen' })}
+        />
+      )}
+
       {/* Clinical Visit Summary & Care Plan (Sealed by Doctor) */}
-      {(item.status === 'completed' ||
-        item.clinicalAssessment ||
-        item.doctorPlan ||
-        item.prescriptionsSummary) && (
+      {(item.status !== 'completed' &&
+        (item.clinicalAssessment ||
+          item.doctorPlan ||
+          item.prescriptionsSummary)) && (
         <Card
           padding="lg"
           style={{
@@ -666,7 +688,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
       </Card>
 
       {/* Teleconsultation Waiting Room Entry */}
-      {!isFinalStatus && (
+      {!isFinalStatus && (item.serviceType === 'teleconsult' || item.serviceType === 'virtual') && (
         <Card padding="md" style={{ gap: spacing.sm, borderColor: colors.primary, borderWidth: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <AppIcon name="camera" size={20} color="primary" />

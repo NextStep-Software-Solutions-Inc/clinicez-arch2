@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { localHealthRecords } from '@db/schema/localHealthRecords';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import { syncQueue } from '@db/schema/syncQueue';
@@ -14,6 +14,7 @@ export interface DeleteRecordParams {
   isOnline?: () => Promise<boolean>;
   deleteRemoteFn?: (patientId: string, serverId: string, token: string | null) => Promise<void>;
   db?: any;
+  entityType?: 'file' | 'file_records';
 }
 
 function getDatabase(override?: any) {
@@ -115,29 +116,43 @@ export async function deleteHealthRecord(params: DeleteRecordParams): Promise<vo
       } catch (err) {
         console.warn(`[deleteHealthRecord] Online DELETE failed, enqueuing deferred delete:`, err);
         // Fall back to offline queue on failure
-        await targetDb.insert(syncQueue).values({
-          id: crypto.randomUUID(),
-          entityType: 'file',
-          entityId: serverId,
-          operation: 'delete',
-          payloadJson: JSON.stringify({ id: serverId, patientId }),
-          createdAt: new Date(),
-        });
+        await safeEnqueueDelete(targetDb, serverId, patientId, params.entityType);
         await safeFlushDatabase();
       }
     } else {
       // Offline: Enqueue deferred delete in syncQueue
-      await targetDb.insert(syncQueue).values({
-        id: crypto.randomUUID(),
-        entityType: 'file',
-        entityId: serverId,
-        operation: 'delete',
-        payloadJson: JSON.stringify({ id: serverId, patientId }),
-        createdAt: new Date(),
-      });
+      await safeEnqueueDelete(targetDb, serverId, patientId, params.entityType);
       await safeFlushDatabase();
     }
   }
 
   emitEvent(RECORDS_SYNCED_EVENT, { patientId, fileId, deleted: true });
+}
+
+async function safeEnqueueDelete(
+  targetDb: any,
+  serverId: string,
+  patientId: string,
+  entityType: 'file' | 'file_records' = 'file'
+) {
+  try {
+    if (typeof targetDb.run === 'function') {
+      targetDb.run(sql`ALTER TABLE sync_queue ADD COLUMN error_message TEXT;`);
+    } else if (targetDb.session?.client?.run) {
+      targetDb.session.client.run('ALTER TABLE sync_queue ADD COLUMN error_message TEXT;');
+    }
+  } catch {
+    // Column already exists or table doesn't need migration
+  }
+
+  const insertValues = {
+    id: crypto.randomUUID(),
+    entityType,
+    entityId: serverId,
+    operation: 'delete' as const,
+    payloadJson: JSON.stringify({ id: serverId, patientId }),
+    createdAt: new Date(),
+  };
+
+  await targetDb.insert(syncQueue).values(insertValues);
 }

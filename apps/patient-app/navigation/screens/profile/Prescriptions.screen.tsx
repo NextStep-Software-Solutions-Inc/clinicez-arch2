@@ -17,6 +17,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { dialog } from '@utils/dialog';
 import { useProfileSync } from 'hooks/useProfileSync';
+import EmptyState from '@ui/EmptyState';
+import { RecordSkeletonList } from 'components/records/RecordSkeletonList';
+import QrCodeView from 'components/sharing/QrCodeView';
 import { publicRoutes } from '@shared/safe';
 import { useEhrOptions } from 'hooks/useEhrOptions';
 
@@ -37,6 +40,7 @@ export default function PrescriptionsScreen() {
   const { isDesktop } = useBreakpoint();
 
   const [records, setRecords] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedRx, setSelectedRx] = useState<any | null>(null);
   const [slipModalVisible, setSlipModalVisible] = useState(false);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
@@ -45,7 +49,7 @@ export default function PrescriptionsScreen() {
   const [attachedReceipts, setAttachedReceipts] = useState<Record<string, ExternalReceiptData>>({});
   const [selectedPharmacy, setSelectedPharmacy] = useState('Mercury Drug');
   const [customPharmacy, setCustomPharmacy] = useState('');
-  const [branchLocation, setBranchLocation] = useState('Fuente Osmeña Branch');
+  const [branchLocation, setBranchLocation] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [receiptPhotoUri, setReceiptPhotoUri] = useState<string | null>(null);
 
@@ -54,68 +58,18 @@ export default function PrescriptionsScreen() {
     .reduce((sum, r) => sum + (r.gamotCoverageAmount ?? 0), 0);
 
   const load = useCallback(() => {
+    setIsLoading(true);
     db.select()
       .from(prescriptions)
       .where(eq(prescriptions.patientId, patientId))
       .orderBy(desc(prescriptions.startDate))
       .then((data) => {
-        if (data && data.length > 0) {
-          setRecords(data);
-        } else {
-          // Sample / seeded e-prescriptions for clinical display
-          setRecords([
-            {
-              id: 'rx-demo-001',
-              patientId,
-              drugName: 'Amlodipine Besylate (Norvasc)',
-              genericName: 'Amlodipine Besylate',
-              dosage: '5mg',
-              dosageForm: 'Tablet',
-              frequency: 'Once daily in the morning',
-              route: 'Oral',
-              duration: '30 days',
-              indication: 'Essential Hypertension Stage 1',
-              startDate: '2026-09-30',
-              endDate: '2026-10-30',
-              prescribingPhysician: 'Dr. Roberto Cruz, MD',
-              refillsAllowed: 2,
-              specialInstructions: 'Take with or without food. Avoid grapefruit juice.',
-              prescriptionNumber: 'RX-20260930-0081',
-              verificationToken: 'rx-tok-98124a9c8b7e',
-              dispenseStatus: 'Pending',
-              isDangerousDrug: false,
-              isPhilHealthGamot: true,
-              philHealthDrugCode: 'PHIL-AMLO-5MG-001',
-              uniquePrescriptionSecurityCode: 'UPSC-HCI990001-2026-000142',
-              gamotCoverageAmount: 450.0,
-            },
-            {
-              id: 'rx-demo-002',
-              patientId,
-              drugName: 'Amoxicillin + Clavulanic Acid (Augmentin)',
-              genericName: 'Amoxicillin + Potassium Clavulanate',
-              dosage: '625mg',
-              dosageForm: 'Film-coated Tablet',
-              frequency: 'Every 12 hours after meals',
-              route: 'Oral',
-              duration: '7 days',
-              indication: 'Acute Bronchitis',
-              startDate: '2026-09-28',
-              endDate: '2026-10-05',
-              prescribingPhysician: 'Dr. Roberto Cruz, MD',
-              refillsAllowed: 0,
-              specialInstructions: 'Complete full 7-day course even if symptoms resolve.',
-              prescriptionNumber: 'RX-20260928-0042',
-              verificationToken: 'rx-tok-44b19280cd11',
-              dispenseStatus: 'Dispensed',
-              dispensedPharmacy: 'Clinic EZ Partner Pharmacy (Laguna Central)',
-              dispensedAt: '2026-09-28 14:32',
-              isDangerousDrug: false,
-            },
-          ]);
-        }
+        setRecords(data ?? []);
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, [patientId]);
 
   useEffect(() => {
@@ -215,112 +169,121 @@ export default function PrescriptionsScreen() {
 
   return (
     <Screen width="content" scroll={false} padded={false}>
-      <FlatList
-        key={isDesktop ? 'grid-2' : 'list-1'}
-        numColumns={isDesktop ? 2 : 1}
-        data={records}
-        keyExtractor={(item) => item.id}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={[
-          styles.content,
-          { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md },
-        ]}
-        columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
-        ListHeaderComponent={
-          <View style={{ gap: spacing.md, marginBottom: spacing.sm }}>
-            {/* PhilHealth GAMOT ₱20,000 Allocation Card */}
-            <View
-              style={[
-                styles.gamotHeaderCard,
-                {
-                  backgroundColor: colors.successBg,
-                  borderColor: colors.successBorder,
-                  borderRadius: radii.xl,
-                  padding: spacing.md,
-                  gap: spacing.md,
-                },
-              ]}
-            >
-              <View style={styles.rowBetween}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                  <AppIcon name="shield" color={colors.successText} size={22} />
-                  <View>
-                    <ThemedText variant="title" style={{ color: colors.successText, fontWeight: '700' }}>
-                      PhilHealth GAMOT Benefit
+      {isLoading ? (
+        <RecordSkeletonList count={3} />
+      ) : (
+        <FlatList
+          key={isDesktop ? 'grid-2' : 'list-1'}
+          numColumns={isDesktop ? 2 : 1}
+          data={records}
+          keyExtractor={(item) => item.id}
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={[
+            styles.content,
+            { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md },
+          ]}
+          columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
+          ListHeaderComponent={
+            <View style={{ gap: spacing.md, marginBottom: spacing.sm }}>
+              {/* PhilHealth GAMOT ₱20,000 Allocation Card */}
+              <View
+                style={[
+                  styles.gamotHeaderCard,
+                  {
+                    backgroundColor: colors.successBg,
+                    borderColor: colors.successBorder,
+                    borderRadius: radii.xl,
+                    padding: spacing.md,
+                    gap: spacing.md,
+                  },
+                ]}
+              >
+                <View style={styles.rowBetween}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                    <AppIcon name="shield" color={colors.successText} size={22} />
+                    <View>
+                      <ThemedText variant="title" style={{ color: colors.successText, fontWeight: '700' }}>
+                        PhilHealth GAMOT Benefit
+                      </ThemedText>
+                      <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                        Outpatient Drug Package (Circular 2026-0012)
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <Badge tone="success" label="₱20,000.00 / yr" size="sm" />
+                </View>
+
+                <View
+                  style={[
+                    styles.gamotStatsRow,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderRadius: radii.md,
+                      paddingVertical: spacing.sm,
+                      paddingHorizontal: spacing.sm,
+                    },
+                  ]}
+                >
+                  <View style={styles.gamotStatItem}>
+                    <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
+                      ANNUAL CEILING
                     </ThemedText>
-                    <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
-                      Outpatient Drug Package (Circular 2026-0012)
+                    <ThemedText variant="bodyBold" style={{ color: colors.text }}>
+                      ₱20,000.00
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.gamotStatDivider, { backgroundColor: colors.borderLight }]} />
+                  <View style={styles.gamotStatItem}>
+                    <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
+                      CLAIMED
+                    </ThemedText>
+                    <ThemedText variant="bodyBold" style={{ color: colors.primary }}>
+                      ₱{totalGamotClaimed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.gamotStatDivider, { backgroundColor: colors.borderLight }]} />
+                  <View style={styles.gamotStatItem}>
+                    <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
+                      AVAILABLE
+                    </ThemedText>
+                    <ThemedText variant="bodyBold" style={{ color: colors.successText }}>
+                      ₱{Math.max(0, 20000 - totalGamotClaimed).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </ThemedText>
                   </View>
                 </View>
-                <Badge tone="success" label="₱20,000.00 / yr" size="sm" />
               </View>
 
               <View
                 style={[
-                  styles.gamotStatsRow,
+                  styles.headerBanner,
                   {
-                    backgroundColor: colors.surfaceSubtle,
-                    borderRadius: radii.md,
-                    paddingVertical: spacing.sm,
-                    paddingHorizontal: spacing.sm,
+                    backgroundColor: colors.primaryLight,
+                    borderColor: colors.primaryBorder,
+                    borderRadius: radii.lg,
+                    padding: spacing.md,
+                    gap: spacing.xs,
                   },
                 ]}
               >
-                <View style={styles.gamotStatItem}>
-                  <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
-                    ANNUAL CEILING
-                  </ThemedText>
-                  <ThemedText variant="bodyBold" style={{ color: colors.text }}>
-                    ₱20,000.00
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <AppIcon name="pill" color={colors.primary} size={20} />
+                  <ThemedText variant="title" style={{ color: colors.primaryText, fontWeight: '700' }}>
+                    Dual-Path Electronic Prescriptions
                   </ThemedText>
                 </View>
-                <View style={[styles.gamotStatDivider, { backgroundColor: colors.borderLight }]} />
-                <View style={styles.gamotStatItem}>
-                  <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
-                    CLAIMED
-                  </ThemedText>
-                  <ThemedText variant="bodyBold" style={{ color: colors.primary }}>
-                    ₱{totalGamotClaimed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </ThemedText>
-                </View>
-                <View style={[styles.gamotStatDivider, { backgroundColor: colors.borderLight }]} />
-                <View style={styles.gamotStatItem}>
-                  <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
-                    AVAILABLE
-                  </ThemedText>
-                  <ThemedText variant="bodyBold" style={{ color: colors.successText }}>
-                    ₱{Math.max(0, 20000 - totalGamotClaimed).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </ThemedText>
-                </View>
-              </View>
-            </View>
-
-            <View
-              style={[
-                styles.headerBanner,
-                {
-                  backgroundColor: colors.primaryLight,
-                  borderColor: colors.primaryBorder,
-                  borderRadius: radii.lg,
-                  padding: spacing.md,
-                  gap: spacing.xs,
-                },
-              ]}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <AppIcon name="pill" color={colors.primary} size={20} />
-                <ThemedText variant="title" style={{ color: colors.primaryText, fontWeight: '700' }}>
-                  Dual-Path Electronic Prescriptions
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
+                  Your official Philippine e-Prescriptions (RA 6675 compliant). Pick up at Clinic EZ partner pharmacies (Path A) or present the digital QR slip at Mercury Drug, Watsons, or Rose Pharmacy (Path B).
                 </ThemedText>
               </View>
-              <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
-                Your official Philippine e-Prescriptions (RA 6675 compliant). Pick up at Clinic EZ partner pharmacies (Path A) or present the digital QR slip at Mercury Drug, Watsons, or Rose Pharmacy (Path B).
-              </ThemedText>
             </View>
-          </View>
-        }
-        ListEmptyComponent={<ProfileSectionHeader title="" description="No prescriptions recorded yet." />}
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon="pill"
+              title="No Prescriptions"
+              message="No active or past electronic prescriptions found for this profile."
+            />
+          }
         renderItem={({ item }) => {
           const receipt = attachedReceipts[item.id];
           const isDispensed = item.dispenseStatus === 'Dispensed';
@@ -381,7 +344,7 @@ export default function PrescriptionsScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                     <AppIcon name="shield" size={14} color={colors.successText} />
                     <ThemedText variant="caption" style={{ color: colors.successText, fontWeight: '700' }}>
-                      PhilHealth GAMOT (₱{(item.gamotCoverageAmount ?? 450).toFixed(2)} Covered)
+                      PhilHealth GAMOT ({item.gamotCoverageAmount != null ? `₱${item.gamotCoverageAmount.toFixed(2)} Covered` : 'Benefit Covered'})
                     </ThemedText>
                   </View>
                   {item.philHealthDrugCode && (
@@ -400,11 +363,11 @@ export default function PrescriptionsScreen() {
                 <ProfileReadOnlyField label="Indication" value={item.indication} />
                 <ProfileReadOnlyField
                   label="Prescribing Physician"
-                  value={item.prescribingPhysician ?? 'Dr. Roberto Cruz, MD'}
+                  value={item.prescribingPhysician ?? 'Attending Physician'}
                 />
                 <ProfileReadOnlyField
                   label="Clinic Source"
-                  value={getClinicName(item.clinicId) ?? 'Metro Health Outpatient Clinic'}
+                  value={getClinicName(item.clinicId) ?? item.clinicName ?? 'Accredited Healthcare Facility'}
                 />
                 <ProfileReadOnlyField
                   label="Refills Remaining"
@@ -487,6 +450,7 @@ export default function PrescriptionsScreen() {
           );
         }}
       />
+      )}
 
       {/* View Digital E-Prescription Slip Modal */}
       <Modal visible={slipModalVisible} transparent animationType="slide">
@@ -531,24 +495,23 @@ export default function PrescriptionsScreen() {
                   Rx
                 </ThemedText>
                 <ThemedText variant="title" style={{ color: colors.text, textAlign: 'center', fontWeight: '700' }}>
-                  METRO HEALTH OUTPATIENT CLINIC
+                  {selectedRx?.clinicName || getClinicName(selectedRx?.clinicId) || 'Accredited Medical Facility'}
                 </ThemedText>
-                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 2 }}>
-                  Unit 201 Medical Arts Bldg, San Pedro, Laguna
-                </ThemedText>
-                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
-                  Tel: (02) 8123-4567 • DOH License: 04-2026-0012
-                </ThemedText>
+                {selectedRx?.clinicAddress ? (
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 2 }}>
+                    {selectedRx.clinicAddress}
+                  </ThemedText>
+                ) : null}
                 <View style={[styles.divider, { backgroundColor: colors.borderLight, marginVertical: spacing.sm }]} />
                 <View style={styles.rxNumberRow}>
                   <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
                     Rx No:{' '}
                     <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
-                      {selectedRx?.prescriptionNumber || 'RX-20260930-0081'}
+                      {selectedRx?.prescriptionNumber || 'Pending'}
                     </ThemedText>
                   </ThemedText>
                   <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '500' }}>
-                    Date: {selectedRx?.startDate || '2026-09-30'}
+                    Date: {selectedRx?.startDate || '—'}
                   </ThemedText>
                 </View>
               </View>
@@ -570,13 +533,10 @@ export default function PrescriptionsScreen() {
                   Prescribing Physician
                 </ThemedText>
                 <ThemedText variant="title" style={{ color: colors.text, fontWeight: '700' }}>
-                  {selectedRx?.prescribingPhysician || 'Dr. Roberto Cruz, MD'}
+                  {selectedRx?.prescribingPhysician || 'Attending Physician'}
                 </ThemedText>
                 <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
-                  Internal Medicine • PRC License No. 0149281
-                </ThemedText>
-                <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
-                  PTR No. 8921043 • S2 License: S2-9482014
+                  {selectedRx?.physicianSpecialty || 'Licensed Medical Practitioner'}
                 </ThemedText>
               </View>
 
@@ -671,7 +631,7 @@ export default function PrescriptionsScreen() {
                       PhilHealth Drug Code:
                     </ThemedText>
                     <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '700' }}>
-                      {selectedRx.philHealthDrugCode || 'PHIL-AMLO-5MG-001'}
+                      {selectedRx.philHealthDrugCode || '—'}
                     </ThemedText>
                   </View>
 
@@ -680,7 +640,7 @@ export default function PrescriptionsScreen() {
                       Covered Amount:
                     </ThemedText>
                     <ThemedText variant="caption" style={{ color: colors.successText, fontWeight: '700' }}>
-                      ₱{(selectedRx.gamotCoverageAmount ?? 450).toFixed(2)}
+                      {selectedRx.gamotCoverageAmount != null ? `₱${selectedRx.gamotCoverageAmount.toFixed(2)}` : 'Benefit Covered'}
                     </ThemedText>
                   </View>
 
@@ -709,7 +669,7 @@ export default function PrescriptionsScreen() {
                           fontWeight: '700',
                         }}
                       >
-                        {selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142'}
+                        {selectedRx.uniquePrescriptionSecurityCode || selectedRx.id}
                       </ThemedText>
                       <Pressable
                         style={[
@@ -722,7 +682,7 @@ export default function PrescriptionsScreen() {
                           },
                         ]}
                         onPress={() =>
-                          copyUpscToken(selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142')
+                          copyUpscToken(selectedRx.uniquePrescriptionSecurityCode || selectedRx.id)
                         }
                       >
                         <AppIcon name="copy" color={colors.onPrimary} size={14} />
@@ -741,31 +701,23 @@ export default function PrescriptionsScreen() {
                         backgroundColor: colors.card,
                         borderColor: colors.border,
                         borderRadius: radii.md,
-                        padding: spacing.sm,
+                        padding: spacing.md,
                         gap: spacing.sm,
+                        alignItems: 'center',
                       },
                     ]}
                   >
-                    <View
-                      style={[
-                        styles.qrGraphic,
-                        {
-                          backgroundColor: colors.primary,
-                          borderRadius: radii.md,
-                        },
-                      ]}
-                    >
-                      <AppIcon name="shield" size={24} color={colors.onPrimary} />
-                      <ThemedText variant="caption" style={{ color: colors.onPrimary, marginTop: 2, fontWeight: '700' }}>
-                        UPSC QR
-                      </ThemedText>
-                    </View>
-                    <View style={{ flex: 1, gap: 2 }}>
+                    <QrCodeView
+                      value={`PHILHEALTH:YAKAP:UPSC:${selectedRx.uniquePrescriptionSecurityCode || selectedRx.id}`}
+                      size={140}
+                      accessibilityLabel="PhilHealth UPSC QR code"
+                    />
+                    <View style={{ width: '100%', gap: 2, alignItems: 'center' }}>
                       <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
                         PhilHealth UPSC QR Payload:
                       </ThemedText>
-                      <ThemedText variant="caption" style={{ color: colors.text, fontFamily: 'monospace' }}>
-                        PHILHEALTH:YAKAP:UPSC:{selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142'}
+                      <ThemedText variant="caption" style={{ color: colors.text, fontFamily: 'monospace', textAlign: 'center' }}>
+                        PHILHEALTH:YAKAP:UPSC:{selectedRx.uniquePrescriptionSecurityCode || selectedRx.id}
                       </ThemedText>
                     </View>
                   </View>
@@ -792,7 +744,7 @@ export default function PrescriptionsScreen() {
                   Present this QR code or link to external drugstores (Mercury Drug, Watsons, Rose Pharmacy). The pharmacist can verify authenticity on the Clinic EZ public portal.
                 </ThemedText>
 
-                {/* QR Code Graphic Placeholder */}
+                {/* QR Code Graphic Card */}
                 <View
                   style={[
                     styles.qrCodeCard,
@@ -800,32 +752,24 @@ export default function PrescriptionsScreen() {
                       backgroundColor: colors.card,
                       borderColor: colors.border,
                       borderRadius: radii.md,
-                      padding: spacing.sm,
+                      padding: spacing.md,
                       gap: spacing.sm,
                       marginTop: spacing.xs,
+                      alignItems: 'center',
                     },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.qrGraphic,
-                      {
-                        backgroundColor: colors.text,
-                        borderRadius: radii.md,
-                      },
-                    ]}
-                  >
-                    <AppIcon name="qrCode" size={24} color={colors.card} />
-                    <ThemedText variant="caption" style={{ color: colors.card, marginTop: 2, fontWeight: '700' }}>
-                      VERIFIED QR
-                    </ThemedText>
-                  </View>
-                  <View style={{ flex: 1, gap: 4 }}>
+                  <QrCodeView
+                    value={`CLINICEZ:RX:${selectedRx?.prescriptionNumber || selectedRx?.id || ''}:${selectedRx?.verificationToken || ''}`}
+                    size={140}
+                    accessibilityLabel="External pharmacy verification QR code"
+                  />
+                  <View style={{ width: '100%', gap: 4 }}>
                     <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
                       Encrypted QR Payload:
                     </ThemedText>
                     <ThemedText variant="caption" style={{ color: colors.text, fontFamily: 'monospace' }}>
-                      CLINICEZ:RX:{selectedRx?.prescriptionNumber || 'RX-20260930-0081'}:{selectedRx?.verificationToken || 'rx-tok-98124a9c8b7e'}
+                      CLINICEZ:RX:{selectedRx?.prescriptionNumber || selectedRx?.id || '—'}:{selectedRx?.verificationToken || '—'}
                     </ThemedText>
                     <Pressable
                       style={[
@@ -840,7 +784,7 @@ export default function PrescriptionsScreen() {
                           gap: 4,
                         },
                       ]}
-                      onPress={() => copyVerificationLink(selectedRx?.verificationToken || 'rx-tok-98124a9c8b7e')}
+                      onPress={() => copyVerificationLink(selectedRx?.verificationToken || '')}
                     >
                       <AppIcon name="copy" color={colors.primary} size={14} />
                       <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>

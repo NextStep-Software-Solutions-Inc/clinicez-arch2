@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ScrollView } from 'react-native';
+import Constants from 'expo-constants';
 import { storage as SecureStore } from '../../../utils/storage';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
 import { useAppTheme } from '../../../contexts/ThemeContext';
@@ -167,6 +168,54 @@ export default function DebugSettingsScreen() {
         width: '100%',
       }}
     >
+      <SettingsSection
+        title="Build & Environment"
+        footer="Active runtime environment, git branch, and isolated SQLite database."
+      >
+        <SettingsRow
+          title="Environment / Variant"
+          right={{
+            type: 'value',
+            label: String(
+              Constants.expoConfig?.extra?.appVariant ??
+                (Constants.expoConfig?.extra?.isProduction ? 'production' : 'development')
+            ),
+          }}
+        />
+        <SettingsRow
+          title="Git Branch"
+          right={{
+            type: 'value',
+            label: String(Constants.expoConfig?.extra?.appBranch || 'main'),
+          }}
+        />
+        <SettingsRow
+          title="Release Channel"
+          right={{
+            type: 'value',
+            label: String(Constants.expoConfig?.extra?.channel ?? 'production'),
+          }}
+        />
+        <SettingsRow
+          title="Package / Bundle ID"
+          right={{
+            type: 'value',
+            label: String(
+              Constants.expoConfig?.ios?.bundleIdentifier ??
+                Constants.expoConfig?.android?.package ??
+                'com.nextstepsoftware.clinicez.patient'
+            ),
+          }}
+        />
+        <SettingsRow
+          title="Database Name"
+          right={{
+            type: 'value',
+            label: String(Constants.expoConfig?.extra?.sqliteDbName ?? 'Clinic EZ_patient.db'),
+          }}
+        />
+      </SettingsSection>
+
       <SettingsSection
         title="Onboarding"
         footer="Toggle off to reset onboarding. The app will immediately navigate to the Welcome screen."
