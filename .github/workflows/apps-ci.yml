@@ -91,14 +91,23 @@ jobs:
       - name: Test portal web
         run: bun run test:portal
 
+      - name: Test admin web
+        run: bun run test:admin
+
       - name: Clinic app token and host/catalog gates
         run: bun run lint:clinic
 
       - name: Lint portal web
         run: bun run lint:portal
 
+      - name: Lint admin web
+        run: bun run lint:admin
+
       - name: Build portal web
         run: bun run build:portal
+
+      - name: Build admin web
+        run: bun run build:admin
 
       - name: Build patient web
         run: bun run build:patient-web

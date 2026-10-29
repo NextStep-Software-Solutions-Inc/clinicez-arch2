@@ -31,16 +31,16 @@ if ($portalApiFiles.Count -gt 0 -or $gitApiFiles.Count -gt 0) {
     exit 1
 }
 
-# 2. Assert exactly 0 occurrences of CLINIC_API_URL or ClinicApiUrl in apps/portal-web (excluding tests), services/portal-api, and services/patient-api
-$clinicApiHits = & git grep --untracked -n -I -i -E 'CLINIC_API_URL|ClinicApiUrl' -- 'apps/portal-web' 'services/portal-api' 'services/patient-api' ':(exclude)apps/portal-web/tests/**' 2>$null
+# 2. Assert exactly 0 occurrences of CLINIC_API_URL or ClinicApiUrl in apps/portal-web, apps/admin-web (excluding tests), services/portal-api, and services/patient-api
+$clinicApiHits = & git grep --untracked -n -I -i -E 'CLINIC_API_URL|ClinicApiUrl' -- 'apps/portal-web' 'apps/admin-web' 'services/portal-api' 'services/patient-api' ':(exclude)apps/portal-web/tests/**' ':(exclude)apps/admin-web/tests/**' 2>$null
 if ($LASTEXITCODE -eq 0 -and $clinicApiHits) {
-    Write-Host 'Forbidden Clinic API URL references found in apps/portal-web, services/portal-api, or services/patient-api:' -ForegroundColor Red
+    Write-Host 'Forbidden Clinic API URL references found in apps/portal-web, apps/admin-web, services/portal-api, or services/patient-api:' -ForegroundColor Red
     $clinicApiHits | ForEach-Object { Write-Host "  $_" }
     exit 1
 }
 
 # 2b. Assert exactly 0 occurrences of SERVICES_CLINIC_API_URL across repo (outside tests)
-$servicesClinicHits = & git grep --untracked -n -I -i 'SERVICES_CLINIC_API_URL' -- 'deploy' 'docs' '.github/workflows' 'services' 'apps' ':(exclude)apps/portal-web/tests/**' 2>$null
+$servicesClinicHits = & git grep --untracked -n -I -i 'SERVICES_CLINIC_API_URL' -- 'deploy' 'docs' '.github/workflows' 'services' 'apps' ':(exclude)apps/portal-web/tests/**' ':(exclude)apps/admin-web/tests/**' 2>$null
 if ($LASTEXITCODE -eq 0 -and $servicesClinicHits) {
     Write-Host 'Stale SERVICES_CLINIC_API_URL references found (expected zero):' -ForegroundColor Red
     $servicesClinicHits | ForEach-Object { Write-Host "  $_" }

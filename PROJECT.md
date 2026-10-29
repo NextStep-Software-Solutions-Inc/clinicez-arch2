@@ -1,159 +1,78 @@
-# Project: Clinic Analytics and Statutory Reports Hardening
+# Project: ClinicEZ Platform Administration Panel Migration & Governance Workstation Restyle
 
 ## Architecture
-- **Layer 1: Shared Platform Standards (`packages/shared-dotnet`)**:
-  - `TenantPrintoutConfig` with `TaxIdentificationNumber` and branding metadata.
-  - `TenantLetterheadComponent` and `DocumentFooterComponent` with legal disclaimers, page numbering (`Page X of Y`), and cryptographic stamps.
-  - Standardized Signatory Layout System (`ClinicianSignatoryComponent`, `DualSignatoryComponent`, `DocumentLayoutExtensions`, `DocumentSpacingConstants`): Enforces `.ShowEntire().ExtendVertical().AlignBottom()` with a guaranteed 20pt buffer (12pt signatory bottom padding + 8pt footer top padding) ensuring signatures and verification seals never touch or kiss the footer divider line across all current and future PDF documents.
-  - `IDocumentSecurityService` (HMAC-SHA256 canonical digest `SEC-SHA256-{hex}`) and `IQrCodeService` (PNG byte matrix).
-- **Layer 2: Clinic Backend Data & Query Engine (`services/clinic-api/ClinicEz.Clinic.Application` & `Infrastructure`)**:
-  - Elimination of all mock fallbacks (dummy doctors, hardcoded diagnoses, static wait/consult times, fictitious invoices, hardcoded clinic names).
-  - Server-side EF Core database aggregations (`SumAsync`, `CountAsync`, `GroupBy` projections) across reports.
-  - `ApplicationDbContext.cs` composite temporal indexes on `(TenantId, ClinicId, Date)` for `ConsultationEncounters`, `PaymentRecords`, `ClinicalProcedures`, `ClinicLabOrders`, and `QueueItems`, plus query filter on `PaymentRecord`.
-  - `ClinicSettings` integration: dynamic retrieval of clinic metadata (`ClinicName`, `DefaultConsultationFee`, `DefaultDoctorSharePercentage`).
-  - QuestPDF vector report generation in `ClinicDocumentPdfService.cs` implementing `IClinicDocumentPdfService`.
-  - Dedicated REST streaming endpoints in `ReportsController.cs` (`GET /api/v1/reports/{reportType}/pdf`).
-- **Layer 3: Workstation Frontend & Interactive Charting (`apps/clinic-app`)**:
-  - Pure vector SVG chart components in `apps/clinic-app/components/analytics/` (`TrendLineChart`, `WorkloadBarChart`, `TenderDonutChart`, `MorbidityDistributionChart`) using `react-native-svg` and `@clinicez/design-tokens`.
-  - 4 core UI/UX states (Skeleton loader, Empty state with CTA, Error state with retry, Active data).
-  - Interactive hover/touch tooltips, filter toggles, responsive scaling (<768px, 768-1023px, >=1024px), and Philippine Peso `₱` currency formatting.
-  - `Dashboard.screen.tsx` modernization: removal of `maxWidth: theme.sizes.contentMaxWidth` on desktop, rich analytics layout, and complete replacement of raw monospace `<pre>` print modal with official QuestPDF vector streaming.
-- **Layer 4: Dual Track Verification & Quality Gates**:
-  - Parallel E2E Testing Track producing opaque-box requirement-driven test suite (Tiers 1-4) published via `TEST_READY.md`.
-  - Final Milestone Phase 1 (100% E2E test pass) and Phase 2 (Adversarial coverage hardening).
-  - Strict compliance with `bun run lint:tokens` (0 violations) and `bun run lint:hosts` (0 violations).
-
----
+- Standalone SPA `@clinicez/admin-web` located in `apps/admin-web` running on Vite + React 19 + TanStack Router + Tailwind CSS v4 and `@clerk/clerk-react` (local dev port 3001, production `admin.{domain}`).
+- Backend API: `services/portal-api` ASP.NET Core 9 Minimal APIs hosting 42 `/api/v1/admin/*` endpoints and 2 public password reset endpoints.
+- Design System: `@clinicez/design-tokens` with strict CSS variable tokens (`lightColors` Teal `#0D6963` / `darkColors` Teal `#34C3A6` on deep Slate `#0A1020`/`#0F172A`). Zero hardcoded hex literals in TSX.
+- Zero Legacy Shims: All routes use clean root paths (`/`, `/tenants`, `/plans`, `/users`, etc.). No `/admin/*` prefix in `apps/admin-web`, and all `/admin/*` files completely deleted from `apps/portal-web`.
+- Zero Database Changes: Completely stateless backend configuration and URL generation updates. 0 migrations, 0 entity changes.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Remove Analytics Mock Wait/Consult Durations | Eliminate fallback 14.5m wait / 18.0m consult; return genuine 0.0 | M1 | Survey |
-| 2 | Remove Analytics Mock Diagnoses | Eliminate hardcoded I10/J06.9/E11.9 fallback list in `GetClinicAnalyticsQuery` | M1 | Survey |
-| 3 | Remove Morbidity Mock Diseases & Demographics | Eliminate 35yo male default and hardcoded DOH top 5 diseases in `GetMorbidityReportQuery` | M1 | Survey |
-| 4 | Remove Hardcoded Clinic Name | Retrieve clinic name from `ClinicSettings` instead of hardcoded string | M1 | Survey |
-| 5 | Remove Tax Discount Mock Invoices | Eliminate fake Maria Santos / Antonio Reyes mock invoices in `GetTaxDiscountAuditReportQuery` | M1 | Survey |
-| 6 | Remove Doctor Shares Mock Doctors & Hardcoded Fee | Eliminate dummy doctors (Dr. Cruz/Reyes/Santos) and hardcoded ₱500 fee | M1 | Survey |
-| 7 | Add DefaultDoctorSharePercentage to ClinicSettings | Configurable physician share percentage (default 70%) in `ClinicSettings` | M1 | Survey |
-| 8 | Server-Side EF Core Aggregations for Daily EOD | Refactor unpaged `ToListAsync` to DB `GroupBy`, `SumAsync`, `CountAsync` projections | M1 | Survey |
-| 9 | Server-Side EF Core Aggregations for Analytics | Refactor flow telemetry, revenue trend, tender shares, top services to DB | M1 | Survey |
-| 10 | Server-Side EF Core Aggregations for Morbidity | Database-level projection and aggregation of ICD-10 diagnoses | M1 | Survey |
-| 11 | Server-Side EF Core Aggregations for Tax Discounts | Direct projection to `TaxDiscountAuditRowDto` with DB sums | M1 | Survey |
-| 12 | Server-Side EF Core Aggregations for Doctor Shares | Server-side grouped queries for encounters, procedures, and doctor revenue | M1 | Survey |
-| 13 | Composite Temporal Indexes in ApplicationDbContext | Add `(TenantId, ClinicId, Date)` indexes on Encounters, Payments, Procedures, LabOrders, Queue | M1 | Survey |
-| 14 | PaymentRecord Global Query Filter | Enforce multi-tenant `!e.IsDeleted && e.ClinicId == CurrentClinicId` on `PaymentRecord` | M1 | Survey |
-| 15 | Backend Empty-Dataset Test Suite | Automated unit tests asserting genuine zeroes and empty lists on empty date ranges | M1 | Survey |
-| 16 | TenantPrintoutConfig TIN Support | Add `TaxIdentificationNumber` to `TenantPrintoutConfig` and `TenantLetterheadComponent` | M2 | Survey |
-| 17 | IClinicDocumentPdfService Reports Extension | Interface method contracts for all 5 operational and statutory reports | M2 | Survey |
-| 18 | Daily EOD Reconciliation QuestPDF Builder | Multi-section vector PDF with census, financial summary, tender breakdown, sign-off | M2 | Survey |
-| 19 | DOH Outpatient Morbidity QuestPDF Builder | Multi-page statutory disease report with age/sex cohorts and Repeating Header | M2 | Survey |
-| 20 | BIR Tax & Discount Audit QuestPDF Builder | Multi-page statutory audit report with Senior/PWD discounts, VAT exempt sales, OR tracking | M2 | Survey |
-| 21 | Doctor Shares Settlement QuestPDF Builder | Multi-page physician fees and facility retention settlement report | M2 | Survey |
-| 22 | Executive Clinic Analytics QuestPDF Builder | Comprehensive analytics report with KPI telemetry, trends, tenders, top services | M2 | Survey |
-| 23 | Cryptographic Tamper Seal & Security Digest | Canonical HMAC-SHA256 hash (`SEC-SHA256-`) stamped in statutory footers | M2 | Survey |
-| 24 | Embedded QR Verification Code | Generated PNG QR matrix linking to document verification URL | M2 | Survey |
-| 25 | ReportsController 5 Streaming PDF Endpoints | `GET /api/v1/reports/{reportType}/pdf` streaming vector PDF with `[HasPermission]` | M2 | Survey |
-| 26 | Backend QuestPDF Generation Tests | Unit tests verifying valid PDF byte generation and empty-dataset handling | M2 | Survey |
-| 27 | TrendLineChart SVG Component | Interactive line chart with revenue/visits toggle, hover/touch tooltips, 4 states | M3 | Survey |
-| 28 | WorkloadBarChart SVG Component | Interactive bar chart with encounters/revenue toggle, rounded bars, tooltips, 4 states | M3 | Survey |
-| 29 | TenderDonutChart SVG Component | Interactive donut chart with semantic token colors, center cutout KPI, 4 states | M3 | Survey |
-| 30 | MorbidityDistributionChart SVG Component | Ranked horizontal bars with demographic age sub-bars, filter toggles, 4 states | M3 | Survey |
-| 31 | Pure SVG & Zero External Chart Library | Implement all charts purely with `react-native-svg` and `@clinicez/design-tokens` | M3 | Survey |
-| 32 | Design Token Audit Compliance | Strict `@clinicez/design-tokens` compliance (`bun run lint:tokens` 0 violations) | M3 | Survey |
-| 33 | Network Isolation Audit Compliance | Strict LAN isolation (`bun run lint:hosts` 0 violations) | M3 | Survey |
-| 34 | Chart Components Unit Tests | Comprehensive component unit tests covering all 4 states, scaling, and math edge cases | M3 | Survey |
-| 35 | Full-Width Desktop Workstation Layout | Remove `maxWidth: theme.sizes.contentMaxWidth` constraint in `Dashboard.screen.tsx` | M4 | Survey |
-| 36 | Analytics Tab Charting Integration | Embed `TrendLineChart`, `TenderDonutChart`, `MorbidityDistributionChart`, `WorkloadBarChart` | M4 | Survey |
-| 37 | Frontend PDF Streaming URL Helpers | Add client helpers in `clinicService.ts` for all 5 report PDF endpoints | M4 | Survey |
-| 38 | Elimination of Legacy Monospace Print Dialog | Remove raw ASCII text generator and `<pre>` modal in `Dashboard.screen.tsx` | M4 | Survey |
-| 39 | 1-Click Vector PDF Export & Print | Integrate `openDocument(url)` with authenticated blob streaming in Reports and Analytics tabs | M4 | Survey |
-| 40 | Dashboard Analytics Integration Tests | Automated tests in `apps/clinic-app/tests/` for analytics charts and PDF export triggers | M4 | Survey |
-| 41 | E2E Test Suite (Tiers 1-4) Pass | 100% pass of requirement-driven opaque-box E2E test suite from `TEST_READY.md` | M5 | Survey |
-| 42 | Tier 5 Adversarial Coverage Hardening | Adversarial stress testing via Challenger -> Worker -> Reviewer loop | M5 | Survey |
-
----
+| 1 | Stateless `AdminBaseUrl` Provider | `IFrontendUrlProvider.GetAdminBaseUrl()` resolving from `AdminBaseUrl` config, falling back to origin/domain | M1 | Survey BE |
+| 2 | Clean Root Path Email & DTO URLs | Admin invitation emails, `AdminUserDto.InviteUrl`, password reset links, and pending self-invites emit `{AdminBaseUrl}/invitations/{token}` and `{AdminBaseUrl}/reset-password/{token}` | M1 | Survey BE |
+| 3 | RBAC on Newsletter Subscribers | Secure `GET /api/v1/admin/newsletter-subscribers` requiring `manage:blogs` or `view:tenants` | M1 | Survey BE |
+| 4 | Clerk Authorized Parties Update | Add `*.localhost` and `*.lvh.me` to `appsettings.Development.json` `Clerk:AuthorizedParties` for local port 3001 AZP validation | M1 | Survey BE |
+| 5 | Docker Compose & Env Config | Forward `AdminBaseUrl` and `Cors__AllowedOrigins` in `deploy/portal-api/docker-compose.yml` and `.env.example` | M1 | Survey BE |
+| 6 | Zero DB Migration Invariant | Confirm 0 database migrations, 0 entity schema changes in `services/portal-api` | M1 | Survey BE |
+| 7 | Standalone `apps/admin-web` Scaffold | Vite + React 19 + TanStack Router + Tailwind CSS v4 + `@clerk/clerk-react` project structure | M2 | Survey FE |
+| 8 | Edge Security Headers & Robots | Strict CSP (`frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `X-Robots-Tag`, `robots.txt Disallow: /` | M2 | Survey BE/FE |
+| 9 | 15-Min Cross-Tab Idle Session Guard | Multi-tab idle tracking (`admin_last_active_at`), 60s warning countdown modal, Clerk `signOut()` on timeout | M2 | Survey BE/FE |
+| 10 | Configurable Admin MFA Gate | `VITE_ADMIN_REQUIRE_MFA` gate enforcing Clerk 2FA/TOTP before workstation access | M2 | Survey BE/FE |
+| 11 | Headless Boot Diagnostic Screen | `<ClerkConfigDiagnosticScreen>` rendered when `VITE_CLERK_PUBLISHABLE_KEY` is missing in CI/smoke environments | M2 | Survey FE |
+| 12 | Clean Root Routing Tree | TanStack Router setup with `/`, `/tenants`, `/tenants/$slug`, `/plans`, `/leads`, `/blog`, `/subscribers`, `/roles`, `/users`, `/settings`, `/invitations/$token`, `/sign-in`, `/sign-up`, `/sync-auth`, `/reset-password/$token` | M2 | Survey FE |
+| 13 | Cross-Surface Origin Resolvers | `getTenantWorkspaceUrl` and `getPublicSiteUrl` directing to `{slug}.{domain}` / `localhost:3000` | M2 | Survey FE |
+| 14 | Governance Workstation Shell & Command Bar | Collapsible sidebar, sticky command bar with `⌘K` palette, environment badge (`LOCAL`/`DEV`/`PROD`), session/MFA indicator, theme toggle | M3 | Survey FE |
+| 15 | Design System Strict Compliance | Token-driven styling via `@clinicez/design-tokens`, 0 hardcoded `#hex` literals, 4-state UX, responsive parity | M3 | Survey FE |
+| 16 | Upgraded Governance Dashboard (`/`) | Semantic KPI cards, Registration Velocity chart with `7d`/`14d`/`30d` toggles using CSS variables, operational activity, quick actions | M3 | Survey FE |
+| 17 | Tenants Registry & Workstation | Search, filters, subscription toggle, cleanup trigger, telemetry overrides, entitlements | M3 | Survey FE |
+| 18 | Operational Governance Dialogs | `PlanEditorDialog` (14 limits, 10 flags, async slug check), `RecordPaymentDialog` (5 methods, VAT calc, receipt), `TenantCleanupDialog` (preflight, archive/purge), `TenantEntitlementsCard` | M3 | Survey FE |
+| 19 | Plans, Leads, Blog & Subscribers CRM | Commercial plan ladder, leads table, Markdown blog editor, subscriber directory with browser CSV export | M3 | Survey FE |
+| 20 | Roles, Admin Accounts & Password Reset | RBAC role editor, admin invite modal, self-action guards (`isSelfAdminUser`, `getAdminUserActionRestriction`), 3-mode password resets, suspend/reactivate | M3 | Survey FE |
+| 21 | Platform Settings & N-Bank Builder | 6 setting categories, N-bank JSON CRUD builder, BIR VAT, online checkout switch, orphan purge policies | M3 | Survey FE |
+| 22 | Invitation Accept & Reset Public Routes | Public token acceptance with role display and Clerk sign-in/up integration, password reset client | M3 | Survey FE |
+| 23 | Clean Deletion of Admin in `portal-web` | Complete removal of 27 admin files (21 routes, 4 dialogs, `admin.service.ts`, `permissions.ts`) with zero legacy shims | M4 | Survey Test |
+| 24 | Shared Touchpoint Decoupling | Decouple `billing.service.ts`, `selfActionGuard.ts`, `invitationCookie.ts`, `sync-auth/page.tsx`, `proxy.ts` (retain `'admin'` in `RESERVED_SUBDOMAINS`), `nav-user.tsx`, `join.ts` | M4 | Survey Test |
+| 25 | Monorepo Orchestration Scripts | Wire `apps/admin-web` into `package.json` (`dev:admin`, `lint:admin`, `typecheck:admin`, `test:admin`, `build:admin`, `typecheck:all`), `check-no-broker.ps1`, `.github/workflows/apps-ci.yml`, and deploy workflows | M4 | Survey Test |
+| 26 | Test Suite Migration & Decoupling | Migrate 5 pure admin test suites to `apps/admin-web/tests/`, decouple 7 shared test suites in `apps/portal-web/tests/` | M4 | Survey Test |
+| 27 | 100% E2E Test Suite Pass (Tiers 1-4) | Pass all functional, boundary, cross-feature, and real-world application test cases published in `TEST_READY.md` | M5 | Survey Test |
+| 28 | Adversarial Coverage Hardening (Tier 5) | White-box stress testing, AST token linting, edge security verification, and Forensic Audit verification | M5 | Survey Test |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Backend Database Aggregations, Indexing & Mock Elimination | `services/clinic-api` queries, `ApplicationDbContext.cs`, `ClinicSettings`, unit tests | none | DONE |
-| M2 | Enterprise QuestPDF Vector PDF Document Builders & Streaming Endpoints | `packages/shared-dotnet`, `services/clinic-api` infrastructure & controller, PDF tests | M1 | DONE |
-| M3 | Interactive SVG Charting Components & Design Token Hardening | `apps/clinic-app/components/analytics/`, tests, token & host linting | none | DONE |
-| M4 | Workstation Dashboard Modernization & PDF Streaming Integration | `apps/clinic-app` `Dashboard.screen.tsx`, `clinicService.ts`, integration tests | M2, M3 | DONE |
-| M5 | Final Milestone: 100% E2E Test Pass & Adversarial Hardening | Full stack verification (Tiers 1-4 pass + Tier 5 adversarial stress testing) | M1, M2, M3, M4 | DONE |
-
----
+| M1 | Backend Stateless Hardening & URL Resolution | `services/portal-api` `AdminBaseUrl` provider, clean root paths in email/invites/resets, newsletter RBAC, Clerk AZP dev parties, docker-compose/env, zero DB changes | none | DONE |
+| M2 | Standalone `apps/admin-web` Scaffold, Security & Routing | Vite + React 19 + TanStack Router + Tailwind v4 scaffold, security headers, idle timeout, MFA gate, diagnostic screen, clean root routes, cross-surface URLs | none | DONE |
+| M3 | Governance Workstation UI/UX Restyle & Governance Modules | Workstation shell, command bar (`⌘K`), design token restyle, upgraded `/` dashboard, all governance pages & operational dialogs, 4-state UX | M2 | DONE |
+| M4 | Monorepo Decoupling, Removal & Build Orchestration | Delete 27 admin files from `portal-web`, decouple shared utilities, wire root scripts/workflows, migrate pure admin test suites | M1, M2, M3 | DONE |
+| M5 | Final Milestone: 100% E2E Pass & Adversarial Hardening | Pass 100% of E2E test suite (Tiers 1-4 from `TEST_READY.md`), Phase 2 Tier 5 Adversarial Coverage Hardening & Forensic Audit | M4, E2E Track | DONE |
 
 ## Interface Contracts
 
-### 1. Backend Report DTOs & Query Endpoints (`services/clinic-api`)
-- `GetDailyEodReportQuery(DateTime? Date)` -> `DailyEodReportDto`
-- `GetClinicAnalyticsQuery(DateTime? StartDate, DateTime? EndDate)` -> `ClinicAnalyticsDto`
-- `GetMorbidityReportQuery(DateTime? StartDate, DateTime? EndDate)` -> `MorbidityReportDto`
-- `GetTaxDiscountAuditReportQuery(DateTime? StartDate, DateTime? EndDate)` -> `TaxDiscountAuditReportDto`
-- `GetDoctorSharesReportQuery(DateTime? StartDate, DateTime? EndDate)` -> `DoctorSharesReportDto`
+### Backend `services/portal-api` ↔ Frontend `apps/admin-web`
+- Base URL config: `AdminBaseUrl` (e.g. `http://localhost:3001` in dev, `https://admin.clinicez.com` in prod).
+- Clean root invitation path: `{AdminBaseUrl}/invitations/{token}`.
+- Clean root password reset path: `{AdminBaseUrl}/reset-password/{token}`.
+- API endpoints: 42 `/api/v1/admin/*` endpoints and 2 `/api/v1/public/password-reset/{token}` endpoints accepting `Authorization: Bearer <ClerkJWT>`.
+- Newsletter subscribers endpoint: `GET /api/v1/admin/newsletter-subscribers` strictly requires admin profile with `manage:blogs` or `view:tenants`.
 
-### 2. PDF Generator Interface (`ClinicEz.Clinic.Application.Common.Interfaces`)
-- `IClinicDocumentPdfService`:
-  - `byte[] GenerateDailyEodReportPdf(DailyEodReportDto report, ClinicSettings settings, string? preparedByName = null)`
-  - `byte[] GenerateMorbidityReportPdf(MorbidityReportDto report, ClinicSettings settings, string? preparedByName = null)`
-  - `byte[] GenerateTaxDiscountAuditReportPdf(TaxDiscountAuditReportDto report, ClinicSettings settings, string? preparedByName = null)`
-  - `byte[] GenerateDoctorSharesReportPdf(DoctorSharesReportDto report, ClinicSettings settings, string? preparedByName = null)`
-  - `byte[] GenerateClinicAnalyticsPdf(ClinicAnalyticsDto analytics, ClinicSettings settings, string? preparedByName = null)`
-
-### 3. REST Streaming PDF Endpoints (`GET /api/v1/reports/...`)
-- `GET /api/v1/reports/daily-eod/pdf?date={yyyy-MM-dd}` -> `application/pdf`
-- `GET /api/v1/reports/morbidity/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
-- `GET /api/v1/reports/tax-discounts/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
-- `GET /api/v1/reports/doctor-shares/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
-- `GET /api/v1/reports/analytics/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
-
-### 4. Frontend SVG Chart Components (`apps/clinic-app/components/analytics/`)
-- `TrendLineChart`: `{ data: DailyTrendPoint[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
-- `WorkloadBarChart`: `{ data: DoctorStat[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
-- `TenderDonutChart`: `{ data: TenderShare[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
-- `MorbidityDistributionChart`: `{ data: MorbidityItem[] | MorbidityDiseaseRow[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
-
----
+### Frontend `apps/admin-web` ↔ Multi-Tenant Portal `apps/portal-web`
+- Cross-surface links:
+  - `getTenantWorkspaceUrl(slug, path)` -> `{slug}.{baseDomain}{path}` or `http://localhost:3000/{slug}{path}`.
+  - `getPublicSiteUrl(path)` -> `{baseDomain}{path}` or `http://localhost:3000{path}`.
+- Shared domain: `clinicez.com` (prod) or `localhost` (dev).
+- Reserved subdomain: `'admin'` remains reserved in `RESERVED_SUBDOMAINS` on `apps/portal-web/src/proxy.ts`.
 
 ## Code Layout
-- `packages/shared-dotnet/`
-  - `Documents/Configuration/TenantPrintoutConfig.cs` (Add `TaxIdentificationNumber`)
-  - `Documents/Components/TenantLetterheadComponent.cs` (Display TIN)
-  - `Documents/Components/DocumentFooterComponent.cs`
-  - `Documents/Security/DocumentSecurityService.cs`
-  - `Documents/Security/QrCodeService.cs`
-- `services/clinic-api/ClinicEz.Clinic.Domain/`
-  - `Entities/ClinicSettings.cs` (Add `DefaultDoctorSharePercentage`)
-- `services/clinic-api/ClinicEz.Clinic.Application/`
-  - `Features/Settings/DTOs/ClinicSettingsDto.cs`
-  - `Features/Settings/Commands/UpdateClinicSettingsCommand.cs`
-  - `Features/Reports/Queries/GetDailyEodReportQuery.cs`
-  - `Features/Reports/Queries/GetClinicAnalyticsQuery.cs`
-  - `Features/Reports/Queries/GetMorbidityReportQuery.cs`
-  - `Features/Reports/Queries/GetTaxDiscountAuditReportQuery.cs`
-  - `Features/Reports/Queries/GetDoctorSharesReportQuery.cs`
-  - `Common/Interfaces/IClinicDocumentPdfService.cs`
-- `services/clinic-api/ClinicEz.Clinic.Infrastructure/`
-  - `Persistence/ApplicationDbContext.cs` (Composite temporal indexes & query filter)
-  - `Services/ClinicDocumentPdfService.cs` (QuestPDF report builders)
-- `services/clinic-api/ClinicEz.Clinic.Api/`
-  - `Controllers/ReportsController.cs` (5 `/pdf` streaming endpoints)
-- `services/clinic-api/ClinicEz.Clinic.Application.Tests/`
-  - `ReportsAndAnalyticsTests.cs` (Add empty-dataset tests)
-  - `HardenedDocumentGenerationTests.cs` (Add QuestPDF report tests)
-- `apps/clinic-app/`
-  - `components/analytics/`
-    - `TrendLineChart.tsx`
-    - `WorkloadBarChart.tsx`
-    - `TenderDonutChart.tsx`
-    - `MorbidityDistributionChart.tsx`
-    - `index.ts`
-  - `navigation/screens/Dashboard.screen.tsx`
-  - `services/clinicService.ts`
-  - `services/documentOpener.ts`
-  - `tests/analyticsCharts.test.ts`
-  - `tests/dashboardAnalyticsIntegration.test.ts`
-- `tests/e2e/` (Derived and managed by E2E Testing Track)
-  - `TEST_INFRA.md`
-  - `TEST_READY.md`
+- `apps/admin-web/`:
+  - `src/main.tsx`: Entrypoint with diagnostic boot screen fallback.
+  - `src/routes/`: TanStack Router file-based tree with clean root paths (`__root.tsx`, `_auth.tsx`, `index.tsx`, `tenants/`, `plans.tsx`, `leads.tsx`, `blog.tsx`, `subscribers.tsx`, `roles.tsx`, `users.tsx`, `settings.tsx`, `invitations/$token.tsx`, `reset-password/$token.tsx`, `sign-in.tsx`, `sign-up.tsx`, `sync-auth.tsx`).
+  - `src/components/`: Governance workstation shell, command bar, KPI cards, velocity chart, `PlanEditorDialog`, `RecordPaymentDialog`, `TenantCleanupDialog`, `TenantEntitlementsCard`, 4-state primitives.
+  - `src/lib/`: Cross-surface `urls.ts`, `selfActionGuard.ts`, `api.ts`, `idleGuard.ts`, `mfaGuard.ts`.
+  - `src/services/admin.service.ts`: Axios client for all 42 `/api/v1/admin/*` endpoints.
+  - `tests/`: Migrated and new test suites.
+  - `vercel.json`: Edge security headers (`CSP`, `X-Frame-Options: DENY`, `X-Robots-Tag: noindex...`).
+  - `public/robots.txt`: `Disallow: /`.
+- `apps/portal-web/`: Cleanly purged of all 27 admin files, decoupled `billing.service.ts`, `selfActionGuard.ts`, `invitationCookie.ts`, `sync-auth/page.tsx`, `proxy.ts`, `nav-user.tsx`.
+- `services/portal-api/`: `FrontendUrlProvider.cs`, `AdminInvitationNotifier.cs`, `AdminUserDto.cs`, `ResetAdminUserPasswordCommand.cs`, `GetPendingSelfInvitationQuery.cs`, `NewsletterEndpoints.cs`, `appsettings.Development.json`.

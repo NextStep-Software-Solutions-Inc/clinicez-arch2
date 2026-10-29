@@ -107,27 +107,7 @@ describe("Challenger M2-2: Boundary & Cross-Feature Integration Testing", () => 
       expect(staffServiceCalled).toBe(false);
     });
 
-    test("Priority 1 wins: Admin cookie routes to /admin/invitations/[token] and never invokes tenantService", async () => {
-      mockCookieValues[PENDING_INVITATION_COOKIE_NAME] = serializePendingInvitation({
-        type: "admin",
-        token: "tok_priority_1_admin",
-      });
 
-      let tenantServiceCalled = false;
-      tenantService.getTenantByOwner = mock(async () => {
-        tenantServiceCalled = true;
-        return {
-          tenantSlug: "owned-clinic-should-not-reach",
-          name: "Existing Owned Clinic",
-          tenantType: "Workplace",
-        } as any;
-      });
-
-      const dest = await runSyncAuth();
-
-      expect(dest).toBe("/admin/invitations/tok_priority_1_admin");
-      expect(tenantServiceCalled).toBe(false);
-    });
 
     test("Priority 1 URL-encodes special characters in cookie token", async () => {
       mockCookieValues[PENDING_INVITATION_COOKIE_NAME] = serializePendingInvitation({
@@ -237,7 +217,7 @@ describe("Challenger M2-2: Boundary & Cross-Feature Integration Testing", () => 
   // Challenge 4: Boundary Cases in Pending Self-Invite Response Formats
   // =========================================================================
   describe("Challenge 4: Edge Cases in Backend Self-Invite Response Formats", () => {
-    test("Routes to /admin/invitations/ when invitationType is 'admin' (case-insensitive)", async () => {
+    test("Routes to external admin URL when invitationType is 'admin' (case-insensitive)", async () => {
       tenantService.getTenantByOwner = mock(async () => null);
 
       staffService.getPendingSelfInvitation = mock(async () => ({
@@ -245,14 +225,14 @@ describe("Challenger M2-2: Boundary & Cross-Feature Integration Testing", () => 
         token: "tok_admin_case_check",
         role: "Platform Administrator",
         email: "admin@clinicez.ph",
-        redirectUrl: "/admin/invitations/tok_admin_case_check",
+        redirectUrl: "https://admin.clinicez.com/invitations/tok_admin_case_check",
       }));
 
       const dest = await runSyncAuth();
-      expect(dest).toBe("/admin/invitations/tok_admin_case_check");
+      expect(dest).toBe("https://admin.clinicez.com/invitations/tok_admin_case_check");
     });
 
-    test("Routes to /admin/invitations/ when redirectUrl starts with /admin/invitations/ even if invitationType is null", async () => {
+    test("Routes to external admin URL when redirectUrl starts with http even if invitationType is null", async () => {
       tenantService.getTenantByOwner = mock(async () => null);
 
       staffService.getPendingSelfInvitation = mock(async () => ({
@@ -260,11 +240,11 @@ describe("Challenger M2-2: Boundary & Cross-Feature Integration Testing", () => 
         token: "tok_admin_redirect_url_check",
         role: "Platform Admin",
         email: "admin@clinicez.ph",
-        redirectUrl: "/admin/invitations/tok_admin_redirect_url_check",
+        redirectUrl: "https://admin.clinicez.com/invitations/tok_admin_redirect_url_check",
       }));
 
       const dest = await runSyncAuth();
-      expect(dest).toBe("/admin/invitations/tok_admin_redirect_url_check");
+      expect(dest).toBe("https://admin.clinicez.com/invitations/tok_admin_redirect_url_check");
     });
 
     test("URL-encodes token with special characters from pending self-invite", async () => {

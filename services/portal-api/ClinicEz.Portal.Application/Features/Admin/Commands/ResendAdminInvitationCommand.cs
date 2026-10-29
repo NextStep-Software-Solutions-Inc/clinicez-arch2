@@ -59,7 +59,7 @@ public class ResendAdminInvitationCommandHandler(
 
         invitationNotifier.RequestInvitation(user, user.Role?.Name ?? "Admin", request.CurrentUser);
 
-        var baseUrl = frontendUrlProvider.GetBaseUrl();
+        var baseUrl = frontendUrlProvider.GetAdminBaseUrl() ?? frontendUrlProvider.GetBaseUrl();
         return AdminUserMapping.ToDto(user, timeProvider, baseUrl);
     }
 }

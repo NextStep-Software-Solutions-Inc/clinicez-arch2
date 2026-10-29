@@ -47,7 +47,7 @@ export function getSubscriptionPlansHref(
   const raw = Array.isArray(tenant) ? tenant[0] : tenant
   const slug = typeof raw === "string" ? raw.trim() : ""
   if (!slug) {
-    return "/admin/plans"
+    return "/pricing"
   }
   return `/${encodeURIComponent(slug)}/dashboard/billing?tab=plans`
 }

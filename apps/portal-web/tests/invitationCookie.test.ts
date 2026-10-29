@@ -23,15 +23,15 @@ describe("Pending Invitation Cookie Utility (invitationCookie.ts)", () => {
       });
     });
 
-    test("serializes valid admin payload and trims whitespace in token", () => {
+    test("serializes valid workspace payload and trims whitespace in token", () => {
       const payload: PendingInvitationCookiePayload = {
-        type: "admin",
-        token: "  tok_admin_67890  ",
+        type: "workspace",
+        token: "  tok_workspace_67890  ",
       };
       const serialized = serializePendingInvitation(payload);
       expect(JSON.parse(serialized)).toEqual({
-        type: "admin",
-        token: "tok_admin_67890",
+        type: "workspace",
+        token: "tok_workspace_67890",
       });
     });
   });
@@ -44,9 +44,9 @@ describe("Pending Invitation Cookie Utility (invitationCookie.ts)", () => {
     });
 
     test("parses URI-encoded JSON string", () => {
-      const raw = encodeURIComponent(JSON.stringify({ type: "admin", token: "admin-token-xyz" }));
+      const raw = encodeURIComponent(JSON.stringify({ type: "workspace", token: "workspace-token-xyz" }));
       const parsed = parsePendingInvitation(raw);
-      expect(parsed).toEqual({ type: "admin", token: "admin-token-xyz" });
+      expect(parsed).toEqual({ type: "workspace", token: "workspace-token-xyz" });
     });
 
     test("returns null for null, undefined, or empty/whitespace string", () => {
@@ -61,7 +61,8 @@ describe("Pending Invitation Cookie Utility (invitationCookie.ts)", () => {
       expect(parsePendingInvitation("{type: workspace, token:}")).toBeNull();
     });
 
-    test("returns null for unsupported type values", () => {
+    test("returns null for unsupported type values including admin", () => {
+      expect(parsePendingInvitation(JSON.stringify({ type: "admin", token: "abc" }))).toBeNull();
       expect(parsePendingInvitation(JSON.stringify({ type: "superadmin", token: "abc" }))).toBeNull();
       expect(parsePendingInvitation(JSON.stringify({ type: "member", token: "abc" }))).toBeNull();
       expect(parsePendingInvitation(JSON.stringify({ type: 123, token: "abc" }))).toBeNull();
@@ -71,7 +72,7 @@ describe("Pending Invitation Cookie Utility (invitationCookie.ts)", () => {
       expect(parsePendingInvitation(JSON.stringify({ type: "workspace" }))).toBeNull();
       expect(parsePendingInvitation(JSON.stringify({ type: "workspace", token: "" }))).toBeNull();
       expect(parsePendingInvitation(JSON.stringify({ type: "workspace", token: "   " }))).toBeNull();
-      expect(parsePendingInvitation(JSON.stringify({ type: "admin", token: null }))).toBeNull();
+      expect(parsePendingInvitation(JSON.stringify({ type: "workspace", token: null }))).toBeNull();
     });
 
     test("returns trimmed token when valid token has surrounding whitespace", () => {

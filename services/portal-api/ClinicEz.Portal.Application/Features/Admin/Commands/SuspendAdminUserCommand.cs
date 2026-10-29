@@ -39,7 +39,7 @@ public class SuspendAdminUserCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        var baseUrl = frontendUrlProvider.GetBaseUrl();
+        var baseUrl = frontendUrlProvider.GetAdminBaseUrl() ?? frontendUrlProvider.GetBaseUrl();
         return AdminUserMapping.ToDto(user, timeProvider, baseUrl);
     }
 }

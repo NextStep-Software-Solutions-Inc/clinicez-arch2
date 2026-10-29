@@ -1,60 +1,98 @@
-# Sentinel Handoff — Final Completion & Victory Audit Sign-Off
+# Sentinel Completion Handoff Report: ClinicEZ Platform Administration Panel Migration
+
+**Date**: 2026-10-28T23:25:00Z  
+**Role**: Project Sentinel  
+**Working Directory**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/sentinel`  
+**Verdict**: **VICTORY CONFIRMED**
+
+---
 
 ## 1. Observation
-- Received user request to rework user and staff invitations across all three operational tiers of Clinic EZ:
-  1. **Platform Users** (`services/portal-api`, `apps/portal-web`): Platform admins, support staff, content writers; 256-bit CSPRNG token with 7-day TTL; "Send Invitation Email" (enqueuing `notification.email.requested` via `portal-api`) vs "Copy Link Only"; public accept page `/admin/invitations/[token]`; Clerk identity linking and redirect to `/admin`.
-  2. **Tenant Workspace Team** (`services/portal-api`, `apps/portal-web`): Workspace admins, billers, viewers; platform email sender (not Clerk); public accept page `/invitations/[token]`; Clerk metadata sync and redirect to `/{tenantSlug}/dashboard/overview`.
-  3. **Clinic Staff** (`services/clinic-api`, `apps/clinic-app`): Clinical practitioners (Doctors, Nurses, Receptionists, Cashiers); emails published to Interop Hub addressed to Portal rendering `clinic.staff.invitation` pointing to the clinic domain `https://{clinicDomain}/invitations/{token}`; public accept page in `apps/clinic-app` (`clinic-web`); facility workstation password setup, complexity validation matching `IFacilityPasswordHasher`, and facility-local JWT access/refresh token issuance.
-  4. **Standardized Status Tracking**: `AdminUserStatus`, `MemberStatus`, `StaffAccountStatus` strictly 4 persisted members `{ Invited, Active, Suspended, Revoked }`; dynamic `Expired` resolution when `Status == Invited && ExpirationDate < UtcNow`; lifecycle audit timestamps (`CreatedAt`, `CreatedBy`, `InvitationExpiresAt`, `JoinedAt`/`InviteAcceptedAt`); unified action menus across all domains.
-- User request recorded verbatim in `/Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-21T03:40:35Z`.
-- Routed execution to General Path (`teamwork_preview_orchestrator`). Dispatched Project Orchestrator `81eae908-dfae-4fd3-b659-5f657de02e8c` with dedicated workspace `.agents/teamwork/orchestrator_invitations`.
-- Maintained active background monitoring via Progress Reporting Cron (`task-34`) and Liveness Check Cron (`task-36`).
-- Orchestrator directed execution across 5 milestones with dual-track E2E test authoring, peer reviews, adversarial challenges, and forensic auditing:
-  - **Milestone 1 (Platform Users & Admin Invitations)**: `AdminUser.cs`, `AdminUserStatus.cs`, `AcceptAdminInvitationCommand.cs`, `GetAdminInvitationDetailsQuery.cs`, `AdminEndpoints.cs`, `admin/invitations/[token]` public page, proxy middleware whitelisting, layout bypass, 100% tests passing, clean audit.
-  - **Milestone 2 (Tenant Workspace Team Invitations)**: `WorkspaceMember.cs` (`MemberStatus`), `ResendStaffInvitationCommand.cs` with suspended/revoked guards, `EntitlementGuard.cs` seat limit enforcement, `/invitations/[token]` public page with revoked/expired/suspended cards, 100% tests passing, clean audit.
-  - **Milestone 3 (Clinic Staff Invites & Facility Auth)**: `StaffAccountStatus.cs` (4 members), `StaffMember.cs`, EF Core migration `20261021065618_AddStaffMemberInvitationTracking.cs`, production utilities (`utils/staffStatus.ts`, `utils/passwordValidation.ts`, `utils/staffManagement.ts`), `InvitationAcceptScreen.tsx` on clinic domain with PBKDF2/argon2id password hashing and local JWT token issuance, Interop Hub notification email routing (`clinic.staff.invitation`), 100% tests passing, clean audit.
-  - **Milestone 4 (Standardized Status, Dynamic Expiration, and Audit Timestamps)**: Cross-domain parity across all 3 domains; strictly 4 persisted status enum members; dynamic non-persisted `Expired` state; audit timestamps (`CreatedAt`, `CreatedBy`, `InvitationExpiresAt`, `JoinedAt`/`InviteAcceptedAt`); AST-verified UI wiring of action matrix into `StaffManagementTab.tsx`; deterministic test synchronization via `TaskCompletionSource<bool>`.
-  - **Milestone 5 (100% E2E Test Suite & Adversarial Hardening)**: Dual-track E2E test catalog `TEST_INFRA.md` and verification readiness manifest `TEST_READY.md` covering all 51 features across Tiers 1-4; 87 new Tier 5 white-box adversarial stress tests verifying 256-bit CSPRNG token entropy (7.9992 bits/byte), race conditions, seat quota limits, and instant session invalidation.
-- Upon orchestrator completion claim, Sentinel intercepted the claim and spawned an independent post-victory auditor (`teamwork_preview_victory_auditor`, conversation ID: `b75a8f3f-2b96-42bc-a3d4-d2cbcb89b896`) with zero shared context from the implementation swarm.
-- Independent auditor completed a strict 3-phase audit and reported:
-  - **Phase A (Timeline & Provenance)**: PASS (Anomalies: none; authentic multi-agent progression and migrations).
-  - **Phase B (Integrity & Anti-Cheating Forensics)**: PASS (Strictly 4 persisted enum members, dynamic Expired resolution, 256-bit CSPRNG tokens with 7-day TTL, Interop Hub email routing with zero Clerk calls, facility password hashing via `IFacilityPasswordHasher` and local JWT issuance, 0 test facades or vacuous assertions, 0 design token violations).
-  - **Phase C (Independent Test Execution)**: 100% match.
-    - `dotnet test services/portal-api/ClinicEz.Portal.Tests/`: 904 passed, 0 failed
-    - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/`: 3,335 passed, 0 failed
-    - `cd apps/portal-web && bun test`: 580 passed, 0 failed across 36 files
-    - `cd apps/clinic-app && bun test`: 3,580 passed, 0 failed across 168 files
-    - `dotnet build CLINICEZ.sln`: 0 warnings, 0 errors
-    - `tsc --noEmit` across `apps/portal-web` and `apps/clinic-app`: 0 errors
-    - `bun apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 violations in 0 files
-    - **Total Monorepo Tests Passed**: **8,399 passed, 0 failed (100% pass rate)**.
-  - **Final Verdict**: **`VICTORY CONFIRMED`**.
-- Mandatory cleanup completed: all crons cancelled via `manage_task(action="kill")` and all subagents terminated via `manage_subagents(action="kill_all")`.
+
+1. **Authoritative Request Execution**:
+   - Recorded user request verbatim in `.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-28T21:03:22Z`.
+   - Evaluated task routing: Routed to General path (`teamwork_preview_orchestrator`).
+   - Dispatched `orchestrator_admin_migration` (`b107e165-4772-4937-83b0-dd48a3b509e1`), which coordinated an implementation hierarchy across 5 milestones, 3 survey explorers, 4 workers, 2 reviewers, 2 challengers, and 1 internal auditor.
+
+2. **Standalone Frontend Application (`apps/admin-web`)**:
+   - Built standalone Single-Page Application using Vite 6 + React 19 + TanStack Router + Tailwind CSS v4 + `@clerk/clerk-react` served on local port 3001 (production `admin.{domain}`).
+   - Serves 17 clean root routes (`/`, `/tenants`, `/tenants/$slug`, `/plans`, `/leads`, `/blog`, `/subscribers`, `/roles`, `/users`, `/settings`, `/invitations/$token`, `/reset-password/$token`, `/sign-in`, `/sign-up`, `/sync-auth`) with strictly ZERO `/admin/*` prefix or legacy backward-compatibility shims.
+   - Built `<ClerkConfigDiagnosticScreen>` in `src/main.tsx` providing headless boot resilience when `VITE_CLERK_PUBLISHABLE_KEY` is missing in CI/smoke environments.
+   - Preserves 100% of admin capabilities, RBAC gating, 4 operational dialogs (`PlanEditorDialog`, `RecordPaymentDialog`, `TenantCleanupDialog`, `TenantEntitlementsCard`), self-action guards, CSV export, N-bank JSON builder, and 3-mode password reset flows across all 42 `/api/v1/admin/*` endpoints.
+   - URL resolvers (`getTenantWorkspaceUrl`, `getPublicSiteUrl`) cleanly route tenant workspace actions to `localhost:3000/{slug}/dashboard` / `{slug}.{domain}` and public blog links to `localhost:3000` / `{domain}`.
+
+3. **Governance Workstation UI/UX Restyle (`clinicez-ui-ux-expert`)**:
+   - Restyled shell (`_auth.tsx`), command bar, navigation, and modules strictly per `clinicez-ui-ux-expert` and `@clinicez/design-tokens` (light Teal `#0D6963` / dark Teal `#34C3A6` on Slate `#0A1020`/`#0F172A`).
+   - Zero hardcoded `#hex` color literals and zero direct `palette.ts` imports verified across all 26 UI files via AST token linting (`bun run lint:admin`).
+   - High-density Governance Workstation shell featuring collapsible grouped sidebar, sticky command bar with `CommandPalette.tsx` (`⌘K`), dynamic environment badge (`LOCAL`/`DEV`/`PROD`), and session/MFA status indicator.
+   - Overview Dashboard (`/`) upgraded with 4 KPI metric cards and Registration Velocity chart with `7d`/`14d`/`30d` window toggles consuming CSS variables.
+   - Enforced explicit 4-state UX (Skeleton, Empty with CTA, Error with Retry, Active) across all 9 governance workstations and responsive parity across desktop (>=1024px), tablet (768-1023px), and mobile (<768px).
+
+4. **Exclusive Admin Security Hardening**:
+   - Configured edge HTTP security headers in `apps/admin-web/vercel.json` (strict `Content-Security-Policy` with `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`).
+   - Configured `apps/admin-web/public/robots.txt` (`Disallow: /`).
+   - Implemented 15-minute cross-tab `AdminIdleSessionGuard` with 60-second countdown warning modal, cross-tab BroadcastChannel activity sync, and future timestamp clamping.
+   - Implemented configurable `AdminMfaGate` enforcing Clerk 2FA/TOTP verification before workstation access.
+
+5. **Stateless `portal-api` Updates (Zero Database Changes Invariant)**:
+   - Added `AdminBaseUrl` resolution via `IFrontendUrlProvider.GetAdminBaseUrl()` in `services/portal-api`.
+   - Clean root URLs (`{AdminBaseUrl}/invitations/{token}` and `{AdminBaseUrl}/reset-password/{token}`) emitted across `AdminInvitationNotifier.cs`, `AdminUserDto.cs`, `ResetAdminUserPasswordCommand.cs`, and `GetPendingSelfInvitationQuery.cs`.
+   - Enforced Admin RBAC (`manage:blogs` or `view:tenants`) on `GET /api/v1/admin/newsletter-subscribers`.
+   - Updated `appsettings.Development.json` `Clerk:AuthorizedParties` with `*.localhost` and `*.lvh.me`.
+   - Configured `AdminBaseUrl` and `Cors__AllowedOrigins` in `deploy/portal-api/docker-compose.yml` and `.env.example`.
+   - **Strictly zero database, entity, or EF Core migration modifications** (0 files in Migrations).
+
+6. **Clean-Cut Removal of Admin from `apps/portal-web` & Monorepo Tooling**:
+   - Completely deleted all 27 legacy admin routes, components, services, and permission constants from `apps/portal-web` with zero `/admin/*` redirect shims.
+   - Retained `'admin'` in `RESERVED_SUBDOMAINS` in `apps/portal-web/src/proxy.ts`.
+   - Cleanly decoupled `billing.service.ts`, `selfActionGuard.ts`, `invitationCookie.ts`, `sync-auth/page.tsx`, `proxy.ts`, `nav-user.tsx`, and `join.ts`.
+   - Root `package.json` scripts (`dev:admin`, `lint:admin`, `typecheck:admin`, `test:admin`, `build:admin`, `typecheck:all`), `scripts/check-no-broker.ps1`, `apps-ci.yml`, and `deploy-admin-web-{dev,prod}.yml` fully wired and operational.
+
+7. **Independent Post-Victory Audit Results**:
+   - Victory Auditor (`2985f7fb-511d-4e09-87d0-1a9e7857f159`) conducted independent 3-phase audit and rendered:
+     **VERDICT: VICTORY CONFIRMED**
+   - Verification suite executions:
+     - `dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj`: 1350 passed, 0 failed.
+     - `dotnet test services/portal-api/ClinicEz.Portal.Api.Tests/ClinicEz.Portal.Api.Tests.csproj`: 18 passed, 0 failed.
+     - `bun run test:tokens`: 27 passed, 0 failed.
+     - `bun run typecheck:all`: 0 errors across all 7 workspaces.
+     - `bun run lint:admin`: 0 errors (0 hex colors across 26 UI files).
+     - `bun run typecheck:admin`: 0 errors.
+     - `bun run test:admin`: 463 passed, 0 failed across 31 files.
+     - `bun run build:admin`: Vite production build passed (14.7s).
+     - `bun run lint:portal`: 0 errors.
+     - `bun run test:portal`: 1168 passed, 0 failed across 58 files.
+     - `bun run build:portal`: Next.js 16 build passed with 0 admin routes.
+     - Live Dev-Server Smoke Test: `http://localhost:3001/` (200), `http://localhost:3001/sign-in` (200), `http://localhost:3000/admin` (404), clean termination.
+
+---
 
 ## 2. Logic Chain
-1. *Tri-Tier Operational Architecture*: Platform users, workspace administrators, and clinical staff operate across distinct security domains. Platform and workspace accounts reside on the portal domain and authenticate against Clerk with platform-level privileges, while clinical staff operate on dedicated clinic subdomains (`https://{clinicDomain}`) requiring local workstation authentication via PBKDF2/argon2id password hashing and facility-scoped JWT access and refresh tokens.
-2. *Standardized 4-State Lifecycle*: To eliminate architectural dissonance, all three domains strictly persist exactly 4 enum members (`Invited`, `Active`, `Suspended`, `Revoked`). The `Expired` state is a temporal condition derived dynamically at runtime (`Status == Invited && ExpirationDate < UtcNow`). Persisting `Expired` in the database would lead to stale state whenever system clocks drift or cron batch updates fail.
-3. *Cryptographic Token Security*: All invitation links leverage cryptographically secure 256-bit random tokens (64-character hex strings generated via `RandomNumberGenerator.GetBytes(32)`) with a strict 7-day TTL (`UtcNow.AddDays(7)`). When an invitation is resent or revoked, the existing token is regenerated or invalidated to prevent replay attacks.
-4. *Platform Email Routing Integrity*: In compliance with architectural privacy and vendor isolation requirements, invitation emails never invoke Clerk's email dispatch APIs. Instead, `services/clinic-api` and `services/portal-api` publish `notification.email.requested` messages to the Clinic EZ Interop Hub, which are consumed by the platform notification service to dispatch templated emails (`clinic.staff.invitation`) pointing to the appropriate clinic domain.
-5. *Authentic Production Utilities and Wiring*: Component action menus and security guards in `apps/clinic-app` (`StaffManagementTab.tsx`, `AuthGate.tsx`) and `apps/portal-web` (`TeamManagementClient.tsx`, `src/proxy.ts`) directly import and execute canonical production utilities (`staffStatus.ts`, `passwordValidation.ts`, `staffManagement.ts`), with AST verification ensuring that action menus are fully wired to enforce the unified action matrix.
+
+1. **Routing and Delegation**: The Sentinel assessed the incoming request and routed to General (`teamwork_preview_orchestrator`) because of the multi-app scope, backend API modifications, test migration, and UI/UX restyle.
+2. **Sentinel Oversight**: Two background crons were scheduled immediately upon dispatch (Progress Reporting `*/8 * * * *`, task-29; Liveness Check `*/10 * * * *`, task-31) to continuously verify heartbeat freshness and relay milestone updates to the user.
+3. **Mandatory Audit Gate**: When the Project Orchestrator claimed completion with unanimous internal gate approvals (`GATE_STATUS.md`), the Sentinel enforced the mandatory blocking audit rule and dispatched `teamwork_preview_victory_auditor` (`2985f7fb-511d-4e09-87d0-1a9e7857f159`) with zero shared context.
+4. **Clean Shutdown**: Upon receiving `VICTORY CONFIRMED`, both background monitoring tasks (`task-29`, `task-31`) were killed, and all subagents were terminated via `manage_subagents(action="kill_all")`.
+
+---
 
 ## 3. Caveats
-- Applying the EF Core migrations in staging and production environments requires executing `dotnet ef database update` for both `ClinicEz.Portal.Infrastructure` (`AddAdminUserInvitationTracking`) and `ClinicEz.Clinic.Infrastructure` (`AddStaffMemberInvitationTracking`).
-- Public invitation accept routes (`/admin/invitations/[token]`, `/invitations/[token]`, and `/invitations/:token`) are explicitly whitelisted in middleware and auth gates to permit unauthenticated initial access while requiring appropriate authentication upon acceptance submission.
+
+- **Clerk Authentication in Local Dev**: In local development without live Clerk publishable keys, `apps/admin-web` renders the `<ClerkConfigDiagnosticScreen>` by design. Provide a valid `VITE_CLERK_PUBLISHABLE_KEY` in `.env.local` to connect to a live Clerk instance.
+- **Port Allocation**: Local development defaults `apps/admin-web` to port `3001` and `apps/portal-web` to port `3000`. Cross-surface navigation between tenant portals and governance workstations relies on this port convention in local dev.
+
+---
 
 ## 4. Conclusion
-The Unified User & Staff Invitations Rework across all three operational tiers (Platform Users, Tenant Workspace Team, and Clinic Staff) is **100% implemented, verified, adversarially hardened, independently audited, and confirmed production-ready**.
+
+The ClinicEZ Platform Administration Panel migration and Governance Workstation restyle is 100% complete with zero functional regression, zero legacy redirect shims, zero hardcoded design token literals, and strictly zero database modifications. All acceptance criteria and verification gates have passed with independent verification.
+
+---
 
 ## 5. Verification Method
-- Independent Victory Auditor Report: `/Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_invitations/handoff.md` (`VICTORY CONFIRMED`)
-- Master Test Readiness Manifest: `/Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_READY.md`
-- Master Test Infrastructure Catalog: `/Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_INFRA.md`
-- Monorepo Solution Build: `dotnet build CLINICEZ.sln` -> 0 warnings, 0 errors
-- Backend Tests:
-  * `dotnet test services/portal-api/ClinicEz.Portal.Tests/` -> 904 passed, 0 failed
-  * `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/` -> 3,335 passed, 0 failed
-- Frontend Tests:
-  * `cd apps/portal-web && bun test` -> 580 passed, 0 failed
-  * `cd apps/clinic-app && bun test` -> 3,580 passed, 0 failed
-- TypeScript Verification: `bun run typecheck` across both apps -> 0 errors
-- Design Token Guard: `bun apps/clinic-app/scripts/check-tokens.mjs --strict` -> 0 violations
+
+- Backend Test Suite: `dotnet test services/portal-api/ClinicEz.Portal.Tests/ClinicEz.Portal.Tests.csproj`
+- Frontend Test Suites: `bun run test:admin` (463 tests) and `bun run test:portal` (1,168 tests)
+- Design Tokens & Monorepo Gates: `bun run test:tokens`, `bun run lint:admin`, `bun run typecheck:all`
+- Build Verification: `bun run build:admin` and `bun run build:portal`
+- Live Dev Smoke Test: `node apps/admin-web/scripts/smoke-test-live.mjs`

@@ -25,15 +25,6 @@ export interface BillingPlan {
   enabledFeatures: string[]
 }
 
-export type {
-  CreateBillingPlanPayload,
-  UpdateBillingPlanPayload,
-  TenantOverridesDto,
-  UpdateTenantOverridesPayload,
-  RecordManualPaymentPayload,
-  RecordManualPaymentResult,
-} from "./admin.service"
-
 export interface PaymentReceipt {
   receiptNumber: string
   amountPaid: number

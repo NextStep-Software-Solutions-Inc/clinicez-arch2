@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using MediatR;
@@ -29,7 +30,8 @@ public record GetPendingSelfInvitationQuery(
 public class GetPendingSelfInvitationQueryHandler(
     IApplicationDbContext context,
     IClerkUserLookup clerkLookup,
-    TimeProvider timeProvider) : IRequestHandler<GetPendingSelfInvitationQuery, PendingSelfInvitationDto?>
+    TimeProvider timeProvider,
+    IFrontendUrlProvider? frontendUrlProvider = null) : IRequestHandler<GetPendingSelfInvitationQuery, PendingSelfInvitationDto?>
 {
     public async Task<PendingSelfInvitationDto?> Handle(GetPendingSelfInvitationQuery request, CancellationToken cancellationToken)
     {
@@ -125,6 +127,11 @@ public class GetPendingSelfInvitationQueryHandler(
 
         if (pendingAdmin != null)
         {
+            var adminBase = frontendUrlProvider?.GetAdminBaseUrl()?.TrimEnd('/');
+            var redirectUrl = !string.IsNullOrEmpty(adminBase)
+                ? $"{adminBase}/invitations/{pendingAdmin.InvitationToken}"
+                : $"/invitations/{pendingAdmin.InvitationToken}";
+
             return new PendingSelfInvitationDto(
                 InvitationType: "Admin",
                 Token: pendingAdmin.InvitationToken!,
@@ -133,7 +140,7 @@ public class GetPendingSelfInvitationQueryHandler(
                 Role: pendingAdmin.Role?.Name ?? "Platform Admin",
                 Email: pendingAdmin.Email,
                 ExpiresAt: pendingAdmin.InvitationExpiresAt,
-                RedirectUrl: $"/admin/invitations/{pendingAdmin.InvitationToken}"
+                RedirectUrl: redirectUrl
             );
         }
 

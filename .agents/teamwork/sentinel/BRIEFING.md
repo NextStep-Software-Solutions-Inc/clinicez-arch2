@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-21T03:40:35Z
+# BRIEFING — 2026-10-28T21:03:22Z
 
 ## Mission
-Orchestrate and monitor the comprehensive rework of user and staff invitations across all three operational tiers (Platform Users, Tenant Workspace Team, and Clinic Staff) using Clinic EZ's built-in email sender and dedicated domain accept flows.
+Extract the ClinicEZ Platform Administration Panel out of `apps/portal-web` into a standalone, security-hardened `apps/admin-web` Single-Page Application (`Vite + React 19 + TanStack Router + Tailwind CSS v4`) served on `admin.{domain}` against `services/portal-api`, and restyle its Governance Workstation shell and dashboard strictly per `.agents/skills/clinicez-ui-ux-expert/SKILL.md` and `@clinicez/design-tokens` with zero functional regression, zero legacy `/admin/*` backward-compatibility shims, and zero database changes.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -55,7 +55,11 @@ Orchestrate and monitor the comprehensive rework of user and staff invitations a
 - Active Project Orchestrator (orchestrator_invitations): 81eae908-dfae-4fd3-b659-5f657de02e8c
 - Active Crons: task-34 (Progress Reporting), task-36 (Liveness Check)
 - Victory Auditor: b75a8f3f-2b96-42bc-a3d4-d2cbcb89b896 (victory_auditor_invitations)
-
+- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_admin_migration): b107e165-4772-4937-83b0-dd48a3b509e1
+- Active Crons: task-29 (Progress Reporting), task-31 (Liveness Check)
+- Victory Auditor (victory_auditor_admin_migration): 2985f7fb-511d-4e09-87d0-1a9e7857f159
+- Cleaned up: task-29 killed, task-31 killed, all subagents killed
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -159,16 +163,29 @@ Orchestrate and monitor the comprehensive rework of user and staff invitations a
 - Dedicated accept pages on appropriate domains (Portal domain for Platform & Workspace; Clinic domain with local JWT auth for Clinic Staff)
 - Full lifecycle status tracking: Invited, Expired, Active, Suspended, Revoked
 - Automated test suites: dotnet test ClinicEz.Portal.Tests, dotnet test ClinicEz.Clinic.Application.Tests, bun test in portal-web & clinic-app
+- Route to General (`teamwork_preview_orchestrator`) for ClinicEZ Admin Panel Migration & Governance Workstation Restyle
+- Standalone apps/admin-web SPA (Vite + React 19 + TanStack Router + Tailwind CSS v4 + @clerk/clerk-react) on port 3001
+- Zero functional regression, clean root routing (no /admin/* prefix or legacy shims)
+- Governance Workstation UI/UX restyle strictly per .agents/skills/clinicez-ui-ux-expert/SKILL.md and @clinicez/design-tokens (0 raw hex values, 4-state UX, responsive)
+- Exclusive security hardening (strict edge headers in vercel.json, robots.txt Disallow /, 15-min idle auto-logout, configurable Admin MFA gate)
+- Stateless services/portal-api updates: AdminBaseUrl resolution, RBAC on newsletter subscribers, dev authorized parties, docker-compose & env configs
+- STRICTLY ZERO database changes, 0 migrations, 0 entity changes
+- Clean-cut removal of admin from apps/portal-web (0 files remaining, reserved slug preserved in proxy)
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Rework user and staff invitations across all three operational tiers of Clinic EZ (Platform Users, Tenant Workspace Team, and Clinic Staff) using Clinic EZ's built-in email sender (Interop Hub notification.email.requested -> SMTP/Resend, not Clerk), secure 7-day tokens, copy-link/send-email options, dedicated accept pages, and standardized account status tracking.
+- **Last user request**: Extract the ClinicEZ Platform Administration Panel out of `apps/portal-web` into a standalone, security-hardened `apps/admin-web` Single-Page Application (`Vite + React 19 + TanStack Router + Tailwind CSS v4`) served on `admin.{domain}` against `services/portal-api`, and restyle its Governance Workstation shell and dashboard strictly per `.agents/skills/clinicez-ui-ux-expert/SKILL.md` and `@clinicez/design-tokens` with zero functional regression, zero legacy `/admin/*` backward-compatibility shims, and zero database changes.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` under timestamp `## 2026-10-21T03:40:35Z`.
+  - Recorded request verbatim to `.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-28T21:03:22Z`.
   - Routed to General path (`teamwork_preview_orchestrator`).
-  - Spawned Project Orchestrator `orchestrator_invitations` (81eae908-dfae-4fd3-b659-5f657de02e8c).
-  - Configured crons: task-34 (Progress Reporting, `*/8 * * * *`), task-36 (Liveness Check, `*/10 * * * *`).
+  - Created working directory `.agents/teamwork/orchestrator_admin_migration`.
+  - Dispatched Project Orchestrator (b107e165-4772-4937-83b0-dd48a3b509e1).
+  - Configured Cron 1 Progress Reporting (`*/8 * * * *`, task-29) and Cron 2 Liveness Check (`*/10 * * * *`, task-31).
+  - Orchestrator reported completion across M1–M5 with unanimous GATE approval.
+  - Dispatched independent Victory Auditor (`2985f7fb-511d-4e09-87d0-1a9e7857f159`).
+  - Independent Victory Audit completed: **VERDICT: VICTORY CONFIRMED**.
+  - All background tasks and subagents cleanly terminated.
 
 ## Project Status
 - **Phase**: complete
@@ -180,14 +197,15 @@ Orchestrate and monitor the comprehensive rework of user and staff invitations a
 - **Triggered**: yes
 - **Verdict**: VICTORY CONFIRMED
 - **Retry count**: 0
-- **Auditor**: b75a8f3f-2b96-42bc-a3d4-d2cbcb89b896 (victory_auditor_invitations)
+- **Auditor**: 2985f7fb-511d-4e09-87d0-1a9e7857f159 (victory_auditor_admin_migration)
 
 ## Artifact Index
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_INFRA.md — Comprehensive 4-Tier E2E Test Infrastructure Specification
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_READY.md — 51-Feature Checklist & 100% Verification Proof across all 4 suites
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel final completion handoff
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_invitations/PROJECT.md — Master Project Plan and Feature Checklist
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_invitations/GATE_STATUS.md — Full Gate Verification Record
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_invitations/handoff.md — Independent Victory Audit Report (VICTORY CONFIRMED)
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/sentinel/handoff.md — Sentinel final completion handoff report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/PROJECT.md — Global Architecture, Inventory & Milestones
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/TEST_INFRA.md — E2E Testing Track Architecture & Methodology
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/TEST_READY.md — Authoritative E2E Test Readiness Verification
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/orchestrator_admin_migration/GATE_STATUS.md — Final Gate Verification Record
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/orchestrator_admin_migration/handoff.md — Orchestrator Hard Handoff
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/victory_auditor_admin_migration/handoff.md — Independent Victory Audit Report (VICTORY CONFIRMED)

@@ -12,7 +12,6 @@ export function isProxyPublicRoute(pathname: string): boolean {
     /^\/teleconsult(\/.*)?$/,
     /^\/verify(\/.*)?$/,
     /^\/upload(\/.*)?$/,
-    /^\/admin\/invitations(\/.*)?$/,
     /^\/invitations(\/.*)?$/,
     /^\/reset-password(\/.*)?$/,
     /^\/favicon\.ico$/,

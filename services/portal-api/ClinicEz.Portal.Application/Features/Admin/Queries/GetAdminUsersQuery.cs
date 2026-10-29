@@ -27,7 +27,7 @@ public class GetAdminUsersQueryHandler(
             .OrderByDescending(u => u.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        var baseUrl = frontendUrlProvider.GetBaseUrl();
+        var baseUrl = frontendUrlProvider.GetAdminBaseUrl() ?? frontendUrlProvider.GetBaseUrl();
 
         return users.Select(u => AdminUserMapping.ToDto(u, timeProvider, baseUrl)).ToList();
     }

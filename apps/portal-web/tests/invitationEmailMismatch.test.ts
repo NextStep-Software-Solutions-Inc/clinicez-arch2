@@ -231,33 +231,33 @@ describe("Issue #115: Invitation Email Mismatch Validation & Account Switching",
       const signOutSpy = mock(async (_opts?: { redirectUrl?: string }) => {});
 
       // Pre-existing cookie from prior anonymous visit
-      setPendingInvitationCookie({ type: "admin", token: "admin_tok_123" });
-      expect(getPendingInvitationCookie()).toEqual({ type: "admin", token: "admin_tok_123" });
+      setPendingInvitationCookie({ type: "workspace", token: "ws_tok_123" });
+      expect(getPendingInvitationCookie()).toEqual({ type: "workspace", token: "ws_tok_123" });
 
       // Landing while signed into a mismatched account clears cookie to prevent /sync-auth loop
       clearPendingInvitationCookie();
       expect(getPendingInvitationCookie()).toBeNull();
 
       // Clicking "Switch Account & Sign In" re-arms cookie and signs out back to the invitation URL
-      const token = "admin_tok_123";
-      setPendingInvitationCookie({ type: "admin", token });
-      await signOutSpy({ redirectUrl: `/admin/invitations/${encodeURIComponent(token)}` });
+      const token = "ws_tok_123";
+      setPendingInvitationCookie({ type: "workspace", token });
+      await signOutSpy({ redirectUrl: `/invitations/${encodeURIComponent(token)}` });
 
-      expect(getPendingInvitationCookie()).toEqual({ type: "admin", token: "admin_tok_123" });
+      expect(getPendingInvitationCookie()).toEqual({ type: "workspace", token: "ws_tok_123" });
       expect(signOutSpy).toHaveBeenCalledWith({
-        redirectUrl: "/admin/invitations/admin_tok_123",
+        redirectUrl: "/invitations/ws_tok_123",
       });
     });
   });
 
-  describe("Static Source Contract Audit — Workspace & Super Admin Invitation Clients", () => {
+  describe("Static Source Contract Audit — Workspace & Standalone Admin Invitation Clients", () => {
     const wsClientPath = path.resolve(
       __dirname,
       "../src/app/invitations/[token]/InvitationAcceptClient.tsx"
     );
     const adminClientPath = path.resolve(
       __dirname,
-      "../src/app/admin/invitations/[token]/AdminInvitationAcceptClient.tsx"
+      "../../admin-web/src/routes/invitations/$token.tsx"
     );
 
     test("Workspace InvitationAcceptClient enforces fail-closed email match and account switch UX", () => {
@@ -272,16 +272,16 @@ describe("Issue #115: Invitation Email Mismatch Validation & Account Switching",
       expect(source).not.toMatch(/#[0-9A-Fa-f]{6}/);
     });
 
-    test("Super Admin AdminInvitationAcceptClient enforces fail-closed email match and safe homepage escape", () => {
+    test("Standalone Admin InvitationAcceptPage enforces fail-closed email match and safe homepage escape", () => {
       const source = fs.readFileSync(adminClientPath, "utf-8");
       expect(source).toContain("isUserEmailMatched(user, invite.email)");
       expect(source).toContain("INVITATION_EMAIL_MISMATCH_MESSAGE");
       expect(source).toContain("if (!invite || !isEmailMatched) return;");
       expect(source).toContain("!isEmailMatched");
       expect(source).toContain("Account Mismatch");
-      expect(source).toContain("Switch Account &amp; Sign In");
-      expect(source).toContain("signOut({ redirectUrl: `/admin/invitations/${encodeURIComponent(trimmedToken)}` })");
-      expect(source).toContain('<Link href="/">Return to Homepage</Link>');
+      expect(source).toContain("Switch Account & Sign In");
+      expect(source).toContain("signOutFn({ redirectUrl: `/invitations/${encodeURIComponent(trimmedToken)}` })");
+      expect(source).toContain('Return to Homepage');
       expect(source).not.toContain('Return to Admin Portal');
       expect(source).not.toMatch(/#[0-9A-Fa-f]{6}/);
     });

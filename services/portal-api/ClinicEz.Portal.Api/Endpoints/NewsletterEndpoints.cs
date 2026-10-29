@@ -1,7 +1,10 @@
+using System.Security.Claims;
 using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Application.Features.Admin.Queries;
 using ClinicEz.Portal.Application.Features.Newsletter.Commands;
 using ClinicEz.Portal.Application.Features.Newsletter.Queries;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -38,8 +41,33 @@ public sealed class NewsletterEndpoints : IEndpoint
         .WithTags("Newsletter");
 
         // Admin subscriber management endpoint
-        app.MapGet("/admin/newsletter-subscribers", async (string? search, ISender sender, CancellationToken ct) =>
+        app.MapGet("/admin/newsletter-subscribers", async (
+            string? search,
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken ct) =>
         {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var email = httpContext.User.FindFirst("emails")?.Value
+                        ?? httpContext.User.FindFirst(ClaimTypes.Email)?.Value
+                        ?? httpContext.User.FindFirst("email")?.Value;
+
+            var admin = await sender.Send(new GetAdminMeQuery(clerkUserId, email), ct);
+            if (admin == null)
+            {
+                return Results.Json(new { Message = "Access denied. Not an administrative profile." }, statusCode: 403);
+            }
+
+            if (!admin.Permissions.Contains(Permissions.ManageBlogs) && !admin.Permissions.Contains(Permissions.ViewTenants))
+            {
+                return Results.Json(new { Message = "Access denied. Requires manage:blogs or view:tenants permission." }, statusCode: 403);
+            }
+
             var result = await sender.Send(new GetNewsletterSubscribersQuery(search), ct);
             return Results.Ok(result);
         })

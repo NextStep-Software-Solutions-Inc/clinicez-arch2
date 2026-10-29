@@ -122,12 +122,12 @@ describe("Issue #117 — Workspace Team Profile Menu Navigation & Clerk Billing 
       );
     });
 
-    test("falls back to /admin/plans when outside a tenant context", () => {
-      expect(getSubscriptionPlansHref(undefined)).toBe("/admin/plans");
-      expect(getSubscriptionPlansHref(null)).toBe("/admin/plans");
-      expect(getSubscriptionPlansHref("")).toBe("/admin/plans");
-      expect(getSubscriptionPlansHref("   ")).toBe("/admin/plans");
-      expect(getSubscriptionPlansHref([])).toBe("/admin/plans");
+    test("falls back to /pricing when outside a tenant context", () => {
+      expect(getSubscriptionPlansHref(undefined)).toBe("/pricing");
+      expect(getSubscriptionPlansHref(null)).toBe("/pricing");
+      expect(getSubscriptionPlansHref("")).toBe("/pricing");
+      expect(getSubscriptionPlansHref("   ")).toBe("/pricing");
+      expect(getSubscriptionPlansHref([])).toBe("/pricing");
     });
   });
 

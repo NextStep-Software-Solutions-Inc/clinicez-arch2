@@ -40,7 +40,7 @@ public static class AdminUserMapping
         {
             inviteUrl = user.InvitationToken.StartsWith("pwdreset_", StringComparison.OrdinalIgnoreCase)
                 ? $"{baseUrl.TrimEnd('/')}/reset-password/{user.InvitationToken}"
-                : $"{baseUrl.TrimEnd('/')}/admin/invitations/{user.InvitationToken}";
+                : $"{baseUrl.TrimEnd('/')}/invitations/{user.InvitationToken}";
         }
 
         return new AdminUserDto

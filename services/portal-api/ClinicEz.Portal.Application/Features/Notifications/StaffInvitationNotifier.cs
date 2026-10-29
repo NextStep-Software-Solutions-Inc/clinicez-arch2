@@ -6,12 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Portal.Application.Features.Notifications;
 
-/// <summary>Where the portal website lives, for links placed in emails (for example an invitation link).</summary>
-public interface IFrontendUrlProvider
-{
-    /// <summary>Absolute base URL without a trailing slash, or null when it cannot be determined.</summary>
-    string? GetBaseUrl();
-}
 
 /// <summary>Asks for the staff invitation email of a pending <see cref="WorkspaceMember"/>.</summary>
 public interface IStaffInvitationNotifier

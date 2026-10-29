@@ -201,9 +201,10 @@ internal sealed class TestClock(DateTimeOffset start) : TimeProvider
 
     public void Advance(TimeSpan by) => _now += by;
 }
-internal sealed class FixedFrontendUrl(string? url) : IFrontendUrlProvider
+internal sealed class FixedFrontendUrl(string? url, string? adminUrl = null) : IFrontendUrlProvider
 {
     public string? GetBaseUrl() => url;
+    public string? GetAdminBaseUrl() => adminUrl ?? url;
 }
 
 /// <summary>Records what portal-api asks the hub admin API to do.</summary>

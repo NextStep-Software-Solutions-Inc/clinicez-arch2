@@ -28,7 +28,7 @@ $allowedPathspecs = @(
 
 # 1. Critical endpoints and offline bypass token
 $pattern = 'challenges\.cloudflare\.com|LOCAL-OFFLINE-BYPASS'
-$criticalHits = & git grep -n -I -i -E $pattern -- . @allowedPathspecs 2>$null
+$criticalHits = & git grep --untracked -n -I -i -E $pattern -- . @allowedPathspecs 2>$null
 if ($LASTEXITCODE -eq 0 -and $criticalHits) {
     Write-Host 'Forbidden Cloudflare Turnstile endpoints or bypass tokens found:' -ForegroundColor Red
     $criticalHits | ForEach-Object { Write-Host "  $_" }
@@ -36,7 +36,7 @@ if ($LASTEXITCODE -eq 0 -and $criticalHits) {
 }
 
 # 2. General turnstile keyword residue
-$turnstileHits = & git grep -n -I -i "turnstile" -- . @allowedPathspecs 2>$null
+$turnstileHits = & git grep --untracked -n -I -i "turnstile" -- . @allowedPathspecs 2>$null
 if ($LASTEXITCODE -eq 0 -and $turnstileHits) {
     Write-Host 'Turnstile residue found in codebase:' -ForegroundColor Red
     $turnstileHits | ForEach-Object { Write-Host "  $_" }
