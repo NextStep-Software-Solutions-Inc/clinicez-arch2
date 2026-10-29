@@ -620,4 +620,34 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
     expect(screenCode).toContain("const emailErr = err.getFieldError?.('email');");
     expect(screenCode).toContain('fieldErrorsMap.email = emailErr;');
   });
+
+  test('Registration form has Suffix input wired and places BloodTypeSelect next to Date of Birth', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const screenCode = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+    expect(screenCode).toContain('label="Suffix"');
+    expect(screenCode).toContain('value={formSuffix}');
+    expect(screenCode).toContain('onChangeText={(val) => {');
+    expect(screenCode).toContain('setFormSuffix(val);');
+    expect(screenCode).toContain("clearFieldError('suffix');");
+    expect(screenCode).toContain('error={formFieldErrors.suffix}');
+    expect(screenCode).toContain('suffix: formSuffix.trim() || undefined');
+    expect(screenCode).toContain("const sfxErr = err.getFieldError?.('suffix');");
+    expect(screenCode).toContain('fieldErrorsMap.suffix = sfxErr;');
+
+    // Verify row pairing: Date of Birth and BloodTypeSelect are inside the same formRow
+    const dobAndBloodPattern = /<ValidatedDateInput[\s\S]*?label="Date of Birth"[\s\S]*?<BloodTypeSelect[\s\S]*?value=\{formBloodType\}/;
+    expect(dobAndBloodPattern.test(screenCode)).toBe(true);
+
+    // Verify row pairing: Last Name and Suffix are inside the same formRow
+    const lastNameAndSuffixPattern = /label="Last Name"[\s\S]*?label="Suffix"/;
+    expect(lastNameAndSuffixPattern.test(screenCode)).toBe(true);
+
+    // Verify row pairing: First Name and Middle Name are inside the same formRow
+    const firstNameAndMiddlePattern = /label="First Name"[\s\S]*?label="Middle Name"/;
+    expect(firstNameAndMiddlePattern.test(screenCode)).toBe(true);
+  });
 });

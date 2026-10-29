@@ -210,6 +210,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formFirstName, setFormFirstName] = useState('');
   const [formLastName, setFormLastName] = useState('');
   const [formMiddleName, setFormMiddleName] = useState('');
+  const [formSuffix, setFormSuffix] = useState('');
   const [formDob, setFormDob] = useState('');
   const [formSex, setFormSex] = useState('Male');
   const [formGenderIdentity, setFormGenderIdentity] = useState('');
@@ -787,6 +788,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       firstName: formFirstName.trim(),
       lastName: formLastName.trim(),
       middleName: formMiddleName.trim() || undefined,
+      suffix: formSuffix.trim() || undefined,
       dateOfBirth: formDob.trim(),
       sex: formSex,
       genderIdentity: formGenderIdentity.trim() || undefined,
@@ -876,6 +878,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         const mnErr = err.getFieldError?.('middleName');
         if (mnErr) fieldErrorsMap.middleName = mnErr;
 
+        const sfxErr = err.getFieldError?.('suffix');
+        if (sfxErr) fieldErrorsMap.suffix = sfxErr;
+
         const dobErr = err.getFieldError?.('dateOfBirth') || err.getFieldError?.('dob');
         if (dobErr) fieldErrorsMap.dateOfBirth = dobErr;
 
@@ -954,6 +959,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormFirstName('');
     setFormLastName('');
     setFormMiddleName('');
+    setFormSuffix('');
     setFormDob('');
     setFormSex('Male');
     setFormGenderIdentity('');
@@ -2048,6 +2054,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Input
+                    label="Middle Name"
+                    placeholder="e.g. Delos"
+                    value={formMiddleName}
+                    onChangeText={(val) => {
+                      setFormMiddleName(val);
+                      clearFieldError('middleName');
+                    }}
+                    error={formFieldErrors.middleName}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={{ flex: 1 }}>
+                  <Input
                     label="Last Name"
                     required
                     placeholder="e.g. Santos"
@@ -2059,21 +2080,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     error={formFieldErrors.lastName}
                   />
                 </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Suffix"
+                    placeholder="e.g. Jr., Sr., III"
+                    value={formSuffix}
+                    onChangeText={(val) => {
+                      setFormSuffix(val);
+                      clearFieldError('suffix');
+                    }}
+                    error={formFieldErrors.suffix}
+                  />
+                </View>
               </View>
 
               <View style={styles.formRow}>
-                <View style={{ flex: 1 }}>
-                  <Input
-                    label="Middle Name"
-                    placeholder="e.g. Delos"
-                    value={formMiddleName}
-                    onChangeText={(val) => {
-                      setFormMiddleName(val);
-                      clearFieldError('middleName');
-                    }}
-                    error={formFieldErrors.middleName}
-                  />
-                </View>
                 <View style={{ flex: 1 }}>
                   <ValidatedDateInput
                     label="Date of Birth"
@@ -2087,6 +2108,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     boundaryMode="pastOrToday"
                     placeholder="YYYY-MM-DD"
                     error={formFieldErrors.dateOfBirth || formFieldErrors.dob}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <BloodTypeSelect
+                    value={formBloodType}
+                    onChange={setFormBloodType}
                   />
                 </View>
               </View>
@@ -2202,16 +2229,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     error={formFieldErrors.email}
                   />
                 </View>
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={{ flex: 1 }}>
-                  <BloodTypeSelect
-                    value={formBloodType}
-                    onChange={setFormBloodType}
-                  />
-                </View>
-                <View style={{ flex: 1 }} />
               </View>
 
               {/* Home Address (Official 1NF PatientAddress Entity) */}
