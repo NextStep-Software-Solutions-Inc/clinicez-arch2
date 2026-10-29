@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
 import { Modal, Input, Button, Badge, Icon, ErrorState, SkeletonList, ThemedText, ValidatedDateInput, validateDateString, BloodTypeSelect } from '@ui';
-import { Alert } from '@utils/feedback';
+import { Alert, notify } from '@utils/feedback';
 import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthLibraryName } from '@services/philHealthCatalogService';
 import {
@@ -12,6 +12,7 @@ import {
   ClinicPatient,
 } from '../services/clinicService';
 import { useEhrOptions } from '../hooks/useEhrOptions';
+import { buildPrincipalSponsorFromGuardian } from './patient/memberType';
 import OrganSystemsExamSection, {
   DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
 } from './chart/OrganSystemsExamSection';
@@ -274,6 +275,17 @@ export default function PhilHealthProfileModal({
   const isPediatric = age < 18;
   const isSenior = age >= 60;
 
+  const guardianSponsor = useMemo(() => {
+    const primaryGuardian =
+      patient?.guardians?.find((g) => g.isPrimaryGuardian) ||
+      patient?.guardians?.[0] ||
+      null;
+    return buildPrincipalSponsorFromGuardian(primaryGuardian, {
+      patientDob: patient?.dateOfBirth,
+      pwdId: patient?.pwdId,
+    });
+  }, [patient]);
+
   useEffect(() => {
     if (visible && patient) {
       setShowAllVaccines(false);
@@ -474,9 +486,32 @@ export default function PhilHealthProfileModal({
 
             {profile.memberType === 'DD' && (
               <View style={styles.sponsorCard}>
-                <View style={styles.sponsorHeader}>
-                  <Badge label="Sponsor" variant="primary" />
-                  <ThemedText variant="bodyBold">Principal member credentials</ThemedText>
+                <View style={styles.sponsorHeaderRow}>
+                  <View style={styles.sponsorHeader}>
+                    <Badge label="Sponsor" variant="primary" />
+                    <ThemedText variant="bodyBold">Principal member credentials</ThemedText>
+                  </View>
+                  {guardianSponsor && (
+                    <Button
+                      title={guardianSponsor.buttonLabel}
+                      icon="copy"
+                      variant="outline"
+                      size="sm"
+                      onPress={() => {
+                        setProfile({
+                          ...profile,
+                          memberPin: guardianSponsor.rawPin || profile.memberPin || '',
+                          dependentRelationship: guardianSponsor.relationship,
+                          memberLastName: guardianSponsor.lastName || profile.memberLastName || '',
+                          memberFirstName: guardianSponsor.firstName || profile.memberFirstName || '',
+                          memberMiddleName: guardianSponsor.middleName || profile.memberMiddleName || '',
+                          memberSuffix: guardianSponsor.suffix || profile.memberSuffix || '',
+                          memberBirthDate: guardianSponsor.birthDate || profile.memberBirthDate || '',
+                        });
+                        notify.success('Principal member credentials filled from Legal Guardian.');
+                      }}
+                    />
+                  )}
                 </View>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   Required for PhilHealth Konsulta dependent claim transmittal. Enter the principal member's legal details.
@@ -1571,9 +1606,17 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
   },
+  sponsorHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
   sponsorHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
   showAllVaccinesBtn: {
