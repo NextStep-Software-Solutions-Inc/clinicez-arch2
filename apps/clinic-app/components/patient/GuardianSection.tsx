@@ -32,24 +32,9 @@ export function createEmptyGuardianDraft(): PatientGuardianDto {
   };
 }
 
-export function isMinorFromDob(dob?: string | null): boolean {
-  if (!dob || !dob.trim()) return false;
-  const trimmed = dob.trim();
-  const check = validateDateString(trimmed, { boundaryMode: 'pastOrToday' });
-  if (!check.isValid) return false;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const now = new Date();
-  let age = now.getFullYear() - year;
-  const mDiff = now.getMonth() + 1 - month;
-  if (mDiff < 0 || (mDiff === 0 && now.getDate() < day)) {
-    age -= 1;
-  }
-  return age >= 0 && age < 18;
-}
+import { isMinorFromDob, isSeniorFromDob } from '../../utils/age';
+
+export { isMinorFromDob, isSeniorFromDob };
 
 export function hasAnyGuardianInput(guardian?: PatientGuardianDto | null): boolean {
   if (!guardian) return false;

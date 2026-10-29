@@ -11,6 +11,7 @@ import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition, type PatientAddressDto, type PatientGuardianDto } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
+import { isSeniorFromDob } from '../../utils/age';
 import {
   type MemberType,
   type PrincipalRelationship,
@@ -442,6 +443,11 @@ export function EditPatientModal({
   const guardianSponsor = useMemo(
     () => buildPrincipalSponsorFromGuardian(guardian, { patientDob: dateOfBirth, pwdId }),
     [guardian, dateOfBirth, pwdId]
+  );
+
+  const isSenior = useMemo(
+    () => isSeniorFromDob(dateOfBirth) || Boolean(seniorCitizenId?.trim()),
+    [dateOfBirth, seniorCitizenId]
   );
 
   const handleApplyGuardianAsSponsor = () => {
@@ -1059,12 +1065,10 @@ export function EditPatientModal({
             </View>
 
             {/* Home Address (Official 1NF PatientAddress Entity) */}
-            <View style={{ marginBottom: theme.spacing.md }}>
-              <PsgcAddressSelector
-                value={permanentAddress}
-                onChange={setPermanentAddress}
-              />
-            </View>
+            <PsgcAddressSelector
+              value={permanentAddress}
+              onChange={setPermanentAddress}
+            />
 
             {/* Secondary Address (Dynamic Custom Fields) */}
             {addressFields.length > 0 && (
@@ -1229,18 +1233,20 @@ export function EditPatientModal({
             )}
 
             <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Senior Citizen ID
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="SC-SP-2020-001"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={seniorCitizenId}
-                  onChangeText={setSeniorCitizenId}
-                />
-              </View>
+              {isSenior && (
+                <View style={styles.formCol}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                    Senior Citizen ID
+                  </ThemedText>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="SC-SP-2020-001"
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={seniorCitizenId}
+                    onChangeText={setSeniorCitizenId}
+                  />
+                </View>
+              )}
               <View style={styles.formCol}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
                   PWD ID

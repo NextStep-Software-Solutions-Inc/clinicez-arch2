@@ -87,5 +87,7 @@ export {
 export {
   default as PsgcAddressSelector,
   type PsgcAddressSelectorProps,
+  hasAnyAddressInput,
+  createEmptyAddressDraft,
 } from './PsgcAddressSelector';
 

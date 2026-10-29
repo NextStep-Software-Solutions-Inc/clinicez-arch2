@@ -220,6 +220,48 @@ export function formatShortAge(
  * - Infants (1-12 mos): e.g. `${months}M${weeks}W${days}D`
  * - Newborns (< 1 mo): e.g. `${weeks}W${days}D` or `${days}D`
  */
+export function isSeniorFromDob(
+  dateOfBirth: string | Date | undefined | null,
+  referenceDate?: Date
+): boolean {
+  const birth = parseDateParts(dateOfBirth);
+  if (!birth) return false;
+  const ref = parseDateParts(referenceDate || new Date());
+  if (!ref) return false;
+
+  // Future birth date is invalid / not a senior
+  if (
+    birth.year > ref.year ||
+    (birth.year === ref.year && (birth.month > ref.month || (birth.month === ref.month && birth.day > ref.day)))
+  ) {
+    return false;
+  }
+
+  const age = calculateChronologicalAge(dateOfBirth, referenceDate);
+  return age !== null && age.years >= 60;
+}
+
+export function isMinorFromDob(
+  dateOfBirth: string | Date | undefined | null,
+  referenceDate?: Date
+): boolean {
+  const birth = parseDateParts(dateOfBirth);
+  if (!birth) return false;
+  const ref = parseDateParts(referenceDate || new Date());
+  if (!ref) return false;
+
+  // Future birth date is invalid / not a minor
+  if (
+    birth.year > ref.year ||
+    (birth.year === ref.year && (birth.month > ref.month || (birth.month === ref.month && birth.day > ref.day)))
+  ) {
+    return false;
+  }
+
+  const age = calculateChronologicalAge(dateOfBirth, referenceDate);
+  return age !== null && age.years < 18;
+}
+
 export function formatCompressedLongAge(
   dateOfBirth: string | Date | undefined | null,
   referenceDate?: Date

@@ -129,7 +129,13 @@ const {
   mapGuardianRelationshipToDependent,
   buildPrincipalSponsorFromGuardian,
 } = await import('../components/patient/memberType');
+const {
+  default: PsgcAddressSelector,
+  hasAnyAddressInput,
+  createEmptyAddressDraft,
+} = await import('../components/ui/PsgcAddressSelector');
 const { computePatientLocation } = await import('../utils/patientLocation');
+const { isSeniorFromDob } = await import('../utils/age');
 
 describe('Legal Guardian Section & Secondary Address Cutover', () => {
   test('isMinorFromDob identifies minors (<18) and adults (>=18) accurately', () => {
@@ -472,5 +478,120 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
 
     expect(dependentWithoutGuardianMarkup).toContain('Principal Member Details');
     expect(dependentWithoutGuardianMarkup).toContain('Use Legal Guardian');
+  });
+
+  test('isSeniorFromDob identifies seniors (>=60) and omits for 30-year-olds and minors', () => {
+    // 30 years old
+    expect(isSeniorFromDob('1996-05-10')).toBe(false);
+    // Minors & young adults
+    expect(isSeniorFromDob('2018-06-15')).toBe(false);
+    expect(isSeniorFromDob('2000-01-01')).toBe(false);
+    // Senior citizens (>=60)
+    expect(isSeniorFromDob('1960-01-01')).toBe(true);
+    expect(isSeniorFromDob('1950-12-31')).toBe(true);
+    // Boundary & invalid cases
+    expect(isSeniorFromDob('')).toBe(false);
+    expect(isSeniorFromDob(null)).toBe(false);
+    expect(isSeniorFromDob('not-a-date')).toBe(false);
+  });
+
+  test('PsgcAddressSelector renders collapsed card with + Add Address and expands on demand', () => {
+    expect(hasAnyAddressInput(null)).toBe(false);
+    expect(hasAnyAddressInput(createEmptyAddressDraft())).toBe(false);
+    expect(hasAnyAddressInput({ addressType: 'Permanent', isSameAsPermanent: false, streetAddress: '123 Rizal Ave' })).toBe(true);
+    expect(hasAnyAddressInput({ addressType: 'Permanent', isSameAsPermanent: false, streetAddress: '', regionPsgc: '1300000000' })).toBe(true);
+
+    const emptyAddress = createEmptyAddressDraft();
+    const collapsedMarkup = renderToStaticMarkup(
+      React.createElement(PsgcAddressSelector, {
+        value: emptyAddress,
+        onChange: () => {},
+        label: 'Home Address',
+      })
+    );
+
+    expect(collapsedMarkup).toContain('Home Address');
+    expect(collapsedMarkup).toContain('Optional');
+    expect(collapsedMarkup).toContain('+ Add Address');
+    expect(collapsedMarkup).not.toContain('Select Region');
+
+    const populatedAddress = {
+      ...emptyAddress,
+      streetAddress: '123 Rizal Ave',
+      regionPsgc: '1300000000',
+    };
+    const expandedMarkup = renderToStaticMarkup(
+      React.createElement(PsgcAddressSelector, {
+        value: populatedAddress,
+        onChange: () => {},
+        label: 'Home Address',
+      })
+    );
+
+    expect(expandedMarkup).toContain('Home Address');
+    expect(expandedMarkup).toContain('Recorded');
+    expect(expandedMarkup).toContain('Remove');
+    expect(expandedMarkup).toContain('Region');
+    expect(expandedMarkup).toContain('Street Address / Building / Unit No.');
+  });
+
+  test('EditPatientModal conditionally renders Senior Citizen ID only for seniors (>=60)', () => {
+    // 30-year-old patient: Senior Citizen ID must NOT be rendered, PWD ID must be rendered
+    const adult30Markup = renderToStaticMarkup(
+      React.createElement(EditPatientModal, {
+        visible: true,
+        onClose: () => {},
+        onSaved: () => {},
+        patient: {
+          id: 'pat-30-yo',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          patientCode: 'PAT-030',
+          firstName: 'Juan',
+          lastName: 'Dela Cruz',
+          fullName: 'Juan Dela Cruz',
+          dateOfBirth: '1996-05-10',
+          age: 30,
+          sex: 'Male',
+          civilStatus: 'Single',
+          contactNumber: '09171234567',
+          createdAt: '2026-10-29T00:00:00Z',
+          customFields: {},
+          guardians: [],
+        } as any,
+      })
+    );
+
+    expect(adult30Markup).not.toContain('Senior Citizen ID');
+    expect(adult30Markup).toContain('PWD ID');
+
+    // 68-year-old senior: Senior Citizen ID MUST be rendered alongside PWD ID
+    const senior68Markup = renderToStaticMarkup(
+      React.createElement(EditPatientModal, {
+        visible: true,
+        onClose: () => {},
+        onSaved: () => {},
+        patient: {
+          id: 'pat-senior-68',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          patientCode: 'PAT-068',
+          firstName: 'Ricardo',
+          lastName: 'Dela Cruz',
+          fullName: 'Ricardo Dela Cruz',
+          dateOfBirth: '1958-03-15',
+          age: 68,
+          sex: 'Male',
+          civilStatus: 'Married',
+          contactNumber: '09187654321',
+          createdAt: '2026-10-29T00:00:00Z',
+          customFields: {},
+          guardians: [],
+        } as any,
+      })
+    );
+
+    expect(senior68Markup).toContain('Senior Citizen ID');
+    expect(senior68Markup).toContain('PWD ID');
   });
 });

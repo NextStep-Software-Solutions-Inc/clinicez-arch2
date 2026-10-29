@@ -75,7 +75,7 @@ import PatientDirectoryCard, {
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
-import { formatLongAge } from '../../utils/age';
+import { formatLongAge, isSeniorFromDob } from '../../utils/age';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useVirtualList } from '../../utils/useVirtualList';
 import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
@@ -290,6 +290,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const formGuardianSponsor = useMemo(
     () => buildPrincipalSponsorFromGuardian(formGuardian, { patientDob: formDob, pwdId: formPwdId }),
     [formGuardian, formDob, formPwdId]
+  );
+
+  const isSenior = useMemo(
+    () => isSeniorFromDob(formDob) || Boolean(formSeniorId?.trim()),
+    [formDob, formSeniorId]
   );
 
   const handleApplyFormGuardianAsSponsor = () => {
@@ -2189,12 +2194,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               </View>
 
               {/* Home Address (Official 1NF PatientAddress Entity) */}
-              <View style={{ marginBottom: theme.spacing.md }}>
-                <PsgcAddressSelector
-                  value={formAddress}
-                  onChange={setFormAddress}
-                />
-              </View>
+              <PsgcAddressSelector
+                value={formAddress}
+                onChange={setFormAddress}
+              />
 
               {/* Secondary Address (Dynamic Custom Fields) */}
               {secondaryAddressCustomFields.length > 0 && (
@@ -2371,16 +2374,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               )}
 
               <View style={styles.formRow}>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>Senior Citizen ID</ThemedText>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="SC-SP-2020-001"
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={formSeniorId}
-                    onChangeText={setFormSeniorId}
-                  />
-                </View>
+                {isSenior && (
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={styles.inputLabel}>Senior Citizen ID</ThemedText>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="SC-SP-2020-001"
+                      placeholderTextColor={theme.colors.textMuted}
+                      value={formSeniorId}
+                      onChangeText={setFormSeniorId}
+                    />
+                  </View>
+                )}
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.inputLabel}>PWD ID</ThemedText>
                   <TextInput
