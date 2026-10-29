@@ -1,6 +1,5 @@
 import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
-import { optionsService } from './optionsService';
 import { SyncStatus, type SearchResponseDto, type ApiError, type EhrOptionDescriptor } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
@@ -2590,6 +2589,7 @@ export const clinicService = {
   },
 
   async getOptionSet(optionSet: string): Promise<EhrOptionDescriptor[]> {
+    const { optionsService } = await import('./optionsService');
     return optionsService.getOptionSet(optionSet);
   },
 

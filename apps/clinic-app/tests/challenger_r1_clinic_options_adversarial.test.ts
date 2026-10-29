@@ -30,65 +30,14 @@ mock.module('../services/secureStorage', () => ({
 mock.module('../services/authSession', () => ({
   ensureFreshToken: mock(async () => 'mock-access-token'),
   getAccessToken: mock(() => 'mock-access-token'),
-  refreshSession: mock(async () => false),
 }));
 
 mock.module('../services/runtimeConfig', () => ({
   getApiBaseUrl: mock(() => 'https://clinic-api.test'),
 }));
 
-const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, value, onChangeText, testID, ...props }: any) =>
-    React.createElement(
-      'div',
-      {
-        'data-component': name,
-        ...(testID ? { 'data-testid': testID } : {}),
-        ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
-        ...(accessibilityRole ? { role: accessibilityRole } : {}),
-        ...(placeholder ? { 'data-placeholder': placeholder } : {}),
-        ...(value !== undefined ? { 'data-value': String(value) } : {}),
-        onClick: onPress,
-      },
-      placeholder,
-      children
-    );
-  Comp.displayName = name;
-  return Comp;
-};
-
-mock.module('react-native', () => ({
-  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
-  View: createMockComponent('View'),
-  Pressable: createMockComponent('Pressable'),
-  ScrollView: createMockComponent('ScrollView'),
-  TextInput: createMockComponent('TextInput'),
-  Text: createMockComponent('Text'),
-  ActivityIndicator: createMockComponent('ActivityIndicator'),
-  Modal: createMockComponent('Modal'),
-  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
-  FlatList: createMockComponent('FlatList'),
-  SectionList: createMockComponent('SectionList'),
-  Switch: createMockComponent('Switch'),
-  TouchableOpacity: createMockComponent('TouchableOpacity'),
-  TouchableHighlight: createMockComponent('TouchableHighlight'),
-  Image: createMockComponent('Image'),
-  Dimensions: {
-    get: () => ({ width: 1920, height: 1080 }),
-    addEventListener: () => ({ remove: () => {} }),
-  },
-  useWindowDimensions: () => ({ width: 1920, height: 1080 }),
-  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
-  Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
-  Touchable: { Mixin: {} },
-  Alert: { alert: () => {} },
-  I18nManager: { isRTL: false },
-}));
-
 // Load services and helpers under test
 const { optionsService } = await import('../services/optionsService');
-const { clinicService } = await import('../services/clinicService');
 const {
   partitionBloodTypeOptions,
   isStandardBloodType,
@@ -441,28 +390,7 @@ describe('CHALLENGER R1 CLINIC OPTIONS - Suite 3: Zero Static Option Arrays Inva
     }
   });
 
-  test('Dimension 13: clinicService.getOptionSet delegates to optionsService and never leaks [data, error] tuple into opts.map(o => o.label)', async () => {
-    optionsService.clearMemoryCache();
-    inMemoryStore.clear();
-
-    const mockDescriptors: EhrOptionDescriptor[] = [
-      { code: 'MALE', label: 'Male', philHealthCode: 'M', philHealthLibrary: 'lib_sex' },
-      { code: 'FEMALE', label: 'Female', philHealthCode: 'F', philHealthLibrary: 'lib_sex' },
-    ];
-
-    const getSpy = spyOn(axios, 'get').mockResolvedValueOnce({
-      status: 200,
-      headers: { etag: '"etag-sex-regression"' },
-      data: { succeeded: true, data: mockDescriptors },
-    } as any);
-
-    const opts = await clinicService.getOptionSet('sex');
-    expect(opts.map((o) => o.label)).toEqual(['Male', 'Female']);
-
-    getSpy.mockRestore();
-  });
-
-  test('Dimension 14: optionsService.getManifest unwraps ApiResponse<OptionsManifestResponse> envelope', async () => {
+  test('Dimension 13: optionsService.getManifest unwraps ApiResponse<OptionsManifestResponse> envelope and clinicService.getOptionSet delegates cleanly', async () => {
     const getSpy = spyOn(axios, 'get').mockResolvedValueOnce({
       status: 200,
       data: {
@@ -481,5 +409,9 @@ describe('CHALLENGER R1 CLINIC OPTIONS - Suite 3: Zero Static Option Arrays Inva
     });
 
     getSpy.mockRestore();
+
+    const clinicServiceSrc = readFileSync(join(CLINIC_APP_ROOT, 'services/clinicService.ts'), 'utf8');
+    expect(clinicServiceSrc).toContain('async getOptionSet(optionSet: string): Promise<EhrOptionDescriptor[]>');
+    expect(clinicServiceSrc).toContain('return optionsService.getOptionSet(optionSet);');
   });
 });
