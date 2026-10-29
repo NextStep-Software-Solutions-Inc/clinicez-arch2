@@ -305,19 +305,6 @@ public static class DependencyInjection
             .HandleReply(InteropTypes.PhilHealthResponse)
             .HandleEntitlementsChanged());
 
-        if (env != null && env.IsDevelopment())
-        {
-            try
-            {
-                using var scope = services.BuildServiceProvider().CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                dbContext.Database.Migrate();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ClinicEz.Clinic] Migration notice: {ex.Message}");
-            }
-        }
         return services;
     }
 }

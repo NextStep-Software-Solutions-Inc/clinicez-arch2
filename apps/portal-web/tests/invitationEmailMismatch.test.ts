@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -152,11 +152,14 @@ describe("Issue #115: Invitation Email Mismatch Validation & Account Switching",
 
   describe("Auto-Accept Guard & Account Switching Lifecycle", () => {
     let cookieJar: string[] = [];
+    let originalDocument: PropertyDescriptor | undefined;
 
     beforeEach(() => {
       cookieJar = [];
+      originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
       Object.defineProperty(globalThis, "document", {
         configurable: true,
+        writable: true,
         value: {
           get cookie() {
             return cookieJar.join("; ");
@@ -172,6 +175,14 @@ describe("Issue #115: Invitation Email Mismatch Validation & Account Switching",
           },
         },
       });
+    });
+
+    afterEach(() => {
+      if (originalDocument) {
+        Object.defineProperty(globalThis, "document", originalDocument);
+      } else {
+        delete (globalThis as Record<string, unknown>).document;
+      }
     });
 
     test("suppresses auto-accept on mismatched user and permits auto-accept after switching to matched user", async () => {

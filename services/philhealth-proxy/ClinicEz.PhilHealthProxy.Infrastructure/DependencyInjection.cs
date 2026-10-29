@@ -46,6 +46,15 @@ public static class DependencyInjection
             .HandleReply(InteropTypes.PhilHealthConfigResponded)
             .HandleReply(InteropTypes.PhilHealthConfigUpsertResponded));
 
+        services.PostConfigure<InteropOptions>(o =>
+        {
+            if (string.IsNullOrWhiteSpace(o.HubUrl))
+            {
+                o.Transport = "InProcess";
+                o.Enabled = false;
+            }
+        });
+
         // 3. Resilient HTTP Client connecting to Portal API for credentials
         var portalBaseUrl = (configuration["PortalApi:BaseUrl"]
             ?? configuration["PORTAL_API_BASE_URL"]
