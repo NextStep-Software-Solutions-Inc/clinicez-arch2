@@ -18,15 +18,15 @@
 **/out/
 **/coverage/
 *.tsbuildinfo
-apps/patient-app/android/
-apps/patient-app/ios/
-apps/clinic-app/android/
-apps/clinic-app/ios/
+/apps/patient-app/android/
+/apps/patient-app/ios/
+/apps/clinic-app/android/
+/apps/clinic-app/ios/
 
-# ── .NET Backend Services (DO NOT UPLOAD TO EAS) ─────────────────
-services/
-packages/shared-dotnet/
-packages/shared-dotnet.Tests/
+# ── .NET Backend Services (ROOT ONLY — DO NOT match apps/*/services/!) ──
+/services/
+/packages/shared-dotnet/
+/packages/shared-dotnet.Tests/
 **/bin/
 **/obj/
 *.sln
@@ -34,7 +34,7 @@ packages/shared-dotnet.Tests/
 .vs/
 
 # ── Heavy Web Marketing Assets (keep workspace package.json intact) ─
-apps/portal-web/public/
+/apps/portal-web/public/
 
 # ── Local Database & Secrets ──────────────────────────────────────
 *.db
@@ -46,22 +46,23 @@ apps/portal-web/public/
 secrets.json
 configuration*.txt
 credentials*.txt
-keys/
+/keys/
 
 # ── Dev tooling, agent metadata, logs & VCS ───────────────────────
 .DS_Store
 Thumbs.db
 *.log
-.agents/
-.github/
-.git/
-.vscode/
-.idea/
+/.agents/
+/.github/
+/.git/
+/.vscode/
+/.idea/
 *.md
 !README.md
 
 # ── Lockfile & Workspace Inclusions (MANDATORY) ───────────────────
 !bun.lock
 !bunfig.toml
-!packages/
-!apps/
+!/apps/patient-app/bunfig.toml
+!/packages/
+!/apps/

@@ -96,7 +96,7 @@
     "db:studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit",
     "lint:tokens": "bun scripts/check-tokens.mjs",
-    "test": "bun test tests"
+    "test": "bun test --preload ./tests/setup-preload.ts tests"
   },
   "private": true
 }
