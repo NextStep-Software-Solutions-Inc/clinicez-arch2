@@ -5,9 +5,6 @@
   "engines": {
     "node": "24.x"
   },
-  "overrides": {
-    "react-dom": "19.2.3"
-  },
   "dependencies": {
     "@clinicez/comms-sdk": "workspace:*",
     "@clinicez/design-tokens": "workspace:*",
@@ -22,8 +19,8 @@
     "expo": "~56.0.8",
     "expo-splash-screen": "~56.0.12",
     "expo-status-bar": "~56.0.4",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-native": "0.85.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
