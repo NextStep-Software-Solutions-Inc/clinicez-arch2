@@ -165,13 +165,17 @@ export function getPortalBaseUrl(): string {
   if (configured) return configured.replace(/\/+$/, '');
 
   const baseDomain = getSetting('EXPO_PUBLIC_BASE_DOMAIN');
-  if (baseDomain) return `https://${baseDomain}`.replace(/\/+$/, '');
+  if (baseDomain) {
+    const cleanBase = baseDomain.replace(/^\.+/, '').replace(/\/+$/, '');
+    return cleanBase.startsWith('portal.') ? `https://${cleanBase}` : `https://portal.${cleanBase}`;
+  }
 
   if (typeof window !== 'undefined' && window.location?.hostname) {
     const match = window.location.hostname.toLowerCase().match(buildServiceHostRegex());
     if (match) {
       const { protocol, port } = window.location;
-      return `${protocol}//${match[3]}${port ? `:${port}` : ''}`;
+      const host = match[3].startsWith('portal.') ? match[3] : `portal.${match[3]}`;
+      return `${protocol}//${host}${port ? `:${port}` : ''}`;
     }
     if (window.location.origin) return window.location.origin.replace(/\/+$/, '');
   }

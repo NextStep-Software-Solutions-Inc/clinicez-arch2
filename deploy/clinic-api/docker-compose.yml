@@ -51,6 +51,7 @@ services:
       - FacilityLicense__PreviousPublicKeyPem=${FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS:-}
       # Public, absolute base URL of the portal web app. Lab slips link to {PortalBaseUrl}/upload/lab/{token}.
       - Clinic__PortalBaseUrl=${PORTAL_BASE_URL:?PORTAL_BASE_URL must be set}
+      - Verification__BaseUrl=${PORTAL_BASE_URL:?PORTAL_BASE_URL must be set}
       # Hangfire dashboard Basic Auth password. Required (there is no default).
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:?HANGFIRE_DASHBOARD_PASSWORD must be set}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}

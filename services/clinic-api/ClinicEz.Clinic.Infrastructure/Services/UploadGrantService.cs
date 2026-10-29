@@ -99,7 +99,7 @@ public sealed class UploadGrantService : IUploadGrantService
         {
             throw new InvalidOperationException(
                 "PortalBaseUrl (environment variable PORTAL_BASE_URL or Clinic__PortalBaseUrl) must be set to the absolute public URL of "
-                + "the portal, for example https://dev.clinicez.net, before lab orders can be issued.");
+                + "the portal, for example https://portal.dev.clinicez.net, before lab orders can be issued.");
         }
 
         return configured.TrimEnd('/');

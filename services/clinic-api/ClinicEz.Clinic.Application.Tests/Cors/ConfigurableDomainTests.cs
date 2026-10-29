@@ -94,6 +94,13 @@ public class ConfigurableDomainTests
                 { "Facility:BaseDomain", "tenants.example.com" }
             })));
 
+        Assert.Equal("https://portal.example.com",
+            VerificationUrlResolver.Resolve(Build(new()
+            {
+                { "Clinic:PortalBaseUrl", "https://portal.example.com/" },
+                { "Facility:BaseDomain", "tenants.example.com" }
+            })));
+
         Assert.Equal("https://tenants.example.com",
             VerificationUrlResolver.Resolve(Build(new() { { "Facility:BaseDomain", "tenants.example.com" } })));
 
