@@ -14,12 +14,12 @@ public sealed record RevertPhilHealthToBranchCommand : IRequest<ClinicSettingsDt
 
 public sealed class RevertPhilHealthToBranchCommandHandler : IRequestHandler<RevertPhilHealthToBranchCommand, ClinicSettingsDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
 
     public RevertPhilHealthToBranchCommandHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork)
     {
@@ -33,7 +33,7 @@ public sealed class RevertPhilHealthToBranchCommandHandler : IRequestHandler<Rev
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct);
         if (settings == null)
         {
-            settings = new ClinicSettings
+            settings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,
@@ -127,6 +127,8 @@ public sealed class RevertPhilHealthToBranchCommandHandler : IRequestHandler<Rev
             BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint,
             TenantSlug: settings.TenantSlug,
             FacilitySlug: settings.FacilitySlug,
-            TvDisplayPin: settings.TvDisplayPin);
+            TvDisplayPin: settings.TvDisplayPin,
+            IsKioskIntakeEnabled: settings.IsKioskIntakeEnabled,
+            KioskTokenVersion: settings.KioskTokenVersion);
     }
 }

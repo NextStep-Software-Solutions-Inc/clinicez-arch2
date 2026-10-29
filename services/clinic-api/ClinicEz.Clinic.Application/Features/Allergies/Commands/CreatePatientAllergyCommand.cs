@@ -37,13 +37,13 @@ public class CreatePatientAllergyValidator : AbstractValidator<CreatePatientAlle
 
 public class CreatePatientAllergyCommandHandler : IRequestHandler<CreatePatientAllergyCommand, PatientAllergyDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientAllergy> _allergyRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CreatePatientAllergyCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientAllergy> allergyRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
@@ -90,20 +90,6 @@ public class CreatePatientAllergyCommandHandler : IRequestHandler<CreatePatientA
         };
 
         await _allergyRepo.AddAsync(allergy, cancellationToken);
-
-        // Keep ClinicPatient.Allergies summary string updated in sync for backwards-compatibility
-        var existingSummary = patient.Allergies;
-        var allergenName = allergy.Allergen;
-        if (string.IsNullOrWhiteSpace(existingSummary))
-        {
-            patient.Allergies = allergenName;
-        }
-        else if (!existingSummary.Contains(allergenName, StringComparison.OrdinalIgnoreCase))
-        {
-            patient.Allergies = $"{existingSummary}, {allergenName}";
-        }
-        _patientRepo.Update(patient);
-
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PatientAllergyDto(

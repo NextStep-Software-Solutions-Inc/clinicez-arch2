@@ -23,17 +23,17 @@ public sealed record ClinicPublishingResultDto(
 
 public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<PublishClinicToDirectoryCommand, ClinicPublishingResultDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicServiceItem> _servicesRepo;
+    private readonly IRepository<ServiceItem> _servicesRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IInteropPublisher _interopPublisher;
 
     public PublishClinicToDirectoryCommandHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicServiceItem> servicesRepo,
+        IRepository<ServiceItem> servicesRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
         IInteropPublisher interopPublisher)
@@ -114,7 +114,7 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
             IsActive: s.IsActive
         )).ToList();
 
-        // Dynamic mapping based on ClinicSettings.SpecialtyMode
+        // Dynamic mapping based on FacilitySettings.SpecialtyMode
         var classification = settings.SpecialtyMode?.Trim().ToLowerInvariant() switch
         {
             "dental" => "Dental Clinic",

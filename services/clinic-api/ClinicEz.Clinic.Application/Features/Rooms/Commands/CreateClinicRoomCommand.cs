@@ -36,13 +36,13 @@ public sealed class CreateClinicRoomCommandValidator : AbstractValidator<CreateC
 
 public sealed class CreateClinicRoomCommandHandler : IRequestHandler<CreateClinicRoomCommand, ClinicRoomDto>
 {
-    private readonly IRepository<ClinicRoom> _roomRepository;
+    private readonly IRepository<Room> _roomRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<StaffMember>? _staffRepository;
 
     public CreateClinicRoomCommandHandler(
-        IRepository<ClinicRoom> roomRepository,
+        IRepository<Room> roomRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<StaffMember>? staffRepository = null)
@@ -70,7 +70,7 @@ public sealed class CreateClinicRoomCommandHandler : IRequestHandler<CreateClini
             .Select(r => (int?)r.DisplayOrder)
             .MaxAsync(cancellationToken) ?? 0) + 1;
 
-        var room = new ClinicRoom
+        var room = new Room
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,

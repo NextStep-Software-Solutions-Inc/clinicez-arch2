@@ -92,12 +92,12 @@ public class NonDoctorWorkflowsMilestone4Tests
     public async Task OrderProcedure_WhenOrderedByNurse_ForNurseOrderableProcedure_Succeeds()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -143,12 +143,12 @@ public class NonDoctorWorkflowsMilestone4Tests
     public async Task OrderProcedure_WhenOrderedByNurse_ForNonNurseOrderableProcedure_ThrowsBadRequestException()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -188,9 +188,9 @@ public class NonDoctorWorkflowsMilestone4Tests
     public async Task OrderProcedure_WhenOrderedByDoctorWithVerifiedPrc_SucceedsEvenIfNotNurseOrderable()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
 
         var doctorId = Guid.NewGuid();
@@ -207,7 +207,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         };
         await db.StaffMembers.AddAsync(doctorStaff);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -253,7 +253,7 @@ public class NonDoctorWorkflowsMilestone4Tests
     public async Task RecordProcedureExecution_WhenRequiresDoctorReEvaluationIsFalse_DischargesToDischargedNonDoctor()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
 
         var queueItemId = Guid.NewGuid();
@@ -273,7 +273,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         };
         await db.QueueItems.AddAsync(queueItem);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = procedureId,
             ClinicId = _clinicId,
@@ -321,16 +321,16 @@ public class NonDoctorWorkflowsMilestone4Tests
     public async Task RecordProcedureExecution_WhenRequiresDoctorReEvaluationIsTrue_RoutesToReEvaluation()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(db, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(db, sieve);
 
         var queueItemId = Guid.NewGuid();
         var procedureId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
 
-        var room = new ClinicRoom
+        var room = new Room
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -339,7 +339,7 @@ public class NonDoctorWorkflowsMilestone4Tests
             DisplayOrder = 1,
             IsActive = true
         };
-        await db.ClinicRooms.AddAsync(room);
+        await db.Rooms.AddAsync(room);
 
         var doctor = new StaffMember
         {
@@ -367,7 +367,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         };
         await db.QueueItems.AddAsync(queueItem);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = procedureId,
             ClinicId = _clinicId,
@@ -418,7 +418,7 @@ public class NonDoctorWorkflowsMilestone4Tests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
         var publisher = Substitute.For<IImmunizationEventPublisher>();
 
@@ -426,7 +426,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         var queueItemId = Guid.NewGuid();
         var nurseId = Guid.NewGuid();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = _clinicId,
@@ -502,10 +502,10 @@ public class NonDoctorWorkflowsMilestone4Tests
         ApplicationDbContext db,
         ISieveProcessor sieve,
         IUnitOfWork unitOfWork,
-        IRepository<ClinicServiceItem>? serviceRepo = null)
+        IRepository<ServiceItem>? serviceRepo = null)
     {
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
 
         return new CreateClinicLabOrderCommandHandler(
@@ -523,13 +523,13 @@ public class NonDoctorWorkflowsMilestone4Tests
     }
 
     [Fact]
-    public async Task CreateClinicLabOrder_WhenNurseOrdersInHouse_WithNurseOrderableTest_Succeeds()
+    public async Task CreateLabOrder_WhenNurseOrdersInHouse_WithNurseOrderableTest_Succeeds()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = _clinicId,
@@ -541,7 +541,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         };
         await db.Patients.AddAsync(patient);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -577,13 +577,13 @@ public class NonDoctorWorkflowsMilestone4Tests
     }
 
     [Fact]
-    public async Task CreateClinicLabOrder_WhenNurseOrdersInHouse_WithNonNurseOrderableTest_ThrowsBadRequestException()
+    public async Task CreateLabOrder_WhenNurseOrdersInHouse_WithNonNurseOrderableTest_ThrowsBadRequestException()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = _clinicId,
@@ -595,7 +595,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         };
         await db.Patients.AddAsync(patient);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -626,13 +626,13 @@ public class NonDoctorWorkflowsMilestone4Tests
     }
 
     [Fact]
-    public async Task CreateClinicLabOrder_WhenRoutedExternal_WithoutDoctor_ThrowsBadRequestException()
+    public async Task CreateLabOrder_WhenRoutedExternal_WithoutDoctor_ThrowsBadRequestException()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = _clinicId,
@@ -644,7 +644,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         };
         await db.Patients.AddAsync(patient);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -677,13 +677,13 @@ public class NonDoctorWorkflowsMilestone4Tests
     }
 
     [Fact]
-    public async Task CreateClinicLabOrder_WhenRoutedExternal_WithDoctorWithoutPrcLicense_ThrowsBadRequestException()
+    public async Task CreateLabOrder_WhenRoutedExternal_WithDoctorWithoutPrcLicense_ThrowsBadRequestException()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = _clinicId,
@@ -708,7 +708,7 @@ public class NonDoctorWorkflowsMilestone4Tests
         };
         await db.StaffMembers.AddAsync(doctorNoPrc);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,

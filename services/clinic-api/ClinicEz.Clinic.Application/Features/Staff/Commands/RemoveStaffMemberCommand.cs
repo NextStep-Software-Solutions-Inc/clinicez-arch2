@@ -26,7 +26,7 @@ public sealed class RemoveStaffMemberCommandValidator : AbstractValidator<Remove
 public sealed class RemoveStaffMemberCommandHandler : IRequestHandler<RemoveStaffMemberCommand, bool>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicRefreshToken>? _refreshTokenRepository;
+    private readonly IRepository<RefreshToken>? _refreshTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IStaffAccessInvalidator? _accessCache;
@@ -35,7 +35,7 @@ public sealed class RemoveStaffMemberCommandHandler : IRequestHandler<RemoveStaf
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<ClinicRefreshToken>? refreshTokenRepository = null,
+        IRepository<RefreshToken>? refreshTokenRepository = null,
         IStaffAccessInvalidator? accessCache = null)
     {
         _staffRepository = staffRepository;

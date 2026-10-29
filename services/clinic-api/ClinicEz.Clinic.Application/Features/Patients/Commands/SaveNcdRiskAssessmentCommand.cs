@@ -63,13 +63,13 @@ public sealed class SaveNcdRiskAssessmentCommandValidator : AbstractValidator<Sa
 
 public sealed class SaveNcdRiskAssessmentCommandHandler : IRequestHandler<SaveNcdRiskAssessmentCommand, NcdRiskAssessmentDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<NcdRiskAssessment> _ncdRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public SaveNcdRiskAssessmentCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<NcdRiskAssessment> ncdRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)

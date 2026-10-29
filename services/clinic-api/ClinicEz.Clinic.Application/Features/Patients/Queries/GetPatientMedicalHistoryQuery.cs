@@ -15,12 +15,12 @@ public sealed record GetPatientMedicalHistoryQuery(Guid PatientId) : IRequest<Pa
 
 public sealed class GetPatientMedicalHistoryQueryHandler : IRequestHandler<GetPatientMedicalHistoryQuery, PatientMedicalHistoryResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<PatientPastMedicalHistory> _medicalRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<PatientMedicalHistory> _medicalRepo;
 
     public GetPatientMedicalHistoryQueryHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<PatientPastMedicalHistory> medicalRepo)
+        IRepository<Patient> patientRepo,
+        IRepository<PatientMedicalHistory> medicalRepo)
     {
         _patientRepo = patientRepo;
         _medicalRepo = medicalRepo;
@@ -36,7 +36,7 @@ public sealed class GetPatientMedicalHistoryQueryHandler : IRequestHandler<GetPa
             throw new NotFoundException($"Patient with id {request.PatientId} not found.");
         }
 
-        var entries = await _medicalRepo.Query(m => m.PatientId == request.PatientId)
+        var entries = await _medicalRepo.Query(m => m.PatientId == request.PatientId && m.Category == MedicalHistoryCategory.MedicalHistory)
             .OrderBy(m => m.ConditionTitle)
             .ToListAsync(cancellationToken);
 
@@ -48,10 +48,10 @@ public sealed class GetPatientMedicalHistoryQueryHandler : IRequestHandler<GetPa
             e.Icd10Code,
             e.SpecificDescription,
             e.OnsetDate,
-            e.IsResolved,
+            e.Status == ProblemStatus.Resolved,
             e.ClinicalNotes,
             e.CreatedAt)).ToList();
 
-        return new PatientMedicalHistoryResultDto(dtos, patient.PersonalMedicalHistoryNotes);
+        return new PatientMedicalHistoryResultDto(dtos, null);
     }
 }

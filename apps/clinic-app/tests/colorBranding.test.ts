@@ -51,6 +51,17 @@ mock.module('react-native', () => ({
   PanResponder: { create: () => ({ panHandlers: {} }) },
   Alert: { alert: () => {} },
   processColor: (c: any) => c,
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
 }));
 
 mock.module('react-native-svg', () => ({

@@ -32,9 +32,7 @@ namespace ClinicEz.Clinic.Application.Tests.Adversarial;
 /// </summary>
 public sealed class Challenger4DualTrackBackendStressTests
 {
-    private readonly YakapClinicalMapper _mapper = new(PhilHealthCatalogLookup.FromBundledSeed());
-
-    private static ClinicPatient CreatePatient(
+    private static Patient CreatePatient(
         string code = "PAT-STRESS-001",
         string pin = "030263078507",
         string tenantId = "tenant_challenger4") => new()
@@ -48,12 +46,12 @@ public sealed class Challenger4DualTrackBackendStressTests
         PhilHealthNumber = pin,
         ContactNumber = "09170009999",
         DateOfBirth = new DateOnly(1985, 6, 15),
-        Gender = "Female",
+        Gender = Gender.Female,
         CustomFields = new Dictionary<string, object?>()
     };
 
     private static ConsultationEncounter CreateEncounter(
-        ClinicPatient patient,
+        Patient patient,
         DateTime date) => new()
     {
         Id = Guid.NewGuid(),
@@ -75,10 +73,10 @@ public sealed class Challenger4DualTrackBackendStressTests
     {
         // Enlistment valid for 2026: 2026-01-01 to 2026-12-31
         var patient = CreatePatient();
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment
@@ -102,10 +100,10 @@ public sealed class Challenger4DualTrackBackendStressTests
     {
         var patient = CreatePatient();
         // 2024 was a leap year
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2024-02-29",
-            ValidUntil = "2025-02-28",
+            EnlistmentDate = new DateOnly(2024, 2, 29),
+            ValidUntil = new DateOnly(2025, 2, 28),
             EffectiveYear = 2024,
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment
@@ -115,7 +113,7 @@ public sealed class Challenger4DualTrackBackendStressTests
         var leapDay = new DateOnly(2024, 2, 29);
         var active = patient.GetActiveYakapEnlistment(leapDay);
         active.Should().NotBeNull();
-        active!.EnlistedAt.Should().Be("2024-02-29");
+        active!.EnlistmentDate.Should().Be(new DateOnly(2024, 2, 29));
 
         // Must be active at mid-year 2024
         patient.GetActiveYakapEnlistment(new DateOnly(2024, 8, 15)).Should().NotBeNull();
@@ -136,25 +134,25 @@ public sealed class Challenger4DualTrackBackendStressTests
         var patient = CreatePatient();
         
         // Beneficiary enlisted in 2024 (with generated sequence numbers)
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2024-01-10",
-            ValidUntil = "2024-12-31",
+            EnlistmentDate = new DateOnly(2024, 1, 10),
+            ValidUntil = new DateOnly(2024, 12, 31),
             EffectiveYear = 2024,
             Status = YakapEnlistmentStatus.Expired,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = "C000921202400001",
-            EnlistmentNo = "E000921202400001",
+            EnlistmentTransNo = "E000921202400001",
             ProfilingTransNo = "P000921202400001"
         });
 
         // 2025 was a GAP year (no enlistment recorded, patient did not visit)
         
         // Beneficiary returns in 2026 and explicitly renews
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2026-03-15",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 3, 15),
+            ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.SelfReported
@@ -195,7 +193,7 @@ public sealed class Challenger4DualTrackBackendStressTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = tenantId,
@@ -206,14 +204,14 @@ public sealed class Challenger4DualTrackBackendStressTests
             PhilHealthNumber = "030263078507",
             ContactNumber = "09171112222",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Male",
+            Gender = Gender.Male,
             CustomFields = new Dictionary<string, object?>()
         };
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment
@@ -266,43 +264,38 @@ public sealed class Challenger4DualTrackBackendStressTests
     }
 
     // =========================================================================
-    // DIMENSION 4: Polymorphic Casing & Double-Serialized JSON Dictionary Parsing
+    // DIMENSION 4: Pure 1NF Relational Enlistment History and Sorting
     // =========================================================================
 
     [Fact]
-    public void Stress_PolymorphicKeysAndMixedCasing_ParsesAllFieldsFaithfully()
+    public void Stress_RelationalEnlistments_ParsesAllFieldsFaithfully()
     {
         var patient = CreatePatient();
-        var rawMixedDict = new List<Dictionary<string, object?>>
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            new()
-            {
-                ["EnlistedAt"] = "2025-02-14",
-                ["ValidUntil"] = "2025-12-31",
-                ["EffectiveYear"] = "2025",
-                ["Status"] = "Expired",
-                ["Source"] = "PhilHealthMasterlist",
-                ["CaseNo"] = "C000921202500001",
-                ["EnlistmentNo"] = "E000921202500001",
-                ["ProfilingTransNo"] = "P000921202500001"
-            },
-            new()
-            {
-                ["enlisted_at"] = "2026-01-01",
-                ["valid_until"] = "2026-12-31",
-                ["effective_year"] = 2026,
-                ["status"] = "Active",
-                ["source"] = "ClinicEnlistment"
-            }
-        };
-
-        patient.CustomFields["yakap_enlistments"] = rawMixedDict;
+            EffectiveYear = 2025,
+            EnlistmentDate = new DateOnly(2025, 2, 14),
+            ValidUntil = new DateOnly(2025, 12, 31),
+            Status = YakapEnlistmentStatus.Expired,
+            Source = YakapEnlistmentSource.PhilHealthMasterlist,
+            CaseNo = "C000921202500001",
+            EnlistmentTransNo = "E000921202500001",
+            ProfilingTransNo = "P000921202500001"
+        });
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
+        {
+            EffectiveYear = 2026,
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
+            Status = YakapEnlistmentStatus.Active,
+            Source = YakapEnlistmentSource.ClinicEnlistment
+        });
 
         var parsed = patient.GetYakapEnlistments();
         parsed.Should().HaveCount(2);
 
         parsed[0].EffectiveYear.Should().Be(2025);
-        parsed[0].EnlistedAt.Should().Be("2025-02-14");
+        parsed[0].EnlistmentDate.Should().Be(new DateOnly(2025, 2, 14));
         parsed[0].CaseNo.Should().Be("C000921202500001");
         parsed[0].Status.Should().Be(YakapEnlistmentStatus.Expired);
 
@@ -311,77 +304,23 @@ public sealed class Challenger4DualTrackBackendStressTests
     }
 
     [Fact]
-    public void Stress_DoubleEncodedJsonString_IsParsedDefensively()
+    public void Stress_RelationalEnlistments_MaintainsChronologicalSort()
     {
         var patient = CreatePatient();
-        var innerJson = "[{\"enlisted_at\":\"2026-05-01\",\"valid_until\":\"2026-12-31\",\"effective_year\":2026,\"status\":\"Active\",\"source\":\"ClinicEnlistment\"}]";
-        patient.CustomFields["yakap_enlistments"] = innerJson;
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
+        {
+            EffectiveYear = 2026,
+            EnlistmentDate = new DateOnly(2026, 5, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
+            Status = YakapEnlistmentStatus.Active,
+            Source = YakapEnlistmentSource.ClinicEnlistment
+        });
 
         var parsed = patient.GetYakapEnlistments();
         parsed.Should().HaveCount(1);
         parsed[0].EffectiveYear.Should().Be(2026);
-        parsed[0].EnlistedAt.Should().Be("2026-05-01");
+        parsed[0].EnlistmentDate.Should().Be(new DateOnly(2026, 5, 1));
         parsed[0].Status.Should().Be(YakapEnlistmentStatus.Active);
-    }
-
-    // =========================================================================
-    // DIMENSION 5: XML DTD v1.14 Report Document Generation with CustomFields
-    // =========================================================================
-
-    [Fact]
-    public void Stress_YakapClinicalMapper_GeneratesCompliantReportDocumentWithUnifiedCustomFields()
-    {
-        var patient = CreatePatient();
-        patient.CustomFields["primary_address_line"] = "Unit 4B & 5B <Highland Park> \"Tower 1\"";
-        patient.CustomFields["primary_barangay"] = "Barangay San Jose";
-        patient.CustomFields["primary_city"] = "Pasig City";
-        patient.CustomFields["primary_province"] = "Metro Manila";
-
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
-        {
-            EnlistedAt = "2026-01-15",
-            ValidUntil = "2026-12-31",
-            EffectiveYear = 2026,
-            Status = YakapEnlistmentStatus.Active,
-            Source = YakapEnlistmentSource.ClinicEnlistment,
-            CaseNo = "C000921202600001",
-            EnlistmentNo = "E000921202600001",
-            ProfilingTransNo = "P000921202600001"
-        });
-
-        var encounter = CreateEncounter(patient, new DateTime(2026, 4, 10, 8, 30, 0, DateTimeKind.Utc));
-        encounter.PhilHealthCaseNo = "C000921202600001";
-        encounter.PhilHealthSoapTransNo = "S000921202600001";
-
-        var settings = new ClinicSettings
-        {
-            TenantId = patient.TenantId,
-            ClinicId = patient.ClinicId,
-            ClinicName = "Adversarial Health Center",
-            AccreditationNumber = "000921"
-        };
-
-        var patientsMap = new Dictionary<Guid, ClinicPatient> { [patient.Id] = patient };
-        var vitalsMap = new Dictionary<Guid, TriageVitals>();
-
-        var doc = _mapper.MapToYakapReportDocument(
-            reportTagging: "1",
-            effectiveYear: "2026",
-            settings: settings,
-            encounters: new[] { encounter },
-            patients: patientsMap,
-            vitalsMap: vitalsMap,
-            transmittalNumber: "R000921202600001");
-
-        doc.Should().NotBeNull();
-        doc.Enlistments.Should().HaveCount(1);
-        var enlistment = doc.Enlistments[0];
-        enlistment.HciCaseNo.Should().Be("C000921202600001");
-        enlistment.HciTransNo.Should().Be("E000921202600001");
-        enlistment.EnlistDate.Should().Be("2026-01-15");
-
-        doc.Profiles.Should().HaveCount(1);
-        doc.Profiles[0].HciTransNo.Should().Be("P000921202600001");
     }
 
     // =========================================================================
@@ -405,7 +344,7 @@ public sealed class Challenger4DualTrackBackendStressTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -416,7 +355,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             PhilHealthNumber = storedPinInDb,
             ContactNumber = "09170003333",
             DateOfBirth = new DateOnly(1980, 5, 20),
-            Gender = "Female",
+            Gender = Gender.Female,
             CustomFields = new Dictionary<string, object?>()
         };
 

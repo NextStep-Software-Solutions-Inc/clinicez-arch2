@@ -21,14 +21,14 @@ public sealed class ReportsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IClinicContext? _clinicContext;
 
     public ReportsController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember>? staffRepo = null,
         IClinicContext? clinicContext = null)
     {
@@ -128,7 +128,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetDailyEodReportQuery(date), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -147,7 +147,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetMorbidityReportQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -166,7 +166,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetTaxDiscountAuditReportQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -185,7 +185,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var report = await _sender.Send(new GetDoctorSharesReportQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = report.TenantId,
             ClinicId = report.ClinicId,
@@ -204,7 +204,7 @@ public sealed class ReportsController : ControllerBase
         CancellationToken ct)
     {
         var analytics = await _sender.Send(new GetClinicAnalyticsQuery(startDate, endDate), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = analytics.TenantId,
             ClinicId = analytics.ClinicId,

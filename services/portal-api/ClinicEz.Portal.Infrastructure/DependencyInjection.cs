@@ -151,14 +151,16 @@ public static class DependencyInjection
                 InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
             .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(
                 InteropTypes.PhilHealthConfigUpsertRequested, InteropTypes.PhilHealthConfigUpsertResponded)
-            .HandleReply(InteropTypes.YakapTransmittalResponded));
+            .HandleReply(InteropTypes.YakapTransmittalResponded)
+            .HandleReply(InteropTypes.YakapSubmissionResponded));
 
         // The PhilHealth proxy asks the portal for the credentials it holds; the key ring protects them at rest.
         services.AddSingleton<IPhilHealthSecretProtector, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSecretProtector>();
-        services.AddHttpClient<IPhilHealthSoapTester, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>(client =>
+        services.AddHttpClient<IPhilHealthPcapiTester, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthPcapiTester>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(20);
         });
+        services.AddSingleton<IPsgcLocationService, ClinicEz.Portal.Infrastructure.Locations.PsgcLocationService>();
 
         // Hub directory feed and onboarding
         services.AddOptions<HubOptions>().Bind(configuration.GetSection(HubOptions.Section));

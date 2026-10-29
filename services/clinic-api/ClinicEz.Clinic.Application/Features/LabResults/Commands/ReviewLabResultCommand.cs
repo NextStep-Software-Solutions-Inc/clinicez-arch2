@@ -24,8 +24,8 @@ public record ReviewLabResultCommand(Guid ResultId, bool Accepted, string? Remar
 /// </summary>
 public class ReviewLabResultCommandHandler : IRequestHandler<ReviewLabResultCommand, LabResultReviewItemDto>
 {
-    private readonly IRepository<ClinicLabResult> _resultRepo;
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<LabResult> _resultRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
@@ -33,8 +33,8 @@ public class ReviewLabResultCommandHandler : IRequestHandler<ReviewLabResultComm
     private readonly IPatientDocumentPublisher _documents;
 
     public ReviewLabResultCommandHandler(
-        IRepository<ClinicLabResult> resultRepo,
-        IRepository<ClinicLabOrder> orderRepo,
+        IRepository<LabResult> resultRepo,
+        IRepository<LabOrder> orderRepo,
         IRepository<StaffMember> staffRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,

@@ -4,10 +4,8 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class DoctorScheduleTemplate : BaseEntity
+public sealed class DoctorScheduleTemplate : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid? BranchId { get; set; }
     public Guid DoctorId { get; set; }
     public required string DoctorName { get; set; }

@@ -33,13 +33,13 @@ public class AdversarialSearchChallengeTests
              PatientSearchProvider searchProvider) CreateTestHarness()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queryHandler = new GetClinicPatientsQueryHandler(repo);
         var searchProvider = new PatientSearchProvider(repo);
         return (context, queryHandler, searchProvider);
     }
 
-    private static ClinicPatient CreatePatient(
+    private static Patient CreatePatient(
         Guid clinicId,
         string patientCode,
         string firstName,
@@ -50,7 +50,7 @@ public class AdversarialSearchChallengeTests
         string? contactNumber = "09171234567",
         string? philHealthNumber = null)
     {
-        return new ClinicPatient
+        return new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = clinicId.ToString(),
@@ -62,7 +62,7 @@ public class AdversarialSearchChallengeTests
             Suffix = suffix,
             ClinicEzId = clinicEzId,
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = contactNumber ?? "09171234567",
             PhilHealthNumber = philHealthNumber
         };

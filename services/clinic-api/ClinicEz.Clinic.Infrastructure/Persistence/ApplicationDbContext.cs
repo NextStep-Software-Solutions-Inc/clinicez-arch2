@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -15,7 +19,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Infrastructure.Persistence;
 
-public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProfileDbContext, IDataProtectionKeyContext
+public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProfileDbContext, IDataProtectionKeyContext, IReadDbContext
 {
     private readonly IConfiguration _configuration;
     private readonly IClinicContext? _clinicContext;
@@ -30,63 +34,94 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     }
 
     public DbSet<Product> Products { get; set; } = null!;
-    public DbSet<ClinicRole> ClinicRoles { get; set; } = null!;
-    public DbSet<ClinicRoom> ClinicRooms { get; set; } = null!;
+    public DbSet<Role> Roles { get; set; } = null!;
+    public DbSet<Room> Rooms { get; set; } = null!;
     public DbSet<StaffMember> StaffMembers { get; set; } = null!;
-    public DbSet<ClinicRefreshToken> RefreshTokens { get; set; } = null!;
+    public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Appointment> Appointments { get; set; } = null!;
     public DbSet<QueueItem> QueueItems { get; set; } = null!;
-    public DbSet<TriageVitals> TriageVitals { get; set; } = null!;
+    public DbSet<PatientVitals> PatientVitals { get; set; } = null!;
     public DbSet<ConsultationEncounter> Consultations { get; set; } = null!;
     public DbSet<EncounterDiagnosis> Diagnoses { get; set; } = null!;
     public DbSet<PrescriptionItem> Prescriptions { get; set; } = null!;
-    public DbSet<ClinicServiceItem> ServiceItems { get; set; } = null!;
+    public DbSet<ServiceItem> ServiceItems { get; set; } = null!;
     public DbSet<Invoice> Invoices { get; set; } = null!;
     public DbSet<InvoiceLineItem> InvoiceLineItems { get; set; } = null!;
     public DbSet<PaymentRecord> Payments { get; set; } = null!;
-    public DbSet<ClinicalProcedure> Procedures { get; set; } = null!;
-    public DbSet<ClinicLabOrder> LabOrders { get; set; } = null!;
-    public DbSet<ClinicLabOrderItem> LabOrderItems { get; set; } = null!;
-    public DbSet<ClinicPatient> Patients { get; set; } = null!;
+    public DbSet<Procedure> Procedures { get; set; } = null!;
+    public DbSet<LabOrder> LabOrders { get; set; } = null!;
+    public DbSet<LabOrderItem> LabOrderItems { get; set; } = null!;
+    public DbSet<LabObservation> LabObservations { get; set; } = null!;
+    public DbSet<LabResult> LabResults { get; set; } = null!;
+    public DbSet<Patient> Patients { get; set; } = null!;
+    public DbSet<PatientPhilHealthMembership> PatientPhilHealthMemberships { get; set; } = null!;
+    public DbSet<PatientYakapEnlistment> PatientYakapEnlistments { get; set; } = null!;
+    public DbSet<PatientAlert> PatientAlerts { get; set; } = null!;
+    public DbSet<PatientAllergy> PatientAllergies { get; set; } = null!;
+    public DbSet<PatientMedicalHistory> PatientMedicalHistories { get; set; } = null!;
+    public DbSet<PatientPhysicalExam> PatientPhysicalExams { get; set; } = null!;
+    public DbSet<PatientPhysicalExamFinding> PatientPhysicalExamFindings { get; set; } = null!;
+    public DbSet<PatientImmunization> PatientImmunizations { get; set; } = null!;
+    public DbSet<PatientReproductiveHistory> PatientReproductiveHistories { get; set; } = null!;
+    public DbSet<PatientSocialHistory> PatientSocialHistories { get; set; } = null!;
+    public DbSet<PatientFamilyHistory> PatientFamilyHistories { get; set; } = null!;
+    public DbSet<PatientSurgicalHistory> PatientSurgicalHistories { get; set; } = null!;
+    public DbSet<NcdRiskAssessment> NcdRiskAssessments { get; set; } = null!;
     public DbSet<MedicalCertificate> MedicalCertificates { get; set; } = null!;
     public DbSet<ReferralLetter> ReferralLetters { get; set; } = null!;
-    public DbSet<ClinicRecordAttachment> RecordAttachments { get; set; } = null!;
-    public DbSet<ClinicCustomFieldDefinition> CustomFieldDefinitions { get; set; } = null!;
-    public DbSet<ClinicSettings> ClinicSettings { get; set; } = null!;
-    public DbSet<EodReconciliationAudit> EodReconciliationAudits { get; set; } = null!;
-    public DbSet<YakapTransmittal> YakapTransmittals { get; set; } = null!;
-    public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
-    public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
-    public DbSet<PatientCodeSequenceTracker> PatientCodeSequenceTrackers { get; set; } = null!;
-    public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
-    public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;
-    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
-    public DbSet<ClinicLabResult> LabResults { get; set; } = null!;
-    public DbSet<UploadGrant> UploadGrants { get; set; } = null!;
-    public DbSet<ShareImport> ShareImports { get; set; } = null!;
-    public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
-    public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
+    public DbSet<RecordAttachment> RecordAttachments { get; set; } = null!;
+    public DbSet<CustomFieldDefinition> CustomFieldDefinitions { get; set; } = null!;
+    public DbSet<FacilitySettings> Settings { get; set; } = null!;
+    public DbSet<StaffNotification> StaffNotifications { get; set; } = null!;
+    public DbSet<AuditEntry> AuditEntries { get; set; } = null!;
+    public DbSet<DentalToothRecord> DentalToothRecords { get; set; } = null!;
     public DbSet<DoctorScheduleTemplate> DoctorScheduleTemplates { get; set; } = null!;
     public DbSet<DoctorBreakTime> DoctorBreakTimes { get; set; } = null!;
     public DbSet<DoctorLeave> DoctorLeaves { get; set; } = null!;
     public DbSet<DoctorScheduleOverride> DoctorScheduleOverrides { get; set; } = null!;
-    public DbSet<PatientSurgicalHistory> PatientSurgicalHistories { get; set; } = null!;
-    public DbSet<PatientSocialHistory> PatientSocialHistories { get; set; } = null!;
-    public DbSet<PatientReproductiveHistory> PatientReproductiveHistories { get; set; } = null!;
-    public DbSet<NcdRiskAssessment> NcdRiskAssessments { get; set; } = null!;
-    public DbSet<PatientImmunization> PatientImmunizations { get; set; } = null!;
-    public DbSet<PatientProblem> PatientProblems { get; set; } = null!;
-    public DbSet<PatientAllergy> PatientAllergies { get; set; } = null!;
-    public DbSet<PatientPastMedicalHistory> PatientPastMedicalHistories { get; set; } = null!;
-    public DbSet<PatientFamilyHistory> PatientFamilyHistories { get; set; } = null!;
-    public DbSet<PatientPhysicalExamProfile> PatientPhysicalExamProfiles { get; set; } = null!;
-    public DbSet<ClinicStaffNotification> StaffNotifications { get; set; } = null!;
+    public DbSet<EodReconciliationAudit> EodReconciliationAudits { get; set; } = null!;
+    public DbSet<PatientAddress> PatientAddresses { get; set; } = null!;
+    public DbSet<PatientGuardian> PatientGuardians { get; set; } = null!;
+    public DbSet<PatientIdentityVerification> PatientIdentityVerifications { get; set; } = null!;
+    public DbSet<PatientHospitalizationHistory> PatientHospitalizationHistories { get; set; } = null!;
+    public DbSet<PatientInjuryHistory> PatientInjuryHistories { get; set; } = null!;
+    public DbSet<PatientHomeMedication> PatientHomeMedications { get; set; } = null!;
+    public DbSet<PatientSexualHistory> PatientSexualHistories { get; set; } = null!;
+    public DbSet<EncounterReviewOfSystemsItem> EncounterReviewOfSystemsItems { get; set; } = null!;
+    public DbSet<EncounterObGyneExam> EncounterObGyneExams { get; set; } = null!;
+    public DbSet<EncounterPediatricMilestone> EncounterPediatricMilestones { get; set; } = null!;
+    public DbSet<EncounterPediatricDangerSign> EncounterPediatricDangerSigns { get; set; } = null!;
+    public DbSet<EncounterAdolescentAssessment> EncounterAdolescentAssessments { get; set; } = null!;
+    public DbSet<EncounterHeadsssDomainAssessment> EncounterHeadsssDomainAssessments { get; set; } = null!;
+    public DbSet<PatientBpMonitoringLog> PatientBpMonitoringLogs { get; set; } = null!;
+    public DbSet<PatientBpMonitoringDay> PatientBpMonitoringDays { get; set; } = null!;
+    public DbSet<YakapSubmission> YakapSubmissions { get; set; } = null!;
+    public DbSet<YakapSubmissionError> YakapSubmissionErrors { get; set; } = null!;
+    public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
+    public DbSet<PatientCodeSequenceTracker> PatientCodeSequenceTrackers { get; set; } = null!;
+    public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
+    public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;
+    public DbSet<PsgcLocation> PsgcLocations { get; set; } = null!;
+    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
+    public DbSet<UploadGrant> UploadGrants { get; set; } = null!;
+    public DbSet<ShareImport> ShareImports { get; set; } = null!;
+    public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
+    public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
-    public DbSet<ClinicAuditEntry> ClinicAuditEntries { get; set; } = null!;
-    public DbSet<DentalToothRecord> DentalToothRecords { get; set; } = null!;
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
     public DbSet<TeleconsultRecordingSession> TeleconsultRecordingSessions { get; set; } = null!;
     public DbSet<TeleconsultRecordingSegment> TeleconsultRecordingSegments { get; set; } = null!;
+    public DbSet<PhilHealthDailySequence> PhilHealthDailySequences => Set<PhilHealthDailySequence>();
+
+    // IReadDbContext Implementation
+    IQueryable<Patient> IReadDbContext.Patients => Patients.AsNoTracking();
+    IQueryable<Appointment> IReadDbContext.Appointments => Appointments.AsNoTracking();
+    IQueryable<QueueItem> IReadDbContext.QueueItems => QueueItems.AsNoTracking();
+    IQueryable<ConsultationEncounter> IReadDbContext.Consultations => Consultations.AsNoTracking();
+    IQueryable<LabOrder> IReadDbContext.LabOrders => LabOrders.AsNoTracking();
+    IQueryable<PrescriptionItem> IReadDbContext.PrescriptionItems => Prescriptions.AsNoTracking();
+    IQueryable<PatientAddress> IReadDbContext.PatientAddresses => PatientAddresses.AsNoTracking();
+    IQueryable<PhilHealthDailySequence> IReadDbContext.PhilHealthDailySequences => PhilHealthDailySequences.AsNoTracking();
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -101,6 +136,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         var schemaName = _configuration["DbSchema"] ?? "public";
         modelBuilder.HasDefaultSchema(schemaName);
         modelBuilder.HasPostgresExtension("btree_gist");
+        modelBuilder.HasPostgresExtension("pg_trgm");
 
         // Auto Primary Keys & Defaults
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
@@ -120,1037 +156,84 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         }
 
         // 1. Multi-Tenant & Clinic Jurisdiction Global Query Filters
-        modelBuilder.Entity<ClinicRole>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicRoom>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<Role>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<Room>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<StaffMember>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<Appointment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<DoctorScheduleTemplate>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<DoctorBreakTime>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<DoctorBreakTime>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<DoctorLeave>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<DoctorScheduleOverride>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<QueueItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<TriageVitals>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientVitals>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ConsultationEncounter>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicServiceItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ServiceItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<Invoice>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicalProcedure>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicLabOrder>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicPatient>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<InvoiceLineItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PaymentRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<Procedure>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<LabOrder>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<LabOrderItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<LabObservation>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<LabResult>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<Patient>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientPhilHealthMembership>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientYakapEnlistment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientAlert>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientAllergy>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientMedicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientPhysicalExam>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientPhysicalExamFinding>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientImmunization>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientReproductiveHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientSocialHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientFamilyHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientSurgicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<NcdRiskAssessment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<DentalToothRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<MedicalCertificate>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ReferralLetter>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicRecordAttachment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicCustomFieldDefinition>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicSettings>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<RecordAttachment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<CustomFieldDefinition>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<FacilitySettings>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<StaffNotification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<RefreshToken>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<AuditEntry>().HasQueryFilter(e => e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientAddress>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientGuardian>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientIdentityVerification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientHospitalizationHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientInjuryHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientHomeMedication>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientSexualHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EncounterReviewOfSystemsItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EncounterObGyneExam>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EncounterPediatricMilestone>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EncounterPediatricDangerSign>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EncounterAdolescentAssessment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EncounterHeadsssDomainAssessment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientBpMonitoringLog>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientBpMonitoringDay>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<YakapSubmission>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<YakapSubmissionError>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PhilHealthDailySequence>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<EodReconciliationAudit>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<YakapTransmittal>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<YakapTransmittalItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicLabResult>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<UploadGrant>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ShareImport>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientSurgicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientSocialHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientReproductiveHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<NcdRiskAssessment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientImmunization>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientProblem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientAllergy>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientPastMedicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientFamilyHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PatientPhysicalExamProfile>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicStaffNotification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<ClinicAuditEntry>().HasQueryFilter(e => e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<DentalToothRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-        modelBuilder.Entity<PaymentRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<TeleconsultRecordingSession>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<TeleconsultRecordingSegment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-
-        modelBuilder.Entity<ClinicStaffNotification>(b =>
-        {
-            b.ToTable("clinic_staff_notifications");
-            b.HasIndex(n => new { n.ClinicId, n.IsRead, n.CreatedAt });
-            b.HasIndex(n => n.RecipientStaffId);
-        });
-
-        modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
-        modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
-        modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted);
-        modelBuilder.Entity<ClinicRefreshToken>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
-
-        // 2. Entity Configurations
-        var permissionsConverter = new ValueConverter<List<string>, string>(
-            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-            v => string.IsNullOrEmpty(v) ? new List<string>() : JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>()
-        );
-
-        var stringListComparer = new ValueComparer<List<string>>(
-            (c1, c2) => c1 != null && c2 != null ? c1.SequenceEqual(c2) : c1 == c2,
-            c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
-            c => c.ToList());
-
-        var customFieldsConverter = new ValueConverter<Dictionary<string, object?>, string>(
-            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-            v => string.IsNullOrEmpty(v) ? new Dictionary<string, object?>() : JsonSerializer.Deserialize<Dictionary<string, object?>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, object?>()
-        );
-
-        var customFieldsComparer = new ValueComparer<Dictionary<string, object?>>(
-            (d1, d2) => d1 != null && d2 != null ? d1.Count == d2.Count && !d1.Except(d2).Any() : d1 == d2,
-            d => d == null ? 0 : d.Aggregate(0, (a, p) => HashCode.Combine(a, p.Key.GetHashCode(), p.Value != null ? p.Value.GetHashCode() : 0)),
-            d => d == null ? new Dictionary<string, object?>() : new Dictionary<string, object?>(d));
-
-        modelBuilder.Entity<ClinicRole>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Description).HasMaxLength(255);
-            entity.Property(e => e.Permissions).HasConversion(permissionsConverter, stringListComparer);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId });
-        });
-
-        modelBuilder.Entity<ClinicRoom>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Code).HasMaxLength(30);
-            entity.Property(e => e.Description).HasMaxLength(255);
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.DisplayOrder });
-            entity.HasIndex(e => new { e.ClinicId, e.Name });
-        });
-
-        modelBuilder.Entity<StaffMember>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Email).HasMaxLength(255);
-            entity.Property(e => e.PhoneNumber).HasMaxLength(50);
-            entity.Property(e => e.PrcLicenseNumber).HasMaxLength(50);
-            entity.Property(e => e.PtrNumber).HasMaxLength(50);
-            entity.Property(e => e.S2LicenseNumber).HasMaxLength(50);
-            entity.Property(e => e.Specialty).HasMaxLength(100);
-            entity.Property(e => e.PhilHealthPan).HasMaxLength(50);
-            entity.Property(e => e.SignatureSpecimen).HasColumnType("text");
-            entity.Property(e => e.DefaultSignatureMode).HasConversion<string>().HasMaxLength(50);
-
-            entity.HasOne(e => e.ClinicRole)
-                .WithMany(r => r.StaffMembers)
-                .HasForeignKey(e => e.ClinicRoleId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.Property(e => e.AssignedRoomIdsJson).HasColumnType("text");
-
-            entity.Property(e => e.PasswordHash).HasMaxLength(500);
-            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(StaffAccountStatus.Active).HasSentinel((StaffAccountStatus)0);
-            entity.Property(e => e.InvitationToken).HasMaxLength(128);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId });
-            entity.HasIndex(e => new { e.ClinicId, e.Email })
-                .IsUnique()
-                .HasFilter("\"IsDeleted\" = false AND \"Email\" IS NOT NULL");
-            entity.HasIndex(e => e.InvitationToken)
-                .HasFilter("\"IsDeleted\" = false AND \"InvitationToken\" IS NOT NULL");
-        });
-
-        modelBuilder.Entity<ClinicRefreshToken>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
-            entity.Property(e => e.DeviceLabel).HasMaxLength(150);
-            entity.HasIndex(e => e.TokenHash).IsUnique();
-            entity.HasIndex(e => e.FamilyId);
-            entity.HasIndex(e => e.StaffMemberId);
-            entity.HasOne(e => e.StaffMember).WithMany().HasForeignKey(e => e.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<Appointment>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).HasMaxLength(100);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.ServiceType).HasMaxLength(255);
-            entity.Property(e => e.Reason).HasMaxLength(255);
-            entity.Property(e => e.EndTimeUtc).IsRequired();
-            entity.Property(e => e.Version).IsRowVersion();
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId });
-            entity.HasIndex(e => e.ScheduledAt);
-            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.ScheduledAt, e.EndTimeUtc });
-            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder24hSent });
-            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder2hSent });
-        });
-
-        modelBuilder.Entity<DoctorScheduleTemplate>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
-            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.DayOfWeek, e.IsActive });
-            entity.HasMany(e => e.BreakTimes)
-                .WithOne(b => b.Template)
-                .HasForeignKey(b => b.TemplateId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<DoctorBreakTime>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Description).IsRequired().HasMaxLength(150);
-            entity.HasIndex(e => e.TemplateId);
-        });
-
-        modelBuilder.Entity<DoctorLeave>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.Reason).HasMaxLength(500);
-            entity.Property(e => e.Status).HasMaxLength(50);
-            entity.Property(e => e.LeaveType).HasMaxLength(50);
-            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.StartDate, e.EndDate });
-        });
-
-        modelBuilder.Entity<DoctorScheduleOverride>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.Reason).HasMaxLength(500);
-            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.Date });
-        });
-
-        modelBuilder.Entity<QueueItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.QueueNumber).IsRequired().HasMaxLength(20);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.DoctorName).HasMaxLength(150);
-            entity.Property(e => e.ChiefComplaint).HasMaxLength(255);
-            entity.Property(e => e.RoomOrStation).HasMaxLength(100);
-            entity.Property(e => e.ApproachingNotificationSent).HasDefaultValue(false);
-            entity.Property(e => e.CalledNotificationSent).HasDefaultValue(false);
-
-            entity.Property(e => e.VisitType)
-                .HasConversion<string>()
-                .HasMaxLength(50)
-                .HasDefaultValue(VisitType.Consultation)
-                .HasSentinel((VisitType)0);
-            entity.Property(e => e.DischargeNotes).HasMaxLength(1000);
-            entity.Property(e => e.DivertedToFacility).HasMaxLength(255);
-            entity.Property(e => e.TransportMode).HasMaxLength(100);
-            entity.Property(e => e.ParamedicOrEscortName).HasMaxLength(150);
-            entity.Property(e => e.HandoverSummary).HasMaxLength(2000);
-
-            entity.HasOne(e => e.Appointment)
-                .WithMany()
-                .HasForeignKey(e => e.AppointmentId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne(e => e.Room)
-                .WithMany(r => r.QueueItems)
-                .HasForeignKey(e => e.RoomId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne(e => e.TriageVitals)
-                .WithOne(v => v.QueueItem)
-                .HasForeignKey<TriageVitals>(v => v.QueueItemId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Consultation)
-                .WithOne(c => c.QueueItem)
-                .HasForeignKey<ConsultationEncounter>(c => c.QueueItemId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.QueueDate });
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CheckInTime });
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.QueueDate, e.Status });
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.VisitType });
-        });
-
-        modelBuilder.Entity<TriageVitals>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.TemperatureCelsius).HasPrecision(5, 2);
-            entity.Property(e => e.OxygenSaturationPercent).HasPrecision(5, 2);
-            entity.Property(e => e.HeightCm).HasPrecision(6, 2);
-            entity.Property(e => e.WeightKg).HasPrecision(6, 2);
-            entity.Property(e => e.Bmi).HasPrecision(5, 2);
-            entity.Property(e => e.RecordedByNurseName).HasMaxLength(150);
-            entity.Property(e => e.VisualAcuityLeft).HasMaxLength(50);
-            entity.Property(e => e.VisualAcuityRight).HasMaxLength(50);
-            entity.Property(e => e.HeadCircumferenceCm).HasPrecision(6, 2);
-            entity.Property(e => e.MidUpperArmCircumferenceCm).HasPrecision(6, 2);
-            entity.Property(e => e.ZScoreWeightForAge).HasPrecision(5, 2);
-            entity.Property(e => e.ZScoreLengthForAge).HasPrecision(5, 2);
-            entity.Property(e => e.ZScoreWeightForLength).HasPrecision(5, 2);
-            entity.Property(e => e.WaistCircumferenceCm).HasPrecision(6, 2);
-            entity.Property(e => e.HipCircumferenceCm).HasPrecision(6, 2);
-            entity.Property(e => e.BodyLengthCm).HasPrecision(6, 2);
-            entity.Property(e => e.SkinfoldThicknessMm).HasPrecision(6, 2);
-            entity.Property(e => e.LimbsCircumferenceCm).HasPrecision(6, 2);
-            entity.Property(e => e.GrowthZScoreCategory).HasMaxLength(50);
-            entity.Property(e => e.GrowthZScoreCode).HasMaxLength(50);
-        });
-
-        modelBuilder.Entity<ConsultationEncounter>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.DoctorPrcLicense).HasMaxLength(50);
-            entity.Property(e => e.DoctorPtr).HasMaxLength(50);
-            entity.Property(e => e.DoctorS2License).HasMaxLength(50);
-            entity.Property(e => e.DoctorPhilHealthPan).HasMaxLength(50);
-            entity.Property(e => e.PhilHealthAtc).HasMaxLength(50);
-            entity.Property(e => e.HciCaseNo).HasMaxLength(50);
-            entity.Property(e => e.HciTransNo).HasMaxLength(50);
-            entity.Property(e => e.SoapTransNo).HasMaxLength(50);
-            entity.Property(e => e.GeneralSurveyId).HasMaxLength(50);
-            entity.Property(e => e.RxClaimToken).HasMaxLength(200);
-
-            entity.HasMany(e => e.Diagnoses)
-                .WithOne(d => d.ConsultationEncounter)
-                .HasForeignKey(d => d.ConsultationEncounterId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(e => e.Prescriptions)
-                .WithOne(p => p.ConsultationEncounter)
-                .HasForeignKey(p => p.ConsultationEncounterId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.TenantId, e.BranchId });
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.EncounterDate });
-        });
-
-        modelBuilder.Entity<EncounterDiagnosis>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Icd10Code).IsRequired().HasMaxLength(20);
-            entity.Property(e => e.Description).IsRequired().HasMaxLength(255);
-        });
-
-        modelBuilder.Entity<PrescriptionItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.GenericName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.BrandName).HasMaxLength(150);
-            entity.Property(e => e.Dosage).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Form).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Sig).IsRequired().HasMaxLength(255);
-        });
-
-        modelBuilder.Entity<ClinicServiceItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.StandardPrice).HasPrecision(18, 2);
-            entity.Property(e => e.PhilHealthCode).HasMaxLength(50);
-            entity.Property(e => e.PhilHealthDescription).HasMaxLength(255);
-            entity.Property(e => e.IsPhilHealthFormulary).HasDefaultValue(false);
-            entity.Property(e => e.IsNurseOrderable).HasDefaultValue(false);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Code }).IsUnique();
-        });
-
-        modelBuilder.Entity<Invoice>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.InvoiceNumber).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.GrossAmount).HasPrecision(18, 2);
-            entity.Property(e => e.DiscountPercentage).HasPrecision(5, 2);
-            entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
-            entity.Property(e => e.NetAmount).HasPrecision(18, 2);
-            entity.Property(e => e.AmountPaid).HasPrecision(18, 2);
-            entity.Property(e => e.RefundedAmount).HasPrecision(18, 2);
-            entity.Property(e => e.BalanceDue).HasPrecision(18, 2);
-
-            entity.HasMany(e => e.LineItems)
-                .WithOne()
-                .HasForeignKey(l => l.InvoiceId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(e => e.Payments)
-                .WithOne()
-                .HasForeignKey(p => p.InvoiceId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.InvoiceNumber }).IsUnique();
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.InvoiceDate });
-        });
-
-        modelBuilder.Entity<InvoiceLineItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.DoctorName).HasMaxLength(150);
-            entity.Property(e => e.Description).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
-            entity.Property(e => e.TotalPrice).HasPrecision(18, 2);
-        });
-
-        modelBuilder.Entity<PaymentRecord>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.PaymentNumber).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Amount).HasPrecision(18, 2);
-            entity.Property(e => e.ReferenceNumber).HasMaxLength(100);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PaymentDate });
-        });
-
-        modelBuilder.Entity<ClinicalProcedure>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.ProcedureName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.TargetRoomName).HasMaxLength(100);
-            entity.Property(e => e.ToothSurface).HasMaxLength(20);
-            entity.HasOne(e => e.TargetRoom)
-                .WithMany()
-                .HasForeignKey(e => e.TargetRoomId)
-                .OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ScheduledAt });
-        });
-
-        modelBuilder.Entity<ClinicLabOrder>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.OrderNumber).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.StageReason).HasMaxLength(500);
-            entity.Property(e => e.QuotedAmount).HasPrecision(18, 2);
-            entity.Property(e => e.QuotedCurrency).HasMaxLength(10);
-            entity.Property(e => e.TargetTenantId).HasMaxLength(100);
-            entity.Property(e => e.LaboratoryTenantId).HasMaxLength(100);
-            entity.Property(e => e.LaboratoryFacilityId).HasMaxLength(100);
-            entity.Property(e => e.LaboratoryName).HasMaxLength(200);
-            entity.Property(e => e.ClaimToken).HasMaxLength(200);
-
-            entity.HasMany(e => e.Items)
-                .WithOne()
-                .HasForeignKey(i => i.LabOrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.OrderNumber }).IsUnique();
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.OrderDate });
-        });
-
-        modelBuilder.Entity<ClinicLabOrderItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TestName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
-        });
-
-        modelBuilder.Entity<ClinicLabResult>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ExternalLabName).HasMaxLength(200);
-            entity.Property(e => e.Notes).HasMaxLength(2000);
-            entity.Property(e => e.FileName).HasMaxLength(255);
-            entity.Property(e => e.ContentType).HasMaxLength(100);
-            entity.Property(e => e.StorageKey).HasMaxLength(400);
-            entity.Property(e => e.EncryptionIvBase64).HasMaxLength(100);
-            entity.Property(e => e.EncryptionTagBase64).HasMaxLength(100);
-            entity.Property(e => e.EncryptedHash).HasMaxLength(100);
-            entity.Property(e => e.WrappedKeyJson).HasColumnType("text");
-            entity.Property(e => e.VerifiedByName).HasMaxLength(150);
-            entity.Property(e => e.VerifiedByPrc).HasMaxLength(50);
-            entity.Property(e => e.ReviewRemarks).HasMaxLength(1000);
-            entity.HasOne<ClinicLabOrder>()
-                .WithMany()
-                .HasForeignKey(e => e.LabOrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.ClinicId, e.LabOrderId });
-            entity.HasIndex(e => new { e.ClinicId, e.Verification, e.SubmittedAt });
-            entity.HasIndex(e => new { e.ClinicId, e.LabOrderId, e.ReportId })
-                .IsUnique()
-                .HasFilter("\"ReportId\" IS NOT NULL");
-        });
-
-        modelBuilder.Entity<UploadGrant>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(32);
-            entity.HasOne<ClinicLabOrder>()
-                .WithMany()
-                .HasForeignKey(e => e.LabOrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => e.TokenHash).IsUnique();
-            entity.HasIndex(e => new { e.ClinicId, e.LabOrderId });
-        });
-
-        modelBuilder.Entity<ShareImport>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Purpose).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ChiefComplaint).HasMaxLength(255);
-            entity.Property(e => e.DenialReason).HasMaxLength(500);
-            entity.Property(e => e.PatientName).HasMaxLength(200);
-            entity.Property(e => e.ClinicEzId).HasMaxLength(40);
-            entity.Property(e => e.QueueNumber).HasMaxLength(20);
-            entity.Property(e => e.ItemsJson).HasColumnType("text");
-            // A flags enum is stored as its comma-separated names, which outgrow the 50-character default.
-            entity.Property(e => e.Scopes).HasMaxLength(200);
-            entity.HasIndex(e => new { e.ClinicId, e.RequestedAt });
-        });
-
-        modelBuilder.Entity<Product>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Sku).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Price).HasPrecision(18, 2);
-        });
-
-        modelBuilder.Entity<ClinicPatient>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.PatientCode).IsRequired().HasMaxLength(30);
-            entity.Property(e => e.ShareGrantScopes).HasMaxLength(200);
-            entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ContactNumber).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Gender).HasMaxLength(50);
-            entity.Property(e => e.PhilHealthNumber).HasMaxLength(30);
-            entity.Property(e => e.SeniorCitizenId).HasMaxLength(50);
-            entity.Property(e => e.PwdId).HasMaxLength(50);
-            entity.Property(e => e.VerificationStatus).HasMaxLength(50).HasDefaultValue("Verified");
-            entity.Property(e => e.CustomFields)
-                .HasConversion(customFieldsConverter, customFieldsComparer);
-            entity.Property(e => e.ClinicEzId).HasMaxLength(40);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientCode }).IsUnique();
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.LastName, e.FirstName });
-            entity.HasIndex(e => new { e.ClinicId, e.ClinicEzId });
-            entity.HasIndex(e => new { e.ClinicId, e.SyncPatientId });
-        });
-
-        modelBuilder.Entity<PatientCodeSequenceTracker>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Year).IsRequired();
-            entity.Property(e => e.CurrentSequence).IsRequired().IsConcurrencyToken();
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Year }).IsUnique();
-        });
-
-        modelBuilder.Entity<PatientSurgicalHistory>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ProcedureName).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.HospitalName).HasMaxLength(255);
-            entity.Property(e => e.Findings).HasMaxLength(1000);
-            entity.Property(e => e.Complications).HasMaxLength(1000);
-            entity.Property(e => e.Remarks).HasMaxLength(1000);
-            entity.HasOne(e => e.Patient)
-                .WithMany(p => p.SurgicalHistories)
-                .HasForeignKey(e => e.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.PatientId, e.SurgeryDate });
-        });
-
-        modelBuilder.Entity<PatientSocialHistory>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.PacksPerDay).HasPrecision(5, 2);
-            entity.Property(e => e.SmokingPackYears).HasPrecision(5, 2);
-            entity.Property(e => e.AlcoholFrequency).HasMaxLength(50);
-            entity.Property(e => e.SubstanceUseHistory).HasMaxLength(500);
-            entity.Property(e => e.DrugTypes).HasMaxLength(255);
-            entity.Property(e => e.PhysicalActivityFrequency).HasMaxLength(100);
-            entity.Property(e => e.DietaryHabits).HasMaxLength(255);
-            entity.Property(e => e.Remarks).HasMaxLength(1000);
-            entity.HasOne(e => e.Patient)
-                .WithOne(p => p.SocialHistory)
-                .HasForeignKey<PatientSocialHistory>(e => e.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId }).IsUnique();
-        });
-
-        modelBuilder.Entity<PatientReproductiveHistory>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ContraceptiveMethod).HasMaxLength(100);
-            entity.Property(e => e.DeliveryType).HasMaxLength(50);
-            entity.Property(e => e.Remarks).HasMaxLength(1000);
-            entity.HasOne(e => e.Patient)
-                .WithOne(p => p.ReproductiveHistory)
-                .HasForeignKey<PatientReproductiveHistory>(e => e.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId }).IsUnique();
-        });
-
-        modelBuilder.Entity<PatientPhysicalExamProfile>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.GenSurveyId).HasMaxLength(10).HasDefaultValue("1");
-            entity.Property(e => e.GenSurveyRemarks).HasMaxLength(1000);
-            entity.Property(e => e.SkinId).HasMaxLength(10).HasDefaultValue("1");
-            entity.Property(e => e.SkinRemarks).HasMaxLength(1000);
-            entity.Property(e => e.HeentId).HasMaxLength(10).HasDefaultValue("11");
-            entity.Property(e => e.HeentRemarks).HasMaxLength(1000);
-            entity.Property(e => e.ChestId).HasMaxLength(10).HasDefaultValue("6");
-            entity.Property(e => e.ChestRemarks).HasMaxLength(1000);
-            entity.Property(e => e.HeartId).HasMaxLength(10).HasDefaultValue("5");
-            entity.Property(e => e.HeartRemarks).HasMaxLength(1000);
-            entity.Property(e => e.AbdomenId).HasMaxLength(10).HasDefaultValue("7");
-            entity.Property(e => e.AbdomenRemarks).HasMaxLength(1000);
-            entity.Property(e => e.NeuroId).HasMaxLength(10).HasDefaultValue("6");
-            entity.Property(e => e.NeuroRemarks).HasMaxLength(1000);
-            entity.Property(e => e.RectalId).HasMaxLength(10).HasDefaultValue("1");
-            entity.Property(e => e.RectalRemarks).HasMaxLength(1000);
-            entity.Property(e => e.GuId).HasMaxLength(10).HasDefaultValue("1");
-            entity.Property(e => e.GuRemarks).HasMaxLength(1000);
-            entity.HasOne(e => e.Patient)
-                .WithOne(p => p.PhysicalExamProfile)
-                .HasForeignKey<PatientPhysicalExamProfile>(e => e.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId }).IsUnique();
-        });
-
-        modelBuilder.Entity<NcdRiskAssessment>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.DiagnosedDiabetes).HasMaxLength(10);
-            entity.Property(e => e.DiabetesMedicationStatus).HasMaxLength(10);
-            entity.Property(e => e.FastingBloodSugarMgDl).HasPrecision(6, 2);
-            entity.Property(e => e.FastingBloodSugarMmolL).HasPrecision(6, 2);
-            entity.Property(e => e.TotalCholesterolMgDl).HasPrecision(6, 2);
-            entity.Property(e => e.UrineKetonesValue).HasMaxLength(50);
-            entity.Property(e => e.UrineProteinValue).HasMaxLength(50);
-            entity.Property(e => e.RiskBand).IsRequired().HasMaxLength(50).HasDefaultValue("BandA");
-            entity.Property(e => e.CalculatedRiskScorePercent).HasPrecision(5, 2);
-            entity.Property(e => e.AssessedByStaffName).HasMaxLength(150);
-            entity.Property(e => e.Remarks).HasMaxLength(1000);
-            entity.HasOne(e => e.Patient)
-                .WithMany(p => p.NcdRiskAssessments)
-                .HasForeignKey(e => e.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.AssessmentDate });
-        });
-
-        modelBuilder.Entity<PatientProblem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Icd10Code).IsRequired().HasMaxLength(20);
-            entity.Property(e => e.ProblemTitle).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.PhilHealthMdiseaseCode).HasMaxLength(20);
-            entity.Property(e => e.ClinicalNotes).HasMaxLength(1000);
-            entity.Property(e => e.RecordedByDoctorName).IsRequired().HasMaxLength(150);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Status });
-            entity.HasIndex(e => new { e.ClinicId, e.Icd10Code });
-        });
-
-        modelBuilder.Entity<PatientAllergy>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Allergen).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.AllergenDrugCode).HasMaxLength(50);
-            entity.Property(e => e.ReactionManifestation).HasMaxLength(500);
-            entity.Property(e => e.Notes).HasMaxLength(1000);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Category });
-        });
-
-        modelBuilder.Entity<PatientPastMedicalHistory>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ConditionTitle).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.PhilHealthMdiseaseCode).HasMaxLength(50);
-            entity.Property(e => e.Icd10Code).HasMaxLength(50);
-            entity.Property(e => e.SpecificDescription).HasMaxLength(500);
-            entity.Property(e => e.ClinicalNotes).HasMaxLength(1000);
-            entity.HasOne(e => e.Patient)
-                .WithMany(p => p.PastMedicalHistories)
-                .HasForeignKey(e => e.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.PhilHealthMdiseaseCode });
-        });
-
-        modelBuilder.Entity<PatientFamilyHistory>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ConditionTitle).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.PhilHealthMdiseaseCode).HasMaxLength(50);
-            entity.Property(e => e.Icd10Code).HasMaxLength(50);
-            entity.Property(e => e.SpecificDescription).HasMaxLength(500);
-            entity.Property(e => e.Relationship).HasMaxLength(100);
-            entity.Property(e => e.ClinicalNotes).HasMaxLength(1000);
-            entity.HasOne(e => e.Patient)
-                .WithMany(p => p.FamilyHistories)
-                .HasForeignKey(e => e.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.PhilHealthMdiseaseCode });
-        });
-
-        modelBuilder.Entity<PatientImmunization>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.PhilHealthLibrary).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.PhilHealthCode).IsRequired().HasMaxLength(20);
-            entity.Property(e => e.VaccineName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.BrandName).HasMaxLength(150);
-            entity.Property(e => e.Manufacturer).HasMaxLength(150);
-            entity.Property(e => e.LotBatchNumber).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Route).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.InjectionSite).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.AdministeredByStaffName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.AdministeredByPrcLicense).HasMaxLength(50);
-            entity.Property(e => e.AdverseReactionSeverity).IsRequired().HasMaxLength(50).HasDefaultValue("None");
-            entity.Property(e => e.AdverseReactionRemarks).HasMaxLength(1000);
-            entity.Property(e => e.HistoricalFacilityName).HasMaxLength(150);
-            entity.Property(e => e.Remarks).HasMaxLength(1000);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.AdministeredAtUtc });
-            entity.HasIndex(e => new { e.LotBatchNumber, e.ExpirationDate });
-        });
-
-        modelBuilder.Entity<MedicalCertificate>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.CertificateNumber).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.PrcLicenseNumber).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.FitnessStatus).HasMaxLength(50);
-            entity.Property(e => e.Purpose).HasMaxLength(50);
-            entity.Property(e => e.SecurityDigest).HasMaxLength(100);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CertificateNumber }).IsUnique();
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.SecurityDigest });
-        });
-
-        modelBuilder.Entity<ReferralLetter>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ReferralNumber).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.ReferringDoctorName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.ReferredToFacility).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.ReferredDepartment).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Urgency).HasMaxLength(50);
-            entity.Property(e => e.SecurityDigest).HasMaxLength(100);
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ReferralNumber }).IsUnique();
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.SecurityDigest });
-        });
-
-        modelBuilder.Entity<ClinicRecordAttachment>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.RecordType).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.FileName).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.ContentType).HasMaxLength(100);
-            entity.Property(e => e.VerificationStatus).HasMaxLength(50).HasDefaultValue("Verified");
-            entity.Property(e => e.RejectionReason).HasMaxLength(255);
-            entity.Property(e => e.VerifiedByStaffName).HasMaxLength(150);
-            entity.Property(e => e.EncryptionAlgorithm).HasMaxLength(50).HasDefaultValue("AES-256-GCM");
-            entity.Property(e => e.EncryptionKeyId).HasMaxLength(100);
-            entity.Property(e => e.EncryptionIvBase64).HasMaxLength(100);
-            entity.Property(e => e.EncryptionTagBase64).HasMaxLength(100);
-            entity.Property(e => e.EncryptedHash).HasMaxLength(100);
-            entity.Property(e => e.WrappedKeyJson).HasColumnType("text");
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-        });
-
-        modelBuilder.Entity<ClinicCustomFieldDefinition>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.EntityType).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.FieldKey).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Label).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.Category).HasMaxLength(50);
-            entity.Property(e => e.BoundaryMode).HasMaxLength(50);
-            entity.Property(e => e.Placeholder).HasMaxLength(200);
-            entity.Property(e => e.OptionsJson).HasColumnType("text");
-            entity.Property(e => e.VisibilityRuleJson).HasColumnType("text");
-            entity.Property(e => e.ConditionalOptionsJson).HasColumnType("text");
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.EntityType, e.FieldKey })
-                .IsUnique()
-                .HasFilter("\"IsDeleted\" = false");
-        });
-
-        modelBuilder.Entity<ClinicSettings>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.TenantSlug).HasMaxLength(100);
-            entity.Property(e => e.FacilitySlug).HasMaxLength(100);
-            entity.Property(e => e.ClinicName).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.AccreditationNumber).HasMaxLength(100);
-            entity.Property(e => e.LetterheadDohLto).HasMaxLength(100);
-            entity.Property(e => e.LetterheadAccentColorHex).HasMaxLength(20);
-            entity.Property(e => e.PmccNumber).HasMaxLength(100);
-            entity.Property(e => e.SoftwareCertificateId).HasMaxLength(100);
-            entity.Property(e => e.KonsultaEndpoint).HasMaxLength(255);
-            entity.Property(e => e.IsPhilHealthOverridden).HasDefaultValue(false);
-            entity.Property(e => e.BranchId);
-            entity.Property(e => e.BranchName).HasMaxLength(200);
-            entity.Property(e => e.BranchPhilHealthAccreditationNumber).HasMaxLength(100);
-            entity.Property(e => e.BranchPmccNumber).HasMaxLength(100);
-            entity.Property(e => e.BranchSoftwareCertificateId).HasMaxLength(100);
-            entity.Property(e => e.BranchKonsultaEndpoint).HasMaxLength(255);
-            entity.Property(e => e.IsBranchPhilHealthAccredited).HasDefaultValue(false);
-            entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
-            entity.Property(e => e.VatRate).HasPrecision(5, 4);
-            entity.Property(e => e.CashierMode).HasMaxLength(50).HasDefaultValue("ClinicDesk");
-            entity.Property(e => e.PreferredChartLayout).HasMaxLength(50).HasDefaultValue("modal");
-            entity.Property(e => e.IsJoinEnabled).HasDefaultValue(true);
-            entity.Property(e => e.JoinCode).HasMaxLength(50);
-            entity.Property(e => e.JoinCodeExpiresAt);
-            entity.Property(e => e.PatientSearchDisplayFieldsJson).HasColumnType("text");
-            entity.Property(e => e.EodReconciliationTime).HasMaxLength(10).HasDefaultValue("21:00");
-            entity.Property(e => e.AutoEodEnabled).HasDefaultValue(true);
-            entity.Property(e => e.TvDisplayMaskPatientNames).HasDefaultValue(true);
-            entity.Property(e => e.TvDisplayPin).HasMaxLength(50);
-            entity.Property(e => e.EnableQueuePushNotifications).HasDefaultValue(true);
-            entity.Property(e => e.QueuePushNotificationThreshold).HasDefaultValue(2);
-            entity.Property(e => e.EnableChipLevelQueueCalling).HasDefaultValue(false);
-            entity.Property(e => e.IsWorkspaceEligible).HasDefaultValue(false);
-            entity.Property(e => e.IsDirectoryPublished).HasDefaultValue(false);
-            entity.Property(e => e.IsOnlineBookingPaused).HasDefaultValue(false);
-            entity.Property(e => e.DefaultApproverName).HasMaxLength(200);
-            entity.Property(e => e.DefaultApproverTitle).HasMaxLength(200);
-            entity.Property(e => e.DocumentSignatoriesJson).HasColumnType("text");
-            entity.Property(e => e.EnableAppointmentReminders).HasDefaultValue(true);
-            entity.Property(e => e.AppointmentReminder24hEnabled).HasDefaultValue(true);
-            entity.Property(e => e.AppointmentReminder2hEnabled).HasDefaultValue(true);
-            entity.Property(e => e.EnableStaffAppointmentNotifications).HasDefaultValue(true);
-
-            entity.Property(e => e.TimeZoneId).HasMaxLength(100);
-            entity.Property(e => e.DateFormat).HasMaxLength(50);
-            entity.Property(e => e.TimeFormat).HasMaxLength(20);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
-        });
-
-        modelBuilder.Entity<EodReconciliationAudit>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.TriggerType).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.ReconciledBy).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.AffectedTicketNumbersJson).HasColumnType("text");
-            entity.Property(e => e.Notes).HasMaxLength(500);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ReconciliationDate });
-        });
-
-
-        modelBuilder.Entity<YakapTransmittal>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.TransmittalNumber).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ReportTagging).IsRequired().HasMaxLength(10);
-            entity.Property(e => e.EffectiveYear).IsRequired().HasMaxLength(10);
-            entity.Property(e => e.PackageType).IsRequired().HasMaxLength(20);
-            entity.Property(e => e.PhilHealthTransactionNumber).HasMaxLength(100);
-            entity.Property(e => e.EncryptedPayloadHash).HasMaxLength(128);
-            entity.Property(e => e.SubmittedBy).HasMaxLength(150);
-            entity.Property(e => e.ValidationErrors).HasConversion(permissionsConverter, stringListComparer);
-
-            entity.HasMany(e => e.Items)
-                .WithOne(i => i.Transmittal)
-                .HasForeignKey(i => i.YakapTransmittalId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.TransmittalNumber });
-            entity.HasIndex(e => new { e.TenantId, e.BranchId });
-        });
-
-        modelBuilder.Entity<YakapTransmittalItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.PhilHealthIdentificationNumber).IsRequired().HasMaxLength(30);
-            entity.Property(e => e.ItemType).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.ReportStatus).HasMaxLength(10).HasDefaultValue("U");
-            entity.Property(e => e.DeficiencyRemarks).HasMaxLength(500);
-
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.YakapTransmittalId });
-        });
-
-        // PhilHealth Catalog: official lib_* libraries shared by every clinic on this server (no tenant filter).
-        modelBuilder.Entity<PhilHealthCatalogItem>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Library).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.ItemKey).IsRequired().HasMaxLength(160);
-            entity.Property(e => e.Code).IsRequired().HasMaxLength(128);
-            entity.Property(e => e.Description).HasMaxLength(2000);
-            entity.Property(e => e.AttributesJson).HasColumnType("text");
-            entity.Property(e => e.KitVersion).HasMaxLength(40);
-            entity.HasIndex(e => new { e.Library, e.ItemKey }).IsUnique();
-            entity.HasIndex(e => new { e.Library, e.Code });
-        });
-
-        modelBuilder.Entity<PhilHealthCatalogImportLog>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Library).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.KitVersion).HasMaxLength(40);
-            entity.Property(e => e.ContentHash).HasMaxLength(64);
-            entity.Property(e => e.Message).HasMaxLength(500);
-            entity.HasIndex(e => new { e.Library, e.CreatedAt });
-        });
-
-        modelBuilder.Entity<IdempotencyRecord>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Scope).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.Key).IsRequired().HasMaxLength(128);
-            entity.Property(e => e.Method).IsRequired().HasMaxLength(10);
-            entity.Property(e => e.Path).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.RequestHash).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.ContentType).HasMaxLength(200);
-            entity.Property(e => e.ResponseBody).HasColumnType("text");
-            entity.HasIndex(e => new { e.Scope, e.Key }).IsUnique();
-            entity.HasIndex(e => e.CreatedAt);
-        });
-
-        modelBuilder.Entity<ClinicAuditEntry>(entity =>
-        {
-            entity.ToTable("ClinicAuditEntries");
-            entity.HasKey(e => e.Id);
-
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Severity).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ActorName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.ActorRole).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ClientIpAddress).HasMaxLength(50);
-            entity.Property(e => e.UserAgent).HasMaxLength(500);
-            entity.Property(e => e.TargetEntityType).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.TargetEntityId).HasMaxLength(100);
-            entity.Property(e => e.PatientNameMasked).HasMaxLength(150);
-            entity.Property(e => e.PatientPinMasked).HasMaxLength(50);
-            entity.Property(e => e.Outcome).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Description).IsRequired().HasMaxLength(1000);
-            entity.Property(e => e.MetadataJson).HasColumnType("text");
-
-            // Composite indexes for audit queries, category tabs, severity alerts, and backward cursor pagination (Timestamp DESC)
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Timestamp });
-            entity.HasIndex(e => new { e.ClinicId, e.Category, e.Timestamp });
-            entity.HasIndex(e => new { e.ClinicId, e.Severity, e.Timestamp });
-            entity.HasIndex(e => new { e.ClinicId, e.ActorStaffId, e.Timestamp });
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Timestamp });
-            entity.HasIndex(e => new { e.ClinicId, e.TargetEntityType, e.TargetEntityId });
-        });
-
-        modelBuilder.Entity<DentalToothRecord>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.PatientName).HasMaxLength(150);
-            entity.Property(e => e.ToothNumber).IsRequired();
-            entity.Property(e => e.Status)
-                .IsRequired()
-                .HasConversion<string>()
-                .HasMaxLength(50);
-            entity.Property(e => e.Surface).HasMaxLength(20);
-            entity.Property(e => e.ActiveSurface).HasMaxLength(20);
-            entity.Property(e => e.IsCurrent).IsRequired().HasDefaultValue(true);
-            entity.Property(e => e.RecordedBy).HasMaxLength(200);
-            entity.Property(e => e.Notes).HasMaxLength(1000);
-            entity.Property(e => e.IsVoided).IsRequired().HasDefaultValue(false);
-            entity.Property(e => e.VoidedBy).HasMaxLength(200);
-            entity.Property(e => e.VoidReason).HasMaxLength(500);
-
-            // Composite indexes for fast odontogram reads and tooth history
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.ToothNumber });
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.ToothNumber, e.IsCurrent });
-            entity.HasIndex(e => new { e.ClinicId, e.ConsultationId });
-        });
+        modelBuilder.Entity<IdempotencyRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         // Interop transactional outbox and inbox
         modelBuilder.ApplyInteropModel();
 
         modelBuilder.ApplyWorkspaceProfileModel();
-        modelBuilder.Entity<DataProtectionKey>(entity => { entity.ToTable("DataProtectionKeys"); });
 
-        modelBuilder.Entity<TeleconsultRecordingSession>(entity =>
-        {
-            entity.ToTable("teleconsult_recording_sessions");
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.ClinicId, e.CallId }).IsUnique();
-            entity.HasIndex(e => new { e.ClinicId, e.PatientId });
-            entity.HasIndex(e => new { e.ClinicId, e.ConsultationId });
-            entity.HasIndex(e => e.ExpiresAtUtc)
-                  .HasFilter("\"IsPurged\" = false AND \"IsLegalHold\" = false");
-
-            entity.Property(e => e.TenantId).HasMaxLength(64).IsRequired();
-            entity.Property(e => e.DoctorName).HasMaxLength(128).IsRequired();
-            entity.Property(e => e.PatientName).HasMaxLength(128).IsRequired();
-            entity.Property(e => e.ConsentStatus).HasMaxLength(32).IsRequired();
-            entity.Property(e => e.RecordingState).HasMaxLength(32).IsRequired();
-            entity.Property(e => e.StoragePolicy).HasMaxLength(32).IsRequired();
-            entity.Property(e => e.ContainerFormat).HasMaxLength(64).IsRequired();
-            entity.Property(e => e.ManifestStorageKey).HasMaxLength(512);
-            entity.Property(e => e.EncryptionAlgorithm).HasMaxLength(32).IsRequired();
-            entity.Property(e => e.EncryptionKeyId).HasMaxLength(64).IsRequired();
-            entity.Property(e => e.LegalHoldReason).HasMaxLength(512);
-            entity.Property(e => e.LegalHoldPlacedByStaffName).HasMaxLength(128);
-            entity.Property(e => e.PurgedBy).HasMaxLength(128);
-
-            entity.HasMany(e => e.Segments)
-                  .WithOne(s => s.Session)
-                  .HasForeignKey(s => s.SessionId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<TeleconsultRecordingSegment>(entity =>
-        {
-            entity.ToTable("teleconsult_recording_segments");
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.SessionId, e.SegmentIndex }).IsUnique();
-
-            entity.Property(e => e.TenantId).HasMaxLength(64).IsRequired();
-            entity.Property(e => e.StorageKey).HasMaxLength(512).IsRequired();
-            entity.Property(e => e.Sha256Checksum).HasMaxLength(64).IsRequired();
-            entity.Property(e => e.IvBase64).HasMaxLength(64).IsRequired();
-            entity.Property(e => e.TagBase64).HasMaxLength(64).IsRequired();
-        });
+        // 2. Apply Modular Entity Configurations from Assembly
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
 
         base.OnModelCreating(modelBuilder);
     }
@@ -1164,6 +247,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        CascadeClinicAndTenantScopes();
         EnforceWormImmutability();
 
         if (!Database.IsRelational())
@@ -1184,6 +268,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        CascadeClinicAndTenantScopes();
         EnforceWormImmutability();
 
         if (!Database.IsRelational())
@@ -1197,14 +282,341 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
+    private void CascadeClinicAndTenantScopes()
+    {
+        var addedScoped = ChangeTracker.Entries<ClinicScopedEntity>()
+            .Where(e => e.State == EntityState.Added)
+            .ToList();
+
+        foreach (var entry in addedScoped)
+        {
+            if (entry.Entity is InvoiceLineItem lineItem && lineItem.ClinicId == Guid.Empty)
+            {
+                if (lineItem.Invoice != null && lineItem.Invoice.ClinicId != Guid.Empty)
+                {
+                    lineItem.ClinicId = lineItem.Invoice.ClinicId;
+                    lineItem.TenantId = lineItem.Invoice.TenantId;
+                }
+                else if (Invoices.Local.FirstOrDefault(i => i.Id == lineItem.InvoiceId) is { } inv && inv.ClinicId != Guid.Empty)
+                {
+                    lineItem.ClinicId = inv.ClinicId;
+                    lineItem.TenantId = inv.TenantId;
+                }
+            }
+            else if (entry.Entity is PaymentRecord pay && pay.ClinicId == Guid.Empty)
+            {
+                if (pay.Invoice != null && pay.Invoice.ClinicId != Guid.Empty)
+                {
+                    pay.ClinicId = pay.Invoice.ClinicId;
+                    pay.TenantId = pay.Invoice.TenantId;
+                }
+                else if (Invoices.Local.FirstOrDefault(i => i.Id == pay.InvoiceId) is { } inv && inv.ClinicId != Guid.Empty)
+                {
+                    pay.ClinicId = inv.ClinicId;
+                    pay.TenantId = inv.TenantId;
+                }
+            }
+            else if (entry.Entity is EncounterDiagnosis diag && diag.ClinicId == Guid.Empty)
+            {
+                if (diag.ConsultationEncounter != null && diag.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    diag.ClinicId = diag.ConsultationEncounter.ClinicId;
+                    diag.TenantId = diag.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == diag.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    diag.ClinicId = ce.ClinicId;
+                    diag.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is LabOrderItem labItem && labItem.ClinicId == Guid.Empty)
+            {
+                if (labItem.LabOrder != null && labItem.LabOrder.ClinicId != Guid.Empty)
+                {
+                    labItem.ClinicId = labItem.LabOrder.ClinicId;
+                    labItem.TenantId = labItem.LabOrder.TenantId;
+                }
+                else if (LabOrders.Local.FirstOrDefault(l => l.Id == labItem.LabOrderId) is { } lo && lo.ClinicId != Guid.Empty)
+                {
+                    labItem.ClinicId = lo.ClinicId;
+                    labItem.TenantId = lo.TenantId;
+                }
+            }
+            else if (entry.Entity is PrescriptionItem rxItem && rxItem.ClinicId == Guid.Empty)
+            {
+                if (rxItem.ConsultationEncounter != null && rxItem.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    rxItem.ClinicId = rxItem.ConsultationEncounter.ClinicId;
+                    rxItem.TenantId = rxItem.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == rxItem.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    rxItem.ClinicId = ce.ClinicId;
+                    rxItem.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientPhysicalExamFinding finding && finding.ClinicId == Guid.Empty)
+            {
+                if (finding.PhysicalExam != null && finding.PhysicalExam.ClinicId != Guid.Empty)
+                {
+                    finding.ClinicId = finding.PhysicalExam.ClinicId;
+                    finding.TenantId = finding.PhysicalExam.TenantId;
+                }
+                else if (PatientPhysicalExams.Local.FirstOrDefault(pe => pe.Id == finding.PhysicalExamId) is { } pe && pe.ClinicId != Guid.Empty)
+                {
+                    finding.ClinicId = pe.ClinicId;
+                    finding.TenantId = pe.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientAddress addr && addr.ClinicId == Guid.Empty)
+            {
+                if (addr.Patient != null && addr.Patient.ClinicId != Guid.Empty)
+                {
+                    addr.ClinicId = addr.Patient.ClinicId;
+                    addr.TenantId = addr.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == addr.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    addr.ClinicId = pt.ClinicId;
+                    addr.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientGuardian guardian && guardian.ClinicId == Guid.Empty)
+            {
+                if (guardian.Patient != null && guardian.Patient.ClinicId != Guid.Empty)
+                {
+                    guardian.ClinicId = guardian.Patient.ClinicId;
+                    guardian.TenantId = guardian.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == guardian.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    guardian.ClinicId = pt.ClinicId;
+                    guardian.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientIdentityVerification verif && verif.ClinicId == Guid.Empty)
+            {
+                if (verif.Patient != null && verif.Patient.ClinicId != Guid.Empty)
+                {
+                    verif.ClinicId = verif.Patient.ClinicId;
+                    verif.TenantId = verif.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == verif.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    verif.ClinicId = pt.ClinicId;
+                    verif.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientHospitalizationHistory hosp && hosp.ClinicId == Guid.Empty)
+            {
+                if (hosp.Patient != null && hosp.Patient.ClinicId != Guid.Empty)
+                {
+                    hosp.ClinicId = hosp.Patient.ClinicId;
+                    hosp.TenantId = hosp.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == hosp.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    hosp.ClinicId = pt.ClinicId;
+                    hosp.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientInjuryHistory injury && injury.ClinicId == Guid.Empty)
+            {
+                if (injury.Patient != null && injury.Patient.ClinicId != Guid.Empty)
+                {
+                    injury.ClinicId = injury.Patient.ClinicId;
+                    injury.TenantId = injury.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == injury.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    injury.ClinicId = pt.ClinicId;
+                    injury.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientHomeMedication homeMed && homeMed.ClinicId == Guid.Empty)
+            {
+                if (homeMed.Patient != null && homeMed.Patient.ClinicId != Guid.Empty)
+                {
+                    homeMed.ClinicId = homeMed.Patient.ClinicId;
+                    homeMed.TenantId = homeMed.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == homeMed.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    homeMed.ClinicId = pt.ClinicId;
+                    homeMed.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientSexualHistory sexHist && sexHist.ClinicId == Guid.Empty)
+            {
+                if (sexHist.Patient != null && sexHist.Patient.ClinicId != Guid.Empty)
+                {
+                    sexHist.ClinicId = sexHist.Patient.ClinicId;
+                    sexHist.TenantId = sexHist.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == sexHist.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    sexHist.ClinicId = pt.ClinicId;
+                    sexHist.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is EncounterReviewOfSystemsItem rosItem && rosItem.ClinicId == Guid.Empty)
+            {
+                if (rosItem.ConsultationEncounter != null && rosItem.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    rosItem.ClinicId = rosItem.ConsultationEncounter.ClinicId;
+                    rosItem.TenantId = rosItem.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == rosItem.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    rosItem.ClinicId = ce.ClinicId;
+                    rosItem.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is EncounterObGyneExam obGyne && obGyne.ClinicId == Guid.Empty)
+            {
+                if (obGyne.ConsultationEncounter != null && obGyne.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    obGyne.ClinicId = obGyne.ConsultationEncounter.ClinicId;
+                    obGyne.TenantId = obGyne.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == obGyne.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    obGyne.ClinicId = ce.ClinicId;
+                    obGyne.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is EncounterPediatricMilestone milestone && milestone.ClinicId == Guid.Empty)
+            {
+                if (milestone.ConsultationEncounter != null && milestone.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    milestone.ClinicId = milestone.ConsultationEncounter.ClinicId;
+                    milestone.TenantId = milestone.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == milestone.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    milestone.ClinicId = ce.ClinicId;
+                    milestone.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is EncounterPediatricDangerSign ds && ds.ClinicId == Guid.Empty)
+            {
+                if (ds.PediatricMilestone != null && ds.PediatricMilestone.ClinicId != Guid.Empty)
+                {
+                    ds.ClinicId = ds.PediatricMilestone.ClinicId;
+                    ds.TenantId = ds.PediatricMilestone.TenantId;
+                }
+                else if (EncounterPediatricMilestones.Local.FirstOrDefault(m => m.Id == ds.PediatricMilestoneId) is { } pm && pm.ClinicId != Guid.Empty)
+                {
+                    ds.ClinicId = pm.ClinicId;
+                    ds.TenantId = pm.TenantId;
+                }
+            }
+            else if (entry.Entity is EncounterAdolescentAssessment adol && adol.ClinicId == Guid.Empty)
+            {
+                if (adol.ConsultationEncounter != null && adol.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    adol.ClinicId = adol.ConsultationEncounter.ClinicId;
+                    adol.TenantId = adol.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == adol.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    adol.ClinicId = ce.ClinicId;
+                    adol.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is EncounterHeadsssDomainAssessment hda && hda.ClinicId == Guid.Empty)
+            {
+                if (hda.ConsultationEncounter != null && hda.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    hda.ClinicId = hda.ConsultationEncounter.ClinicId;
+                    hda.TenantId = hda.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == hda.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    hda.ClinicId = ce.ClinicId;
+                    hda.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientBpMonitoringLog bpLog && bpLog.ClinicId == Guid.Empty)
+            {
+                if (bpLog.Patient != null && bpLog.Patient.ClinicId != Guid.Empty)
+                {
+                    bpLog.ClinicId = bpLog.Patient.ClinicId;
+                    bpLog.TenantId = bpLog.Patient.TenantId;
+                }
+                else if (Patients.Local.FirstOrDefault(p => p.Id == bpLog.PatientId) is { } pt && pt.ClinicId != Guid.Empty)
+                {
+                    bpLog.ClinicId = pt.ClinicId;
+                    bpLog.TenantId = pt.TenantId;
+                }
+            }
+            else if (entry.Entity is PatientBpMonitoringDay bpDay && bpDay.ClinicId == Guid.Empty)
+            {
+                if (bpDay.BpMonitoringLog != null && bpDay.BpMonitoringLog.ClinicId != Guid.Empty)
+                {
+                    bpDay.ClinicId = bpDay.BpMonitoringLog.ClinicId;
+                    bpDay.TenantId = bpDay.BpMonitoringLog.TenantId;
+                }
+                else if (PatientBpMonitoringLogs.Local.FirstOrDefault(l => l.Id == bpDay.BpMonitoringLogId) is { } log && log.ClinicId != Guid.Empty)
+                {
+                    bpDay.ClinicId = log.ClinicId;
+                    bpDay.TenantId = log.TenantId;
+                }
+            }
+            else if (entry.Entity is YakapSubmission ysub && ysub.ClinicId == Guid.Empty)
+            {
+                if (ysub.ConsultationEncounter != null && ysub.ConsultationEncounter.ClinicId != Guid.Empty)
+                {
+                    ysub.ClinicId = ysub.ConsultationEncounter.ClinicId;
+                    ysub.TenantId = ysub.ConsultationEncounter.TenantId;
+                }
+                else if (Consultations.Local.FirstOrDefault(c => c.Id == ysub.ConsultationEncounterId) is { } ce && ce.ClinicId != Guid.Empty)
+                {
+                    ysub.ClinicId = ce.ClinicId;
+                    ysub.TenantId = ce.TenantId;
+                }
+            }
+            else if (entry.Entity is YakapSubmissionError subErr && subErr.ClinicId == Guid.Empty)
+            {
+                if (subErr.YakapSubmission != null && subErr.YakapSubmission.ClinicId != Guid.Empty)
+                {
+                    subErr.ClinicId = subErr.YakapSubmission.ClinicId;
+                    subErr.TenantId = subErr.YakapSubmission.TenantId;
+                }
+                else if (YakapSubmissions.Local.FirstOrDefault(s => s.Id == subErr.YakapSubmissionId) is { } sub && sub.ClinicId != Guid.Empty)
+                {
+                    subErr.ClinicId = sub.ClinicId;
+                    subErr.TenantId = sub.TenantId;
+                }
+            }
+            else if (entry.Entity is PhilHealthDailySequence pds && pds.ClinicId == Guid.Empty)
+            {
+                if (CurrentClinicId != Guid.Empty)
+                {
+                    pds.ClinicId = CurrentClinicId;
+                }
+            }
+
+            if (entry.Entity.ClinicId == Guid.Empty && CurrentClinicId != Guid.Empty)
+            {
+                entry.Entity.ClinicId = CurrentClinicId;
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.Entity.TenantId))
+            {
+                entry.Entity.TenantId = "default";
+            }
+        }
+    }
+
     /// <summary>
-    /// Enforces Write-Once-Read-Many (WORM) immutability on ClinicAuditEntry records in accordance
+    /// Enforces Write-Once-Read-Many (WORM) immutability on AuditEntry records in accordance
     /// with the Philippine Data Privacy Act (RA 10173). Any update, hard deletion, or soft deletion
     /// mutation triggers an immediate InvalidOperationException.
     /// </summary>
     private void EnforceWormImmutability()
     {
-        var auditMutations = ChangeTracker.Entries<ClinicAuditEntry>()
+        var auditMutations = ChangeTracker.Entries<AuditEntry>()
             .Where(e => e.State is EntityState.Modified or EntityState.Deleted ||
                        (e.State is EntityState.Added && e.Entity.IsDeleted))
             .ToList();
@@ -1213,14 +625,14 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         {
             var sample = auditMutations.First();
             throw new InvalidOperationException(
-                $"ClinicAuditEntry is append-only (WORM). {sample.State} operation on audit entry '{sample.Entity.Id}' is strictly prohibited by Philippine Data Privacy Act (RA 10173) and compliance policy.");
+                $"ClinicAuditEntry is append-only (WORM). AuditEntry is append-only (WORM). {sample.State} operation on audit entry '{sample.Entity.Id}' is strictly prohibited by Philippine Data Privacy Act (RA 10173) and compliance policy.");
         }
     }
 
     private void EnforceInMemoryUniqueConstraints()
     {
-        var addedPatients = ChangeTracker.Entries<ClinicPatient>()
-            .Where(e => e.State == EntityState.Added)
+        var addedPatients = ChangeTracker.Entries<Patient>()
+            .Where(e => e.State == EntityState.Added && !e.Entity.IsDeleted)
             .Select(e => e.Entity)
             .ToList();
 
@@ -1234,8 +646,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             {
                 var sample = duplicateInBatch.First();
                 throw new DbUpdateException(
-                    $"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\". Key (tenant_id, clinic_id, patient_code)=({sample.TenantId}, {sample.ClinicId}, {sample.PatientCode}) already exists.",
-                    new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\""));
+                    $"23505: duplicate key value violates unique constraint \"IX_Patients_TenantId_ClinicId_PatientCode\" (IX_ClinicPatients_ClinicId_PatientCode). Key (tenant_id, clinic_id, patient_code)=({sample.TenantId}, {sample.ClinicId}, {sample.PatientCode}) already exists.",
+                    new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_Patients_TenantId_ClinicId_PatientCode\" (IX_ClinicPatients_ClinicId_PatientCode)"));
             }
 
             foreach (var p in addedPatients)
@@ -1244,11 +656,13 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 {
                     var exists = Patients.Local.Any(existing =>
                         existing != p &&
+                        !existing.IsDeleted &&
                         existing.TenantId == p.TenantId &&
                         existing.ClinicId == p.ClinicId &&
                         string.Equals(existing.PatientCode, p.PatientCode, StringComparison.OrdinalIgnoreCase))
                         || Patients.IgnoreQueryFilters().Any(existing =>
                         existing.Id != p.Id &&
+                        !existing.IsDeleted &&
                         existing.TenantId == p.TenantId &&
                         existing.ClinicId == p.ClinicId &&
                         existing.PatientCode == p.PatientCode);
@@ -1256,15 +670,15 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                     if (exists)
                     {
                         throw new DbUpdateException(
-                            $"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\". Key (tenant_id, clinic_id, patient_code)=({p.TenantId}, {p.ClinicId}, {p.PatientCode}) already exists.",
-                            new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\""));
+                            $"23505: duplicate key value violates unique constraint \"IX_Patients_TenantId_ClinicId_PatientCode\" (IX_ClinicPatients_ClinicId_PatientCode). Key (tenant_id, clinic_id, patient_code)=({p.TenantId}, {p.ClinicId}, {p.PatientCode}) already exists.",
+                            new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_Patients_TenantId_ClinicId_PatientCode\" (IX_ClinicPatients_ClinicId_PatientCode)"));
                     }
                 }
             }
         }
 
         var addedTrackers = ChangeTracker.Entries<PatientCodeSequenceTracker>()
-            .Where(e => e.State == EntityState.Added)
+            .Where(e => e.State == EntityState.Added && !e.Entity.IsDeleted)
             .Select(e => e.Entity)
             .ToList();
 
@@ -1274,11 +688,13 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             {
                 var exists = PatientCodeSequenceTrackers.Local.Any(existing =>
                     existing != t &&
+                    !existing.IsDeleted &&
                     existing.TenantId == t.TenantId &&
                     existing.ClinicId == t.ClinicId &&
                     existing.Year == t.Year)
                     || PatientCodeSequenceTrackers.IgnoreQueryFilters().Any(existing =>
                     existing.Id != t.Id &&
+                    !existing.IsDeleted &&
                     existing.TenantId == t.TenantId &&
                     existing.ClinicId == t.ClinicId &&
                     existing.Year == t.Year);
@@ -1293,7 +709,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         }
 
         var addedSessions = ChangeTracker.Entries<TeleconsultRecordingSession>()
-            .Where(e => e.State == EntityState.Added)
+            .Where(e => e.State == EntityState.Added && !e.Entity.IsDeleted)
             .Select(e => e.Entity)
             .ToList();
 
@@ -1303,24 +719,26 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             {
                 var exists = TeleconsultRecordingSessions.Local.Any(existing =>
                     existing != s &&
+                    !existing.IsDeleted &&
                     existing.ClinicId == s.ClinicId &&
                     existing.CallId == s.CallId)
                     || TeleconsultRecordingSessions.IgnoreQueryFilters().Any(existing =>
                     existing.Id != s.Id &&
+                    !existing.IsDeleted &&
                     existing.ClinicId == s.ClinicId &&
                     existing.CallId == s.CallId);
 
                 if (exists)
                 {
                     throw new DbUpdateException(
-                        $"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_sessions_ClinicId_CallId\". Key (clinic_id, call_id)=({s.ClinicId}, {s.CallId}) already exists.",
-                        new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_sessions_ClinicId_CallId\""));
+                        $"23505: duplicate key value violates unique constraint \"IX_TeleconsultRecordingSessions_ClinicId_CallId\". Key (clinic_id, call_id)=({s.ClinicId}, {s.CallId}) already exists.",
+                        new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_TeleconsultRecordingSessions_ClinicId_CallId\""));
                 }
             }
         }
 
         var addedSegments = ChangeTracker.Entries<TeleconsultRecordingSegment>()
-            .Where(e => e.State == EntityState.Added)
+            .Where(e => e.State == EntityState.Added && !e.Entity.IsDeleted)
             .Select(e => e.Entity)
             .ToList();
 
@@ -1330,18 +748,20 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             {
                 var exists = TeleconsultRecordingSegments.Local.Any(existing =>
                     existing != seg &&
+                    !existing.IsDeleted &&
                     existing.SessionId == seg.SessionId &&
                     existing.SegmentIndex == seg.SegmentIndex)
                     || TeleconsultRecordingSegments.IgnoreQueryFilters().Any(existing =>
                     existing.Id != seg.Id &&
+                    !existing.IsDeleted &&
                     existing.SessionId == seg.SessionId &&
                     existing.SegmentIndex == seg.SegmentIndex);
 
                 if (exists)
                 {
                     throw new DbUpdateException(
-                        $"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_segments_SessionId_SegmentIndex\". Key (session_id, segment_index)=({seg.SessionId}, {seg.SegmentIndex}) already exists.",
-                        new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_segments_SessionId_SegmentIndex\""));
+                        $"23505: duplicate key value violates unique constraint \"IX_TeleconsultRecordingSegments_SessionId_SegmentIndex\". Key (session_id, segment_index)=({seg.SessionId}, {seg.SegmentIndex}) already exists.",
+                        new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_TeleconsultRecordingSegments_SessionId_SegmentIndex\""));
                 }
             }
         }

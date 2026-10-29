@@ -22,6 +22,7 @@ import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
 import { deletePatientHealthcareProvider } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
 type ProviderForm = {
   id: string | null;
@@ -36,13 +37,8 @@ const EMPTY: ProviderForm = {
   id: null, providerType: 'primary_care', name: '', specialty: '', clinicHospital: '', phone: '',
 };
 
-const PROVIDER_TYPE_OPTIONS = [
-  { label: 'Primary Care Physician', value: 'primary_care' },
-  { label: 'Specialist 1', value: 'specialist_1' },
-  { label: 'Specialist 2', value: 'specialist_2' },
-];
-
 export default function HealthcareProvidersScreen() {
+  const { selectOptions: providerTypeOptions } = useEhrOptions('provider_type');
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
@@ -146,7 +142,7 @@ export default function HealthcareProvidersScreen() {
     }
   });
 
-  const typeLabel = (val: string) => PROVIDER_TYPE_OPTIONS.find(o => o.value === val)?.label ?? val;
+  const typeLabel = (val: string) => providerTypeOptions.find(o => o.value === val)?.label ?? val;
 
   return (
     <BottomSheetModalProvider>
@@ -189,7 +185,7 @@ export default function HealthcareProvidersScreen() {
       </ThemedBottomSheetModal>
 
       <Controller control={control} name="providerType" render={({ field }) => (
-        <ProfileSelectModal visible={typeModal} title="Provider Type" options={PROVIDER_TYPE_OPTIONS}
+        <ProfileSelectModal visible={typeModal} title="Provider Type" options={providerTypeOptions}
           selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
       )} />
     </BottomSheetModalProvider>

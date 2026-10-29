@@ -28,7 +28,11 @@ public record CreateBranchRequest(
     string? ZipCode = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    List<Guid>? FacilityIds = null);
+    List<Guid>? FacilityIds = null,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null);
 
 public record UpdateBranchRequest(
     string Name,
@@ -41,25 +45,33 @@ public record UpdateBranchRequest(
     string? ZipCode = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null);
 
 public record ConfigureBranchPhilHealthRequest(
     string AccreditationNumber,
     string? PmccNumber = null,
     string? SoftwareCertificateId = null,
+    string? SecretKey = null,
+    string? CipherKey = null,
+    string? BaseUrl = null,
+    bool IsPhilHealthAccredited = true,
     string? Username = null,
     string? Password = null,
-    string? CipherKey = null,
-    string? KonsultaEndpoint = null,
-    bool IsPhilHealthAccredited = true);
+    string? KonsultaEndpoint = null);
 
 public record TestBranchPhilHealthRequest(
     string? AccreditationNumber = null,
     string? PmccNumber = null,
     string? SoftwareCertificateId = null,
+    string? SecretKey = null,
+    string? CipherKey = null,
+    string? BaseUrl = null,
     string? Username = null,
     string? Password = null,
-    string? CipherKey = null,
     string? KonsultaEndpoint = null);
 
 public record BranchFacilitySummaryDto(
@@ -85,8 +97,14 @@ public record BranchResponse(
     string? PhilHealthAccreditationNumber,
     string? PhilHealthPmccNumber,
     string? PhilHealthSoftwareCertificateId,
-    string? PhilHealthKonsultaEndpoint,
+    string? PhilHealthBaseUrl,
     bool IsPhilHealthAccredited,
+    bool HasSecretKey,
+    bool HasCipherKey,
+    string? RegionPsgc,
+    string? ProvincePsgc,
+    string? CityMunicipalityPsgc,
+    string? BarangayPsgc,
     List<BranchFacilitySummaryDto> Facilities);
 
 public class BranchEndpoints : IEndpoint
@@ -141,6 +159,10 @@ public class BranchEndpoints : IEndpoint
                 ZipCode = request.ZipCode,
                 ContactNumber = request.ContactNumber,
                 ContactEmail = request.ContactEmail,
+                RegionPsgc = request.RegionPsgc?.Trim(),
+                ProvincePsgc = request.ProvincePsgc?.Trim(),
+                CityMunicipalityPsgc = request.CityMunicipalityPsgc?.Trim(),
+                BarangayPsgc = request.BarangayPsgc?.Trim(),
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = clerkUserId
@@ -167,26 +189,7 @@ public class BranchEndpoints : IEndpoint
 
             await context.SaveChangesAsync(CancellationToken.None);
 
-            var summary = new BranchResponse(
-                branch.Id,
-                branch.TenantId,
-                branch.Name,
-                branch.Code,
-                branch.IsActive,
-                branch.StreetAddress,
-                branch.Barangay,
-                branch.City,
-                branch.Province,
-                branch.Region,
-                branch.ZipCode,
-                branch.ContactNumber,
-                branch.ContactEmail,
-                branch.PhilHealthAccreditationNumber,
-                branch.PhilHealthPmccNumber,
-                branch.PhilHealthSoftwareCertificateId,
-                branch.PhilHealthKonsultaEndpoint,
-                branch.IsPhilHealthAccredited,
-                new List<BranchFacilitySummaryDto>());
+            var summary = ToResponse(branch, new List<BranchFacilitySummaryDto>());
 
             return Results.Created($"/api/v1/branches/{branch.Id}", ApiResponse<BranchResponse>.Success(summary));
         })
@@ -274,37 +277,13 @@ public class BranchEndpoints : IEndpoint
                 await context.SaveChangesAsync(CancellationToken.None);
             }
 
-            var list = await context.Branches
+            var branchesList = await context.Branches
                 .Where(b => b.TenantId == tenant.Id && !b.IsDeleted)
                 .Include(b => b.Facilities)
                 .OrderBy(b => b.Name)
-                .Select(b => new BranchResponse(
-                    b.Id,
-                    b.TenantId,
-                    b.Name,
-                    b.Code,
-                    b.IsActive,
-                    b.StreetAddress,
-                    b.Barangay,
-                    b.City,
-                    b.Province,
-                    b.Region,
-                    b.ZipCode,
-                    b.ContactNumber,
-                    b.ContactEmail,
-                    b.PhilHealthAccreditationNumber,
-                    b.PhilHealthPmccNumber,
-                    b.PhilHealthSoftwareCertificateId,
-                    b.PhilHealthKonsultaEndpoint,
-                    b.IsPhilHealthAccredited,
-                    b.Facilities.Where(f => !f.IsDeleted).Select(f => new BranchFacilitySummaryDto(
-                        f.Id,
-                        f.Name,
-                        f.FacilityType.ToString(),
-                        f.Status.ToString()
-                    )).ToList()
-                ))
                 .ToListAsync();
+
+            var list = branchesList.Select(b => ToResponse(b)).ToList();
 
             return Results.Ok(ApiResponse<List<BranchResponse>>.Success(list));
         })
@@ -348,31 +327,7 @@ public class BranchEndpoints : IEndpoint
                 return Results.Forbid();
             }
 
-            var response = new BranchResponse(
-                branch.Id,
-                branch.TenantId,
-                branch.Name,
-                branch.Code,
-                branch.IsActive,
-                branch.StreetAddress,
-                branch.Barangay,
-                branch.City,
-                branch.Province,
-                branch.Region,
-                branch.ZipCode,
-                branch.ContactNumber,
-                branch.ContactEmail,
-                branch.PhilHealthAccreditationNumber,
-                branch.PhilHealthPmccNumber,
-                branch.PhilHealthSoftwareCertificateId,
-                branch.PhilHealthKonsultaEndpoint,
-                branch.IsPhilHealthAccredited,
-                branch.Facilities.Where(f => !f.IsDeleted).Select(f => new BranchFacilitySummaryDto(
-                    f.Id,
-                    f.Name,
-                    f.FacilityType.ToString(),
-                    f.Status.ToString()
-                )).ToList());
+            var response = ToResponse(branch);
 
             return Results.Ok(ApiResponse<BranchResponse>.Success(response));
         })
@@ -428,6 +383,10 @@ public class BranchEndpoints : IEndpoint
             branch.ZipCode = request.ZipCode;
             branch.ContactNumber = request.ContactNumber;
             branch.ContactEmail = request.ContactEmail;
+            if (request.RegionPsgc != null) branch.RegionPsgc = request.RegionPsgc.Trim();
+            if (request.ProvincePsgc != null) branch.ProvincePsgc = request.ProvincePsgc.Trim();
+            if (request.CityMunicipalityPsgc != null) branch.CityMunicipalityPsgc = request.CityMunicipalityPsgc.Trim();
+            if (request.BarangayPsgc != null) branch.BarangayPsgc = request.BarangayPsgc.Trim();
             branch.IsActive = request.IsActive;
             branch.UpdatedAt = DateTime.UtcNow;
             branch.UpdatedBy = clerkUserId;
@@ -486,39 +445,35 @@ public class BranchEndpoints : IEndpoint
                 return Results.Forbid();
             }
 
-            var resolvedEndpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-                ? request.KonsultaEndpoint.Trim()
-                : PhilHealthDefaults.KonsultaEndpoint;
+            var resolvedEndpoint = !string.IsNullOrWhiteSpace(request.BaseUrl)
+                ? request.BaseUrl.Trim()
+                : (!string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
+                    ? request.KonsultaEndpoint.Trim()
+                    : PhilHealthDefaults.PcapiBaseUrl);
 
-            if (request.IsPhilHealthAccredited && env.IsProduction() && !PhilHealthSoapTester.IsStagingOrSandbox(resolvedEndpoint))
+            if (request.IsPhilHealthAccredited && env.IsProduction() && !PhilHealthPcapiTester.IsStagingOrSandbox(resolvedEndpoint))
             {
-                var effectiveUsername = request.Username != null
-                    ? request.Username.Trim()
-                    : (!string.IsNullOrEmpty(branch.PhilHealthEncryptedUsername) ? protector.Unprotect(branch.PhilHealthEncryptedUsername) : string.Empty);
-                var effectivePassword = request.Password != null
-                    ? request.Password
-                    : (!string.IsNullOrEmpty(branch.PhilHealthEncryptedPassword) ? protector.Unprotect(branch.PhilHealthEncryptedPassword) : string.Empty);
+                var effectiveSecretKey = request.SecretKey != null
+                    ? request.SecretKey.Trim()
+                    : (!string.IsNullOrEmpty(branch.PhilHealthEncryptedSecretKey) ? protector.Unprotect(branch.PhilHealthEncryptedSecretKey) : string.Empty);
 
-                if (string.IsNullOrWhiteSpace(effectiveUsername) || string.IsNullOrWhiteSpace(effectivePassword))
+                if (string.IsNullOrWhiteSpace(effectiveSecretKey))
                 {
-                    return Results.BadRequest(ApiResponse<bool>.Fail("SOAP Username and Password are required for production PhilHealth gateway endpoints."));
+                    return Results.BadRequest(ApiResponse<bool>.Fail("PhilHealth PCAPI Secret Key is required for production PhilHealth gateway endpoints."));
                 }
             }
 
             branch.PhilHealthAccreditationNumber = request.AccreditationNumber?.Trim();
             branch.PhilHealthPmccNumber = request.PmccNumber?.Trim();
             branch.PhilHealthSoftwareCertificateId = request.SoftwareCertificateId?.Trim();
-            branch.PhilHealthKonsultaEndpoint = resolvedEndpoint;
+            branch.PhilHealthBaseUrl = resolvedEndpoint;
             branch.IsPhilHealthAccredited = request.IsPhilHealthAccredited;
 
-            if (request.Username != null)
-                branch.PhilHealthEncryptedUsername = protector.Protect(request.Username.Trim());
-
-            if (request.Password != null)
-                branch.PhilHealthEncryptedPassword = protector.Protect(request.Password);
+            if (request.SecretKey != null)
+                branch.PhilHealthEncryptedSecretKey = protector.Protect(request.SecretKey.Trim());
 
             if (!string.IsNullOrWhiteSpace(request.CipherKey))
-                branch.PhilHealthEncryptedCipherKey = protector.Protect(request.CipherKey);
+                branch.PhilHealthEncryptedCipherKey = protector.Protect(request.CipherKey.Trim());
 
             branch.UpdatedAt = DateTime.UtcNow;
             branch.UpdatedBy = clerkUserId;
@@ -535,16 +490,16 @@ public class BranchEndpoints : IEndpoint
         })
         .RequireAuthorization()
         .WithName("ConfigureBranchPhilHealth")
-        .WithDescription("Encrypted configuration of PhilHealth PMCC, software cert, and SOAP credentials on a branch.");
+        .WithDescription("Encrypted configuration of PhilHealth PMCC, software cert, and PCAPI credentials on a branch.");
 
-        // 5b. Test PhilHealth SOAP gateway connection for a branch before or after saving
+        // 5b. Test PhilHealth PCAPI gateway connection for a branch before or after saving
         branches.MapPost("/{id:guid}/philhealth-test", async (
             Guid id,
             TestBranchPhilHealthRequest request,
             HttpContext httpContext,
             IApplicationDbContext context,
             IPhilHealthSecretProtector protector,
-            IPhilHealthSoapTester soapTester,
+            IPhilHealthPcapiTester pcapiTester,
             IHostEnvironment env,
             CancellationToken ct) =>
         {
@@ -588,21 +543,19 @@ public class BranchEndpoints : IEndpoint
                 ? request.SoftwareCertificateId.Trim()
                 : branch.PhilHealthSoftwareCertificateId;
 
-            var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-                ? request.KonsultaEndpoint.Trim()
-                : (!string.IsNullOrWhiteSpace(branch.PhilHealthKonsultaEndpoint) ? branch.PhilHealthKonsultaEndpoint.Trim() : PhilHealthDefaults.KonsultaEndpoint);
+            var baseUrl = !string.IsNullOrWhiteSpace(request.BaseUrl)
+                ? request.BaseUrl.Trim()
+                : (!string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
+                    ? request.KonsultaEndpoint.Trim()
+                    : (!string.IsNullOrWhiteSpace(branch.PhilHealthBaseUrl) ? branch.PhilHealthBaseUrl.Trim() : PhilHealthDefaults.PcapiBaseUrl));
 
-            var isCustomUnsavedEndpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint) &&
-                !string.Equals(request.KonsultaEndpoint.Trim(), branch.PhilHealthKonsultaEndpoint?.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(request.KonsultaEndpoint.Trim(), PhilHealthDefaults.KonsultaEndpoint, StringComparison.OrdinalIgnoreCase);
+            var isCustomUnsavedUrl = !string.IsNullOrWhiteSpace(request.BaseUrl) &&
+                !string.Equals(request.BaseUrl.Trim(), branch.PhilHealthBaseUrl?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(request.BaseUrl.Trim(), PhilHealthDefaults.PcapiBaseUrl, StringComparison.OrdinalIgnoreCase);
 
-            var username = request.Username != null
-                ? request.Username.Trim()
-                : (!isCustomUnsavedEndpoint && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedUsername) ? protector.Unprotect(branch.PhilHealthEncryptedUsername) : string.Empty);
-
-            var password = request.Password != null
-                ? request.Password
-                : (!isCustomUnsavedEndpoint && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedPassword) ? protector.Unprotect(branch.PhilHealthEncryptedPassword) : string.Empty);
+            var secretKey = request.SecretKey != null
+                ? request.SecretKey.Trim()
+                : (!isCustomUnsavedUrl && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedSecretKey) ? protector.Unprotect(branch.PhilHealthEncryptedSecretKey) : string.Empty);
 
             if (string.IsNullOrWhiteSpace(accreditationNumber))
             {
@@ -611,36 +564,29 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isProduction = env.IsProduction();
-            var isStagingOrSandbox = PhilHealthSoapTester.IsStagingOrSandbox(endpoint);
+            var isStagingOrSandbox = PhilHealthPcapiTester.IsStagingOrSandbox(baseUrl);
 
             if (isProduction && !isStagingOrSandbox)
             {
-                if (string.IsNullOrWhiteSpace(username))
+                if (string.IsNullOrWhiteSpace(secretKey))
                 {
                     return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
-                        new PhilHealthTestConnectionResult(false, "SOAP Username is required to authenticate with the PhilHealth gateway.")));
-                }
-
-                if (string.IsNullOrWhiteSpace(password))
-                {
-                    return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
-                        new PhilHealthTestConnectionResult(false, "SOAP Password is required to authenticate with the PhilHealth gateway.")));
+                        new PhilHealthTestConnectionResult(false, "PCAPI Secret Key is required to authenticate with the PhilHealth gateway.")));
                 }
             }
 
-            var result = await soapTester.TestConnectionAsync(
+            var result = await pcapiTester.TestConnectionAsync(
                 accreditationNumber: accreditationNumber,
-                username: username ?? string.Empty,
-                password: password ?? string.Empty,
+                secretKey: secretKey ?? string.Empty,
                 softwareCertificateId: softwareCertId,
-                endpoint: endpoint,
+                baseUrl: baseUrl,
                 ct: ct);
 
             return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(result));
         })
         .RequireAuthorization()
         .WithName("TestBranchPhilHealthConnection")
-        .WithDescription("Tests live connectivity and authentication with PhilHealth SOAP gateway before or after saving credentials.");
+        .WithDescription("Tests live connectivity and authentication with PhilHealth PCAPI gateway before or after saving credentials.");
 
         // 6. Assign facilities to a branch
         branches.MapPost("/{id:guid}/facilities", async (
@@ -806,4 +752,38 @@ public class BranchEndpoints : IEndpoint
         .RequireAuthorization()
         .WithName("DeleteBranch");
     }
+
+    public static BranchResponse ToResponse(Branch b, List<BranchFacilitySummaryDto>? facilities = null) =>
+        new(
+            b.Id,
+            b.TenantId,
+            b.Name,
+            b.Code,
+            b.IsActive,
+            b.StreetAddress,
+            b.Barangay,
+            b.City,
+            b.Province,
+            b.Region,
+            b.ZipCode,
+            b.ContactNumber,
+            b.ContactEmail,
+            b.PhilHealthAccreditationNumber,
+            b.PhilHealthPmccNumber,
+            b.PhilHealthSoftwareCertificateId,
+            b.PhilHealthBaseUrl,
+            b.IsPhilHealthAccredited,
+            HasSecretKey: !string.IsNullOrEmpty(b.PhilHealthEncryptedSecretKey),
+            HasCipherKey: !string.IsNullOrEmpty(b.PhilHealthEncryptedCipherKey),
+            b.RegionPsgc,
+            b.ProvincePsgc,
+            b.CityMunicipalityPsgc,
+            b.BarangayPsgc,
+            facilities ?? (b.Facilities?.Where(f => !f.IsDeleted).Select(f => new BranchFacilitySummaryDto(
+                f.Id,
+                f.Name,
+                f.FacilityType.ToString(),
+                f.Status.ToString()
+            )).ToList() ?? new List<BranchFacilitySummaryDto>())
+        );
 }

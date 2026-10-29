@@ -24,12 +24,12 @@ public record CancelClinicLabOrderRequest(
 
 public class CancelClinicLabOrderCommandHandler : IRequestHandler<CancelClinicLabOrderCommand, ClinicLabOrderDto>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CancelClinicLabOrderCommandHandler(
-        IRepository<ClinicLabOrder> orderRepo,
+        IRepository<LabOrder> orderRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {

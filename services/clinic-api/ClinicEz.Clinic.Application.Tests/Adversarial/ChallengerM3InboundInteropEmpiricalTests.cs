@@ -85,7 +85,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(fromParty, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue();
     }
 
@@ -103,7 +103,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(fromParty, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue();
     }
 
@@ -128,7 +128,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(rogueParty, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Only Portal control-plane can mutate Tier-1 eligibility");
         settings.ClinicName.Should().Be("Untouched Clinic");
     }
@@ -151,7 +151,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(spoofedParty, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Spoofed sender must be dropped");
     }
 
@@ -177,7 +177,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var act = () => handler.HandleAsync(evt, CreateContext(Party.Portal, toParty, evt), CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -194,7 +194,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -212,7 +212,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -229,7 +229,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue("Tenant match must be case-insensitive");
     }
 
@@ -249,7 +249,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -272,7 +272,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Cross-tenant tampering attempt must not mutate victim's settings");
         settings.ClinicName.Should().Be("Victim Clinic");
     }
@@ -306,7 +306,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, toParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue();
     }
 
@@ -319,7 +319,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
     {
         using var db = MessagingTestKit.CreateDbContext();
         var clinicId = Guid.NewGuid();
-        var originalSettings = new ClinicSettings
+        var originalSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-alpha",
@@ -348,7 +348,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
             CreatedAt = DateTime.UtcNow.AddMonths(-1),
             CreatedBy = "provisioner"
         };
-        db.ClinicSettings.Add(originalSettings);
+        db.Settings.Add(originalSettings);
         await db.SaveChangesAsync();
 
         var evt = new FacilityCreatedEvent
@@ -369,7 +369,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, MessagingTestKit.ClinicParty("tenant-alpha", clinicId), evt), CancellationToken.None);
 
-        var updated = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var updated = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Mutated fields
         updated.IsWorkspaceEligible.Should().BeTrue();
@@ -416,7 +416,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, MessagingTestKit.ClinicParty("tenant-alpha", clinicId), evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.ClinicName.Should().Be("Keep This Name", "Whitespace name must not overwrite existing name");
         settings.FacilitySlug.Should().Be("keep-slug", "Null slug must not overwrite existing slug");
         settings.TenantSlug.Should().Be("keep-tenant-slug", "Empty tenant slug must not overwrite existing tenant slug");
@@ -444,7 +444,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateDirectoryUpdatedHandler(db);
         await handler.HandleAsync(evt, CreateContext(Party.Portal, MessagingTestKit.ClinicParty("tenant-alpha", clinicId), evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Null IsWorkspaceEligible must coalesce to false");
     }
 
@@ -479,7 +479,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateFacilityCreatedHandler(db);
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleOrDefaultAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleOrDefaultAsync(s => s.ClinicId == clinicId);
         settings.Should().NotBeNull();
         settings!.IsWorkspaceEligible.Should().BeTrue();
         settings.ClinicName.Should().Be("Newly Licensed Clinic");
@@ -513,7 +513,7 @@ public class ChallengerM3InboundInteropEmpiricalTests
         var handler = CreateFacilityCreatedHandler(db);
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue("Redelivered license with updated eligibility must update settings");
     }
 

@@ -15,7 +15,7 @@ public sealed record UpdatePatientSurgicalHistoryCommand(
     Guid Id,
     Guid PatientId,
     string ProcedureName,
-    DateOnly SurgeryDate,
+    DateOnly? SurgeryDate = null,
     string? HospitalName = null,
     string? Findings = null,
     string? Complications = null,

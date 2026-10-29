@@ -23,10 +23,10 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IRepository<PaymentRecord> _paymentRepo;
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
-    private readonly IRepository<ClinicalProcedure> _procedureRepo;
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<Procedure> _procedureRepo;
+    private readonly IRepository<LabOrder> _labOrderRepo;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
 
     public GetDailyEodReportQueryHandler(
@@ -34,10 +34,10 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         IRepository<Invoice> invoiceRepo,
         IRepository<PaymentRecord> paymentRepo,
         IRepository<ConsultationEncounter> consultationRepo,
-        IRepository<ClinicalProcedure> procedureRepo,
-        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<Procedure> procedureRepo,
+        IRepository<LabOrder> labOrderRepo,
         IClinicContext clinicContext,
-        IRepository<ClinicSettings>? settingsRepo = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
         IWorkspaceProfileProvider? workspaceProfiles = null)
     {
         _queueRepo = queueRepo;
@@ -69,7 +69,7 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         }
         var nextDay = targetDate.AddDays(1);
 
-        ClinicSettings? settings = null;
+        FacilitySettings? settings = null;
         if (_settingsRepo != null)
         {
             settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);

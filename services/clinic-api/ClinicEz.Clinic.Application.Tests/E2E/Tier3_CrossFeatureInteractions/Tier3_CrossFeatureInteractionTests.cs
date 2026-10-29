@@ -65,7 +65,7 @@ public class Tier3_CrossFeatureInteractionTests
     // Interaction 2: Extended Triage + WHO Z-Score Calculation + PEPERT Mapping
     // =========================================================================
     [Fact]
-    public void Interaction2_TriageVitals_GrowthEngine_YakapPepertMapping()
+    public void Interaction2_PatientVitals_GrowthEngine_YakapPepertMapping()
     {
         // 14-month female infant presenting for routine check-up
         var triage = new ExtendedTriageVitalsDto(
@@ -111,7 +111,7 @@ public class Tier3_CrossFeatureInteractionTests
     public void Interaction3_ProblemList_Allergies_CdsRules_BlocksMultipleContraindications()
     {
         // Patient has active asthma, active peptic ulcer, and penicillin allergy
-        var problems = new List<PatientProblemDto>
+        var problems = new List<PatientMedicalHistoryDto>
         {
             new(Guid.NewGuid(), _clinicId, _patientId, "J45.0", "Active Bronchial Asthma", new DateOnly(2018, 1, 1), ProblemStatus.Active, null, "001"),
             new(Guid.NewGuid(), _clinicId, _patientId, "K25.0", "Active Gastric Ulcer", new DateOnly(2025, 12, 1), ProblemStatus.Active, null, "008")
@@ -327,7 +327,7 @@ public class Tier3_CrossFeatureInteractionTests
 
         foreach (var nsaid in nsaidsToTest)
         {
-            var alerts = Cds.EvaluateOrderSafety(new[] { nsaid }, allergies, new List<PatientProblemDto>());
+            var alerts = Cds.EvaluateOrderSafety(new[] { nsaid }, allergies, new List<PatientMedicalHistoryDto>());
             alerts.Should().ContainSingle(a => a.RuleType == "CrossReactivity" && a.IsHardStop);
         }
     }

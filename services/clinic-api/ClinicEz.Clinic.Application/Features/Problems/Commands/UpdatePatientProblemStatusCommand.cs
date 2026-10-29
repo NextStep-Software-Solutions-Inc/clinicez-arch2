@@ -33,12 +33,12 @@ public class UpdatePatientProblemStatusValidator : AbstractValidator<UpdatePatie
 
 public class UpdatePatientProblemStatusCommandHandler : IRequestHandler<UpdatePatientProblemStatusCommand, PatientProblemDto>
 {
-    private readonly IRepository<PatientProblem> _problemRepo;
+    private readonly IRepository<PatientMedicalHistory> _problemRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdatePatientProblemStatusCommandHandler(
-        IRepository<PatientProblem> problemRepo,
+        IRepository<PatientMedicalHistory> problemRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -86,17 +86,17 @@ public class UpdatePatientProblemStatusCommandHandler : IRequestHandler<UpdatePa
             problem.ClinicId,
             problem.PatientId,
             problem.ConsultationEncounterId,
-            problem.Icd10Code,
-            problem.ProblemTitle,
+            problem.Icd10Code ?? string.Empty,
+            problem.ConditionTitle,
             problem.PhilHealthMdiseaseCode,
             problem.Status.ToString(),
-            problem.Severity.ToString(),
+            problem.Severity?.ToString() ?? "Moderate",
             problem.IsChronicNcd,
             problem.OnsetDate,
             problem.ResolvedDate,
             problem.ClinicalNotes,
-            problem.RecordedByDoctorId,
-            problem.RecordedByDoctorName,
+            problem.RecordedByStaffId ?? Guid.Empty,
+            problem.RecordedByStaffName ?? string.Empty,
             problem.CreatedAt
         );
     }

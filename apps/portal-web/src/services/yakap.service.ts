@@ -1,138 +1,100 @@
 import { apiClient } from "@/transport/apiClient";
 
-export interface PortalEligibleYakapEncounter {
-  encounterId: string;
-  patientId: string;
-  patientName: string;
-  philHealthIdentificationNumber?: string;
-  encounterDate: string;
-  doctorName: string;
-  primaryDiagnosis?: string;
-  diagnosesCount: number;
-  prescriptionsCount: number;
-  diagnosticsCount: number;
-  isYakapEligible: boolean;
-  hasPhilHealthPin: boolean;
-  totalMedicationAmount: number;
+/**
+ * PhilHealth YAKAP 2.0 Zero-PHI Contracts & Telemetry Services.
+ *
+ * Strict Privacy Invariant:
+ * HQ Portal Web monitors branch telemetry and submission state machines.
+ * Under RA 10173 & PhilHealth PCAPI v2.0, ZERO patient names, PINs, or raw clinical XML
+ * are ever ingested, processed, or exposed across HQ telemetry endpoints.
+ */
+
+export interface PortalYakapBranchSummaryDto {
+  branchId: string;
+  accreditationNo?: string | null;
+  empaneledCount: number;
+  selectedCount: number;
+  acceptedUploadsCount: number;
+  pendingPollingCount: number;
+  rejectedOrFailedCount: number;
+  submissionsByType: Record<string, number>;
+  lastMasterlistSyncAtUtc?: string | null;
+  masterlistTotalCount: number;
 }
 
-export interface PortalYakapTransmittalItem {
+export interface PortalYakapSubmissionErrorDto {
+  fieldPath: string;
+  issue: string;
+  errorCode?: string | null;
+}
+
+export interface PortalYakapSubmissionDto {
   id: string;
-  yakapTransmittalId: string;
-  patientId: string;
-  patientName: string;
-  philHealthIdentificationNumber: string;
-  consultationEncounterId?: string;
-  encounterDate?: string;
-  itemType: string;
-  reportStatus: string;
-  deficiencyRemarks?: string;
+  patientCode: string; // Zero-PHI anonymized code (e.g. "PAT-0123")
+  accreditationNo: string;
+  caseNo: string;
+  submissionType: string; // "FPE" | "Consultation" | "Diagnostic" | "Medicine" | "Referral"
+  reportStatus: string; // "U" | "V" | "F"
+  localTransactionNo: string; // 23B local tx (E..., C...)
+  uploadTransactionNo?: string | null; // 23B PhilHealth upload tx (U...)
+  yesReferenceNo?: string | null; // PhilHealth reference (MCA...)
+  processingStatus: string; // "Pending" | "Submitted" | "Accepted" | "Rejected" | "Failed"
+  payloadSha256Hash?: string | null;
+  submittedAtUtc?: string | null;
+  lastPolledAtUtc?: string | null;
+  completedAtUtc?: string | null;
+  attemptCount: number;
+  lastErrorMessage?: string | null;
+  errors: PortalYakapSubmissionErrorDto[];
 }
 
-export interface PortalYakapTransmittal {
-  id: string;
-  transmittalNumber: string;
-  reportTagging: string;
-  effectiveYear: string;
-  packageType: string;
-  status: string;
-  philHealthTransactionNumber?: string;
-  encryptedPayloadHash?: string;
-  validationErrors: string[];
-  submittedAt?: string;
-  submittedBy?: string;
-  createdAt: string;
-  totalItemsCount: number;
-  items: PortalYakapTransmittalItem[];
-  branchId?: string;
-}
-
-export interface PortalCreateTransmittalPayload {
-  consultationEncounterIds?: string[];
-  reportTagging: string;
-  effectiveYear?: string;
-}
-
-export interface PortalValidationResult {
-  transmittalId: string;
-  isValid: boolean;
-  transmittalNumber?: string;
-  rawXml?: string;
-  validationErrors: string[];
-}
-
-export interface PortalSubmissionResult {
-  transmittalId: string;
-  isSuccess: boolean;
-  transmittalNumber: string;
-  transactionNumber?: string;
-  validationErrors: string[];
+export interface PortalYakapMasterlistSyncResultDto {
+  success: boolean;
+  recordsAdded: number;
+  recordsUpdated: number;
+  totalActiveCount: number;
+  syncedAtUtc: string;
+  message?: string | null;
 }
 
 export const yakapService = {
-  async getEligibleEncounters(
+  async getBranchSummary(branchId: string): Promise<PortalYakapBranchSummaryDto> {
+    const res = await apiClient.get<any>(`/yakap/branches/${branchId}/summary`);
+    return res.data?.data || res.data;
+  },
+
+  async getSubmissions(
     branchId: string,
-    reportTagging: string = "2",
-    startDate?: string,
-    endDate?: string
-  ): Promise<PortalEligibleYakapEncounter[]> {
-    let url = `/yakap/branches/${branchId}/eligible-encounters?reportTagging=${encodeURIComponent(reportTagging)}`;
-    if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
-    if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
+    filters?: { status?: string; submissionType?: string; page?: number; pageSize?: number }
+  ): Promise<PortalYakapSubmissionDto[]> {
+    const params = new URLSearchParams();
+    if (filters?.status && filters.status !== "all") params.set("status", filters.status);
+    if (filters?.submissionType && filters.submissionType !== "all") params.set("submissionType", filters.submissionType);
+    if (filters?.page) params.set("page", String(filters.page));
+    if (filters?.pageSize) params.set("pageSize", String(filters.pageSize));
+    const qs = params.toString() ? `?${params.toString()}` : "";
 
-    const res = await apiClient.get<{ data: PortalEligibleYakapEncounter[] }>(url);
-    return res.data?.data || [];
+    const res = await apiClient.get<any>(`/yakap/branches/${branchId}/submissions${qs}`);
+    return res.data?.data || res.data || [];
   },
 
-  async getTransmittals(
-    branchId: string,
-    status?: string,
-    reportTagging?: string
-  ): Promise<PortalYakapTransmittal[]> {
-    let url = `/yakap/branches/${branchId}/transmittals`;
-    const params: string[] = [];
-    if (status && status !== "all") params.push(`status=${encodeURIComponent(status)}`);
-    if (reportTagging && reportTagging !== "all") params.push(`reportTagging=${encodeURIComponent(reportTagging)}`);
-    if (params.length > 0) url += `?${params.join("&")}`;
-
-    const res = await apiClient.get<{ data: PortalYakapTransmittal[] }>(url);
-    return res.data?.data || [];
+  async getSubmissionById(branchId: string, id: string): Promise<PortalYakapSubmissionDto> {
+    const res = await apiClient.get<any>(`/yakap/branches/${branchId}/submissions/${id}`);
+    return res.data?.data || res.data;
   },
 
-  async getTransmittalById(id: string): Promise<PortalYakapTransmittal | null> {
-    const res = await apiClient.get<{ data: PortalYakapTransmittal }>(`/yakap/transmittals/${id}`);
-    return res.data?.data || null;
+  async pollSubmissionStatus(branchId: string, id: string): Promise<PortalYakapSubmissionDto> {
+    const res = await apiClient.post<any>(`/yakap/branches/${branchId}/submissions/${id}/poll`, {});
+    return res.data?.data || res.data;
   },
 
-  async getTransmittalXml(id: string): Promise<string> {
-    const res = await apiClient.get<{ data: string }>(`/yakap/transmittals/${id}/xml`);
-    return res.data?.data || "";
+  async retrySubmission(branchId: string, id: string): Promise<PortalYakapSubmissionDto> {
+    const res = await apiClient.post<any>(`/yakap/branches/${branchId}/submissions/${id}/retry`, {});
+    return res.data?.data || res.data;
   },
 
-  async createTransmittal(
-    branchId: string,
-    payload: PortalCreateTransmittalPayload
-  ): Promise<PortalYakapTransmittal> {
-    const res = await apiClient.post<{ data: PortalYakapTransmittal }>(
-      `/yakap/branches/${branchId}/transmittals`,
-      payload
-    );
-    return res.data?.data;
-  },
-
-  async validateTransmittal(id: string): Promise<PortalValidationResult> {
-    const res = await apiClient.post<{ data: PortalValidationResult }>(
-      `/yakap/transmittals/${id}/validate`,
-      {}
-    );
-    return res.data?.data;
-  },
-
-  async submitTransmittal(branchId: string, id: string): Promise<PortalSubmissionResult> {
-    const res = await apiClient.post<{ data: PortalSubmissionResult }>(
-      `/yakap/branches/${branchId}/transmittals/${id}/submit`,
-      {}
-    );
-    return res.data?.data;
+  async syncMasterlist(branchId: string): Promise<PortalYakapMasterlistSyncResultDto> {
+    const res = await apiClient.post<any>(`/yakap/branches/${branchId}/masterlist/sync`, {});
+    return res.data?.data || res.data;
   },
 };

@@ -57,11 +57,11 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var licenseToken = CreateLicenseToken(clinicId, tenantId);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -135,11 +135,11 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var licenseToken = CreateLicenseToken(clinicId, tenantId);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -199,7 +199,7 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var oldToken = "old-token-12345678901234567890123456789012";
         var staff = new StaffMember
@@ -217,7 +217,7 @@ public class StaffInvitationTests
             IsActive = true
         };
         await staffRepo.AddAsync(staff);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -266,7 +266,7 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var staff = new StaffMember
         {
@@ -382,10 +382,10 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var licenseToken = CreateLicenseToken(clinicId, tenantId);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -437,10 +437,10 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var token = "inv-token-abc-123";
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -487,7 +487,7 @@ public class StaffInvitationTests
         var clinicContext = Substitute.For<IClinicContext>();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var handler = new GetClinicInvitationDetailsQueryHandler(staffRepo, settingsRepo);
         var act = () => handler.Handle(new GetClinicInvitationDetailsQuery("nonexistent-token"), CancellationToken.None);
@@ -592,7 +592,7 @@ public class StaffInvitationTests
 
         var (db, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        await db.ClinicSettings.AddAsync(new ClinicSettings
+        await db.Settings.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -748,12 +748,12 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var notifier = Substitute.For<IClinicStaffInvitationNotifier>();
         notifier.BuildInviteUrl(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns(ci => $"https://nextstep.clinic.dev.clinicez.net/invitations/{ci.ArgAt<string>(0)}");
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -842,7 +842,7 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var notifier = Substitute.For<IClinicStaffInvitationNotifier>();
         notifier.BuildInviteUrl(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns(ci => $"https://nextstep.clinic.dev.clinicez.net/invitations/{ci.ArgAt<string>(0)}");
@@ -899,12 +899,12 @@ public class StaffInvitationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var notifier = Substitute.For<IClinicStaffInvitationNotifier>();
         notifier.BuildInviteUrl(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns(ci => $"https://nextstep.clinic.dev.clinicez.net/invitations/{ci.ArgAt<string>(0)}");
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,

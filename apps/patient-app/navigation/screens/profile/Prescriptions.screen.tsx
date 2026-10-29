@@ -18,6 +18,7 @@ import * as Clipboard from 'expo-clipboard';
 import { dialog } from '@utils/dialog';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { publicRoutes } from '@shared/safe';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
 interface ExternalReceiptData {
   pharmacyName: string;
@@ -27,17 +28,9 @@ interface ExternalReceiptData {
   attachedAt: string;
 }
 
-const COMMON_DRUGSTORES = [
-  'Mercury Drug',
-  'Watsons',
-  'Rose Pharmacy',
-  'Southstar Drug',
-  'The Generics Pharmacy (TGP)',
-  'Generika Drugstore',
-  'Other',
-];
-
 export default function PrescriptionsScreen() {
+  const { selectOptions: drugstoreOptions } = useEhrOptions('common_drugstore');
+  const commonDrugstores = React.useMemo(() => drugstoreOptions.map((o) => o.label), [drugstoreOptions]);
   const patientId = usePatientId();
   const { getClinicName } = useClinicNameMap();
   const { colors, radii, spacing } = useAppTheme();
@@ -937,7 +930,7 @@ export default function PrescriptionsScreen() {
                   Pharmacy Chain *
                 </ThemedText>
                 <View style={styles.chipRow}>
-                  {COMMON_DRUGSTORES.map((pharmacy) => {
+                  {commonDrugstores.map((pharmacy) => {
                     const isSelected = selectedPharmacy === pharmacy;
                     return (
                       <Pressable

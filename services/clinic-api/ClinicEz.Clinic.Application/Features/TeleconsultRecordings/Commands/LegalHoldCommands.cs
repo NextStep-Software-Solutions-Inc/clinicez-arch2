@@ -26,14 +26,14 @@ public sealed class LegalHoldCommandHandler :
     IRequestHandler<ReleaseLegalHoldCommand, RecordingSessionDto>
 {
     private readonly IRepository<TeleconsultRecordingSession> _sessionRepo;
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly ILogger<LegalHoldCommandHandler> _logger;
 
     public LegalHoldCommandHandler(
         IRepository<TeleconsultRecordingSession> sessionRepo,
-        IRepository<ClinicAuditEntry> auditRepo,
+        IRepository<AuditEntry> auditRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         ILogger<LegalHoldCommandHandler> logger)
@@ -68,7 +68,7 @@ public sealed class LegalHoldCommandHandler :
         session.LegalHoldPlacedByStaffId = _clinicContext.StaffId;
         session.LegalHoldPlacedByStaffName = _clinicContext.StaffName ?? "Facility Administrator";
 
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = session.TenantId,
@@ -119,7 +119,7 @@ public sealed class LegalHoldCommandHandler :
         session.IsLegalHold = false;
         session.LegalHoldReason = null;
 
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = session.TenantId,

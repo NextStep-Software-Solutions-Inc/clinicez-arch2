@@ -365,10 +365,10 @@ public class AuditPipelineEmpiricalStressTests
         consultDescriptor.Action.Should().Be("clinical.consultation.signed");
         consultDescriptor.Category.Should().Be(ClinicAuditCategories.Clinical);
 
-        var voidDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Yakap.Commands.VoidYakapTransmittal.VoidYakapTransmittalCommand));
-        voidDescriptor.IsAuditable.Should().BeTrue();
-        voidDescriptor.Action.Should().Be("philhealth.transmittal.voided");
-        voidDescriptor.Severity.Should().Be(ClinicAuditSeverities.Emergency);
+        var registerDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Patients.Commands.RegisterClinicPatientCommand));
+        registerDescriptor.IsAuditable.Should().BeTrue();
+        registerDescriptor.Action.Should().Be("patient.registration.created");
+        registerDescriptor.Category.Should().Be(ClinicAuditCategories.Patient);
 
         var auditQueryDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Audit.Queries.GetAuditLogsQuery));
         auditQueryDescriptor.IsAuditable.Should().BeTrue();
@@ -379,7 +379,7 @@ public class AuditPipelineEmpiricalStressTests
         updateTriageDescriptor.Action.Should().Be("clinical.triage_vitals.updated");
         updateTriageDescriptor.Category.Should().Be(ClinicAuditCategories.Clinical);
         updateTriageDescriptor.Severity.Should().Be(ClinicAuditSeverities.Routine);
-        updateTriageDescriptor.TargetEntityType.Should().Be("TriageVitals");
+        updateTriageDescriptor.TargetEntityType.Should().Be("PatientVitals");
 
         // 2. Unmapped command with heuristic fallback
         var unmappedDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(StressTestCommand));

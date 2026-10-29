@@ -6,7 +6,7 @@ public sealed record TriageVitalsDto(
     Guid Id,
     string TenantId,
     Guid ClinicId,
-    Guid QueueItemId,
+    Guid? QueueItemId,
     Guid PatientId,
     Guid? NurseId,
     string? RecordedByNurseName,

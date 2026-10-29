@@ -28,7 +28,7 @@ namespace ClinicEz.Clinic.Application.Tests.Adversarial;
 /// <summary>
 /// Empirical Adversarial Verification Suite by Challenger M1_2.
 /// Verifies:
-/// 1. Dynamic metadata persistence in ClinicPatient.CustomFields dictionary with edge-case values
+/// 1. Dynamic metadata persistence in Patient.CustomFields dictionary with edge-case values
 ///    (empty strings, numbers, booleans, special unicode characters, nested structures, nulls).
 /// 2. Multi-tenant isolation: Tenant A cannot access, modify, reorder, or delete custom field definitions belonging to Tenant B.
 /// </summary>
@@ -131,7 +131,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         );
 
     // =========================================================================
-    // TASK 1: DYNAMIC METADATA PERSISTENCE IN ClinicPatient.CustomFields
+    // TASK 1: DYNAMIC METADATA PERSISTENCE IN Patient.CustomFields
     // =========================================================================
 
     [Fact]
@@ -144,7 +144,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         var edgeFields = new Dictionary<string, object?>
@@ -190,7 +190,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         var edgeNumbers = new Dictionary<string, object?>
@@ -253,7 +253,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         var boolFields = new Dictionary<string, object?>
@@ -298,7 +298,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         var unicodeFields = new Dictionary<string, object?>
@@ -343,7 +343,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         var nestedDict = new Dictionary<string, object?>
@@ -413,7 +413,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
         var updateHandler = new UpdateClinicPatientCommandHandler(patientRepo, uow);
         var getByIdHandler = new GetClinicPatientByIdQueryHandler(patientRepo);
@@ -472,7 +472,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, uowA, repoA, dbB, uowB, repoB, _) =
-            CreateSharedDatabasePair<ClinicCustomFieldDefinition>(contextA, contextB);
+            CreateSharedDatabasePair<CustomFieldDefinition>(contextA, contextB);
 
         var createHandlerA = new CreateCustomFieldDefinitionCommandHandler(repoA, uowA, contextA);
         var createHandlerB = new CreateCustomFieldDefinitionCommandHandler(repoB, uowB, contextB);
@@ -492,8 +492,8 @@ public class ChallengerM1_2AdversarialVerificationTests
         dbB.ChangeTracker.Clear();
 
         // Act - Query as Tenant A and as Tenant B
-        var listA = await queryHandlerA.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
-        var listB = await queryHandlerB.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var listA = await queryHandlerA.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
+        var listB = await queryHandlerB.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert - Tenant A only sees Tenant A's fields
         listA.Should().HaveCount(2);
@@ -522,7 +522,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, _, repoA, dbB, uowB, repoB, _) =
-            CreateSharedDatabasePair<ClinicCustomFieldDefinition>(contextA, contextB);
+            CreateSharedDatabasePair<CustomFieldDefinition>(contextA, contextB);
 
         var createHandlerB = new CreateCustomFieldDefinitionCommandHandler(repoB, uowB, contextB);
 
@@ -555,7 +555,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, uowA, repoA, dbB, uowB, repoB, dbAdmin) =
-            CreateSharedDatabasePair<ClinicCustomFieldDefinition>(contextA, contextB);
+            CreateSharedDatabasePair<CustomFieldDefinition>(contextA, contextB);
 
         var createHandlerB = new CreateCustomFieldDefinitionCommandHandler(repoB, uowB, contextB);
         var updateHandlerA = new UpdateCustomFieldDefinitionCommandHandler(repoA, uowA);
@@ -588,7 +588,7 @@ public class ChallengerM1_2AdversarialVerificationTests
 
         // Verify in DB that Tenant B's field was NOT altered in any way
         dbAdmin.ChangeTracker.Clear();
-        var verifiedBField = await dbAdmin.Set<ClinicCustomFieldDefinition>()
+        var verifiedBField = await dbAdmin.Set<CustomFieldDefinition>()
             .IgnoreQueryFilters()
             .FirstAsync(f => f.Id == bField.Id);
 
@@ -616,7 +616,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, uowA, repoA, dbB, uowB, repoB, dbAdmin) =
-            CreateSharedDatabasePair<ClinicCustomFieldDefinition>(contextA, contextB);
+            CreateSharedDatabasePair<CustomFieldDefinition>(contextA, contextB);
 
         var createHandlerA = new CreateCustomFieldDefinitionCommandHandler(repoA, uowA, contextA);
         var createHandlerB = new CreateCustomFieldDefinitionCommandHandler(repoB, uowB, contextB);
@@ -633,7 +633,7 @@ public class ChallengerM1_2AdversarialVerificationTests
 
         // Act 1: Tenant A attempts to reorder using OrderedIds containing Tenant B's IDs mixed with Tenant A's
         var orderedIds = new List<Guid> { b1.Id, a2.Id, a1.Id, b2.Id };
-        var reorderResult = await reorderHandlerA.Handle(new ReorderCustomFieldsCommand("ClinicPatient", orderedIds), CancellationToken.None);
+        var reorderResult = await reorderHandlerA.Handle(new ReorderCustomFieldsCommand("Patient", orderedIds), CancellationToken.None);
 
         // Assert - returned list only contains Tenant A's fields, ordered appropriately among Tenant A's own items
         reorderResult.Should().HaveCount(2);
@@ -642,8 +642,8 @@ public class ChallengerM1_2AdversarialVerificationTests
 
         // Verify in DB that Tenant B's fields kept their original display order 1 and 2
         dbAdmin.ChangeTracker.Clear();
-        var rawB1 = await dbAdmin.Set<ClinicCustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b1.Id);
-        var rawB2 = await dbAdmin.Set<ClinicCustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b2.Id);
+        var rawB1 = await dbAdmin.Set<CustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b1.Id);
+        var rawB2 = await dbAdmin.Set<CustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b2.Id);
         rawB1.DisplayOrder.Should().Be(1);
         rawB2.DisplayOrder.Should().Be(2);
 
@@ -653,13 +653,13 @@ public class ChallengerM1_2AdversarialVerificationTests
             new(b1.Id, 9999),
             new(b2.Id, 8888)
         };
-        var maliciousResult = await reorderHandlerA.Handle(new ReorderCustomFieldsCommand(items: maliciousItems, entityType: "ClinicPatient"), CancellationToken.None);
+        var maliciousResult = await reorderHandlerA.Handle(new ReorderCustomFieldsCommand(items: maliciousItems, entityType: "Patient"), CancellationToken.None);
 
         // Assert - Tenant A's handler does not return or mutate Tenant B's fields
         maliciousResult.Should().HaveCount(2); // returns Tenant A's existing fields
         dbAdmin.ChangeTracker.Clear();
-        var rawB1After = await dbAdmin.Set<ClinicCustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b1.Id);
-        var rawB2After = await dbAdmin.Set<ClinicCustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b2.Id);
+        var rawB1After = await dbAdmin.Set<CustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b1.Id);
+        var rawB2After = await dbAdmin.Set<CustomFieldDefinition>().IgnoreQueryFilters().FirstAsync(f => f.Id == b2.Id);
         rawB1After.DisplayOrder.Should().Be(1);
         rawB2After.DisplayOrder.Should().Be(2);
     }
@@ -680,7 +680,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, uowA, repoA, dbB, uowB, repoB, dbAdmin) =
-            CreateSharedDatabasePair<ClinicCustomFieldDefinition>(contextA, contextB);
+            CreateSharedDatabasePair<CustomFieldDefinition>(contextA, contextB);
 
         var createHandlerB = new CreateCustomFieldDefinitionCommandHandler(repoB, uowB, contextB);
         var deleteHandlerA = new DeleteCustomFieldDefinitionCommandHandler(repoA, uowA);
@@ -699,7 +699,7 @@ public class ChallengerM1_2AdversarialVerificationTests
 
         // Verify in DB that Tenant B's field is NOT deleted
         dbAdmin.ChangeTracker.Clear();
-        var rawField = await dbAdmin.Set<ClinicCustomFieldDefinition>()
+        var rawField = await dbAdmin.Set<CustomFieldDefinition>()
             .IgnoreQueryFilters()
             .FirstAsync(f => f.Id == bField.Id);
 
@@ -724,7 +724,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, uowA, repoA, dbB, uowB, repoB, dbAdmin) =
-            CreateSharedDatabasePair<ClinicCustomFieldDefinition>(contextA, contextB);
+            CreateSharedDatabasePair<CustomFieldDefinition>(contextA, contextB);
 
         var installHandlerA = new InstallCustomFieldTemplateCommandHandler(repoA, uowA, contextA);
         var installHandlerB = new InstallCustomFieldTemplateCommandHandler(repoB, uowB, contextB);
@@ -742,18 +742,18 @@ public class ChallengerM1_2AdversarialVerificationTests
 
         // Assert - Tenant A has exactly 8 fields
         installedA.Should().HaveCount(8);
-        var queriedA = await queryHandlerA.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queriedA = await queryHandlerA.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queriedA.Should().HaveCount(8);
         queriedA.All(f => f.TenantId == "tenant_USTP" && f.ClinicId == clinicIdA).Should().BeTrue();
 
         // Assert - Tenant B has exactly 4 fields
         installedB.Should().HaveCount(4);
-        var queriedB = await queryHandlerB.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queriedB = await queryHandlerB.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queriedB.Should().HaveCount(4);
         queriedB.All(f => f.TenantId == "tenant_Corporate" && f.ClinicId == clinicIdB).Should().BeTrue();
 
         // Verify total in shared database is exactly 8 + 4 = 12
-        var totalInDb = await dbAdmin.Set<ClinicCustomFieldDefinition>().IgnoreQueryFilters().CountAsync();
+        var totalInDb = await dbAdmin.Set<CustomFieldDefinition>().IgnoreQueryFilters().CountAsync();
         totalInDb.Should().Be(12);
     }
 
@@ -773,7 +773,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, uowA, repoA, dbB, uowB, repoB, _) =
-            CreateSharedDatabasePair<ClinicCustomFieldDefinition>(contextA, contextB);
+            CreateSharedDatabasePair<CustomFieldDefinition>(contextA, contextB);
 
         var createHandlerA = new CreateCustomFieldDefinitionCommandHandler(repoA, uowA, contextA);
         var createHandlerB = new CreateCustomFieldDefinitionCommandHandler(repoB, uowB, contextB);
@@ -808,7 +808,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         // Case 1: Null CustomFields
@@ -842,7 +842,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         var injectionPayloads = new Dictionary<string, object?>
@@ -882,7 +882,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         clinicContext.ClinicId.Returns(clinicId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, clinicContext);
 
         // 4 levels of nesting
@@ -933,7 +933,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         contextB.ClinicId.Returns(clinicIdB);
 
         var (dbA, _, repoA, dbB, uowB, repoB, _) =
-            CreateSharedDatabasePair<ClinicPatient>(contextA, contextB);
+            CreateSharedDatabasePair<Patient>(contextA, contextB);
 
         var registerHandlerB = new RegisterClinicPatientCommandHandler(repoB, uowB, contextB);
         var getByIdHandlerA = new GetClinicPatientByIdQueryHandler(repoA);
@@ -974,7 +974,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         context.ClinicId.Returns(clinicId);
 
         var (contextDb, uow, sieve) = TestDbHelper.CreateTestContext(context);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(contextDb, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(contextDb, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, context);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, context);
 
@@ -986,7 +986,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         var randomGuid2 = Guid.NewGuid();
         var orderedIds = new List<Guid> { randomGuid1, existingField.Id, randomGuid2 };
 
-        var result = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", orderedIds), CancellationToken.None);
+        var result = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", orderedIds), CancellationToken.None);
 
         // Assert - Only the existing field is processed and returned, no exception thrown
         result.Should().HaveCount(1);

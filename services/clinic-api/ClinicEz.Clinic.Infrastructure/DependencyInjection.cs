@@ -1,6 +1,9 @@
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Common.Security;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
@@ -48,7 +51,10 @@ public static class DependencyInjection
         services.AddScoped<ClinicEz.Clinic.Domain.Interfaces.IClinicScopeSetter>(sp => (ClinicContext)sp.GetRequiredService<IClinicContext>());
 
         services.AddScoped<ClinicPortalProjectionInterceptor>();
+        services.AddScoped<SoftDeleteSaveChangesInterceptor>();
+        services.AddScoped<DomainEventDispatchSaveChangesInterceptor>();
         services.AddScoped<IRecordAttachmentStorage, RecordAttachmentStorage>();
+        services.AddScoped<ClinicEz.Clinic.Infrastructure.Persistence.Services.IBatchedAuditLogWriter, ClinicEz.Clinic.Infrastructure.Persistence.Services.BatchedAuditLogWriter>();
 
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
@@ -57,10 +63,15 @@ public static class DependencyInjection
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
                 npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
             });
-            options.AddInterceptors(sp.GetRequiredService<ClinicPortalProjectionInterceptor>());
+            options.AddInterceptors(
+                sp.GetRequiredService<SoftDeleteSaveChangesInterceptor>(),
+                sp.GetRequiredService<ClinicPortalProjectionInterceptor>(),
+                sp.GetRequiredService<DomainEventDispatchSaveChangesInterceptor>());
         });
 
         // Register repositories and Unit of Work
+        services.AddSingleton<ITenantConnectionResolver, DefaultTenantConnectionResolver>();
+        services.AddScoped<IReadDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -71,12 +82,16 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddSingleton<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Clinic.Infrastructure.Auth.StaffAccessCache>();
         services.AddSingleton<ClinicEz.Clinic.Domain.Interfaces.IStaffAccessInvalidator>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache>());
+        services.AddSingleton<ClinicEz.Clinic.Infrastructure.Auth.IKioskAccessCache, ClinicEz.Clinic.Infrastructure.Auth.KioskAccessCache>();
+        services.AddSingleton<ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.Auth.IKioskAccessCache>());
+        services.AddScoped<ClinicEz.Clinic.Domain.Interfaces.IKioskTokenService, ClinicEz.Clinic.Infrastructure.Auth.KioskTokenService>();
         services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IWorkspaceResolver, ClinicEz.Clinic.Infrastructure.Auth.WorkspaceResolver>();
         services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IClinicAuthService, ClinicEz.Clinic.Infrastructure.Auth.ClinicAuthService>();
 
         // PhilHealth Catalog: bundled lib_* JSON seeded on every boot + idempotent administrator import
         services.AddScoped<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.IPhilHealthCatalogImportService, ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogImportService>();
         services.AddScoped<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.IPhilHealthCatalogQueryService, ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogQueryService>();
+        services.AddScoped<IPsgcLocationService, ClinicEz.Clinic.Infrastructure.Locations.PsgcLocationService>();
         services.AddSingleton<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>();
         services.AddSingleton<ClinicEz.Clinic.Application.Common.Interfaces.IPhilHealthCatalogLookup>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>());
         services.AddSingleton<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.IPhilHealthCatalogCache>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>());
@@ -123,13 +138,16 @@ public static class DependencyInjection
                 sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePharmacyGamotGateway>>()));
 
-        services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator>(sp =>
+        services.AddScoped<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator>(sp =>
             new ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator(
                 sp.GetRequiredService<PhilHealthSequenceGenerator>(),
                 sp.GetRequiredService<IAuditLogQueue>(),
                 sp.GetRequiredService<IClinicContext>(),
                 sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator>>()));
+
+        services.AddScoped<ClinicEz.Clinic.Domain.Interfaces.IPhilHealthSequenceGenerator>(sp =>
+            sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator>());
 
         services.AddScoped<ClinicEz.Clinic.Application.Common.Interfaces.IPatientCodeGenerator, PatientCodeGenerator>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthMasterlistSyncService, ClinicEz.Clinic.Infrastructure.Services.PhilHealthMasterlistSyncService>();
@@ -143,8 +161,44 @@ public static class DependencyInjection
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
         services.AddScoped<IImmunizationEventPublisher, ImmunizationEventPublisher>();
-        services.AddHttpClient(PatientRecordSharedHandler.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30))
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddHttpClient(PatientRecordSharedHandler.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            ConnectCallback = async (context, cancellationToken) =>
+            {
+                var host = context.DnsEndPoint.Host;
+                IPAddress[] addresses;
+                if (IPAddress.TryParse(host.Trim('[', ']'), out var literal))
+                {
+                    addresses = [literal];
+                }
+                else
+                {
+                    addresses = await Dns.GetHostAddressesAsync(host, cancellationToken);
+                }
+
+                var allowed = addresses.Where(a => !SafeDownloadUrlValidator.IsPrivateOrReserved(a)).ToArray();
+                if (allowed.Length == 0)
+                {
+                    throw new HttpRequestException($"Host '{host}' does not resolve to an allowed public address.");
+                }
+
+                var socket = new Socket(allowed[0].AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(new IPEndPoint(allowed[0], context.DnsEndPoint.Port), cancellationToken);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            }
+        });
         services.Configure<ClinicUploadOptions>(configuration.GetSection(ClinicUploadOptions.SectionName));
         services.PostConfigure<ClinicUploadOptions>(options =>
         {
@@ -245,6 +299,8 @@ public static class DependencyInjection
             .Handle<CommsAttachmentFiledPayload, CommsAttachmentFiledHandler>(InteropTypes.CommsAttachmentFiled)
             .Respond<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.YakapTransmittalResponder>(
                 InteropTypes.YakapTransmittalRequested, InteropTypes.YakapTransmittalResponded)
+            .Respond<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.YakapSubmissionResponder>(
+                InteropTypes.YakapSubmissionRequested, InteropTypes.YakapSubmissionResponded)
             .HandleReply(InteropTypes.GamotLookupResponded)
             .HandleReply(InteropTypes.PhilHealthResponse)
             .HandleEntitlementsChanged());

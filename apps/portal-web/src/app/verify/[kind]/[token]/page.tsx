@@ -1,6 +1,6 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
-import { joinApiUrl } from '@shared/safe';
+import { joinApiUrl, type EhrOptionDescriptor } from '@shared/safe';
 import { getPortalApiUrl } from '@/utils/domain';
 import VerifyClient, { DocumentVerificationData } from './VerifyClient';
 import RxVerifyClient, { RxVerificationData } from './RxVerifyClient';
@@ -69,6 +69,31 @@ export default async function DynamicVerifyPage({ params, searchParams }: Dynami
 
   // Branch 1: kind === 'rx' or 'prescription' delegates to RxVerifyClient (Pharmacist Verification & Dispense Flow)
   if (kind === 'rx' || kind === 'prescription') {
+    let initialDrugstoreOptions: EhrOptionDescriptor[] = [];
+    try {
+      const optResponse = await fetch(
+        joinApiUrl(portalApiUrl, '/public/options/common_drugstore'),
+        { next: { revalidate: 3600 } }
+      );
+      if (optResponse.ok) {
+        const optPayload = await optResponse.json().catch(() => null);
+        const candidates = Array.isArray(optPayload)
+          ? optPayload
+          : Array.isArray(optPayload?.options)
+            ? optPayload.options
+            : Array.isArray(optPayload?.data?.options)
+              ? optPayload.data.options
+              : Array.isArray(optPayload?.data)
+                ? optPayload.data
+                : [];
+        initialDrugstoreOptions = candidates.filter(
+          (item: any) => item && typeof item.code === 'string' && typeof item.label === 'string'
+        );
+      }
+    } catch {
+      initialDrugstoreOptions = [];
+    }
+
     let rxData: RxVerificationData;
 
     try {
@@ -119,7 +144,13 @@ export default async function DynamicVerifyPage({ params, searchParams }: Dynami
       };
     }
 
-    return <RxVerifyClient token={token} initialData={rxData} />;
+    return (
+      <RxVerifyClient
+        token={token}
+        initialData={rxData}
+        initialDrugstoreOptions={initialDrugstoreOptions}
+      />
+    );
   }
 
   // Branch 2: All other document kinds delegate to VerifyClient (Zero-PHI Authenticity Result)

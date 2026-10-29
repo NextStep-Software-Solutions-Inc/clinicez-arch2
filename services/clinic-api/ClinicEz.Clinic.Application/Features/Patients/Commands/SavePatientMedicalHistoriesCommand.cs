@@ -29,14 +29,14 @@ public sealed class SavePatientMedicalHistoriesCommandValidator : AbstractValida
 
 public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<SavePatientMedicalHistoriesCommand, PatientMedicalHistoryResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<PatientPastMedicalHistory> _medicalRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<PatientMedicalHistory> _medicalRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public SavePatientMedicalHistoriesCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<PatientPastMedicalHistory> medicalRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<PatientMedicalHistory> medicalRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -60,7 +60,7 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
         var clinicId = _clinicContext.ClinicId;
         var staffName = _clinicContext.StaffId?.ToString() ?? "ClinicStaff";
 
-        var existingEntries = await _medicalRepo.Query(m => m.PatientId == request.PatientId)
+        var existingEntries = await _medicalRepo.Query(m => m.PatientId == request.PatientId && m.Category == MedicalHistoryCategory.MedicalHistory)
             .ToListAsync(cancellationToken);
 
         // Track conditions to keep or add
@@ -83,7 +83,7 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
                 existing.Icd10Code = item.Icd10Code?.Trim();
                 existing.SpecificDescription = item.SpecificDescription?.Trim();
                 existing.OnsetDate = item.OnsetDate;
-                existing.IsResolved = item.IsResolved;
+                existing.Status = item.IsResolved ? ProblemStatus.Resolved : ProblemStatus.Active;
                 existing.ClinicalNotes = item.ClinicalNotes?.Trim();
                 existing.UpdatedAt = DateTime.UtcNow;
                 existing.UpdatedBy = staffName;
@@ -91,18 +91,19 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
             }
             else
             {
-                var newEntity = new PatientPastMedicalHistory
+                var newEntity = new PatientMedicalHistory
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
                     ClinicId = clinicId,
                     PatientId = request.PatientId,
+                    Category = MedicalHistoryCategory.MedicalHistory,
                     ConditionTitle = item.ConditionTitle.Trim(),
                     PhilHealthMdiseaseCode = item.PhilHealthMdiseaseCode?.Trim(),
                     Icd10Code = item.Icd10Code?.Trim(),
                     SpecificDescription = item.SpecificDescription?.Trim(),
                     OnsetDate = item.OnsetDate,
-                    IsResolved = item.IsResolved,
+                    Status = item.IsResolved ? ProblemStatus.Resolved : ProblemStatus.Active,
                     ClinicalNotes = item.ClinicalNotes?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = staffName
@@ -124,23 +125,10 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
             }
         }
 
-        // Update summary notes and chronic conditions string on ClinicPatient
-        patient.PersonalMedicalHistoryNotes = request.Notes?.Trim();
-        if (request.Items.Count > 0)
-        {
-            patient.ChronicConditions = string.Join(", ", request.Items.Select(i =>
-                !string.IsNullOrWhiteSpace(i.SpecificDescription) ? i.SpecificDescription : i.ConditionTitle));
-        }
-        else
-        {
-            patient.ChronicConditions = null;
-        }
-
-        _patientRepo.Update(patient);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Fetch refreshed active items
-        var updatedEntries = await _medicalRepo.Query(m => m.PatientId == request.PatientId)
+        var updatedEntries = await _medicalRepo.Query(m => m.PatientId == request.PatientId && m.Category == MedicalHistoryCategory.MedicalHistory)
             .OrderBy(m => m.ConditionTitle)
             .ToListAsync(cancellationToken);
 
@@ -152,10 +140,10 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
             e.Icd10Code,
             e.SpecificDescription,
             e.OnsetDate,
-            e.IsResolved,
+            e.Status == ProblemStatus.Resolved,
             e.ClinicalNotes,
             e.CreatedAt)).ToList();
 
-        return new PatientMedicalHistoryResultDto(dtos, patient.PersonalMedicalHistoryNotes);
+        return new PatientMedicalHistoryResultDto(dtos, request.Notes?.Trim());
     }
 }

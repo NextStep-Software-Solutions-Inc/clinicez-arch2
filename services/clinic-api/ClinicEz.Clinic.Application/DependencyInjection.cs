@@ -26,9 +26,14 @@ public static class DependencyInjection
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditLoggingBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
-        services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IYakapClinicalMapper, ClinicEz.Clinic.Application.Features.Yakap.Services.YakapClinicalMapper>();
+        services.AddSingleton<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthPayloadEncryptor, ClinicEz.Clinic.Application.Features.Yakap.Services.PhilHealthPayloadEncryptor>();
+        services.AddTransient<ClinicEz.Clinic.Application.Features.Yakap.WireBuilders.YakapFpeWireBuilder>();
+        services.AddTransient<ClinicEz.Clinic.Application.Features.Yakap.WireBuilders.YakapConsultationWireBuilder>();
+        services.AddTransient<ClinicEz.Clinic.Application.Features.Yakap.WireBuilders.YakapDiagnosticRequestWireBuilder>();
+        services.AddTransient<ClinicEz.Clinic.Application.Features.Yakap.WireBuilders.YakapDiagnosticResultsWireBuilder>();
+        services.AddTransient<ClinicEz.Clinic.Application.Features.Yakap.WireBuilders.YakapMedicineWireBuilder>();
+        services.AddTransient<ClinicEz.Clinic.Application.Features.Yakap.WireBuilders.YakapReferralWireBuilder>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Schedules.Services.ISlotAvailabilityService, ClinicEz.Clinic.Application.Features.Schedules.Services.SlotAvailabilityService>();
-        services.AddScoped<ClinicEz.Clinic.Application.Features.Patients.Services.ILegacyPatientProfileIngestionService, ClinicEz.Clinic.Application.Features.Patients.Services.LegacyPatientProfileIngestionService>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Queue.Services.IQueueNotificationDispatcher, ClinicEz.Clinic.Application.Features.Queue.Services.QueueNotificationDispatcher>();
         services.AddScoped<IAppointmentNotificationDispatcher, AppointmentNotificationDispatcher>();
 

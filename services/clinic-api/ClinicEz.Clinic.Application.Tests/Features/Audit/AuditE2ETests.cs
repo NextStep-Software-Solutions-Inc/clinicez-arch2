@@ -48,7 +48,7 @@ public sealed class AuditE2ETests
 {
     private readonly IPhiRedactionService _redactionService = new PhiRedactionService();
 
-    private static (ApplicationDbContext Context, Guid ClinicId, string TenantId, IRepository<ClinicAuditEntry> Repo)
+    private static (ApplicationDbContext Context, Guid ClinicId, string TenantId, IRepository<AuditEntry> Repo)
         CreateIsolatedContext(Guid? customClinicId = null, string? customTenantId = null)
     {
         var clinicId = customClinicId ?? Guid.NewGuid();
@@ -71,12 +71,12 @@ public sealed class AuditE2ETests
         clinicContext.TenantId.Returns(tenantId);
 
         var context = new ApplicationDbContext(options, config, clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, null!);
+        var repo = TestDbHelper.CreateRepository<AuditEntry>(context, null!);
 
         return (context, clinicId, tenantId, repo);
     }
 
-    private static (ApplicationDbContext Context, IRepository<ClinicAuditEntry> Repo)
+    private static (ApplicationDbContext Context, IRepository<AuditEntry> Repo)
         CreateContextForExistingDb(string sharedDbName, Guid clinicId, string tenantId)
     {
         var config = new ConfigurationBuilder()
@@ -95,7 +95,7 @@ public sealed class AuditE2ETests
         clinicContext.TenantId.Returns(tenantId);
 
         var context = new ApplicationDbContext(options, config, clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, null!);
+        var repo = TestDbHelper.CreateRepository<AuditEntry>(context, null!);
 
         return (context, repo);
     }
@@ -125,7 +125,7 @@ public sealed class AuditE2ETests
         maskedPhilHealthPin.Should().Be("12-****8901-2");
 
         // ── Step 1: Patient Check-in / Queue Arrival Event ────────────────────
-        var checkInEntry = new ClinicAuditEntry
+        var checkInEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -154,7 +154,7 @@ public sealed class AuditE2ETests
                 RoomAssigned = "Room 3"
             })
         };
-        await context.ClinicAuditEntries.AddAsync(checkInEntry);
+        await context.AuditEntries.AddAsync(checkInEntry);
 
         // ── Step 2: Doctor Consultation SOAP Signing with Medical Prose Redaction
         var rawSubjective = "Patient reports 3-day history of productive cough, fever up to 39C, and right-sided pleuritic chest pain.";
@@ -189,7 +189,7 @@ public sealed class AuditE2ETests
         var expectedSubjectiveChecksum = _redactionService.ComputeTextChecksum(rawSubjective);
         redactedSoapPayloadJson.Should().Contain(expectedSubjectiveChecksum);
 
-        var consultationSignedEntry = new ClinicAuditEntry
+        var consultationSignedEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -212,11 +212,11 @@ public sealed class AuditE2ETests
             Description = $"Consultation encounter signed with ICD-10 J18.9 for {maskedPatientName}",
             MetadataJson = redactedSoapPayloadJson
         };
-        await context.ClinicAuditEntries.AddAsync(consultationSignedEntry);
+        await context.AuditEntries.AddAsync(consultationSignedEntry);
 
         // ── Step 3: PhilHealth Yakap eKAS Creation ────────────────────────────
         var ekasNumber = "EKAS-202610-0914";
-        var ekasEntry = new ClinicAuditEntry
+        var ekasEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -245,11 +245,11 @@ public sealed class AuditE2ETests
                 EncounterId = encounterId.ToString()
             })
         };
-        await context.ClinicAuditEntries.AddAsync(ekasEntry);
+        await context.AuditEntries.AddAsync(ekasEntry);
 
         // ── Step 4: PhilHealth Yakap XML Transmittal Generation (DTD v1.14) ───
         var transmittalBatchNo = "PMCC-202610-0018";
-        var transmittalGenEntry = new ClinicAuditEntry
+        var transmittalGenEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -279,10 +279,10 @@ public sealed class AuditE2ETests
                 IcdCode = "J18.9"
             })
         };
-        await context.ClinicAuditEntries.AddAsync(transmittalGenEntry);
+        await context.AuditEntries.AddAsync(transmittalGenEntry);
 
         // ── Step 5: Payload AES-256-CBC Encryption & PhilHealth SOAP Transmittal
-        var transmittalEncEntry = new ClinicAuditEntry
+        var transmittalEncEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -310,9 +310,9 @@ public sealed class AuditE2ETests
                 KeyDigest = "sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069"
             })
         };
-        await context.ClinicAuditEntries.AddAsync(transmittalEncEntry);
+        await context.AuditEntries.AddAsync(transmittalEncEntry);
 
-        var soapSubmittedEntry = new ClinicAuditEntry
+        var soapSubmittedEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -341,7 +341,7 @@ public sealed class AuditE2ETests
                 TransmissionLatencyMs = 642
             })
         };
-        await context.ClinicAuditEntries.AddAsync(soapSubmittedEntry);
+        await context.AuditEntries.AddAsync(soapSubmittedEntry);
 
         // Commit all records to DB
         var savedCount = await context.SaveChangesAsync();
@@ -399,7 +399,7 @@ public sealed class AuditE2ETests
         var maskedPhilHealthPin = "04-****7890-1";
 
         // ── Step 1: Cashier collects payment ──────────────────────────────────
-        var paymentEntry = new ClinicAuditEntry
+        var paymentEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -429,11 +429,11 @@ public sealed class AuditE2ETests
                 OfficialReceiptNumber = "OR-202610-0412"
             })
         };
-        await context.ClinicAuditEntries.AddAsync(paymentEntry);
+        await context.AuditEntries.AddAsync(paymentEntry);
 
         // ── Step 2: Cashier void action with mandatory statutory reason ───────
         var statutoryVoidReason = "Erroneous charge for whole abdominal ultrasound (PHP 1,800); physician order was for KBU ultrasound only (PHP 950). Excess charge PHP 850 requires void & re-invoice per BIR RR 11-2018.";
-        var voidEntry = new ClinicAuditEntry
+        var voidEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -463,10 +463,10 @@ public sealed class AuditE2ETests
                 TaxJurisdiction = "BIR-RR-11-2018"
             })
         };
-        await context.ClinicAuditEntries.AddAsync(voidEntry);
+        await context.AuditEntries.AddAsync(voidEntry);
 
         // ── Step 3: Managerial Refund Authorization ───────────────────────────
-        var refundEntry = new ClinicAuditEntry
+        var refundEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -498,7 +498,7 @@ public sealed class AuditE2ETests
                 ApprovedUtc = DateTime.UtcNow
             })
         };
-        await context.ClinicAuditEntries.AddAsync(refundEntry);
+        await context.AuditEntries.AddAsync(refundEntry);
 
         await context.SaveChangesAsync();
 
@@ -544,7 +544,7 @@ public sealed class AuditE2ETests
         var baseTime = DateTime.UtcNow.AddMinutes(-30);
 
         // ── Step 1: 5 Consecutive Failed Logins with Sanitized Passwords ──────
-        var attackEntries = new List<ClinicAuditEntry>();
+        var attackEntries = new List<AuditEntry>();
         for (int i = 1; i <= 5; i++)
         {
             var rawAttackPayload = JsonSerializer.Serialize(new
@@ -560,7 +560,7 @@ public sealed class AuditE2ETests
             sanitizedAttackPayload.Should().NotContain($"StolenPasswordAttempt{i}!");
             sanitizedAttackPayload.Should().Contain(PhiRedactionService.SecretRedactedToken);
 
-            attackEntries.Add(new ClinicAuditEntry
+            attackEntries.Add(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -581,10 +581,10 @@ public sealed class AuditE2ETests
                 MetadataJson = sanitizedAttackPayload
             });
         }
-        await context.ClinicAuditEntries.AddRangeAsync(attackEntries);
+        await context.AuditEntries.AddRangeAsync(attackEntries);
 
         // ── Step 2: Account Lockout Triggered ─────────────────────────────────
-        var lockoutEntry = new ClinicAuditEntry
+        var lockoutEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -610,10 +610,10 @@ public sealed class AuditE2ETests
                 OffendingIp = attackerIp
             })
         };
-        await context.ClinicAuditEntries.AddAsync(lockoutEntry);
+        await context.AuditEntries.AddAsync(lockoutEntry);
 
         // ── Step 3: Privilege Escalation Attempt Rejection ────────────────────
-        var escalationEntry = new ClinicAuditEntry
+        var escalationEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -627,7 +627,7 @@ public sealed class AuditE2ETests
             ActorRole = "Unknown",
             ClientIpAddress = attackerIp,
             UserAgent = attackerUserAgent,
-            TargetEntityType = "ClinicRole",
+            TargetEntityType = "Role",
             TargetEntityId = "SuperAdministrator",
             Outcome = ClinicAuditOutcomes.Failure,
             Description = $"Unauthorized role escalation to SuperAdministrator from {attackerIp} rejected for locked staff {targetStaffId}",
@@ -638,7 +638,7 @@ public sealed class AuditE2ETests
                 OriginatingIp = attackerIp
             })
         };
-        await context.ClinicAuditEntries.AddAsync(escalationEntry);
+        await context.AuditEntries.AddAsync(escalationEntry);
 
         await context.SaveChangesAsync();
 
@@ -688,7 +688,7 @@ public sealed class AuditE2ETests
         var now = DateTime.UtcNow;
 
         // Seed diverse audit records across categories
-        var sampleEntries = new List<ClinicAuditEntry>
+        var sampleEntries = new List<AuditEntry>
         {
             new()
             {
@@ -752,7 +752,7 @@ public sealed class AuditE2ETests
             }
         };
 
-        await context.ClinicAuditEntries.AddRangeAsync(sampleEntries);
+        await context.AuditEntries.AddRangeAsync(sampleEntries);
         await context.SaveChangesAsync();
 
         var exportHandler = new ExportAuditLogsQueryHandler(repo, clinicContext);
@@ -864,10 +864,10 @@ public sealed class AuditE2ETests
         var now = DateTime.UtcNow;
 
         // Seed 5 Sensitive Entries in Clinic Alpha
-        var alphaEntries = new List<ClinicAuditEntry>();
+        var alphaEntries = new List<AuditEntry>();
         for (int i = 1; i <= 5; i++)
         {
-            alphaEntries.Add(new ClinicAuditEntry
+            alphaEntries.Add(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -885,14 +885,14 @@ public sealed class AuditE2ETests
                 MetadataJson = "{\"confidential\":\"strictly-isolated\"}"
             });
         }
-        await contextAlpha.ClinicAuditEntries.AddRangeAsync(alphaEntries);
+        await contextAlpha.AuditEntries.AddRangeAsync(alphaEntries);
         await contextAlpha.SaveChangesAsync();
 
         // Seed 3 Entries in Clinic Beta
-        var betaEntries = new List<ClinicAuditEntry>();
+        var betaEntries = new List<AuditEntry>();
         for (int i = 1; i <= 3; i++)
         {
-            betaEntries.Add(new ClinicAuditEntry
+            betaEntries.Add(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -910,7 +910,7 @@ public sealed class AuditE2ETests
                 MetadataJson = "{}"
             });
         }
-        await contextBeta.ClinicAuditEntries.AddRangeAsync(betaEntries);
+        await contextBeta.AuditEntries.AddRangeAsync(betaEntries);
         await contextBeta.SaveChangesAsync();
 
         // ── Attack 1: Clinic Beta Queries All Audit Logs ──────────────────────

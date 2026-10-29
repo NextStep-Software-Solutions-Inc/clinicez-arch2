@@ -6,6 +6,8 @@ using ClinicEz.Patient.Api.Middleware;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Infrastructure.Persistence;
 using ClinicEz.Patient.Infrastructure.Services.Auth;
+using ClinicEz.Patient.Application.Common.Interfaces;
+using ClinicEz.Patient.Infrastructure.Locations;
 using ClinicEz.Shared.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authentication;
@@ -65,6 +67,7 @@ public sealed class PatientApiTestHost : IAsyncDisposable
         builder.Services.AddSingleton(Substitute.For<IMediator>());
         builder.Services.AddSingleton(patients);
         builder.Services.AddSingleton(Substitute.For<IUnitOfWork>());
+        builder.Services.AddSingleton<IPsgcLocationService, PsgcLocationService>();
         builder.Services.AddDbContext<ApplicationDbContext>(o => o.UseNpgsql(UnreachableDatabase));
         builder.Services
             .AddAuthentication(HeaderAuthHandler.SchemeName)

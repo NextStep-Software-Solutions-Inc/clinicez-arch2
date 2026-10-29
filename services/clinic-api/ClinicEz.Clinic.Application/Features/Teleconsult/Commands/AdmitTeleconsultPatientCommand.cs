@@ -37,8 +37,8 @@ public sealed record TeleconsultAdmissionResultDto(
 public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<AdmitTeleconsultPatientCommand, TeleconsultAdmissionResultDto>
 {
     private readonly IRepository<Appointment> _appointmentRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IInteropPublisher _publisher;
@@ -46,8 +46,8 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
 
     public AdmitTeleconsultPatientCommandHandler(
         IRepository<Appointment> appointmentRepo,
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicAuditEntry> auditRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<AuditEntry> auditRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IInteropPublisher publisher,
@@ -77,6 +77,7 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
         if (appointment.PaymentStatus == TeleconsultPaymentStatus.Pending)
         {
             var patient = await _patientRepo.Query()
+                .Include(p => p.YakapEnlistments)
                 .FirstOrDefaultAsync(p => p.Id == appointment.PatientId && p.ClinicId == _clinicContext.ClinicId, ct);
             if (patient != null)
             {
@@ -136,7 +137,7 @@ public sealed class AdmitTeleconsultPatientCommandHandler : IRequestHandler<Admi
                 appointment.CallId = callIdForOverride;
 
                 // 3. Write Immutable WORM Audit Entry in ClinicAuditEntries
-                var audit = new ClinicAuditEntry
+                var audit = new AuditEntry
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,

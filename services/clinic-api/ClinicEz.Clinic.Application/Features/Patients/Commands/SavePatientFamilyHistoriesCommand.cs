@@ -29,13 +29,13 @@ public sealed class SavePatientFamilyHistoriesCommandValidator : AbstractValidat
 
 public sealed class SavePatientFamilyHistoriesCommandHandler : IRequestHandler<SavePatientFamilyHistoriesCommand, PatientFamilyHistoryResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientFamilyHistory> _familyRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public SavePatientFamilyHistoriesCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientFamilyHistory> familyRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
@@ -82,7 +82,10 @@ public sealed class SavePatientFamilyHistoriesCommandHandler : IRequestHandler<S
                 existing.PhilHealthMdiseaseCode = item.PhilHealthMdiseaseCode?.Trim();
                 existing.Icd10Code = item.Icd10Code?.Trim();
                 existing.SpecificDescription = item.SpecificDescription?.Trim();
-                existing.Relationship = item.Relationship?.Trim();
+                if (Enum.TryParse<FamilyRelationship>(item.Relationship?.Trim(), true, out var rel))
+                {
+                    existing.Relationship = rel;
+                }
                 existing.ClinicalNotes = item.ClinicalNotes?.Trim();
                 existing.UpdatedAt = DateTime.UtcNow;
                 existing.UpdatedBy = staffName;
@@ -100,7 +103,7 @@ public sealed class SavePatientFamilyHistoriesCommandHandler : IRequestHandler<S
                     PhilHealthMdiseaseCode = item.PhilHealthMdiseaseCode?.Trim(),
                     Icd10Code = item.Icd10Code?.Trim(),
                     SpecificDescription = item.SpecificDescription?.Trim(),
-                    Relationship = item.Relationship?.Trim(),
+                    Relationship = Enum.TryParse<FamilyRelationship>(item.Relationship?.Trim(), true, out var newRel) ? newRel : FamilyRelationship.Other,
                     ClinicalNotes = item.ClinicalNotes?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = staffName
@@ -122,10 +125,6 @@ public sealed class SavePatientFamilyHistoriesCommandHandler : IRequestHandler<S
             }
         }
 
-        // Update summary notes on ClinicPatient
-        patient.FamilyMedicalHistoryNotes = request.Notes?.Trim();
-
-        _patientRepo.Update(patient);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Fetch refreshed active items
@@ -140,10 +139,10 @@ public sealed class SavePatientFamilyHistoriesCommandHandler : IRequestHandler<S
             e.PhilHealthMdiseaseCode,
             e.Icd10Code,
             e.SpecificDescription,
-            e.Relationship,
+            e.Relationship.ToString(),
             e.ClinicalNotes,
             e.CreatedAt)).ToList();
 
-        return new PatientFamilyHistoryResultDto(dtos, patient.FamilyMedicalHistoryNotes);
+        return new PatientFamilyHistoryResultDto(dtos, request.Notes?.Trim());
     }
 }

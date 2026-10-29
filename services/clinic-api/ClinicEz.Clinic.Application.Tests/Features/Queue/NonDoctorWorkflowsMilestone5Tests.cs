@@ -69,7 +69,7 @@ public class NonDoctorWorkflowsMilestone5Tests
         var (context, uow, _) = TestDbHelper.CreateTestContext(_clinicContext);
 
         // Seed existing Nurse role with legacy permissions only (missing DocumentsRead)
-        var nurseRole = new ClinicRole
+        var nurseRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -81,7 +81,7 @@ public class NonDoctorWorkflowsMilestone5Tests
         };
 
         // Seed existing Receptionist role with legacy permissions only (missing RecordsUpload)
-        var receptionistRole = new ClinicRole
+        var receptionistRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -92,17 +92,17 @@ public class NonDoctorWorkflowsMilestone5Tests
             Permissions = new List<string> { ClinicPermissions.QueueRead, ClinicPermissions.QueueCall }
         };
 
-        await context.ClinicRoles.AddRangeAsync(nurseRole, receptionistRole);
+        await context.Roles.AddRangeAsync(nurseRole, receptionistRole);
         await context.SaveChangesAsync();
 
         // Act
         await ClinicRoleSeeder.SeedDefaultRolesForClinicAsync(context, _tenantId, _clinicId, CancellationToken.None);
 
         // Assert
-        var updatedNurse = await context.ClinicRoles.FirstAsync(r => r.Id == nurseRole.Id);
+        var updatedNurse = await context.Roles.FirstAsync(r => r.Id == nurseRole.Id);
         updatedNurse.Permissions.Should().Contain(ClinicPermissions.DocumentsRead);
 
-        var updatedReceptionist = await context.ClinicRoles.FirstAsync(r => r.Id == receptionistRole.Id);
+        var updatedReceptionist = await context.Roles.FirstAsync(r => r.Id == receptionistRole.Id);
         updatedReceptionist.Permissions.Should().Contain(ClinicPermissions.RecordsUpload);
     }
 
@@ -120,13 +120,13 @@ public class NonDoctorWorkflowsMilestone5Tests
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(context, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var clinicPatient = new ClinicPatient
+        var clinicPatient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -135,7 +135,7 @@ public class NonDoctorWorkflowsMilestone5Tests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1990, 5, 15),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "+639171234567"
         };
         await patientRepo.AddAsync(clinicPatient, CancellationToken.None);
@@ -381,9 +381,9 @@ public class NonDoctorWorkflowsMilestone5Tests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,

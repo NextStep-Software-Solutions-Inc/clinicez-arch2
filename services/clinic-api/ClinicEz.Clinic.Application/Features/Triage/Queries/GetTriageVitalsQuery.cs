@@ -14,11 +14,11 @@ public sealed record GetTriageVitalsQuery(Guid QueueItemId) : IRequest<TriageVit
 
 public sealed class GetTriageVitalsQueryHandler : IRequestHandler<GetTriageVitalsQuery, TriageVitalsDto?>
 {
-    private readonly IRepository<TriageVitals> _vitalsRepository;
+    private readonly IRepository<PatientVitals> _vitalsRepository;
     private readonly IClinicContext _clinicContext;
 
     public GetTriageVitalsQueryHandler(
-        IRepository<TriageVitals> vitalsRepository,
+        IRepository<PatientVitals> vitalsRepository,
         IClinicContext clinicContext)
     {
         _vitalsRepository = vitalsRepository;

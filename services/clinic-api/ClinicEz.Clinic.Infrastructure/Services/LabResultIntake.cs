@@ -63,7 +63,7 @@ public sealed class LabResultIntake : ILabResultIntake
             _db.UploadGrants.Update(grant);
         }
 
-        var result = new ClinicLabResult
+        var result = new LabResult
         {
             Id = Guid.NewGuid(),
             TenantId = order.TenantId ?? string.Empty,

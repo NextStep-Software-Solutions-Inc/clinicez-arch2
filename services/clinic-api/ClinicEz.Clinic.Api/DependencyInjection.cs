@@ -15,6 +15,12 @@ public static class DependencyInjection
 
         services.AddAuthorization(options =>
         {
+            options.AddPolicy(ClinicEz.Clinic.Domain.Constants.ClinicPolicies.KioskIntake, policy =>
+                policy.RequireAssertion(ctx =>
+                    ctx.User.Identity?.IsAuthenticated == true &&
+                    ctx.User.HasClaim(ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.TokenType, "kiosk") &&
+                    !string.IsNullOrWhiteSpace(ctx.User.FindFirst(ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.ClinicId)?.Value)));
+
             options.AddPolicy(ClinicEz.Clinic.Domain.Constants.ClinicPermissions.AuditRead, policy =>
                 policy.RequireAssertion(ctx =>
                     ctx.User.HasClaim(ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.Permission, ClinicEz.Clinic.Domain.Constants.ClinicPermissions.AuditRead) ||

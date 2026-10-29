@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Auth;
 
-public sealed record ResolvedWorkspace(ClinicSettings Settings, string TenantId, Guid ClinicId);
+public sealed record ResolvedWorkspace(FacilitySettings Settings, string TenantId, Guid ClinicId);
 
 public interface IWorkspaceResolver
 {
@@ -47,7 +47,7 @@ public sealed class WorkspaceResolver : IWorkspaceResolver
     {
         if (string.IsNullOrWhiteSpace(facilitySlug)) return null;
         var clean = facilitySlug.Trim().ToLowerInvariant();
-        var all = _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
+        var all = _db.Settings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
 
         var isGuid = Guid.TryParse(facilitySlug, out var facGuid);
         if (isGuid && facGuid != Guid.Empty && facGuid != LegacyDefaultClinicId)
@@ -81,7 +81,7 @@ public sealed class WorkspaceResolver : IWorkspaceResolver
             return null;
 
         var clean = tenantSlug.Trim().ToLowerInvariant();
-        var all = _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
+        var all = _db.Settings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
 
         TenantLookupDto? tenant = null;
         try
@@ -111,8 +111,8 @@ public sealed class WorkspaceResolver : IWorkspaceResolver
     {
         if (string.IsNullOrWhiteSpace(workspace) || string.Equals(workspace, "tenant_default", StringComparison.OrdinalIgnoreCase))
         {
-            var all = _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
-            ClinicSettings? settings = null;
+            var all = _db.Settings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
+            FacilitySettings? settings = null;
             if (Guid.TryParse(_configuration["ClinicSettings:ClinicId"], out var configured) &&
                 configured != Guid.Empty && configured != LegacyDefaultClinicId)
             {

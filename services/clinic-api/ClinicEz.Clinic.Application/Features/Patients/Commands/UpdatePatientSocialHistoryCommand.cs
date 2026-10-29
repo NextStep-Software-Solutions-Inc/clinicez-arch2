@@ -44,13 +44,13 @@ public sealed class UpdatePatientSocialHistoryCommandValidator : AbstractValidat
 
 public sealed class UpdatePatientSocialHistoryCommandHandler : IRequestHandler<UpdatePatientSocialHistoryCommand, PatientSocialHistoryDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientSocialHistory> _socialRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdatePatientSocialHistoryCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientSocialHistory> socialRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)

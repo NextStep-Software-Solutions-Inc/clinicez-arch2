@@ -28,13 +28,13 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IClinicContext _clinicContext;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
-    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
 
     public GetQueueQueryHandler(
         IRepository<QueueItem> queueRepository,
         IClinicContext clinicContext,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<ClinicSettings>? settingsRepository = null)
+        IRepository<FacilitySettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _clinicContext = clinicContext;
@@ -50,7 +50,7 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
         var query = _queueRepository.Query(q => 
             q.ClinicId == _clinicContext.ClinicId && 
             q.QueueDate == targetDate)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .AsQueryable();
 
         // Specific Doctor Filter
@@ -159,13 +159,13 @@ public sealed class GetQueueMetricsQueryHandler : IRequestHandler<GetQueueMetric
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IClinicContext _clinicContext;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
-    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
 
     public GetQueueMetricsQueryHandler(
         IRepository<QueueItem> queueRepository,
         IClinicContext clinicContext,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<ClinicSettings>? settingsRepository = null)
+        IRepository<FacilitySettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _clinicContext = clinicContext;

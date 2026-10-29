@@ -16,13 +16,13 @@ namespace ClinicEz.Clinic.Application.Features.Patients.Search;
 /// </summary>
 public sealed class PatientSearchProvider : ISearchProvider
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
 
     public string Category => "Patients";
     public int Priority => 10;
     public string? RequiredPermission => ClinicPermissions.PatientsRead;
 
-    public PatientSearchProvider(IRepository<ClinicPatient> patientRepo)
+    public PatientSearchProvider(IRepository<Patient> patientRepo)
     {
         _patientRepo = patientRepo ?? throw new ArgumentNullException(nameof(patientRepo));
     }
@@ -39,6 +39,7 @@ public sealed class PatientSearchProvider : ISearchProvider
         var boundedLimit = limit <= 0 ? 10 : Math.Min(limit, 50);
 
         var patients = await _patientRepo.Query(e => !e.IsDeleted && e.ClinicId == tenantId, ignoreQueryFilters: true)
+            .Include(p => p.Alerts)
             .AsNoTracking()
             .WhereMatchesSearchTerm(query)
             .OrderBy(p => p.LastName)
@@ -73,9 +74,9 @@ public sealed class PatientSearchProvider : ISearchProvider
         }).ToList();
     }
 
-    private static (string text, string variant) ResolveBadge(ClinicPatient patient)
+    private static (string text, string variant) ResolveBadge(Patient patient)
     {
-        if (!string.IsNullOrWhiteSpace(patient.Alerts))
+        if (patient.Alerts.Any(a => a.IsActive))
             return ("Alert", SearchBadgeVariant.Emergency);
 
         if (!string.IsNullOrWhiteSpace(patient.SeniorCitizenId))
@@ -84,6 +85,6 @@ public sealed class PatientSearchProvider : ISearchProvider
         if (!string.IsNullOrWhiteSpace(patient.PwdId))
             return ("PWD", SearchBadgeVariant.Neutral);
 
-        return (patient.Gender ?? "Routine", SearchBadgeVariant.Routine);
+        return (patient.Gender.ToString(), SearchBadgeVariant.Routine);
     }
 }

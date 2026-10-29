@@ -20,7 +20,7 @@ public sealed record CreateCustomFieldDefinitionCommand(
     string FieldKey,
     string Label,
     CustomFieldDataType DataType,
-    string? EntityType = "ClinicPatient",
+    string? EntityType = "Patient",
     string? Category = null,
     bool IsRequired = false,
     int DisplayOrder = 0,
@@ -95,12 +95,12 @@ public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValida
 
 public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<CreateCustomFieldDefinitionCommand, ClinicCustomFieldDefinitionDto>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CreateCustomFieldDefinitionCommandHandler(
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -111,7 +111,7 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
 
     public async Task<ClinicCustomFieldDefinitionDto> Handle(CreateCustomFieldDefinitionCommand request, CancellationToken ct)
     {
-        var targetEntityType = string.IsNullOrWhiteSpace(request.EntityType) ? "ClinicPatient" : request.EntityType.Trim();
+        var targetEntityType = string.IsNullOrWhiteSpace(request.EntityType) ? "Patient" : request.EntityType.Trim();
         var normalizedKey = (request.FieldKey ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "_");
 
         if (string.IsNullOrWhiteSpace(normalizedKey) || !Regex.IsMatch(normalizedKey, @"\A[a-z0-9_]+\z"))
@@ -139,7 +139,7 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             _repo,
             ct);
 
-        var entity = new ClinicCustomFieldDefinition
+        var entity = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,

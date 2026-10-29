@@ -25,7 +25,7 @@ namespace ClinicEz.Clinic.Application.Tests.Adversarial;
 ///    - Handles UTC Z, local offsets, whitespace, lowercase 't', and SQL timestamps.
 ///    - Isolates calendar dates from UTC+8 timezone shifts across midnight boundaries.
 /// 2. End-to-end integration across PhilHealthMasterlistSyncService (both batch and XML modes)
-///    and YakapClinicalMapper.
+///    and PCAPI Wire Builders.
 /// </summary>
 public class ChallengerM3_2MidYearTimestampEmpiricalTests
 {
@@ -54,7 +54,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -65,7 +65,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1863, 11, 30),
-            Gender = "Male"
+            Gender = Gender.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -95,10 +95,10 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
         var entry = enlistments[0];
 
         // CRITICAL CHECK: must NOT collapse to "2026-01-01"
-        entry.EnlistedAt.Should().NotBe($"{expectedEffectiveYear}-01-01");
-        entry.EnlistedAt.Should().Be(expectedEnlistedAt);
+        entry.EnlistmentDate.Should().NotBe(new DateOnly(expectedEffectiveYear, 1, 1));
+        entry.EnlistmentDate.Should().Be(DateOnly.Parse(expectedEnlistedAt));
         entry.EffectiveYear.Should().Be(expectedEffectiveYear);
-        entry.ValidUntil.Should().Be($"{expectedEffectiveYear}-12-31");
+        entry.ValidUntil.Should().Be(new DateOnly(expectedEffectiveYear, 12, 31));
         entry.Status.Should().Be(YakapEnlistmentStatus.Active);
         entry.Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
     }
@@ -115,7 +115,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -126,7 +126,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1875, 12, 15),
-            Gender = "Male"
+            Gender = Gender.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -153,9 +153,9 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
         var entry = updatedPatient.GetYakapEnlistments().Single();
 
         entry.EffectiveYear.Should().Be(2026, "Effective year should be derived from AssignedDate");
-        entry.EnlistedAt.Should().Be("2026-07-20", "Exact calendar date must be preserved");
-        entry.EnlistedAt.Should().NotBe("2026-01-01");
-        entry.ValidUntil.Should().Be("2026-12-31");
+        entry.EnlistmentDate.Should().Be(new DateOnly(2026, 7, 20), "Exact calendar date must be preserved");
+        entry.EnlistmentDate.Should().NotBe(new DateOnly(2026, 1, 1));
+        entry.ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -181,7 +181,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1731, 3, 19),
-            Gender = "Female"
+            Gender = Gender.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -205,10 +205,10 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
         var updatedPatient = await dbContext.Patients.FirstAsync(p => p.Id == patient.Id);
         var entry = updatedPatient.GetYakapEnlistments().Single();
 
-        entry.EnlistedAt.Should().Be("2026-07-20");
-        entry.EnlistedAt.Should().NotBe("2026-01-01");
+        entry.EnlistmentDate.Should().Be(new DateOnly(2026, 7, 20));
+        entry.EnlistmentDate.Should().NotBe(new DateOnly(2026, 1, 1));
         entry.EffectiveYear.Should().Be(2026);
-        entry.ValidUntil.Should().Be("2026-12-31");
+        entry.ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -234,22 +234,22 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000004",
             DateOfBirth = new DateOnly(1866, 10, 29),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
         const string expectedCaseNo = "C00921202600888";
         const string expectedEnlistNo = "E00921202600888";
         const string expectedProfTransNo = "P00921202600888";
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = expectedCaseNo,
-            EnlistmentNo = expectedEnlistNo,
+            EnlistmentTransNo = expectedEnlistNo,
             ProfilingTransNo = expectedProfTransNo
         });
 
@@ -277,12 +277,12 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
         var entry = updatedPatient.GetYakapEnlistments().Single();
 
         // EnlistedAt updated to mid-year date without collapsing to Jan 01
-        entry.EnlistedAt.Should().Be("2026-07-20");
-        entry.EnlistedAt.Should().NotBe("2026-01-01");
+        entry.EnlistmentDate.Should().Be(new DateOnly(2026, 7, 20));
+        entry.EnlistmentDate.Should().NotBe(new DateOnly(2026, 1, 1));
 
         // Control numbers strictly retained
         entry.CaseNo.Should().Be(expectedCaseNo);
-        entry.EnlistmentNo.Should().Be(expectedEnlistNo);
+        entry.EnlistmentTransNo.Should().Be(expectedEnlistNo);
         entry.ProfilingTransNo.Should().Be(expectedProfTransNo);
     }
 }

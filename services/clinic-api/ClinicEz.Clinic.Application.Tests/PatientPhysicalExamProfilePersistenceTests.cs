@@ -7,7 +7,6 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
@@ -23,7 +22,7 @@ using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests;
 
-public sealed class PatientPhysicalExamProfilePersistenceTests
+public sealed class PatientPhysicalExamPersistenceTests
 {
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly string _tenantId = "tenant-physical-exam";
@@ -31,7 +30,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
     private readonly IClinicContext _clinicContext;
     private readonly IPhilHealthCatalogLookup _catalogLookup;
 
-    public PatientPhysicalExamProfilePersistenceTests()
+    public PatientPhysicalExamPersistenceTests()
     {
         _clinicContext = Substitute.For<IClinicContext>();
         _clinicContext.ClinicId.Returns(_clinicId);
@@ -44,22 +43,19 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
     public async Task GetProfile_WhenNoPhysicalExamExists_ReturnsStatutoryNormalDefaults()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var familyRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
         var surgRepo = TestDbHelper.CreateRepository<PatientSurgicalHistory>(context, sieve);
         var socRepo = TestDbHelper.CreateRepository<PatientSocialHistory>(context, sieve);
         var reproRepo = TestDbHelper.CreateRepository<PatientReproductiveHistory>(context, sieve);
         var ncdRepo = TestDbHelper.CreateRepository<NcdRiskAssessment>(context, sieve);
-        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExamProfile>(context, sieve);
-
-        var ingestionService = new LegacyPatientProfileIngestionService(
-            patientRepo, surgRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, immRepo, _catalogLookup, peRepo);
+        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExam>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -67,7 +63,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
             PatientCode = "P-TEST-PE-01",
             FirstName = "Juan",
             LastName = "Dela Cruz",
-            Gender = "Male",
+            Gender = Gender.Male,
             DateOfBirth = new DateOnly(1990, 5, 20),
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09171234567"
@@ -76,7 +72,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
         await uow.SaveChangesAsync();
 
         var controller = new YakapPatientProfileController(
-            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, ingestionService, peRepo);
+            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, peRepo);
 
         var actionResult = await controller.GetProfile(patientId, CancellationToken.None);
         var okResult = actionResult.Result as OkObjectResult;
@@ -112,22 +108,19 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
     public async Task UpdateProfile_DoesNotMutatePhysicalExamProfile()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var familyRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
         var surgRepo = TestDbHelper.CreateRepository<PatientSurgicalHistory>(context, sieve);
         var socRepo = TestDbHelper.CreateRepository<PatientSocialHistory>(context, sieve);
         var reproRepo = TestDbHelper.CreateRepository<PatientReproductiveHistory>(context, sieve);
         var ncdRepo = TestDbHelper.CreateRepository<NcdRiskAssessment>(context, sieve);
-        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExamProfile>(context, sieve);
-
-        var ingestionService = new LegacyPatientProfileIngestionService(
-            patientRepo, surgRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, immRepo, _catalogLookup, peRepo);
+        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExam>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -135,7 +128,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
             PatientCode = "P-TEST-PE-02",
             FirstName = "Maria",
             LastName = "Santos",
-            Gender = "Female",
+            Gender = Gender.Female,
             DateOfBirth = new DateOnly(1985, 3, 15),
             PhilHealthNumber = "99-123456789-0",
             ContactNumber = "09171234567"
@@ -144,7 +137,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
         await uow.SaveChangesAsync();
 
         var controller = new YakapPatientProfileController(
-            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, ingestionService, peRepo);
+            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, peRepo);
 
         var updateDto = new PhilHealthPatientProfileDto
         {
@@ -160,7 +153,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
         okUpdate.Should().NotBeNull();
 
         // Physical examination mutation was decoupled from YakapPatientProfileController,
-        // so no PatientPhysicalExamProfile entity should have been created or modified in peRepo.
+        // so no PatientPhysicalExam entity should have been created or modified in peRepo.
         var persistedPe = await peRepo.Query(pe => pe.PatientId == patientId).FirstOrDefaultAsync();
         persistedPe.Should().BeNull();
     }
@@ -169,19 +162,19 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
     public async Task UpdatePatientPhysicalExamCommand_PersistsFindingsAndSubsequentQueriesRetrieveThem()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var familyRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
         var surgRepo = TestDbHelper.CreateRepository<PatientSurgicalHistory>(context, sieve);
         var socRepo = TestDbHelper.CreateRepository<PatientSocialHistory>(context, sieve);
         var reproRepo = TestDbHelper.CreateRepository<PatientReproductiveHistory>(context, sieve);
         var ncdRepo = TestDbHelper.CreateRepository<NcdRiskAssessment>(context, sieve);
-        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExamProfile>(context, sieve);
+        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExam>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -189,7 +182,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
             PatientCode = "P-TEST-PE-CMD",
             FirstName = "Andres",
             LastName = "Bonifacio",
-            Gender = "Male",
+            Gender = Gender.Male,
             DateOfBirth = new DateOnly(1980, 11, 30),
             PhilHealthNumber = "11-223344556-7",
             ContactNumber = "09181234567"
@@ -241,28 +234,24 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
         persistedPe.HeentId.Should().Be("5");
         persistedPe.HeentRemarks.Should().Be("Exudative pharyngitis and cervical adenopathy");
         persistedPe.ChestId.Should().Be("2");
-        persistedPe.ChestRemarks.Should().Be("Bilateral wheezes on expiration");
+        persistedPe.ChestLungsRemarks.Should().Be("Bilateral wheezes on expiration");
         persistedPe.HeartId.Should().Be("2");
         persistedPe.HeartRemarks.Should().Be("Grade II systolic murmur at apex");
         persistedPe.AbdomenId.Should().Be("3");
         persistedPe.AbdomenRemarks.Should().Be("Right lower quadrant tenderness with guarding");
         persistedPe.NeuroId.Should().Be("3");
-        persistedPe.NeuroRemarks.Should().Be("Decreased sensation on left lower extremity");
+        persistedPe.NeurologicalRemarks.Should().Be("Decreased sensation on left lower extremity");
         persistedPe.RectalId.Should().Be("2");
-        persistedPe.RectalRemarks.Should().Be("External hemorrhoids noted, non-thrombosed");
+        persistedPe.DigitalRectalRemarks.Should().Be("External hemorrhoids noted, non-thrombosed");
         persistedPe.GuId.Should().Be("2");
-        persistedPe.GuRemarks.Should().Be("Mild suprapubic tenderness");
+        persistedPe.GenitourinaryRemarks.Should().Be("Mild suprapubic tenderness");
         persistedPe.GenSurveyId.Should().Be("2");
-        persistedPe.GenSurveyRemarks.Should().Be("Awake, in mild respiratory distress");
+        persistedPe.GeneralSurveyRemarks.Should().Be("Awake, in mild respiratory distress");
 
         // Dedicated CQRS query retrieves persisted findings
-        var ingestionService = new LegacyPatientProfileIngestionService(
-            patientRepo, surgRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, immRepo, _catalogLookup, peRepo);
-
         var queryHandler = new GetPatientPhysicalExamQueryHandler(
             patientRepo,
             peRepo,
-            ingestionService,
             _clinicContext);
 
         var queryResult = await queryHandler.Handle(new GetPatientPhysicalExamQuery(patientId), CancellationToken.None);
@@ -274,7 +263,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
 
         // Yakap composite read facade also projects persisted findings
         var yakapController = new YakapPatientProfileController(
-            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, ingestionService, peRepo);
+            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, peRepo);
 
         var yakapGetResult = await yakapController.GetProfile(patientId, CancellationToken.None);
         var yakapOk = yakapGetResult.Result as OkObjectResult;
@@ -291,19 +280,11 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
     public async Task GetPatientPhysicalExamQuery_WhenNoProfileExists_ReturnsStatutoryNormalDefaults()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var surgRepo = TestDbHelper.CreateRepository<PatientSurgicalHistory>(context, sieve);
-        var socRepo = TestDbHelper.CreateRepository<PatientSocialHistory>(context, sieve);
-        var reproRepo = TestDbHelper.CreateRepository<PatientReproductiveHistory>(context, sieve);
-        var ncdRepo = TestDbHelper.CreateRepository<NcdRiskAssessment>(context, sieve);
-        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExamProfile>(context, sieve);
-
-        var ingestionService = new LegacyPatientProfileIngestionService(
-            patientRepo, surgRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, immRepo, _catalogLookup, peRepo);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExam>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -311,7 +292,7 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
             PatientCode = "P-TEST-PE-NORM",
             FirstName = "Clara",
             LastName = "Reyes",
-            Gender = "Female",
+            Gender = Gender.Female,
             DateOfBirth = new DateOnly(1995, 8, 12),
             PhilHealthNumber = "33-445566778-9",
             ContactNumber = "09191234567"
@@ -322,7 +303,6 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
         var queryHandler = new GetPatientPhysicalExamQueryHandler(
             patientRepo,
             peRepo,
-            ingestionService,
             _clinicContext);
 
         var result = await queryHandler.Handle(new GetPatientPhysicalExamQuery(patientId), CancellationToken.None);
@@ -343,153 +323,19 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
     }
 
     [Fact]
-    public void YakapClinicalMapper_WithRelationalPhysicalExamProfile_MapsPEMISCAndPESPECIFIC()
-    {
-        var mapper = new YakapClinicalMapper(_catalogLookup);
-        var patientId = Guid.NewGuid();
-        var encounterId = Guid.NewGuid();
-
-        var patient = new ClinicPatient
-        {
-            Id = patientId,
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientCode = "PAT-1982-001",
-            FirstName = "Emilio",
-            LastName = "Aguinaldo",
-            Gender = "Male",
-            DateOfBirth = new DateOnly(1982, 3, 22),
-            PhilHealthNumber = "12-345678901-2",
-            ContactNumber = "09171234567",
-            BloodType = "O+"
-        };
-
-        var encounter = new ConsultationEncounter
-        {
-            Id = encounterId,
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientId = patientId,
-            PatientName = "Emilio Aguinaldo",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Test",
-            EncounterDate = DateTime.UtcNow,
-            Subjective = "Cough and colds",
-            Assessment = "Acute Bronchitis"
-        };
-
-        var vitals = new TriageVitals
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientId = patientId,
-            QueueItemId = Guid.NewGuid(),
-            SystolicBp = 120,
-            DiastolicBp = 80,
-            HeartRateBpm = 75,
-            RespiratoryRateBreathsPerMin = 18,
-            TemperatureCelsius = 36.8m,
-            HeightCm = 170,
-            WeightKg = 70,
-            Bmi = 24.2m
-        };
-
-        var pe = new PatientPhysicalExamProfile
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientId = patientId,
-            GenSurveyId = "2",
-            GenSurveyRemarks = "Awake, in mild respiratory distress",
-            SkinId = "2",
-            SkinRemarks = "Clubbing of fingers present",
-            HeentId = "5",
-            HeentRemarks = "Exudative pharyngitis",
-            ChestId = "2",
-            ChestRemarks = "Bilateral wheezes on expiration",
-            HeartId = "2",
-            HeartRemarks = "Grade II systolic murmur",
-            AbdomenId = "3",
-            AbdomenRemarks = "Right lower quadrant tenderness",
-            NeuroId = "3",
-            NeuroRemarks = "Decreased sensation left lower leg",
-            RectalId = "2",
-            RectalRemarks = "External hemorrhoids non-thrombosed",
-            GuId = "2",
-            GuRemarks = "Mild suprapubic tenderness"
-        };
-
-        var settings = new ClinicSettings
-        {
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            ClinicName = "Test Healthcare Center",
-            AccreditationNumber = "123456789"
-        };
-
-        var patientsMap = new Dictionary<Guid, ClinicPatient> { [patientId] = patient };
-        var vitalsMap = new Dictionary<Guid, TriageVitals> { [encounterId] = vitals };
-        var peMap = new Dictionary<Guid, PatientPhysicalExamProfile> { [patientId] = pe };
-
-        var reportDoc = mapper.MapToYakapReportDocument(
-            reportTagging: "1",
-            effectiveYear: "2026",
-            settings: settings,
-            encounters: [encounter],
-            patients: patientsMap,
-            vitalsMap: vitalsMap,
-            transmittalNumber: "TX-TEST-PE-01",
-            physicalExamsMap: peMap);
-
-        reportDoc.Should().NotBeNull();
-        reportDoc.Profiles.Should().HaveCount(1);
-        var profile = reportDoc.Profiles[0];
-
-        // Verify PEMISCS maps from PatientPhysicalExamProfile
-        profile.PhysicalExamMiscs.Should().HaveCount(1);
-        var misc = profile.PhysicalExamMiscs[0];
-        misc.SkinId.Should().Be("2");
-        misc.HeentId.Should().Be("5");
-        misc.ChestId.Should().Be("2");
-        misc.HeartId.Should().Be("2");
-        misc.AbdomenId.Should().Be("3");
-        misc.NeuroId.Should().Be("3");
-        misc.RectalId.Should().Be("2");
-        misc.GuId.Should().Be("2");
-
-        // Verify PESPECIFIC maps from PatientPhysicalExamProfile
-        profile.PhysicalExamSpecifics.Should().NotBeNull();
-        profile.PhysicalExamSpecifics.SkinRem.Should().Be("Clubbing of fingers present");
-        profile.PhysicalExamSpecifics.HeentRem.Should().Be("Exudative pharyngitis");
-        profile.PhysicalExamSpecifics.ChestRem.Should().Be("Bilateral wheezes on expiration");
-        profile.PhysicalExamSpecifics.HeartRem.Should().Be("Grade II systolic murmur");
-        profile.PhysicalExamSpecifics.AbdomenRem.Should().Be("Right lower quadrant tenderness");
-        profile.PhysicalExamSpecifics.NeuroRem.Should().Be("Decreased sensation left lower leg");
-        profile.PhysicalExamSpecifics.RectalRem.Should().Be("External hemorrhoids non-thrombosed");
-        profile.PhysicalExamSpecifics.GuRem.Should().Be("Mild suprapubic tenderness");
-
-        // Verify PEGENSURVEY and BloodType
-        profile.GenSurveyId.Should().Be("2");
-        profile.GenSurveyRem.Should().Be("Awake, in mild respiratory distress");
-        profile.BloodType.Should().Be("O+");
-    }
-
-    [Fact]
     public async Task GetPatientChart_IncludesPersistedPhysicalExamProfile()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExamProfile>(context, sieve);
+        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExam>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -497,21 +343,21 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
             PatientCode = "P-TEST-PE-03",
             FirstName = "Roberto",
             LastName = "Luna",
-            Gender = "Male",
+            Gender = Gender.Male,
             DateOfBirth = new DateOnly(1975, 11, 8),
             PhilHealthNumber = "12-345678901-9",
             ContactNumber = "09171234567"
         };
         await patientRepo.AddAsync(patient);
 
-        var pe = new PatientPhysicalExamProfile
+        var pe = new PatientPhysicalExam
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
             PatientId = patientId,
             GenSurveyId = "1",
-            GenSurveyRemarks = "Comfortable, ambulatory",
+            GeneralSurveyRemarks = "Comfortable, ambulatory",
             SkinId = "1",
             HeentId = "11",
             ChestId = "6",
@@ -550,11 +396,11 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
     public async Task UpdatePatientPhysicalExamCommand_PartialUpdate_PreservesUnspecifiedFields()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExamProfile>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExam>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -562,27 +408,27 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
             PatientCode = "P-TEST-PARTIAL",
             FirstName = "Apolinario",
             LastName = "Mabini",
-            Gender = "Male",
+            Gender = Gender.Male,
             DateOfBirth = new DateOnly(1864, 7, 23),
             PhilHealthNumber = "12-998877665-1",
             ContactNumber = "09171234567"
         };
         await patientRepo.AddAsync(patient);
 
-        var initialPe = new PatientPhysicalExamProfile
+        var initialPe = new PatientPhysicalExam
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
             PatientId = patientId,
             GenSurveyId = "2",
-            GenSurveyRemarks = "In moderate respiratory distress",
+            GeneralSurveyRemarks = "In moderate respiratory distress",
             SkinId = "1",
             SkinRemarks = null,
             HeentId = "5",
             HeentRemarks = "Exudative pharyngitis",
             ChestId = "2",
-            ChestRemarks = "Bilateral crackles",
+            ChestLungsRemarks = "Bilateral crackles",
             HeartId = "5",
             AbdomenId = "7",
             NeuroId = "6",
@@ -620,156 +466,9 @@ public sealed class PatientPhysicalExamProfilePersistenceTests
         persisted.Should().NotBeNull();
         persisted!.SkinId.Should().Be("2");
         persisted.GenSurveyId.Should().Be("2");
-        persisted.GenSurveyRemarks.Should().Be("In moderate respiratory distress");
+        persisted.GeneralSurveyRemarks.Should().Be("In moderate respiratory distress");
         persisted.HeentId.Should().Be("5");
         persisted.ChestId.Should().Be("2");
-    }
-
-    [Fact]
-    public async Task ValidateYakapTransmittalCommand_WithRelationalPhysicalExamProfile_PassesPhysicalExamToMapperAndProxy()
-    {
-        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var transmittalRepo = TestDbHelper.CreateRepository<YakapTransmittal>(context, sieve);
-        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var serviceItemRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var peRepo = TestDbHelper.CreateRepository<PatientPhysicalExamProfile>(context, sieve);
-
-        var proxyClient = Substitute.For<IPhilHealthProxyClient>();
-        GenerateAndValidateReportProxyRequest? capturedRequest = null;
-        proxyClient.ValidateReportAsync(
-            Arg.Do<GenerateAndValidateReportProxyRequest>(r => capturedRequest = r),
-            Arg.Any<CancellationToken>())
-            .Returns(ApiResponse<YakapValidationProxyResponse>.Success(
-                new YakapValidationProxyResponse(
-                    IsValid: true,
-                    TransmittalNumber: "TXN-TEST-VAL-PE",
-                    RawXml: "<xml>TransmittalValid</xml>",
-                    EncryptedPayload: "enc-valid",
-                    PhilHealthSoapResponse: "OK",
-                    ValidationErrors: [])));
-
-        var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
-        {
-            Id = patientId,
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientCode = "P-VAL-PE",
-            FirstName = "Melchora",
-            LastName = "Aquino",
-            Gender = "Female",
-            DateOfBirth = new DateOnly(1950, 1, 6),
-            PhilHealthNumber = "01-234567890-1",
-            ContactNumber = "09171234567",
-            BloodType = "AB+"
-        };
-        await patientRepo.AddAsync(patient);
-
-        var encounterId = Guid.NewGuid();
-        var encounter = new ConsultationEncounter
-        {
-            Id = encounterId,
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientId = patientId,
-            PatientName = "Melchora Aquino",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Jose Rizal",
-            EncounterDate = DateTime.UtcNow,
-            Subjective = "Fever and productive cough",
-            Assessment = "Community Acquired Pneumonia"
-        };
-        await encounterRepo.AddAsync(encounter);
-
-        var pe = new PatientPhysicalExamProfile
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientId = patientId,
-            GenSurveyId = "2",
-            GenSurveyRemarks = "In respiratory distress",
-            SkinId = "2",
-            SkinRemarks = "Cyanosis of extremities",
-            ChestId = "2",
-            ChestRemarks = "Right lower lobe crackles",
-            HeartId = "5",
-            AbdomenId = "7",
-            NeuroId = "6",
-            RectalId = "1",
-            GuId = "1",
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = "AttendingPhysician"
-        };
-        await peRepo.AddAsync(pe);
-
-        var transmittal = new YakapTransmittal
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            TransmittalNumber = "TXN-TEST-VAL-PE",
-            ReportTagging = "1",
-            EffectiveYear = "2026",
-            PackageType = "K",
-            Status = YakapTransmittalStatus.Draft,
-            Items =
-            {
-                new YakapTransmittalItem
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = _tenantId,
-                    ClinicId = _clinicId,
-                    PatientId = patientId,
-                    PatientName = "Aquino, Melchora",
-                    PhilHealthIdentificationNumber = "012345678901",
-                    ConsultationEncounterId = encounterId,
-                    ItemType = "Encounter"
-                }
-            }
-        };
-        await transmittalRepo.AddAsync(transmittal);
-        await uow.SaveChangesAsync();
-
-        var mapper = new YakapClinicalMapper(_catalogLookup);
-
-        var handler = new ClinicEz.Clinic.Application.Features.Yakap.Commands.ValidateYakapTransmittal.ValidateYakapTransmittalCommandHandler(
-            transmittalRepo,
-            encounterRepo,
-            patientRepo,
-            vitalsRepo,
-            settingsRepo,
-            labOrderRepo,
-            serviceItemRepo,
-            proxyClient,
-            uow,
-            _clinicContext,
-            mapper,
-            peRepo);
-
-        var result = await handler.Handle(
-            new ClinicEz.Clinic.Application.Features.Yakap.Commands.ValidateYakapTransmittal.ValidateYakapTransmittalCommand(transmittal.Id),
-            CancellationToken.None);
-
-        result.Succeeded.Should().BeTrue();
-        capturedRequest.Should().NotBeNull();
-        capturedRequest!.Document.Should().NotBeNull();
-        capturedRequest.Document.Profiles.Should().HaveCount(1);
-
-        var p = capturedRequest.Document.Profiles[0];
-        p.BloodType.Should().Be("AB+");
-        p.GenSurveyId.Should().Be("2");
-        p.GenSurveyRem.Should().Be("In respiratory distress");
-        p.PhysicalExamMiscs.Should().HaveCount(1);
-        p.PhysicalExamMiscs[0].SkinId.Should().Be("2");
-        p.PhysicalExamMiscs[0].ChestId.Should().Be("2");
-        p.PhysicalExamSpecifics.Should().NotBeNull();
-        p.PhysicalExamSpecifics.SkinRem.Should().Be("Cyanosis of extremities");
-        p.PhysicalExamSpecifics.ChestRem.Should().Be("Right lower lobe crackles");
     }
 }
 

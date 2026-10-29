@@ -24,12 +24,12 @@ public record CreateClinicServiceItemCommand(
 
 public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClinicServiceItemCommand, ClinicServiceItemDto>
 {
-    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CreateClinicServiceItemCommandHandler(
-        IRepository<ClinicServiceItem> serviceRepo,
+        IRepository<ServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -58,7 +58,7 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
         var philHealthDescription = string.IsNullOrWhiteSpace(request.PhilHealthDescription) ? null : request.PhilHealthDescription.Trim();
         var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
 
-        var entity = new ClinicServiceItem
+        var entity = new ServiceItem
         {
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,

@@ -55,7 +55,7 @@ export const RISK_BAND_MIDPOINTS: Record<RiskBandType, number> = {
 
 /**
  * Calculates 10-year cardiometabolic CVD risk score aligned with DOH PHILPEN Protocol
- * and PhilHealth Yakap (KonsultaData v1.14) statutory requirements.
+ * and PhilHealth YAKAP 2.0 (PCAPI) statutory requirements.
  */
 export function calculatePhilPenRisk(input: PhilPenInput): PhilPenComputationResult {
   // 1. Crisis & Clinical Override Rules

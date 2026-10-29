@@ -43,7 +43,7 @@ public class BillingAndCashierTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+            TestDbHelper.CreateRepository<Patient>(db, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve),
             unitOfWork,
             _clinicContext,
@@ -116,7 +116,7 @@ public class BillingAndCashierTests
     public async Task CreateClinicService_AddsToCatalogWithUniqueCode()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
 
         var handler = new CreateClinicServiceItemCommandHandler(serviceRepo, unitOfWork, _clinicContext);
         var command = new CreateClinicServiceItemCommand("PROC-SUTURE", "Laceration Suture Repair", "Procedure", 750m, "Minor surgery closure");
@@ -132,7 +132,7 @@ public class BillingAndCashierTests
     public async Task OrderAndExecuteProcedure_UpdatesStatusAndVitals()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
 
         var orderHandler = new OrderProcedureCommandHandler(procRepo, unitOfWork, _clinicContext);
         var orderCmd = new OrderProcedureCommand(
@@ -165,8 +165,8 @@ public class BillingAndCashierTests
     public async Task CreateLabOrder_GeneratesDailySequentialNumber()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
         var handler = new CreateClinicLabOrderCommandHandler(
             orderRepo,
@@ -204,8 +204,8 @@ public class BillingAndCashierTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(db, sieve);
         var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var procedureRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
+        var procedureRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
 
         var today = DateTime.UtcNow;
 

@@ -42,10 +42,10 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -59,7 +59,7 @@ public class DomainSearchProvidersTests
             PhilHealthNumber = "12-345678901-2"
         };
 
-        var patientB = new ClinicPatient
+        var patientB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -71,7 +71,7 @@ public class DomainSearchProvidersTests
             DateOfBirth = new DateOnly(1990, 8, 15)
         };
 
-        var softDeleted = new ClinicPatient
+        var softDeleted = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -109,10 +109,10 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -125,7 +125,7 @@ public class DomainSearchProvidersTests
             DateOfBirth = new DateOnly(1995, 2, 14)
         };
 
-        var patientB = new ClinicPatient
+        var patientB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -138,7 +138,7 @@ public class DomainSearchProvidersTests
             DateOfBirth = new DateOnly(1992, 3, 10)
         };
 
-        var patientNoClinicEzId = new ClinicPatient
+        var patientNoClinicEzId = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -193,10 +193,10 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -211,7 +211,7 @@ public class DomainSearchProvidersTests
             DateOfBirth = new DateOnly(1993, 7, 21)
         };
 
-        var patientB = new ClinicPatient
+        var patientB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -289,10 +289,10 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var alertPatient = new ClinicPatient
+        var alertPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -300,11 +300,21 @@ public class DomainSearchProvidersTests
             PatientCode = "PAT-ALERT",
             FirstName = "Alert",
             LastName = "Patient",
-            ContactNumber = "09170000001",
-            Alerts = "Severe Penicillin Allergy"
+            ContactNumber = "09170000001"
         };
+        alertPatient.Alerts.Add(new PatientAlert
+        {
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientId = alertPatient.Id,
+            Category = PatientAlertCategory.ClinicalSafety,
+            Code = "ALLERGY",
+            Title = "Severe Penicillin Allergy",
+            Severity = PatientAlertSeverity.Critical,
+            Status = PatientAlertStatus.Active
+        });
 
-        var seniorPatient = new ClinicPatient
+        var seniorPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -316,7 +326,7 @@ public class DomainSearchProvidersTests
             SeniorCitizenId = "OSCA-12345"
         };
 
-        var pwdPatient = new ClinicPatient
+        var pwdPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -515,10 +525,10 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var provider = new LabOrderSearchProvider(labRepo);
 
-        var panicOrder = new ClinicLabOrder
+        var panicOrder = new LabOrder
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -528,13 +538,13 @@ public class DomainSearchProvidersTests
             PatientName = "Apolinario Mabini",
             HasCriticalPanicAlert = true,
             Status = LabOrderStatus.Ordered,
-            Items = new List<ClinicLabOrderItem>
+            Items = new List<LabOrderItem>
             {
                 new() { TestName = "Potassium Serum", Category = "Chemistry" }
             }
         };
 
-        var routineOrder = new ClinicLabOrder
+        var routineOrder = new LabOrder
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -544,7 +554,7 @@ public class DomainSearchProvidersTests
             PatientName = "Melchora Aquino",
             HasCriticalPanicAlert = false,
             Status = LabOrderStatus.Completed,
-            Items = new List<ClinicLabOrderItem>
+            Items = new List<LabOrderItem>
             {
                 new() { TestName = "Complete Blood Count (CBC)", Category = "Hematology" }
             }
@@ -658,14 +668,14 @@ public class DomainSearchProvidersTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var provider = new SettingSearchProvider(roomRepo, serviceRepo, staffRepo, settingsRepo);
 
-        var room = new ClinicRoom
+        var room = new Room
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -675,7 +685,7 @@ public class DomainSearchProvidersTests
             Type = ClinicRoomType.Consultation
         };
 
-        var service = new ClinicServiceItem
+        var service = new ServiceItem
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -698,7 +708,7 @@ public class DomainSearchProvidersTests
             Specialty = "Pediatrics"
         };
 
-        var facilitySettings = new ClinicSettings
+        var facilitySettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -709,10 +719,10 @@ public class DomainSearchProvidersTests
             PlanTier = "Growth"
         };
 
-        context.ClinicRooms.Add(room);
+        context.Rooms.Add(room);
         context.ServiceItems.Add(service);
         context.StaffMembers.Add(staff);
-        context.ClinicSettings.Add(facilitySettings);
+        context.Settings.Add(facilitySettings);
         await context.SaveChangesAsync();
 
         // Act - search by keyword "Pediatric"

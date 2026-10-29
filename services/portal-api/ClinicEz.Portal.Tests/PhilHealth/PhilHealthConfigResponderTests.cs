@@ -50,9 +50,9 @@ public class PhilHealthConfigResponderTests : IDisposable
             PhilHealthAccreditationNumber = $"HCI-{name}",
             PhilHealthPmccNumber = "Z15445",
             PhilHealthSoftwareCertificateId = "KON-CERT",
-            PhilHealthEncryptedUsername = _protector.Protect("soap-user"),
-            PhilHealthEncryptedPassword = _protector.Protect("soap-pass"),
-            PhilHealthEncryptedCipherKey = _protector.Protect("cipher-key")
+            PhilHealthEncryptedSecretKey = _protector.Protect("secret-key"),
+            PhilHealthEncryptedCipherKey = _protector.Protect("cipher-key"),
+            PhilHealthBaseUrl = "https://pcapi.philhealth.gov.ph"
         };
         _context.Branches.Add(branch);
         _context.SaveChanges();
@@ -85,10 +85,9 @@ public class PhilHealthConfigResponderTests : IDisposable
         AccreditationNumber = " HCI-9 ",
         PmccNumber = "Z1",
         SoftwareCertificateId = "KON-1",
-        Username = " new-user ",
-        Password = "new-pass",
+        SecretKey = " new-secret ",
         CipherKey = "new-cipher",
-        KonsultaEndpoint = "https://philhealth.example/soap",
+        BaseUrl = "https://pcapi.philhealth.gov.ph",
         IsActive = true
     };
 
@@ -115,10 +114,9 @@ public class PhilHealthConfigResponderTests : IDisposable
         Assert.Equal(accredited.Id.ToString(), config.BranchId);
         Assert.Equal("Accredited", config.FacilityName);
         Assert.Equal("HCI-Accredited", config.AccreditationNumber);
-        Assert.Equal("soap-user", config.Username);
-        Assert.Equal("soap-pass", config.Password);
+        Assert.Equal("secret-key", config.SecretKey);
         Assert.Equal("cipher-key", config.CipherKey);
-        Assert.Equal(PhilHealthDefaults.KonsultaEndpoint, config.KonsultaEndpoint);
+        Assert.Equal("https://pcapi.philhealth.gov.ph", config.BaseUrl);
         Assert.True(config.IsActive);
     }
 
@@ -205,10 +203,10 @@ public class PhilHealthConfigResponderTests : IDisposable
     public async Task Read_OfAValueStoredBeforeEncryption_ReturnsItAsIs()
     {
         var branch = AddBranch();
-        branch.PhilHealthEncryptedUsername = "legacy-plain-user";
+        branch.PhilHealthEncryptedSecretKey = "legacy-plain-secret";
         await _context.SaveChangesAsync();
 
-        Assert.Equal("legacy-plain-user", (await Read(_tenant.Id.ToString(), branch.Id.ToString())).Config!.Username);
+        Assert.Equal("legacy-plain-secret", (await Read(_tenant.Id.ToString(), branch.Id.ToString())).Config!.SecretKey);
     }
 
     [Fact]
@@ -222,11 +220,10 @@ public class PhilHealthConfigResponderTests : IDisposable
         Assert.True(reply.Succeeded);
         var stored = await _context.Branches.AsNoTracking().SingleAsync(b => b.Id == branch.Id);
         Assert.Equal("HCI-9", stored.PhilHealthAccreditationNumber);
-        Assert.Equal("https://philhealth.example/soap", stored.PhilHealthKonsultaEndpoint);
+        Assert.Equal("https://pcapi.philhealth.gov.ph", stored.PhilHealthBaseUrl);
         Assert.True(stored.IsPhilHealthAccredited);
-        Assert.NotEqual("new-pass", stored.PhilHealthEncryptedPassword);
-        Assert.Equal("new-user", _protector.Unprotect(stored.PhilHealthEncryptedUsername!));
-        Assert.Equal("new-pass", _protector.Unprotect(stored.PhilHealthEncryptedPassword!));
+        Assert.NotEqual("new-secret", stored.PhilHealthEncryptedSecretKey);
+        Assert.Equal("new-secret", _protector.Unprotect(stored.PhilHealthEncryptedSecretKey!));
         Assert.Equal("new-cipher", _protector.Unprotect(stored.PhilHealthEncryptedCipherKey!));
     }
 
@@ -249,12 +246,11 @@ public class PhilHealthConfigResponderTests : IDisposable
     {
         var branch = AddBranch(accredited: true);
 
-        await Upsert(Config() with { Username = "", Password = " ", CipherKey = "" });
+        await Upsert(Config() with { SecretKey = "", CipherKey = "" });
         await _context.SaveChangesAsync();
 
         var stored = await _context.Branches.AsNoTracking().SingleAsync(b => b.Id == branch.Id);
-        Assert.Equal("soap-user", _protector.Unprotect(stored.PhilHealthEncryptedUsername!));
-        Assert.Equal("soap-pass", _protector.Unprotect(stored.PhilHealthEncryptedPassword!));
+        Assert.Equal("secret-key", _protector.Unprotect(stored.PhilHealthEncryptedSecretKey!));
         Assert.Equal("cipher-key", _protector.Unprotect(stored.PhilHealthEncryptedCipherKey!));
     }
 
@@ -298,6 +294,6 @@ public class PhilHealthConfigResponderTests : IDisposable
         Assert.Equal(1, await _context.Branches.CountAsync());
         var stored = await _context.Branches.AsNoTracking().SingleAsync(b => b.Id == branch.Id);
         Assert.Equal("HCI-Main Branch", stored.PhilHealthAccreditationNumber);
-        Assert.Equal("soap-pass", _protector.Unprotect(stored.PhilHealthEncryptedPassword!));
+        Assert.Equal("secret-key", _protector.Unprotect(stored.PhilHealthEncryptedSecretKey!));
     }
 }

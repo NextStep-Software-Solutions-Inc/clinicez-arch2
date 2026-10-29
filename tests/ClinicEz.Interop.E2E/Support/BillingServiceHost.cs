@@ -5,6 +5,8 @@ using ClinicEz.Billing.Application.Services;
 using ClinicEz.Billing.Domain.Entities;
 using ClinicEz.Billing.Domain.Constants;
 using ClinicEz.Billing.Domain.Enums;
+using StaffRole = ClinicEz.Billing.Domain.Enums.StaffRole;
+using Invoice = ClinicEz.Billing.Domain.Entities.Invoice;
 using ClinicEz.Billing.Infrastructure;
 using ClinicEz.Billing.Infrastructure.Auth;
 using ClinicEz.Billing.Infrastructure.Persistence;

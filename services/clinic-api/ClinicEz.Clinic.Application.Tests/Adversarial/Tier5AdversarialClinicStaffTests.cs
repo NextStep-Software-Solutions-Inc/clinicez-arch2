@@ -141,7 +141,7 @@ public class Tier5AdversarialClinicStaffTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var refreshRepo = TestDbHelper.CreateRepository<ClinicRefreshToken>(context, sieve);
+        var refreshRepo = TestDbHelper.CreateRepository<RefreshToken>(context, sieve);
         var accessCache = Substitute.For<IStaffAccessInvalidator>();
 
         var staff = new StaffMember
@@ -161,7 +161,7 @@ public class Tier5AdversarialClinicStaffTests
         await staffRepo.AddAsync(staff);
 
         // Add 2 active refresh tokens
-        var token1 = new ClinicRefreshToken
+        var token1 = new RefreshToken
         {
             Id = Guid.NewGuid(),
             StaffMemberId = staff.Id,
@@ -171,7 +171,7 @@ public class Tier5AdversarialClinicStaffTests
             FamilyId = Guid.NewGuid(),
             ExpiresAt = DateTime.UtcNow.AddDays(30)
         };
-        var token2 = new ClinicRefreshToken
+        var token2 = new RefreshToken
         {
             Id = Guid.NewGuid(),
             StaffMemberId = staff.Id,
@@ -217,7 +217,7 @@ public class Tier5AdversarialClinicStaffTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var refreshRepo = TestDbHelper.CreateRepository<ClinicRefreshToken>(context, sieve);
+        var refreshRepo = TestDbHelper.CreateRepository<RefreshToken>(context, sieve);
         var accessCache = Substitute.For<IStaffAccessInvalidator>();
 
         var staff = new StaffMember
@@ -417,12 +417,12 @@ public class Tier5AdversarialClinicStaffTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // License allows exactly 2 staff members
         var licenseToken = CreateLicenseToken(TestClinicId, TestTenantId, maxStaff: 2);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = TestClinicId,
@@ -468,11 +468,11 @@ public class Tier5AdversarialClinicStaffTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // License allows exactly 2 staff members
         var licenseToken = CreateLicenseToken(TestClinicId, TestTenantId, maxStaff: 2);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = TestClinicId,

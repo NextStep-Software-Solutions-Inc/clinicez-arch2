@@ -25,10 +25,10 @@ public class ValidateJoinCodeTests
     public async Task ValidateJoinCode_ValidActiveCode_ReturnsOkWithClinicAndTenantDetails()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var handler = new ValidateJoinCodeQueryHandler(repo);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "apex-health",
@@ -42,7 +42,7 @@ public class ValidateJoinCodeTests
             JoinCode = "APEX2026",
             JoinCodeExpiresAt = DateTime.UtcNow.AddDays(7),
         };
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.SaveChangesAsync();
 
         var query = new ValidateJoinCodeQuery("APEX2026");
@@ -61,10 +61,10 @@ public class ValidateJoinCodeTests
     public async Task ValidateJoinCode_CaseInsensitiveAndWhitespaceTolerant()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var handler = new ValidateJoinCodeQueryHandler(repo);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "apex-health",
@@ -74,7 +74,7 @@ public class ValidateJoinCodeTests
             JoinCode = "JOIN123",
             JoinCodeExpiresAt = null,
         };
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.SaveChangesAsync();
 
         var query = new ValidateJoinCodeQuery("  join123  ");
@@ -89,7 +89,7 @@ public class ValidateJoinCodeTests
     public async Task ValidateJoinCode_NonExistentCode_Returns404()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var handler = new ValidateJoinCodeQueryHandler(repo);
 
         var query = new ValidateJoinCodeQuery("UNKNOWN_CODE");
@@ -104,10 +104,10 @@ public class ValidateJoinCodeTests
     public async Task ValidateJoinCode_DisabledIntake_Returns400()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var handler = new ValidateJoinCodeQueryHandler(repo);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "apex-health",
@@ -116,7 +116,7 @@ public class ValidateJoinCodeTests
             IsJoinEnabled = false,
             JoinCode = "OFFLINE2026",
         };
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.SaveChangesAsync();
 
         var query = new ValidateJoinCodeQuery("OFFLINE2026");
@@ -131,10 +131,10 @@ public class ValidateJoinCodeTests
     public async Task ValidateJoinCode_ExpiredCode_Returns410()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var handler = new ValidateJoinCodeQueryHandler(repo);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "apex-health",
@@ -144,7 +144,7 @@ public class ValidateJoinCodeTests
             JoinCode = "EXPIRED2026",
             JoinCodeExpiresAt = DateTime.UtcNow.AddHours(-2), // Lapsed 2 hours ago
         };
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.SaveChangesAsync();
 
         var query = new ValidateJoinCodeQuery("EXPIRED2026");

@@ -11,30 +11,7 @@ import {
   PatientSocialHistory,
   UpdatePatientSocialHistoryPayload,
 } from '../../services/clinicService';
-
-export const PHYSICAL_ACTIVITY_OPTIONS = [
-  'Sedentary (<30 mins/week)',
-  'Lightly Active (<150 mins/week)',
-  'Moderate Activity (≥150 mins/week)',
-  'Vigorous / Highly Active',
-];
-
-export const DIETARY_HABIT_OPTIONS = [
-  'Standard Balanced Diet',
-  'High-Sodium / Salty Food',
-  'High-Fat / Fried Food',
-  'High-Fiber / Fruit & Vegetable Rich',
-  'Low-Sodium / DASH Diet',
-  'Diabetic / Low-Glycemic Diet',
-  'Vegetarian / Plant-Based',
-];
-
-export const ALCOHOL_FREQUENCY_OPTIONS = [
-  'Occasional / Social',
-  '1-2x Weekly',
-  '3-5x Weekly',
-  'Daily',
-];
+import { useEhrOptions } from '../../hooks/useEhrOptions';
 
 interface LifestyleSocialTabProps {
   patient: ClinicPatient;
@@ -60,6 +37,14 @@ export default function LifestyleSocialTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { options: dynamicActivityOptions } = useEhrOptions('physical_activity');
+  const { options: dynamicDietaryOptions } = useEhrOptions('dietary_intake');
+  const { options: dynamicAlcoholOptions } = useEhrOptions('alcohol_type');
+
+  const activityOptions = dynamicActivityOptions.map((o) => o.label);
+  const dietaryOptions = dynamicDietaryOptions.map((o) => o.label);
+  const alcoholFrequencyOptions = dynamicAlcoholOptions.map((o) => o.label);
+
   // Smoking Fields (Tri-state: 'never' | 'current' | 'quit')
   const [smokingStatus, setSmokingStatus] = useState<'never' | 'current' | 'quit'>('never');
   const [packsPerDay, setPacksPerDay] = useState('');
@@ -82,8 +67,8 @@ export default function LifestyleSocialTab({
   const [coitarcheAge, setCoitarcheAge] = useState('');
 
   // Standardized Lifestyle & Diet
-  const [physicalActivityFrequency, setPhysicalActivityFrequency] = useState(PHYSICAL_ACTIVITY_OPTIONS[2]);
-  const [selectedDietaryHabits, setSelectedDietaryHabits] = useState<string[]>([DIETARY_HABIT_OPTIONS[0]]);
+  const [physicalActivityFrequency, setPhysicalActivityFrequency] = useState('');
+  const [selectedDietaryHabits, setSelectedDietaryHabits] = useState<string[]>([]);
   const [remarks, setRemarks] = useState('');
 
   const populateForm = (data: PatientSocialHistory) => {
@@ -127,13 +112,13 @@ export default function LifestyleSocialTab({
 
     // Standardized Physical Activity resolution
     if (data.physicalActivityFrequency && data.physicalActivityFrequency.trim()) {
-      const match = PHYSICAL_ACTIVITY_OPTIONS.find((opt) =>
+      const match = activityOptions.find((opt) =>
         opt.toLowerCase().includes(data.physicalActivityFrequency!.trim().toLowerCase()) ||
         data.physicalActivityFrequency!.trim().toLowerCase().includes(opt.split(' ')[0].toLowerCase())
       );
       setPhysicalActivityFrequency(match || data.physicalActivityFrequency);
     } else {
-      setPhysicalActivityFrequency(PHYSICAL_ACTIVITY_OPTIONS[2]);
+      setPhysicalActivityFrequency('');
     }
 
     // Standardized Dietary Habits resolution
@@ -144,7 +129,7 @@ export default function LifestyleSocialTab({
         .filter((s) => s.length > 0);
       const matched: string[] = [];
       habits.forEach((h) => {
-        const found = DIETARY_HABIT_OPTIONS.find(
+        const found = dietaryOptions.find(
           (opt) => opt.toLowerCase().includes(h.toLowerCase()) || h.toLowerCase().includes(opt.toLowerCase())
         );
         if (found && !matched.includes(found)) {
@@ -153,9 +138,9 @@ export default function LifestyleSocialTab({
           matched.push(h);
         }
       });
-      setSelectedDietaryHabits(matched.length > 0 ? matched : [DIETARY_HABIT_OPTIONS[0]]);
+      setSelectedDietaryHabits(matched.length > 0 ? matched : []);
     } else {
-      setSelectedDietaryHabits([DIETARY_HABIT_OPTIONS[0]]);
+      setSelectedDietaryHabits([]);
     }
 
     setRemarks(data.remarks || '');
@@ -509,7 +494,7 @@ export default function LifestyleSocialTab({
                 Drinking Frequency
               </ThemedText>
               <View style={styles.chipsWrap}>
-                {ALCOHOL_FREQUENCY_OPTIONS.map((freq) => {
+                {alcoholFrequencyOptions.map((freq) => {
                   const active = alcoholFrequency === freq;
                   return (
                     <Pressable
@@ -659,7 +644,7 @@ export default function LifestyleSocialTab({
             Select standard cardiovascular and metabolic activity level
           </ThemedText>
           <View style={styles.chipsWrap}>
-            {PHYSICAL_ACTIVITY_OPTIONS.map((opt) => {
+            {activityOptions.map((opt) => {
               const active = physicalActivityFrequency === opt;
               return (
                 <Pressable
@@ -686,7 +671,7 @@ export default function LifestyleSocialTab({
             Select all applicable nutrition profiles (multi-select)
           </ThemedText>
           <View style={styles.chipsWrap}>
-            {DIETARY_HABIT_OPTIONS.map((opt) => {
+            {dietaryOptions.map((opt) => {
               const active = selectedDietaryHabits.includes(opt);
               return (
                 <Pressable

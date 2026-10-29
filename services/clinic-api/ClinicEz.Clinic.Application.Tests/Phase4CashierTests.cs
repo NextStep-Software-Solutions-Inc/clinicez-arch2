@@ -62,7 +62,7 @@ public class LocalCashierOwnershipTests
         bool billingAcceptsRequest, DiscountType discount = DiscountType.None, string cashierMode = "CashierCounter")
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        db.ClinicSettings.Add(new ClinicSettings
+        db.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = Tenant,
@@ -76,9 +76,9 @@ public class LocalCashierOwnershipTests
         billing.PublishInvoiceRequestedAsync(Arg.Any<BillingInvoiceRequestedPayload>(), Arg.Any<CancellationToken>()).Returns(billingAcceptsRequest);
         var handler = new CreateInvoiceCommandHandler(
             TestDbHelper.CreateRepository<Invoice>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+            TestDbHelper.CreateRepository<Patient>(db, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicSettings>(db, sieve),
+            TestDbHelper.CreateRepository<FacilitySettings>(db, sieve),
             uow,
             _clinicContext,
             billing);
@@ -203,7 +203,7 @@ public class LocalCashierOwnershipTests
         await db.SaveChangesAsync();
         var handler = new CreateInvoiceCommandHandler(
             TestDbHelper.CreateRepository<Invoice>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+            TestDbHelper.CreateRepository<Patient>(db, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve),
             uow,
             _clinicContext,
@@ -288,9 +288,9 @@ public class LocalCashierOwnershipTests
 
         var updateHandler = new UpdateInvoiceCommandHandler(
             TestDbHelper.CreateRepository<Invoice>(db, Substitute.For<ISieveProcessor>()),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, Substitute.For<ISieveProcessor>()),
+            TestDbHelper.CreateRepository<Patient>(db, Substitute.For<ISieveProcessor>()),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, Substitute.For<ISieveProcessor>()),
-            TestDbHelper.CreateRepository<ClinicSettings>(db, Substitute.For<ISieveProcessor>()),
+            TestDbHelper.CreateRepository<FacilitySettings>(db, Substitute.For<ISieveProcessor>()),
             uow,
             _clinicContext,
             billing);
@@ -316,9 +316,9 @@ public class LocalCashierOwnershipTests
         var sieve = Substitute.For<ISieveProcessor>();
         var createHandler = new CreateInvoiceCommandHandler(
             TestDbHelper.CreateRepository<Invoice>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+            TestDbHelper.CreateRepository<Patient>(db, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicSettings>(db, sieve),
+            TestDbHelper.CreateRepository<FacilitySettings>(db, sieve),
             uow,
             _clinicContext,
             Substitute.For<IBillingRequestPublisher>());
@@ -347,9 +347,9 @@ public class LocalCashierOwnershipTests
 
         var updateHandler = new UpdateInvoiceCommandHandler(
             TestDbHelper.CreateRepository<Invoice>(db, Substitute.For<ISieveProcessor>()),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, Substitute.For<ISieveProcessor>()),
+            TestDbHelper.CreateRepository<Patient>(db, Substitute.For<ISieveProcessor>()),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, Substitute.For<ISieveProcessor>()),
-            TestDbHelper.CreateRepository<ClinicSettings>(db, Substitute.For<ISieveProcessor>()),
+            TestDbHelper.CreateRepository<FacilitySettings>(db, Substitute.For<ISieveProcessor>()),
             uow,
             _clinicContext,
             billing);

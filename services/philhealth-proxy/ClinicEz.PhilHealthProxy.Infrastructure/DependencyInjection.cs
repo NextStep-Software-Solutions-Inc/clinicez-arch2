@@ -1,10 +1,16 @@
+using System;
+using ClinicEz.PhilHealthProxy.Domain.Interfaces;
+using ClinicEz.PhilHealthProxy.Infrastructure.Interop;
+using ClinicEz.PhilHealthProxy.Infrastructure.Persistence;
+using ClinicEz.PhilHealthProxy.Infrastructure.Services;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Persistence;
+using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Security;
-using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using ClinicEz.PhilHealthProxy.Domain.Interfaces;
-using ClinicEz.PhilHealthProxy.Infrastructure.Services;
 
 namespace ClinicEz.PhilHealthProxy.Infrastructure;
 
@@ -15,16 +21,36 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment env)
     {
-        // Pure Stateless Zero-DB Micro-Gateway:
-        // Register in-memory cache for 1-hour statutory credentials caching
         services.AddMemoryCache();
 
-        // Resilient HTTP Client connecting to Portal API for branch accreditation credentials
+        // 1. Configure DbContext for Interop Inbox/Outbox
+        var dbConnection = configuration.GetConnectionString("DefaultConnection");
+        if (!string.IsNullOrWhiteSpace(dbConnection))
+        {
+            services.AddDbContext<PhilHealthProxyDbContext>(opts =>
+                opts.UseNpgsql(dbConnection, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "philhealth")));
+        }
+        else
+        {
+            services.AddDbContext<PhilHealthProxyDbContext>(opts =>
+                opts.UseInMemoryDatabase("PhilHealthProxy_Interop"));
+        }
+
+        services.AddScoped<IInteropDbContext>(sp => sp.GetRequiredService<PhilHealthProxyDbContext>());
+
+        // 2. Wire Interop SDK with Responder and Reply handlers
+        services.AddInterop<PhilHealthProxyDbContext>(configuration, handlers => handlers
+            .Respond<PhilHealthRequestPayload, PhilHealthResponsePayload, PhilHealthRequestResponder>(
+                InteropTypes.PhilHealthRequest,
+                InteropTypes.PhilHealthResponse)
+            .HandleReply(InteropTypes.PhilHealthConfigResponded)
+            .HandleReply(InteropTypes.PhilHealthConfigUpsertResponded));
+
+        // 3. Resilient HTTP Client connecting to Portal API for credentials
         var portalBaseUrl = (configuration["PortalApi:BaseUrl"]
             ?? configuration["PORTAL_API_BASE_URL"]
             ?? throw new InvalidOperationException("PortalApi:BaseUrl is not configured (environment variable PortalApi__BaseUrl)."))
             .TrimEnd('/');
-
         if (portalBaseUrl.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
         {
             portalBaseUrl = portalBaseUrl[..^7].TrimEnd('/');
@@ -37,27 +63,24 @@ public static class DependencyInjection
         })
         .AddStandardResilienceHandler();
 
-        // Register CurrentTenantService as both itself (for the middleware setter)
-        // and as ICurrentTenant (for handlers and the SOAP client).
+        // 4. Tenant Context & Session services
         services.AddScoped<CurrentTenantService>();
         services.AddScoped<ICurrentTenant>(sp => sp.GetRequiredService<CurrentTenantService>());
 
-        services.AddHttpClient<IPhilHealthSoapClient, PhilHealthSoapClient>(client =>
+        // 5. PhilHealth PCAPI v2.0 services
+        services.AddSingleton<IPhilHealthTokenCache, PhilHealthTokenCache>();
+        services.AddSingleton<IPhilHealthRateLimiter, PhilHealthRateLimiter>();
+        services.AddSingleton<IPhilHealthPayloadEncryptor, PhilHealthPayloadEncryptor>();
+        services.AddSingleton<IPcapiSandboxService, PcapiSandboxService>();
+
+        services.AddHttpClient<IPhilHealthPcapiClient, PhilHealthPcapiClient>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        // Singleton token cache — holds per-tenant access tokens across HTTP requests.
-        services.AddSingleton<IPhilHealthTokenCache, PhilHealthTokenCache>();
+        services.AddScoped<PhilHealthRequestResponder>();
 
-        // PhilHealth PKA cryptographic, validation, generation, and parsing engines
-        services.AddSingleton<IPhilHealthPayloadEncryptor, PhilHealthPayloadEncryptor>();
-        services.AddSingleton<IKonsultaXmlValidator, KonsultaXmlValidator>();
-        services.AddSingleton<IKonsultaXmlGenerator, KonsultaXmlGenerator>();
-        services.AddSingleton<IKonsultaMasterlistParser, KonsultaMasterlistParser>();
-        services.AddSingleton<ISoapSandboxService, SoapSandboxService>();
-
-        // The Data Protection provider protects tenant credentials in memory during local caching.
+        // 6. Data Protection
         services.AddInMemoryEncryptedDataProtection(configuration, "ClinicEz.PhilHealthProxy");
 
         return services;

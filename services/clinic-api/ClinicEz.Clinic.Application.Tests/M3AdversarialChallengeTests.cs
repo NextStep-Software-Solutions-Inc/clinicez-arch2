@@ -188,9 +188,9 @@ public sealed class M3AdversarialChallengeTests
             PatientName = "Test Patient",
             DoctorId = Guid.NewGuid(),
             DoctorName = "Dr. Test",
-            IsYakapEligible = true,
-            PhysicalExamFindingsJson = System.Text.Json.JsonSerializer.Serialize(initialFindings)
+            IsYakapEligible = true
         };
+        encounter.SetPhysicalExamFindings(initialFindings);
         await context.Consultations.AddAsync(encounter);
         await context.SaveChangesAsync();
 
@@ -336,7 +336,7 @@ public sealed class M3AdversarialChallengeTests
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
         var generator = new PhilHealthSequenceGenerator(dbContext, NullLogger<PhilHealthSequenceGenerator>.Instance);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = tenantId,
@@ -393,9 +393,6 @@ public sealed class M3AdversarialChallengeTests
 
         // Verify encounter entity fields were updated and linked
         encounter.PhilHealthCaseNo.Should().Be("C000921202600001");
-        encounter.HciCaseNo.Should().Be("C000921202600001");
-        encounter.HciTransNo.Should().Be("E000921202600001");
         encounter.PhilHealthSoapTransNo.Should().Be("S000921202600001");
-        encounter.SoapTransNo.Should().Be("S000921202600001");
     }
 }

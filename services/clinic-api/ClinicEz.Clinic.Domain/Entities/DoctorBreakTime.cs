@@ -3,7 +3,7 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class DoctorBreakTime : BaseEntity
+public sealed class DoctorBreakTime : ClinicScopedEntity
 {
     public Guid TemplateId { get; set; }
     public DoctorScheduleTemplate? Template { get; set; }

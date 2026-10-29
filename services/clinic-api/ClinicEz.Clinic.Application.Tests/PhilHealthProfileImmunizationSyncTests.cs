@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Controllers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Immunizations.Commands;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -39,9 +38,9 @@ public sealed class PhilHealthProfileImmunizationSyncTests
     public async Task GetProfile_MergesImmunizationsFromRelationalTable()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var familyRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
         var surgRepo = TestDbHelper.CreateRepository<PatientSurgicalHistory>(context, sieve);
@@ -49,11 +48,8 @@ public sealed class PhilHealthProfileImmunizationSyncTests
         var reproRepo = TestDbHelper.CreateRepository<PatientReproductiveHistory>(context, sieve);
         var ncdRepo = TestDbHelper.CreateRepository<NcdRiskAssessment>(context, sieve);
 
-        var ingestionService = new LegacyPatientProfileIngestionService(
-            patientRepo, surgRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, immRepo, _catalogLookup);
-
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -62,7 +58,7 @@ public sealed class PhilHealthProfileImmunizationSyncTests
             FirstName = "Marco",
             LastName = "Penida",
             ContactNumber = "09171234567",
-            Gender = "Female",
+            Gender = Gender.Female,
             DateOfBirth = new DateOnly(1999, 1, 21),
             PhilHealthNumber = "12-121212121-7"
         };
@@ -90,7 +86,7 @@ public sealed class PhilHealthProfileImmunizationSyncTests
         await uow.SaveChangesAsync();
 
         var controller = new YakapPatientProfileController(
-            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, ingestionService);
+            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup);
 
         var actionResult = await controller.GetProfile(patientId, CancellationToken.None);
         var okResult = actionResult.Result as OkObjectResult;
@@ -106,9 +102,9 @@ public sealed class PhilHealthProfileImmunizationSyncTests
     public async Task UpdateProfile_SyncsImmunizationsToRelationalTable()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var familyRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
         var surgRepo = TestDbHelper.CreateRepository<PatientSurgicalHistory>(context, sieve);
@@ -116,11 +112,8 @@ public sealed class PhilHealthProfileImmunizationSyncTests
         var reproRepo = TestDbHelper.CreateRepository<PatientReproductiveHistory>(context, sieve);
         var ncdRepo = TestDbHelper.CreateRepository<NcdRiskAssessment>(context, sieve);
 
-        var ingestionService = new LegacyPatientProfileIngestionService(
-            patientRepo, surgRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, immRepo, _catalogLookup);
-
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -129,7 +122,7 @@ public sealed class PhilHealthProfileImmunizationSyncTests
             FirstName = "Marco",
             LastName = "Penida",
             ContactNumber = "09171234567",
-            Gender = "Female",
+            Gender = Gender.Female,
             DateOfBirth = new DateOnly(1999, 1, 21),
             PhilHealthNumber = "12-121212121-7"
         };
@@ -137,7 +130,7 @@ public sealed class PhilHealthProfileImmunizationSyncTests
         await uow.SaveChangesAsync();
 
         var controller = new YakapPatientProfileController(
-            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup, ingestionService);
+            patientRepo, vitalsRepo, medicalRepo, familyRepo, immRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, _catalogLookup);
 
         var profileDto = new PhilHealthPatientProfileDto
         {
@@ -154,55 +147,6 @@ public sealed class PhilHealthProfileImmunizationSyncTests
         var actionResult = await controller.UpdateProfile(patientId, profileDto, CancellationToken.None);
         var okResult = actionResult.Result as OkObjectResult;
         okResult.Should().NotBeNull();
-
-        var inDb = immRepo.Query(i => i.PatientId == patientId).ToList();
-        inDb.Should().HaveCount(2);
-        inDb.Should().Contain(i => i.PhilHealthLibrary == "lib_immyoungw" && i.PhilHealthCode == "Y01");
-        inDb.Should().Contain(i => i.PhilHealthLibrary == "lib_immchild" && i.PhilHealthCode == "C03");
-    }
-
-    [Fact]
-    public async Task LegacyIngestion_IngestsProfileImmunizationsToRelationalTable()
-    {
-        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var surgRepo = TestDbHelper.CreateRepository<PatientSurgicalHistory>(context, sieve);
-        var socRepo = TestDbHelper.CreateRepository<PatientSocialHistory>(context, sieve);
-        var reproRepo = TestDbHelper.CreateRepository<PatientReproductiveHistory>(context, sieve);
-        var ncdRepo = TestDbHelper.CreateRepository<NcdRiskAssessment>(context, sieve);
-
-        var ingestionService = new LegacyPatientProfileIngestionService(
-            patientRepo, surgRepo, socRepo, reproRepo, ncdRepo, uow, _clinicContext, immRepo, _catalogLookup);
-
-        var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
-        {
-            Id = patientId,
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientCode = "PAT-2026-0001",
-            FirstName = "Marco",
-            LastName = "Penida",
-            ContactNumber = "09171234567",
-            Gender = "Female",
-            DateOfBirth = new DateOnly(1999, 1, 21),
-            PhilHealthNumber = "12-121212121-7",
-            CustomFields = new Dictionary<string, object?>
-            {
-                ["philhealth_profile"] = new PhilHealthPatientProfileDto
-                {
-                    Pin = "12-121212121-7",
-                    MemberType = "MM",
-                    YoungWomanImmunizations = ["Y01"],
-                    ChildImmunizations = ["C03"]
-                }
-            }
-        };
-        await patientRepo.AddAsync(patient);
-        await uow.SaveChangesAsync();
-
-        await ingestionService.EnsureIngestedAsync(patientId, CancellationToken.None);
 
         var inDb = immRepo.Query(i => i.PatientId == patientId).ToList();
         inDb.Should().HaveCount(2);

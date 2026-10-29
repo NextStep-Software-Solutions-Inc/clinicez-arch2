@@ -16,12 +16,12 @@ public sealed record SeedDentalServicesCommand : IRequest<List<ClinicServiceItem
 
 public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDentalServicesCommand, List<ClinicServiceItemDto>>
 {
-    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public SeedDentalServicesCommandHandler(
-        IRepository<ClinicServiceItem> serviceRepo,
+        IRepository<ServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -63,7 +63,7 @@ public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDenta
             }
             else
             {
-                var newItem = new ClinicServiceItem
+                var newItem = new ServiceItem
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,

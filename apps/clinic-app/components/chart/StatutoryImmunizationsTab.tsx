@@ -5,6 +5,7 @@ import { ThemedText, Badge, Icon, EmptyState, Button, Modal } from '../ui';
 import AdministerVaccineModal from './AdministerVaccineModal';
 import HistoricalVaccineModal from './HistoricalVaccineModal';
 import { clinicService } from '../../services/clinicService';
+import { useEhrOptions } from '../../hooks/useEhrOptions';
 import { notify } from '../../utils/feedback';
 import type {
   ClinicPatient,
@@ -78,12 +79,15 @@ export default function StatutoryImmunizationsTab({
   onRefreshChart,
   queueItemId,
 }: StatutoryImmunizationsTabProps) {
+  const { options: severityOptions } = useEhrOptions('allergy_severity');
+  const availableSeverities = useMemo(() => severityOptions.map((s) => s.label), [severityOptions]);
+
   const [selectedCohort, setSelectedCohort] = useState<string>('ALL');
   const [administerModalVisible, setAdministerModalVisible] = useState(false);
   const [historicalModalVisible, setHistoricalModalVisible] = useState(false);
   const [aefiModalVisible, setAefiModalVisible] = useState(false);
   const [targetAefiImm, setTargetAefiImm] = useState<PatientImmunizationRecord | null>(null);
-  const [aefiSeverity, setAefiSeverity] = useState<'Mild' | 'Moderate' | 'Severe'>('Moderate');
+  const [aefiSeverity, setAefiSeverity] = useState<'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening'>('Moderate');
   const [aefiRemarks, setAefiRemarks] = useState('');
   const [submittingAefi, setSubmittingAefi] = useState(false);
 
@@ -401,10 +405,10 @@ export default function StatutoryImmunizationsTab({
                 Reaction Severity:
               </ThemedText>
               <View style={styles.severityButtons}>
-                {(['Mild', 'Moderate', 'Severe'] as const).map((sev) => (
+                {availableSeverities.map((sev) => (
                   <Pressable
                     key={sev}
-                    onPress={() => setAefiSeverity(sev)}
+                    onPress={() => setAefiSeverity(sev as any)}
                     style={[styles.sevBtn, aefiSeverity === sev && styles.sevBtn_active]}
                   >
                     <ThemedText

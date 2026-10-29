@@ -101,7 +101,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var unassignedPatient = new ClinicPatient
+        var unassignedPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -112,7 +112,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = patientPin,
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1995, 5, 20),
-            Gender = "Male"
+            Gender = Gender.Male
         };
         dbContext.Patients.Add(unassignedPatient);
         await dbContext.SaveChangesAsync();
@@ -154,7 +154,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -165,22 +165,22 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000001",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
         const string initialCaseNo = "C00921202600001";
         const string initialEnlistNo = "E00921202600001";
         const string initialProfTransNo = "P00921202600001";
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = initialCaseNo,
-            EnlistmentNo = initialEnlistNo,
+            EnlistmentTransNo = initialEnlistNo,
             ProfilingTransNo = initialProfTransNo
         });
 
@@ -213,12 +213,12 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         var entry = enlistments[0];
         entry.EffectiveYear.Should().Be(2026);
         entry.Status.Should().Be(YakapEnlistmentStatus.Active);
-        entry.EnlistedAt.Should().Be("2026-02-15");
+        entry.EnlistmentDate.Should().Be(new DateOnly(2026, 2, 15));
         entry.Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
 
         // All 3 control numbers MUST be strictly retained!
         entry.CaseNo.Should().Be(initialCaseNo);
-        entry.EnlistmentNo.Should().Be(initialEnlistNo);
+        entry.EnlistmentTransNo.Should().Be(initialEnlistNo);
         entry.ProfilingTransNo.Should().Be(initialProfTransNo);
     }
 
@@ -237,7 +237,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -248,22 +248,22 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09180000002",
             DateOfBirth = new DateOnly(1985, 6, 12),
-            Gender = "Female"
+            Gender = Gender.Female
         };
 
         const string initialCaseNo = "C00921202600002";
         const string initialEnlistNo = "E00921202600002";
         const string initialProfTransNo = "P00921202600002";
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-05",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 5),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = initialCaseNo,
-            EnlistmentNo = initialEnlistNo,
+            EnlistmentTransNo = initialEnlistNo,
             ProfilingTransNo = initialProfTransNo
         });
 
@@ -292,12 +292,12 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         var entry = updatedPatient.GetYakapEnlistments().Single(e => e.EffectiveYear == 2026);
 
         entry.Status.Should().Be(YakapEnlistmentStatus.Transferred);
-        entry.EnlistedAt.Should().Be("2026-03-01");
+        entry.EnlistmentDate.Should().Be(new DateOnly(2026, 3, 1));
         entry.Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
 
         // Control numbers strictly retained
         entry.CaseNo.Should().Be(initialCaseNo);
-        entry.EnlistmentNo.Should().Be(initialEnlistNo);
+        entry.EnlistmentTransNo.Should().Be(initialEnlistNo);
         entry.ProfilingTransNo.Should().Be(initialProfTransNo);
 
         // Verification that strict guard rejects future encounters on this transferred enlistment
@@ -322,7 +322,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -333,32 +333,32 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000003",
             DateOfBirth = new DateOnly(1930, 1, 6),
-            Gender = "Female"
+            Gender = Gender.Female
         };
 
         // Historical 2024 enlistment
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2024,
-            EnlistedAt = "2024-02-01",
-            ValidUntil = "2024-12-31",
+            EnlistmentDate = new DateOnly(2024, 2, 1),
+            ValidUntil = new DateOnly(2024, 12, 31),
             Status = YakapEnlistmentStatus.Expired,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = "C00921202400010",
-            EnlistmentNo = "E00921202400010",
+            EnlistmentTransNo = "E00921202400010",
             ProfilingTransNo = "P00921202400010"
         });
 
         // Historical 2025 enlistment
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2025,
-            EnlistedAt = "2025-01-15",
-            ValidUntil = "2025-12-31",
+            EnlistmentDate = new DateOnly(2025, 1, 15),
+            ValidUntil = new DateOnly(2025, 12, 31),
             Status = YakapEnlistmentStatus.Expired,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = "C00921202500055",
-            EnlistmentNo = "E00921202500055",
+            EnlistmentTransNo = "E00921202500055",
             ProfilingTransNo = "P00921202500055"
         });
 
@@ -395,7 +395,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         enlistments[2].EffectiveYear.Should().Be(2026);
         enlistments[2].Status.Should().Be(YakapEnlistmentStatus.Active);
-        enlistments[2].EnlistedAt.Should().Be("2026-01-20");
+        enlistments[2].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 20));
         enlistments[2].Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
     }
 
@@ -415,7 +415,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -426,22 +426,22 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000004",
             DateOfBirth = new DateOnly(1864, 7, 23),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
         const string caseNo = "C00921202600777";
         const string enlistNo = "E00921202600777";
         const string profNo = "P00921202600777";
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = caseNo,
-            EnlistmentNo = enlistNo,
+            EnlistmentTransNo = enlistNo,
             ProfilingTransNo = profNo
         });
 
@@ -474,11 +474,11 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         enlistments.Should().ContainSingle("Idempotent sync must not create duplicate benefit year entries");
         enlistments[0].EffectiveYear.Should().Be(2026);
-        enlistments[0].EnlistedAt.Should().Be("2026-01-10");
+        enlistments[0].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 10));
         enlistments[0].Status.Should().Be(YakapEnlistmentStatus.Active);
         enlistments[0].Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
         enlistments[0].CaseNo.Should().Be(caseNo);
-        enlistments[0].EnlistmentNo.Should().Be(enlistNo);
+        enlistments[0].EnlistmentTransNo.Should().Be(enlistNo);
         enlistments[0].ProfilingTransNo.Should().Be(profNo);
     }
 
@@ -494,7 +494,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -505,7 +505,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09180000005",
             DateOfBirth = new DateOnly(1875, 11, 14),
-            Gender = "Male"
+            Gender = Gender.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -532,7 +532,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         enlistments.Should().ContainSingle("Duplicate entries for same effective year must collapse into one entry");
         enlistments[0].EffectiveYear.Should().Be(2026);
-        enlistments[0].EnlistedAt.Should().Be("2026-01-20", "Latest assigned date wins");
+        enlistments[0].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 20), "Latest assigned date wins");
         enlistments[0].Status.Should().Be(YakapEnlistmentStatus.Active);
     }
 
@@ -552,7 +552,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patientActive = new ClinicPatient
+        var patientActive = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -563,10 +563,10 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000006",
             DateOfBirth = new DateOnly(1868, 10, 13),
-            Gender = "Female"
+            Gender = Gender.Female
         };
 
-        var patientTransferred = new ClinicPatient
+        var patientTransferred = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -577,7 +577,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "030263078507",
             ContactNumber = "09180000007",
             DateOfBirth = new DateOnly(1850, 8, 30),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
         dbContext.Patients.AddRange(patientActive, patientTransferred);
@@ -611,12 +611,12 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         var updatedActive = await dbContext.Patients.FirstAsync(p => p.Id == patientActive.Id);
         updatedActive.GetYakapEnlistments().Should().ContainSingle();
         updatedActive.GetYakapEnlistments()[0].Status.Should().Be(YakapEnlistmentStatus.Active);
-        updatedActive.GetYakapEnlistments()[0].EnlistedAt.Should().Be("2026-01-10");
+        updatedActive.GetYakapEnlistments()[0].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 10));
 
         var updatedTransferred = await dbContext.Patients.FirstAsync(p => p.Id == patientTransferred.Id);
         updatedTransferred.GetYakapEnlistments().Should().ContainSingle();
         updatedTransferred.GetYakapEnlistments()[0].Status.Should().Be(YakapEnlistmentStatus.Transferred);
-        updatedTransferred.GetYakapEnlistments()[0].EnlistedAt.Should().Be("2026-02-15");
+        updatedTransferred.GetYakapEnlistments()[0].EnlistmentDate.Should().Be(new DateOnly(2026, 2, 15));
     }
 
     // =========================================================================
@@ -639,7 +639,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContextA);
 
         // Same PhilHealth PIN in two different tenants
-        var patientInTenantA = new ClinicPatient
+        var patientInTenantA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantA,
@@ -650,10 +650,10 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000008",
             DateOfBirth = new DateOnly(1861, 6, 19),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
-        var patientInTenantB = new ClinicPatient
+        var patientInTenantB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantB,
@@ -664,7 +664,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2", // Same PIN
             ContactNumber = "09180000009",
             DateOfBirth = new DateOnly(1861, 6, 19),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
         dbContext.Patients.AddRange(patientInTenantA, patientInTenantB);

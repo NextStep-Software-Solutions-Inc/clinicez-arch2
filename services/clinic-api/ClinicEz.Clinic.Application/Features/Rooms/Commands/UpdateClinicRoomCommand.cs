@@ -38,14 +38,14 @@ public sealed class UpdateClinicRoomCommandValidator : AbstractValidator<UpdateC
 
 public sealed class UpdateClinicRoomCommandHandler : IRequestHandler<UpdateClinicRoomCommand, ClinicRoomDto>
 {
-    private readonly IRepository<ClinicRoom> _roomRepository;
+    private readonly IRepository<Room> _roomRepository;
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdateClinicRoomCommandHandler(
-        IRepository<ClinicRoom> roomRepository,
+        IRepository<Room> roomRepository,
         IRepository<StaffMember> staffRepository,
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,

@@ -9,11 +9,14 @@ using Microsoft.EntityFrameworkCore;
 namespace ClinicEz.Clinic.Infrastructure.Messaging;
 
 /// <summary>Where to send a message about one clinic patient: the clinic it comes from and the patient-app account it goes to.</summary>
-public sealed record ClinicPatientAddress(Party From, Party To, ClinicSettings Clinic, Guid SyncPatientId);
+public sealed record ClinicPatientAddress(Party From, Party To, FacilitySettings Clinic, Guid CloudPatientId)
+{
+    public Guid SyncPatientId => CloudPatientId;
+}
 
 /// <summary>
 /// Maps a clinic patient to the patient-app account that receives patient-facing messages. Only patients linked to a
-/// patient-app account (<see cref="ClinicPatient.SyncPatientId"/>) can be addressed; walk-in patients have no account.
+/// patient-app account (<see cref="Patient.CloudPatientId"/>) can be addressed; walk-in patients have no account.
 /// </summary>
 public sealed class ClinicPatientAddressResolver
 {
@@ -24,24 +27,24 @@ public sealed class ClinicPatientAddressResolver
     /// <summary>Null when the clinic is not provisioned here, the patient is unknown to the clinic, or has no patient-app account.</summary>
     public async Task<ClinicPatientAddress?> ResolveAsync(Guid clinicId, Guid clinicPatientId, CancellationToken ct)
     {
-        var clinic = await _db.ClinicSettings
+        var clinic = await _db.Settings
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(s => !s.IsDeleted && s.ClinicId == clinicId, ct);
         if (clinic == null) return null;
 
-        var syncPatientId = await _db.Patients
+        var cloudPatientId = await _db.Patients
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(p => !p.IsDeleted && p.ClinicId == clinicId && p.Id == clinicPatientId)
-            .Select(p => p.SyncPatientId)
+            .Select(p => p.CloudPatientId)
             .FirstOrDefaultAsync(ct);
-        if (syncPatientId is not { } syncId || syncId == Guid.Empty) return null;
+        if (cloudPatientId is not { } cId || cId == Guid.Empty) return null;
 
         return new ClinicPatientAddress(
             ClinicParties.Clinic(clinic.TenantId, clinic.ClinicId.ToString()),
-            Party.ForPatient(syncId.ToString()),
+            Party.ForPatient(cId.ToString()),
             clinic,
-            syncId);
+            cId);
     }
 }

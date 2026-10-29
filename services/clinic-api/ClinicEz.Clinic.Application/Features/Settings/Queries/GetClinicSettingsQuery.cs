@@ -14,12 +14,12 @@ public sealed record GetClinicSettingsQuery : IRequest<ClinicSettingsDto>;
 
 public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSettingsQuery, ClinicSettingsDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
 
     public GetClinicSettingsQueryHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork)
     {
@@ -36,7 +36,7 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
         if (settings == null)
         {
             // Auto-provision default settings for this clinic facility
-            settings = new ClinicSettings
+            settings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,
@@ -133,6 +133,8 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint,
             TenantSlug: settings.TenantSlug,
             FacilitySlug: settings.FacilitySlug,
-            TvDisplayPin: settings.TvDisplayPin);
+            TvDisplayPin: settings.TvDisplayPin,
+            IsKioskIntakeEnabled: settings.IsKioskIntakeEnabled,
+            KioskTokenVersion: settings.KioskTokenVersion);
     }
 }

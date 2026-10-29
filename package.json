@@ -11,7 +11,9 @@
   "scripts": {
     "lint:portal": "bun --cwd apps/portal-web lint",
     "test:portal": "bun test apps/portal-web/tests",
+    "typecheck:portal": "tsc --noEmit -p apps/portal-web",
     "typecheck:patient": "tsc --noEmit -p apps/patient-app",
+    "lint:tokens": "bun apps/clinic-app/scripts/check-tokens.mjs && bun apps/patient-app/scripts/check-tokens.mjs",
     "lint:patient-tokens": "bun apps/patient-app/scripts/check-tokens.mjs",
     "test:tokens": "bun --cwd packages/design-tokens test",
     "test:patient": "bun test apps/patient-app/tests",

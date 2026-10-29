@@ -18,13 +18,13 @@ public sealed record VerifyRecordAttachmentCommand(
 
 public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<VerifyRecordAttachmentCommand, ClinicRecordAttachmentDto>
 {
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicRecordEventPublisher _eventPublisher;
 
     public VerifyRecordAttachmentCommandHandler(
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicRecordEventPublisher eventPublisher)

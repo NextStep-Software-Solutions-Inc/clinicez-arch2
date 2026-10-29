@@ -144,7 +144,7 @@ public class ClinicContextSecurityTests
     public void BackgroundScope_UsesConfiguredClinic_AndTrustedSystemPermissions()
     {
         var clinic = Guid.NewGuid();
-        var ctx = Create(null, ("ClinicSettings:ClinicId", clinic.ToString()), ("ClinicSettings:TenantId", "tenant-cfg"));
+        var ctx = Create(null, ("FacilitySettings:ClinicId", clinic.ToString()), ("FacilitySettings:TenantId", "tenant-cfg"));
 
         ctx.ClinicId.Should().Be(clinic);
         ctx.TenantId.Should().Be("tenant-cfg");

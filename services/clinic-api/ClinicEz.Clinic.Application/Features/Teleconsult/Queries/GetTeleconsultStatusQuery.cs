@@ -30,12 +30,12 @@ public sealed record GetTeleconsultStatusQuery(Guid AppointmentId) : IRequest<Te
 public sealed class GetTeleconsultStatusQueryHandler : IRequestHandler<GetTeleconsultStatusQuery, TeleconsultStatusDto>
 {
     private readonly IRepository<Appointment> _appointmentRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetTeleconsultStatusQueryHandler(
         IRepository<Appointment> appointmentRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IClinicContext clinicContext)
     {
         _appointmentRepo = appointmentRepo;

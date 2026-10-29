@@ -120,8 +120,8 @@ public class Milestone1AuditBoundaryStressTests
 
         using (seedContext)
         {
-            await seedContext.ClinicAuditEntries.AddRangeAsync(
-                new ClinicAuditEntry
+            await seedContext.AuditEntries.AddRangeAsync(
+                new AuditEntry
                 {
                     Id = entryAId,
                     TenantId = tenantId,
@@ -138,7 +138,7 @@ public class Milestone1AuditBoundaryStressTests
                     Description = "Confidential encounter at Facility A",
                     MetadataJson = "{\"chiefComplaint\": \"Facility A Secret Diagnosis\"}"
                 },
-                new ClinicAuditEntry
+                new AuditEntry
                 {
                     Id = entryBId,
                     TenantId = tenantId,
@@ -163,7 +163,7 @@ public class Milestone1AuditBoundaryStressTests
         var contextBMock = CreateClinicContextMock(clinicBId, tenantId);
         using var contextB = new ApplicationDbContext(options, config, contextBMock);
 
-        var projected = await contextB.ClinicAuditEntries
+        var projected = await contextB.AuditEntries
             .Select(x => new
             {
                 x.Id,
@@ -193,7 +193,7 @@ public class Milestone1AuditBoundaryStressTests
 
         using (seedContext)
         {
-            await seedContext.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+            await seedContext.AuditEntries.AddAsync(new AuditEntry
             {
                 Id = targetFacilityAEntryId,
                 TenantId = tenantId,
@@ -216,17 +216,17 @@ public class Milestone1AuditBoundaryStressTests
         var contextBMock = CreateClinicContextMock(clinicBId, tenantId);
         using var contextB = new ApplicationDbContext(options, config, contextBMock);
 
-        var queryById = await contextB.ClinicAuditEntries
+        var queryById = await contextB.AuditEntries
             .Where(x => x.Id == targetFacilityAEntryId)
             .ToListAsync();
 
-        var firstOrDefault = await contextB.ClinicAuditEntries
+        var firstOrDefault = await contextB.AuditEntries
             .FirstOrDefaultAsync(x => x.Id == targetFacilityAEntryId);
 
-        var singleOrDefault = await contextB.ClinicAuditEntries
+        var singleOrDefault = await contextB.AuditEntries
             .SingleOrDefaultAsync(x => x.Id == targetFacilityAEntryId);
 
-        var anyWithId = await contextB.ClinicAuditEntries
+        var anyWithId = await contextB.AuditEntries
             .AnyAsync(x => x.Id == targetFacilityAEntryId);
 
         // Assert: Unconditionally null and empty
@@ -249,7 +249,7 @@ public class Milestone1AuditBoundaryStressTests
         using (seedContext)
         {
             // Patient in Facility B
-            await seedContext.Patients.AddAsync(new ClinicPatient
+            await seedContext.Patients.AddAsync(new Patient
             {
                 Id = sharedPatientId,
                 TenantId = tenantId,
@@ -261,7 +261,7 @@ public class Milestone1AuditBoundaryStressTests
             });
 
             // Audit entry for Facility A referencing sharedPatientId (e.g. cross-facility referral attempt)
-            await seedContext.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+            await seedContext.AuditEntries.AddAsync(new AuditEntry
             {
                 Id = entryAId,
                 TenantId = tenantId,
@@ -279,7 +279,7 @@ public class Milestone1AuditBoundaryStressTests
             });
 
             // Audit entry for Facility B referencing sharedPatientId
-            await seedContext.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+            await seedContext.AuditEntries.AddAsync(new AuditEntry
             {
                 Id = entryBId,
                 TenantId = tenantId,
@@ -291,7 +291,7 @@ public class Milestone1AuditBoundaryStressTests
                 Action = "clinical.triage.recorded",
                 ActorName = "Nurse Bob (Facility B)",
                 ActorRole = "Nurse",
-                TargetEntityType = "TriageVitals",
+                TargetEntityType = "PatientVitals",
                 Outcome = "Success",
                 Description = "Routine vitals recorded at Facility B"
             });
@@ -304,7 +304,7 @@ public class Milestone1AuditBoundaryStressTests
         using var contextB = new ApplicationDbContext(options, config, contextBMock);
 
         var joined = await (from patient in contextB.Patients
-                            join audit in contextB.ClinicAuditEntries on patient.Id equals audit.PatientId
+                            join audit in contextB.AuditEntries on patient.Id equals audit.PatientId
                             select new
                             {
                                 patient.PatientCode,
@@ -328,8 +328,8 @@ public class Milestone1AuditBoundaryStressTests
 
         using (seedContext)
         {
-            await seedContext.ClinicAuditEntries.AddRangeAsync(
-                new ClinicAuditEntry
+            await seedContext.AuditEntries.AddRangeAsync(
+                new AuditEntry
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -344,7 +344,7 @@ public class Milestone1AuditBoundaryStressTests
                     Outcome = "Success",
                     Description = "Facility A Transmittal payload"
                 },
-                new ClinicAuditEntry
+                new AuditEntry
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -367,11 +367,11 @@ public class Milestone1AuditBoundaryStressTests
         var contextBMock = CreateClinicContextMock(clinicBId, tenantId);
         using var contextB = new ApplicationDbContext(options, config, contextBMock);
 
-        var maliciousOrQuery = await contextB.ClinicAuditEntries
+        var maliciousOrQuery = await contextB.AuditEntries
             .Where(x => x.ClinicId == clinicAId || x.ClinicId == clinicBId)
             .ToListAsync();
 
-        var hostileExplicitAQuery = await contextB.ClinicAuditEntries
+        var hostileExplicitAQuery = await contextB.AuditEntries
             .Where(x => x.ClinicId == clinicAId)
             .ToListAsync();
 
@@ -393,7 +393,7 @@ public class Milestone1AuditBoundaryStressTests
             // Add 10 entries for Facility A
             for (int i = 0; i < 10; i++)
             {
-                await seedContext.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+                await seedContext.AuditEntries.AddAsync(new AuditEntry
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -404,7 +404,7 @@ public class Milestone1AuditBoundaryStressTests
                     Action = $"op.facilityA.{i}",
                     ActorName = "Worker A",
                     ActorRole = "Staff",
-                    TargetEntityType = "ClinicRoom",
+                    TargetEntityType = "Room",
                     Outcome = "Success",
                     Description = $"Op A {i}"
                 });
@@ -413,7 +413,7 @@ public class Milestone1AuditBoundaryStressTests
             // Add 3 entries for Facility B
             for (int i = 0; i < 3; i++)
             {
-                await seedContext.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+                await seedContext.AuditEntries.AddAsync(new AuditEntry
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -424,7 +424,7 @@ public class Milestone1AuditBoundaryStressTests
                     Action = $"op.facilityB.{i}",
                     ActorName = "Worker B",
                     ActorRole = "Staff",
-                    TargetEntityType = "ClinicRoom",
+                    TargetEntityType = "Room",
                     Outcome = "Success",
                     Description = $"Op B {i}"
                 });
@@ -437,9 +437,9 @@ public class Milestone1AuditBoundaryStressTests
         var contextBMock = CreateClinicContextMock(clinicBId, tenantId);
         using var contextB = new ApplicationDbContext(options, config, contextBMock);
 
-        var totalCount = await contextB.ClinicAuditEntries.CountAsync();
-        var anyFromFacilityA = await contextB.ClinicAuditEntries.AnyAsync(x => x.ClinicId == clinicAId);
-        var categories = await contextB.ClinicAuditEntries
+        var totalCount = await contextB.AuditEntries.CountAsync();
+        var anyFromFacilityA = await contextB.AuditEntries.AnyAsync(x => x.ClinicId == clinicAId);
+        var categories = await contextB.AuditEntries
             .GroupBy(x => x.Category)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync();
@@ -459,7 +459,7 @@ public class Milestone1AuditBoundaryStressTests
 
         using (seedContext)
         {
-            await seedContext.ClinicAuditEntries.AddAsync(new ClinicAuditEntry
+            await seedContext.AuditEntries.AddAsync(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -481,7 +481,7 @@ public class Milestone1AuditBoundaryStressTests
         var nullClinicContext = CreateClinicContextMock(null, tenantId);
         using var unauthContext = new ApplicationDbContext(options, config, nullClinicContext);
 
-        var entries = await unauthContext.ClinicAuditEntries.ToListAsync();
+        var entries = await unauthContext.AuditEntries.ToListAsync();
 
         // Assert: 0 entries returned
         entries.Should().BeEmpty();
@@ -748,7 +748,7 @@ public class Milestone1AuditBoundaryStressTests
                 Action = $"op.action.{i}",
                 ActorName = $"Staff {i}",
                 ActorRole = "Staff",
-                TargetEntityType = "ClinicRoom",
+                TargetEntityType = "Room",
                 TargetEntityId = $"room-{i}",
                 Outcome = "Success",
                 Description = $"Operation {i} in room {i}",
@@ -791,7 +791,7 @@ public class Milestone1AuditBoundaryStressTests
         // Query database to verify all 37 records were flushed and persisted
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var persisted = await db.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+        var persisted = await db.AuditEntries.IgnoreQueryFilters().ToListAsync();
 
         persisted.Should().HaveCount(messageCount, "Worker graceful drain must flush all pending messages (< BatchSize) on shutdown");
         persisted.Select(p => p.Action).Distinct().Should().HaveCount(messageCount);
@@ -873,7 +873,7 @@ public class Milestone1AuditBoundaryStressTests
 
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var persisted = await db.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+        var persisted = await db.AuditEntries.IgnoreQueryFilters().ToListAsync();
 
         persisted.Should().HaveCount(messageCount, "Graceful drain must flush all 235 messages across multiple batch iterations.");
     }
@@ -959,7 +959,7 @@ public class Milestone1AuditBoundaryStressTests
 
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var persisted = await db.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+        var persisted = await db.AuditEntries.IgnoreQueryFilters().ToListAsync();
 
         var actions = persisted.Select(x => x.Action).ToHashSet();
         var allExpected = Enumerable.Range(0, concurrentWriters)

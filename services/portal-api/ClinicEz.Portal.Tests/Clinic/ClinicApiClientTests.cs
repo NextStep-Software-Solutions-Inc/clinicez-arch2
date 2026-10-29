@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Clinic;
 using ClinicEz.Portal.Infrastructure.Persistence;
@@ -59,81 +58,77 @@ public class ClinicApiClientTests : IDisposable
     }
 
     [Fact]
-    public async Task GetTransmittalsAsync_ReturnsData_OnSuccess()
+    public async Task GetSubmissionsAsync_ReturnsData_OnSuccess()
     {
         // Arrange
-        var expectedTransmittals = new List<PortalYakapTransmittalDto>
+        var expectedSubmissions = new List<PortalYakapSubmissionDto>
         {
-            new(
-                Id: Guid.NewGuid(),
-                TransmittalNumber: "TR-2026-0001",
-                ReportTagging: "2",
-                EffectiveYear: "2026",
-                PackageType: "K",
-                Status: "Draft",
-                PhilHealthTransactionNumber: null,
-                EncryptedPayloadHash: null,
-                ValidationErrors: new List<string>(),
-                SubmittedAt: null,
-                SubmittedBy: null,
-                CreatedAt: DateTime.UtcNow,
-                TotalItemsCount: 1,
-                Items: new List<PortalYakapTransmittalItemDto>(),
-                BranchId: _branchId)
+            new()
+            {
+                Id = Guid.NewGuid(),
+                PatientCode = "PT-001",
+                AccreditationNo = "H91001111",
+                CaseNo = "CASE-01",
+                SubmissionType = "Service01_Registration",
+                ReportStatus = "U",
+                LocalTransactionNo = "TX-001",
+                ProcessingStatus = "Accepted",
+                SubmittedAtUtc = DateTime.UtcNow
+            }
         };
 
-        var apiResponse = ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>.Success(expectedTransmittals);
+        var apiResponse = ApiResponse<IReadOnlyList<PortalYakapSubmissionDto>>.Success(expectedSubmissions);
         var json = JsonSerializer.Serialize(apiResponse);
 
         _requestClientMock
-            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
-                InteropTypes.YakapTransmittalRequested,
-                InteropTypes.YakapTransmittalResponded,
+            .Setup(c => c.RequestAsync<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload>(
+                InteropTypes.YakapSubmissionRequested,
+                InteropTypes.YakapSubmissionResponded,
                 Party.Portal,
                 It.Is<Party>(p => p.Kind == PartyKind.Facility && p.TenantId == _tenantId.ToString()),
-                It.Is<YakapTransmittalRequestedPayload>(req => req.Method == "GET" && req.Path == "transmittals"),
+                It.Is<YakapSubmissionRequestedPayload>(req => req.Method == "GET" && req.Path == "submissions"),
                 It.IsAny<TimeSpan?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new YakapTransmittalRespondedPayload
+            .ReturnsAsync(new YakapSubmissionRespondedPayload
             {
                 StatusCode = 200,
                 Body = json
             });
 
         // Act
-        var result = await _sut.GetTransmittalsAsync(_tenantId.ToString(), _branchId, null, null);
+        var result = await _sut.GetSubmissionsAsync(_tenantId.ToString(), _branchId);
 
         // Assert
         Assert.True(result.Succeeded);
         Assert.NotNull(result.Data);
         Assert.Single(result.Data);
-        Assert.Equal("TR-2026-0001", result.Data[0].TransmittalNumber);
+        Assert.Equal("PT-001", result.Data[0].PatientCode);
     }
 
     [Fact]
-    public async Task GetTransmittalsAsync_WhenClinicApiReturnsErrorStatus_ReturnsFailResponse()
+    public async Task GetSubmissionsAsync_WhenClinicApiReturnsErrorStatus_ReturnsFailResponse()
     {
         // Arrange
-        var errorResponse = ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>.Fail("Internal clinic error");
+        var errorResponse = ApiResponse<IReadOnlyList<PortalYakapSubmissionDto>>.Fail("Internal clinic error");
         var json = JsonSerializer.Serialize(errorResponse);
 
         _requestClientMock
-            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
-                InteropTypes.YakapTransmittalRequested,
-                InteropTypes.YakapTransmittalResponded,
+            .Setup(c => c.RequestAsync<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload>(
+                InteropTypes.YakapSubmissionRequested,
+                InteropTypes.YakapSubmissionResponded,
                 Party.Portal,
                 It.IsAny<Party>(),
-                It.IsAny<YakapTransmittalRequestedPayload>(),
+                It.IsAny<YakapSubmissionRequestedPayload>(),
                 It.IsAny<TimeSpan?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new YakapTransmittalRespondedPayload
+            .ReturnsAsync(new YakapSubmissionRespondedPayload
             {
                 StatusCode = 500,
                 Body = json
             });
 
         // Act
-        var result = await _sut.GetTransmittalsAsync(_tenantId.ToString(), _branchId, null, null);
+        var result = await _sut.GetSubmissionsAsync(_tenantId.ToString(), _branchId);
 
         // Assert
         Assert.False(result.Succeeded);
@@ -141,22 +136,22 @@ public class ClinicApiClientTests : IDisposable
     }
 
     [Fact]
-    public async Task GetTransmittalsAsync_WhenNetworkFails_ReturnsGracefulConnectionErrorMessage()
+    public async Task GetSubmissionsAsync_WhenNetworkFails_ReturnsGracefulConnectionErrorMessage()
     {
         // Arrange
         _requestClientMock
-            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
-                InteropTypes.YakapTransmittalRequested,
-                InteropTypes.YakapTransmittalResponded,
+            .Setup(c => c.RequestAsync<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload>(
+                InteropTypes.YakapSubmissionRequested,
+                InteropTypes.YakapSubmissionResponded,
                 Party.Portal,
                 It.IsAny<Party>(),
-                It.IsAny<YakapTransmittalRequestedPayload>(),
+                It.IsAny<YakapSubmissionRequestedPayload>(),
                 It.IsAny<TimeSpan?>(),
                 It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InteropRequestTimeoutException(InteropTypes.YakapTransmittalRequested, Guid.NewGuid(), TimeSpan.FromSeconds(45)));
+            .ThrowsAsync(new InteropRequestTimeoutException(InteropTypes.YakapSubmissionRequested, Guid.NewGuid(), TimeSpan.FromSeconds(45)));
 
         // Act
-        var result = await _sut.GetTransmittalsAsync(_tenantId.ToString(), _branchId, null, null);
+        var result = await _sut.GetSubmissionsAsync(_tenantId.ToString(), _branchId);
 
         // Assert
         Assert.False(result.Succeeded);
@@ -165,57 +160,88 @@ public class ClinicApiClientTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateTransmittalAsync_SendsCorrectPayloadAndReturnsSuccess()
+    public async Task GetBranchYakapSummaryAsync_ReturnsSummaryData()
     {
         // Arrange
-        var transmittalId = Guid.NewGuid();
-        var request = new PortalCreateYakapTransmittalRequest(
-            ConsultationEncounterIds: new List<Guid> { Guid.NewGuid() },
-            ReportTagging: "2",
-            EffectiveYear: "2026",
-            BranchId: _branchId);
+        var expectedSummary = new PortalYakapBranchSummaryDto
+        {
+            BranchId = _branchId,
+            AccreditationNo = "H91001111",
+            EmpaneledCount = 100,
+            SelectedCount = 80,
+            AcceptedUploadsCount = 75,
+            PendingPollingCount = 5,
+            RejectedOrFailedCount = 0,
+            MasterlistTotalCount = 100
+        };
 
-        var expectedDto = new PortalYakapTransmittalDto(
-            Id: transmittalId,
-            TransmittalNumber: "TR-NEW-01",
-            ReportTagging: "2",
-            EffectiveYear: "2026",
-            PackageType: "K",
-            Status: "Draft",
-            PhilHealthTransactionNumber: null,
-            EncryptedPayloadHash: null,
-            ValidationErrors: new List<string>(),
-            SubmittedAt: null,
-            SubmittedBy: null,
-            CreatedAt: DateTime.UtcNow,
-            TotalItemsCount: 1,
-            Items: new List<PortalYakapTransmittalItemDto>(),
-            BranchId: _branchId);
-
-        var apiResponse = ApiResponse<PortalYakapTransmittalDto>.Success(expectedDto);
+        var apiResponse = ApiResponse<PortalYakapBranchSummaryDto>.Success(expectedSummary);
         var json = JsonSerializer.Serialize(apiResponse);
 
         _requestClientMock
-            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
-                InteropTypes.YakapTransmittalRequested,
-                InteropTypes.YakapTransmittalResponded,
+            .Setup(c => c.RequestAsync<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload>(
+                InteropTypes.YakapSubmissionRequested,
+                InteropTypes.YakapSubmissionResponded,
                 Party.Portal,
                 It.Is<Party>(p => p.Kind == PartyKind.Facility && p.TenantId == _tenantId.ToString()),
-                It.Is<YakapTransmittalRequestedPayload>(req => req.Method == "POST" && req.Path == "transmittals"),
+                It.Is<YakapSubmissionRequestedPayload>(req => req.Method == "GET" && req.Path == "submissions/summary"),
                 It.IsAny<TimeSpan?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new YakapTransmittalRespondedPayload
+            .ReturnsAsync(new YakapSubmissionRespondedPayload
             {
                 StatusCode = 200,
                 Body = json
             });
 
         // Act
-        var result = await _sut.CreateTransmittalAsync(_tenantId.ToString(), _branchId, request);
+        var result = await _sut.GetBranchYakapSummaryAsync(_tenantId.ToString(), _branchId);
 
         // Assert
         Assert.True(result.Succeeded);
         Assert.NotNull(result.Data);
-        Assert.Equal("TR-NEW-01", result.Data.TransmittalNumber);
+        Assert.Equal(100, result.Data.EmpaneledCount);
+        Assert.Equal("H91001111", result.Data.AccreditationNo);
+    }
+
+    [Fact]
+    public async Task SyncMasterlistAsync_SendsCorrectPayloadAndReturnsSuccess()
+    {
+        // Arrange
+        var expectedSyncResult = new PortalYakapMasterlistSyncResultDto
+        {
+            Success = true,
+            RecordsAdded = 10,
+            RecordsUpdated = 5,
+            TotalActiveCount = 15,
+            SyncedAtUtc = DateTime.UtcNow,
+            Message = "Sync completed successfully"
+        };
+
+        var apiResponse = ApiResponse<PortalYakapMasterlistSyncResultDto>.Success(expectedSyncResult);
+        var json = JsonSerializer.Serialize(apiResponse);
+
+        _requestClientMock
+            .Setup(c => c.RequestAsync<YakapSubmissionRequestedPayload, YakapSubmissionRespondedPayload>(
+                InteropTypes.YakapSubmissionRequested,
+                InteropTypes.YakapSubmissionResponded,
+                Party.Portal,
+                It.Is<Party>(p => p.Kind == PartyKind.Facility && p.TenantId == _tenantId.ToString()),
+                It.Is<YakapSubmissionRequestedPayload>(req => req.Method == "POST" && req.Path == "masterlist/sync"),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new YakapSubmissionRespondedPayload
+            {
+                StatusCode = 200,
+                Body = json
+            });
+
+        // Act
+        var result = await _sut.SyncMasterlistAsync(_tenantId.ToString(), _branchId);
+
+        // Assert
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Data);
+        Assert.True(result.Data.Success);
+        Assert.Equal(10, result.Data.RecordsAdded);
     }
 }

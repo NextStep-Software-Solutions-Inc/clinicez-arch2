@@ -25,7 +25,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
     private readonly IRepository<StaffMember>? _staffRepository;
 
     public CallQueueItemCommandHandler(
@@ -33,7 +33,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null,
-        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<Room>? roomRepository = null,
         IRepository<StaffMember>? staffRepository = null)
     {
         _queueRepository = queueRepository;
@@ -47,7 +47,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     public CallQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicRoom> roomRepository,
+        IRepository<Room> roomRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
         : this(queueRepository, unitOfWork, clinicContext, null, roomRepository, staffRepository)
@@ -57,7 +57,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     public async Task<QueueItemDto> Handle(CallQueueItemCommand request, CancellationToken cancellationToken)
     {
         var item = await _queueRepository.Query(q => q.Id == request.Id && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (item == null)

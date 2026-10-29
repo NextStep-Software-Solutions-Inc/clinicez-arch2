@@ -8,7 +8,7 @@ using MediatR;
 namespace ClinicEz.Clinic.Application.Features.CustomFields.Queries;
 
 public sealed record GetCustomFieldTemplatesQuery(
-    string? EntityType = "ClinicPatient") : IRequest<IReadOnlyList<CustomFieldTemplateDto>>;
+    string? EntityType = "Patient") : IRequest<IReadOnlyList<CustomFieldTemplateDto>>;
 
 public sealed class GetCustomFieldTemplatesQueryHandler : IRequestHandler<GetCustomFieldTemplatesQuery, IReadOnlyList<CustomFieldTemplateDto>>
 {

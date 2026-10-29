@@ -25,14 +25,14 @@ public class BillingDocumentSeparationTests
     [Fact]
     public void GenerateInvoicePdf_OnPaidInvoice_Should_Generate_ValidPdf_And_Maintain_Document_Integrity()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "test-tenant",
             ClinicId = Guid.NewGuid(),
             ClinicName = "Clinic EZ Test Clinic"
         };
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = settings.TenantId,
@@ -40,7 +40,7 @@ public class BillingDocumentSeparationTests
             LastName = "Angeles",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1995, 5, 12),
-            Gender = "Female",
+            Gender = Gender.Female,
             PatientCode = "P-10023"
         };
 
@@ -120,7 +120,7 @@ public class BillingDocumentSeparationTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var sender = Substitute.For<ISender>();
         var pdfService = Substitute.For<IClinicDocumentPdfService>();
 
@@ -146,7 +146,7 @@ public class BillingDocumentSeparationTests
         await db.Invoices.AddAsync(invoice);
         await db.SaveChangesAsync();
 
-        pdfService.GenerateInvoicePdf(Arg.Any<Invoice>(), Arg.Any<ClinicSettings>(), Arg.Any<StaffMember?>(), Arg.Any<ClinicPatient?>(), Arg.Any<string?>())
+        pdfService.GenerateInvoicePdf(Arg.Any<Invoice>(), Arg.Any<FacilitySettings>(), Arg.Any<StaffMember?>(), Arg.Any<Patient?>(), Arg.Any<string?>())
             .Returns(Encoding.ASCII.GetBytes("%PDF-1.4 Fake PDF Content"));
 
         var controller = new BillingController(
@@ -173,7 +173,7 @@ public class BillingDocumentSeparationTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var sender = Substitute.For<ISender>();
         var pdfService = Substitute.For<IClinicDocumentPdfService>();
 
@@ -199,7 +199,7 @@ public class BillingDocumentSeparationTests
         await db.Invoices.AddAsync(invoice);
         await db.SaveChangesAsync();
 
-        pdfService.GenerateOfficialReceiptPdf(Arg.Any<Invoice>(), Arg.Any<PaymentRecord?>(), Arg.Any<ClinicSettings>(), Arg.Any<StaffMember?>(), Arg.Any<ClinicPatient?>(), Arg.Any<string?>())
+        pdfService.GenerateOfficialReceiptPdf(Arg.Any<Invoice>(), Arg.Any<PaymentRecord?>(), Arg.Any<FacilitySettings>(), Arg.Any<StaffMember?>(), Arg.Any<Patient?>(), Arg.Any<string?>())
             .Returns(Encoding.ASCII.GetBytes("%PDF-1.4 Fake Receipt Content"));
 
         var controller = new BillingController(
@@ -226,7 +226,7 @@ public class BillingDocumentSeparationTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var sender = Substitute.For<ISender>();
         var pdfService = Substitute.For<IClinicDocumentPdfService>();
 
@@ -252,7 +252,7 @@ public class BillingDocumentSeparationTests
         await db.Invoices.AddAsync(invoice);
         await db.SaveChangesAsync();
 
-        pdfService.GenerateOfficialReceiptPdf(Arg.Any<Invoice>(), Arg.Any<PaymentRecord?>(), Arg.Any<ClinicSettings>(), Arg.Any<StaffMember?>(), Arg.Any<ClinicPatient?>(), Arg.Any<string?>())
+        pdfService.GenerateOfficialReceiptPdf(Arg.Any<Invoice>(), Arg.Any<PaymentRecord?>(), Arg.Any<FacilitySettings>(), Arg.Any<StaffMember?>(), Arg.Any<Patient?>(), Arg.Any<string?>())
             .Returns(Encoding.ASCII.GetBytes("%PDF-1.4 Fake Receipt Content"));
 
         var controller = new BillingController(

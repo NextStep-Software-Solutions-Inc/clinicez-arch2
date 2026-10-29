@@ -3,7 +3,6 @@ import {
   formatPhilHealthPin,
   validatePhilHealthPinMod11,
   PHILHEALTH_MOD11_WEIGHTS,
-  PHILHEALTH_RELATIONSHIPS,
   type MemberType,
   type PrincipalRelationship,
 } from "../src/lib/philhealth";

@@ -6,11 +6,10 @@ import { Alert } from '@utils/feedback';
 import { useAuth, usePermission } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import {
-  PHILHEALTH_DELIVERY_TYPE_OPTIONS,
-  PHILHEALTH_CONTRACEPTIVE_OPTIONS,
   normalizeDeliveryType,
   normalizeContraceptiveMethod,
 } from '../../constants/reproductiveHealth';
+import { useEhrOptions } from '../../hooks/useEhrOptions';
 import {
   clinicService,
   ClinicPatient,
@@ -31,6 +30,9 @@ export default function ReproductiveHealthTab({
   onRefreshChart,
   readOnly,
 }: ReproductiveHealthTabProps) {
+  const { selectOptions: deliveryOptions } = useEhrOptions('delivery_type');
+  const { selectOptions: contraOptions } = useEhrOptions('contraceptive_method');
+
   const { user, state, permissions } = useAuth();
   const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
   const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
@@ -446,7 +448,7 @@ export default function ReproductiveHealthTab({
           label="Most Recent Delivery Type"
           value={deliveryType}
           onSelect={(val) => canWritePatients && setDeliveryType(val)}
-          options={PHILHEALTH_DELIVERY_TYPE_OPTIONS}
+          options={deliveryOptions}
           modalTitle="Select Most Recent Delivery Type"
           modalSubtitle="PhilHealth Konsulta (pDeliveryTyp) statutory options"
           icon="baby"
@@ -490,7 +492,7 @@ export default function ReproductiveHealthTab({
           label="Contraceptive Method in Use"
           value={contraceptiveMethod}
           onSelect={(val) => canWritePatients && setContraceptiveMethod(val)}
-          options={PHILHEALTH_CONTRACEPTIVE_OPTIONS}
+          options={contraOptions}
           modalTitle="Select Contraceptive Method"
           modalSubtitle="DOH Family Planning Program & PhilHealth Yakap (pBirthCtrlMethod)"
           icon="shield"

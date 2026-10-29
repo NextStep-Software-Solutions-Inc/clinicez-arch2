@@ -15,6 +15,21 @@ public sealed record ClaimAllergyDto(
     DateOnly? OnsetDate = null,
     string? Notes = null);
 
+public sealed record ClaimIntakeAddressDto(
+    string? AddressType = null,
+    string? StreetAddress = null,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null,
+    string? RegionName = null,
+    string? ProvinceName = null,
+    string? CityMunicipalityName = null,
+    string? BarangayName = null,
+    string? PostalCode = null,
+    bool IsSameAsPermanent = false,
+    bool IsPrimary = true);
+
 public sealed record ClaimIntakeResultDto(
     Guid PatientId,
     string ClinicEzId,
@@ -44,4 +59,5 @@ public sealed record ClaimIntakeCommand(
     string? PrincipalFullName = null,
     string? PrincipalRelationship = null,
     DateOnly? PrincipalDateOfBirth = null,
-    List<ClaimAllergyDto>? Allergies = null) : IRequest<ClaimIntakeResultDto>;
+    List<ClaimAllergyDto>? Allergies = null,
+    List<ClaimIntakeAddressDto>? Addresses = null) : IRequest<ClaimIntakeResultDto>;

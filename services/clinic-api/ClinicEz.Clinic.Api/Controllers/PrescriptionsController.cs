@@ -25,12 +25,12 @@ public sealed class PrescriptionsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
 
     public PrescriptionsController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo)
     {
         _sender = sender;
         _pdfService = pdfService;
@@ -55,7 +55,7 @@ public sealed class PrescriptionsController : ControllerBase
         CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetPrescriptionSlipQuery(ConsultationId: consultationId), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = "default",
             ClinicId = Guid.Empty,
@@ -89,7 +89,7 @@ public sealed class PrescriptionsController : ControllerBase
         CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetPrescriptionSlipQuery(PrescriptionNumber: prescriptionNumber), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = "default",
             ClinicId = Guid.Empty,

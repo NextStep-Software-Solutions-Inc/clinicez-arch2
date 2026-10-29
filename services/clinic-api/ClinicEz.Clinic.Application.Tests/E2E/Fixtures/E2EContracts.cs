@@ -241,7 +241,7 @@ public static class E2EContracts
         InRemission
     }
 
-    public record PatientProblemDto(
+    public record PatientMedicalHistoryDto(
         Guid Id,
         Guid ClinicId,
         Guid PatientId,
@@ -318,8 +318,8 @@ public static class E2EContracts
         string HciAccreditationNumber,
         List<DualModeConsultationDto> Consultations,
         List<PatientImmunizationDto> Immunizations,
-        List<PatientProblemDto> Problems,
+        List<PatientMedicalHistoryDto> Problems,
         List<PatientAllergyDto> Allergies,
         List<PhilPenRiskResultDto> NcdRiskAssessments,
-        List<ExtendedTriageVitalsDto> TriageVitals);
+        List<ExtendedTriageVitalsDto> PatientVitals);
 }

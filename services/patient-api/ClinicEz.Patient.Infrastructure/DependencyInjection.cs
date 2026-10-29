@@ -33,6 +33,7 @@ using ClinicEz.Patient.Infrastructure.Services.Jobs.Processors;
 using ClinicEz.Patient.Infrastructure.Services.Storage;
 using ClinicEz.Patient.Infrastructure.Services.Notifications;
 using ClinicEz.Patient.Infrastructure.Interop;
+using ClinicEz.Patient.Infrastructure.Locations;
 
 namespace ClinicEz.Patient.Infrastructure;
 
@@ -110,6 +111,7 @@ public static class DependencyInjection
         services.AddClaimTokenService();
         services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Patient");
         services.AddScoped<ClinicEz.Patient.Application.Common.Interfaces.IImageConversionService, ClinicEz.Patient.Infrastructure.Services.ImageConversionService>();
+        services.AddSingleton<IPsgcLocationService, PsgcLocationService>();
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core

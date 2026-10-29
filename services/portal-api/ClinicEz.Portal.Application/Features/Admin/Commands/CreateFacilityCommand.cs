@@ -45,7 +45,11 @@ public record CreateFacilityCommand(
     Guid? BranchId = null,
     string? Slug = null,
     FacilityDeploymentMode DeploymentMode = FacilityDeploymentMode.SharedCloud,
-    string? ConsoleBaseUrl = null
+    string? ConsoleBaseUrl = null,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null
 ) : IRequest<CreateFacilityResult>;
 
 /// <summary>
@@ -171,7 +175,11 @@ public class CreateFacilityCommandHandler(
             ZipCode = string.IsNullOrWhiteSpace(request.ZipCode) ? targetBranch?.ZipCode : request.ZipCode,
             StreetAddress = string.IsNullOrWhiteSpace(request.StreetAddress) ? targetBranch?.StreetAddress : request.StreetAddress,
             ContactNumber = string.IsNullOrWhiteSpace(request.ContactNumber) ? targetBranch?.ContactNumber : request.ContactNumber,
-            ContactEmail = string.IsNullOrWhiteSpace(request.ContactEmail) ? targetBranch?.ContactEmail : request.ContactEmail
+            ContactEmail = string.IsNullOrWhiteSpace(request.ContactEmail) ? targetBranch?.ContactEmail : request.ContactEmail,
+            RegionPsgc = string.IsNullOrWhiteSpace(request.RegionPsgc) ? targetBranch?.RegionPsgc : request.RegionPsgc,
+            ProvincePsgc = string.IsNullOrWhiteSpace(request.ProvincePsgc) ? targetBranch?.ProvincePsgc : request.ProvincePsgc,
+            CityMunicipalityPsgc = string.IsNullOrWhiteSpace(request.CityMunicipalityPsgc) ? targetBranch?.CityMunicipalityPsgc : request.CityMunicipalityPsgc,
+            BarangayPsgc = string.IsNullOrWhiteSpace(request.BarangayPsgc) ? targetBranch?.BarangayPsgc : request.BarangayPsgc
         };
 
         // The license is derived from the workspace's entitlements and this facility's share of the pool, never from the request.
@@ -213,7 +221,7 @@ public class CreateFacilityCommandHandler(
             BranchPhilHealthAccreditationNumber = targetBranch?.PhilHealthAccreditationNumber,
             BranchPmccNumber = targetBranch?.PhilHealthPmccNumber,
             BranchSoftwareCertificateId = targetBranch?.PhilHealthSoftwareCertificateId,
-            BranchKonsultaEndpoint = targetBranch?.PhilHealthKonsultaEndpoint,
+            BranchKonsultaEndpoint = targetBranch?.PhilHealthBaseUrl,
             IsBranchPhilHealthAccredited = targetBranch != null && targetBranch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(targetBranch.PhilHealthAccreditationNumber)
         }, cancellationToken);
 

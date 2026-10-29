@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { joinApiUrl } from '@shared/safe';
+import { joinApiUrl, type EhrOptionDescriptor } from '@shared/safe';
 import { getPortalApiUrl } from '@/utils/domain';
+import { useEhrOptions } from '@/hooks/useEhrOptions';
 import {
   CheckCircle,
   AlertTriangle,
@@ -72,17 +73,11 @@ export interface RxVerificationData {
 interface RxVerifyClientProps {
   token: string;
   initialData: RxVerificationData;
+  initialDrugstoreOptions?: EhrOptionDescriptor[];
+  initialPharmacyName?: string;
 }
 
-const COMMON_DRUGSTORES = [
-  'Mercury Drug',
-  'Watsons',
-  'Rose Pharmacy',
-  'Southstar Drug',
-  'The Generics Pharmacy (TGP)',
-  'Generika Drugstore',
-  'Other Drugstore',
-];
+// Static array purged: options dynamically hydrated via useEhrOptions('common_drugstore')
 
 const MAX_RECEIPT_SIZE_BYTES = 5 * 1024 * 1024; // 5 MiB ceiling
 
@@ -130,9 +125,49 @@ async function compressReceiptImage(file: File): Promise<File> {
   });
 }
 
-export default function RxVerifyClient({ token, initialData }: RxVerifyClientProps) {
+export default function RxVerifyClient({
+  token,
+  initialData,
+  initialDrugstoreOptions,
+  initialPharmacyName,
+}: RxVerifyClientProps) {
   const [data, setData] = useState<RxVerificationData>(initialData);
-  const [pharmacyName, setPharmacyName] = useState('Mercury Drug');
+  const { options: dynamicDrugstoreOptions } = useEhrOptions('common_drugstore');
+
+  const drugstoreOptions = useMemo(() => {
+    if (dynamicDrugstoreOptions.length > 0) {
+      return dynamicDrugstoreOptions;
+    }
+    return initialDrugstoreOptions ?? [];
+  }, [dynamicDrugstoreOptions, initialDrugstoreOptions]);
+
+  const [pharmacyName, setPharmacyName] = useState(
+    () => initialPharmacyName ?? drugstoreOptions[0]?.label ?? ''
+  );
+
+  // Sync default pharmacy selection once dynamic options arrive if necessary
+  useEffect(() => {
+    if (drugstoreOptions.length > 0) {
+      const match = drugstoreOptions.find(
+        (d) => d.label === pharmacyName || d.code === pharmacyName
+      );
+      if (!match) {
+        setPharmacyName(drugstoreOptions[0].label || drugstoreOptions[0].code);
+      }
+    }
+  }, [drugstoreOptions, pharmacyName]);
+
+  const isOtherPharmacy = useMemo(() => {
+    const selected = drugstoreOptions.find(
+      (d) => d.label === pharmacyName || d.code === pharmacyName
+    );
+    return (
+      selected?.requiresSpecifyText === true ||
+      selected?.code === 'OTHER' ||
+      pharmacyName === 'Other' ||
+      pharmacyName === 'Other Drugstore'
+    );
+  }, [drugstoreOptions, pharmacyName]);
   const [customPharmacy, setCustomPharmacy] = useState('');
   const [branchLocation, setBranchLocation] = useState('');
   const [officialReceiptNumber, setOfficialReceiptNumber] = useState('');
@@ -198,7 +233,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
     e.preventDefault();
     setSubmitError(null);
 
-    const finalPharmacy = pharmacyName === 'Other Drugstore' ? customPharmacy.trim() : pharmacyName;
+    const finalPharmacy = isOtherPharmacy ? customPharmacy.trim() : pharmacyName;
 
     if (!finalPharmacy) {
       setSubmitError('Please specify the pharmacy or drugstore name.');
@@ -700,15 +735,15 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
                         onChange={(e) => setPharmacyName(e.target.value)}
                         className="w-full text-sm border border-input rounded-lg p-2.5 bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
                       >
-                        {COMMON_DRUGSTORES.map((d) => (
-                          <option key={d} value={d}>
-                            {d}
+                        {drugstoreOptions.map((opt) => (
+                          <option key={opt.code} value={opt.label}>
+                            {opt.label}
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    {pharmacyName === 'Other Drugstore' ? (
+                    {isOtherPharmacy ? (
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-foreground">
                           Specify Drugstore Name *

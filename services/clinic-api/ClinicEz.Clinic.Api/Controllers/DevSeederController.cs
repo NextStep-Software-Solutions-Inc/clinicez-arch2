@@ -135,17 +135,17 @@ public sealed class DevSeederController : ControllerBase
 
         var targetClinicId = ResolveClinicId(clinicId);
 
-        IQueryable<ClinicPatient> patientsQuery = _dbContext.Patients.IgnoreQueryFilters();
+        IQueryable<Patient> patientsQuery = _dbContext.Patients.IgnoreQueryFilters();
         IQueryable<ConsultationEncounter> encountersQuery = _dbContext.Consultations.IgnoreQueryFilters();
         IQueryable<PrescriptionItem> prescriptionsQuery = _dbContext.Prescriptions.IgnoreQueryFilters();
         IQueryable<MedicalCertificate> medCertsQuery = _dbContext.MedicalCertificates.IgnoreQueryFilters();
-        IQueryable<PatientPastMedicalHistory> pastHistoriesQuery = _dbContext.PatientPastMedicalHistories.IgnoreQueryFilters();
+        IQueryable<PatientMedicalHistory> pastHistoriesQuery = _dbContext.PatientMedicalHistories.IgnoreQueryFilters().Where(h => h.Category == MedicalHistoryCategory.MedicalHistory);
         IQueryable<PatientFamilyHistory> familyHistoriesQuery = _dbContext.PatientFamilyHistories.IgnoreQueryFilters();
         IQueryable<PatientSocialHistory> socialHistoriesQuery = _dbContext.PatientSocialHistories.IgnoreQueryFilters();
         IQueryable<PatientSurgicalHistory> surgicalHistoriesQuery = _dbContext.PatientSurgicalHistories.IgnoreQueryFilters();
         IQueryable<PatientReproductiveHistory> reproHistoriesQuery = _dbContext.PatientReproductiveHistories.IgnoreQueryFilters();
         IQueryable<PatientAllergy> allergiesQuery = _dbContext.PatientAllergies.IgnoreQueryFilters();
-        IQueryable<PatientProblem> problemsQuery = _dbContext.PatientProblems.IgnoreQueryFilters();
+        IQueryable<PatientMedicalHistory> problemsQuery = _dbContext.PatientMedicalHistories.IgnoreQueryFilters().Where(h => h.Category == MedicalHistoryCategory.ProblemListItem);
         IQueryable<PatientImmunization> immunizationsQuery = _dbContext.PatientImmunizations.IgnoreQueryFilters();
 
         if (targetClinicId.HasValue && targetClinicId.Value != Guid.Empty)

@@ -192,6 +192,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(e => new { e.TenantId, e.Code })
                 .HasFilter("\"IsDeleted\" = false AND \"Code\" IS NOT NULL")
                 .IsUnique();
+
+            entity.Property(e => e.PhilHealthAccreditationNumber).HasMaxLength(32);
+            entity.Property(e => e.PhilHealthPmccNumber).HasMaxLength(32);
+            entity.Property(e => e.PhilHealthSoftwareCertificateId).HasMaxLength(64);
+            entity.Property(e => e.PhilHealthEncryptedSecretKey).HasMaxLength(512);
+            entity.Property(e => e.PhilHealthEncryptedCipherKey).HasMaxLength(512);
+            entity.Property(e => e.PhilHealthBaseUrl).HasMaxLength(2048);
+            entity.Property(e => e.RegionPsgc).HasMaxLength(10);
+            entity.Property(e => e.ProvincePsgc).HasMaxLength(10);
+            entity.Property(e => e.CityMunicipalityPsgc).HasMaxLength(10);
+            entity.Property(e => e.BarangayPsgc).HasMaxLength(10);
         });
 
         modelBuilder.Entity<Facility>(entity =>
@@ -204,6 +215,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.IsPatientDiscoveryEligible).HasDefaultValue(false);
             entity.Property(e => e.CellId).HasMaxLength(80).HasDefaultValue(string.Empty);
             entity.Property(e => e.HubClientId).HasMaxLength(128);
+            entity.Property(e => e.RegionPsgc).HasMaxLength(10);
+            entity.Property(e => e.ProvincePsgc).HasMaxLength(10);
+            entity.Property(e => e.CityMunicipalityPsgc).HasMaxLength(10);
+            entity.Property(e => e.BarangayPsgc).HasMaxLength(10);
             entity.HasOne(e => e.Tenant)
                 .WithMany()
                 .HasForeignKey(e => e.TenantId)

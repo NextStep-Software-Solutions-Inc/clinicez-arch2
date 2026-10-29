@@ -50,13 +50,13 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task UpdateClinicSettings_StaffMutation_CannotAlter_IsWorkspaceEligible(bool initialEligibility)
+    public async Task UpdateFacilitySettings_StaffMutation_CannotAlter_IsWorkspaceEligible(bool initialEligibility)
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var existingSettings = new ClinicSettings
+        var existingSettings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -88,7 +88,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
         var resultDto = await handler.Handle(updateCommand, CancellationToken.None);
 
         // Assert - DB entity and returned DTO must strictly preserve initial IsWorkspaceEligible
-        var refreshedSettings = await context.ClinicSettings.IgnoreQueryFilters()
+        var refreshedSettings = await context.Settings.IgnoreQueryFilters()
             .FirstAsync(s => s.ClinicId == _testClinicId);
 
         refreshedSettings.IsWorkspaceEligible.Should().Be(initialEligibility,
@@ -98,11 +98,11 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_WhenCreatingInitialSettings_DefaultsIsWorkspaceEligibleToFalse()
+    public async Task UpdateFacilitySettings_WhenCreatingInitialSettings_DefaultsIsWorkspaceEligibleToFalse()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // No pre-existing settings in database
         var handler = new UpdateClinicSettingsCommandHandler(settingsRepo, _clinicContext, uow);
@@ -115,11 +115,11 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
         var resultDto = await handler.Handle(command, CancellationToken.None);
 
         // Assert
-        var created = await context.ClinicSettings.IgnoreQueryFilters()
+        var created = await context.Settings.IgnoreQueryFilters()
             .FirstAsync(s => s.ClinicId == _testClinicId);
 
         created.IsWorkspaceEligible.Should().BeFalse(
-            "New ClinicSettings created by staff command must default IsWorkspaceEligible to false");
+            "New FacilitySettings created by staff command must default IsWorkspaceEligible to false");
         resultDto.IsWorkspaceEligible.Should().BeFalse();
         created.ClinicName.Should().Be("Brand New Clinic");
     }
@@ -133,9 +133,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -149,7 +149,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -160,7 +160,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -199,9 +199,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         if (hasDoctor)
@@ -220,7 +220,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
 
         if (hasActiveService)
         {
-            await servicesRepo.AddAsync(new ClinicServiceItem
+            await servicesRepo.AddAsync(new ServiceItem
             {
                 TenantId = _testTenantId,
                 ClinicId = _testClinicId,
@@ -232,7 +232,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             }, CancellationToken.None);
         }
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -261,13 +261,13 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         // Ineligible, no hours, no doctor, no service
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -300,9 +300,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         // Zero settings in DB
@@ -332,12 +332,12 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -382,9 +382,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
         await staffRepo.AddAsync(new StaffMember
         {
@@ -397,7 +397,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -408,7 +408,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -484,9 +484,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -501,7 +501,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -512,7 +512,7 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             TenantSlug = "metro-health",
@@ -591,9 +591,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
         // Zero settings, zero staff, zero services
         var handler = new GetClinicPublishingReadinessQueryHandler(
@@ -619,11 +619,11 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -652,9 +652,9 @@ public class ChallengerM2TwoTierGovernanceEmpiricalTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,

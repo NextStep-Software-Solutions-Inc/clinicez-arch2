@@ -14,16 +14,16 @@ namespace ClinicEz.Clinic.Application.Features.Appointments.Services;
 
 public sealed class AppointmentNotificationDispatcher : IAppointmentNotificationDispatcher
 {
-    private readonly IRepository<ClinicPatient> _patientRepository;
-    private readonly IRepository<ClinicSettings> _settingsRepository;
-    private readonly IRepository<ClinicStaffNotification> _staffNotificationRepository;
+    private readonly IRepository<Patient> _patientRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
+    private readonly IRepository<StaffNotification> _staffNotificationRepository;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<AppointmentNotificationDispatcher> _logger;
 
     public AppointmentNotificationDispatcher(
-        IRepository<ClinicPatient> patientRepository,
-        IRepository<ClinicSettings> settingsRepository,
-        IRepository<ClinicStaffNotification> staffNotificationRepository,
+        IRepository<Patient> patientRepository,
+        IRepository<FacilitySettings> settingsRepository,
+        IRepository<StaffNotification> staffNotificationRepository,
         IInteropPublisher publisher,
         ILogger<AppointmentNotificationDispatcher> logger)
     {
@@ -41,13 +41,13 @@ public sealed class AppointmentNotificationDispatcher : IAppointmentNotification
         var syncPatientId = await _patientRepository.Query(
                 p => p.Id == appointment.PatientId && p.ClinicId == appointment.ClinicId,
                 ignoreQueryFilters: true)
-            .Select(p => p.SyncPatientId)
+            .Select(p => p.CloudPatientId)
             .FirstOrDefaultAsync(ct);
 
         if (!syncPatientId.HasValue || syncPatientId.Value == Guid.Empty)
         {
             _logger.LogInformation(
-                "Appointment {AppointmentId} patient {PatientId} is not linked to mobile app account (SyncPatientId is null). Skipping push notification.",
+                "Appointment {AppointmentId} patient {PatientId} is not linked to mobile app account (CloudPatientId is null). Skipping push notification.",
                 appointment.Id, appointment.PatientId);
             return;
         }
@@ -79,7 +79,7 @@ public sealed class AppointmentNotificationDispatcher : IAppointmentNotification
         _publisher.Enqueue(InteropTypes.PatientAppointmentAlert, from, to, appointment.Id, payload);
 
         _logger.LogInformation(
-            "Enqueued {AlertKind} alert for appointment {AppointmentId} to patient {SyncPatientId}.",
+            "Enqueued {AlertKind} alert for appointment {AppointmentId} to patient {CloudPatientId}.",
             alertKind, appointment.Id, syncPatientId.Value);
     }
 
@@ -111,7 +111,7 @@ public sealed class AppointmentNotificationDispatcher : IAppointmentNotification
         var title = ResolveStaffNotificationTitle(appointment, eventType);
         var body = ResolveStaffNotificationBody(appointment, eventType);
 
-        var staffNotification = new ClinicStaffNotification
+        var staffNotification = new StaffNotification
         {
             Id = Guid.NewGuid(),
             TenantId = appointment.TenantId ?? settings?.TenantId ?? "clinic",

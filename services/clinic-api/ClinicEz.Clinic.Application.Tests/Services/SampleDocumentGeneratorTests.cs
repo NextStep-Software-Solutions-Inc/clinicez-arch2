@@ -37,7 +37,7 @@ public class SampleDocumentGeneratorTests
     [InlineData("Clinic Analytics Summary", "Sample-ExecutiveAnalyticsSummary.pdf")]
     public void GenerateSamplePdf_ReturnsValidPdfAndExpectedFileName(string docType, string expectedFileName)
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-sample",
             ClinicName = "Test Sample Clinic",
@@ -61,7 +61,7 @@ public class SampleDocumentGeneratorTests
     [Fact]
     public void GenerateSamplePdf_SupportsWetSignatureAndCustomPaperSize()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-sample",
             ClinicName = "Test Sample Clinic"
@@ -84,7 +84,7 @@ public class SampleDocumentGeneratorTests
     [Fact]
     public void SampleDocumentFixtures_ProduceNonEmptyModels()
     {
-        var settings = new ClinicSettings { TenantId = "t-1", ClinicName = "Sample Clinic" };
+        var settings = new FacilitySettings { TenantId = "t-1", ClinicName = "Sample Clinic" };
         var doctor = SampleDocumentFixtures.CreateSampleDoctor(settings, SignatureMode.WetSignature);
         var patient = SampleDocumentFixtures.CreateSamplePatient(settings);
 

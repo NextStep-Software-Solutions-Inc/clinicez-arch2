@@ -46,6 +46,34 @@ export interface PatientJoinRequestedPayload {
   email?: string;
   address?: string;
 
+  // Structured Cascading 10-digit PSGC Address
+  regionPsgc?: string;
+  provincePsgc?: string;
+  cityMunicipalityPsgc?: string;
+  barangayPsgc?: string;
+  regionName?: string;
+  provinceName?: string;
+  cityMunicipalityName?: string;
+  barangayName?: string;
+  streetAddress?: string;
+  zipCode?: string;
+
+  // Multi-address list
+  addresses?: Array<{
+    addressType: "Permanent" | "Current";
+    isSameAsPermanent?: boolean;
+    regionPsgc?: string;
+    provincePsgc?: string;
+    cityMunicipalityPsgc?: string;
+    barangayPsgc?: string;
+    regionName?: string;
+    provinceName?: string;
+    cityMunicipalityName?: string;
+    barangayName?: string;
+    streetAddress?: string;
+    zipCode?: string;
+  }>;
+
   // Statutory PhilHealth & Welfare Identifiers
   philHealthPin?: string;
   memberType?: "MM" | "DD";

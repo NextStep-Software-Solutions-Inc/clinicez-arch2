@@ -17,8 +17,8 @@ using ClinicEz.Clinic.Application.Features.Problems.Dtos;
 using ClinicEz.Clinic.Application.Features.Procedures.DTOs;
 using ClinicEz.Clinic.Application.Features.Records.DTOs;
 using ClinicEz.Clinic.Application.Features.Triage.DTOs;
-using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
@@ -31,47 +31,52 @@ public record GetPatientChartQuery(Guid PatientId) : IRequest<PatientChartDto>;
 public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery, PatientChartDto>
 {
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
-    private readonly IRepository<TriageVitals> _triageRepo;
-    private readonly IRepository<ClinicalProcedure> _procedureRepo;
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<PatientVitals> _triageRepo;
+    private readonly IRepository<Procedure> _procedureRepo;
+    private readonly IRepository<LabOrder> _labOrderRepo;
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<PatientSurgicalHistory>? _surgicalRepo;
     private readonly IRepository<PatientSocialHistory>? _socialRepo;
     private readonly IRepository<PatientReproductiveHistory>? _reproductiveRepo;
     private readonly IRepository<NcdRiskAssessment>? _ncdRepo;
-    private readonly Services.ILegacyPatientProfileIngestionService? _legacyIngestion;
-    private readonly IRepository<ClinicPatient>? _patientRepo;
-    private readonly IRepository<PatientProblem>? _problemRepo;
+    private readonly IRepository<Patient>? _patientRepo;
+    private readonly IRepository<PatientMedicalHistory>? _medicalHistoryRepo;
     private readonly IRepository<PatientAllergy>? _allergyRepo;
     private readonly IRepository<PatientImmunization>? _immunizationRepo;
-    private readonly IRepository<ClinicRecordAttachment>? _attachmentRepo;
-    private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
+    private readonly IRepository<RecordAttachment>? _attachmentRepo;
+    private readonly IRepository<PatientPhysicalExam>? _physicalExamRepo;
     private readonly IRepository<DentalToothRecord>? _dentalToothRepo;
     private readonly IRepository<MedicalCertificate>? _medCertRepo;
     private readonly IRepository<ReferralLetter>? _referralRepo;
+    private readonly IRepository<PatientPhilHealthMembership>? _membershipRepo;
+    private readonly IRepository<PatientYakapEnlistment>? _enlistmentRepo;
+    private readonly IRepository<PatientAlert>? _alertRepo;
 
     public GetPatientChartQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
-        IRepository<TriageVitals> triageRepo,
-        IRepository<ClinicalProcedure> procedureRepo,
-        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<PatientVitals> triageRepo,
+        IRepository<Procedure> procedureRepo,
+        IRepository<LabOrder> labOrderRepo,
         IRepository<Invoice> invoiceRepo,
         IClinicContext clinicContext,
         IRepository<PatientSurgicalHistory>? surgicalRepo = null,
         IRepository<PatientSocialHistory>? socialRepo = null,
         IRepository<PatientReproductiveHistory>? reproductiveRepo = null,
         IRepository<NcdRiskAssessment>? ncdRepo = null,
-        Services.ILegacyPatientProfileIngestionService? legacyIngestion = null,
-        IRepository<ClinicPatient>? patientRepo = null,
-        IRepository<PatientProblem>? problemRepo = null,
+        IRepository<Patient>? patientRepo = null,
+        IRepository<PatientMedicalHistory>? medicalHistoryRepo = null,
         IRepository<PatientAllergy>? allergyRepo = null,
         IRepository<PatientImmunization>? immunizationRepo = null,
-        IRepository<ClinicRecordAttachment>? attachmentRepo = null,
-        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null,
+        IRepository<RecordAttachment>? attachmentRepo = null,
+        IRepository<PatientPhysicalExam>? physicalExamRepo = null,
         IRepository<DentalToothRecord>? dentalToothRepo = null,
         IRepository<MedicalCertificate>? medCertRepo = null,
-        IRepository<ReferralLetter>? referralRepo = null)
+        IRepository<ReferralLetter>? referralRepo = null,
+        IRepository<PatientPhilHealthMembership>? membershipRepo = null,
+        IRepository<PatientYakapEnlistment>? enlistmentRepo = null,
+        IRepository<PatientAlert>? alertRepo = null,
+        IRepository<PatientMedicalHistory>? problemRepo = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -83,9 +88,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _socialRepo = socialRepo;
         _reproductiveRepo = reproductiveRepo;
         _ncdRepo = ncdRepo;
-        _legacyIngestion = legacyIngestion;
         _patientRepo = patientRepo;
-        _problemRepo = problemRepo;
+        _medicalHistoryRepo = medicalHistoryRepo ?? problemRepo;
         _allergyRepo = allergyRepo;
         _immunizationRepo = immunizationRepo;
         _attachmentRepo = attachmentRepo;
@@ -93,6 +97,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _dentalToothRepo = dentalToothRepo;
         _medCertRepo = medCertRepo;
         _referralRepo = referralRepo;
+        _membershipRepo = membershipRepo;
+        _enlistmentRepo = enlistmentRepo;
+        _alertRepo = alertRepo;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -133,12 +140,164 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             .ToListAsync(cancellationToken);
 
         // Demographics & Verified Patient Profile
-        ClinicPatient? patient = null;
+        Patient? patient = null;
         if (_patientRepo != null)
         {
             patient = await _patientRepo.Query(p => p.Id == request.PatientId)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        // 1NF Collections
+        PatientPhilHealthMembershipDto? philhealthDto = null;
+        if (_membershipRepo != null)
+        {
+            var mem = await _membershipRepo.Query(m => m.PatientId == request.PatientId).FirstOrDefaultAsync(cancellationToken);
+            if (mem != null)
+            {
+                philhealthDto = new PatientPhilHealthMembershipDto(
+                    mem.Id,
+                    mem.MemberType.ToString(),
+                    mem.DependentRelationship?.ToString(),
+                    mem.MemberPin,
+                    mem.PrincipalMemberPin,
+                    mem.PrincipalLastName,
+                    mem.PrincipalFirstName,
+                    mem.PrincipalMiddleName,
+                    mem.PrincipalSuffix,
+                    mem.PrincipalDateOfBirth,
+                    mem.PrincipalGender?.ToString(),
+                    mem.MembershipCategoryCode,
+                    mem.MembershipCategoryDesc,
+                    mem.EmployerPin,
+                    mem.EmployerName,
+                    mem.DefaultWalkInAtc
+                );
+            }
+        }
+
+        List<PatientYakapEnlistmentDto>? enlistmentDtos = null;
+        if (_enlistmentRepo != null)
+        {
+            var enlistments = await _enlistmentRepo.Query(e => e.PatientId == request.PatientId)
+                .OrderByDescending(e => e.EnlistmentDate)
+                .ToListAsync(cancellationToken);
+            enlistmentDtos = enlistments.Select(e => new PatientYakapEnlistmentDto(
+                e.Id,
+                e.EffectiveYear,
+                e.Status.ToString(),
+                e.Source.ToString(),
+                e.PackageType.ToString(),
+                e.EnlistmentDate,
+                e.ValidUntil,
+                e.CaseNo,
+                e.EnlistmentTransNo,
+                e.ProfilingTransNo,
+                e.ProfilingDate,
+                e.ProfilingAtc,
+                e.IsWalkedIn,
+                e.HasPatientConsent,
+                e.ConsentSignedAtUtc,
+                e.CreatedByStaffId,
+                e.CreatedByStaffName,
+                e.EnlistmentTransDate
+            )).ToList();
+        }
+
+        List<PatientAlertDto>? alertDtos = null;
+        if (_alertRepo != null)
+        {
+            var alerts = await _alertRepo.Query(a => a.PatientId == request.PatientId)
+                .OrderByDescending(a => a.Severity)
+                .ThenByDescending(a => a.CreatedAt)
+                .ToListAsync(cancellationToken);
+            alertDtos = alerts.Select(a => new PatientAlertDto(
+                a.Id,
+                a.Category.ToString(),
+                a.Code,
+                a.Title,
+                a.Severity.ToString(),
+                a.Status.ToString(),
+                a.ExpiresAt,
+                a.Notes,
+                a.RecordedByStaffId,
+                a.RecordedByStaffName
+            )).ToList();
+        }
+
+        List<PatientMedicalHistoryDto>? medicalHistoryDtos = null;
+        var problemDtos = new List<PatientProblemDto>();
+        if (_medicalHistoryRepo != null)
+        {
+            var medHistories = await _medicalHistoryRepo.Query(m => m.PatientId == request.PatientId)
+                .AsNoTracking()
+                .OrderByDescending(m => m.OnsetDate ?? DateOnly.MinValue)
+                .ThenByDescending(m => m.CreatedAt)
+                .ToListAsync(cancellationToken);
+            medicalHistoryDtos = medHistories.Select(m => new PatientMedicalHistoryDto(
+                m.Id,
+                m.Category.ToString(),
+                m.VerificationStatus.ToString(),
+                m.ConditionTitle,
+                m.Icd10Code,
+                m.SnomedCode,
+                m.PhilHealthMdiseaseCode,
+                m.SpecificDescription,
+                m.Status.ToString(),
+                m.Severity?.ToString(),
+                m.IsChronicNcd,
+                m.OnsetDate,
+                m.ResolvedDate,
+                m.ConsultationEncounterId,
+                m.ClinicalNotes,
+                m.RecordedByStaffId,
+                m.RecordedByStaffName
+            )).ToList();
+
+            problemDtos = medHistories
+                .Where(p => p.Category == MedicalHistoryCategory.ProblemListItem)
+                .Select(p => new PatientProblemDto(
+                    p.Id,
+                    p.ClinicId,
+                    p.PatientId,
+                    p.ConsultationEncounterId,
+                    p.Icd10Code ?? string.Empty,
+                    p.ConditionTitle,
+                    p.PhilHealthMdiseaseCode,
+                    p.Status.ToString(),
+                    p.Severity?.ToString() ?? "Moderate",
+                    p.IsChronicNcd,
+                    p.OnsetDate,
+                    p.ResolvedDate,
+                    p.ClinicalNotes,
+                    p.RecordedByStaffId ?? Guid.Empty,
+                    p.RecordedByStaffName ?? string.Empty,
+                    p.CreatedAt
+                )).ToList();
+
+            if (problemDtos.Count == 0)
+            {
+                problemDtos = medHistories
+                    .Where(p => p.Category == MedicalHistoryCategory.MedicalHistory)
+                    .Select(p => new PatientProblemDto(
+                        p.Id,
+                        p.ClinicId,
+                        p.PatientId,
+                        p.ConsultationEncounterId,
+                        p.Icd10Code ?? string.Empty,
+                        p.ConditionTitle,
+                        p.PhilHealthMdiseaseCode,
+                        p.Status.ToString(),
+                        p.Severity?.ToString() ?? "Moderate",
+                        p.IsChronicNcd,
+                        p.OnsetDate,
+                        p.ResolvedDate,
+                        p.ClinicalNotes,
+                        p.RecordedByStaffId ?? Guid.Empty,
+                        p.RecordedByStaffName ?? string.Empty,
+                        p.CreatedAt
+                    )).ToList();
+            }
         }
 
         string patientName;
@@ -154,42 +313,58 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             var age = today.Year - patient.DateOfBirth.Year;
             if (patient.DateOfBirth > today.AddYears(-age)) age--;
 
-            var customProfile = ExtractCustomProfile(patient);
-            var memberStatus = ResolveMemberStatus(patient, customProfile);
-
-            var atc = consultations.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PhilHealthAtc))?.PhilHealthAtc
-                ?? customProfile?.Atc
-                ?? (string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? null : "A");
-
-            var activeCaseNo = ResolveActiveCaseNo(patient)
+            var activeCaseNo = enlistmentDtos?.FirstOrDefault(e => e.Status == "Active")?.CaseNo
+                ?? ResolveActiveCaseNo(patient)
                 ?? consultations.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PhilHealthCaseNo))?.PhilHealthCaseNo
                 ?? (string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? null : $"C{patient.PatientCode.Replace("-", string.Empty)}");
+
+            var memberStatus = philhealthDto?.MemberType
+                ?? (!string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? "Member" : "Non-Member");
+
+            var atc = consultations.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PhilHealthAtc))?.PhilHealthAtc
+                ?? philhealthDto?.DefaultWalkInAtc
+                ?? (string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? null : "A");
+
+            var alertsSummary = alertDtos != null && alertDtos.Count > 0
+                ? string.Join("; ", alertDtos.Where(a => a.IsActive).Select(a => $"{a.Category}: {a.Title}"))
+                : null;
 
             demographicsDto = new PatientDemographicsDto(
                 Dob: patient.DateOfBirth,
                 Age: age,
-                Gender: patient.Gender,
-                CivilStatus: patient.CivilStatus,
+                Gender: patient.Gender.ToString(),
+                CivilStatus: patient.CivilStatus?.ToString(),
                 ContactNumber: patient.ContactNumber,
                 Email: patient.Email,
-                AddressLine: GetCustomFieldString(patient, "primary_address_line"),
-                Barangay: GetCustomFieldString(patient, "primary_barangay"),
+                AddressLine: patient.Addresses.FirstOrDefault()?.StreetAddress ?? GetCustomFieldString(patient, "primary_address_line"),
+                Barangay: patient.Addresses.FirstOrDefault()?.BarangayName ?? GetCustomFieldString(patient, "primary_barangay"),
                 City: GetCustomFieldString(patient, "primary_city"),
                 Province: GetCustomFieldString(patient, "primary_province"),
-                PhilHealthNumber: !string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? patient.PhilHealthNumber : customProfile?.Pin,
+                PhilHealthNumber: philhealthDto?.PhilHealthPin ?? patient.PhilHealthNumber,
                 SeniorCitizenId: patient.SeniorCitizenId,
                 PwdId: patient.PwdId,
-                BloodType: !string.IsNullOrWhiteSpace(patient.BloodType) ? patient.BloodType : customProfile?.BloodType,
+                BloodType: patient.BloodType.HasValue ? patient.BloodType.Value switch
+                {
+                    BloodType.APositive => "A+",
+                    BloodType.ANegative => "A-",
+                    BloodType.BPositive => "B+",
+                    BloodType.BNegative => "B-",
+                    BloodType.ABPositive => "AB+",
+                    BloodType.ABNegative => "AB-",
+                    BloodType.OPositive => "O+",
+                    BloodType.ONegative => "O-",
+                    _ => patient.BloodType.Value.ToString()
+                } : null,
                 MemberStatus: memberStatus,
                 PhilHealthAtc: atc,
                 ActiveCaseNo: activeCaseNo,
-                EmergencyContactName: GetCustomFieldString(patient, "emergency_contact_name"),
-                EmergencyContactPhone: GetCustomFieldString(patient, "emergency_contact_phone"),
-                EmergencyContactRelationship: GetCustomFieldString(patient, "emergency_contact_relationship"),
-                Alerts: patient.Alerts,
+                EmergencyContactName: patient.EmergencyContactName ?? GetCustomFieldString(patient, "emergency_contact_name"),
+                EmergencyContactPhone: patient.EmergencyContactNumber ?? GetCustomFieldString(patient, "emergency_contact_phone"),
+                EmergencyContactRelationship: patient.EmergencyContactRelationship ?? GetCustomFieldString(patient, "emergency_contact_relationship"),
+                Alerts: alertsSummary,
                 PatientCode: patient.PatientCode,
                 ClinicEzId: patient.ClinicEzId,
-                VerificationStatus: patient.VerificationStatus ?? "Verified"
+                VerificationStatus: patient.VerificationStatus.ToString()
             );
         }
         else
@@ -199,36 +374,6 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 ?? procedures.FirstOrDefault()?.PatientName
                 ?? invoices.FirstOrDefault()?.PatientName
                 ?? "Registered Patient";
-        }
-
-        // Problems
-        var problemDtos = new List<PatientProblemDto>();
-        if (_problemRepo != null)
-        {
-            var problems = await _problemRepo.Query(p => p.PatientId == request.PatientId)
-                .AsNoTracking()
-                .OrderByDescending(p => p.OnsetDate ?? DateOnly.MinValue)
-                .ThenByDescending(p => p.CreatedAt)
-                .ToListAsync(cancellationToken);
-
-            problemDtos = problems.Select(p => new PatientProblemDto(
-                p.Id,
-                p.ClinicId,
-                p.PatientId,
-                p.ConsultationEncounterId,
-                p.Icd10Code,
-                p.ProblemTitle,
-                p.PhilHealthMdiseaseCode,
-                p.Status.ToString(),
-                p.Severity.ToString(),
-                p.IsChronicNcd,
-                p.OnsetDate,
-                p.ResolvedDate,
-                p.ClinicalNotes,
-                p.RecordedByDoctorId,
-                p.RecordedByDoctorName,
-                p.CreatedAt
-            )).ToList();
         }
 
         // Allergies
@@ -256,11 +401,6 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 a.Notes,
                 a.CreatedAt
             )).ToList();
-        }
-
-        if (_legacyIngestion != null)
-        {
-            await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
         }
 
         // Immunizations
@@ -435,16 +575,10 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 c.PhilHealthSignSympCode,
                 c.PhilHealthOtherComplaint,
                 c.PhilHealthPainSite,
-                c.PhilHealthCaseNo ?? c.HciCaseNo,
-                c.PhilHealthSoapTransNo ?? c.SoapTransNo,
+                c.PhilHealthCaseNo,
+                c.PhilHealthSoapTransNo,
                 c.DoctorPhilHealthPan,
                 c.PhilHealthAtc,
-                c.HciCaseNo ?? c.PhilHealthCaseNo,
-                c.HciTransNo,
-                c.SoapTransNo ?? c.PhilHealthSoapTransNo,
-                c.GeneralSurveyId,
-                c.GeneralSurveyRemarks,
-                c.PhysicalExamFindingsJson,
                 DentalFindings: encounterFindings.Count > 0 ? encounterFindings : null
             );
         }).ToList();
@@ -576,11 +710,6 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         PatientReproductiveHistoryDto? reproductiveDto = null;
         NcdRiskAssessmentDto? latestNcdDto = null;
 
-        if (_legacyIngestion != null)
-        {
-            await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
-        }
-
         if (_surgicalRepo != null)
         {
             var surgeries = await _surgicalRepo.Query(s => s.PatientId == request.PatientId)
@@ -643,35 +772,73 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             }
         }
 
+        List<PatientPhysicalExamDto>? physicalExamDtos = null;
         PatientPhysicalExamProfileDto? physicalExamDto = null;
+        PatientPhysicalExamDto? latestPhysicalExamDto = null;
         if (_physicalExamRepo != null)
         {
-            var pe = await _physicalExamRepo.Query(p => p.PatientId == request.PatientId).FirstOrDefaultAsync(cancellationToken);
-            if (pe != null)
+            var peList = await _physicalExamRepo.Query(p => p.PatientId == request.PatientId)
+                .Include(p => p.Findings)
+                .OrderByDescending(p => p.ExamDate)
+                .ToListAsync(cancellationToken);
+
+            physicalExamDtos = peList.Select(pe => new PatientPhysicalExamDto(
+                pe.Id,
+                DateOnly.FromDateTime(pe.ExamDate),
+                pe.ConsultationEncounterId,
+                pe.ExaminedByStaffId,
+                pe.ExaminedByStaffName,
+                pe.GeneralSurveyStatus.ToString(),
+                pe.GeneralSurveyRemarks,
+                pe.MusculoskeletalRemarks,
+                pe.PsychiatricRemarks,
+                pe.LymphaticRemarks,
+                pe.HeentRemarks,
+                pe.ChestLungsRemarks,
+                pe.HeartRemarks,
+                pe.AbdomenRemarks,
+                pe.GenitourinaryRemarks,
+                pe.DigitalRectalRemarks,
+                pe.SkinRemarks,
+                pe.NeurologicalRemarks,
+                pe.Findings.Select(f => new PatientPhysicalExamFindingDto(
+                    f.Id,
+                    f.System.ToString(),
+                    f.IsNormal,
+                    f.FindingTitle,
+                    f.PhilHealthFindingCode,
+                    f.BodySite,
+                    f.Laterality
+                )).ToList()
+            )).ToList();
+
+            latestPhysicalExamDto = physicalExamDtos.FirstOrDefault();
+            var latestPe = peList.FirstOrDefault();
+            if (latestPe != null)
             {
                 physicalExamDto = new PatientPhysicalExamProfileDto(
-                    pe.Id,
-                    pe.PatientId,
-                    pe.GenSurveyId,
-                    pe.GenSurveyRemarks,
-                    pe.SkinId,
-                    pe.SkinRemarks,
-                    pe.HeentId,
-                    pe.HeentRemarks,
-                    pe.ChestId,
-                    pe.ChestRemarks,
-                    pe.HeartId,
-                    pe.HeartRemarks,
-                    pe.AbdomenId,
-                    pe.AbdomenRemarks,
-                    pe.NeuroId,
-                    pe.NeuroRemarks,
-                    pe.RectalId,
-                    pe.RectalRemarks,
-                    pe.GuId,
-                    pe.GuRemarks,
-                    pe.CreatedAt,
-                    pe.UpdatedAt
+                    latestPe.Id,
+                    latestPe.PatientId,
+                    ((int)latestPe.GeneralSurveyStatus).ToString(),
+                    latestPe.GeneralSurveyRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Skin)?.PhilHealthFindingCode ?? "1",
+                    latestPe.SkinRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Heent)?.PhilHealthFindingCode ?? "11",
+                    latestPe.HeentRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Chest)?.PhilHealthFindingCode ?? "6",
+                    latestPe.ChestLungsRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Heart)?.PhilHealthFindingCode ?? "5",
+                    latestPe.HeartRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Abdomen)?.PhilHealthFindingCode ?? "7",
+                    latestPe.AbdomenRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Neurological)?.PhilHealthFindingCode ?? "6",
+                    latestPe.NeurologicalRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Rectal)?.PhilHealthFindingCode ?? "1",
+                    latestPe.DigitalRectalRemarks,
+                    latestPe.Findings?.FirstOrDefault(f => f.System == PhysicalExamSystem.Genitourinary)?.PhilHealthFindingCode ?? "1",
+                    latestPe.GenitourinaryRemarks,
+                    latestPe.CreatedAt,
+                    latestPe.UpdatedAt
                 );
             }
         }
@@ -767,58 +934,17 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             DentalTeeth: dentalToothDtos,
             DentalProcedures: procedureDtos.Where(p => p.Category == "Dental" || p.ToothNumber.HasValue).ToList(),
             MedicalCertificates: medicalCertificateDtos,
-            ReferralLetters: referralLetterDtos
+            ReferralLetters: referralLetterDtos,
+            PhilHealthMembership: philhealthDto,
+            YakapEnlistments: enlistmentDtos,
+            Alerts: alertDtos,
+            MedicalHistories: medicalHistoryDtos,
+            PhysicalExams: physicalExamDtos,
+            LatestPhysicalExam: latestPhysicalExamDto
         );
     }
 
-    private static PhilHealthPatientProfileDto? ExtractCustomProfile(ClinicPatient patient)
-    {
-        if (patient.CustomFields == null || !patient.CustomFields.TryGetValue("philhealth_profile", out var profObj) || profObj == null)
-            return null;
-
-        if (profObj is PhilHealthPatientProfileDto typed)
-            return typed;
-
-        try
-        {
-            var json = profObj.ToString();
-            if (!string.IsNullOrWhiteSpace(json))
-            {
-                return JsonSerializer.Deserialize<PhilHealthPatientProfileDto>(json,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-        }
-        catch
-        {
-            // Fall through gracefully
-        }
-
-        return null;
-    }
-
-    private static string? ResolveMemberStatus(ClinicPatient patient, PhilHealthPatientProfileDto? customProfile)
-    {
-        if (!string.IsNullOrWhiteSpace(customProfile?.MemberType))
-        {
-            return customProfile.MemberType.Equals("DD", StringComparison.OrdinalIgnoreCase) ? "Dependent" : "Member";
-        }
-
-        if (patient.CustomFields != null)
-        {
-            if (patient.CustomFields.TryGetValue("member_status", out var ms) && ms != null && !string.IsNullOrWhiteSpace(ms.ToString()))
-                return ms.ToString();
-
-            if (patient.CustomFields.TryGetValue("member_type", out var mt) && mt != null && !string.IsNullOrWhiteSpace(mt.ToString()))
-                return mt.ToString()!.Equals("DD", StringComparison.OrdinalIgnoreCase) ? "Dependent" : "Member";
-        }
-
-        if (!string.IsNullOrWhiteSpace(patient.PhilHealthNumber))
-            return "Member";
-
-        return "Non-Member";
-    }
-
-    private static string? GetCustomFieldString(ClinicPatient patient, string key)
+    private static string? GetCustomFieldString(Patient patient, string key)
     {
         if (patient.CustomFields == null) return null;
         if (!patient.CustomFields.TryGetValue(key, out var val) || val == null) return null;
@@ -836,68 +962,76 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         return string.IsNullOrWhiteSpace(str) ? null : str;
     }
 
-    private static string? ResolveActiveCaseNo(ClinicPatient patient)
+    private static string? ResolveActiveCaseNo(Patient patient)
     {
-        if (patient.CustomFields == null) return null;
-
-        if (patient.CustomFields.TryGetValue("yakap_enlistments", out var enlistmentObj) && enlistmentObj != null)
+        if (patient.YakapEnlistments != null && patient.YakapEnlistments.Count > 0)
         {
-            try
-            {
-                // Case 1: JsonElement array
-                if (enlistmentObj is System.Text.Json.JsonElement elem && elem.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    foreach (var item in elem.EnumerateArray())
-                    {
-                        var status = item.TryGetProperty("status", out var sProp) ? sProp.GetString() : null;
-                        if (!string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase)) continue;
+            var active = patient.YakapEnlistments.LastOrDefault(e => e.Status == YakapEnlistmentStatus.Active && !string.IsNullOrWhiteSpace(e.CaseNo));
+            if (active != null) return active.CaseNo;
+        }
 
-                        var caseNo = item.TryGetProperty("case_no", out var cProp) ? cProp.GetString() : null;
-                        if (!string.IsNullOrWhiteSpace(caseNo)) return caseNo;
+        if (patient.CustomFields != null)
+        {
+            if (patient.CustomFields.TryGetValue("active_case_no", out var acn) && acn != null && !string.IsNullOrWhiteSpace(acn.ToString()))
+                return acn.ToString()!.Trim();
+
+            if (patient.CustomFields.TryGetValue("philhealth_case_no", out var pcn) && pcn != null && !string.IsNullOrWhiteSpace(pcn.ToString()))
+                return pcn.ToString()!.Trim();
+
+            if (patient.CustomFields.TryGetValue("case_no", out var cn) && cn != null && !string.IsNullOrWhiteSpace(cn.ToString()))
+                return cn.ToString()!.Trim();
+
+            if (patient.CustomFields.TryGetValue("yakap_enlistments", out var raw) && raw != null)
+            {
+                if (raw is System.Text.Json.JsonElement je)
+                {
+                    if (je.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var item in je.EnumerateArray())
+                        {
+                            var status = item.TryGetProperty("status", out var st) ? st.GetString() : null;
+                            if (string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase) || status == null)
+                            {
+                                if ((item.TryGetProperty("case_no", out var c) || item.TryGetProperty("caseNo", out c) || item.TryGetProperty("hciCaseNo", out c)) && !string.IsNullOrWhiteSpace(c.GetString()))
+                                {
+                                    return c.GetString()!.Trim();
+                                }
+                            }
+                        }
                     }
                 }
-                // Case 2: In-memory List or IEnumerable of Dictionary
-                else if (enlistmentObj is System.Collections.IEnumerable list)
+                else if (raw is IEnumerable<Dictionary<string, object?>> list)
                 {
                     foreach (var item in list)
                     {
-                        if (item is IDictionary<string, object?> dict)
+                        var status = item.TryGetValue("status", out var st) ? st?.ToString() : null;
+                        if (string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase) || status == null)
                         {
-                            var status = dict.TryGetValue("status", out var s) ? s?.ToString() : null;
-                            if (!string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase)) continue;
-
-                            var caseNo = dict.TryGetValue("case_no", out var c) ? c?.ToString() : null;
-                            if (!string.IsNullOrWhiteSpace(caseNo)) return caseNo;
+                            if ((item.TryGetValue("case_no", out var c) || item.TryGetValue("caseNo", out c) || item.TryGetValue("hciCaseNo", out c)) && c != null && !string.IsNullOrWhiteSpace(c.ToString()))
+                            {
+                                return c.ToString()!.Trim();
+                            }
                         }
                     }
                 }
-                // Case 3: JSON string
-                else if (enlistmentObj is string jsonStr && !string.IsNullOrWhiteSpace(jsonStr))
+                else if (raw is IEnumerable<object> objList)
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(jsonStr);
-                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    foreach (var item in objList)
                     {
-                        foreach (var item in doc.RootElement.EnumerateArray())
+                        if (item is Dictionary<string, object?> dict)
                         {
-                            var status = item.TryGetProperty("status", out var sProp) ? sProp.GetString() : null;
-                            if (!string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase)) continue;
-
-                            var caseNo = item.TryGetProperty("case_no", out var cProp) ? cProp.GetString() : null;
-                            if (!string.IsNullOrWhiteSpace(caseNo)) return caseNo;
+                            var status = dict.TryGetValue("status", out var st) ? st?.ToString() : null;
+                            if (string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase) || status == null)
+                            {
+                                if ((dict.TryGetValue("case_no", out var c) || dict.TryGetValue("caseNo", out c) || dict.TryGetValue("hciCaseNo", out c)) && c != null && !string.IsNullOrWhiteSpace(c.ToString()))
+                                {
+                                    return c.ToString()!.Trim();
+                                }
+                            }
                         }
                     }
                 }
             }
-            catch
-            {
-                // Graceful fallback
-            }
-        }
-
-        if (patient.CustomFields.TryGetValue("philhealth_case_no", out var directCase) && directCase != null)
-        {
-            var directStr = directCase.ToString();
-            if (!string.IsNullOrWhiteSpace(directStr)) return directStr;
         }
 
         return null;

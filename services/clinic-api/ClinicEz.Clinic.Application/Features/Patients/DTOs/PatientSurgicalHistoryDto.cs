@@ -6,7 +6,7 @@ public sealed record PatientSurgicalHistoryDto(
     Guid Id,
     Guid PatientId,
     string ProcedureName,
-    DateOnly SurgeryDate,
+    DateOnly? SurgeryDate,
     string? HospitalName,
     string? Findings,
     string? Complications,
@@ -14,7 +14,7 @@ public sealed record PatientSurgicalHistoryDto(
 
 public sealed record UpsertPatientSurgicalHistoryRequest(
     string ProcedureName,
-    DateOnly SurgeryDate,
+    DateOnly? SurgeryDate = null,
     string? HospitalName = null,
     string? Findings = null,
     string? Complications = null,

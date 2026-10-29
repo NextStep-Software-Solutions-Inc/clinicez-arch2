@@ -34,7 +34,7 @@ public class ClinicOutboundMessagingTests
         _clinicContext.TenantId.Returns(TenantId);
     }
 
-    private static ClinicPatient NewPatient(Guid clinicId, Guid? syncPatientId) => new()
+    private static Patient NewPatient(Guid clinicId, Guid? syncPatientId) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = TenantId,
@@ -44,8 +44,8 @@ public class ClinicOutboundMessagingTests
         LastName = "Santos",
         ContactNumber = "0917-123-4567",
         DateOfBirth = new DateOnly(1984, 3, 12),
-        Gender = "Female",
-        SyncPatientId = syncPatientId
+        Gender = Gender.Female,
+        CloudPatientId = syncPatientId
     };
 
     // ----- clinic.record.verified -----
@@ -58,7 +58,7 @@ public class ClinicOutboundMessagingTests
         var syncId = Guid.NewGuid();
         var patient = NewPatient(_clinicId, syncId);
         db.Patients.Add(patient);
-        db.RecordAttachments.Add(new ClinicRecordAttachment
+        db.RecordAttachments.Add(new RecordAttachment
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
@@ -76,7 +76,7 @@ public class ClinicOutboundMessagingTests
         var publisher = new ClinicRecordEventPublisher(
             new InteropPublisher(db), MessagingTestKit.Addresses(db), NullLogger<ClinicRecordEventPublisher>.Instance);
         var handler = new VerifyRecordAttachmentCommandHandler(
-            TestDbHelper.CreateRepository<ClinicRecordAttachment>(db, sieve), probe.Wrap(db, uow), _clinicContext, publisher);
+            TestDbHelper.CreateRepository<RecordAttachment>(db, sieve), probe.Wrap(db, uow), _clinicContext, publisher);
 
         var result = await handler.Handle(new VerifyRecordAttachmentCommand(attachmentId, IsApproved: true), CancellationToken.None);
 
@@ -157,7 +157,7 @@ public class ClinicOutboundMessagingTests
             TestDbHelper.CreateRepository<StaffMember>(db, sieve),
             TestDbHelper.CreateRepository<QueueItem>(db, sieve),
             TestDbHelper.CreateRepository<Appointment>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+            TestDbHelper.CreateRepository<Patient>(db, sieve),
             probe.Wrap(db, uow),
             _clinicContext,
             new ClinicIdentityProvider(db, _clinicContext),

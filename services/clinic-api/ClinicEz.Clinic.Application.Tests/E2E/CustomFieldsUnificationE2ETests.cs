@@ -20,9 +20,12 @@ namespace ClinicEz.Clinic.Application.Tests.E2E;
 /// </summary>
 public class CustomFieldsUnificationE2ETests
 {
-    private readonly YakapClinicalMapper _mapper = new(
-        ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup.FromBundledSeed()
-    );
+    private static string NormalizePin(string? pin)
+    {
+        if (string.IsNullOrWhiteSpace(pin)) return "000000000000";
+        var digits = new string(pin.Where(char.IsDigit).ToArray());
+        return digits.Length >= 12 ? digits[..12] : digits.PadLeft(12, '0');
+    }
 
     // =========================================================================
     // TIER 1: FEATURE COVERAGE
@@ -31,7 +34,7 @@ public class CustomFieldsUnificationE2ETests
     [Fact]
     public void F1_PatientCustomFields_InitializesAsEmptyDictionaryByDefault()
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -39,7 +42,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1992, 4, 15),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09171234567"
         };
 
@@ -50,7 +53,7 @@ public class CustomFieldsUnificationE2ETests
     [Fact]
     public void F1_PatientCustomFields_StoresAddressAndEmergencyContactsInJsonDictionary()
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -58,7 +61,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1988, 11, 20),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09181234567"
         };
 
@@ -78,7 +81,7 @@ public class CustomFieldsUnificationE2ETests
     [Fact]
     public void F1_ProtectedRelationalColumns_RetainDirectPropertiesOnPatient()
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -86,7 +89,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Clara",
             LastName = "Reyes",
             DateOfBirth = new DateOnly(1950, 1, 1),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09201234567",
             PhilHealthNumber = "12-345678901-2",
             SeniorCitizenId = "SC-2020-001",
@@ -101,7 +104,7 @@ public class CustomFieldsUnificationE2ETests
     [Fact]
     public void F2_YakapEnlistments_SerializesAndDeserializesChronologicalArray()
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -109,7 +112,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Andres",
             LastName = "Bonifacio",
             DateOfBirth = new DateOnly(1975, 5, 10),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09211234567"
         };
 
@@ -150,10 +153,10 @@ public class CustomFieldsUnificationE2ETests
     [Fact]
     public void F3_PinNormalization_FormatsToExactTwelveDigits()
     {
-        _mapper.NormalizePin("12-345678901-2").Should().Be("123456789012");
-        _mapper.NormalizePin("03-026307850-7").Should().Be("030263078507");
-        _mapper.NormalizePin("12345").Should().Be("000000012345");
-        _mapper.NormalizePin(null!).Should().Be("000000000000");
+        NormalizePin("12-345678901-2").Should().Be("123456789012");
+        NormalizePin("03-026307850-7").Should().Be("030263078507");
+        NormalizePin("12345").Should().Be("000000012345");
+        NormalizePin(null!).Should().Be("000000000000");
     }
 
     // =========================================================================
@@ -219,7 +222,7 @@ public class CustomFieldsUnificationE2ETests
     [Fact]
     public void B4_CustomFields_HandlesNullValuesDefensively()
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -227,7 +230,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Test",
             LastName = "User",
             DateOfBirth = new DateOnly(2000, 1, 1),
-            Gender = "Other",
+            Gender = Gender.Other,
             ContactNumber = "09000000000"
         };
 
@@ -296,7 +299,7 @@ public class CustomFieldsUnificationE2ETests
     public void S1_CompleteLifecycle_IntakeToEncounterToRenewal()
     {
         // 1. Patient Intake: Address in CustomFields
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -304,7 +307,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Gloria",
             LastName = "Macapagal",
             DateOfBirth = new DateOnly(1955, 4, 5),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09170001122",
             PhilHealthNumber = "12-345678901-2",
             SeniorCitizenId = "SC-PAMP-101"

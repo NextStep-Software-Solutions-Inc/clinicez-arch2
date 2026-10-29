@@ -100,24 +100,24 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
 public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaffMemberCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicRole> _roleRepository;
-    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IRepository<Role> _roleRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IFacilityPasswordHasher _passwordHasher;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
     private readonly IClinicStaffInvitationNotifier? _invitationNotifier;
 
     public CreateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicRole> roleRepository,
-        IRepository<ClinicSettings> settingsRepository,
+        IRepository<Role> roleRepository,
+        IRepository<FacilitySettings> settingsRepository,
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IFacilityPasswordHasher? passwordHasher = null,
-        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<Room>? roomRepository = null,
         IClinicStaffInvitationNotifier? invitationNotifier = null)
     {
         _staffRepository = staffRepository;

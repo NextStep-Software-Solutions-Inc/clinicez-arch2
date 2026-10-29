@@ -87,20 +87,20 @@ public class ChallengerM3_2EmpiricalTests
         var grantEvt = BuildDirectoryEvent(clinicId, TenantA, isWorkspaceEligible: true);
         await handler.HandleAsync(grantEvt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, clinicParty, grantEvt), CancellationToken.None);
 
-        var verifyGrant = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var verifyGrant = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         verifyGrant.IsWorkspaceEligible.Should().BeTrue("State must transition from false to true upon Portal grant");
 
         // Transition 2: true -> false
         var revokeEvt = BuildDirectoryEvent(clinicId, TenantA, isWorkspaceEligible: false);
         await handler.HandleAsync(revokeEvt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, clinicParty, revokeEvt), CancellationToken.None);
 
-        var verifyRevoke = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var verifyRevoke = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         verifyRevoke.IsWorkspaceEligible.Should().BeFalse("State must transition from true to false upon Portal revocation");
 
         // Redundant delivery of false: should remain false idempotently
         await handler.HandleAsync(revokeEvt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, clinicParty, revokeEvt), CancellationToken.None);
 
-        var verifyRedundant = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var verifyRedundant = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         verifyRedundant.IsWorkspaceEligible.Should().BeFalse("State must remain false idempotently on duplicate message delivery");
     }
 
@@ -121,10 +121,10 @@ public class ChallengerM3_2EmpiricalTests
             await handler.HandleAsync(grantEvt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, clinicParty, grantEvt), CancellationToken.None);
         }
 
-        var count = await db.ClinicSettings.IgnoreQueryFilters().CountAsync(s => s.ClinicId == clinicId);
-        count.Should().Be(1, "Repeated deliveries must not create duplicate ClinicSettings rows");
+        var count = await db.Settings.IgnoreQueryFilters().CountAsync(s => s.ClinicId == clinicId);
+        count.Should().Be(1, "Repeated deliveries must not create duplicate FacilitySettings rows");
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue();
     }
 
@@ -150,7 +150,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await act.Should().NotThrowAsync("Missing clinic record must be gracefully dropped without throwing or crashing");
 
-        var totalRows = await db.ClinicSettings.IgnoreQueryFilters().CountAsync();
+        var totalRows = await db.Settings.IgnoreQueryFilters().CountAsync();
         totalRows.Should().Be(0, "No row should be created for non-existent clinic on directory update");
     }
 
@@ -173,7 +173,7 @@ public class ChallengerM3_2EmpiricalTests
         await act.Should().NotThrowAsync();
 
         // Clinic in Tenant A should remain completely untouched
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -207,7 +207,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await handler.HandleAsync(evt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, senderParty, clinicParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse($"Unauthorized sender ({service}, {kind}) must not modify workspace eligibility");
     }
 
@@ -234,7 +234,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await handler.HandleAsync(evt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, spoofedParty, clinicParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Facility party spoofing Portal service name must be rejected because Kind != ControlPlane");
     }
 
@@ -259,7 +259,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await handler.HandleAsync(evt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, corruptedTo, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -295,7 +295,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await handler.HandleAsync(evt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, clinicParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue();
         settings.ClinicName.Should().Be("Established Clinic Name", "Whitespace name must not overwrite existing name");
         settings.FacilitySlug.Should().Be("established-slug", "Null slug must not overwrite existing slug");
@@ -319,7 +319,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await handler.HandleAsync(evt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, clinicParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Null IsWorkspaceEligible must coalesce to false");
     }
 
@@ -342,7 +342,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await handler.HandleAsync(evt, DeliveredContext(InteropTypes.FacilityDirectoryUpdated, Party.Portal, clinicParty, evt), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue("Tenant matching must be case-insensitive");
     }
 
@@ -380,7 +380,7 @@ public class ChallengerM3_2EmpiricalTests
 
         await handler.HandleAsync(license, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         bool expected = inputEligible ?? false;
         settings.IsWorkspaceEligible.Should().Be(expected, $"Initial provisioning must set IsWorkspaceEligible to {expected}");
     }
@@ -405,7 +405,7 @@ public class ChallengerM3_2EmpiricalTests
         var renewalContext = DeliveredContext(InteropTypes.FacilityLicenseIssued, Party.Portal, MessagingTestKit.ClinicParty(TenantA, clinicId), renewalLicense);
         await handler.HandleAsync(renewalLicense, renewalContext, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         bool expected = renewal ?? false;
         settings.IsWorkspaceEligible.Should().Be(expected, $"Renewal must update IsWorkspaceEligible to {expected}");
     }

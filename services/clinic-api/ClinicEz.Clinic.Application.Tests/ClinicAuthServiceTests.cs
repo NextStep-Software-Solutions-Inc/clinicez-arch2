@@ -64,7 +64,7 @@ public class ClinicAuthServiceTests
 
         if (withSettings)
         {
-            db.ClinicSettings.Add(new ClinicSettings
+            db.Settings.Add(new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
@@ -161,7 +161,7 @@ public class ClinicAuthServiceTests
     public async Task Bootstrap_RejectsTamperedLicense()
     {
         var f = await CreateAsync();
-        var settings = await f.Db.ClinicSettings.SingleAsync();
+        var settings = await f.Db.Settings.SingleAsync();
         var tampered = settings.LicenseToken![..^4] + "AAAA";
         settings.LicenseToken = tampered;
         await f.Db.SaveChangesAsync();
@@ -376,7 +376,7 @@ public class ClinicAuthServiceTests
         var f = await CreateAsync();
         await f.Service.BootstrapAsync(Bootstrap(f));
 
-        var settings = await f.Db.ClinicSettings.SingleAsync();
+        var settings = await f.Db.Settings.SingleAsync();
         settings.LicenseToken = SignLicense(f.ClinicId, f.TenantId, "owner@clinic.test", expires: DateTime.UtcNow.AddDays(-2));
         await f.Db.SaveChangesAsync();
         (await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null))).Ok
@@ -394,7 +394,7 @@ public class ClinicAuthServiceTests
         var f = await CreateAsync();
         await f.Service.BootstrapAsync(Bootstrap(f));
 
-        var doctorRole = await f.Db.ClinicRoles.IgnoreQueryFilters()
+        var doctorRole = await f.Db.Roles.IgnoreQueryFilters()
             .SingleAsync(r => r.ClinicId == f.ClinicId && r.Name == ClinicRoleSeeder.DoctorRoleName);
 
         var doctor = new StaffMember

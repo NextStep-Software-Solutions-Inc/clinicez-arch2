@@ -33,12 +33,12 @@ public sealed record UploadRecordAttachmentCommand(
 
 public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<UploadRecordAttachmentCommand, ClinicRecordAttachmentDto>
 {
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UploadRecordAttachmentCommandHandler(
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -49,7 +49,7 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
 
     public async Task<ClinicRecordAttachmentDto> Handle(UploadRecordAttachmentCommand request, CancellationToken ct)
     {
-        var attachment = new ClinicRecordAttachment
+        var attachment = new RecordAttachment
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,

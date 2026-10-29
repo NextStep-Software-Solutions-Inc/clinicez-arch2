@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,12 +9,11 @@ namespace ClinicEz.PhilHealthProxy.Api.Tests.Infrastructure;
 
 /// <summary>
 /// Creates an in-process test server for the stateless PhilHealth Proxy API.
-/// Zero database dependencies.
 /// </summary>
 public sealed class KonsultaWebApplicationFactory : WebApplicationFactory<Program>
 {
-    public IPhilHealthSoapClient MockSoapClient { get; } =
-        Substitute.For<IPhilHealthSoapClient>();
+    public IPhilHealthPcapiClient MockPcapiClient { get; } =
+        Substitute.For<IPhilHealthPcapiClient>();
 
     public ITenantRepository MockTenantRepository { get; } =
         Substitute.For<ITenantRepository>();
@@ -22,18 +22,21 @@ public sealed class KonsultaWebApplicationFactory : WebApplicationFactory<Progra
     {
         builder.UseEnvironment("Testing");
 
-        // Outside Development the proxy refuses to start without these; the tests give it throw-away values.
+        // Configuration settings required for startup outside Development
         builder.UseSetting("Internal:ApiKey", "test-internal-key");
+        builder.UseSetting("PortalApi:BaseUrl", "http://localhost:8080");
+        builder.UseSetting("Messaging:Transport", "InProcess");
+        builder.UseSetting("Messaging:Enabled", "false");
 
         builder.ConfigureServices(services =>
         {
-            // ── Replace real SOAP client with our mock ────────────────────────
-            var soapDescriptors = services
-                .Where(d => d.ServiceType == typeof(IPhilHealthSoapClient))
+            // ── Replace real PCAPI client with our mock ────────────────────────
+            var pcapiDescriptors = services
+                .Where(d => d.ServiceType == typeof(IPhilHealthPcapiClient))
                 .ToList();
-            foreach (var d in soapDescriptors) services.Remove(d);
+            foreach (var d in pcapiDescriptors) services.Remove(d);
 
-            services.AddSingleton(MockSoapClient);
+            services.AddSingleton(MockPcapiClient);
 
             // ── Replace real Tenant Repository with mock ──────────────────────
             var tenantDescriptors = services

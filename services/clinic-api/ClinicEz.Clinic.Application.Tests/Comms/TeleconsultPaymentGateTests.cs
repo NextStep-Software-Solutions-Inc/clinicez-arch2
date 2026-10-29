@@ -48,8 +48,8 @@ public sealed class TeleconsultPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -91,15 +91,15 @@ public sealed class TeleconsultPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
         var scheduledAt = new DateTime(2026, 10, 26, 14, 0, 0, DateTimeKind.Utc);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -112,11 +112,14 @@ public sealed class TeleconsultPaymentGateTests
             PhilHealthNumber = "12-345678901-2"
         };
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-15",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 15),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -168,7 +171,7 @@ public sealed class TeleconsultPaymentGateTests
         var publisher = Substitute.For<IInteropPublisher>();
         var recipientResolver = new ClinicRecipientResolver(context, NullLogger<ClinicRecipientResolver>.Instance);
 
-        context.ClinicSettings.Add(new ClinicSettings
+        context.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -277,8 +280,8 @@ public sealed class TeleconsultPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -329,7 +332,7 @@ public sealed class TeleconsultPaymentGateTests
         appointment.EmergencyOverrideDoctorName.Should().Be("Dr. Ramon Santos");
 
         // Verify immutable WORM audit entry was persisted in ClinicAuditEntries
-        var audit = await context.ClinicAuditEntries
+        var audit = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.admission.emergency_override");
         audit.Should().NotBeNull();
         audit!.Category.Should().Be(ClinicAuditCategories.Clinical);
@@ -362,8 +365,8 @@ public sealed class TeleconsultPaymentGateTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(unauthorizedContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -409,8 +412,8 @@ public sealed class TeleconsultPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -457,8 +460,8 @@ public sealed class TeleconsultPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -469,7 +472,7 @@ public sealed class TeleconsultPaymentGateTests
             Id = appointmentId,
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            PatientId = nonExistentPatientId, // Patient does not exist in ClinicPatient table
+            PatientId = nonExistentPatientId, // Patient does not exist in Patient table
             PatientName = "Unknown Patient",
             DoctorId = _clinicContext.StaffId!.Value,
             ScheduledAt = DateTime.UtcNow,
@@ -499,8 +502,8 @@ public sealed class TeleconsultPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();

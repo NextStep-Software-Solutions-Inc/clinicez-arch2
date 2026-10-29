@@ -485,7 +485,7 @@ public class ReconcileEodEmpiricalChallengerTests
         string timeZoneId,
         bool expectedShouldReconcile)
     {
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,

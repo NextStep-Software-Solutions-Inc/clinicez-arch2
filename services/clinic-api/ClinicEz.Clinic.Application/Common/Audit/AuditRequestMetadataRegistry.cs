@@ -97,23 +97,23 @@ public static class AuditRequestMetadataRegistry
             case "UpdateMyProfileCommand":
                 return (ClinicAuditCategories.Security, "security.profile.updated", ClinicAuditSeverities.Routine, "StaffMember", "Staff member updated own profile credentials");
             case "CreateClinicRoleCommand":
-                return (ClinicAuditCategories.Security, "security.role.created", ClinicAuditSeverities.Urgent, "ClinicRole", "Created custom clinical role with specific permissions");
+                return (ClinicAuditCategories.Security, "security.role.created", ClinicAuditSeverities.Urgent, "Role", "Created custom clinical role with specific permissions");
             case "UpdateClinicRoleCommand":
-                return (ClinicAuditCategories.Security, "security.role.updated", ClinicAuditSeverities.Urgent, "ClinicRole", "Modified permissions assigned to clinic role");
+                return (ClinicAuditCategories.Security, "security.role.updated", ClinicAuditSeverities.Urgent, "Role", "Modified permissions assigned to clinic role");
             case "DeleteClinicRoleCommand":
-                return (ClinicAuditCategories.Security, "security.role.deleted", ClinicAuditSeverities.Urgent, "ClinicRole", "Deleted clinic role definition");
+                return (ClinicAuditCategories.Security, "security.role.deleted", ClinicAuditSeverities.Urgent, "Role", "Deleted clinic role definition");
 
             // Operations & Admin
             case "UpdateClinicSettingsCommand":
-                return (ClinicAuditCategories.Operations, "operations.settings.updated", ClinicAuditSeverities.Urgent, "ClinicSettings", "Updated clinic profile, facility details, or queue config");
+                return (ClinicAuditCategories.Operations, "operations.settings.updated", ClinicAuditSeverities.Urgent, "FacilitySettings", "Updated clinic profile, facility details, or queue config");
             case "CreateClinicRoomCommand":
-                return (ClinicAuditCategories.Operations, "operations.room.created", ClinicAuditSeverities.Routine, "ClinicRoom", "Created new clinic consultation room or station");
+                return (ClinicAuditCategories.Operations, "operations.room.created", ClinicAuditSeverities.Routine, "Room", "Created new clinic consultation room or station");
             case "UpdateClinicRoomCommand":
-                return (ClinicAuditCategories.Operations, "operations.room.updated", ClinicAuditSeverities.Routine, "ClinicRoom", "Updated clinic room details and staff coverage");
+                return (ClinicAuditCategories.Operations, "operations.room.updated", ClinicAuditSeverities.Routine, "Room", "Updated clinic room details and staff coverage");
             case "DeleteClinicRoomCommand":
-                return (ClinicAuditCategories.Operations, "operations.room.deleted", ClinicAuditSeverities.Urgent, "ClinicRoom", "Deleted clinic consultation room");
+                return (ClinicAuditCategories.Operations, "operations.room.deleted", ClinicAuditSeverities.Urgent, "Room", "Deleted clinic consultation room");
             case "ReorderClinicRoomsCommand":
-                return (ClinicAuditCategories.Operations, "operations.rooms.reordered", ClinicAuditSeverities.Routine, "ClinicRoom", "Reordered clinic room workstation sequence");
+                return (ClinicAuditCategories.Operations, "operations.rooms.reordered", ClinicAuditSeverities.Routine, "Room", "Reordered clinic room workstation sequence");
             case "UpsertDoctorScheduleTemplateCommand":
                 return (ClinicAuditCategories.Operations, "operations.doctor_schedule.upserted", ClinicAuditSeverities.Routine, "DoctorScheduleTemplate", "Configured recurring doctor shift availability template");
             case "DeleteDoctorScheduleTemplateCommand":
@@ -123,41 +123,41 @@ public static class AuditRequestMetadataRegistry
             case "DeleteDoctorLeaveCommand":
                 return (ClinicAuditCategories.Operations, "operations.doctor_leave.deleted", ClinicAuditSeverities.Urgent, "DoctorLeave", "Cancelled doctor blackout leave");
             case "CreateClinicServiceItemCommand":
-                return (ClinicAuditCategories.Operations, "operations.service_item.created", ClinicAuditSeverities.Routine, "ClinicServiceItem", "Created new item in clinic fee schedule catalog");
+                return (ClinicAuditCategories.Operations, "operations.service_item.created", ClinicAuditSeverities.Routine, "ServiceItem", "Created new item in clinic fee schedule catalog");
             case "UpdateClinicServiceItemCommand":
-                return (ClinicAuditCategories.Operations, "operations.service_item.updated", ClinicAuditSeverities.Routine, "ClinicServiceItem", "Updated item pricing or PhilHealth code in fee catalog");
+                return (ClinicAuditCategories.Operations, "operations.service_item.updated", ClinicAuditSeverities.Routine, "ServiceItem", "Updated item pricing or PhilHealth code in fee catalog");
             case "BulkImportServicesCommand":
-                return (ClinicAuditCategories.Operations, "operations.services.bulk_imported", ClinicAuditSeverities.Urgent, "ClinicServiceItem", "Bulk imported service catalog fee items");
+                return (ClinicAuditCategories.Operations, "operations.services.bulk_imported", ClinicAuditSeverities.Urgent, "ServiceItem", "Bulk imported service catalog fee items");
             case "CreateProductCommand":
                 return (ClinicAuditCategories.Operations, "operations.product.created", ClinicAuditSeverities.Routine, "Product", "Created new inventory product record");
             case "CreateCustomFieldDefinitionCommand":
-                return (ClinicAuditCategories.Operations, "operations.custom_field.created", ClinicAuditSeverities.Routine, "ClinicCustomFieldDefinition", "Defined new custom demographic/clinical intake field");
+                return (ClinicAuditCategories.Operations, "operations.custom_field.created", ClinicAuditSeverities.Routine, "CustomFieldDefinition", "Defined new custom demographic/clinical intake field");
             case "UpdateCustomFieldDefinitionCommand":
-                return (ClinicAuditCategories.Operations, "operations.custom_field.updated", ClinicAuditSeverities.Routine, "ClinicCustomFieldDefinition", "Updated custom field definition, visibility, or options");
+                return (ClinicAuditCategories.Operations, "operations.custom_field.updated", ClinicAuditSeverities.Routine, "CustomFieldDefinition", "Updated custom field definition, visibility, or options");
             case "DeleteCustomFieldDefinitionCommand":
-                return (ClinicAuditCategories.Operations, "operations.custom_field.deleted", ClinicAuditSeverities.Urgent, "ClinicCustomFieldDefinition", "Deleted custom intake field definition");
+                return (ClinicAuditCategories.Operations, "operations.custom_field.deleted", ClinicAuditSeverities.Urgent, "CustomFieldDefinition", "Deleted custom intake field definition");
             case "InstallCustomFieldTemplateCommand":
-                return (ClinicAuditCategories.Operations, "operations.custom_field_template.installed", ClinicAuditSeverities.Routine, "ClinicCustomFieldDefinition", "Installed pre-configured custom fields template bundle");
+                return (ClinicAuditCategories.Operations, "operations.custom_field_template.installed", ClinicAuditSeverities.Routine, "CustomFieldDefinition", "Installed pre-configured custom fields template bundle");
             case "ReorderCustomFieldsCommand":
-                return (ClinicAuditCategories.Operations, "operations.custom_fields.reordered", ClinicAuditSeverities.Routine, "ClinicCustomFieldDefinition", "Reordered custom field display sequence");
+                return (ClinicAuditCategories.Operations, "operations.custom_fields.reordered", ClinicAuditSeverities.Routine, "CustomFieldDefinition", "Reordered custom field display sequence");
             case "MarkStaffNotificationReadCommand":
-                return (ClinicAuditCategories.Operations, "operations.notification.read", ClinicAuditSeverities.Routine, "ClinicStaffNotification", "Marked staff broadcast notification as read");
+                return (ClinicAuditCategories.Operations, "operations.notification.read", ClinicAuditSeverities.Routine, "StaffNotification", "Marked staff broadcast notification as read");
             case "MarkAllStaffNotificationsReadCommand":
-                return (ClinicAuditCategories.Operations, "operations.notifications.all_read", ClinicAuditSeverities.Routine, "ClinicStaffNotification", "Marked all staff broadcast notifications as read");
+                return (ClinicAuditCategories.Operations, "operations.notifications.all_read", ClinicAuditSeverities.Routine, "StaffNotification", "Marked all staff broadcast notifications as read");
             case "ReconcileEodCommand":
                 return (ClinicAuditCategories.Operations, "operations.eod.reconciled", ClinicAuditSeverities.Urgent, "EodReconciliationAudit", "Executed End-of-Day clinic reconciliation closure");
 
             // Patient
             case "RegisterClinicPatientCommand":
-                return (ClinicAuditCategories.Patient, "patient.registration.created", ClinicAuditSeverities.Routine, "ClinicPatient", "Registered new patient in clinic master directory");
+                return (ClinicAuditCategories.Patient, "patient.registration.created", ClinicAuditSeverities.Routine, "Patient", "Registered new patient in clinic master directory");
             case "UpdateClinicPatientCommand":
-                return (ClinicAuditCategories.Patient, "patient.demographics.updated", ClinicAuditSeverities.Routine, "ClinicPatient", "Updated patient demographics and PhilHealth identifiers");
+                return (ClinicAuditCategories.Patient, "patient.demographics.updated", ClinicAuditSeverities.Routine, "Patient", "Updated patient demographics and PhilHealth identifiers");
             case "BulkRegisterClinicPatientsCommand":
-                return (ClinicAuditCategories.Patient, "patient.bulk_registration.completed", ClinicAuditSeverities.Routine, "ClinicPatient", "Bulk registered patient cohort into directory");
+                return (ClinicAuditCategories.Patient, "patient.bulk_registration.completed", ClinicAuditSeverities.Routine, "Patient", "Bulk registered patient cohort into directory");
             case "PublicStudentSelfEnrollCommand":
-                return (ClinicAuditCategories.Patient, "patient.self_enrollment.created", ClinicAuditSeverities.Routine, "ClinicPatient", "Public self-intake registration completed");
+                return (ClinicAuditCategories.Patient, "patient.self_enrollment.created", ClinicAuditSeverities.Routine, "Patient", "Public self-intake registration completed");
             case "RedeemPatientShareCommand":
-                return (ClinicAuditCategories.Patient, "patient.share.redeemed", ClinicAuditSeverities.Routine, "ClinicPatient", "Redeemed cross-facility patient shared record grant");
+                return (ClinicAuditCategories.Patient, "patient.share.redeemed", ClinicAuditSeverities.Routine, "Patient", "Redeemed cross-facility patient shared record grant");
             case "AddPatientSurgicalHistoryCommand":
                 return (ClinicAuditCategories.Patient, "patient.surgical_history.added", ClinicAuditSeverities.Routine, "PatientSurgicalHistory", "Recorded surgical history entry for patient");
             case "UpdatePatientSurgicalHistoryCommand":
@@ -189,7 +189,7 @@ public static class AuditRequestMetadataRegistry
             case "UpdatePatientProblemStatusCommand":
                 return (ClinicAuditCategories.Patient, "patient.problem.status_updated", ClinicAuditSeverities.Routine, "PatientProblem", "Updated problem lifecycle status (Active/Resolved)");
             case "GetPatientChartQuery":
-                return (ClinicAuditCategories.Patient, "patient.chart.viewed", ClinicAuditSeverities.Routine, "ClinicPatient", "Clinician viewed comprehensive patient medical chart");
+                return (ClinicAuditCategories.Patient, "patient.chart.viewed", ClinicAuditSeverities.Routine, "Patient", "Clinician viewed comprehensive patient medical chart");
 
             // Appointments & Queue
             case "CreateAppointmentCommand":
@@ -215,9 +215,9 @@ public static class AuditRequestMetadataRegistry
 
             // Clinical
             case "RecordTriageVitalsCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.triage_vitals.recorded", ClinicAuditSeverities.Routine, "TriageVitals", "Nurse recorded triage vitals and WHO Z-scores");
+                return (ClinicAuditCategories.Clinical, "clinical.triage_vitals.recorded", ClinicAuditSeverities.Routine, "PatientVitals", "Nurse recorded triage vitals and WHO Z-scores");
             case "UpdateTriageVitalsCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.triage_vitals.updated", ClinicAuditSeverities.Routine, "TriageVitals", "Nurse updated triage vitals and WHO Z-scores");
+                return (ClinicAuditCategories.Clinical, "clinical.triage_vitals.updated", ClinicAuditSeverities.Routine, "PatientVitals", "Nurse updated triage vitals and WHO Z-scores");
             case "CreateConsultationCommand":
                 return (ClinicAuditCategories.Clinical, "clinical.consultation.created", ClinicAuditSeverities.Routine, "ConsultationEncounter", "Initiated clinical consultation encounter");
             case "UpdateConsultationCommand":
@@ -231,17 +231,17 @@ public static class AuditRequestMetadataRegistry
             case "RecordImmunizationAefiCommand":
                 return (ClinicAuditCategories.Clinical, "clinical.immunization.aefi_recorded", ClinicAuditSeverities.Urgent, "PatientImmunization", "Documented Adverse Event Following Immunization");
             case "OrderProcedureCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.procedure.ordered", ClinicAuditSeverities.Routine, "ClinicalProcedure", "Doctor ordered in-clinic nursing procedure");
+                return (ClinicAuditCategories.Clinical, "clinical.procedure.ordered", ClinicAuditSeverities.Routine, "Procedure", "Doctor ordered in-clinic nursing procedure");
             case "RecordProcedureExecutionCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.procedure.executed", ClinicAuditSeverities.Routine, "ClinicalProcedure", "Nurse recorded completed procedure execution and vitals");
+                return (ClinicAuditCategories.Clinical, "clinical.procedure.executed", ClinicAuditSeverities.Routine, "Procedure", "Nurse recorded completed procedure execution and vitals");
             case "CreateClinicLabOrderCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.lab_order.created", ClinicAuditSeverities.Routine, "ClinicLabOrder", "Ordered clinical diagnostic laboratory tests");
+                return (ClinicAuditCategories.Clinical, "clinical.lab_order.created", ClinicAuditSeverities.Routine, "LabOrder", "Ordered clinical diagnostic laboratory tests");
             case "AttachExternalLabResultCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.lab_result.attached", ClinicAuditSeverities.Routine, "ClinicLabOrder", "Attached external laboratory diagnostic report");
+                return (ClinicAuditCategories.Clinical, "clinical.lab_result.attached", ClinicAuditSeverities.Routine, "LabOrder", "Attached external laboratory diagnostic report");
             case "AcknowledgePanicAlertCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.panic_alert.acknowledged", ClinicAuditSeverities.Urgent, "ClinicLabOrder", "Acknowledged critical panic lab value alert");
+                return (ClinicAuditCategories.Clinical, "clinical.panic_alert.acknowledged", ClinicAuditSeverities.Urgent, "LabOrder", "Acknowledged critical panic lab value alert");
             case "ReviewLabResultCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.lab_result.reviewed", ClinicAuditSeverities.Routine, "ClinicLabResult", "Physician reviewed diagnostic laboratory results");
+                return (ClinicAuditCategories.Clinical, "clinical.lab_result.reviewed", ClinicAuditSeverities.Routine, "LabResult", "Physician reviewed diagnostic laboratory results");
             case "RecordExternalDispenseCommand":
                 return (ClinicAuditCategories.Clinical, "clinical.prescription.external_dispensed", ClinicAuditSeverities.Routine, "PrescriptionItem", "Recorded external pharmacy dispensation");
             case "SubmitPublicRxDispenseCommand":
@@ -251,13 +251,13 @@ public static class AuditRequestMetadataRegistry
             case "IssueReferralLetterCommand":
                 return (ClinicAuditCategories.Clinical, "clinical.referral_letter.issued", ClinicAuditSeverities.Routine, "ReferralLetter", "Issued clinical specialist referral letter");
             case "UploadRecordAttachmentCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.record_attachment.uploaded", ClinicAuditSeverities.Routine, "ClinicRecordAttachment", "Uploaded document/film to patient medical chart");
+                return (ClinicAuditCategories.Clinical, "clinical.record_attachment.uploaded", ClinicAuditSeverities.Routine, "RecordAttachment", "Uploaded document/film to patient medical chart");
             case "UploadAndEncryptRecordAttachmentCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.record_attachment.encrypted_uploaded", ClinicAuditSeverities.Routine, "ClinicRecordAttachment", "Uploaded and encrypted sensitive chart document");
+                return (ClinicAuditCategories.Clinical, "clinical.record_attachment.encrypted_uploaded", ClinicAuditSeverities.Routine, "RecordAttachment", "Uploaded and encrypted sensitive chart document");
             case "VerifyRecordAttachmentCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.record_attachment.verified", ClinicAuditSeverities.Routine, "ClinicRecordAttachment", "Clinician verified authenticity of attached document");
+                return (ClinicAuditCategories.Clinical, "clinical.record_attachment.verified", ClinicAuditSeverities.Routine, "RecordAttachment", "Clinician verified authenticity of attached document");
             case "IntakePatientSharedFileCommand":
-                return (ClinicAuditCategories.Clinical, "clinical.shared_file.ingested", ClinicAuditSeverities.Routine, "ClinicRecordAttachment", "Ingested shared document from patient portal");
+                return (ClinicAuditCategories.Clinical, "clinical.shared_file.ingested", ClinicAuditSeverities.Routine, "RecordAttachment", "Ingested shared document from patient portal");
 
             // Billing
             case "CreateInvoiceCommand":
@@ -270,22 +270,20 @@ public static class AuditRequestMetadataRegistry
                 return (ClinicAuditCategories.Billing, "billing.payment.refunded", ClinicAuditSeverities.Urgent, "PaymentRecord", "Processed payment refund");
 
             // PhilHealth
-            case "CreateYakapTransmittalCommand":
-                return (ClinicAuditCategories.PhilHealth, "philhealth.transmittal.created", ClinicAuditSeverities.Routine, "YakapTransmittal", "Generated PhilHealth Yakap batch transmittal package");
-            case "ValidateYakapTransmittalCommand":
-                return (ClinicAuditCategories.PhilHealth, "philhealth.transmittal.validated", ClinicAuditSeverities.Routine, "YakapTransmittal", "Pre-flight validated transmittal against KonsultaData_v1.14.dtd");
-            case "SubmitYakapTransmittalCommand":
-                return (ClinicAuditCategories.PhilHealth, "philhealth.transmittal.submitted", ClinicAuditSeverities.Routine, "YakapTransmittal", "Encrypted (AES-256) and transmitted XML claim transmittal");
-            case "VoidYakapTransmittalCommand":
-                return (ClinicAuditCategories.PhilHealth, "philhealth.transmittal.voided", ClinicAuditSeverities.Emergency, "YakapTransmittal", "Voided PhilHealth Yakap transmittal with mandatory reason");
+            case "CreateYakapSubmissionCommand":
+                return (ClinicAuditCategories.PhilHealth, "philhealth.submission.created", ClinicAuditSeverities.Routine, "YakapSubmission", "Created PhilHealth Yakap 2.0 direct API submission");
+            case "SubmitYakapSubmissionCommand":
+                return (ClinicAuditCategories.PhilHealth, "philhealth.submission.submitted", ClinicAuditSeverities.Routine, "YakapSubmission", "Transmitted PhilHealth Yakap 2.0 encrypted JSON payload");
+            case "CancelYakapSubmissionCommand":
+                return (ClinicAuditCategories.PhilHealth, "philhealth.submission.cancelled", ClinicAuditSeverities.Emergency, "YakapSubmission", "Cancelled PhilHealth Yakap 2.0 submission");
 
             // Auditing the Auditor
             case "GetAuditLogsQuery":
-                return (ClinicAuditCategories.Audit, "audit.log.viewed", ClinicAuditSeverities.Routine, "ClinicAuditEntry", "Administrator queried clinic forensic audit trail");
+                return (ClinicAuditCategories.Audit, "audit.log.viewed", ClinicAuditSeverities.Routine, "AuditEntry", "Administrator queried clinic forensic audit trail");
             case "GetAuditLogDetailQuery":
-                return (ClinicAuditCategories.Audit, "audit.log.viewed", ClinicAuditSeverities.Routine, "ClinicAuditEntry", "Administrator viewed single audit log entry detail");
+                return (ClinicAuditCategories.Audit, "audit.log.viewed", ClinicAuditSeverities.Routine, "AuditEntry", "Administrator viewed single audit log entry detail");
             case "ExportAuditLogsQuery":
-                return (ClinicAuditCategories.Audit, "audit.log.exported", ClinicAuditSeverities.Urgent, "ClinicAuditEntry", "Administrator exported forensic audit trail archive");
+                return (ClinicAuditCategories.Audit, "audit.log.exported", ClinicAuditSeverities.Urgent, "AuditEntry", "Administrator exported forensic audit trail archive");
         }
 
         // 2. Generic heuristic fallback for any other command

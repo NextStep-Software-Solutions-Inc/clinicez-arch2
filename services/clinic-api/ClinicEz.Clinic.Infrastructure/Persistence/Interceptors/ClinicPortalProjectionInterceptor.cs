@@ -50,7 +50,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
         db.ChangeTracker.DetectChanges();
 
-        var settingEntries = db.ChangeTracker.Entries<ClinicSettings>()
+        var settingEntries = db.ChangeTracker.Entries<FacilitySettings>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             .ToList();
 
@@ -70,7 +70,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
             .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             .ToList();
 
-        var labOrderEntries = db.ChangeTracker.Entries<ClinicLabOrder>()
+        var labOrderEntries = db.ChangeTracker.Entries<LabOrder>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             .ToList();
 
@@ -87,7 +87,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         }
 
         var publisher = new InteropPublisher(db);
-        var clinicSettingsCache = new Dictionary<Guid, ClinicSettings>();
+        var clinicSettingsCache = new Dictionary<Guid, FacilitySettings>();
 
         // Cache existing outbox correlations already queued in this transaction to prevent duplicates
         var alreadyStaged = db.ChangeTracker.Entries<InteropOutboxMessage>()
@@ -532,15 +532,15 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         }
     }
 
-    private static async Task<ClinicSettings?> GetClinicSettingsAsync(
+    private static async Task<FacilitySettings?> GetClinicSettingsAsync(
         ApplicationDbContext db,
         Guid clinicId,
-        Dictionary<Guid, ClinicSettings> cache,
+        Dictionary<Guid, FacilitySettings> cache,
         CancellationToken ct)
     {
         if (cache.TryGetValue(clinicId, out var existing)) return existing;
 
-        var loaded = await db.ClinicSettings.IgnoreQueryFilters().AsNoTracking()
+        var loaded = await db.Settings.IgnoreQueryFilters().AsNoTracking()
             .FirstOrDefaultAsync(s => s.ClinicId == clinicId && !s.IsDeleted, ct);
 
         if (loaded != null) cache[clinicId] = loaded;

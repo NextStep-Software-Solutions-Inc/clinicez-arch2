@@ -33,11 +33,11 @@ public class PrescriptionInteroperabilityTests
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -46,7 +46,7 @@ public class PrescriptionInteroperabilityTests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1984, 5, 20),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09171234567"
         };
         await db.Patients.AddAsync(patient);
@@ -103,9 +103,9 @@ public class PrescriptionInteroperabilityTests
     {
         var (db, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
 
         var token = "token-secret-hex-1234567890";
         var encounter = new ConsultationEncounter
@@ -276,9 +276,9 @@ public class PrescriptionInteroperabilityTests
     {
         var (db, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
 
         var handler = new GetPublicRxVerificationInfoQueryHandler(encounterRepo, patientRepo, staffRepo, settingsRepo);
         var act = async () => await handler.Handle(new GetPublicRxVerificationInfoQuery(mismatchedToken), CancellationToken.None);
@@ -292,9 +292,9 @@ public class PrescriptionInteroperabilityTests
     {
         var (db, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
 
         var labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
         var handler = new GetPublicRxVerificationInfoQueryHandler(encounterRepo, patientRepo, staffRepo, settingsRepo);

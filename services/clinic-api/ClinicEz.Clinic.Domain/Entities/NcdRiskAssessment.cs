@@ -4,22 +4,13 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class NcdRiskAssessment : BaseEntity
+public sealed class NcdRiskAssessment : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid PatientId { get; set; }
-    public ClinicPatient? Patient { get; set; }
+    public Patient? Patient { get; set; }
     public Guid? ConsultationEncounterId { get; set; }
 
     public DateTime AssessmentDate { get; set; } = DateTime.UtcNow;
-
-    [NotMapped]
-    public DateTime AssessmentDateUtc
-    {
-        get => AssessmentDate;
-        set => AssessmentDate = value;
-    }
 
     public Guid? AssessedByStaffId { get; set; }
     public string? AssessedByStaffName { get; set; }
@@ -67,17 +58,12 @@ public sealed class NcdRiskAssessment : BaseEntity
 
     // WHO / ISH Cardiovascular Risk Band (Q17: Band A to Band E)
     public string RiskBand { get; set; } = "BandA";
+    public string? CvdRiskLevelCode { get; set; }
 
-    [NotMapped]
-    public string RiskLevelLetter
-    {
-        get => RiskBand.Replace("Band", "");
-        set => RiskBand = value.StartsWith("Band", StringComparison.OrdinalIgnoreCase) ? value : $"Band{value}";
-    }
+    public bool? HighSaltIntake { get; set; }
 
     public decimal? CalculatedRiskScorePercent { get; set; }
 
     public string? Remarks { get; set; }
-
     public string? VoidReason { get; set; }
 }

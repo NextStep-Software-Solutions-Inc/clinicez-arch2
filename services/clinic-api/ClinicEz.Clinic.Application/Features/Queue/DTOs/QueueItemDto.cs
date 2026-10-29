@@ -40,7 +40,7 @@ public sealed record QueueItemDto(
 
 public static class QueueItemMappingExtensions
 {
-    public static string? FormatVitalsSummary(TriageVitals? vitals)
+    public static string? FormatVitalsSummary(PatientVitals? vitals)
     {
         if (vitals == null) return null;
 
@@ -66,7 +66,7 @@ public static class QueueItemMappingExtensions
         if (vitals.Bmi.HasValue)
             parts.Add($"BMI {vitals.Bmi.Value}");
 
-        var zCategory = vitals.GrowthZScoreCategory ?? vitals.PhilHealthZScoreCategory;
+        var zCategory = vitals.GrowthZScoreCategory;
         if (!string.IsNullOrWhiteSpace(zCategory))
             parts.Add($"Z: {zCategory.Trim()}");
 
@@ -75,7 +75,7 @@ public static class QueueItemMappingExtensions
 
     public static QueueItemDto ToDto(this QueueItem item)
     {
-        string? vitalsSummary = FormatVitalsSummary(item.TriageVitals);
+        string? vitalsSummary = FormatVitalsSummary(item.PatientVitals);
 
         return new QueueItemDto(
             item.Id,
@@ -95,7 +95,7 @@ public static class QueueItemMappingExtensions
             item.CalledTime,
             item.CompletedTime,
             item.ChiefComplaint,
-            item.TriageVitals != null,
+            item.PatientVitals != null,
             vitalsSummary,
             item.RoomOrStation,
             item.RoomId,

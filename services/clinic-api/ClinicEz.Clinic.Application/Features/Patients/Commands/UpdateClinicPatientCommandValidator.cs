@@ -40,6 +40,8 @@ public sealed class UpdateClinicPatientCommandValidator : AbstractValidator<Upda
             RuleFor(x => x.PhilHealthNumber!)
                 .Must(pin => PinRegex.IsMatch(pin.Trim()))
                 .WithMessage("PhilHealth Identification Number must follow the 12-digit format 'XX-XXXXXXXXX-X' per RA 11223.")
+                .Must(pin => !pin.Replace("-", "").Replace(" ", "").Trim().All(c => c == '0'))
+                .WithMessage("PhilHealth Identification Number cannot be all zeros (unassigned placeholder).")
                 .Must(RegisterClinicPatientCommandValidator.BeValidPhilHealthMod11)
                 .WithMessage("PhilHealth Identification Number check digit is invalid (Mod-11 verification failed).");
         });

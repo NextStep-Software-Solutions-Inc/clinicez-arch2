@@ -1,4 +1,4 @@
-﻿using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Interop.E2E.Support;
@@ -6,9 +6,9 @@ namespace ClinicEz.Interop.E2E.Support;
 /// <summary>Clinic-side fixtures: what a clinic's staff would already have entered before ordering or prescribing.</summary>
 public static class ClinicSeed
 {
-    public static async Task<ClinicPatient> PatientAsync(ClinicHost clinic, Fac facility, Guid? syncPatientId, string first = "Maria", string last = "Santos")
+    public static async Task<ClinicEz.Clinic.Domain.Entities.Patient> PatientAsync(ClinicHost clinic, Fac facility, Guid? syncPatientId, string first = "Maria", string last = "Santos")
     {
-        var patient = new ClinicPatient
+        var patient = new ClinicEz.Clinic.Domain.Entities.Patient
         {
             Id = Guid.NewGuid(),
             TenantId = facility.Tenant,
@@ -18,8 +18,8 @@ public static class ClinicSeed
             LastName = last,
             ContactNumber = "0917-123-4567",
             DateOfBirth = new DateOnly(1984, 3, 12),
-            Gender = "Female",
-            SyncPatientId = syncPatientId
+            Gender = Gender.Female,
+            CloudPatientId = syncPatientId
         };
         await clinic.DbAsync(async db =>
         {
@@ -55,7 +55,7 @@ public static class ClinicSeed
 
     /// <summary>A consultation ready to be signed, with one prescribed medicine.</summary>
     public static async Task<ConsultationEncounter> EncounterWithPrescriptionAsync(
-        ClinicHost clinic, Fac facility, ClinicPatient patient, StaffMember doctor, string genericName = "Paracetamol", int quantity = 10)
+        ClinicHost clinic, Fac facility, ClinicEz.Clinic.Domain.Entities.Patient patient, StaffMember doctor, string genericName = "Paracetamol", int quantity = 10)
     {
         var encounter = new ConsultationEncounter
         {

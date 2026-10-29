@@ -27,7 +27,7 @@ public sealed class UploadGrantService : IUploadGrantService
         _options = options.Value;
     }
 
-    public async Task<MintedUploadGrant> MintAsync(ClinicLabOrder order, UploaderKind kind, CancellationToken ct)
+    public async Task<MintedUploadGrant> MintAsync(LabOrder order, UploaderKind kind, CancellationToken ct)
     {
         var portalUrl = RequirePortalBaseUrl();
 
@@ -78,7 +78,7 @@ public sealed class UploadGrantService : IUploadGrantService
             .FirstOrDefaultAsync(o => !o.IsDeleted && o.ClinicId == clinicId && o.Id == grant.LabOrderId, ct);
         if (order == null) return null;
 
-        var clinic = await _db.ClinicSettings
+        var clinic = await _db.Settings
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(s => !s.IsDeleted && s.ClinicId == clinicId, ct);

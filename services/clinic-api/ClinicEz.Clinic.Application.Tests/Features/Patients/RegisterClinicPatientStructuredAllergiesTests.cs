@@ -16,13 +16,13 @@ using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests.Features.Patients;
 
-public class RegisterClinicPatientStructuredAllergiesTests
+public class RegisterPatientStructuredAllergiesTests
 {
     private readonly IClinicContext _clinicContext;
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly string _tenantId = "tenant_allergy_test";
 
-    public RegisterClinicPatientStructuredAllergiesTests()
+    public RegisterPatientStructuredAllergiesTests()
     {
         _clinicContext = Substitute.For<IClinicContext>();
         _clinicContext.ClinicId.Returns(_clinicId);
@@ -34,7 +34,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, allergyRepo);
@@ -99,7 +99,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, allergyRepo);
@@ -149,7 +149,7 @@ public class RegisterClinicPatientStructuredAllergiesTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
 

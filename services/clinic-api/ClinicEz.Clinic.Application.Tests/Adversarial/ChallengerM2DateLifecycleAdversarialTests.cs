@@ -45,9 +45,9 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
         _generator = new PhilHealthSequenceGenerator(_dbContext, NullLogger<PhilHealthSequenceGenerator>.Instance);
     }
 
-    private ClinicPatient CreatePatient(string code, List<Dictionary<string, object?>>? enlistments = null)
+    private Patient CreatePatient(string code, List<Dictionary<string, object?>>? enlistments = null)
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -57,12 +57,48 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
             LastName = "Challenger",
             ContactNumber = "09181234567",
             PhilHealthNumber = "120345678901",
-            DateOfBirth = new DateOnly(1990, 1, 1)
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            YakapEnlistments = new List<PatientYakapEnlistment>()
         };
 
         if (enlistments != null)
         {
-            patient.CustomFields[ClinicPatientYakapExtensions.YakapEnlistmentsKey] = enlistments;
+            foreach (var dict in enlistments)
+            {
+                var enlistment = new PatientYakapEnlistment
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    PatientId = patient.Id,
+                    EffectiveYear = dict.TryGetValue("effective_year", out var ey) && ey != null && int.TryParse(ey.ToString(), out var parsedEy) ? parsedEy : 2026,
+                    Status = dict.TryGetValue("status", out var st) && st != null && Enum.TryParse<YakapEnlistmentStatus>(st.ToString(), true, out var parsedSt) ? parsedSt : YakapEnlistmentStatus.Active,
+                    Source = dict.TryGetValue("source", out var src) && src != null && Enum.TryParse<YakapEnlistmentSource>(src.ToString(), true, out var parsedSrc) ? parsedSrc : YakapEnlistmentSource.ClinicEnlistment,
+                    CaseNo = dict.TryGetValue("case_no", out var cn) ? cn?.ToString() : null,
+                    EnlistmentTransNo = dict.TryGetValue("enlistment_no", out var en) ? en?.ToString() : (dict.TryGetValue("enlistment_trans_no", out var etn) ? etn?.ToString() : null),
+                    ProfilingTransNo = dict.TryGetValue("profiling_trans_no", out var pn) ? pn?.ToString() : null
+                };
+
+                if (dict.TryGetValue("enlisted_at", out var ea) && ea != null && DateOnly.TryParse(ea.ToString(), out var parsedEa))
+                {
+                    enlistment.EnlistmentDate = parsedEa;
+                }
+                else
+                {
+                    enlistment.EnlistmentDate = new DateOnly(enlistment.EffectiveYear > 0 ? enlistment.EffectiveYear : 2026, 1, 1);
+                }
+
+                if (dict.TryGetValue("valid_until", out var vu) && vu != null && DateOnly.TryParse(vu.ToString(), out var parsedVu))
+                {
+                    enlistment.ValidUntil = parsedVu;
+                }
+                else
+                {
+                    enlistment.ValidUntil = new DateOnly(enlistment.EffectiveYear > 0 ? enlistment.EffectiveYear : 2026, 12, 31);
+                }
+
+                patient.YakapEnlistments.Add(enlistment);
+            }
         }
 
         return patient;
@@ -156,10 +192,10 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
     public void LeapYear_2024_02_29_ValidUntil_CoversLeapDay_ExpiresNextDay()
     {
         // Enlistment valid until 2024-02-29
-        var entry = new YakapEnlistmentEntry
+        var entry = new PatientYakapEnlistment
         {
-            EnlistedAt = "2023-03-01",
-            ValidUntil = "2024-02-29",
+            EnlistmentDate = new DateOnly(2023, 3, 1),
+            ValidUntil = new DateOnly(2024, 2, 29),
             EffectiveYear = 2024,
             Status = YakapEnlistmentStatus.Active
         };
@@ -273,37 +309,37 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
         var patient = CreatePatient("PAT-MULTI-YEAR");
 
         // Add out of order: 2025, then 2023, then 2026, then 2024
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2025-01-10",
-            ValidUntil = "2025-12-31",
+            EnlistmentDate = new DateOnly(2025, 1, 10),
+            ValidUntil = new DateOnly(2025, 12, 31),
             EffectiveYear = 2025,
             Status = YakapEnlistmentStatus.Expired,
             CaseNo = "C000921202500010"
         });
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2023-02-15",
-            ValidUntil = "2023-12-31",
+            EnlistmentDate = new DateOnly(2023, 2, 15),
+            ValidUntil = new DateOnly(2023, 12, 31),
             EffectiveYear = 2023,
             Status = YakapEnlistmentStatus.Expired,
             CaseNo = "C000921202300010"
         });
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2026-01-05",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 5),
+            ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active,
             CaseNo = "C000921202600010"
         });
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
-            EnlistedAt = "2024-03-01",
-            ValidUntil = "2024-12-31",
+            EnlistmentDate = new DateOnly(2024, 3, 1),
+            ValidUntil = new DateOnly(2024, 12, 31),
             EffectiveYear = 2024,
             Status = YakapEnlistmentStatus.Expired,
             CaseNo = "C000921202400010"
@@ -405,26 +441,26 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
         // Verify 2023, 2024, 2025 entries are 100% UNTOUCHED
         entries[0].EffectiveYear.Should().Be(2023);
         entries[0].CaseNo.Should().Be("C000921202300001");
-        entries[0].EnlistmentNo.Should().Be("E000921202300001");
+        entries[0].EnlistmentTransNo.Should().Be("E000921202300001");
         entries[0].ProfilingTransNo.Should().Be("P000921202300001");
         entries[0].Status.Should().Be(YakapEnlistmentStatus.Expired);
 
         entries[1].EffectiveYear.Should().Be(2024);
         entries[1].CaseNo.Should().Be("C000921202400002");
-        entries[1].EnlistmentNo.Should().Be("E000921202400002");
+        entries[1].EnlistmentTransNo.Should().Be("E000921202400002");
         entries[1].ProfilingTransNo.Should().Be("P000921202400002");
         entries[1].Status.Should().Be(YakapEnlistmentStatus.Expired);
 
         entries[2].EffectiveYear.Should().Be(2025);
         entries[2].CaseNo.Should().Be("C000921202500003");
-        entries[2].EnlistmentNo.Should().Be("E000921202500003");
+        entries[2].EnlistmentTransNo.Should().Be("E000921202500003");
         entries[2].ProfilingTransNo.Should().Be("P000921202500003");
         entries[2].Status.Should().Be(YakapEnlistmentStatus.Expired);
 
         // 2026 has newly generated numbers
         entries[3].EffectiveYear.Should().Be(2026);
         entries[3].CaseNo.Should().Be(result.CaseNumber);
-        entries[3].EnlistmentNo.Should().Be(result.EnlistmentTransactionNumber);
+        entries[3].EnlistmentTransNo.Should().Be(result.EnlistmentTransactionNumber);
         entries[3].ProfilingTransNo.Should().Be(result.ProfilingTransactionNumber);
         entries[3].Status.Should().Be(YakapEnlistmentStatus.Active);
     }
@@ -474,7 +510,7 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
 
         var entries = patient.GetYakapEnlistments();
         entries.Should().HaveCount(1);
-        entries[0].EnlistedAt.Should().Be("2026-01-02");
+        entries[0].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 2));
         entries[0].Source.Should().Be(YakapEnlistmentSource.SelfReported);
         entries[0].CaseNo.Should().Be(result.CaseNumber);
     }
@@ -487,10 +523,10 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
     public void DateOutsideActiveWindow_EncounterBeforeEnlistmentDate_FailsCoverage()
     {
         // Enlistment is active starting June 1, 2026: [2026-06-01 to 2026-12-31]
-        var entry = new YakapEnlistmentEntry
+        var entry = new PatientYakapEnlistment
         {
-            EnlistedAt = "2026-06-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 6, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active
         };
@@ -513,10 +549,10 @@ public sealed class ChallengerM2DateLifecycleAdversarialTests
     public void DateOutsideActiveWindow_CustomValidUntil_ExpiresMidYear()
     {
         // Custom validity until June 30, 2026
-        var entry = new YakapEnlistmentEntry
+        var entry = new PatientYakapEnlistment
         {
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-06-30",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 6, 30),
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active
         };

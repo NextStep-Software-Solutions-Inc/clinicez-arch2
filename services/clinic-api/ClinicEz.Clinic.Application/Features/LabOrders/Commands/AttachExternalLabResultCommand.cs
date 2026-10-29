@@ -25,14 +25,14 @@ public record AttachExternalLabResultCommand(
 
 public class AttachExternalLabResultCommandHandler : IRequestHandler<AttachExternalLabResultCommand, ClinicLabOrderDto>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicLabResult> _resultRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
+    private readonly IRepository<LabResult> _resultRepo;
     private readonly IClinicContext _clinicContext;
     private readonly ILabResultIntake _intake;
 
     public AttachExternalLabResultCommandHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicLabResult> resultRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<LabResult> resultRepo,
         IClinicContext clinicContext,
         ILabResultIntake intake)
     {

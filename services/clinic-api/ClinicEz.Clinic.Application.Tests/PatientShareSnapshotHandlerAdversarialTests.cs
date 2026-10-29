@@ -29,7 +29,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
 
     private ShareImport SeedImport(bool addToQueue = false, string? complaint = null)
     {
-        if (!_db.ClinicSettings.IgnoreQueryFilters().Any(c => c.ClinicId == _clinicId))
+        if (!_db.Settings.IgnoreQueryFilters().Any(c => c.ClinicId == _clinicId))
         {
             MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         }
@@ -101,7 +101,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         saved.Status.Should().Be(ShareImportStatus.Imported);
         saved.PatientName.Should().Be("John Paul Dela Cruz Jr.");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("John Paul");
         patient.MiddleName.Should().Be("Dela");
         patient.LastName.Should().Be("Cruz");
@@ -132,7 +132,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         saved.Status.Should().Be(ShareImportStatus.Imported);
         saved.PatientName.Should().Be("Maria De La Paz Santos III");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Maria");
         patient.MiddleName.Should().Be("De La Paz");
         patient.LastName.Should().Be("Santos");
@@ -159,7 +159,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         var saved = await Reload(import);
         saved.PatientName.Should().Be("Maria De La Paz Santos III");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Maria");
         patient.MiddleName.Should().BeNull();
         patient.LastName.Should().Be("De La Paz Santos");
@@ -192,7 +192,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         var saved = await Reload(import);
         saved.PatientName.Should().Be("Ely An Dela Maureal Jr.");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Ely An");
         patient.MiddleName.Should().Be("Dela");
         patient.LastName.Should().Be("Maureal");
@@ -221,7 +221,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         var saved = await Reload(import);
         saved.PatientName.Should().Be("Ely An Maureal");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Ely An");
         patient.LastName.Should().Be("Maureal");
         patient.MiddleName.Should().BeNull();
@@ -243,7 +243,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import, CreateSnapshot(demographics));
 
         var saved = await Reload(import);
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Cher");
         patient.LastName.Should().Be("Unknown");
         saved.PatientName.Should().Be("Cher Unknown");
@@ -263,7 +263,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import, CreateSnapshot(demographics));
 
         var saved = await Reload(import);
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Patient");
         patient.LastName.Should().Be("Zendaya");
         saved.PatientName.Should().Be("Patient Zendaya");
@@ -287,7 +287,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         var saved = await Reload(import);
         saved.PatientName.Should().Be("John Paul Dela Cruz Jr.");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("John Paul Dela");
         patient.LastName.Should().Be("Cruz");
         patient.Suffix.Should().Be("Jr.");
@@ -307,7 +307,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         var saved = await Reload(import);
         saved.PatientName.Should().Be("Maria De La Paz Santos III");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Maria De La Paz");
         patient.LastName.Should().Be("Santos");
         patient.Suffix.Should().Be("III");
@@ -327,7 +327,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         var saved = await Reload(import);
         saved.PatientName.Should().Be("Madonna Madonna");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Madonna");
         patient.LastName.Should().Be("Madonna");
     }
@@ -346,7 +346,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         var saved = await Reload(import);
         saved.PatientName.Should().Be("Cher Cher");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Cher");
         patient.LastName.Should().Be("Cher");
     }
@@ -363,7 +363,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import, CreateSnapshot(demographics));
 
         var saved = await Reload(import);
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Santos");
         patient.LastName.Should().Be("Santos");
         patient.Suffix.Should().Be("Jr.");
@@ -382,7 +382,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import, CreateSnapshot(demographics));
 
         var saved = await Reload(import);
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Patient");
         patient.LastName.Should().Be("Unknown");
         saved.PatientName.Should().Be("Patient Unknown");
@@ -403,7 +403,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
             await Deliver(import, CreateSnapshot(demographics));
 
             var saved = await Reload(import);
-            var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+            var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
             patient.LastName.Should().Be("Cruz");
             patient.Suffix.Should().Be(suf);
             patient.FirstName.Should().Be("Juan Dela");
@@ -424,7 +424,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         existingPatient.MiddleName = null;
         existingPatient.Suffix = null;
         existingPatient.DateOfBirth = new DateOnly(2000, 1, 1);
-        existingPatient.Gender = "Other";
+        existingPatient.Gender = Gender.Other;
         existingPatient.PhilHealthNumber = null;
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         _db.Patients.Add(existingPatient);
@@ -447,7 +447,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
 
         var saved = await Reload(import);
         saved.Status.Should().Be(ShareImportStatus.Imported);
-        saved.ClinicPatientId.Should().Be(existingPatient.Id);
+        saved.PatientId.Should().Be(existingPatient.Id);
         saved.PatientName.Should().Be("Ely An Dela Maureal Jr.");
 
         var healed = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == existingPatient.Id);
@@ -456,7 +456,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         healed.LastName.Should().Be("Maureal");
         healed.Suffix.Should().Be("Jr.");
         healed.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        healed.Gender.Should().Be("Male");
+        healed.Gender.Should().Be(Gender.Male);
         healed.PhilHealthNumber.Should().Be("12-345678901-2");
     }
 
@@ -464,12 +464,12 @@ public class PatientShareSnapshotHandlerTestsAdversarial
     public async Task Reimport_Heals_ExistingPatient_WhenMatchedBySyncPatientId()
     {
         var existingPatient = Phase3TestKit.NewPatient(_clinicId, Tenant);
-        existingPatient.SyncPatientId = _patientPlaneId;
+        existingPatient.CloudPatientId = _patientPlaneId;
         existingPatient.ClinicEzId = null; // No ClinicEzId originally
         existingPatient.FirstName = "Juan";
         existingPatient.LastName = "Cruz";
         existingPatient.DateOfBirth = new DateOnly(2000, 1, 1);
-        existingPatient.Gender = "Other";
+        existingPatient.Gender = Gender.Other;
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         _db.Patients.Add(existingPatient);
         await _db.SaveChangesAsync();
@@ -489,7 +489,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import, snapshot);
 
         var saved = await Reload(import);
-        saved.ClinicPatientId.Should().Be(existingPatient.Id);
+        saved.PatientId.Should().Be(existingPatient.Id);
         saved.PatientName.Should().Be("Juan Carlos Dela Cruz Sr.");
 
         var healed = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == existingPatient.Id);
@@ -498,7 +498,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         healed.LastName.Should().Be("Cruz");
         healed.Suffix.Should().Be("Sr.");
         healed.DateOfBirth.Should().Be(new DateOnly(1980, 1, 10));
-        healed.Gender.Should().Be("Male");
+        healed.Gender.Should().Be(Gender.Male);
         healed.ClinicEzId.Should().Be("CE-NEW-ID");
     }
 
@@ -529,14 +529,14 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import, snapshot);
 
         var saved = await Reload(import);
-        saved.ClinicPatientId.Should().Be(existingPatient.Id);
+        saved.PatientId.Should().Be(existingPatient.Id);
         saved.PatientName.Should().Be("Ely An Maureal");
 
         var healed = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == existingPatient.Id);
         healed.FirstName.Should().Be("Ely An");
         healed.LastName.Should().Be("Maureal");
         healed.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        healed.Gender.Should().Be("Male");
+        healed.Gender.Should().Be(Gender.Male);
     }
 
     [Fact]
@@ -588,7 +588,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import1, snapshot1);
 
         var saved1 = await Reload(import1);
-        var patient1 = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved1.ClinicPatientId);
+        var patient1 = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved1.PatientId);
         patient1.FirstName.Should().Be("Ely An");
 
         // Second import with same patient
@@ -597,7 +597,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         await Deliver(import2, snapshot2);
 
         var saved2 = await Reload(import2);
-        saved2.ClinicPatientId.Should().Be(patient1.Id);
+        saved2.PatientId.Should().Be(patient1.Id);
         (await _db.Patients.IgnoreQueryFilters().CountAsync(p => p.ClinicEzId == "CE-IDEM-1")).Should().Be(1);
 
         var patient2 = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == patient1.Id);
@@ -606,6 +606,6 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         patient2.LastName.Should().Be("Maureal");
         patient2.Suffix.Should().Be("Jr.");
         patient2.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        patient2.Gender.Should().Be("Male");
+        patient2.Gender.Should().Be(Gender.Male);
     }
 }

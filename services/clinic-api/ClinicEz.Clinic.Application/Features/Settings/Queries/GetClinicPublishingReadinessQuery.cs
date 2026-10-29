@@ -30,15 +30,15 @@ public sealed record ClinicPublishingChecksDto(
 
 public sealed class GetClinicPublishingReadinessQueryHandler : IRequestHandler<GetClinicPublishingReadinessQuery, ClinicPublishingReadinessDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicServiceItem> _servicesRepo;
+    private readonly IRepository<ServiceItem> _servicesRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicPublishingReadinessQueryHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicServiceItem> servicesRepo,
+        IRepository<ServiceItem> servicesRepo,
         IClinicContext clinicContext)
     {
         _settingsRepo = settingsRepo;

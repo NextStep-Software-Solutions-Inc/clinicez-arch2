@@ -24,11 +24,11 @@ import {
   formatPhilHealthPin,
   validatePhilHealthPinMod11,
   validatePhilHealthPin,
-  PHILHEALTH_RELATIONSHIPS,
   type MemberType,
   type PrincipalRelationship,
   type PhilHealthValidationResult,
 } from '../src/lib/philhealth';
+import { optionsService } from '../src/services/options.service';
 
 import {
   type PatientJoinRequestedPayload,
@@ -219,13 +219,40 @@ describe('Feature 17: PhilHealth PIN Mod-11 Check Digit Algorithm & Masking', ()
 });
 
 describe('Feature 18: PhilHealth Member Type (MM vs DD) & Principal Sponsor Credentials', () => {
-  test('T1.1: Verifies statutory PhilHealth relationship options catalog', () => {
-    const codes = PHILHEALTH_RELATIONSHIPS.map((r) => r.code);
-    expect(codes).toEqual(['C', 'S', 'P', 'D']);
-    expect(PHILHEALTH_RELATIONSHIPS.find((r) => r.code === 'C')?.label).toContain('Child');
-    expect(PHILHEALTH_RELATIONSHIPS.find((r) => r.code === 'S')?.label).toContain('Spouse');
-    expect(PHILHEALTH_RELATIONSHIPS.find((r) => r.code === 'P')?.label).toContain('Parent');
-    expect(PHILHEALTH_RELATIONSHIPS.find((r) => r.code === 'D')?.label).toContain('Disabled Dependent');
+  test('T1.1: Verifies dynamic options resolution via optionsService.getOptionSet("guardian_relationship")', async () => {
+    const originalFetch = globalThis.fetch;
+    const mockOptions = [
+      { code: 'MOTHER', label: 'Mother', philHealthCode: '1' },
+      { code: 'FATHER', label: 'Father', philHealthCode: '2' },
+      { code: 'SPOUSE', label: 'Spouse', philHealthCode: '3' },
+      { code: 'SIBLING', label: 'Brother / Sister', philHealthCode: '4' },
+      { code: 'GRANDPARENT', label: 'Grandmother / Grandfather', philHealthCode: '5' },
+      { code: 'LEGAL_GUARDIAN', label: 'Court-Appointed Legal Guardian', philHealthCode: '6' },
+      { code: 'NON_RELATIVE_CAREGIVER', label: 'Non-Relative Primary Caregiver', philHealthCode: '7', requiresSpecifyText: true },
+    ];
+
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('/public/options/guardian_relationship')) {
+        return new Response(JSON.stringify(mockOptions), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ETag: '"sha256-guardian-relationship-v1"' },
+        });
+      }
+      return originalFetch(url);
+    }) as any;
+
+    try {
+      const options = await optionsService.getOptionSet('guardian_relationship');
+      expect(options.length).toBeGreaterThanOrEqual(4);
+      const codes = options.map((r) => r.code);
+      expect(codes).toContain('SPOUSE');
+      expect(codes).toContain('MOTHER');
+      expect(options.find((r) => r.code === 'SPOUSE')?.label).toContain('Spouse');
+      expect(options.find((r) => r.code === 'MOTHER')?.label).toContain('Mother');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test('T1.2: Standard Member (MM) valid payload does not require principal sponsor fields', () => {
@@ -298,6 +325,54 @@ describe('Feature 18: PhilHealth Member Type (MM vs DD) & Principal Sponsor Cred
     expect(serializedPayload.principalFullName).toBeUndefined();
     expect(serializedPayload.principalRelationship).toBeUndefined();
     expect(serializedPayload.principalMemberPin).toBeUndefined();
+  });
+
+  test('T1.5: PatientJoinRequestedPayload accepts 10-digit PSGC columns and structured addresses array', () => {
+    const psgcPayload: PatientJoinRequestedPayload = {
+      tenantSlug: 'ustp',
+      facilitySlug: 'cdo-clinic',
+      joinCode: 'CLINIC2026',
+      firstName: 'Maria',
+      lastName: 'Santos',
+      dateOfBirth: '1995-08-20',
+      sex: 'Female',
+      contactNumber: '09181234567',
+      regionPsgc: '1000000000',
+      provincePsgc: '1043000000',
+      cityMunicipalityPsgc: '1043050000',
+      barangayPsgc: '104305001',
+      regionName: 'Region X (Northern Mindanao)',
+      provinceName: 'Misamis Oriental',
+      cityMunicipalityName: 'Cagayan de Oro City',
+      barangayName: 'Carmen',
+      streetAddress: 'Zone 3, Vamenta Blvd',
+      zipCode: '9000',
+      addresses: [
+        {
+          addressType: 'Current',
+          isSameAsPermanent: true,
+          regionPsgc: '1000000000',
+          provincePsgc: '1043000000',
+          cityMunicipalityPsgc: '1043050000',
+          barangayPsgc: '104305001',
+          regionName: 'Region X (Northern Mindanao)',
+          provinceName: 'Misamis Oriental',
+          cityMunicipalityName: 'Cagayan de Oro City',
+          barangayName: 'Carmen',
+          streetAddress: 'Zone 3, Vamenta Blvd',
+          zipCode: '9000',
+        },
+      ],
+    };
+
+    expect(psgcPayload.regionPsgc).toBe('1000000000');
+    expect(psgcPayload.provincePsgc).toBe('1043000000');
+    expect(psgcPayload.cityMunicipalityPsgc).toBe('1043050000');
+    expect(psgcPayload.barangayPsgc).toBe('104305001');
+    expect(psgcPayload.addresses).toBeDefined();
+    expect(psgcPayload.addresses?.[0].addressType).toBe('Current');
+    expect(psgcPayload.addresses?.[0].cityMunicipalityName).toBe('Cagayan de Oro City');
+    expect(psgcPayload.addresses?.[0].barangayName).toBe('Carmen');
   });
 
   test('T2.1 (Boundary): Dependent (DD) validation blocks invalid or missing principal sponsor PIN', () => {

@@ -43,14 +43,14 @@ public sealed class UpdatePatientPhysicalExamCommandValidator : AbstractValidato
 
 public sealed class UpdatePatientPhysicalExamCommandHandler : IRequestHandler<UpdatePatientPhysicalExamCommand, PatientPhysicalExamProfileDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<PatientPhysicalExamProfile> _physicalExamRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<PatientPhysicalExam> _physicalExamRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdatePatientPhysicalExamCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<PatientPhysicalExamProfile> physicalExamRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<PatientPhysicalExam> physicalExamRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -71,36 +71,38 @@ public sealed class UpdatePatientPhysicalExamCommandHandler : IRequestHandler<Up
         }
 
         var entry = await _physicalExamRepo.Query(pe => pe.PatientId == request.PatientId)
+            .OrderByDescending(pe => pe.ExamDate)
             .FirstOrDefaultAsync(cancellationToken);
 
         var staffActor = _clinicContext.StaffId?.ToString() ?? "ClinicStaff";
 
         if (entry == null)
         {
-            entry = new PatientPhysicalExamProfile
+            entry = new PatientPhysicalExam
             {
                 Id = Guid.NewGuid(),
                 TenantId = patient.TenantId ?? _clinicContext.TenantId,
                 ClinicId = _clinicContext.ClinicId,
                 PatientId = request.PatientId,
-                GenSurveyId = !string.IsNullOrWhiteSpace(request.GenSurveyId) ? request.GenSurveyId : "1",
-                GenSurveyRemarks = string.IsNullOrWhiteSpace(request.GenSurveyRemarks) ? null : request.GenSurveyRemarks.Trim(),
-                SkinId = !string.IsNullOrWhiteSpace(request.SkinId) ? request.SkinId : "1",
+                GeneralSurveyStatus = (request.GenSurveyId == "2") ? GeneralSurveyStatus.Abnormal : GeneralSurveyStatus.Normal,
+                GenSurveyId = request.GenSurveyId,
+                GeneralSurveyRemarks = string.IsNullOrWhiteSpace(request.GenSurveyRemarks) ? null : request.GenSurveyRemarks.Trim(),
+                SkinId = request.SkinId,
                 SkinRemarks = string.IsNullOrWhiteSpace(request.SkinRemarks) ? null : request.SkinRemarks.Trim(),
-                HeentId = !string.IsNullOrWhiteSpace(request.HeentId) ? request.HeentId : "11",
+                HeentId = request.HeentId,
                 HeentRemarks = string.IsNullOrWhiteSpace(request.HeentRemarks) ? null : request.HeentRemarks.Trim(),
-                ChestId = !string.IsNullOrWhiteSpace(request.ChestId) ? request.ChestId : "6",
-                ChestRemarks = string.IsNullOrWhiteSpace(request.ChestRemarks) ? null : request.ChestRemarks.Trim(),
-                HeartId = !string.IsNullOrWhiteSpace(request.HeartId) ? request.HeartId : "5",
+                ChestId = request.ChestId,
+                ChestLungsRemarks = string.IsNullOrWhiteSpace(request.ChestRemarks) ? null : request.ChestRemarks.Trim(),
+                HeartId = request.HeartId,
                 HeartRemarks = string.IsNullOrWhiteSpace(request.HeartRemarks) ? null : request.HeartRemarks.Trim(),
-                AbdomenId = !string.IsNullOrWhiteSpace(request.AbdomenId) ? request.AbdomenId : "7",
+                AbdomenId = request.AbdomenId,
                 AbdomenRemarks = string.IsNullOrWhiteSpace(request.AbdomenRemarks) ? null : request.AbdomenRemarks.Trim(),
-                NeuroId = !string.IsNullOrWhiteSpace(request.NeuroId) ? request.NeuroId : "6",
-                NeuroRemarks = string.IsNullOrWhiteSpace(request.NeuroRemarks) ? null : request.NeuroRemarks.Trim(),
-                RectalId = !string.IsNullOrWhiteSpace(request.RectalId) ? request.RectalId : "1",
-                RectalRemarks = string.IsNullOrWhiteSpace(request.RectalRemarks) ? null : request.RectalRemarks.Trim(),
-                GuId = !string.IsNullOrWhiteSpace(request.GuId) ? request.GuId : "1",
-                GuRemarks = string.IsNullOrWhiteSpace(request.GuRemarks) ? null : request.GuRemarks.Trim(),
+                NeuroId = request.NeuroId,
+                NeurologicalRemarks = string.IsNullOrWhiteSpace(request.NeuroRemarks) ? null : request.NeuroRemarks.Trim(),
+                RectalId = request.RectalId,
+                DigitalRectalRemarks = string.IsNullOrWhiteSpace(request.RectalRemarks) ? null : request.RectalRemarks.Trim(),
+                GuId = request.GuId,
+                GenitourinaryRemarks = string.IsNullOrWhiteSpace(request.GuRemarks) ? null : request.GuRemarks.Trim(),
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = staffActor
             };
@@ -109,49 +111,49 @@ public sealed class UpdatePatientPhysicalExamCommandHandler : IRequestHandler<Up
         else
         {
             if (request.GenSurveyId != null)
-                entry.GenSurveyId = !string.IsNullOrWhiteSpace(request.GenSurveyId) ? request.GenSurveyId : "1";
+                entry.GenSurveyId = request.GenSurveyId;
             if (request.GenSurveyRemarks != null)
-                entry.GenSurveyRemarks = string.IsNullOrWhiteSpace(request.GenSurveyRemarks) ? null : request.GenSurveyRemarks.Trim();
+                entry.GeneralSurveyRemarks = string.IsNullOrWhiteSpace(request.GenSurveyRemarks) ? null : request.GenSurveyRemarks.Trim();
 
             if (request.SkinId != null)
-                entry.SkinId = !string.IsNullOrWhiteSpace(request.SkinId) ? request.SkinId : "1";
+                entry.SkinId = request.SkinId;
             if (request.SkinRemarks != null)
                 entry.SkinRemarks = string.IsNullOrWhiteSpace(request.SkinRemarks) ? null : request.SkinRemarks.Trim();
 
             if (request.HeentId != null)
-                entry.HeentId = !string.IsNullOrWhiteSpace(request.HeentId) ? request.HeentId : "11";
+                entry.HeentId = request.HeentId;
             if (request.HeentRemarks != null)
                 entry.HeentRemarks = string.IsNullOrWhiteSpace(request.HeentRemarks) ? null : request.HeentRemarks.Trim();
 
             if (request.ChestId != null)
-                entry.ChestId = !string.IsNullOrWhiteSpace(request.ChestId) ? request.ChestId : "6";
+                entry.ChestId = request.ChestId;
             if (request.ChestRemarks != null)
-                entry.ChestRemarks = string.IsNullOrWhiteSpace(request.ChestRemarks) ? null : request.ChestRemarks.Trim();
+                entry.ChestLungsRemarks = string.IsNullOrWhiteSpace(request.ChestRemarks) ? null : request.ChestRemarks.Trim();
 
             if (request.HeartId != null)
-                entry.HeartId = !string.IsNullOrWhiteSpace(request.HeartId) ? request.HeartId : "5";
+                entry.HeartId = request.HeartId;
             if (request.HeartRemarks != null)
                 entry.HeartRemarks = string.IsNullOrWhiteSpace(request.HeartRemarks) ? null : request.HeartRemarks.Trim();
 
             if (request.AbdomenId != null)
-                entry.AbdomenId = !string.IsNullOrWhiteSpace(request.AbdomenId) ? request.AbdomenId : "7";
+                entry.AbdomenId = request.AbdomenId;
             if (request.AbdomenRemarks != null)
                 entry.AbdomenRemarks = string.IsNullOrWhiteSpace(request.AbdomenRemarks) ? null : request.AbdomenRemarks.Trim();
 
             if (request.NeuroId != null)
-                entry.NeuroId = !string.IsNullOrWhiteSpace(request.NeuroId) ? request.NeuroId : "6";
+                entry.NeuroId = request.NeuroId;
             if (request.NeuroRemarks != null)
-                entry.NeuroRemarks = string.IsNullOrWhiteSpace(request.NeuroRemarks) ? null : request.NeuroRemarks.Trim();
+                entry.NeurologicalRemarks = string.IsNullOrWhiteSpace(request.NeuroRemarks) ? null : request.NeuroRemarks.Trim();
 
             if (request.RectalId != null)
-                entry.RectalId = !string.IsNullOrWhiteSpace(request.RectalId) ? request.RectalId : "1";
+                entry.RectalId = request.RectalId;
             if (request.RectalRemarks != null)
-                entry.RectalRemarks = string.IsNullOrWhiteSpace(request.RectalRemarks) ? null : request.RectalRemarks.Trim();
+                entry.DigitalRectalRemarks = string.IsNullOrWhiteSpace(request.RectalRemarks) ? null : request.RectalRemarks.Trim();
 
             if (request.GuId != null)
-                entry.GuId = !string.IsNullOrWhiteSpace(request.GuId) ? request.GuId : "1";
+                entry.GuId = request.GuId;
             if (request.GuRemarks != null)
-                entry.GuRemarks = string.IsNullOrWhiteSpace(request.GuRemarks) ? null : request.GuRemarks.Trim();
+                entry.GenitourinaryRemarks = string.IsNullOrWhiteSpace(request.GuRemarks) ? null : request.GuRemarks.Trim();
 
             entry.UpdatedAt = DateTime.UtcNow;
             entry.UpdatedBy = staffActor;
@@ -163,24 +165,24 @@ public sealed class UpdatePatientPhysicalExamCommandHandler : IRequestHandler<Up
         return new PatientPhysicalExamProfileDto(
             entry.Id,
             entry.PatientId,
-            entry.GenSurveyId,
-            entry.GenSurveyRemarks,
-            entry.SkinId,
+            GenSurveyId: entry.GenSurveyId ?? "1",
+            entry.GeneralSurveyRemarks,
+            SkinId: entry.SkinId ?? "1",
             entry.SkinRemarks,
-            entry.HeentId,
+            HeentId: entry.HeentId ?? "11",
             entry.HeentRemarks,
-            entry.ChestId,
-            entry.ChestRemarks,
-            entry.HeartId,
+            ChestId: entry.ChestId ?? "6",
+            entry.ChestLungsRemarks,
+            HeartId: entry.HeartId ?? "5",
             entry.HeartRemarks,
-            entry.AbdomenId,
+            AbdomenId: entry.AbdomenId ?? "7",
             entry.AbdomenRemarks,
-            entry.NeuroId,
-            entry.NeuroRemarks,
-            entry.RectalId,
-            entry.RectalRemarks,
-            entry.GuId,
-            entry.GuRemarks,
+            NeuroId: entry.NeuroId ?? "6",
+            entry.NeurologicalRemarks,
+            RectalId: entry.RectalId ?? "1",
+            entry.DigitalRectalRemarks,
+            GuId: entry.GuId ?? "1",
+            entry.GenitourinaryRemarks,
             entry.CreatedAt,
             entry.UpdatedAt);
     }

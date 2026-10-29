@@ -25,9 +25,9 @@ public sealed record PublicJoinCodeValidationResult(
 
 public sealed class ValidateJoinCodeQueryHandler : IRequestHandler<ValidateJoinCodeQuery, PublicJoinCodeValidationResult>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
 
-    public ValidateJoinCodeQueryHandler(IRepository<ClinicSettings> settingsRepo)
+    public ValidateJoinCodeQueryHandler(IRepository<FacilitySettings> settingsRepo)
     {
         _settingsRepo = settingsRepo;
     }

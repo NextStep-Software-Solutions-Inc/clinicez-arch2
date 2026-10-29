@@ -26,121 +26,50 @@ public class ChallengerM1_2MigrationAndSerializationTests
     // =========================================================================
 
     [Fact]
-    public void Migration_UpOperations_ContainsSqlBackfillFollowedByTenDropColumns()
+    public void Migration_InitialCreate_UpOperations_ContainsPure1NfTablesAndIndexes()
     {
         // Arrange
-        var migration = new UnifyPatientAddressAndYakapIntoCustomFields();
+        var migration = new InitialCreate();
         var migrationBuilder = new MigrationBuilder("Npgsql");
 
         // Act - invoke protected Up via reflection
-        var upMethod = typeof(UnifyPatientAddressAndYakapIntoCustomFields)
+        var upMethod = typeof(InitialCreate)
             .GetMethod("Up", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         upMethod.Should().NotBeNull();
         upMethod!.Invoke(migration, new object[] { migrationBuilder });
 
-        // Assert operations
-        var ops = migrationBuilder.Operations;
-        ops.Should().HaveCount(11);
+        // Assert operations include 1NF tables and indexes
+        var createTables = migrationBuilder.Operations.OfType<CreateTableOperation>().ToList();
+        createTables.Should().Contain(t => t.Name == "PatientPhilHealthMemberships");
+        createTables.Should().Contain(t => t.Name == "PatientYakapEnlistments");
+        createTables.Should().Contain(t => t.Name == "PatientSocialHistories");
+        createTables.Should().Contain(t => t.Name == "PatientReproductiveHistories");
 
-        // First operation must be the SQL backfill script
-        ops[0].Should().BeOfType<SqlOperation>();
-        var sqlOp = (SqlOperation)ops[0];
-        sqlOp.Sql.Should().Contain(@"UPDATE ""public"".""Patients""");
-        sqlOp.Sql.Should().Contain(@"jsonb_strip_nulls");
-        sqlOp.Sql.Should().Contain(@"primary_address_line");
-        sqlOp.Sql.Should().Contain(@"primary_barangay");
-        sqlOp.Sql.Should().Contain(@"primary_city");
-        sqlOp.Sql.Should().Contain(@"primary_province");
-        sqlOp.Sql.Should().Contain(@"emergency_contact_name");
-        sqlOp.Sql.Should().Contain(@"emergency_contact_phone");
-        sqlOp.Sql.Should().Contain(@"emergency_contact_relationship");
-        sqlOp.Sql.Should().Contain(@"yakap_enlistments");
-
-        // Next 10 operations must be DropColumn for the 10 static columns
-        var dropOps = ops.Skip(1).Cast<DropColumnOperation>().ToList();
-        dropOps.Should().HaveCount(10);
-        var droppedNames = dropOps.Select(d => d.Name).ToList();
-
-        droppedNames.Should().BeEquivalentTo(new[]
-        {
-            "AddressLine",
-            "Barangay",
-            "City",
-            "Province",
-            "EmergencyContactName",
-            "EmergencyContactPhone",
-            "EmergencyContactRelationship",
-            "PhilHealthCaseNo",
-            "PhilHealthEnlistmentNo",
-            "PhilHealthProfilingTransNo"
-        });
-
-        foreach (var drop in dropOps)
-        {
-            drop.Schema.Should().Be("public");
-            drop.Table.Should().Be("Patients");
-        }
+        var createIndexes = migrationBuilder.Operations.OfType<CreateIndexOperation>().ToList();
+        // Jsonb GIN index on Patient.CustomFields
+        createIndexes.Should().Contain(i => i.Table == "Patients" && i.Name == "IX_Patients_CustomFields");
+        // Filtered unique index on DoctorScheduleTemplate
+        createIndexes.Should().Contain(i => i.Table == "DoctorScheduleTemplates" && i.IsUnique && i.Filter != null && i.Filter.Contains("IsDeleted"));
     }
 
     [Fact]
-    public void Migration_DownOperations_ContainsTenAddColumnsFollowedByReverseSql()
+    public void Migration_InitialCreate_DownOperations_DropsTablesAndIndexes()
     {
         // Arrange
-        var migration = new UnifyPatientAddressAndYakapIntoCustomFields();
+        var migration = new InitialCreate();
         var migrationBuilder = new MigrationBuilder("Npgsql");
 
         // Act - invoke protected Down via reflection
-        var downMethod = typeof(UnifyPatientAddressAndYakapIntoCustomFields)
+        var downMethod = typeof(InitialCreate)
             .GetMethod("Down", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         downMethod.Should().NotBeNull();
         downMethod!.Invoke(migration, new object[] { migrationBuilder });
 
-        // Assert operations
-        var ops = migrationBuilder.Operations;
-        ops.Should().HaveCount(11);
-
-        // First 10 operations must be AddColumn for the 10 static columns
-        var addOps = ops.Take(10).Cast<AddColumnOperation>().ToList();
-        addOps.Should().HaveCount(10);
-        var addedNames = addOps.Select(a => a.Name).ToList();
-
-        addedNames.Should().BeEquivalentTo(new[]
-        {
-            "AddressLine",
-            "Barangay",
-            "City",
-            "Province",
-            "EmergencyContactName",
-            "EmergencyContactPhone",
-            "EmergencyContactRelationship",
-            "PhilHealthCaseNo",
-            "PhilHealthEnlistmentNo",
-            "PhilHealthProfilingTransNo"
-        });
-
-        foreach (var add in addOps)
-        {
-            add.Schema.Should().Be("public");
-            add.Table.Should().Be("Patients");
-            add.ClrType.Should().Be(typeof(string));
-            add.IsNullable.Should().BeTrue();
-            add.ColumnType.Should().Be("text");
-        }
-
-        // 11th operation must be the reverse SQL restoring column values from CustomFields JSONB
-        ops[10].Should().BeOfType<SqlOperation>();
-        var sqlOp = (SqlOperation)ops[10];
-        sqlOp.Sql.Should().Contain(@"UPDATE ""public"".""Patients""");
-        sqlOp.Sql.Should().Contain(@"""AddressLine"" = NULLIF(""CustomFields""::jsonb ->> 'primary_address_line', '')");
-        sqlOp.Sql.Should().Contain(@"""Barangay"" = NULLIF(""CustomFields""::jsonb ->> 'primary_barangay', '')");
-        sqlOp.Sql.Should().Contain(@"""City"" = NULLIF(""CustomFields""::jsonb ->> 'primary_city', '')");
-        sqlOp.Sql.Should().Contain(@"""Province"" = NULLIF(""CustomFields""::jsonb ->> 'primary_province', '')");
-        sqlOp.Sql.Should().Contain(@"""EmergencyContactName"" = NULLIF(""CustomFields""::jsonb ->> 'emergency_contact_name', '')");
-        sqlOp.Sql.Should().Contain(@"""EmergencyContactPhone"" = NULLIF(""CustomFields""::jsonb ->> 'emergency_contact_phone', '')");
-        sqlOp.Sql.Should().Contain(@"""EmergencyContactRelationship"" = NULLIF(""CustomFields""::jsonb ->> 'emergency_contact_relationship', '')");
-        sqlOp.Sql.Should().Contain(@"""PhilHealthCaseNo"" = NULLIF(""CustomFields""::jsonb -> 'yakap_enlistments' -> 0 ->> 'case_no', '')");
-        sqlOp.Sql.Should().Contain(@"""PhilHealthEnlistmentNo"" = NULLIF(""CustomFields""::jsonb -> 'yakap_enlistments' -> 0 ->> 'enlistment_no', '')");
-        sqlOp.Sql.Should().Contain(@"""PhilHealthProfilingTransNo"" = NULLIF(""CustomFields""::jsonb -> 'yakap_enlistments' -> 0 ->> 'profiling_trans_no', '')");
+        var dropTables = migrationBuilder.Operations.OfType<DropTableOperation>().ToList();
+        dropTables.Should().Contain(t => t.Name == "PatientPhilHealthMemberships");
+        dropTables.Should().Contain(t => t.Name == "PatientYakapEnlistments");
+        dropTables.Should().Contain(t => t.Name == "PatientSocialHistories");
+        dropTables.Should().Contain(t => t.Name == "PatientReproductiveHistories");
     }
 
     // =========================================================================
@@ -523,7 +452,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
     // =========================================================================
 
     [Fact]
-    public void ClinicPatientDto_RoundTripsJson_WithCamelCaseOptions()
+    public void PatientDto_RoundTripsJson_WithCamelCaseOptions()
     {
         // Arrange
         var customFields = new Dictionary<string, object?>
@@ -551,7 +480,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             }
         };
 
-        var dto = new ClinicPatientDto(
+        var dto = new PatientDto(
             Id: Guid.NewGuid(),
             TenantId: "tenant_alpha",
             ClinicId: Guid.NewGuid(),
@@ -612,7 +541,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
         json.Should().Contain("\"C00921202600001\"");
 
         // Act - deserialize
-        var deserialized = JsonSerializer.Deserialize<ClinicPatientDto>(json, options);
+        var deserialized = JsonSerializer.Deserialize<PatientDto>(json, options);
 
         // Assert full fidelity round-trip
         deserialized.Should().NotBeNull();
@@ -744,7 +673,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
     public void ResolveActiveCaseNo_WithMultipleEnlistments_SelectsActiveEntryCaseNo()
     {
         // Patient with two enlistments: 2025 is Expired, 2026 is Active
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -752,7 +681,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             FirstName = "Teresa",
             LastName = "Magbanua",
             DateOfBirth = new DateOnly(1985, 10, 13),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09171112233"
         };
 
@@ -795,7 +724,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
         ]";
         using var doc = JsonDocument.Parse(json);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -803,7 +732,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             FirstName = "Melchora",
             LastName = "Aquino",
             DateOfBirth = new DateOnly(1930, 1, 6),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09179998877"
         };
         patient.CustomFields["yakap_enlistments"] = doc.RootElement.Clone();
@@ -818,7 +747,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
     [Fact]
     public void ResolveActiveCaseNo_WhenAllEnlistmentsExpired_ReturnsNullOrFallback()
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = "tenant_1",
             ClinicId = Guid.NewGuid(),
@@ -826,7 +755,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             FirstName = "Apolinario",
             LastName = "Mabini",
             DateOfBirth = new DateOnly(1970, 7, 23),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170002233"
         };
 

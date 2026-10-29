@@ -89,7 +89,7 @@ public sealed class RecordingRetentionSweeper : BackgroundService, IRecordingRet
             session.PurgedBy = "System.RetentionSweeper";
 
             // 4. Write immutable WORM audit log
-            db.ClinicAuditEntries.Add(new ClinicAuditEntry
+            db.AuditEntries.Add(new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = session.TenantId,

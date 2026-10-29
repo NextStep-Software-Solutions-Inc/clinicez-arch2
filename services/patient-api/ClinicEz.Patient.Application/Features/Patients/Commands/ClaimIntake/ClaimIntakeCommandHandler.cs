@@ -318,6 +318,81 @@ public sealed class ClaimIntakeCommandHandler : IRequestHandler<ClaimIntakeComma
             }
         }
 
+        // ── 5.1 Hydrate Structured PatientAddress Entities ───────────────────
+        if (request.Addresses != null && request.Addresses.Count > 0)
+        {
+            foreach (var addr in request.Addresses)
+            {
+                var addrType = Enum.TryParse<AddressType>(addr.AddressType, true, out var at) ? at : AddressType.Home;
+                var existingAddr = targetPatient.Addresses.FirstOrDefault(a => !a.IsDeleted && a.Type == addrType);
+                if (existingAddr == null)
+                {
+                    targetPatient.Addresses.Add(new PatientAddress
+                    {
+                        ClientId = Guid.NewGuid(),
+                        PatientId = targetPatient.Id,
+                        Type = addrType,
+                        StreetAddress = addr.StreetAddress?.Trim() ?? string.Empty,
+                        HouseStreet = addr.StreetAddress?.Trim() ?? string.Empty,
+                        RegionPsgc = addr.RegionPsgc?.Trim(),
+                        ProvincePsgc = addr.ProvincePsgc?.Trim(),
+                        CityMunicipalityPsgc = addr.CityMunicipalityPsgc?.Trim(),
+                        BarangayPsgc = addr.BarangayPsgc?.Trim(),
+                        RegionName = addr.RegionName?.Trim(),
+                        ProvinceName = addr.ProvinceName?.Trim(),
+                        CityMunicipalityName = addr.CityMunicipalityName?.Trim(),
+                        BarangayName = addr.BarangayName?.Trim(),
+                        Region = addr.RegionName?.Trim(),
+                        Province = addr.ProvinceName?.Trim(),
+                        CityMunicipality = addr.CityMunicipalityName?.Trim() ?? string.Empty,
+                        Barangay = addr.BarangayName?.Trim(),
+                        ZipCode = addr.PostalCode?.Trim(),
+                        Country = "Philippines",
+                        IsSameAsPermanent = addr.IsSameAsPermanent,
+                        IsPrimary = addr.IsPrimary,
+                        CreatedBy = request.ClerkUserId
+                    });
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(addr.StreetAddress))
+                    {
+                        existingAddr.StreetAddress = addr.StreetAddress.Trim();
+                        existingAddr.HouseStreet = addr.StreetAddress.Trim();
+                    }
+                    if (!string.IsNullOrWhiteSpace(addr.RegionPsgc)) existingAddr.RegionPsgc = addr.RegionPsgc.Trim();
+                    if (!string.IsNullOrWhiteSpace(addr.ProvincePsgc)) existingAddr.ProvincePsgc = addr.ProvincePsgc.Trim();
+                    if (!string.IsNullOrWhiteSpace(addr.CityMunicipalityPsgc)) existingAddr.CityMunicipalityPsgc = addr.CityMunicipalityPsgc.Trim();
+                    if (!string.IsNullOrWhiteSpace(addr.BarangayPsgc)) existingAddr.BarangayPsgc = addr.BarangayPsgc.Trim();
+                    if (!string.IsNullOrWhiteSpace(addr.RegionName))
+                    {
+                        existingAddr.RegionName = addr.RegionName.Trim();
+                        existingAddr.Region = addr.RegionName.Trim();
+                    }
+                    if (!string.IsNullOrWhiteSpace(addr.ProvinceName))
+                    {
+                        existingAddr.ProvinceName = addr.ProvinceName.Trim();
+                        existingAddr.Province = addr.ProvinceName.Trim();
+                    }
+                    if (!string.IsNullOrWhiteSpace(addr.CityMunicipalityName))
+                    {
+                        existingAddr.CityMunicipalityName = addr.CityMunicipalityName.Trim();
+                        existingAddr.CityMunicipality = addr.CityMunicipalityName.Trim();
+                    }
+                    if (!string.IsNullOrWhiteSpace(addr.BarangayName))
+                    {
+                        existingAddr.BarangayName = addr.BarangayName.Trim();
+                        existingAddr.Barangay = addr.BarangayName.Trim();
+                    }
+                    if (!string.IsNullOrWhiteSpace(addr.PostalCode)) existingAddr.ZipCode = addr.PostalCode.Trim();
+                    existingAddr.IsSameAsPermanent = addr.IsSameAsPermanent;
+                    existingAddr.IsPrimary = addr.IsPrimary;
+                    existingAddr.UpdatedAt = DateTime.UtcNow;
+                    existingAddr.UpdatedBy = request.ClerkUserId;
+                }
+            }
+        }
+
         // ── 6. Resolve Clinic Facility Catalog Record ─────────────────────────
         Clinic? clinic = null;
         if (Guid.TryParse(claims.FacilitySlug, out var parsedClinicId))

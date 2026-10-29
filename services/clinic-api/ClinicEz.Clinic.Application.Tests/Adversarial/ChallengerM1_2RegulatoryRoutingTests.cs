@@ -45,7 +45,7 @@ public class ChallengerM1_2RegulatoryRoutingTests
     private static readonly string SamplePngDataUri =
         "data:image/png;base64," + Convert.ToBase64String(Sample1x1PngBytes);
 
-    private static ClinicSettings CreateSampleClinicSettings(Guid clinicId, string tenantId = "tenant-test-01") =>
+    private static FacilitySettings CreateSampleFacilitySettings(Guid clinicId, string tenantId = "tenant-test-01") =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -149,8 +149,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var sender = Substitute.For<ISender>();
@@ -198,8 +198,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var sender = Substitute.For<ISender>();
@@ -231,8 +231,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var sender = Substitute.For<ISender>();
@@ -266,8 +266,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var sender = Substitute.For<ISender>();
@@ -303,8 +303,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var sender = Substitute.For<ISender>();
@@ -339,8 +339,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var sender = Substitute.For<ISender>();
@@ -375,8 +375,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var sender = Substitute.For<ISender>();
@@ -414,9 +414,9 @@ public class ChallengerM1_2RegulatoryRoutingTests
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var sender = Substitute.For<ISender>();
 
         var doctor = new StaffMember
@@ -451,7 +451,7 @@ public class ChallengerM1_2RegulatoryRoutingTests
             SignedAt = DateTime.UtcNow
         };
         await medCertRepo.AddAsync(cert, CancellationToken.None);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var controller = new DocumentsController(
@@ -486,9 +486,9 @@ public class ChallengerM1_2RegulatoryRoutingTests
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var sender = Substitute.For<ISender>();
 
         var doctor = new StaffMember
@@ -526,7 +526,7 @@ public class ChallengerM1_2RegulatoryRoutingTests
             SignedAt = DateTime.UtcNow
         };
         await referralRepo.AddAsync(referral, CancellationToken.None);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var controller = new DocumentsController(
@@ -555,8 +555,8 @@ public class ChallengerM1_2RegulatoryRoutingTests
         clinicContext.TenantId.Returns("tenant-test-01");
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(clinicId), CancellationToken.None);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(clinicId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var orderId = Guid.NewGuid();

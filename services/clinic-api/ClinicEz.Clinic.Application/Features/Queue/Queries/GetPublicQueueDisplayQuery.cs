@@ -23,12 +23,12 @@ public sealed record GetPublicQueueDisplayQuery(
 public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPublicQueueDisplayQuery, PublicQueueDisplayDto?>
 {
     private readonly IRepository<QueueItem> _queueRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetPublicQueueDisplayQueryHandler(
         IRepository<QueueItem> queueRepo,
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext)
     {
         _queueRepo = queueRepo;
@@ -39,7 +39,7 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
     public async Task<PublicQueueDisplayDto?> Handle(GetPublicQueueDisplayQuery request, CancellationToken ct)
     {
         // 1. Resolve clinic settings without requiring ambient authentication
-        ClinicSettings? clinic = null;
+        FacilitySettings? clinic = null;
 
         if (request.ClinicId.HasValue && request.ClinicId.Value != Guid.Empty)
         {

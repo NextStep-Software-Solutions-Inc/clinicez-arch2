@@ -48,7 +48,7 @@ public class ChallengerM1CustomFieldsAdversarialTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private (ApplicationDbContext Context, IUnitOfWork Uow, Repository<ClinicPatient> PatientRepo, RegisterClinicPatientCommandHandler RegHandler, UpdateClinicPatientCommandHandler UpdHandler)
+    private (ApplicationDbContext Context, IUnitOfWork Uow, Repository<Patient> PatientRepo, RegisterClinicPatientCommandHandler RegHandler, UpdateClinicPatientCommandHandler UpdHandler)
         CreateHarness(IClinicContext? clinicContext = null, string? sharedDbName = null)
     {
         var ctx = clinicContext ?? _clinicContext;
@@ -56,7 +56,7 @@ public class ChallengerM1CustomFieldsAdversarialTests
             ? TestDbHelper.CreateSharedTestContext(sharedDbName, ctx)
             : TestDbHelper.CreateTestContext(ctx);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var regHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, ctx);
         var updHandler = new UpdateClinicPatientCommandHandler(patientRepo, uow, null, ctx);
         return (context, uow, patientRepo, regHandler, updHandler);
@@ -309,9 +309,9 @@ public class ChallengerM1CustomFieldsAdversarialTests
         // Arrange
         var (context, _, patientRepo, regHandler, updHandler) = CreateHarness();
 
-        const string sqlPayload1 = "'; DROP TABLE \"ClinicPatients\"; --";
+        const string sqlPayload1 = "'; DROP TABLE \"Patients\"; --";
         const string sqlPayload2 = "' OR '1'='1";
-        const string sqlPayload3 = "123 Main St'; UPDATE \"ClinicPatients\" SET \"PatientCode\"='PWNED' WHERE '1'='1'; --";
+        const string sqlPayload3 = "123 Main St'; UPDATE \"Patients\" SET \"PatientCode\"='PWNED' WHERE '1'='1'; --";
         const string sqlPayload4 = "UNION ALL SELECT NULL, NULL, NULL, NULL, NULL--";
 
         var regCommand = BuildRegisterCommand(
@@ -1271,18 +1271,18 @@ public class ChallengerM1CustomFieldsAdversarialTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
 
         var patientId = Guid.NewGuid();
         const string unicodeAddr = "Purok 1, Brgy. ᜉᜒᜎᜒᜉᜒᜈᜐ᜔, Tokyo 東京";
         const string emojiContact = "Dr. Santos 🩺👩‍⚕️";
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -1291,7 +1291,7 @@ public class ChallengerM1CustomFieldsAdversarialTests
             FirstName = "Chart",
             LastName = "DemographicsTester",
             DateOfBirth = new DateOnly(1988, 5, 10),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09171234567",
             PhilHealthNumber = "12-345678901-2",
             SeniorCitizenId = "SC-9999",

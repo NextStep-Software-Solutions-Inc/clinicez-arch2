@@ -426,7 +426,7 @@ describe('Adversarial Stress Suite — Frontend Custom Field Engine (Issue #76)'
         member_type: 'DD',
         principal_member_pin: '12-345678901-2',
         principal_relationship: 'Child',
-        philhealth_profile: {
+        institutional_notes: {
           chronic_conditions: ['Hypertension', 'Diabetes'],
           ncd: { systolic: 120, diastolic: 80 },
         },
@@ -458,7 +458,7 @@ describe('Adversarial Stress Suite — Frontend Custom Field Engine (Issue #76)'
       expect(merged.member_type).toBe('DD');
       expect(merged.principal_member_pin).toBe('12-345678901-2');
       expect(merged.principal_relationship).toBe('Child');
-      expect(merged.philhealth_profile).toEqual({
+      expect(merged.institutional_notes).toEqual({
         chronic_conditions: ['Hypertension', 'Diabetes'],
         ncd: { systolic: 120, diastolic: 80 },
       });

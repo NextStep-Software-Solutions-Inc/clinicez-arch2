@@ -23,10 +23,12 @@ import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
 import { deletePatientAddress } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useEhrOptions } from 'hooks/useEhrOptions';
+import CascadingAddressPicker from 'components/profile/CascadingAddressPicker';
 
 type AddressForm = {
   id: string | null;
-  type: 'primary' | 'secondary';
+  type: string;
   houseNo: string;
   streetBarangay: string;
   cityMunicipality: string;
@@ -34,16 +36,36 @@ type AddressForm = {
   region: string;
   postalCode: string;
   country: string;
+  regionPsgc?: string | null;
+  provincePsgc?: string | null;
+  cityMunicipalityPsgc?: string | null;
+  barangayPsgc?: string | null;
+  regionName?: string | null;
+  provinceName?: string | null;
+  cityMunicipalityName?: string | null;
+  barangayName?: string | null;
+  isSameAsPermanent?: boolean;
 };
 
-const TYPE_OPTIONS = [
-  { label: 'Primary (Home)', value: 'primary' },
-  { label: 'Secondary', value: 'secondary' },
-];
-
 const EMPTY_FORM: AddressForm = {
-  id: null, type: 'primary' as const, houseNo: '', streetBarangay: '',
-  cityMunicipality: '', province: '', region: '', postalCode: '', country: 'Philippines',
+  id: null,
+  type: 'primary',
+  houseNo: '',
+  streetBarangay: '',
+  cityMunicipality: '',
+  province: '',
+  region: '',
+  postalCode: '',
+  country: 'Philippines',
+  regionPsgc: null,
+  provincePsgc: null,
+  cityMunicipalityPsgc: null,
+  barangayPsgc: null,
+  regionName: null,
+  provinceName: null,
+  cityMunicipalityName: null,
+  barangayName: null,
+  isSameAsPermanent: false,
 };
 
 export default function AddressesScreen() {
@@ -57,7 +79,9 @@ export default function AddressesScreen() {
   const [typeModal, setTypeModal] = useState(false);
   const sheetRef = useRef<BottomSheetModalType>(null);
 
-  const { control, handleSubmit, reset, formState: { isDirty } } = useForm<AddressForm>({ defaultValues: EMPTY_FORM });
+  const { selectOptions: typeOptions } = useEhrOptions('address_type');
+
+  const { control, handleSubmit, reset, watch, setValue, formState: { isDirty } } = useForm<AddressForm>({ defaultValues: EMPTY_FORM });
 
   const load = useCallback(async () => {
     try {
@@ -83,12 +107,24 @@ export default function AddressesScreen() {
 
   const openEdit = (row: any) => {
     const form: AddressForm = {
-      id: row.id, type: row.type ?? 'primary',
-      houseNo: row.houseStreet ?? '',          // DB column: houseStreet
-      streetBarangay: row.barangay ?? '',      // DB column: barangay
-      cityMunicipality: row.cityMunicipality ?? '', province: row.province ?? '',
-      region: row.region ?? '', postalCode: row.zipCode ?? '',
+      id: row.id,
+      type: row.type ?? 'primary',
+      houseNo: row.houseStreet ?? '',
+      streetBarangay: row.barangay ?? '',
+      cityMunicipality: row.cityMunicipality ?? '',
+      province: row.province ?? '',
+      region: row.region ?? '',
+      postalCode: row.zipCode ?? '',
       country: row.country ?? 'Philippines',
+      regionPsgc: row.regionPsgc ?? null,
+      provincePsgc: row.provincePsgc ?? null,
+      cityMunicipalityPsgc: row.cityMunicipalityPsgc ?? null,
+      barangayPsgc: row.barangayPsgc ?? null,
+      regionName: row.regionName ?? row.region ?? null,
+      provinceName: row.provinceName ?? row.province ?? null,
+      cityMunicipalityName: row.cityMunicipalityName ?? row.cityMunicipality ?? null,
+      barangayName: row.barangayName ?? row.barangay ?? null,
+      isSameAsPermanent: Boolean(row.isSameAsPermanent),
     };
     reset(form);
     setEditing(form);
@@ -125,13 +161,23 @@ export default function AddressesScreen() {
     const dbFields = {
       ...rest,
       patientId,
+      type: (['primary', 'secondary'].includes(data.type) ? data.type : 'primary') as 'primary' | 'secondary',
       houseStreet: houseNo.trim() || null,
-      barangay: streetBarangay.trim() || null,
-      cityMunicipality: rest.cityMunicipality.trim(),
-      province: rest.province.trim() || null,
-      region: rest.region.trim() || null,
+      barangay: (data.barangayName || streetBarangay || '').trim() || null,
+      cityMunicipality: (data.cityMunicipalityName || rest.cityMunicipality || '').trim(),
+      province: (data.provinceName || rest.province || '').trim() || null,
+      region: (data.regionName || rest.region || '').trim() || null,
       zipCode: postalCode.trim() || null,
-      country: rest.country.trim() || 'Philippines',
+      country: rest.country?.trim() || 'Philippines',
+      regionPsgc: data.regionPsgc ?? null,
+      provincePsgc: data.provincePsgc ?? null,
+      cityMunicipalityPsgc: data.cityMunicipalityPsgc ?? null,
+      barangayPsgc: data.barangayPsgc ?? null,
+      regionName: data.regionName ?? null,
+      provinceName: data.provinceName ?? null,
+      cityMunicipalityName: data.cityMunicipalityName ?? null,
+      barangayName: data.barangayName ?? null,
+      isSameAsPermanent: Boolean(data.isSameAsPermanent),
       updatedAt: new Date(),
     };
     try {
@@ -193,30 +239,45 @@ export default function AddressesScreen() {
           <Controller control={control} name="type" render={({ field }) => (
             <ProfileFormField
               label="Address Type"
-              value={TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
+              value={typeOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value}
               onPressIn={() => setTypeModal(true)}
               placeholder="Select type"
               picker
             />
           )} />
-          <Controller control={control} name="houseNo" render={({ field }) => (
-            <ProfileFormField label="House / Unit No. & Building" value={field.value} onChangeText={field.onChange} placeholder="e.g. 123 Block 4" />
-          )} />
-          <Controller control={control} name="streetBarangay" render={({ field }) => (
-            <ProfileFormField label="Street / Barangay" value={field.value} onChangeText={field.onChange} placeholder="e.g. Brgy. San Isidro" />
-          )} />
-          <Controller control={control} name="cityMunicipality" render={({ field }) => (
-            <ProfileFormField label="City / Municipality" value={field.value} onChangeText={field.onChange} required />
-          )} />
-          <Controller control={control} name="province" render={({ field }) => (
-            <ProfileFormField label="Province" value={field.value} onChangeText={field.onChange} />
-          )} />
-          <Controller control={control} name="region" render={({ field }) => (
-            <ProfileFormField label="Region" value={field.value} onChangeText={field.onChange} placeholder="e.g. Region III" />
-          )} />
-          <Controller control={control} name="postalCode" render={({ field }) => (
-            <ProfileFormField label="Postal Code" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="4 digits" />
-          )} />
+          <CascadingAddressPicker
+            value={{
+              regionPsgc: watch('regionPsgc'),
+              regionName: watch('regionName') || watch('region'),
+              provincePsgc: watch('provincePsgc'),
+              provinceName: watch('provinceName') || watch('province'),
+              cityMunicipalityPsgc: watch('cityMunicipalityPsgc'),
+              cityMunicipalityName: watch('cityMunicipalityName') || watch('cityMunicipality'),
+              barangayPsgc: watch('barangayPsgc'),
+              barangayName: watch('barangayName') || watch('streetBarangay'),
+              houseStreet: watch('houseNo'),
+              postalCode: watch('postalCode'),
+              isSameAsPermanent: watch('isSameAsPermanent'),
+            }}
+            onChange={(next) => {
+              setValue('regionPsgc', next.regionPsgc, { shouldDirty: true });
+              setValue('regionName', next.regionName, { shouldDirty: true });
+              setValue('region', next.regionName || '', { shouldDirty: true });
+              setValue('provincePsgc', next.provincePsgc, { shouldDirty: true });
+              setValue('provinceName', next.provinceName, { shouldDirty: true });
+              setValue('province', next.provinceName || '', { shouldDirty: true });
+              setValue('cityMunicipalityPsgc', next.cityMunicipalityPsgc, { shouldDirty: true });
+              setValue('cityMunicipalityName', next.cityMunicipalityName, { shouldDirty: true });
+              setValue('cityMunicipality', next.cityMunicipalityName || '', { shouldDirty: true });
+              setValue('barangayPsgc', next.barangayPsgc, { shouldDirty: true });
+              setValue('barangayName', next.barangayName, { shouldDirty: true });
+              setValue('streetBarangay', next.barangayName || '', { shouldDirty: true });
+              setValue('houseNo', next.houseStreet || next.streetAddress || '', { shouldDirty: true });
+              setValue('postalCode', next.postalCode || next.zipCode || '', { shouldDirty: true });
+              setValue('isSameAsPermanent', next.isSameAsPermanent, { shouldDirty: true });
+            }}
+            showSameAsPermanentToggle={watch('type') === 'secondary'}
+          />
           <Controller control={control} name="country" render={({ field }) => (
             <ProfileFormField label="Country" value={field.value} onChangeText={field.onChange} />
           )} />
@@ -225,7 +286,7 @@ export default function AddressesScreen() {
       </ThemedBottomSheetModal>
 
       <Controller control={control} name="type" render={({ field }) => (
-        <ProfileSelectModal visible={typeModal} title="Address Type" options={TYPE_OPTIONS}
+        <ProfileSelectModal visible={typeModal} title="Address Type" options={typeOptions}
           selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
       )} />
     </BottomSheetModalProvider>

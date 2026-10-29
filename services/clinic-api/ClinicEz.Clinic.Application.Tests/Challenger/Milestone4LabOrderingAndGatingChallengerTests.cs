@@ -48,10 +48,10 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         IClinicContext clinicContext,
         Guid clinicId,
         string tenantId,
-        IRepository<ClinicServiceItem>? serviceRepo = null)
+        IRepository<ServiceItem>? serviceRepo = null)
     {
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
 
         return new CreateClinicLabOrderCommandHandler(
@@ -68,9 +68,9 @@ public class Milestone4LabOrderingAndGatingChallengerTests
             serviceRepo);
     }
 
-    private static async Task<ClinicPatient> SeedPatientAsync(ApplicationDbContext db, Guid clinicId, string tenantId)
+    private static async Task<Patient> SeedPatientAsync(ApplicationDbContext db, Guid clinicId, string tenantId)
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -79,7 +79,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1990, 5, 15),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09171234567"
         };
         await db.Patients.AddAsync(patient);
@@ -94,10 +94,10 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
-        var rbsService = new ClinicServiceItem
+        var rbsService = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -145,10 +145,10 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
-        var urineService = new ClinicServiceItem
+        var urineService = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -191,10 +191,10 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
-        var biopsyService = new ClinicServiceItem
+        var biopsyService = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -232,7 +232,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
         await db.SaveChangesAsync();
 
@@ -261,10 +261,10 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
-        var orderableItem = new ClinicServiceItem
+        var orderableItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -275,7 +275,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
             IsNurseOrderable = true,
             IsActive = true
         };
-        var nonOrderableItem = new ClinicServiceItem
+        var nonOrderableItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -314,10 +314,10 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
-        var cbcService = new ClinicServiceItem
+        var cbcService = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -357,10 +357,10 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
-        var rbsItem = new ClinicServiceItem
+        var rbsItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -401,7 +401,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
         await db.SaveChangesAsync();
 
@@ -436,7 +436,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
         var doctorWithoutPrc = new StaffMember
@@ -480,7 +480,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
         var doctorWhitespacePrc = new StaffMember
@@ -524,7 +524,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
         var foreignDoctor = new StaffMember
@@ -572,7 +572,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         // Arrange
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(db, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(db, sieve);
         var patient = await SeedPatientAsync(db, clinicId, tenantId);
 
         var doctor = new StaffMember
@@ -588,7 +588,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
         };
         await db.StaffMembers.AddAsync(doctor);
 
-        var biopsyService = new ClinicServiceItem
+        var biopsyService = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,

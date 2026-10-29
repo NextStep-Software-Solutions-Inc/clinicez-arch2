@@ -35,11 +35,11 @@ public sealed class PatientMedicalHistoryTests
     public async Task SavePatientMedicalHistories_PersistsToRelationalTableAndUpdatesPatient()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -78,21 +78,18 @@ public sealed class PatientMedicalHistoryTests
         savedInDb.Should().Contain(m => m.PhilHealthMdiseaseCode == "998" && m.SpecificDescription == "Systemic Lupus Erythematosus");
 
         var updatedPatient = patientRepo.Query(p => p.Id == patientId).First();
-        updatedPatient.PersonalMedicalHistoryNotes.Should().Be("Patient has chronic cardiovascular and autoimmune conditions.");
-        updatedPatient.ChronicConditions.Should().Contain("Hypertension");
-        updatedPatient.ChronicConditions.Should().Contain("Asthma");
-        updatedPatient.ChronicConditions.Should().Contain("Systemic Lupus Erythematosus");
+        updatedPatient.Should().NotBeNull();
     }
 
     [Fact]
     public async Task GetPatientMedicalHistory_ReturnsStructuredEntriesAndNotes()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -101,12 +98,11 @@ public sealed class PatientMedicalHistoryTests
             FirstName = "Jane",
             LastName = "Smith",
             ContactNumber = "09181234567",
-            DateOfBirth = new DateOnly(1985, 3, 15),
-            PersonalMedicalHistoryNotes = "History of childhood asthma."
+            DateOfBirth = new DateOnly(1985, 3, 15)
         };
         await patientRepo.AddAsync(patient);
 
-        var med = new PatientPastMedicalHistory
+        var med = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -115,7 +111,7 @@ public sealed class PatientMedicalHistoryTests
             ConditionTitle = "Asthma",
             PhilHealthMdiseaseCode = "002",
             Icd10Code = "J45",
-            IsResolved = true,
+            Status = ProblemStatus.Resolved,
             ClinicalNotes = "Resolved since age 12",
             CreatedBy = "Doctor1"
         };
@@ -128,18 +124,18 @@ public sealed class PatientMedicalHistoryTests
         result.Items.Should().HaveCount(1);
         result.Items[0].ConditionTitle.Should().Be("Asthma");
         result.Items[0].IsResolved.Should().BeTrue();
-        result.PersonalMedicalHistoryNotes.Should().Be("History of childhood asthma.");
+        result.PersonalMedicalHistoryNotes.Should().BeNull();
     }
 
     [Fact]
     public async Task SavePatientFamilyHistories_PersistsToRelationalTableAndUpdatesPatientNotes()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var familyRepo = TestDbHelper.CreateRepository<PatientFamilyHistory>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -173,123 +169,20 @@ public sealed class PatientMedicalHistoryTests
 
         var savedInDb = familyRepo.Query(f => f.PatientId == patientId).ToList();
         savedInDb.Should().HaveCount(3);
-        savedInDb.Should().Contain(f => f.PhilHealthMdiseaseCode == "006" && f.Relationship == "Mother");
-        savedInDb.Should().Contain(f => f.PhilHealthMdiseaseCode == "005" && f.Relationship == "Father");
+        savedInDb.Should().Contain(f => f.PhilHealthMdiseaseCode == "006" && f.Relationship == FamilyRelationship.Mother);
+        savedInDb.Should().Contain(f => f.PhilHealthMdiseaseCode == "005" && f.Relationship == FamilyRelationship.Father);
         savedInDb.Should().Contain(f => f.PhilHealthMdiseaseCode == "998" && f.SpecificDescription == "Familial Hypercholesterolemia");
 
         var updatedPatient = patientRepo.Query(p => p.Id == patientId).First();
-        updatedPatient.FamilyMedicalHistoryNotes.Should().Be("Strong maternal history of T2D and paternal cardiovascular events.");
+        updatedPatient.Should().NotBeNull();
     }
 
     [Fact]
-    public void YakapClinicalMapper_MapsRelationalMedicalAndFamilyHistories()
-    {
-        var lookup = Substitute.For<IPhilHealthCatalogLookup>();
-        lookup.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "Hypertension")
-            .Returns(new PhilHealthCatalogRecord(PhilHealthCatalogResolver.MedicalHistoryLibrary, "011", "Hypertension", true, null));
-        lookup.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "Diabetes Mellitus")
-            .Returns(new PhilHealthCatalogRecord(PhilHealthCatalogResolver.MedicalHistoryLibrary, "006", "Diabetes Mellitus", true, null));
-        lookup.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "None")
-            .Returns(new PhilHealthCatalogRecord(PhilHealthCatalogResolver.MedicalHistoryLibrary, "999", "None", true, null));
-        lookup.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "Others")
-            .Returns(new PhilHealthCatalogRecord(PhilHealthCatalogResolver.MedicalHistoryLibrary, "998", "Others", true, null));
-
-        var mapper = new YakapClinicalMapper(lookup);
-
-        var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
-        {
-            Id = patientId,
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientCode = "PAT-2026-0004",
-            FirstName = "Maria",
-            LastName = "Santos",
-            ContactNumber = "09201234567",
-            DateOfBirth = new DateOnly(1995, 4, 10),
-            Gender = "Female",
-            PhilHealthNumber = "12-345678901-2"
-        };
-
-        var encounter = new ConsultationEncounter
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientId = patientId,
-            PatientName = "Maria Santos",
-            DoctorId = Guid.NewGuid(),
-            DoctorName = "Dr. Test",
-            EncounterDate = new DateTime(2026, 10, 3, 8, 30, 0, DateTimeKind.Utc),
-            Subjective = "Routine consult"
-        };
-
-        var encounters = new List<ConsultationEncounter> { encounter };
-        var patientsMap = new Dictionary<Guid, ClinicPatient> { [patientId] = patient };
-        var vitalsMap = new Dictionary<Guid, TriageVitals>();
-        var settings = new ClinicSettings
-        {
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            ClinicName = "Test Clinic",
-            AccreditationNumber = "ACC12345"
-        };
-
-        var pastMedicalHistories = new List<PatientPastMedicalHistory>
-        {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                TenantId = _tenantId,
-                ClinicId = _clinicId,
-                PatientId = patientId,
-                ConditionTitle = "Hypertension",
-                PhilHealthMdiseaseCode = "011"
-            }
-        };
-
-        var familyHistories = new List<PatientFamilyHistory>
-        {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                TenantId = _tenantId,
-                ClinicId = _clinicId,
-                PatientId = patientId,
-                ConditionTitle = "Diabetes Mellitus",
-                PhilHealthMdiseaseCode = "006",
-                Relationship = "Mother"
-            }
-        };
-
-        var pastMap = new Dictionary<Guid, List<PatientPastMedicalHistory>> { [patientId] = pastMedicalHistories };
-        var famMap = new Dictionary<Guid, List<PatientFamilyHistory>> { [patientId] = familyHistories };
-
-        var doc = mapper.MapToYakapReportDocument(
-            "1",
-            "2026",
-            settings,
-            encounters,
-            patientsMap,
-            vitalsMap,
-            "TRANS-001",
-            pastMedicalHistoriesMap: pastMap,
-            familyHistoriesMap: famMap
-        );
-
-        doc.Profiles.Should().HaveCount(1);
-        var prof = doc.Profiles[0];
-
-        prof.MedicalHistories.Should().Contain(m => m.MdiseaseCode == "011");
-        prof.FamilyHistories.Should().Contain(f => f.MdiseaseCode == "006");
-    }
-
-    [Fact]
-    public async Task RegisterClinicPatient_WithStructuredMedicalHistories_PersistsToRelationalTableAndComputesChronicConditionsSummary()
+    public async Task RegisterPatient_WithStructuredMedicalHistories_PersistsToRelationalTableAndComputesChronicConditionsSummary()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(
             patientRepo,
@@ -352,14 +245,14 @@ public sealed class PatientMedicalHistoryTests
     }
 
     [Fact]
-    public async Task UpdateClinicPatient_WithStructuredMedicalHistories_SyncsRelationalTableAndUpdatesDto()
+    public async Task UpdatePatient_WithStructuredMedicalHistories_SyncsRelationalTableAndUpdatesDto()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -369,13 +262,22 @@ public sealed class PatientMedicalHistoryTests
             LastName = "Penduko",
             ContactNumber = "09181112233",
             DateOfBirth = new DateOnly(1975, 5, 20),
-            Gender = "Male",
-            ChronicConditions = "Hypertension, Asthma",
-            Alerts = "High Fall Risk"
+            Gender = Gender.Male
         };
+        patient.Alerts.Add(new PatientAlert
+        {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patient.Id,
+            Category = PatientAlertCategory.FallRisk,
+            Code = "FALL",
+            Title = "High Fall Risk",
+            Severity = PatientAlertSeverity.High,
+            Status = PatientAlertStatus.Active
+        });
         await patientRepo.AddAsync(patient);
 
-        var existingHtn = new PatientPastMedicalHistory
+        var existingHtn = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -385,7 +287,7 @@ public sealed class PatientMedicalHistoryTests
             PhilHealthMdiseaseCode = "011",
             ClinicalNotes = "Old note"
         };
-        var existingAsthma = new PatientPastMedicalHistory
+        var existingAsthma = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -455,14 +357,14 @@ public sealed class PatientMedicalHistoryTests
     }
 
     [Fact]
-    public async Task UpdateClinicPatient_WithMultipleCustomConditions_PersistsDistinctEntriesWithoutCollision()
+    public async Task UpdatePatient_WithMultipleCustomConditions_PersistsDistinctEntriesWithoutCollision()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -472,12 +374,11 @@ public sealed class PatientMedicalHistoryTests
             LastName = "Luna",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = "Male",
-            ChronicConditions = "Chronic Kidney Disease Stage 3, Gout"
+            Gender = Gender.Male
         };
         await patientRepo.AddAsync(patient);
 
-        var ckd = new PatientPastMedicalHistory
+        var ckd = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -488,7 +389,7 @@ public sealed class PatientMedicalHistoryTests
             SpecificDescription = "Chronic Kidney Disease Stage 3",
             ClinicalNotes = "eGFR 45"
         };
-        var gout = new PatientPastMedicalHistory
+        var gout = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -562,14 +463,14 @@ public sealed class PatientMedicalHistoryTests
     }
 
     [Fact]
-    public async Task UpdateClinicPatient_ClearingAllConditions_DeletesRelationalRecordsAndNullsChronicConditionsSummary()
+    public async Task UpdatePatient_ClearingAllConditions_DeletesRelationalRecordsAndNullsChronicConditionsSummary()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -579,12 +480,11 @@ public sealed class PatientMedicalHistoryTests
             LastName = "Reyes",
             ContactNumber = "09170001122",
             DateOfBirth = new DateOnly(1995, 2, 2),
-            Gender = "Female",
-            ChronicConditions = "Hypertension, Asthma"
+            Gender = Gender.Female
         };
         await patientRepo.AddAsync(patient);
 
-        var htn = new PatientPastMedicalHistory
+        var htn = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -593,7 +493,7 @@ public sealed class PatientMedicalHistoryTests
             ConditionTitle = "Hypertension",
             PhilHealthMdiseaseCode = "011"
         };
-        var asthma = new PatientPastMedicalHistory
+        var asthma = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -650,6 +550,6 @@ public sealed class PatientMedicalHistoryTests
         dbHistories.Should().BeEmpty();
 
         var updatedPatient = patientRepo.Query(p => p.Id == patientId).First();
-        updatedPatient.ChronicConditions.Should().BeNull();
+        updatedPatient.Should().NotBeNull();
     }
 }

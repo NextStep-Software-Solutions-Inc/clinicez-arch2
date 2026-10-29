@@ -27,12 +27,12 @@ public sealed class LabOrdersController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
 
     public LabOrdersController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo)
     {
         _sender = sender;
         _pdfService = pdfService;
@@ -69,7 +69,7 @@ public sealed class LabOrdersController : ControllerBase
         CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetClinicLabOrderSlipQuery(id), ct);
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = "default",
             ClinicId = Guid.Empty,

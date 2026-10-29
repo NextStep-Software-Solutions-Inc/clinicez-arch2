@@ -29,19 +29,19 @@ public sealed class ResendStaffInvitationCommandValidator : AbstractValidator<Re
 public sealed class ResendStaffInvitationCommandHandler : IRequestHandler<ResendStaffInvitationCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
     private readonly IClinicStaffInvitationNotifier? _invitationNotifier;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public ResendStaffInvitationCommandHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicSettings> settingsRepository,
+        IRepository<FacilitySettings> settingsRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicStaffInvitationNotifier? invitationNotifier = null,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;

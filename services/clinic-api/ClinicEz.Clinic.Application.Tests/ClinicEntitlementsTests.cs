@@ -38,7 +38,7 @@ using Xunit;
 namespace ClinicEz.Clinic.Application.Tests;
 
 /// <summary>
-/// The clinic's part of the shared entitlement machinery: the license store / facility registry on <c>ClinicSettings</c>, the
+/// The clinic's part of the shared entitlement machinery: the license store / facility registry on <c>FacilitySettings</c>, the
 /// <c>entitlements.changed</c> and heartbeat wiring, the entitlement version kept by license activation, and read-only grace
 /// enforcement in a real pipeline.
 /// </summary>
@@ -69,7 +69,7 @@ public class ClinicEntitlementsTests
             Limits = new FacilityLimits { MaxStaff = maxStaff }
         });
 
-    private static ClinicSettings Settings(string? token = null, int version = 0, bool deleted = false, Guid? id = null, string tenant = Tenant) => new()
+    private static FacilitySettings Settings(string? token = null, int version = 0, bool deleted = false, Guid? id = null, string tenant = Tenant) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = tenant,
@@ -109,7 +109,7 @@ public class ClinicEntitlementsTests
     public async Task Store_ReadsAndReplacesTheLicense()
     {
         var db = CreateDb($"Clinic_StoreDb_{Guid.NewGuid()}");
-        db.ClinicSettings.Add(Settings("old-token", version: 1));
+        db.Settings.Add(Settings("old-token", version: 1));
         await db.SaveChangesAsync();
         var store = new ClinicLicenseStore(db);
         var token = Token(version: 4, maxStaff: 20, plan: "Enterprise", expires: new DateTime(2027, 5, 1, 0, 0, 0, DateTimeKind.Utc));
@@ -117,7 +117,7 @@ public class ClinicEntitlementsTests
         (await store.GetAsync(Tenant, ClinicGuid, default)).Should().Be(new HeldFacilityLicense("old-token", 1));
         await store.SaveAsync(Tenant, ClinicGuid, new FacilityLicenseUpdate(token, PayloadOf(token)), default);
 
-        var saved = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync();
+        var saved = await db.Settings.IgnoreQueryFilters().SingleAsync();
         saved.LicenseToken.Should().Be(token);
         saved.EntitlementVersion.Should().Be(4);
         saved.PlanTier.Should().Be("Enterprise");
@@ -131,7 +131,7 @@ public class ClinicEntitlementsTests
     {
         var db = CreateDb($"Clinic_StoreDb_{Guid.NewGuid()}");
         var deleted = Guid.NewGuid();
-        db.ClinicSettings.AddRange(Settings("t"), Settings("gone", deleted: true, id: deleted));
+        db.Settings.AddRange(Settings("t"), Settings("gone", deleted: true, id: deleted));
         await db.SaveChangesAsync();
         var store = new ClinicLicenseStore(db);
 
@@ -144,7 +144,7 @@ public class ClinicEntitlementsTests
     public async Task Store_SaveOnlyChangesTheAddressedClinic_EvenWithinOneTenant()
     {
         var db = CreateDb($"Clinic_StoreDb_{Guid.NewGuid()}");
-        db.ClinicSettings.AddRange(Settings("clinic-one", version: 1), Settings("clinic-two", version: 1, id: OtherClinicGuid));
+        db.Settings.AddRange(Settings("clinic-one", version: 1), Settings("clinic-two", version: 1, id: OtherClinicGuid));
         await db.SaveChangesAsync();
         var store = new ClinicLicenseStore(db);
         var token = Token(version: 5);
@@ -175,7 +175,7 @@ public class ClinicEntitlementsTests
         var first = Settings("a");
         first.LicenseExpiresAt = expiry;
         first.IsWorkspaceEligible = true;
-        db.ClinicSettings.AddRange(first, Settings("b", id: second, tenant: "tenant-two"), Settings("c", deleted: true, id: Guid.NewGuid()));
+        db.Settings.AddRange(first, Settings("b", id: second, tenant: "tenant-two"), Settings("c", deleted: true, id: Guid.NewGuid()));
         await db.SaveChangesAsync();
 
         var entries = await new ClinicLicenseStore(db).ListAsync(default);
@@ -211,19 +211,19 @@ public class ClinicEntitlementsTests
         return services.BuildServiceProvider();
     }
 
-    private static async Task SeedAsync(ServiceProvider provider, params ClinicSettings[] settings)
+    private static async Task SeedAsync(ServiceProvider provider, params FacilitySettings[] settings)
     {
         using var scope = provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        db.ClinicSettings.AddRange(settings);
+        db.Settings.AddRange(settings);
         await db.SaveChangesAsync();
     }
 
-    private static async Task<ClinicSettings> ReadSettingsAsync(ServiceProvider provider)
+    private static async Task<FacilitySettings> ReadSettingsAsync(ServiceProvider provider)
     {
         using var scope = provider.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>()
-            .ClinicSettings.IgnoreQueryFilters().AsNoTracking().SingleAsync();
+            .Settings.IgnoreQueryFilters().AsNoTracking().SingleAsync();
     }
 
     [Fact]
@@ -300,16 +300,16 @@ public class ClinicEntitlementsTests
         clinicContext.TenantId.Returns(Tenant);
         clinicContext.ClinicId.Returns(ClinicGuid);
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
         var controller = new LicenseController(
             settingsRepo, new Repository<StaffMember>(context, sieve), new FacilityLicenseValidator(), clinicContext, uow,
             Substitute.For<ITenantLookupService>());
 
         await controller.ApplyLicense(new ApplyLicenseRequest(Token(version: 3)), CancellationToken.None);
-        (await context.ClinicSettings.IgnoreQueryFilters().SingleAsync()).EntitlementVersion.Should().Be(3);
+        (await context.Settings.IgnoreQueryFilters().SingleAsync()).EntitlementVersion.Should().Be(3);
 
         await controller.ApplyLicense(new ApplyLicenseRequest(Token(version: 6)), CancellationToken.None);
-        var saved = await context.ClinicSettings.IgnoreQueryFilters().SingleAsync();
+        var saved = await context.Settings.IgnoreQueryFilters().SingleAsync();
         saved.EntitlementVersion.Should().Be(6);
         saved.LicenseToken.Should().NotBeNullOrEmpty();
     }
@@ -334,7 +334,7 @@ public class ClinicEntitlementsTests
             MessagingTestKit.Delivered(InteropTypes.FacilityLicenseIssued, Party.Portal, ClinicParty, Guid.NewGuid(), message),
             default);
 
-        (await db.ClinicSettings.IgnoreQueryFilters().SingleAsync()).EntitlementVersion.Should().Be(4);
+        (await db.Settings.IgnoreQueryFilters().SingleAsync()).EntitlementVersion.Should().Be(4);
     }
 
     // ── read-only grace in a real pipeline ──────────────────────────────────────────────
@@ -347,8 +347,8 @@ public class ClinicEntitlementsTests
     {
         var dbName = $"Clinic_GraceDb_{Guid.NewGuid()}";
         var seed = CreateDb(dbName);
-        if (provisioned) seed.ClinicSettings.Add(Settings(token));
-        seed.ClinicSettings.Add(Settings(Token(1, facilityId: OtherClinicGuid), id: OtherClinicGuid));
+        if (provisioned) seed.Settings.Add(Settings(token));
+        seed.Settings.Add(Settings(Token(1, facilityId: OtherClinicGuid), id: OtherClinicGuid));
         await seed.SaveChangesAsync();
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
@@ -535,7 +535,7 @@ public class ClinicEntitlementsTests
     public async Task LicenseState_ForAnonymousRequests_HasNoClinic_AndIsNotEnforced()
     {
         var db = CreateDb($"Clinic_StateDb_{Guid.NewGuid()}");
-        db.ClinicSettings.Add(Settings(Token(1, expires: DateTime.UtcNow.AddDays(-40), graceUntil: DateTime.UtcNow.AddDays(-26))));
+        db.Settings.Add(Settings(Token(1, expires: DateTime.UtcNow.AddDays(-40), graceUntil: DateTime.UtcNow.AddDays(-26))));
         await db.SaveChangesAsync();
         var http = new DefaultHttpContext();
         http.Request.Headers["X-Clinic-Id"] = ClinicGuid.ToString();
@@ -547,8 +547,8 @@ public class ClinicEntitlementsTests
     public async Task LicenseState_ForAStaffSession_IsResolvedFromTheTokenClaims_NotFromHeaders()
     {
         var db = CreateDb($"Clinic_StateDb_{Guid.NewGuid()}");
-        db.ClinicSettings.Add(Settings(Token(1, expires: DateTime.UtcNow.AddDays(-3), graceUntil: DateTime.UtcNow.AddDays(11))));
-        db.ClinicSettings.Add(Settings(Token(1, facilityId: OtherClinicGuid), id: OtherClinicGuid));
+        db.Settings.Add(Settings(Token(1, expires: DateTime.UtcNow.AddDays(-3), graceUntil: DateTime.UtcNow.AddDays(11))));
+        db.Settings.Add(Settings(Token(1, facilityId: OtherClinicGuid), id: OtherClinicGuid));
         await db.SaveChangesAsync();
         var http = new DefaultHttpContext
         {
@@ -570,7 +570,7 @@ public class ClinicEntitlementsTests
     public async Task LicenseState_ForAStaffTokenWithoutAClinic_IsNotEnforced()
     {
         var db = CreateDb($"Clinic_StateDb_{Guid.NewGuid()}");
-        db.ClinicSettings.Add(Settings(Token(1, expires: DateTime.UtcNow.AddDays(-40), graceUntil: DateTime.UtcNow.AddDays(-26))));
+        db.Settings.Add(Settings(Token(1, expires: DateTime.UtcNow.AddDays(-40), graceUntil: DateTime.UtcNow.AddDays(-26))));
         await db.SaveChangesAsync();
         var http = new DefaultHttpContext
         {

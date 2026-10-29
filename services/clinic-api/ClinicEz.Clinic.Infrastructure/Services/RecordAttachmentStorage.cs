@@ -23,7 +23,7 @@ public sealed class RecordAttachmentStorage : IRecordAttachmentStorage
         _db = db;
     }
 
-    public async Task<ClinicRecordAttachment> EncryptAndStoreAsync(
+    public async Task<RecordAttachment> EncryptAndStoreAsync(
         string tenantId,
         Guid clinicId,
         Guid patientId,
@@ -41,7 +41,7 @@ public sealed class RecordAttachmentStorage : IRecordAttachmentStorage
         var storageKey = $"tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez";
         await _storage.SaveEncryptedFileAsync(storageKey, encrypted.Ciphertext, ct);
 
-        var attachment = new ClinicRecordAttachment
+        var attachment = new RecordAttachment
         {
             Id = attachmentId,
             TenantId = tenantId,

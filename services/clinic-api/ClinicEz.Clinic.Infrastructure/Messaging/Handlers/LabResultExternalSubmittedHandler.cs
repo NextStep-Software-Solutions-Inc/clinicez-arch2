@@ -86,7 +86,7 @@ public sealed class LabResultExternalSubmittedHandler : IInteropHandler<External
                 from order in _dbContext.LabOrders.IgnoreQueryFilters()
                 join patient in _dbContext.Patients.IgnoreQueryFilters() on order.PatientId equals patient.Id
                 where !order.IsDeleted && order.ClinicId == clinic.ClinicId && order.Id == requisitionId
-                      && !patient.IsDeleted && patient.ClinicId == clinic.ClinicId && patient.SyncPatientId == senderId
+                      && !patient.IsDeleted && patient.ClinicId == clinic.ClinicId && patient.CloudPatientId == senderId
                 select order.Id).AnyAsync(ct);
             if (!owned)
             {

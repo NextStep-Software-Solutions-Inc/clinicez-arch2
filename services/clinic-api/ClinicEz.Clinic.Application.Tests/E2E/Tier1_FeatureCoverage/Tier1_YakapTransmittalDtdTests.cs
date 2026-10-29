@@ -31,10 +31,10 @@ public class Tier1_YakapTransmittalDtdTests
             HciAccreditationNumber: "H90000001",
             Consultations: new List<DualModeConsultationDto>(),
             Immunizations: new List<PatientImmunizationDto>(),
-            Problems: new List<PatientProblemDto>(),
+            Problems: new List<PatientMedicalHistoryDto>(),
             Allergies: new List<PatientAllergyDto>(),
             NcdRiskAssessments: new List<PhilPenRiskResultDto>(),
-            TriageVitals: new List<ExtendedTriageVitalsDto>());
+            PatientVitals: new List<ExtendedTriageVitalsDto>());
 
         transmittal.TransmittalNumber.Should().StartWith("R");
         transmittal.EffectiveYear.Should().Be("2026");
@@ -58,7 +58,7 @@ public class Tier1_YakapTransmittalDtdTests
     [Fact]
     public void F26_T3_TransmittalAggregation_DirectRelationalBatchExtraction()
     {
-        var problems = new List<PatientProblemDto>
+        var problems = new List<PatientMedicalHistoryDto>
         {
             new(Guid.NewGuid(), _clinicId, _patientId, "I10", "Hypertension", new DateOnly(2020, 1, 1), ProblemStatus.Active, null, "001")
         };

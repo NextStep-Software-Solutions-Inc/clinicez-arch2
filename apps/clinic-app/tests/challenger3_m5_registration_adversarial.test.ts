@@ -580,26 +580,23 @@ describe('Challenger 3 Adversarial Registration & Locality Suite: Patients.scree
   // SUITE 4: Source Code White-Box Verification of Patients.screen.tsx
   // =========================================================================
   describe('Suite 4: White-Box Source Code Verification of Patients.screen.tsx', () => {
-    it('4.1 Asserts Patients.screen.tsx contains explicit yakap_enlistments transfer', () => {
+    it('4.1 Asserts Patients.screen.tsx has purged legacy yakap_enlistments transfer', () => {
       const screenPath = path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx');
       expect(fs.existsSync(screenPath)).toBe(true);
 
       const code = fs.readFileSync(screenPath, 'utf8');
 
-      // 1. Verify existence of the transfer check
-      const expectedSnippet = `if (dynamicFieldValues['yakap_enlistments']) {\n      customFields['yakap_enlistments'] = dynamicFieldValues['yakap_enlistments'];\n    }`;
-      expect(code.includes("if (dynamicFieldValues['yakap_enlistments'])")).toBe(true);
-      expect(code.includes("customFields['yakap_enlistments'] = dynamicFieldValues['yakap_enlistments']")).toBe(true);
+      // 1. Verify that legacy yakap_enlistments transfer into customFields is completely purged
+      expect(code.includes("customFields['yakap_enlistments']")).toBe(false);
+      expect(code.includes("dynamicFieldValues['yakap_enlistments']")).toBe(false);
 
-      // 2. Verify that it appears after the sanitizeCustomFieldsPayload block
+      // 2. Verify that sanitizeCustomFieldsPayload is used
       const sanitizeIndex = code.indexOf('const cleanCustom = sanitizeCustomFieldsPayload');
-      const transferIndex = code.indexOf("customFields['yakap_enlistments'] = dynamicFieldValues['yakap_enlistments']");
       expect(sanitizeIndex).toBeGreaterThan(0);
-      expect(transferIndex).toBeGreaterThan(sanitizeIndex);
 
       // 3. Verify that payload maps customFields
       const payloadCustomFieldsIndex = code.indexOf('customFields: Object.keys(customFields).length > 0 ? customFields : undefined');
-      expect(payloadCustomFieldsIndex).toBeGreaterThan(transferIndex);
+      expect(payloadCustomFieldsIndex).toBeGreaterThan(sanitizeIndex);
     });
 
     it('4.2 Verifies YakapEnlistmentSection is mounted with dynamicFieldValues binding', () => {

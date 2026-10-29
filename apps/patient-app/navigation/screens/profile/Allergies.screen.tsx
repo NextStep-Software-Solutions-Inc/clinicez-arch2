@@ -23,8 +23,9 @@ import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncSer
 import { deletePatientAllergy } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
-type AllergySeverity = 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
+type AllergySeverity = 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening' | string;
 
 type AllergyForm = {
   id: string | null;
@@ -37,17 +38,11 @@ type AllergyForm = {
 
 const EMPTY: AllergyForm = { id: null, allergen: '', reactionType: '', severity: '', management: '', isActive: true };
 
-const SEVERITY_OPTIONS = [
-  { label: 'Mild', value: 'Mild' },
-  { label: 'Moderate', value: 'Moderate' },
-  { label: 'Severe', value: 'Severe' },
-  { label: 'Life Threatening', value: 'LifeThreatening' },
-];
-
 export default function AllergiesScreen() {
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
+  const { selectOptions: severityOptions } = useEhrOptions('allergy_severity');
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [severityModal, setSeverityModal] = useState(false);
@@ -175,7 +170,13 @@ export default function AllergiesScreen() {
             <ProfileFormField label="Reaction Type" value={field.value} onChangeText={field.onChange} placeholder="e.g. Rash, Anaphylaxis" />
           )} />
           <Controller control={control} name="severity" render={({ field }) => (
-            <ProfileFormField label="Severity" value={SEVERITY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setSeverityModal(true)} placeholder="Select severity" picker />
+            <ProfileFormField
+              label="Severity"
+              value={severityOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''}
+              onPressIn={() => setSeverityModal(true)}
+              placeholder="Select severity"
+              picker
+            />
           )} />
           <Controller control={control} name="management" render={({ field }) => (
             <ProfileFormField label="Management / Notes" value={field.value} onChangeText={field.onChange} multiline placeholder="e.g. Carry EpiPen" />
@@ -188,7 +189,7 @@ export default function AllergiesScreen() {
       </ThemedBottomSheetModal>
 
       <Controller control={control} name="severity" render={({ field }) => (
-        <ProfileSelectModal visible={severityModal} title="Severity" options={SEVERITY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSeverityModal(false)} />
+        <ProfileSelectModal visible={severityModal} title="Severity" options={severityOptions} selected={field.value} onSelect={field.onChange} onClose={() => setSeverityModal(false)} />
       )} />
     </BottomSheetModalProvider>
   );

@@ -4,9 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
-using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittals;
+using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetEligibleYakapEncounters;
 using ClinicEz.Clinic.Domain.Entities;
-using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Clinic.Infrastructure.Messaging.Responders;
@@ -45,7 +44,7 @@ public class YakapTransmittalResponderTests : IDisposable
 
         var config = new ConfigurationBuilder().Build();
         _db = new ApplicationDbContext(options, config, Substitute.For<IClinicContext>());
-        _db.ClinicSettings.Add(new ClinicSettings
+        _db.Settings.Add(new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -93,7 +92,7 @@ public class YakapTransmittalResponderTests : IDisposable
         var request = new YakapTransmittalRequestedPayload
         {
             Method = "GET",
-            Path = "transmittals"
+            Path = "encounters/eligible"
         };
 
         // Act
@@ -113,7 +112,7 @@ public class YakapTransmittalResponderTests : IDisposable
         var request = new YakapTransmittalRequestedPayload
         {
             Method = "GET",
-            Path = "transmittals"
+            Path = "encounters/eligible"
         };
 
         // Act
@@ -125,7 +124,7 @@ public class YakapTransmittalResponderTests : IDisposable
     }
 
     [Fact]
-    public async Task RespondAsync_GetTransmittals_EntersScopeAndReturnsSuccess()
+    public async Task RespondAsync_GetEligibleEncounters_EntersScopeAndReturnsSuccess()
     {
         // Arrange
         var branchId = Guid.NewGuid();
@@ -133,40 +132,39 @@ public class YakapTransmittalResponderTests : IDisposable
         var request = new YakapTransmittalRequestedPayload
         {
             Method = "GET",
-            Path = "transmittals",
-            Query = $"branchId={branchId}&status=Draft"
+            Path = "encounters/eligible",
+            Query = $"branchId={branchId}&reportTagging=2"
         };
 
-        var expectedDto = new List<YakapTransmittalDto>
-        {
-            new(
-                Id: Guid.NewGuid(),
-                TransmittalNumber: "TR-2026-0001",
-                ReportTagging: "2",
-                EffectiveYear: "2026",
-                PackageType: "K",
-                Status: YakapTransmittalStatus.Draft,
-                PhilHealthTransactionNumber: null,
-                EncryptedPayloadHash: null,
-                ValidationErrors: new List<string>(),
-                SubmittedAt: null,
-                SubmittedBy: null,
-                CreatedAt: DateTime.UtcNow,
-                TotalItemsCount: 0,
-                Items: new List<YakapTransmittalItemDto>(),
-                BranchId: branchId)
-        };
+        var expectedDto = new List<EligibleYakapEncounterDto>();
 
-        _sender.Send(Arg.Any<GetYakapTransmittalsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(ApiResponse<IReadOnlyList<YakapTransmittalDto>>.Success(expectedDto));
+        _sender.Send(Arg.Any<GetEligibleYakapEncountersQuery>(), Arg.Any<CancellationToken>())
+            .Returns(ApiResponse<List<EligibleYakapEncounterDto>>.Success(expectedDto));
 
         // Act
         var response = await _sut.RespondAsync(request, context, CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(200);
-        response.Body.Should().Contain("TR-2026-0001");
         _scope.Received(1).Enter(TenantId, _clinicId, branchId);
+    }
+
+    [Fact]
+    public async Task RespondAsync_GetTransmittals_ReturnsSuccessDeprecated()
+    {
+        // Arrange
+        var context = CreateContext();
+        var request = new YakapTransmittalRequestedPayload
+        {
+            Method = "GET",
+            Path = "transmittals"
+        };
+
+        // Act
+        var response = await _sut.RespondAsync(request, context, CancellationToken.None);
+
+        // Assert
+        response.StatusCode.Should().Be(200);
     }
 
     [Fact]

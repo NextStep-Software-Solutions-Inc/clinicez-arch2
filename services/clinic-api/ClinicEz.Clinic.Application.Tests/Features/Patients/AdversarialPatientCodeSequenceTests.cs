@@ -39,14 +39,14 @@ public class AdversarialPatientCodeSequenceTests
         var year = DateTime.UtcNow.Year;
         var prefix = $"PAT-{year}-";
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var attachmentRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var attachmentRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         // Seed 1..5, where 3 and 5 are soft-deleted
         for (int i = 1; i <= 5; i++)
         {
             var isDel = (i == 3 || i == 5);
-            await context.Patients.AddAsync(new ClinicPatient
+            await context.Patients.AddAsync(new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -55,7 +55,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"Seed{i}",
                 LastName = "Test",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = "Male",
+                Gender = Gender.Male,
                 ContactNumber = $"091700000{i:D2}",
                 IsDeleted = isDel,
                 CreatedAt = DateTime.UtcNow
@@ -127,12 +127,12 @@ public class AdversarialPatientCodeSequenceTests
         var clinic3Id = Guid.NewGuid();
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Clinic 1: 1..20 (11..20 soft-deleted)
         for (int i = 1; i <= 20; i++)
         {
-            await context.Patients.AddAsync(new ClinicPatient
+            await context.Patients.AddAsync(new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -141,7 +141,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"C1_{i}",
                 LastName = "Test",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = "Male",
+                Gender = Gender.Male,
                 ContactNumber = "09170000001",
                 IsDeleted = i > 10,
                 CreatedAt = DateTime.UtcNow
@@ -151,7 +151,7 @@ public class AdversarialPatientCodeSequenceTests
         // Clinic 2: 1..5 (4..5 soft-deleted)
         for (int i = 1; i <= 5; i++)
         {
-            await context.Patients.AddAsync(new ClinicPatient
+            await context.Patients.AddAsync(new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -160,7 +160,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"C2_{i}",
                 LastName = "Test",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = "Female",
+                Gender = Gender.Female,
                 ContactNumber = "09170000002",
                 IsDeleted = i > 3,
                 CreatedAt = DateTime.UtcNow
@@ -209,13 +209,13 @@ public class AdversarialPatientCodeSequenceTests
         var year = DateTime.UtcNow.Year;
         var prefix = $"PAT-{year}-";
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Seed scattered sequences: 1 (active), 2 (soft-deleted), 15 (soft-deleted), 42 (active), 99 (soft-deleted)
         var existingIndices = new[] { (1, false), (2, true), (15, true), (42, false), (99, true) };
         foreach (var (idx, isDeleted) in existingIndices)
         {
-            await context.Patients.AddAsync(new ClinicPatient
+            await context.Patients.AddAsync(new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -224,7 +224,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"Scatter_{idx}",
                 LastName = "Patient",
                 DateOfBirth = new DateOnly(1995, 1, 1),
-                Gender = "Male",
+                Gender = Gender.Male,
                 ContactNumber = "09170000099",
                 IsDeleted = isDeleted,
                 CreatedAt = DateTime.UtcNow
@@ -271,13 +271,13 @@ public class AdversarialPatientCodeSequenceTests
         var year = DateTime.UtcNow.Year;
         var prefix = $"PAT-{year}-";
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var attachmentRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var attachmentRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         if (existingMax > 0)
         {
             // Seed a soft-deleted patient at existingMax
-            await context.Patients.AddAsync(new ClinicPatient
+            await context.Patients.AddAsync(new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -286,7 +286,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = "Boundary",
                 LastName = "Student",
                 DateOfBirth = new DateOnly(2002, 1, 1),
-                Gender = "Male",
+                Gender = Gender.Male,
                 ContactNumber = "09180000000",
                 IsDeleted = true,
                 CreatedAt = DateTime.UtcNow
@@ -312,7 +312,7 @@ public class AdversarialPatientCodeSequenceTests
         var year = DateTime.UtcNow.Year;
         var prefix = $"PAT-{year}-";
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Seed dirty, malformed, overflow, and custom suffix codes
         var weirdCodes = new[]
@@ -329,7 +329,7 @@ public class AdversarialPatientCodeSequenceTests
 
         foreach (var code in weirdCodes)
         {
-            await context.Patients.AddAsync(new ClinicPatient
+            await context.Patients.AddAsync(new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -338,7 +338,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = "Weird",
                 LastName = "Code",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = "Male",
+                Gender = Gender.Male,
                 ContactNumber = "09170000000",
                 IsDeleted = true, // even if soft-deleted
                 CreatedAt = DateTime.UtcNow
@@ -361,7 +361,7 @@ public class AdversarialPatientCodeSequenceTests
         // Arrange
         var currentYear = DateTime.UtcNow.Year;
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Seed codes from other years (both active and soft-deleted)
         var otherYearCodes = new[]
@@ -373,7 +373,7 @@ public class AdversarialPatientCodeSequenceTests
 
         foreach (var code in otherYearCodes)
         {
-            await context.Patients.AddAsync(new ClinicPatient
+            await context.Patients.AddAsync(new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -382,7 +382,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = "OldYear",
                 LastName = "Patient",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = "Male",
+                Gender = Gender.Male,
                 ContactNumber = "09170000000",
                 IsDeleted = true,
                 CreatedAt = DateTime.UtcNow

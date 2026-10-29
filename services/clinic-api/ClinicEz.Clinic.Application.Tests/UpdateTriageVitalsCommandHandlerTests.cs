@@ -39,11 +39,11 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var existingVitalsId = Guid.NewGuid();
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = existingVitalsId,
             TenantId = tenantId,
@@ -71,11 +71,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             QueueNumber = "Q-001",
             Status = QueueStatus.Triaged,
             Priority = QueuePriority.Routine,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -101,17 +101,17 @@ public class UpdateTriageVitalsCommandHandlerTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Id.Should().Be(existingVitalsId, "In-place update must preserve existing TriageVitals.Id");
+        result.Id.Should().Be(existingVitalsId, "In-place update must preserve existing PatientVitals.Id");
         result.SystolicBp.Should().Be(130);
         result.DiastolicBp.Should().Be(85);
         result.HeartRateBpm.Should().Be(80);
         result.Notes.Should().Be("Updated triage notes after rest");
 
         // Database row count for this queue item must remain exactly 1 (zero duplicate rows)
-        var vitalsCount = await context.TriageVitals.CountAsync(v => v.QueueItemId == queueItemId);
+        var vitalsCount = await context.PatientVitals.CountAsync(v => v.QueueItemId == queueItemId);
         vitalsCount.Should().Be(1, "Zero duplicate rows should be created on update");
 
-        var updatedEntity = await context.TriageVitals.FirstAsync(v => v.QueueItemId == queueItemId);
+        var updatedEntity = await context.PatientVitals.FirstAsync(v => v.QueueItemId == queueItemId);
         updatedEntity.Id.Should().Be(existingVitalsId);
         updatedEntity.SystolicBp.Should().Be(130);
         updatedEntity.UpdatedAt.Should().NotBeNull();
@@ -124,8 +124,8 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
         var command = new UpdateTriageVitalsCommand(
@@ -157,8 +157,8 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var queueItem = new QueueItem
         {
@@ -169,7 +169,7 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Crisostomo Ibarra",
             QueueNumber = "Q-002",
             Status = QueueStatus.Waiting,
-            TriageVitals = null // No vitals recorded yet
+            PatientVitals = null // No vitals recorded yet
         };
         await context.QueueItems.AddAsync(queueItem);
         await context.SaveChangesAsync();
@@ -204,10 +204,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -239,11 +239,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Elias",
             QueueNumber = "Q-003",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -295,10 +295,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -320,11 +320,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Sisa",
             QueueNumber = "Q-004",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -367,10 +367,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -389,11 +389,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Basilio",
             QueueNumber = "Q-005",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -421,7 +421,7 @@ public class UpdateTriageVitalsCommandHandlerTests
         // Assert
         result.PainScore.Should().Be(0, "Pain score of 0 is a valid clinical metric and must be preserved");
 
-        var dbVitals = await context.TriageVitals.FirstAsync(v => v.QueueItemId == queueItemId);
+        var dbVitals = await context.PatientVitals.FirstAsync(v => v.QueueItemId == queueItemId);
         dbVitals.PainScore.Should().Be(0);
     }
 
@@ -432,10 +432,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = tenantId,
@@ -444,12 +444,12 @@ public class UpdateTriageVitalsCommandHandlerTests
             FirstName = "Totoy",
             LastName = "Bibo",
             DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-24)),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09171234567"
         };
         await context.Patients.AddAsync(patient);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -471,11 +471,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Totoy Bibo",
             QueueNumber = "Q-006",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var zScoreCalc = Substitute.For<IWhoZScoreCalculator>();
@@ -517,10 +517,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -546,11 +546,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Nene",
             QueueNumber = "Q-007",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -600,10 +600,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -623,11 +623,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Kapitan Tiago",
             QueueNumber = "Q-008",
             Status = currentStatus,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -663,10 +663,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -686,11 +686,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             PatientName = "Don Custodio",
             QueueNumber = "Q-009",
             Status = QueueStatus.Waiting, // Waiting
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -726,10 +726,10 @@ public class UpdateTriageVitalsCommandHandlerTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -750,11 +750,11 @@ public class UpdateTriageVitalsCommandHandlerTests
             QueueNumber = "Q-010",
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -788,7 +788,7 @@ public class UpdateTriageVitalsCommandHandlerTests
     public void FormatVitalsSummary_HarmonizedFormatting_AcrossNullAndFullFields()
     {
         // 1. Full vitals with all fields
-        var fullVitals = new TriageVitals
+        var fullVitals = new PatientVitals
         {
             TenantId = "tenant_test",
             SystolicBp = 120,
@@ -805,7 +805,7 @@ public class UpdateTriageVitalsCommandHandlerTests
         fullSummary.Should().Be("BP 120/80 • HR 72 • RR 16/min • Temp 36.6°C • SpO2 98% • BMI 22.5 • Z: Normal");
 
         // 2. Only Temperature and HR (BP is null) -> must never render "BP: /"
-        var partialVitals = new TriageVitals
+        var partialVitals = new PatientVitals
         {
             TenantId = "tenant_test",
             SystolicBp = null,
@@ -823,7 +823,7 @@ public class UpdateTriageVitalsCommandHandlerTests
         QueueItemMappingExtensions.FormatVitalsSummary(null).Should().BeNull();
 
         // 4. Vitals object with all properties null returns null
-        var emptyVitals = new TriageVitals { TenantId = "tenant_test" };
+        var emptyVitals = new PatientVitals { TenantId = "tenant_test" };
         QueueItemMappingExtensions.FormatVitalsSummary(emptyVitals).Should().BeNull();
     }
 

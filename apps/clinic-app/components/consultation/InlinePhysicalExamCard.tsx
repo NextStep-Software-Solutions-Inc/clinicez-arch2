@@ -17,6 +17,7 @@ import {
 } from '@ui';
 import type { IconName } from '../ui/Icon';
 import { theme } from '../../constants/theme';
+import type { PatientPhysicalExamFindingDto, PatientPhysicalExamDto } from '../../services/clinicService';
 
 export type SystemExamStatus = 'Normal' | 'Abnormal';
 
@@ -621,3 +622,146 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
 });
+
+export function to1NFFindings(findings: PhysicalExamFindings): PatientPhysicalExamFindingDto[] {
+  return EXAM_SYSTEMS.map((sys) => {
+    const isNormal = findings[sys.key] === 'Normal';
+    const remarks = findings[sys.remarksKey] as string | undefined;
+    const optionCode = findings[sys.codeKey] as string | undefined;
+    return {
+      system: sys.label,
+      isNormal,
+      findingTitle: isNormal ? sys.normalDescription : remarks || 'Abnormal finding',
+      optionCode: optionCode || (isNormal ? sys.normalCode : '99'),
+      remarks: remarks || null,
+    };
+  });
+}
+
+/**
+ * Reconstructs the 10-system PhysicalExamFindings workstation state from pure 1NF relational child rows.
+ * Supports PatientPhysicalExamDto[] (nested findings) or flat PatientPhysicalExamFindingDto[].
+ * Returns null if input is missing, empty, contains zero exam findings, or contains only degenerate child rows.
+ */
+export function from1NFFindings(
+  input?: PatientPhysicalExamDto[] | PatientPhysicalExamFindingDto[] | null
+): PhysicalExamFindings | null {
+  if (!input || !Array.isArray(input) || input.length === 0) {
+    return null;
+  }
+
+  let generalSurveyId: string | undefined;
+  let generalSurveyRemarks: string | undefined;
+  let flatFindings: PatientPhysicalExamFindingDto[] = [];
+
+  const first = input[0] as any;
+  if ('findings' in first && Array.isArray(first.findings)) {
+    const pe = first as PatientPhysicalExamDto;
+    generalSurveyId = pe.generalSurveyId;
+    generalSurveyRemarks = pe.generalSurveyRemarks;
+    flatFindings = pe.findings || [];
+  } else if ('system' in first) {
+    flatFindings = input as PatientPhysicalExamFindingDto[];
+  } else {
+    return null;
+  }
+
+  const hasGeneralSurveyId = Boolean(generalSurveyId && generalSurveyId.trim());
+
+  if (flatFindings.length === 0 && !hasGeneralSurveyId) {
+    return null;
+  }
+
+  const normalizeSystemName = (sys: string): string =>
+    (sys || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const result: PhysicalExamFindings = { ...DEFAULT_PHYSICAL_EXAM_NORMAL };
+
+  if (hasGeneralSurveyId && generalSurveyId) {
+    result.generalSurveyId = generalSurveyId;
+    if (generalSurveyId === '2' || generalSurveyId === '99') {
+      result.generalSurvey = 'Abnormal';
+    }
+  }
+  if (generalSurveyRemarks !== undefined && generalSurveyRemarks !== null) {
+    result.generalSurveyRemarks = generalSurveyRemarks;
+  }
+
+  let matchedCount = 0;
+
+  for (const finding of flatFindings) {
+    if (!finding || !finding.system) continue;
+
+    const norm = normalizeSystemName(finding.system);
+    if (!norm) continue;
+
+    // Pass 1: Exact normalized match against sys.label or sys.key across all 10 systems in EXAM_SYSTEMS
+    let matchedSys = EXAM_SYSTEMS.find((sys) => {
+      const sysLabelNorm = normalizeSystemName(sys.label);
+      const sysKeyNorm = normalizeSystemName(String(sys.key));
+      return norm === sysLabelNorm || norm === sysKeyNorm;
+    });
+
+    // Pass 2: Safe fuzzy heuristic strictly avoiding substring collisions (e.g. gastro, abdo, norm === 'gi')
+    if (!matchedSys) {
+      matchedSys = EXAM_SYSTEMS.find((sys) => {
+        if (sys.key === 'generalSurvey' && (norm.includes('general') || norm.includes('survey'))) return true;
+        if (sys.key === 'skin' && (norm.includes('skin') || norm.includes('extremit'))) return true;
+        if (sys.key === 'heent' && (norm.includes('heent') || norm.includes('head') || norm.includes('eye'))) return true;
+        if (sys.key === 'chest' && (norm.includes('chest') || norm.includes('lung') || norm.includes('pulmo') || norm.includes('respirat'))) return true;
+        if (sys.key === 'heart' && (norm.includes('heart') || norm.includes('cvs') || norm.includes('cardio'))) return true;
+        if (sys.key === 'abdomen' && (norm.includes('abdo') || norm.includes('gastro') || norm === 'gi' || norm === 'gitract')) return true;
+        if (sys.key === 'neuro' && (norm.includes('neuro') || norm.includes('cns'))) return true;
+        if (sys.key === 'rectal' && (norm.includes('rectal') || norm.includes('dre'))) return true;
+        if (sys.key === 'gu' && (norm.includes('genito') || norm === 'gu')) return true;
+        if (sys.key === 'musculoskeletal' && (norm.includes('musculo') || norm.includes('msk') || norm.includes('skelet'))) return true;
+        return false;
+      });
+    }
+
+    if (!matchedSys) continue;
+
+    matchedCount++;
+
+    const isNormal = Boolean(finding.isNormal);
+    (result as any)[matchedSys.key] = isNormal ? 'Normal' : 'Abnormal';
+
+    if (finding.optionCode) {
+      (result as any)[matchedSys.codeKey] = finding.optionCode;
+    } else if (isNormal) {
+      (result as any)[matchedSys.codeKey] = matchedSys.normalCode;
+    } else {
+      (result as any)[matchedSys.codeKey] = '99';
+    }
+
+    if (finding.remarks !== undefined && finding.remarks !== null) {
+      (result as any)[matchedSys.remarksKey] = finding.remarks;
+    } else if (
+      !isNormal &&
+      finding.findingTitle &&
+      finding.findingTitle !== matchedSys.normalDescription &&
+      finding.findingTitle !== 'Abnormal finding'
+    ) {
+      (result as any)[matchedSys.remarksKey] = finding.findingTitle;
+    } else if (isNormal) {
+      (result as any)[matchedSys.remarksKey] = '';
+    }
+
+    if (matchedSys.key === 'generalSurvey') {
+      if (finding.optionCode) {
+        result.generalSurveyId = finding.optionCode;
+      }
+      if (finding.remarks) {
+        result.generalSurveyRemarks = finding.remarks;
+      }
+    }
+  }
+
+  // Degenerate child rows guard: if flatFindings contains rows but 0 systems matched and generalSurveyId is not present, return null
+  if (matchedCount === 0 && !hasGeneralSurveyId) {
+    return null;
+  }
+
+  return result;
+}
+

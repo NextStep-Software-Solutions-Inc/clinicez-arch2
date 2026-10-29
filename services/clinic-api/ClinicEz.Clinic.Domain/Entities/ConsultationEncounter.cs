@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using ClinicEz.Clinic.Domain.Common;
+using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class ConsultationEncounter : BaseEntity
+public sealed class ConsultationEncounter : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid? BranchId { get; set; }
 
     public Guid? QueueItemId { get; set; }
@@ -17,6 +16,7 @@ public sealed class ConsultationEncounter : BaseEntity
     public Appointment? Appointment { get; set; }
 
     public Guid PatientId { get; set; }
+    public Patient? Patient { get; set; }
     public required string PatientName { get; set; }
 
     public Guid DoctorId { get; set; }
@@ -42,6 +42,36 @@ public sealed class ConsultationEncounter : BaseEntity
     public bool IsSigned { get; set; } = false;
     public DateTime? SignedAt { get; set; }
 
+    public void Sign(
+        string? prcLicense = null,
+        string? ptr = null,
+        string? s2License = null,
+        string? philHealthPan = null,
+        string? philHealthAtc = null)
+    {
+        if (prcLicense != null) DoctorPrcLicense = prcLicense;
+        if (ptr != null) DoctorPtr = ptr;
+        if (s2License != null) DoctorS2License = s2License;
+        if (!string.IsNullOrWhiteSpace(philHealthPan)) DoctorPhilHealthPan = philHealthPan;
+        if (!string.IsNullOrWhiteSpace(philHealthAtc)) PhilHealthAtc = philHealthAtc;
+
+        IsSigned = true;
+        SignedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+        UpdatedBy = DoctorName;
+
+        AddDomainEvent(new ClinicEz.Clinic.Domain.Events.ConsultationSignedDomainEvent(
+            Id,
+            ClinicId,
+            PatientId,
+            DoctorId,
+            DoctorName,
+            SignedAt.Value));
+    }
+
+    // Dual Clinical Workflow Mode
+    public VisitWorkflowMode VisitWorkflowMode { get; set; } = VisitWorkflowMode.Regular;
+
     // PhilHealth Konsulta / YAKAP Encounter Tracking
     public bool IsYakapEligible { get; set; } = false;
     public string? PhilHealthSignSympCode { get; set; }
@@ -51,12 +81,42 @@ public sealed class ConsultationEncounter : BaseEntity
     public string? PhilHealthSoapTransNo { get; set; }
     public string? DoctorPhilHealthPan { get; set; }
     public string? PhilHealthAtc { get; set; }
-    public string? HciCaseNo { get; set; }
-    public string? HciTransNo { get; set; }
-    public string? SoapTransNo { get; set; }
-    public string? GeneralSurveyId { get; set; }
-    public string? GeneralSurveyRemarks { get; set; }
-    public string? PhysicalExamFindingsJson { get; set; }
+    public bool IsWalkedIn { get; set; } = false;
+    public bool HasCoPayment { get; set; } = false;
+    public DateOnly? CoPaymentDate { get; set; }
+    public decimal? CoPaymentAmount { get; set; }
+    public decimal? CoPaymentBalance { get; set; }
+    public string? PhilHealthManagementCodes { get; set; }
+
+    public string? PhilHealthVisitType { get; set; }
+    public string? SpecificDiagnosisCodes { get; set; }
+    public string? CounselingCodes { get; set; }
+    public string? RoutineVaccineName { get; set; }
+    public DateOnly? RoutineVaccineDate { get; set; }
+    public string? AdultsRoutineScreeningCode { get; set; }
+    public string? PediatricRoutineScreeningCode { get; set; }
+    public string? PrenatalScreeningServicesCode { get; set; }
+    public string? BreastCancerScreeningCode { get; set; }
+    public string? CervicalCancerScreeningCode { get; set; }
+    public string? ColorectalCancerScreeningCode { get; set; }
+    public string? ProstateCancerScreeningCode { get; set; }
+    public string? DiagnosticServicesOption { get; set; }
+    public bool HasMedicationPrescription { get; set; } = false;
+    public bool HasReferral { get; set; } = false;
+    public string? OtherMedicalAdviceSpec { get; set; }
+    public bool HasFollowUp { get; set; } = false;
+    public DateOnly? FollowUpDate { get; set; }
+    public string? FollowUpScheduleText { get; set; }
+    public string? FollowUpReason { get; set; }
+    public string? FollowUpVaccineName { get; set; }
+    public DateOnly? FollowUpVaccineNextDate { get; set; }
+    public string? ClinicalDisposition { get; set; }
+    public YakapServiceDeliveryMethod ServiceDeliveryMethod { get; set; } = YakapServiceDeliveryMethod.FacilityBased;
+    public Guid? PatientIdentityVerificationId { get; set; }
+    public PatientIdentityVerification? PatientIdentityVerification { get; set; }
+    public string? DoctorDesignation { get; set; }
+    public string? ConsultationReasonCode { get; set; }
+    public string? ConsultationReasonDetails { get; set; }
 
     // E-Prescription Interoperability & External Verification
     public string? PrescriptionNumber { get; set; }
@@ -87,25 +147,117 @@ public sealed class ConsultationEncounter : BaseEntity
     // Navigations
     public ICollection<EncounterDiagnosis> Diagnoses { get; set; } = new List<EncounterDiagnosis>();
     public ICollection<PrescriptionItem> Prescriptions { get; set; } = new List<PrescriptionItem>();
+    public ICollection<PatientPhysicalExam> PhysicalExams { get; set; } = new List<PatientPhysicalExam>();
+    public ICollection<PatientVitals> Vitals { get; set; } = new List<PatientVitals>();
+    public ICollection<EncounterReviewOfSystemsItem> ReviewOfSystemsItems { get; set; } = new List<EncounterReviewOfSystemsItem>();
+    public EncounterObGyneExam? ObGyneExam { get; set; }
+    public ICollection<EncounterPediatricMilestone> PediatricMilestones { get; set; } = new List<EncounterPediatricMilestone>();
+    public EncounterAdolescentAssessment? AdolescentAssessment { get; set; }
+    public ICollection<EncounterHeadsssDomainAssessment> HeadsssAssessments { get; set; } = new List<EncounterHeadsssDomainAssessment>();
+    public ICollection<PatientBpMonitoringLog> BpMonitoringLogs { get; set; } = new List<PatientBpMonitoringLog>();
 
     public NineSystemPhysicalExamFindings? GetPhysicalExamFindings()
     {
-        if (string.IsNullOrWhiteSpace(PhysicalExamFindingsJson)) return null;
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<NineSystemPhysicalExamFindings>(PhysicalExamFindingsJson);
-        }
-        catch
-        {
-            return null;
-        }
+        var exam = PhysicalExams.FirstOrDefault();
+        if (exam == null) return null;
+
+        var findings = new NineSystemPhysicalExamFindings();
+        findings.Skin = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Skin)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.SkinRemarks),
+            exam.SkinRemarks);
+        findings.Heent = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Heent)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.HeentRemarks),
+            exam.HeentRemarks);
+        findings.Chest = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Chest)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.ChestLungsRemarks),
+            exam.ChestLungsRemarks);
+        findings.Heart = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Heart)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.HeartRemarks),
+            exam.HeartRemarks);
+        findings.Abdomen = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Abdomen)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.AbdomenRemarks),
+            exam.AbdomenRemarks);
+        findings.Neuro = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Neurological)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.NeurologicalRemarks),
+            exam.NeurologicalRemarks);
+        findings.Rectal = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Rectal)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.DigitalRectalRemarks),
+            exam.DigitalRectalRemarks);
+        findings.Gu = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Genitourinary)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.GenitourinaryRemarks),
+            exam.GenitourinaryRemarks);
+        findings.Musculoskeletal = new SystemExamFinding(
+            exam.Findings.FirstOrDefault(f => f.System == PhysicalExamSystem.Musculoskeletal)?.IsNormal ?? string.IsNullOrWhiteSpace(exam.MusculoskeletalRemarks),
+            exam.MusculoskeletalRemarks);
+
+        return findings;
     }
 
     public void SetPhysicalExamFindings(NineSystemPhysicalExamFindings? findings)
     {
-        PhysicalExamFindingsJson = findings != null
-            ? System.Text.Json.JsonSerializer.Serialize(findings)
-            : null;
+        if (findings == null)
+        {
+            PhysicalExams.Clear();
+            return;
+        }
+
+        var exam = PhysicalExams.FirstOrDefault();
+        if (exam == null)
+        {
+            exam = new PatientPhysicalExam
+            {
+                TenantId = TenantId,
+                ClinicId = ClinicId,
+                PatientId = PatientId,
+                ConsultationEncounterId = Id,
+                ExamDate = EncounterDate != default ? EncounterDate : DateTime.UtcNow
+            };
+            PhysicalExams.Add(exam);
+        }
+
+        exam.SkinRemarks = findings.Skin?.Remarks;
+        exam.HeentRemarks = findings.Heent?.Remarks;
+        exam.ChestLungsRemarks = findings.Chest?.Remarks;
+        exam.HeartRemarks = findings.Heart?.Remarks;
+        exam.AbdomenRemarks = findings.Abdomen?.Remarks;
+        exam.NeurologicalRemarks = findings.Neuro?.Remarks;
+        exam.DigitalRectalRemarks = findings.Rectal?.Remarks;
+        exam.GenitourinaryRemarks = findings.Gu?.Remarks;
+        exam.MusculoskeletalRemarks = findings.Musculoskeletal?.Remarks;
+
+        void SyncFinding(PhysicalExamSystem sys, SystemExamFinding? f)
+        {
+            if (f == null) return;
+            var existing = exam.Findings.FirstOrDefault(x => x.System == sys);
+            if (existing == null)
+            {
+                exam.Findings.Add(new PatientPhysicalExamFinding
+                {
+                    TenantId = exam.TenantId,
+                    ClinicId = exam.ClinicId,
+                    PhysicalExamId = exam.Id,
+                    System = sys,
+                    IsNormal = f.IsNormal,
+                    FindingTitle = sys.ToString(),
+                    Remarks = f.Remarks
+                });
+            }
+            else
+            {
+                existing.IsNormal = f.IsNormal;
+                existing.Remarks = f.Remarks;
+            }
+        }
+
+        SyncFinding(PhysicalExamSystem.Skin, findings.Skin);
+        SyncFinding(PhysicalExamSystem.Heent, findings.Heent);
+        SyncFinding(PhysicalExamSystem.Chest, findings.Chest);
+        SyncFinding(PhysicalExamSystem.Heart, findings.Heart);
+        SyncFinding(PhysicalExamSystem.Abdomen, findings.Abdomen);
+        SyncFinding(PhysicalExamSystem.Neurological, findings.Neuro);
+        SyncFinding(PhysicalExamSystem.Rectal, findings.Rectal);
+        SyncFinding(PhysicalExamSystem.Genitourinary, findings.Gu);
+        SyncFinding(PhysicalExamSystem.Musculoskeletal, findings.Musculoskeletal);
     }
 }
 
@@ -148,4 +300,3 @@ public sealed class NineSystemPhysicalExamFindings
     public SystemExamFinding Gu { get; set; } = new();
     public SystemExamFinding Musculoskeletal { get; set; } = new();
 }
-

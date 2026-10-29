@@ -43,11 +43,11 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var doctorOnlyItem = new ClinicServiceItem
+        var doctorOnlyItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -87,11 +87,11 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var nurseItem = new ClinicServiceItem
+        var nurseItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -135,8 +135,8 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
         var doctorId = Guid.NewGuid();
@@ -153,7 +153,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.StaffMembers.AddAsync(doctor);
 
-        var doctorOnlyItem = new ClinicServiceItem
+        var doctorOnlyItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -196,8 +196,8 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
         var doctorWithoutPrcId = Guid.NewGuid();
@@ -214,7 +214,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.StaffMembers.AddAsync(doctor);
 
-        var doctorOnlyItem = new ClinicServiceItem
+        var doctorOnlyItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -256,8 +256,8 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
         var handler = new OrderProcedureCommandHandler(
@@ -286,7 +286,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var handler = new OrderProcedureCommandHandler(
             procRepo,
@@ -315,9 +315,9 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
         var queueItem = new QueueItem
@@ -332,7 +332,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -378,9 +378,9 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
         var queueItem = new QueueItem
@@ -394,7 +394,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -438,7 +438,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
@@ -457,7 +457,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = procedureId,
             ClinicId = clinicId,
@@ -507,16 +507,16 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
         var procedureId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
 
-        var room = new ClinicRoom
+        var room = new Room
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -525,7 +525,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
             DisplayOrder = 3,
             IsActive = true
         };
-        await context.ClinicRooms.AddAsync(room);
+        await context.Rooms.AddAsync(room);
 
         var doctor = new StaffMember
         {
@@ -553,7 +553,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = procedureId,
             ClinicId = clinicId,
@@ -599,7 +599,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
@@ -619,7 +619,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = procedureId,
             ClinicId = clinicId,
@@ -664,7 +664,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
@@ -697,7 +697,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         };
         await context.QueueItems.AddAsync(queueItem);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = procedureId,
             ClinicId = clinicId,
@@ -739,7 +739,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var handler = new RecordProcedureExecutionCommandHandler(
             procRepo,
@@ -764,7 +764,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var publisher = Substitute.For<IImmunizationEventPublisher>();
 
@@ -772,7 +772,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         var queueItemId = Guid.NewGuid();
         var nurseId = Guid.NewGuid();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = clinicId,
@@ -847,7 +847,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var publisher = Substitute.For<IImmunizationEventPublisher>();
 
@@ -855,7 +855,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         var queueItemId = Guid.NewGuid();
         var nurseId = Guid.NewGuid();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = clinicId,
@@ -928,14 +928,14 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var publisher = Substitute.For<IImmunizationEventPublisher>();
 
         var patientId = Guid.NewGuid();
         var queueItemId = Guid.NewGuid();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             ClinicId = clinicId,
@@ -1039,11 +1039,11 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
     {
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
-        var serviceRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
+        var serviceRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
-        var roomConsultation = new ClinicRoom
+        var roomConsultation = new Room
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -1053,7 +1053,7 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
             DisplayOrder = 1,
             IsActive = true
         };
-        var roomTreatment = new ClinicRoom
+        var roomTreatment = new Room
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -1063,9 +1063,9 @@ public class NonDoctorWorkflowsMilestone4AdversarialTests
             DisplayOrder = 2,
             IsActive = true
         };
-        await context.ClinicRooms.AddRangeAsync(roomConsultation, roomTreatment);
+        await context.Rooms.AddRangeAsync(roomConsultation, roomTreatment);
 
-        var serviceItem = new ClinicServiceItem
+        var serviceItem = new ServiceItem
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,

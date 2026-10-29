@@ -36,7 +36,7 @@ public class WalkInRetailBillingTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -82,7 +82,7 @@ public class WalkInRetailBillingTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -119,7 +119,7 @@ public class WalkInRetailBillingTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -157,7 +157,7 @@ public class WalkInRetailBillingTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -193,7 +193,7 @@ public class WalkInRetailBillingTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,

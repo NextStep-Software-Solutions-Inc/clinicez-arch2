@@ -92,10 +92,10 @@ public class ServicesCatalogChallengerTests
     public async Task AutoSeeding_HighChurnSequentialQueries_SeedsOnlyOnceAndRemainsConsistent()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -123,10 +123,10 @@ public class ServicesCatalogChallengerTests
     public async Task SpecialtyModeTransition_DoesNotWipeOrDuplicateExistingServices()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -167,10 +167,10 @@ public class ServicesCatalogChallengerTests
         clinicContext2.ClinicId.Returns(clinicId2);
 
         var (context2, uow2, sieve2) = TestDbHelper.CreateTestContext(clinicContext2);
-        var repo2 = TestDbHelper.CreateRepository<ClinicServiceItem>(context2, sieve2);
-        var settingsRepo2 = TestDbHelper.CreateRepository<ClinicSettings>(context2, sieve2);
+        var repo2 = TestDbHelper.CreateRepository<ServiceItem>(context2, sieve2);
+        var settingsRepo2 = TestDbHelper.CreateRepository<FacilitySettings>(context2, sieve2);
 
-        var settings2 = new ClinicSettings
+        var settings2 = new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = clinicId2,
@@ -217,12 +217,12 @@ public class ServicesCatalogChallengerTests
         contextMock.TenantId.Returns("tenant-variation-test");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(contextMock);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         if (specialtyMode != null)
         {
-            await settingsRepo.AddAsync(new ClinicSettings
+            await settingsRepo.AddAsync(new FacilitySettings
             {
                 TenantId = "tenant-variation-test",
                 ClinicId = testClinicId,
@@ -259,7 +259,7 @@ public class ServicesCatalogChallengerTests
     public async Task SeedDentalServices_RepeatedFiftyTimes_RemainsStrictlyIdempotent()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContext);
 
         for (int i = 0; i < 50; i++)
@@ -277,11 +277,11 @@ public class ServicesCatalogChallengerTests
     public async Task SeedDentalServices_PreservesMultipleCustomPricesAndDescriptions()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContext);
 
         // Pre-create 3 dental services with customized prices, names, and case-varied codes
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -292,7 +292,7 @@ public class ServicesCatalogChallengerTests
             Description = "VIP specialized 60-minute examination",
             IsActive = true
         });
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -303,7 +303,7 @@ public class ServicesCatalogChallengerTests
             Description = "Dual-stage ultrasonic subgingival cleaning",
             IsActive = true
         });
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -356,9 +356,9 @@ public class ServicesCatalogChallengerTests
     public async Task DirectoryPublishing_FiltersOutInactiveDentalServices_IncludesOnlyActive()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Active doctor required for publishing readiness
@@ -378,7 +378,7 @@ public class ServicesCatalogChallengerTests
         foreach (var code in activeCodes)
         {
             var def = DentalCatalogDefaults.Defaults.First(d => d.Code == code);
-            await servicesRepo.AddAsync(new ClinicServiceItem
+            await servicesRepo.AddAsync(new ServiceItem
             {
                 TenantId = TenantId,
                 ClinicId = _clinicId,
@@ -397,7 +397,7 @@ public class ServicesCatalogChallengerTests
         {
             var def = DentalCatalogDefaults.Defaults.First(d => d.Code == code);
             inactiveNames.Add(def.Name);
-            await servicesRepo.AddAsync(new ClinicServiceItem
+            await servicesRepo.AddAsync(new ServiceItem
             {
                 TenantId = TenantId,
                 ClinicId = _clinicId,
@@ -410,7 +410,7 @@ public class ServicesCatalogChallengerTests
         }
 
         // Add 2 active general medical services and 1 inactive medical service
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -420,7 +420,7 @@ public class ServicesCatalogChallengerTests
             StandardPrice = 500m,
             IsActive = true
         });
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -430,7 +430,7 @@ public class ServicesCatalogChallengerTests
             StandardPrice = 350m,
             IsActive = true
         });
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -441,7 +441,7 @@ public class ServicesCatalogChallengerTests
             IsActive = false
         });
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,

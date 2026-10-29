@@ -66,7 +66,7 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
 
         // 3. Multi-Tenant Filter Bypass & Update
         var tenantId = message.TenantId.ToLower();
-        var settings = await _dbContext.ClinicSettings
+        var settings = await _dbContext.Settings
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.ClinicId == message.ResourceId && s.TenantId.ToLower() == tenantId, ct);
 

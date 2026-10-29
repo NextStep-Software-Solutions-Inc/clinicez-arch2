@@ -70,7 +70,7 @@ public class AppointmentBookedIsolationTests
 
         var mine = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.ClinicId == _clinicId);
         mine.Id.Should().NotBe(patientId, "the primary key is taken by another clinic's chart");
-        mine.SyncPatientId.Should().Be(patientId);
+        mine.CloudPatientId.Should().Be(patientId);
         mine.Email.Should().Be("new@clinic.test");
         var untouched = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == patientId);
         untouched.ClinicId.Should().Be(otherClinic);

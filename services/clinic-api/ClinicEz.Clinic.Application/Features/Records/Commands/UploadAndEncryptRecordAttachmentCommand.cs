@@ -23,14 +23,14 @@ public sealed record UploadAndEncryptRecordAttachmentCommand(
 
 public sealed class UploadAndEncryptRecordAttachmentCommandHandler : IRequestHandler<UploadAndEncryptRecordAttachmentCommand, ClinicRecordAttachmentDto>
 {
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicEncryptionService _encryptionService;
     private readonly IClinicStorageService _storageService;
 
     public UploadAndEncryptRecordAttachmentCommandHandler(
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicEncryptionService encryptionService,
@@ -63,7 +63,7 @@ public sealed class UploadAndEncryptRecordAttachmentCommandHandler : IRequestHan
         await _storageService.SaveEncryptedFileAsync(storageKey, encryptedPayload.Ciphertext, ct);
 
         // 3. Create verified attachment record
-        var attachment = new ClinicRecordAttachment
+        var attachment = new RecordAttachment
         {
             Id = attachmentId,
             TenantId = tenantId,

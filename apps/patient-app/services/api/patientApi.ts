@@ -45,6 +45,15 @@ export interface AddressItem {
     postalCode?: string | null;
     country: string | null;
     isPrimary: boolean;
+    regionPsgc?: string | null;
+    provincePsgc?: string | null;
+    cityMunicipalityPsgc?: string | null;
+    barangayPsgc?: string | null;
+    regionName?: string | null;
+    provinceName?: string | null;
+    cityMunicipalityName?: string | null;
+    barangayName?: string | null;
+    isSameAsPermanent?: boolean | null;
     updatedAt: string | null;
 }
 export interface EmergencyContactItem { id: string; clientId: string; fullName: string; relationship: string | null; mobile: string | null; altPhone: string | null; isPrimary: boolean; updatedAt: string | null }
@@ -401,6 +410,15 @@ export interface AddressInput {
     zipCode?: string | null;
     country?: string | null;
     isPrimary?: boolean;
+    regionPsgc?: string | null;
+    provincePsgc?: string | null;
+    cityMunicipalityPsgc?: string | null;
+    barangayPsgc?: string | null;
+    regionName?: string | null;
+    provinceName?: string | null;
+    cityMunicipalityName?: string | null;
+    barangayName?: string | null;
+    isSameAsPermanent?: boolean | null;
 }
 
 export async function getPatientAddresses(

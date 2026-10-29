@@ -307,3 +307,52 @@ describe('SQLite Migration 0015 (local_health_records, local_documents, upload_q
     sqlite.close();
   });
 });
+
+describe('SQLite Migration 0016 (patient_addresses PSGC columns)', () => {
+  test('0016 migration file exists and is registered in journal and migrations.js', () => {
+    const sqlPath = join(APP_ROOT, 'drizzle/0016_add_psgc_address_columns.sql');
+    expect(existsSync(sqlPath)).toBe(true);
+
+    const journal = JSON.parse(readApp('drizzle/meta/_journal.json'));
+    const entry16 = journal.entries.find((e: { idx: number }) => e.idx === 16);
+    expect(entry16).toBeDefined();
+    expect(entry16.tag).toBe('0016_add_psgc_address_columns');
+
+    const migrationsJs = readApp('drizzle/migrations.js');
+    expect(migrationsJs.includes('0016_add_psgc_address_columns.sql')).toBe(true);
+    expect(migrationsJs.includes('m0016')).toBe(true);
+  });
+
+  test('applying all SQLite migrations 0000..0016 alters patient_addresses with all 9 PSGC columns', () => {
+    const sqlite = new Database(':memory:');
+    const journal = JSON.parse(readApp('drizzle/meta/_journal.json'));
+
+    for (const entry of journal.entries) {
+      const sqlContent = readApp(`drizzle/${entry.tag}.sql`);
+      const statements = sqlContent.split('--> statement-breakpoint');
+      for (const stmt of statements) {
+        const trimmed = stmt.trim();
+        if (trimmed) {
+          sqlite.exec(trimmed);
+        }
+      }
+    }
+
+    const cols = sqlite
+      .query('PRAGMA table_info(patient_addresses)')
+      .all() as Array<{ name: string }>;
+    const colNames = new Set(cols.map((c) => c.name));
+
+    expect(colNames.has('region_psgc')).toBe(true);
+    expect(colNames.has('province_psgc')).toBe(true);
+    expect(colNames.has('city_municipality_psgc')).toBe(true);
+    expect(colNames.has('barangay_psgc')).toBe(true);
+    expect(colNames.has('region_name')).toBe(true);
+    expect(colNames.has('province_name')).toBe(true);
+    expect(colNames.has('city_municipality_name')).toBe(true);
+    expect(colNames.has('barangay_name')).toBe(true);
+    expect(colNames.has('is_same_as_permanent')).toBe(true);
+
+    sqlite.close();
+  });
+});

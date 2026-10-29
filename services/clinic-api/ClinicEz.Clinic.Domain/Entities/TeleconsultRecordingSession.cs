@@ -4,10 +4,8 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class TeleconsultRecordingSession : BaseEntity
+public sealed class TeleconsultRecordingSession : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid? BranchId { get; set; }
 
     /// <summary>Unique media call identifier correlated across comms-api and media-broker.</summary>
@@ -20,6 +18,7 @@ public sealed class TeleconsultRecordingSession : BaseEntity
     public ConsultationEncounter? Consultation { get; set; }
 
     public Guid PatientId { get; set; }
+    public Patient? Patient { get; set; }
     public required string PatientName { get; set; }
 
     public Guid DoctorId { get; set; }

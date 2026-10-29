@@ -18,12 +18,12 @@ public record BulkImportServicesCommand(
 
 public class BulkImportServicesCommandHandler : IRequestHandler<BulkImportServicesCommand, BulkImportResultDto>
 {
-    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public BulkImportServicesCommandHandler(
-        IRepository<ClinicServiceItem> serviceRepo,
+        IRepository<ServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -107,7 +107,7 @@ public class BulkImportServicesCommandHandler : IRequestHandler<BulkImportServic
             }
             else
             {
-                var newItem = new ClinicServiceItem
+                var newItem = new ServiceItem
                 {
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,

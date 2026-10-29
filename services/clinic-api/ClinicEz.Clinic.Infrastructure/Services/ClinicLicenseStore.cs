@@ -26,7 +26,7 @@ public sealed class ClinicLicenseStore : IFacilityLicenseStore, IFacilityRegistr
 
     public async Task<HeldFacilityLicense?> GetAsync(string tenantId, Guid facilityId, CancellationToken ct)
     {
-        var settings = await _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking()
+        var settings = await _db.Settings.IgnoreQueryFilters().AsNoTracking()
             .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.ClinicId == facilityId && !s.IsDeleted, ct);
 
         return settings is null ? null : new HeldFacilityLicense(settings.LicenseToken, settings.EntitlementVersion);
@@ -34,7 +34,7 @@ public sealed class ClinicLicenseStore : IFacilityLicenseStore, IFacilityRegistr
 
     public async Task SaveAsync(string tenantId, Guid facilityId, FacilityLicenseUpdate update, CancellationToken ct)
     {
-        var settings = await _db.ClinicSettings.IgnoreQueryFilters()
+        var settings = await _db.Settings.IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.ClinicId == facilityId && !s.IsDeleted, ct)
             ?? throw new InvalidOperationException($"Clinic {facilityId} of tenant {tenantId} is not provisioned.");
 
@@ -50,7 +50,7 @@ public sealed class ClinicLicenseStore : IFacilityLicenseStore, IFacilityRegistr
     }
 
     public async Task<IReadOnlyList<FacilityRegistryEntry>> ListAsync(CancellationToken ct) =>
-        await _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking()
+        await _db.Settings.IgnoreQueryFilters().AsNoTracking()
             .Where(s => !s.IsDeleted)
             .Select(s => new FacilityRegistryEntry(s.TenantId, s.ClinicId, FacilityType.Clinic, s.LicenseExpiresAt, s.IsWorkspaceEligible))
             .ToListAsync(ct);

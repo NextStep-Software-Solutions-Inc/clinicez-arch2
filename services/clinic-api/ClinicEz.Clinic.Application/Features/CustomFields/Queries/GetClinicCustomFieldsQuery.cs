@@ -12,14 +12,14 @@ using Microsoft.EntityFrameworkCore;
 namespace ClinicEz.Clinic.Application.Features.CustomFields.Queries;
 
 public sealed record GetClinicCustomFieldsQuery(
-    string? EntityType = "ClinicPatient",
+    string? EntityType = "Patient",
     string? Category = null) : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>;
 
 public sealed class GetClinicCustomFieldsQueryHandler : IRequestHandler<GetClinicCustomFieldsQuery, IReadOnlyList<ClinicCustomFieldDefinitionDto>>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
 
-    public GetClinicCustomFieldsQueryHandler(IRepository<ClinicCustomFieldDefinition> repo)
+    public GetClinicCustomFieldsQueryHandler(IRepository<CustomFieldDefinition> repo)
     {
         _repo = repo;
     }
@@ -30,7 +30,16 @@ public sealed class GetClinicCustomFieldsQueryHandler : IRequestHandler<GetClini
 
         if (!string.IsNullOrWhiteSpace(request.EntityType))
         {
-            query = query.Where(f => f.EntityType == request.EntityType);
+            var isPatient = string.Equals(request.EntityType, "Patient", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(request.EntityType, "ClinicPatient", StringComparison.OrdinalIgnoreCase);
+            if (isPatient)
+            {
+                query = query.Where(f => f.EntityType == "Patient" || f.EntityType == "ClinicPatient");
+            }
+            else
+            {
+                query = query.Where(f => f.EntityType == request.EntityType);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.Category))

@@ -25,7 +25,7 @@ public static class LabResultDocuments
     /// The patient's copy of one result. The result id is the document id, so the copy is updated in place as the result is
     /// reviewed. <paramref name="body"/> replaces the default upload summary (the ClinicEZ lab's structured report).
     /// </summary>
-    public static PatientDocumentDraft For(ClinicLabOrder order, ClinicLabResult result, object? body = null) => new(
+    public static PatientDocumentDraft For(LabOrder order, LabResult result, object? body = null) => new(
         order.ClinicId,
         order.PatientId,
         result.Id,

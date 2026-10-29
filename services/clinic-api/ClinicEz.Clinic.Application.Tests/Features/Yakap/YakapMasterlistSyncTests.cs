@@ -61,7 +61,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -72,7 +72,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "12-345678901-2", // Hyphenated in DB
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Female"
+            Gender = Gender.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -109,8 +109,8 @@ public class YakapMasterlistSyncTests
         enlistments.Should().ContainSingle();
         enlistments[0].EffectiveYear.Should().Be(2026);
         enlistments[0].Status.Should().Be(YakapEnlistmentStatus.Active);
-        enlistments[0].EnlistedAt.Should().Be("2026-01-15");
-        enlistments[0].ValidUntil.Should().Be("2026-12-31");
+        enlistments[0].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 15));
+        enlistments[0].ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
         enlistments[0].Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
     }
 
@@ -126,7 +126,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -137,7 +137,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "123456789012", // Unhyphenated in DB
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1982, 3, 4),
-            Gender = "Male"
+            Gender = Gender.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -185,7 +185,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -196,7 +196,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1985, 8, 15),
-            Gender = "Female"
+            Gender = Gender.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -243,7 +243,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -254,7 +254,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "030263078507",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1985, 8, 15),
-            Gender = "Female"
+            Gender = Gender.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -306,7 +306,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -317,19 +317,22 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000004",
             DateOfBirth = new DateOnly(1978, 12, 16),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
         // Pre-existing 2026 enlistment with allocated control numbers
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
+            TenantId = "tenant-001",
+            ClinicId = clinicId,
+            PatientId = patient.Id,
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = "C000921202600099",
-            EnlistmentNo = "E000921202600099",
+            EnlistmentTransNo = "E000921202600099",
             ProfilingTransNo = "P000921202600099"
         });
 
@@ -364,12 +367,12 @@ public class YakapMasterlistSyncTests
         var enlistment = updatedPatient.GetYakapEnlistments().FirstOrDefault(e => e.EffectiveYear == 2026);
 
         enlistment.Should().NotBeNull();
-        enlistment!.EnlistedAt.Should().Be("2026-01-10", "Enlisted date updated from masterlist");
+        enlistment!.EnlistmentDate.Should().Be(new DateOnly(2026, 1, 10), "Enlisted date updated from masterlist");
         enlistment.Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
 
         // Control numbers MUST be preserved!
         enlistment.CaseNo.Should().Be("C000921202600099");
-        enlistment.EnlistmentNo.Should().Be("E000921202600099");
+        enlistment.EnlistmentTransNo.Should().Be("E000921202600099");
         enlistment.ProfilingTransNo.Should().Be("P000921202600099");
     }
 
@@ -385,7 +388,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -396,19 +399,22 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000005",
             DateOfBirth = new DateOnly(1980, 3, 19),
-            Gender = "Female"
+            Gender = Gender.Female
         };
 
         // Pre-existing 2025 expired entry
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
+            TenantId = "tenant-001",
+            ClinicId = clinicId,
+            PatientId = patient.Id,
             EffectiveYear = 2025,
-            EnlistedAt = "2025-01-10",
-            ValidUntil = "2025-12-31",
+            EnlistmentDate = new DateOnly(2025, 1, 10),
+            ValidUntil = new DateOnly(2025, 12, 31),
             Status = YakapEnlistmentStatus.Expired,
             Source = YakapEnlistmentSource.ClinicEnlistment,
             CaseNo = "C000921202500001",
-            EnlistmentNo = "E000921202500001",
+            EnlistmentTransNo = "E000921202500001",
             ProfilingTransNo = "P000921202500001"
         });
 
@@ -506,7 +512,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContextA);
 
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantA,
@@ -517,10 +523,10 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Male"
+            Gender = Gender.Male
         };
 
-        var patientB = new ClinicPatient
+        var patientB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantB,
@@ -531,7 +537,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "12-345678901-2", // Same PIN in different tenant
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Female"
+            Gender = Gender.Female
         };
 
         dbContext.Patients.AddRange(patientA, patientB);
@@ -570,7 +576,7 @@ public class YakapMasterlistSyncTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -581,7 +587,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000099",
             DateOfBirth = new DateOnly(1863, 11, 30),
-            Gender = "Male"
+            Gender = Gender.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -643,6 +649,6 @@ public class YakapMasterlistSyncTests
         enlistments.Should().ContainSingle();
         enlistments[0].EffectiveYear.Should().Be(2026);
         enlistments[0].Status.Should().Be(YakapEnlistmentStatus.Active);
-        enlistments[0].EnlistedAt.Should().Be("2026-01-20");
+        enlistments[0].EnlistmentDate.Should().Be(new DateOnly(2026, 1, 20));
     }
 }

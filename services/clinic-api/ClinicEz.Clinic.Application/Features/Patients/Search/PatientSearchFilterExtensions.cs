@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using ClinicEz.Clinic.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Patients.Search;
 
@@ -10,6 +11,25 @@ namespace ClinicEz.Clinic.Application.Features.Patients.Search;
 /// </summary>
 public static class PatientSearchFilterExtensions
 {
+    private static bool IsPostgreSqlQuery(IQueryable query)
+    {
+        try
+        {
+            var provider = query.Provider;
+            var compilerField = provider.GetType().GetField("_queryCompiler", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (compilerField?.GetValue(provider) is { } compiler)
+            {
+                var databaseField = compiler.GetType().GetField("_database", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (databaseField?.GetValue(compiler) is { } db)
+                {
+                    return db.GetType().Assembly.FullName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
     /// <summary>
     /// Filters clinic patients by the provided search term supporting:
     /// - ClinicEzId: exact ("CE-WDP9-FMBJ"), partial ("WDP9"), unhyphenated ("cewdp9fmbj")
@@ -20,7 +40,7 @@ public static class PatientSearchFilterExtensions
     /// - PatientCode, ContactNumber, PhilHealthNumber (hyphenated and unhyphenated), SeniorCitizenId, PwdId
     /// Translates cleanly in both EF Core Npgsql and EF Core InMemory providers.
     /// </summary>
-    public static IQueryable<ClinicPatient> WhereMatchesSearchTerm(this IQueryable<ClinicPatient> query, string? searchTerm)
+    public static IQueryable<Patient> WhereMatchesSearchTerm(this IQueryable<Patient> query, string? searchTerm)
     {
         if (string.IsNullOrWhiteSpace(searchTerm))
             return query;
@@ -36,6 +56,23 @@ public static class PatientSearchFilterExtensions
         var words = term.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var spaceNormalized = string.Join(" ", words);
 
+        // On PostgreSQL relational provider, emit pure EF.Functions.ILike on SearchText to hit pg_trgm GIN index
+        if (IsPostgreSqlQuery(query))
+        {
+            if (words.Length > 0)
+            {
+                foreach (var word in words)
+                {
+                    var token = word;
+                    query = query.Where(p => p.SearchText != null && EF.Functions.ILike(p.SearchText, $"%{token}%"));
+                }
+                return query;
+            }
+
+            return query.Where(p => p.SearchText != null && EF.Functions.ILike(p.SearchText, $"%{term}%"));
+        }
+
+        // In-memory fallback for unit tests and local mocks
         // Pre-extract up to 5 individual tokens for multi-token name matching
         var wordCount = words.Length;
         var w0 = wordCount > 0 ? words[0] : "";
@@ -45,6 +82,12 @@ public static class PatientSearchFilterExtensions
         var w4 = wordCount > 4 ? words[4] : "";
 
         return query.Where(p =>
+            // 0. High-performance pg_trgm SearchText column (with fallback to fine-grained fields)
+            (p.SearchText != null && (
+                p.SearchText.Contains(term) ||
+                (unhyphenated.Length > 0 && p.SearchText.Contains(unhyphenated))
+            )) ||
+
             // 1. ClinicEzId (exact, partial, unhyphenated)
             (p.ClinicEzId != null && (
                 p.ClinicEzId.ToLower().Contains(term) ||

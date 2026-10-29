@@ -35,16 +35,16 @@ public record UpdateInvoiceRequest(
 public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand, InvoiceDto>
 {
     private readonly IRepository<Invoice> _invoiceRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IBillingRequestPublisher _billingPublisher;
 
     public UpdateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
@@ -55,9 +55,9 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
 
     public UpdateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicSettings>? settingsRepo,
+        IRepository<FacilitySettings>? settingsRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IBillingRequestPublisher billingPublisher)
@@ -216,7 +216,7 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
 
         var syncPatientId = await _patientRepo
             .Query(p => p.ClinicId == _clinicContext.ClinicId && p.Id == invoice.PatientId)
-            .Select(p => p.SyncPatientId)
+            .Select(p => p.CloudPatientId)
             .FirstOrDefaultAsync(ct);
 
         var lines = invoice.LineItems

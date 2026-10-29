@@ -29,20 +29,20 @@ public record RecordProcedureExecutionCommand(
 
 public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProcedureExecutionCommand, ClinicalProcedureDto>
 {
-    private readonly IRepository<ClinicalProcedure> _procRepo;
+    private readonly IRepository<Procedure> _procRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<QueueItem>? _queueRepo;
     private readonly IRepository<StaffMember>? _staffRepo;
-    private readonly IRepository<ClinicRoom>? _roomRepo;
+    private readonly IRepository<Room>? _roomRepo;
 
     public RecordProcedureExecutionCommandHandler(
-        IRepository<ClinicalProcedure> procRepo,
+        IRepository<Procedure> procRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<QueueItem>? queueRepo = null,
         IRepository<StaffMember>? staffRepo = null,
-        IRepository<ClinicRoom>? roomRepo = null)
+        IRepository<Room>? roomRepo = null)
     {
         _procRepo = procRepo;
         _unitOfWork = unitOfWork;

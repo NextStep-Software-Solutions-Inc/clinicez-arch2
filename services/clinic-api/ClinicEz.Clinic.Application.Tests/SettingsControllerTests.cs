@@ -30,7 +30,7 @@ public class SettingsControllerTests
             Arg.Any<string>(),
             Arg.Any<bool>(),
             Arg.Any<string?>(),
-            Arg.Any<ClinicSettings>())
+            Arg.Any<FacilitySettings>())
             .Returns((sampleBytes, "Sample-MedicalCertificate.pdf"));
 
         var clinicContext = Substitute.For<IClinicContext>();
@@ -38,7 +38,7 @@ public class SettingsControllerTests
         clinicContext.ClinicId.Returns(Guid.NewGuid());
 
         var (context, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var settingsRepo = new Repository<FacilitySettings>(context, sieve);
 
         var controller = new SettingsController(_sender, _pdfService, settingsRepo, _sampleGenerator);
 
@@ -66,7 +66,7 @@ public class SettingsControllerTests
     {
         var placardBytes = Encoding.UTF8.GetBytes("%PDF-1.4 placard");
         _pdfService.GenerateReceptionPlacardPdf(
-            Arg.Any<ClinicSettings>(),
+            Arg.Any<FacilitySettings>(),
             Arg.Any<string>(),
             Arg.Any<string?>(),
             Arg.Any<string?>())

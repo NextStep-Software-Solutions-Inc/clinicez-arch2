@@ -29,14 +29,14 @@ namespace ClinicEz.Clinic.Application.Tests.Adversarial;
 /// fallback paths, and concurrency hazards across:
 /// 1. PhilHealthDateParser
 /// 2. PhilHealthPinNormalizer
-/// 3. ClinicPatientYakapExtensions
-/// 4. YakapClinicalMapper
+/// 3. PatientYakapExtensions
+/// 4. PCAPI Wire Builders
 /// 5. PhilHealthMasterlistSyncService
 /// 6. PhilHealthSequenceGenerator / AssignPatientJourneyNumbersAsync
 /// </summary>
 public sealed class Tier5BackendAdversarialCoverageTests
 {
-    private static ClinicPatient CreateTestPatient(
+    private static Patient CreateTestPatient(
         string code = "PAT-001",
         string firstName = "Test",
         string lastName = "Patient",
@@ -53,7 +53,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         PhilHealthNumber = pin,
         ContactNumber = "09170000001",
         DateOfBirth = new DateOnly(1990, 1, 1),
-        Gender = "Male"
+        Gender = Gender.Male
     };
 
     private static ConsultationEncounter CreateTestEncounter(
@@ -270,16 +270,16 @@ public sealed class Tier5BackendAdversarialCoverageTests
     }
 
     // =========================================================================
-    // SECTION 3: ClinicPatientYakapExtensions Polymorphic Deserialization & Edge Cases
+    // SECTION 3: PatientYakapExtensions Polymorphic Deserialization & Edge Cases
     // =========================================================================
 
     [Fact]
     public void YakapExtensions_GetYakapEnlistments_NullAndMalformedCustomFields_HandledSafely()
     {
-        ClinicPatient? nullPatient = null;
+        Patient? nullPatient = null;
         nullPatient.GetYakapEnlistments().Should().BeEmpty();
 
-        var patientWithNullCustomFields = new ClinicPatient
+        var patientWithNullCustomFields = new Patient
         {
             TenantId = "tenant1",
             ClinicId = Guid.NewGuid(),
@@ -288,7 +288,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
             LastName = "B",
             ContactNumber = "09170000000",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Male",
+            Gender = Gender.Male,
             CustomFields = null!
         };
         patientWithNullCustomFields.GetYakapEnlistments().Should().BeEmpty();
@@ -311,83 +311,32 @@ public sealed class Tier5BackendAdversarialCoverageTests
     }
 
     [Fact]
-    public void YakapExtensions_GetYakapEnlistments_JsonElementStringAndDoubleEncodedJson_ParsedCorrectly()
+    public void YakapExtensions_GetYakapEnlistments_RelationalNavigation_FiltersSoftDeletedAndSorts()
     {
-        var rawJson = """
-        [
-            {
-                "enlisted_at": "2026-02-01",
-                "valid_until": "2026-12-31",
-                "effective_year": "2026",
-                "status": "Active",
-                "source": "ClinicEnlistment",
-                "case_no": "C000921202600001",
-                "enlistment_no": "E000921202600001",
-                "profiling_trans_no": "P000921202600001"
-            }
-        ]
-        """;
+        var patient = CreateTestPatient("PAT-REL-01");
+        patient.YakapEnlistments = new List<PatientYakapEnlistment>
+        {
+            new() { EffectiveYear = 2026, EnlistmentDate = new DateOnly(2026, 2, 1), ValidUntil = new DateOnly(2026, 12, 31), Status = YakapEnlistmentStatus.Active, CaseNo = "C000921202600001", EnlistmentTransNo = "E000921202600001", ProfilingTransNo = "P000921202600001" },
+            new() { EffectiveYear = 2025, EnlistmentDate = new DateOnly(2025, 1, 1), ValidUntil = new DateOnly(2025, 12, 31), Status = YakapEnlistmentStatus.Expired, IsDeleted = true }
+        };
 
-        // Raw string
-        var patient1 = CreateTestPatient("PAT-STR-1");
-        patient1.CustomFields["yakap_enlistments"] = rawJson;
-        var res1 = patient1.GetYakapEnlistments();
-        res1.Should().HaveCount(1);
-        res1[0].EffectiveYear.Should().Be(2026);
-        res1[0].CaseNo.Should().Be("C000921202600001");
-
-        // JsonElement wrapping string (double-encoded JSON)
-        using var stringDoc = JsonDocument.Parse($"\"{rawJson.Replace("\"", "\\\"").Replace("\r", "").Replace("\n", "")}\"");
-        var patient2 = CreateTestPatient("PAT-STR-2");
-        patient2.CustomFields["yakap_enlistments"] = stringDoc.RootElement.Clone();
-        var res2 = patient2.GetYakapEnlistments();
-        res2.Should().HaveCount(1);
-        res2[0].EffectiveYear.Should().Be(2026);
-
-        // Malformed JSON string
-        var patient3 = CreateTestPatient("PAT-STR-3");
-        patient3.CustomFields["yakap_enlistments"] = "{ broken json array";
-        patient3.GetYakapEnlistments().Should().BeEmpty();
+        var res = patient.GetYakapEnlistments();
+        res.Should().HaveCount(1);
+        res[0].EffectiveYear.Should().Be(2026);
+        res[0].CaseNo.Should().Be("C000921202600001");
     }
 
     [Fact]
     public void YakapExtensions_GetYakapEnlistments_HeterogeneousUntypedEnumerable_ParsesAllItems()
     {
-        using var jsonDoc = JsonDocument.Parse("""
-        {
-            "enlisted_at": "2026-01-01",
-            "effective_year": 2026,
-            "status": "Active"
-        }
-        """);
-
-        var mixedList = new ArrayList
-        {
-            new YakapEnlistmentEntry
-            {
-                EffectiveYear = 2024,
-                EnlistedAt = "2024-01-10",
-                ValidUntil = "2024-12-31",
-                Status = YakapEnlistmentStatus.Expired
-            },
-            new Dictionary<string, object?>
-            {
-                ["effective_year"] = 2025,
-                ["enlisted_at"] = "2025-01-15",
-                ["status"] = "Active"
-            },
-            jsonDoc.RootElement.Clone(),
-            new // Anonymous POCO
-            {
-                effective_year = 2027,
-                enlisted_at = "2027-01-01",
-                status = "Active"
-            },
-            null // Null element should be safely ignored
-        };
-
         var patient = CreateTestPatient("PAT-HET-01");
-        patient.CustomFields["yakap_enlistments"] = mixedList;
+        patient.YakapEnlistments = new List<PatientYakapEnlistment>
+        {
+            new() { EffectiveYear = 2026, EnlistmentDate = new DateOnly(2026, 1, 1), ValidUntil = new DateOnly(2026, 12, 31), Status = YakapEnlistmentStatus.Active },
+            new() { EffectiveYear = 2024, EnlistmentDate = new DateOnly(2024, 1, 10), ValidUntil = new DateOnly(2024, 12, 31), Status = YakapEnlistmentStatus.Expired },
+            new() { EffectiveYear = 2025, EnlistmentDate = new DateOnly(2025, 1, 15), ValidUntil = new DateOnly(2025, 12, 31), Status = YakapEnlistmentStatus.Active },
+            new() { EffectiveYear = 2027, EnlistmentDate = new DateOnly(2027, 1, 1), ValidUntil = new DateOnly(2027, 12, 31), Status = YakapEnlistmentStatus.Active }
+        };
 
         var entries = patient.GetYakapEnlistments();
         entries.Should().HaveCount(4);
@@ -397,8 +346,8 @@ public sealed class Tier5BackendAdversarialCoverageTests
     [Fact]
     public void YakapExtensions_SetYakapEnlistments_NullPatient_ThrowsArgumentNullException()
     {
-        ClinicPatient nullPatient = null!;
-        var act = () => nullPatient.SetYakapEnlistments(new List<YakapEnlistmentEntry>());
+        Patient nullPatient = null!;
+        var act = () => nullPatient.SetYakapEnlistments(new List<PatientYakapEnlistment>());
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -414,28 +363,28 @@ public sealed class Tier5BackendAdversarialCoverageTests
     public void YakapExtensions_AddOrRenewYakapEnlistment_PreservesExistingAllocatedControlNumbers()
     {
         var patient = CreateTestPatient("PAT-RENEW-01");
-        var initial = new YakapEnlistmentEntry
+        var initial = new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-10",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 10),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             CaseNo = "C000921202600001",
-            EnlistmentNo = "E000921202600001",
+            EnlistmentTransNo = "E000921202600001",
             ProfilingTransNo = "P000921202600001"
         };
         patient.AddOrRenewYakapEnlistment(initial);
 
         // Update with null control numbers (e.g. from PhilHealth masterlist sync)
-        var updated = new YakapEnlistmentEntry
+        var updated = new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-10",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 10),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             Source = YakapEnlistmentSource.PhilHealthMasterlist,
             CaseNo = null,
-            EnlistmentNo = "",
+            EnlistmentTransNo = "",
             ProfilingTransNo = "   "
         };
         patient.AddOrRenewYakapEnlistment(updated);
@@ -444,7 +393,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         enlistments.Should().HaveCount(1);
         enlistments[0].Source.Should().Be(YakapEnlistmentSource.PhilHealthMasterlist);
         enlistments[0].CaseNo.Should().Be("C000921202600001");
-        enlistments[0].EnlistmentNo.Should().Be("E000921202600001");
+        enlistments[0].EnlistmentTransNo.Should().Be("E000921202600001");
         enlistments[0].ProfilingTransNo.Should().Be("P000921202600001");
     }
 
@@ -467,11 +416,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
     public void StrictGuard_TransferredEnlistment_ThrowsTransferredException()
     {
         var patient = CreateTestPatient("PAT-GUARD-02");
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Transferred
         });
 
@@ -485,11 +434,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
     public void StrictGuard_PreEnlistmentEncounter_ThrowsActionableException()
     {
         var patient = CreateTestPatient("PAT-GUARD-03");
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-05-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 5, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -504,11 +453,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
     public void StrictGuard_ExpiredEncounter_ThrowsExactExpiredExceptionWithMessage()
     {
         var patient = CreateTestPatient("PAT-GUARD-04");
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2025,
-            EnlistedAt = "2025-01-01",
-            ValidUntil = "2025-12-31",
+            EnlistmentDate = new DateOnly(2025, 1, 1),
+            ValidUntil = new DateOnly(2025, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -523,11 +472,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
     public void StrictGuard_ExactBoundaryDates_InclusiveBoundariesSucceed()
     {
         var patient = CreateTestPatient("PAT-GUARD-05");
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-02-15",
-            ValidUntil = "2026-11-30",
+            EnlistmentDate = new DateOnly(2026, 2, 15),
+            ValidUntil = new DateOnly(2026, 11, 30),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -546,11 +495,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
     public void StrictGuard_LeapYearEncounters_BoundaryHandling()
     {
         var patient = CreateTestPatient("PAT-GUARD-06");
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2024,
-            EnlistedAt = "2024-01-01",
-            ValidUntil = "2024-12-31",
+            EnlistmentDate = new DateOnly(2024, 1, 1),
+            ValidUntil = new DateOnly(2024, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -571,11 +520,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
             .WithMessage("*Patient has no active PhilHealth YAKAP enlistment for benefit year 2026.*");
 
         // 2. Transferred year
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2025,
-            EnlistedAt = "2025-01-01",
-            ValidUntil = "2025-12-31",
+            EnlistmentDate = new DateOnly(2025, 1, 1),
+            ValidUntil = new DateOnly(2025, 12, 31),
             Status = YakapEnlistmentStatus.Transferred
         });
         var actTrans = () => patient.ResolveActiveEnlistmentForYearOrThrow(2025);
@@ -583,11 +532,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
             .WithMessage("*marked as Transferred. Cannot assign journey numbers.*");
 
         // 3. Expired year
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2024,
-            EnlistedAt = "2024-01-01",
-            ValidUntil = "2024-12-31",
+            EnlistmentDate = new DateOnly(2024, 1, 1),
+            ValidUntil = new DateOnly(2024, 12, 31),
             Status = YakapEnlistmentStatus.Expired
         });
         var actExp = () => patient.ResolveActiveEnlistmentForYearOrThrow(2024);
@@ -595,152 +544,16 @@ public sealed class Tier5BackendAdversarialCoverageTests
             .WithMessage("*marked as Expired. Cannot assign journey numbers.*");
 
         // 4. Active year
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
         var active = patient.ResolveActiveEnlistmentForYearOrThrow(2026);
         active.Should().NotBeNull();
         active.EffectiveYear.Should().Be(2026);
-    }
-
-    // =========================================================================
-    // SECTION 5: YakapClinicalMapper Control Number Resolution & Multi-Year Claims
-    // =========================================================================
-
-    [Fact]
-    public void YakapClinicalMapper_MultiYearPatient_ClaimsResolveCorrectBenefitYearNumbers()
-    {
-        var mapper = new YakapClinicalMapper(PhilHealthCatalogLookup.FromBundledSeed());
-
-        var clinicId = Guid.NewGuid();
-        var patientId = Guid.NewGuid();
-        var enc2025Id = Guid.NewGuid();
-        var enc2026Id = Guid.NewGuid();
-
-        var settings = new ClinicSettings
-        {
-            TenantId = "tenant_m5",
-            ClinicId = clinicId,
-            ClinicName = "Adversarial Health Center",
-            AccreditationNumber = "000921"
-        };
-
-        var patient = CreateTestPatient("PAT-M5-001", "Maria", "Clara", "030263078507", "tenant_m5", clinicId);
-        patient.Id = patientId;
-
-        // Multi-year enlistment history
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
-        {
-            EffectiveYear = 2025,
-            EnlistedAt = "2025-03-01",
-            ValidUntil = "2025-12-31",
-            Status = YakapEnlistmentStatus.Active,
-            CaseNo = "C000921202500099",
-            EnlistmentNo = "E000921202500099",
-            ProfilingTransNo = "P000921202500099"
-        });
-
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
-        {
-            EffectiveYear = 2026,
-            EnlistedAt = "2026-01-15T08:00:00Z", // Un-normalized timestamp
-            ValidUntil = "2026-12-31",
-            Status = YakapEnlistmentStatus.Active,
-            CaseNo = "C000921202600555",
-            EnlistmentNo = "E000921202600555",
-            ProfilingTransNo = "P000921202600555"
-        });
-
-        var enc2025 = CreateTestEncounter(patientId, new DateTime(2025, 7, 10, 10, 0, 0, DateTimeKind.Utc), "tenant_m5", clinicId, "S000921202500099");
-        enc2025.Id = enc2025Id;
-
-        var enc2026 = CreateTestEncounter(patientId, new DateTime(2026, 4, 15, 14, 0, 0, DateTimeKind.Utc), "tenant_m5", clinicId, "S000921202600555");
-        enc2026.Id = enc2026Id;
-
-        var patientsMap = new Dictionary<Guid, ClinicPatient> { [patientId] = patient };
-        var vitalsMap = new Dictionary<Guid, TriageVitals>();
-
-        // Act 1: Generate Claim for 2025
-        var doc2025 = mapper.MapToYakapReportDocument(
-            reportTagging: "1",
-            effectiveYear: "2025",
-            settings: settings,
-            encounters: new[] { enc2025 },
-            patients: patientsMap,
-            vitalsMap: vitalsMap,
-            transmittalNumber: "R000921202500001");
-
-        // Assert 1: Uses 2025 C/E/P control numbers and EnlistDate
-        doc2025.Enlistments.Should().HaveCount(1);
-        var e2025 = doc2025.Enlistments[0];
-        e2025.HciCaseNo.Should().Be("C000921202500099");
-        e2025.HciTransNo.Should().Be("E000921202500099");
-        e2025.EnlistDate.Should().Be("2025-03-01");
-        doc2025.Profiles[0].HciTransNo.Should().Be("P000921202500099");
-
-        // Act 2: Generate Claim for 2026
-        var doc2026 = mapper.MapToYakapReportDocument(
-            reportTagging: "1",
-            effectiveYear: "2026",
-            settings: settings,
-            encounters: new[] { enc2026 },
-            patients: patientsMap,
-            vitalsMap: vitalsMap,
-            transmittalNumber: "R000921202600001");
-
-        // Assert 2: Uses 2026 C/E/P control numbers and strictly normalized EnlistDate (stripped timestamp)
-        doc2026.Enlistments.Should().HaveCount(1);
-        var e2026 = doc2026.Enlistments[0];
-        e2026.HciCaseNo.Should().Be("C000921202600555");
-        e2026.HciTransNo.Should().Be("E000921202600555");
-        e2026.EnlistDate.Should().Be("2026-01-15");
-        doc2026.Profiles[0].HciTransNo.Should().Be("P000921202600555");
-    }
-
-    [Fact]
-    public void YakapClinicalMapper_LegacyCustomFieldsFallback_ResolvesCorrectlyWhenEnlistmentsMissing()
-    {
-        var mapper = new YakapClinicalMapper(PhilHealthCatalogLookup.FromBundledSeed());
-
-        var clinicId = Guid.NewGuid();
-        var patientId = Guid.NewGuid();
-        var encId = Guid.NewGuid();
-
-        var settings = new ClinicSettings
-        {
-            TenantId = "tenant_legacy",
-            ClinicId = clinicId,
-            ClinicName = "Legacy Health Center",
-            AccreditationNumber = "000921"
-        };
-
-        var patient = CreateTestPatient("PAT-LEG-001", "Legacy", "Patient", "030263078507", "tenant_legacy", clinicId);
-        patient.Id = patientId;
-
-        // Patient has legacy keys in CustomFields rather than yakap_enlistments
-        patient.CustomFields["philhealth_case_no"] = "C000921202699999";
-        patient.CustomFields["philhealth_enlistment_no"] = "E000921202699999";
-        patient.CustomFields["philhealth_profiling_trans_no"] = "P000921202699999";
-
-        var encounter = CreateTestEncounter(patientId, new DateTime(2026, 6, 1, 10, 0, 0, DateTimeKind.Utc), "tenant_legacy", clinicId);
-        encounter.Id = encId;
-
-        var doc = mapper.MapToYakapReportDocument(
-            reportTagging: "1",
-            effectiveYear: "2026",
-            settings: settings,
-            encounters: new[] { encounter },
-            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
-            vitalsMap: new Dictionary<Guid, TriageVitals>(),
-            transmittalNumber: "R000921202600001");
-
-        doc.Enlistments[0].HciCaseNo.Should().Be("C000921202699999");
-        doc.Enlistments[0].HciTransNo.Should().Be("E000921202699999");
-        doc.Profiles[0].HciTransNo.Should().Be("P000921202699999");
     }
 
     // =========================================================================
@@ -836,23 +649,23 @@ public sealed class Tier5BackendAdversarialCoverageTests
         patient.Id = patientId;
 
         // Existing 2025 entry and pre-allocated 2026 control numbers
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2025,
-            EnlistedAt = "2025-01-01",
-            ValidUntil = "2025-12-31",
+            EnlistmentDate = new DateOnly(2025, 1, 1),
+            ValidUntil = new DateOnly(2025, 12, 31),
             Status = YakapEnlistmentStatus.Expired,
             CaseNo = "C000921202500001"
         });
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active,
             CaseNo = "C000921202600888",
-            EnlistmentNo = "E000921202600888",
+            EnlistmentTransNo = "E000921202600888",
             ProfilingTransNo = "P000921202600888"
         });
 
@@ -881,7 +694,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         enlistments[1].EffectiveYear.Should().Be(2026);
         enlistments[1].Status.Should().Be(YakapEnlistmentStatus.Transferred);
         enlistments[1].CaseNo.Should().Be("C000921202600888"); // Preserved!
-        enlistments[1].EnlistmentNo.Should().Be("E000921202600888"); // Preserved!
+        enlistments[1].EnlistmentTransNo.Should().Be("E000921202600888"); // Preserved!
         enlistments[1].ProfilingTransNo.Should().Be("P000921202600888"); // Preserved!
     }
 
@@ -924,11 +737,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
         patient.Id = patientId;
 
         // Active enlistment for 2026
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -956,7 +769,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         var reloaded = await dbContext.Patients.IgnoreQueryFilters().FirstAsync(p => p.Id == patientId);
         var active = reloaded.ResolveActiveEnlistmentForYearOrThrow(2026);
         active.CaseNo.Should().Be(result.CaseNumber);
-        active.EnlistmentNo.Should().Be(result.EnlistmentTransactionNumber);
+        active.EnlistmentTransNo.Should().Be(result.EnlistmentTransactionNumber);
         active.ProfilingTransNo.Should().Be(result.ProfilingTransactionNumber);
     }
 
@@ -975,11 +788,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
         var patient = CreateTestPatient("PAT-ENC-001", "Enc", "Patient", "030263078507", tenantId, clinicId);
         patient.Id = patientId;
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -1010,10 +823,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         // Check persisted encounter record
         var reloadedEnc = await dbContext.Consultations.IgnoreQueryFilters().FirstAsync(e => e.Id == encounterId);
         reloadedEnc.PhilHealthCaseNo.Should().Be(result.CaseNumber);
-        reloadedEnc.HciCaseNo.Should().Be(result.CaseNumber);
-        reloadedEnc.HciTransNo.Should().Be(result.EnlistmentTransactionNumber);
         reloadedEnc.PhilHealthSoapTransNo.Should().Be(result.SoapTransactionNumber);
-        reloadedEnc.SoapTransNo.Should().Be(result.SoapTransactionNumber);
 
         // Idempotency check: Repeated call returns identical numbers without incrementing
         var repeatedResult = await generator.AssignPatientJourneyNumbersAsync(
@@ -1051,11 +861,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
             var p = CreateTestPatient($"PAT-CONC-{i:D3}", $"First{i}", $"Last{i}", $"030263078{i:D3}", tenantId, clinicId);
             p.Id = pId;
 
-            p.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+            p.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
             {
                 EffectiveYear = 2026,
-                EnlistedAt = "2026-01-01",
-                ValidUntil = "2026-12-31",
+                EnlistmentDate = new DateOnly(2026, 1, 1),
+                ValidUntil = new DateOnly(2026, 12, 31),
                 Status = YakapEnlistmentStatus.Active
             });
 
@@ -1091,17 +901,15 @@ public sealed class Tier5BackendAdversarialCoverageTests
     }
 
     [Fact]
-    public void YakapEnlistmentEntry_UnparseableDates_FallsBackToEffectiveYear()
+    public void PatientYakapEnlistment_DefaultDates_FallsBackToEffectiveYear()
     {
-        var entry = new YakapEnlistmentEntry
+        var entry = new PatientYakapEnlistment
         {
-            EnlistedAt = "unparseable-start",
-            ValidUntil = "unparseable-end",
             EffectiveYear = 2026,
             Status = YakapEnlistmentStatus.Active
         };
 
-        // When dates are unparseable, IsCoveringDate checks EffectiveYear == referenceDate.Year
+        // When dates are default, IsCoveringDate checks EffectiveYear == referenceDate.Year
         entry.IsCoveringDate(new DateOnly(2026, 7, 1)).Should().BeTrue();
         entry.IsCoveringDate(new DateOnly(2025, 7, 1)).Should().BeFalse();
 
@@ -1113,11 +921,11 @@ public sealed class Tier5BackendAdversarialCoverageTests
     public void YakapExtensions_DateTimeOverloads_WorkIdenticallyToDateOnly()
     {
         var patient = CreateTestPatient("PAT-DT-01");
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -1144,61 +952,43 @@ public sealed class Tier5BackendAdversarialCoverageTests
     }
 
     [Fact]
-    public void YakapExtensions_ParseJsonElement_InfersMissingEffectiveYearAndDefaults()
+    public void YakapExtensions_AddOrRenewYakapEnlistment_InfersMissingEffectiveYearAndDefaults()
     {
-        // 1. Missing effective_year, status, and source -> infers 2027 and defaults to Active and ClinicEnlistment
-        using var doc1 = JsonDocument.Parse("""
-        [
-            {
-                "enlisted_at": "2027-04-15",
-                "case_no": "  "
-            }
-        ]
-        """);
+        // 1. Missing effective_year -> infers from EnlistmentDate
         var patient1 = CreateTestPatient("PAT-JSON-01");
-        patient1.CustomFields["yakap_enlistments"] = doc1.RootElement.Clone();
+        patient1.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
+        {
+            EnlistmentDate = new DateOnly(2027, 4, 15),
+            CaseNo = null
+        });
         var entries1 = patient1.GetYakapEnlistments();
 
         entries1.Should().HaveCount(1);
         entries1[0].EffectiveYear.Should().Be(2027);
-        entries1[0].ValidUntil.Should().Be("2027-12-31");
+        entries1[0].ValidUntil.Should().Be(new DateOnly(2027, 12, 31));
         entries1[0].Status.Should().Be(YakapEnlistmentStatus.Active);
         entries1[0].Source.Should().Be(YakapEnlistmentSource.ClinicEnlistment);
-        entries1[0].CaseNo.Should().BeNull(); // Whitespace converted to null
+        entries1[0].CaseNo.Should().BeNull();
 
-        // 2. Missing effective_year and invalid enlisted_at -> falls back to UtcNow.Year
-        using var doc2 = JsonDocument.Parse("""
-        [
-            {
-                "enlisted_at": "not-a-date"
-            }
-        ]
-        """);
+        // 2. Missing effective_year and default EnlistmentDate -> falls back to UtcNow.Year
         var patient2 = CreateTestPatient("PAT-JSON-02");
-        patient2.CustomFields["yakap_enlistments"] = doc2.RootElement.Clone();
+        patient2.AddOrRenewYakapEnlistment(new PatientYakapEnlistment());
         var entries2 = patient2.GetYakapEnlistments();
 
         entries2.Should().HaveCount(1);
         entries2[0].EffectiveYear.Should().Be(DateTime.UtcNow.Year);
-        entries2[0].ValidUntil.Should().Be($"{DateTime.UtcNow.Year}-12-31");
+        entries2[0].ValidUntil.Should().Be(new DateOnly(DateTime.UtcNow.Year, 12, 31));
     }
 
     [Fact]
-    public void YakapExtensions_ParseDictionary_ExtractsNumericVariations()
+    public void YakapExtensions_RelationalEnlistments_PreservesMultipleYearsChronologically()
     {
         var patient = CreateTestPatient("PAT-DICT-01");
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment { EffectiveYear = 2024, EnlistmentDate = new DateOnly(2024, 1, 1), ValidUntil = new DateOnly(2024, 12, 31) });
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment { EffectiveYear = 2025, EnlistmentDate = new DateOnly(2025, 1, 1), ValidUntil = new DateOnly(2025, 12, 31) });
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment { EffectiveYear = 2026, EnlistmentDate = new DateOnly(2026, 1, 1), ValidUntil = new DateOnly(2026, 12, 31) });
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment { EffectiveYear = 2028, EnlistmentDate = new DateOnly(2028, 1, 1), ValidUntil = new DateOnly(2028, 12, 31) });
 
-        // Test long, short, string, JsonElement numbers
-        using var jsonNum = JsonDocument.Parse("2028");
-        var dictList = new List<Dictionary<string, object?>>
-        {
-            new() { ["EffectiveYear"] = (long)2024, ["enlisted_at"] = "2024-01-01" },
-            new() { ["effective_year"] = (short)2025, ["enlisted_at"] = "2025-01-01" },
-            new() { ["effective_year"] = "2026", ["enlisted_at"] = "2026-01-01" },
-            new() { ["effective_year"] = jsonNum.RootElement.Clone(), ["enlisted_at"] = "2028-01-01" }
-        };
-
-        patient.CustomFields["yakap_enlistments"] = dictList;
         var entries = patient.GetYakapEnlistments();
 
         entries.Should().HaveCount(4);
@@ -1312,56 +1102,6 @@ public sealed class Tier5BackendAdversarialCoverageTests
                 AssignedStatus: "1")
         });
         res2.Should().Be(1);
-    }
-
-    [Fact]
-    public void YakapClinicalMapper_Fallbacks_CleanPatientCodeAndHistoricalClaims()
-    {
-        var mapper = new YakapClinicalMapper(PhilHealthCatalogLookup.FromBundledSeed());
-
-        var clinicId = Guid.NewGuid();
-        var patientId = Guid.NewGuid();
-        var encId = Guid.NewGuid();
-
-        var settings = new ClinicSettings
-        {
-            TenantId = "tenant_fb",
-            ClinicId = clinicId,
-            ClinicName = "Fallback Health Center",
-            AccreditationNumber = "000921"
-        };
-
-        // Patient with hyphens in code and zero control numbers
-        var patient = CreateTestPatient("PAT-MANILA-2026-001", "Fallback", "Patient", "030263078507", "tenant_fb", clinicId);
-        patient.Id = patientId;
-
-        // Add a 2025 Transferred entry (no active entry for 2025)
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
-        {
-            EffectiveYear = 2025,
-            EnlistedAt = "2025-01-01",
-            ValidUntil = "2025-12-31",
-            Status = YakapEnlistmentStatus.Transferred,
-            CaseNo = "C0009212025HIST01"
-        });
-
-        var enc = CreateTestEncounter(patientId, new DateTime(2025, 5, 10, 0, 0, 0, DateTimeKind.Utc), "tenant_fb", clinicId);
-        enc.Id = encId;
-
-        var doc = mapper.MapToYakapReportDocument(
-            reportTagging: "1",
-            effectiveYear: "2025",
-            settings: settings,
-            encounters: new[] { enc },
-            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
-            vitalsMap: new Dictionary<Guid, TriageVitals>(),
-            transmittalNumber: "R000921202500001");
-
-        // In 2025 claim, historical entry was matched
-        doc.Enlistments[0].HciCaseNo.Should().Be("C0009212025HIST01");
-        // EnlistmentNo was null on entry, so falls back to clean code:
-        // "PAT-MANILA-2026-001".Replace("-", "") -> "PATMANILA2026001"
-        doc.Enlistments[0].HciTransNo.Should().Be("EPATMANILA2026001");
     }
 
     [Fact]

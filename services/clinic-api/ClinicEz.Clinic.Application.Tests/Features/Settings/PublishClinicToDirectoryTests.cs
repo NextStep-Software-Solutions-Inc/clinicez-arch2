@@ -44,9 +44,9 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -60,7 +60,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _testClinicId,
             Code = "SRV-01",
@@ -70,7 +70,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -113,12 +113,12 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -159,13 +159,13 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         // Missing doctor and missing operating hours
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -195,9 +195,9 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -211,7 +211,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -222,7 +222,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -234,7 +234,7 @@ public class PublishClinicToDirectoryTests
         }, CancellationToken.None);
 
         // Inactive service should be excluded from published active services
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -245,7 +245,7 @@ public class PublishClinicToDirectoryTests
             IsActive = false
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -288,9 +288,9 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -304,7 +304,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _testClinicId,
             Code = "SRV-01",
@@ -314,7 +314,7 @@ public class PublishClinicToDirectoryTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -346,12 +346,12 @@ public class PublishClinicToDirectoryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,

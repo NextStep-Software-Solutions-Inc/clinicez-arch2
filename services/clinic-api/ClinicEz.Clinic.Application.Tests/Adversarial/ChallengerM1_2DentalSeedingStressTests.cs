@@ -59,7 +59,7 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         // Act: Run 10 consecutive iterations
@@ -82,7 +82,7 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         // Act: Run 50 consecutive iterations
@@ -109,14 +109,14 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         // Seed 3 initial dental items
         var initial3 = DentalCatalogDefaults.Defaults.Take(3).ToList();
         foreach (var def in initial3)
         {
-            await repo.AddAsync(new ClinicServiceItem
+            await repo.AddAsync(new ServiceItem
             {
                 TenantId = TenantIdA,
                 ClinicId = _clinicIdA,
@@ -157,13 +157,13 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         var preseeded = DentalCatalogDefaults.Defaults.Take(existingCount).ToList();
         foreach (var def in preseeded)
         {
-            await repo.AddAsync(new ClinicServiceItem
+            await repo.AddAsync(new ServiceItem
             {
                 TenantId = TenantIdA,
                 ClinicId = _clinicIdA,
@@ -199,11 +199,11 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         // Clinic customizes DENT-CONS (₱1,250 instead of ₱500) and DENT-RCT (₱7,500 instead of ₱4,000)
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantIdA,
             ClinicId = _clinicIdA,
@@ -215,7 +215,7 @@ public class ChallengerM1_2DentalSeedingStressTests
             IsActive = true
         });
 
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantIdA,
             ClinicId = _clinicIdA,
@@ -261,11 +261,11 @@ public class ChallengerM1_2DentalSeedingStressTests
         // Arrange: Shared in-memory database backing both clinics
         var sharedDbName = $"SharedDb_DentalSeed_{Guid.NewGuid()}";
         var (contextA, uowA, sieveA) = TestDbHelper.CreateSharedTestContext(sharedDbName, _clinicContextA);
-        var repoA = TestDbHelper.CreateRepository<ClinicServiceItem>(contextA, sieveA);
+        var repoA = TestDbHelper.CreateRepository<ServiceItem>(contextA, sieveA);
         var handlerA = new SeedDentalServicesCommandHandler(repoA, uowA, _clinicContextA);
 
         var (contextB, uowB, sieveB) = TestDbHelper.CreateSharedTestContext(sharedDbName, _clinicContextB);
-        var repoB = TestDbHelper.CreateRepository<ClinicServiceItem>(contextB, sieveB);
+        var repoB = TestDbHelper.CreateRepository<ServiceItem>(contextB, sieveB);
         var handlerB = new SeedDentalServicesCommandHandler(repoB, uowB, _clinicContextB);
 
         // Act 1: Seed Clinic A only
@@ -280,7 +280,7 @@ public class ChallengerM1_2DentalSeedingStressTests
         clinicBItemsBefore.Should().BeEmpty("Clinic B must not see any items from Clinic A due to query filters");
 
         // Act 2: Seed Clinic B with a customized price on DENT-CONS (₱2,000)
-        await repoB.AddAsync(new ClinicServiceItem
+        await repoB.AddAsync(new ServiceItem
         {
             TenantId = TenantIdB,
             ClinicId = _clinicIdB,
@@ -360,11 +360,11 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         // Pre-populate with lowercase and whitespace padded codes
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantIdA,
             ClinicId = _clinicIdA,
@@ -375,7 +375,7 @@ public class ChallengerM1_2DentalSeedingStressTests
             IsActive = true
         });
 
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantIdA,
             ClinicId = _clinicIdA,
@@ -401,7 +401,7 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         // Seed initial items
@@ -429,11 +429,11 @@ public class ChallengerM1_2DentalSeedingStressTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
 
         // Pre-insert a soft-deleted DENT-RCT row
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             Id = Guid.NewGuid(),
             TenantId = TenantIdA,

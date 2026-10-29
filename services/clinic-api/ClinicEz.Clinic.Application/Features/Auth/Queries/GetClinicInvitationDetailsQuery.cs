@@ -26,11 +26,11 @@ public sealed class GetClinicInvitationDetailsQueryValidator : AbstractValidator
 public sealed class GetClinicInvitationDetailsQueryHandler : IRequestHandler<GetClinicInvitationDetailsQuery, ClinicStaffInvitationDetailsDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
 
     public GetClinicInvitationDetailsQueryHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicSettings> settingsRepository)
+        IRepository<FacilitySettings> settingsRepository)
     {
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;

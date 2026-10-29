@@ -241,7 +241,7 @@ describe('patientCustomFieldsMerger (Issue #77 R3)', () => {
     expect('spouse_name' in result).toBe(false);
   });
 
-  test('TC-R3-6: Preserves yakap_enlistments array untouched across edits', () => {
+  test('TC-R3-6: Purges legacy yakap_enlistments array from customFields across edits (1NF model)', () => {
     const enlistments = [
       {
         year: '2026',
@@ -267,7 +267,7 @@ describe('patientCustomFieldsMerger (Issue #77 R3)', () => {
       staticValues: {},
     });
 
-    expect(result.yakap_enlistments).toEqual(enlistments);
+    expect(result.yakap_enlistments).toBeUndefined();
     expect(result.last_physical_exam_date).toBe('2026-02-01');
   });
 
@@ -299,8 +299,7 @@ describe('patientCustomFieldsMerger (Issue #77 R3)', () => {
     expect(result.principal_full_name).toBeNull();
     expect(result.principal_relationship).toBeNull();
     expect(result.principal_dob).toBeNull();
-    expect(result.philhealth_profile).toBeDefined();
-    expect(result.philhealth_profile.memberType).toBe('MM');
+    expect(result.philhealth_profile).toBeUndefined();
   });
 
   test('TC-R3-8: Handles legacy patient properties (e.g. addressLine, emergencyContactName) when cleared', () => {

@@ -18,11 +18,11 @@ public record AcknowledgePanicAlertCommand(
 
 public class AcknowledgePanicAlertCommandHandler : IRequestHandler<AcknowledgePanicAlertCommand, ClinicLabOrderDto>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
     private readonly IUnitOfWork _unitOfWork;
 
     public AcknowledgePanicAlertCommandHandler(
-        IRepository<ClinicLabOrder> orderRepo,
+        IRepository<LabOrder> orderRepo,
         IUnitOfWork unitOfWork)
     {
         _orderRepo = orderRepo;

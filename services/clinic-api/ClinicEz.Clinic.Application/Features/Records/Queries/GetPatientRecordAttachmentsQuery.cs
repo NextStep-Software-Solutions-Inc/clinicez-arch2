@@ -18,9 +18,9 @@ public sealed record GetPatientRecordAttachmentsQuery(
 
 public sealed class GetPatientRecordAttachmentsQueryHandler : IRequestHandler<GetPatientRecordAttachmentsQuery, IReadOnlyList<ClinicRecordAttachmentDto>>
 {
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
 
-    public GetPatientRecordAttachmentsQueryHandler(IRepository<ClinicRecordAttachment> attachmentRepo)
+    public GetPatientRecordAttachmentsQueryHandler(IRepository<RecordAttachment> attachmentRepo)
     {
         _attachmentRepo = attachmentRepo;
     }

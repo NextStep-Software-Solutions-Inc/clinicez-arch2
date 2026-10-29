@@ -17,6 +17,8 @@ import { db } from '../../../db/index';
 import { getAppointmentDetail } from '../../../services/appointments/appointmentsService';
 import type { AppointmentItem, AttachedDocument, AffiliatedClinic, ProviderSnapshot } from '../../../services/appointments/types';
 import { dialog } from '../../../utils/dialog';
+import { usePatientId } from '../../../hooks/usePatientId';
+import TeleconsultRecordingPlayerModal from '../../../components/teleconsult/TeleconsultRecordingPlayerModal';
 
 type Props = StaticScreenProps<{ appointmentId: string }>;
 
@@ -233,6 +235,8 @@ export default function AppointmentDetailScreen({ route }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPaidLocally, setIsPaidLocally] = useState(false);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
+  const patientId = usePatientId();
 
   const loadAppointment = useCallback(async () => {
     try {
@@ -695,6 +699,30 @@ export default function AppointmentDetailScreen({ route }: Props) {
         </Card>
       )}
 
+      {/* Consultation Recording Playback */}
+      {item.status === 'completed' && (
+        <Card padding="md" style={{ gap: spacing.sm, borderColor: colors.primaryBorder, borderWidth: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <AppIcon name="camera" size={20} color="primary" />
+              <ThemedText variant="bodyBold">Consultation Recording</ThemedText>
+            </View>
+            <Badge tone="success" label="Encrypted Vault" icon="shield" />
+          </View>
+          <ThemedText variant="small" color="textSecondary">
+            Review your completed teleconsultation recording, replay clinical advice, and verify your care plan.
+          </ThemedText>
+          <Button
+            label="Watch / Listen to Consultation Recording"
+            variant="secondary"
+            size="lg"
+            icon="camera"
+            fullWidth
+            onPress={() => setShowPlayerModal(true)}
+          />
+        </Card>
+      )}
+
       {/* Sticky Bottom Actions */}
       {!isFinalStatus && (
         <View style={[styles.actionBar, { gap: spacing.md, paddingVertical: spacing.md }]}>
@@ -714,6 +742,15 @@ export default function AppointmentDetailScreen({ route }: Props) {
           />
         </View>
       )}
+
+      <TeleconsultRecordingPlayerModal
+        visible={showPlayerModal}
+        onClose={() => setShowPlayerModal(false)}
+        patientId={patientId || 'patient-me'}
+        appointmentId={item.id}
+        physicianName={item.provider.name}
+        consultationDate={dateLabel}
+      />
     </Screen>
   );
 }

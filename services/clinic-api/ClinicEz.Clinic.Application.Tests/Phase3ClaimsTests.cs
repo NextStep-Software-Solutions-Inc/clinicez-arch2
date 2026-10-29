@@ -38,8 +38,8 @@ public class LabClaimsAndDocumentsTests
 
     private CreateClinicLabOrderCommandHandler NewHandler(
         ApplicationDbContext db, Sieve.Services.ISieveProcessor sieve, IUnitOfWork uow, IHubClaimsClient? hub, bool provisioned = true) =>
-        new(TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+        new(TestDbHelper.CreateRepository<LabOrder>(db, sieve),
+            TestDbHelper.CreateRepository<Patient>(db, sieve),
             TestDbHelper.CreateRepository<StaffMember>(db, sieve),
             uow,
             _clinicContext,
@@ -49,7 +49,7 @@ public class LabClaimsAndDocumentsTests
             Phase3TestKit.Claims(hub),
             Phase3TestKit.Documents(db));
 
-    private (ClinicPatient Patient, StaffMember Doctor) Seed(ApplicationDbContext db, bool patientLinked = true, string? prc = "0123456")
+    private (Patient Patient, StaffMember Doctor) Seed(ApplicationDbContext db, bool patientLinked = true, string? prc = "0123456")
     {
         MessagingTestKit.SeedClinic(db, _clinicId, Tenant);
         var patient = Phase3TestKit.NewPatient(_clinicId, Tenant, patientLinked ? Guid.NewGuid() : null);
@@ -61,7 +61,7 @@ public class LabClaimsAndDocumentsTests
         return (patient, doctor);
     }
 
-    private static CreateClinicLabOrderCommand Command(ClinicPatient patient, StaffMember doctor, string? targetFacility = null, string? targetTenant = null) =>
+    private static CreateClinicLabOrderCommand Command(Patient patient, StaffMember doctor, string? targetFacility = null, string? targetTenant = null) =>
         new(patient.Id, "Maria Santos", OrderedByDoctorId: doctor.Id, TargetFacilityId: targetFacility, TargetTenantId: targetTenant);
 
     [Fact]
@@ -162,7 +162,7 @@ public class LabClaimsAndDocumentsTests
         var row = await db.InteropOutbox.SingleAsync(o => o.Type == InteropTypes.PatientDocumentIssued);
         var envelope = InteropEnvelope.FromJson(row.EnvelopeJson);
         envelope.To.Kind.Should().Be(PartyKind.Patient);
-        envelope.To.PatientId.Should().Be(patient.SyncPatientId!.Value.ToString());
+        envelope.To.PatientId.Should().Be(patient.CloudPatientId!.Value.ToString());
         var document = envelope.GetPayload<PatientDocumentIssuedPayload>();
         document.DocumentId.Should().Be(order.Id);
         document.Kind.Should().Be(PatientDocumentKind.LabRequest);

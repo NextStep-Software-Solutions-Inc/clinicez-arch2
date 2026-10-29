@@ -44,6 +44,7 @@ public class DevPatientSeederTests
 
         var patients = await context.Patients.IgnoreQueryFilters()
             .Where(p => p.ClinicId == options.ClinicId)
+            .Include(p => p.YakapEnlistments)
             .ToListAsync();
 
         Assert.Equal(targetCount, patients.Count);
@@ -55,8 +56,8 @@ public class DevPatientSeederTests
             Assert.False(string.IsNullOrWhiteSpace(p.LastName));
             Assert.False(string.IsNullOrWhiteSpace(p.ContactNumber));
             Assert.False(string.IsNullOrWhiteSpace(p.PhilHealthNumber));
-            Assert.Contains(p.Gender, new[] { "Male", "Female", "Other" });
-            Assert.False(string.IsNullOrWhiteSpace(p.BloodType));
+            Assert.Contains(p.Gender, new[] { Gender.Male, Gender.Female, Gender.Other });
+            Assert.True(p.BloodType.HasValue);
             Assert.True(p.DateOfBirth < DateOnly.FromDateTime(DateTime.UtcNow));
             Assert.NotNull(p.CustomFields);
             Assert.True(p.CustomFields.ContainsKey("primary_address_line"));
@@ -66,7 +67,7 @@ public class DevPatientSeederTests
             Assert.True(p.CustomFields.ContainsKey("emergency_contact_name"));
             Assert.True(p.CustomFields.ContainsKey("emergency_contact_phone"));
             Assert.True(p.CustomFields.ContainsKey("emergency_contact_relationship"));
-            Assert.True(p.CustomFields.ContainsKey("yakap_enlistments"));
+            Assert.NotEmpty(p.YakapEnlistments);
 
             var age = DateTime.UtcNow.Year - p.DateOfBirth.Year;
             if (age >= 60)
@@ -168,7 +169,7 @@ public class DevPatientSeederTests
         Assert.True(result.SocialHistoriesCreated > 0);
         Assert.True(result.PhysicalExamProfilesCreated > 0);
 
-        var pastHistories = await context.PatientPastMedicalHistories.IgnoreQueryFilters()
+        var pastHistories = await context.PatientMedicalHistories.IgnoreQueryFilters()
             .Where(h => h.ClinicId == clinicId)
             .ToListAsync();
         Assert.NotEmpty(pastHistories);
@@ -183,7 +184,7 @@ public class DevPatientSeederTests
             .ToListAsync();
         Assert.NotEmpty(socialHistories);
 
-        var physExams = await context.PatientPhysicalExamProfiles.IgnoreQueryFilters()
+        var physExams = await context.PatientPhysicalExams.IgnoreQueryFilters()
             .Where(p => p.ClinicId == clinicId)
             .ToListAsync();
         Assert.Equal(options.Count, physExams.Count);
@@ -239,7 +240,7 @@ public class DevPatientSeederTests
 
         // 2. Add 1 manual real patient (not seeded)
         var realPatientId = Guid.NewGuid();
-        context.Patients.Add(new ClinicPatient
+        context.Patients.Add(new Patient
         {
             Id = realPatientId,
             TenantId = "tenant_test",
@@ -249,7 +250,7 @@ public class DevPatientSeederTests
             LastName = "Santos",
             ContactNumber = "0917-123-4567",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Female",
+            Gender = Gender.Female,
             CreatedBy = "staff-user-123"
         });
         await context.SaveChangesAsync();
@@ -288,7 +289,7 @@ public class DevPatientSeederTests
         });
 
         // Add 1 manual patient with a different prefix and creator
-        context.Patients.Add(new ClinicPatient
+        context.Patients.Add(new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_test",
@@ -298,7 +299,7 @@ public class DevPatientSeederTests
             LastName = "Dela Cruz",
             ContactNumber = "0918-987-6543",
             DateOfBirth = new DateOnly(1985, 5, 20),
-            Gender = "Male",
+            Gender = Gender.Male,
             CreatedBy = "admin"
         });
         await context.SaveChangesAsync();

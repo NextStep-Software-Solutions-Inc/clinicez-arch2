@@ -3,7 +3,7 @@ using Sieve.Attributes;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class Product : BaseEntity
+public sealed class Product : ClinicScopedEntity
 {
     public Product() { }
     [Sieve(CanFilter = true, CanSort = true)]

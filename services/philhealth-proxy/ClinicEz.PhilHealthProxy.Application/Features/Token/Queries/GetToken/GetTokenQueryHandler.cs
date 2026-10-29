@@ -1,30 +1,38 @@
-using ClinicEz.Shared.Common;
-using ClinicEz.Shared.Exceptions;
-using MediatR;
-using ClinicEz.PhilHealthProxy.Application.Common;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using ClinicEz.PhilHealthProxy.Domain.Entities;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
+using ClinicEz.PhilHealthProxy.Domain.Models;
+using MediatR;
 
 namespace ClinicEz.PhilHealthProxy.Application.Features.Token.Queries.GetToken;
 
 public sealed class GetTokenQueryHandler(
-    IPhilHealthSoapClient soapClient,
-    ICurrentTenant currentTenant)
-    : IRequestHandler<GetTokenQuery, ApiResponse<KonsultaOperationResponse>>
+    ICurrentTenant currentTenant,
+    ITenantRepository tenantRepo,
+    IPhilHealthPcapiClient pcapiClient)
+    : IRequestHandler<GetTokenQuery, PcapiTokenResponse>
 {
-    public async Task<ApiResponse<KonsultaOperationResponse>> Handle(
-        GetTokenQuery request,
-        CancellationToken cancellationToken)
+    public async Task<PcapiTokenResponse> Handle(GetTokenQuery request, CancellationToken cancellationToken)
     {
-        if (currentTenant.TenantId is null)
-            throw new UnauthorizedException("Tenant could not be resolved from the request.");
+        var tenantId = currentTenant.TenantId 
+            ?? throw new UnauthorizedAccessException("TenantId is missing or unverified.");
 
-        var result = await soapClient.GetTokenAsync(cancellationToken);
+        PhilHealthTenant? tenant = currentTenant.BranchId.HasValue
+            ? await tenantRepo.GetByBranchIdAsync(currentTenant.BranchId.Value, cancellationToken)
+            : await tenantRepo.GetByTenantIdAsync(tenantId, cancellationToken);
 
-        if (!result.IsSuccess)
-            throw new ServiceUnavailableException(
-                $"PhilHealth SOAP service returned an error: [{result.ErrorCode}] {result.ErrorMessage}");
+        tenant ??= new PhilHealthTenant
+        {
+            TenantId = tenantId,
+            BranchId = currentTenant.BranchId,
+            AccreditationNumber = "H10000001",
+            SoftwareCertificateId = "KON-DUMMYCERTS-Z15445",
+            BaseUrl = "https://staging.philhealth.gov.ph"
+        };
 
-        return ApiResponse<KonsultaOperationResponse>.Success(
-            new KonsultaOperationResponse(true, result.ResponseXml, null, null));
+        var data = await pcapiClient.AuthenticateAsync(tenant, cancellationToken);
+        return new PcapiTokenResponse("success", 200, "Token retrieved successfully.", data);
     }
 }

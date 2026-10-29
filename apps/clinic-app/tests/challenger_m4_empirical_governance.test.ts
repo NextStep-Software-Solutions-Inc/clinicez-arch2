@@ -62,6 +62,7 @@ mock.module('react-native', () => ({
   TouchableOpacity: createMockComponent('TouchableOpacity'),
   TouchableHighlight: createMockComponent('TouchableHighlight'),
   Image: createMockComponent('Image'),
+  RefreshControl: createMockComponent('RefreshControl'),
   Dimensions: {
     get: () => ({ width: 1280, height: 800 }),
     addEventListener: () => ({ remove: () => {} }),

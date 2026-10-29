@@ -47,14 +47,14 @@ public class Milestone1AnalyticsHardeningStressTests
         paymentEntity!.GetIndexes().Should().Contain(idx =>
             idx.Properties.Select(p => p.Name).SequenceEqual(new[] { "TenantId", "ClinicId", "PaymentDate" }));
 
-        // 3. ClinicalProcedure: (TenantId, ClinicId, ScheduledAt)
-        var procEntity = context.Model.FindEntityType(typeof(ClinicalProcedure));
+        // 3. Procedure: (TenantId, ClinicId, ScheduledAt)
+        var procEntity = context.Model.FindEntityType(typeof(Procedure));
         procEntity.Should().NotBeNull();
         procEntity!.GetIndexes().Should().Contain(idx =>
             idx.Properties.Select(p => p.Name).SequenceEqual(new[] { "TenantId", "ClinicId", "ScheduledAt" }));
 
-        // 4. ClinicLabOrder: (TenantId, ClinicId, OrderDate)
-        var labEntity = context.Model.FindEntityType(typeof(ClinicLabOrder));
+        // 4. LabOrder: (TenantId, ClinicId, OrderDate)
+        var labEntity = context.Model.FindEntityType(typeof(LabOrder));
         labEntity.Should().NotBeNull();
         labEntity!.GetIndexes().Should().Contain(idx =>
             idx.Properties.Select(p => p.Name).SequenceEqual(new[] { "TenantId", "ClinicId", "OrderDate" }));
@@ -79,15 +79,15 @@ public class Milestone1AnalyticsHardeningStressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(10);
 
         // Seed Clinic 1 (Target clinic)
-        var patient1 = new ClinicPatient
+        var patient1 = new Patient
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -95,7 +95,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Maria",
             LastName = "Clara",
             DateOfBirth = new DateOnly(1995, 5, 20),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09170000001"
         };
         await patientRepo.AddAsync(patient1);
@@ -151,7 +151,7 @@ public class Milestone1AnalyticsHardeningStressTests
         await consultRepo.AddAsync(enc1);
 
         // Seed Clinic 2 (FOREIGN clinic - should be 100% isolated!)
-        var patient2 = new ClinicPatient
+        var patient2 = new Patient
         {
             TenantId = _tenant2Id,
             ClinicId = _clinic2Id,
@@ -159,7 +159,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Crisostomo",
             LastName = "Ibarra",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170000002"
         };
         await patientRepo.AddAsync(patient2);
@@ -274,15 +274,15 @@ public class Milestone1AnalyticsHardeningStressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(11);
 
         // Seed soft-deleted patient
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -290,7 +290,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Deleted",
             LastName = "Patient",
             DateOfBirth = new DateOnly(1985, 1, 1),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170000003",
             IsDeleted = true,
             DeletedAt = DateTime.UtcNow
@@ -372,7 +372,7 @@ public class Milestone1AnalyticsHardeningStressTests
         await consultRepo.AddAsync(consult);
 
         // Seed soft-deleted procedure
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -388,7 +388,7 @@ public class Milestone1AnalyticsHardeningStressTests
         await procRepo.AddAsync(proc);
 
         // Seed soft-deleted lab order
-        var lab = new ClinicLabOrder
+        var lab = new LabOrder
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -457,9 +457,9 @@ public class Milestone1AnalyticsHardeningStressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(14);
         var patientId = Guid.NewGuid();
@@ -567,15 +567,15 @@ public class Milestone1AnalyticsHardeningStressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(9);
         var patientId = Guid.NewGuid();
 
         // 1. Completed procedure
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -588,7 +588,7 @@ public class Milestone1AnalyticsHardeningStressTests
         });
 
         // 2. Cancelled procedure
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -601,7 +601,7 @@ public class Milestone1AnalyticsHardeningStressTests
         });
 
         // 3. InProgress procedure
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -614,7 +614,7 @@ public class Milestone1AnalyticsHardeningStressTests
         });
 
         // 4. Ordered procedure
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -642,15 +642,15 @@ public class Milestone1AnalyticsHardeningStressTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(10);
         var docId = Guid.NewGuid();
         const string docName = "Dr. Specialist";
 
         // Set custom physician share to 80% (facility retention 20%)
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -671,7 +671,7 @@ public class Milestone1AnalyticsHardeningStressTests
         });
 
         // Procedure performed by doc
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -733,8 +733,8 @@ public class Milestone1AnalyticsHardeningStressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(12);
 
@@ -778,13 +778,13 @@ public class Milestone1AnalyticsHardeningStressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(15);
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = _tenant1Id,
             ClinicId = _clinic1Id,
@@ -792,7 +792,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Solo",
             LastName = "Patient",
             DateOfBirth = new DateOnly(2015, 6, 1), // 11yo pediatric
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09170000004"
         };
         await patientRepo.AddAsync(patient);
@@ -906,9 +906,9 @@ public class Milestone1AnalyticsHardeningStressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Passing settingsRepo = null to simulate unconfigured or newly provisioned clinic
         var eodHandler = new GetDailyEodReportQueryHandler(

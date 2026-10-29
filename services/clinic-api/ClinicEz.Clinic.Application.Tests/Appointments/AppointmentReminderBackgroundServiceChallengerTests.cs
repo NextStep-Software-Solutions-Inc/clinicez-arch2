@@ -74,7 +74,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         {
             var db = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            var c1 = new ClinicSettings
+            var c1 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic1Id,
@@ -85,7 +85,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 AppointmentReminder2hEnabled = true
             };
 
-            var c2 = new ClinicSettings
+            var c2 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic2Id,
@@ -96,7 +96,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 AppointmentReminder2hEnabled = true
             };
 
-            var c3 = new ClinicSettings
+            var c3 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic3Id,
@@ -107,7 +107,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 AppointmentReminder2hEnabled = false
             };
 
-            var c4 = new ClinicSettings
+            var c4 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic4Id,
@@ -118,7 +118,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 AppointmentReminder2hEnabled = true
             };
 
-            var c5 = new ClinicSettings
+            var c5 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinic5Id,
@@ -130,7 +130,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 IsDeleted = true
             };
 
-            await db.ClinicSettings.AddRangeAsync(c1, c2, c3, c4, c5);
+            await db.Settings.AddRangeAsync(c1, c2, c3, c4, c5);
 
             // Seed two appointments (24h and 2h) for each clinic
             var appointments = new List<Appointment>();
@@ -240,7 +240,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
 
         var utcNow = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -258,7 +258,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var appt25h = CreateAppointment("Appt 25h (Exact upper bound)", utcNow.AddHours(25));
         var appt26h = CreateAppointment("Appt 26h (Outside upper)", utcNow.AddHours(26));
 
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.Appointments.AddRangeAsync(appt22h, appt23h, appt24h, appt25h, appt26h);
         await context.SaveChangesAsync();
 
@@ -303,7 +303,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
 
         var utcNow = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -321,7 +321,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var appt2_5h = CreateAppointment("Appt 2.5h (Exact upper bound)", utcNow.AddHours(2.5));
         var appt3h = CreateAppointment("Appt 3h (Outside upper)", utcNow.AddHours(3));
 
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.Appointments.AddRangeAsync(appt30m, appt1h, appt2h, appt2_5h, appt3h);
         await context.SaveChangesAsync();
 
@@ -366,7 +366,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
 
         var utcNow = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -385,7 +385,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var appt2hBelow = CreateAppointment("2h Below by 1s", utcNow.AddHours(1).AddSeconds(-1));
         var appt2hAbove = CreateAppointment("2h Above by 1s", utcNow.AddHours(2.5).AddSeconds(1));
 
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.Appointments.AddRangeAsync(appt24hBelow, appt24hAbove, appt2hBelow, appt2hAbove);
         await context.SaveChangesAsync();
 
@@ -408,7 +408,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
 
         var utcNow = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -450,7 +450,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var confirmed24h = CreateAppointmentWithStatus("Confirmed 24h", utcNow.AddHours(24), AppointmentStatus.Confirmed);
         appts.Add(confirmed24h);
 
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.Appointments.AddRangeAsync(appts);
         await context.SaveChangesAsync();
 
@@ -490,7 +490,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var t0 = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
         var scheduledAt = t0.AddHours(24); // Scheduled at tomorrow 10:00
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -515,7 +515,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
             Reminder2hSent = false
         };
 
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.Appointments.AddAsync(appt);
         await context.SaveChangesAsync();
 
@@ -574,7 +574,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
 
         var utcNow = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -599,7 +599,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
             Reminder2hSent = false
         };
 
-        await context.ClinicSettings.AddAsync(clinic);
+        await context.Settings.AddAsync(clinic);
         await context.Appointments.AddAsync(appt);
         await context.SaveChangesAsync();
 
@@ -627,9 +627,9 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
     {
         // Arrange: Full end-to-end integration test with real AppointmentNotificationDispatcher and InteropPublisher
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = new InteropPublisher(context);
         var dispatcherLogger = NullLogger<AppointmentNotificationDispatcher>.Instance;
         var dispatcher = new AppointmentNotificationDispatcher(patientRepo, settingsRepo, staffNotificationRepo, publisher, dispatcherLogger);
@@ -640,7 +640,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var utcNow = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
         var syncPatientId = Guid.NewGuid();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -650,10 +650,10 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
             PatientCode = "P-BONIFACIO",
             DateOfBirth = new DateOnly(1990, 11, 30),
             ContactNumber = "0917-888-9999",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
 
-        var clinic = new ClinicSettings
+        var clinic = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -763,7 +763,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         {
             var db = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            var c1 = new ClinicSettings
+            var c1 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinicGood1,
@@ -774,7 +774,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 AppointmentReminder2hEnabled = true
             };
 
-            var c2 = new ClinicSettings
+            var c2 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinicBad,
@@ -785,7 +785,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 AppointmentReminder2hEnabled = true
             };
 
-            var c3 = new ClinicSettings
+            var c3 = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 ClinicId = clinicGood2,
@@ -796,7 +796,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
                 AppointmentReminder2hEnabled = true
             };
 
-            await db.ClinicSettings.AddRangeAsync(c1, c2, c3);
+            await db.Settings.AddRangeAsync(c1, c2, c3);
 
             var a1 = CreateAppointmentForClinic("Appt Good 1", clinicGood1, "tenant-g1", utcNow.AddHours(24));
             var a2 = CreateAppointmentForClinic("Appt Bad", clinicBad, "tenant-bad", utcNow.AddHours(24));
@@ -843,7 +843,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var utcNow = new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc);
         var otherClinicId = Guid.NewGuid();
 
-        var clinicA = new ClinicSettings
+        var clinicA = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -857,7 +857,7 @@ public sealed class AppointmentReminderBackgroundServiceChallengerTests
         var apptA = CreateAppointmentForClinic("Appt A", _clinicId, _tenantId, utcNow.AddHours(24));
         var apptB = CreateAppointmentForClinic("Appt B", otherClinicId, "tenant-b", utcNow.AddHours(24));
 
-        await context.ClinicSettings.AddAsync(clinicA);
+        await context.Settings.AddAsync(clinicA);
         await context.Appointments.AddRangeAsync(apptA, apptB);
         await context.SaveChangesAsync();
 

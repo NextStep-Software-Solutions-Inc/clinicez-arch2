@@ -22,13 +22,13 @@ public record GetClinicLabOrdersQuery(
 
 public class GetClinicLabOrdersQueryHandler : IRequestHandler<GetClinicLabOrdersQuery, List<ClinicLabOrderDto>>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicLabResult> _resultRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
+    private readonly IRepository<LabResult> _resultRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicLabOrdersQueryHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicLabResult> resultRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<LabResult> resultRepo,
         IClinicContext clinicContext)
     {
         _orderRepo = orderRepo;

@@ -246,7 +246,7 @@ export interface MergeCustomFieldsOptions {
  * Merges form custom field values into existing custom fields on update.
  * Explicitly removes cleared or conditionally hidden custom fields (or emits `null` tombstones
  * when `options.emitNullTombstones` is enabled for HTTP PUT additive merge endpoints) while
- * preserving unrelated system metadata keys (e.g., member_type, principal_member_pin, philhealth_profile).
+ * preserving unrelated system metadata keys (e.g., member_type, principal_member_pin).
  */
 export function mergeCustomFieldsForUpdate(
   existingCustomFields: Record<string, any> | undefined,

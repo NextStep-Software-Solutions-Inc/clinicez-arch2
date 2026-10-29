@@ -35,7 +35,7 @@ public sealed class MarkQueueItemNoShowCommandHandler : IRequestHandler<MarkQueu
     public async Task<QueueItemDto> Handle(MarkQueueItemNoShowCommand request, CancellationToken cancellationToken)
     {
         var item = await _queueRepository.Query(q => q.Id == request.Id && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (item == null)

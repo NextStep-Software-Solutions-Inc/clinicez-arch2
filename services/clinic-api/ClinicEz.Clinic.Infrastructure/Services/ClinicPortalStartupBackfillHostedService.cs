@@ -49,7 +49,7 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
 
             _logger.LogInformation("[ClinicEz.Clinic] ClinicPortalStartupBackfillHostedService: Starting portal projection backfill...");
 
-            var clinics = await db.ClinicSettings.IgnoreQueryFilters()
+            var clinics = await db.Settings.IgnoreQueryFilters()
                 .Where(s => !s.IsDeleted)
                 .ToListAsync(stoppingToken);
 

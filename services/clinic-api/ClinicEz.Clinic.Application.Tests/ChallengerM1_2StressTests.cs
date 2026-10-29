@@ -48,15 +48,15 @@ public class ChallengerM1_2StressTests
         paymentIndexes.Should().Contain(idx =>
             idx.SequenceEqual(new[] { "TenantId", "ClinicId", "PaymentDate" }));
 
-        // 3. ClinicalProcedure -> (TenantId, ClinicId, ScheduledAt)
-        var procedureEntity = model.FindEntityType(typeof(ClinicalProcedure));
+        // 3. Procedure -> (TenantId, ClinicId, ScheduledAt)
+        var procedureEntity = model.FindEntityType(typeof(Procedure));
         procedureEntity.Should().NotBeNull();
         var procedureIndexes = procedureEntity!.GetIndexes().Select(idx => idx.Properties.Select(p => p.Name).ToList()).ToList();
         procedureIndexes.Should().Contain(idx =>
             idx.SequenceEqual(new[] { "TenantId", "ClinicId", "ScheduledAt" }));
 
-        // 4. ClinicLabOrder -> (TenantId, ClinicId, OrderDate)
-        var labOrderEntity = model.FindEntityType(typeof(ClinicLabOrder));
+        // 4. LabOrder -> (TenantId, ClinicId, OrderDate)
+        var labOrderEntity = model.FindEntityType(typeof(LabOrder));
         labOrderEntity.Should().NotBeNull();
         var labIndexes = labOrderEntity!.GetIndexes().Select(idx => idx.Properties.Select(p => p.Name).ToList()).ToList();
         labIndexes.Should().Contain(idx =>
@@ -113,17 +113,17 @@ public class ChallengerM1_2StressTests
     }
 
     [Fact]
-    public async Task Verify_AllQueries_ExecuteWithoutException_WhenAllTablesEmpty_And_NoClinicSettings()
+    public async Task Verify_AllQueries_ExecuteWithoutException_WhenAllTablesEmpty_And_NoFacilitySettings()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // 1. GetClinicAnalyticsQuery with zero data and no settings
         var analyticsHandler = new GetClinicAnalyticsQueryHandler(
@@ -193,9 +193,9 @@ public class ChallengerM1_2StressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var today = DateTime.UtcNow.Date.AddHours(10);
 
@@ -268,7 +268,7 @@ public class ChallengerM1_2StressTests
         await invoiceRepo.AddAsync(invEdge);
 
         // 3. Consultation with null licenses, empty diagnoses, and patient with non-binary gender
-        var patientOtherGender = new ClinicPatient
+        var patientOtherGender = new Patient
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -276,7 +276,7 @@ public class ChallengerM1_2StressTests
             FirstName = "Baby",
             LastName = "Doe",
             DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow), // Newborn (age 0)
-            Gender = "Other",
+            Gender = Gender.Other,
             ContactNumber = "09000000000"
         };
         await patientRepo.AddAsync(patientOtherGender);
@@ -312,8 +312,8 @@ public class ChallengerM1_2StressTests
         };
         await consultRepo.AddAsync(consultUnknownPatient);
 
-        // 4. ClinicalProcedure with null ordered by and staff name
-        var procEdge = new ClinicalProcedure
+        // 4. Procedure with null ordered by and staff name
+        var procEdge = new Procedure
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -328,8 +328,8 @@ public class ChallengerM1_2StressTests
         };
         await procRepo.AddAsync(procEdge);
 
-        // 5. ClinicLabOrder with empty items
-        var labEdge = new ClinicLabOrder
+        // 5. LabOrder with empty items
+        var labEdge = new LabOrder
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -337,7 +337,7 @@ public class ChallengerM1_2StressTests
             PatientName = "Baby Doe",
             OrderNumber = "LAB-EDGE-01",
             OrderDate = today,
-            Items = new List<ClinicLabOrderItem>() // Empty items
+            Items = new List<LabOrderItem>() // Empty items
         };
         await labRepo.AddAsync(labEdge);
 
@@ -378,11 +378,11 @@ public class ChallengerM1_2StressTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        // Configure ClinicSettings with 75% physician share
-        var settings = new ClinicSettings
+        // Configure FacilitySettings with 75% physician share
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -629,8 +629,8 @@ public class ChallengerM1_2StressTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
         var today = DateTime.UtcNow.Date;
 

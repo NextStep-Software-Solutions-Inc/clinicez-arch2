@@ -2,15 +2,18 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.PhilHealthProxy.Api.Controllers;
+using ClinicEz.PhilHealthProxy.Application.Features.Tenants.Commands;
+using ClinicEz.PhilHealthProxy.Application.Features.Tenants.Queries;
 using ClinicEz.PhilHealthProxy.Domain.Entities;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
+using ClinicEz.PhilHealthProxy.Domain.Models;
 using ClinicEz.Shared.Common;
 using FluentAssertions;
+using MediatR;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -26,208 +29,194 @@ public sealed class TenantsControllerTests
         public IFileProvider ContentRootFileProvider { get; set; } = null!;
     }
 
-    private readonly ITenantRepository _tenantRepository = Substitute.For<ITenantRepository>();
-    private readonly IPhilHealthSoapClient _soapClient = Substitute.For<IPhilHealthSoapClient>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly ITenantRepository _tenantRepo = Substitute.For<ITenantRepository>();
+    private readonly IPhilHealthPcapiClient _pcapiClient = Substitute.For<IPhilHealthPcapiClient>();
     private readonly IDataProtectionProvider _dataProtection = new EphemeralDataProtectionProvider();
 
     [Fact]
-    public async Task Configure_WithBlankCredentialsOnStagingEndpoint_ReturnsOk()
+    public async Task Configure_WithValidRequest_ReturnsOkObjectResult()
     {
-        var env = new FakeHostEnv("Production");
-        var controller = new TenantsController(
-            _tenantRepository,
-            _soapClient,
-            _dataProtection,
-            NullLogger<TenantsController>.Instance,
-            env);
+        var env = new FakeHostEnv("Testing");
+        var controller = new TenantsController(_mediator, env);
 
         var request = new ConfigureTenantCredentialsRequest(
             TenantId: Guid.NewGuid(),
-            FacilityName: "Staging Clinic",
-            AccreditationNumber: "P10038831",
-            PmccNumber: "Z15445",
-            SoftwareCertificateId: "KON-DUMMYCERTS-Z15445",
-            Username: "",
-            Password: "",
-            CipherKey: "",
-            KonsultaEndpoint: "https://staging.philhealth.gov.ph/KONSULTA/SOAP");
-
-        _tenantRepository.UpsertTenantAsync(Arg.Any<PhilHealthTenant>(), Arg.Any<CancellationToken>())
-            .Returns(ci => Task.FromResult(ci.Arg<PhilHealthTenant>()));
-
-        var result = await controller.ConfigureCredentials(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result;
-        var response = (ApiResponse<TenantConfigurationStatusResponse>)okResult.Value!;
-        response.Succeeded.Should().BeTrue();
-        response.Data!.IsConfigured.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP")]
-    [InlineData("https://claims.philhealth.gov.ph/soap/gateway")]
-    [InlineData("https://claims.philhealth.gov.ph/soap/gateway/")]
-    [InlineData("https://prod.philhealth.gov.ph/KONSULTA/SOAP/")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/   ")]
-    public async Task Configure_WithBlankCredentialsOnProductionEndpointVariantsInProductionEnv_ReturnsBadRequest(
-        string productionEndpoint)
-    {
-        var env = new FakeHostEnv("Production");
-        var controller = new TenantsController(
-            _tenantRepository,
-            _soapClient,
-            _dataProtection,
-            NullLogger<TenantsController>.Instance,
-            env);
-
-        var request = new ConfigureTenantCredentialsRequest(
-            TenantId: Guid.NewGuid(),
-            FacilityName: "Production Clinic",
+            BranchId: null,
+            FacilityName: "Main Health Center",
             AccreditationNumber: "H91001234",
             PmccNumber: "Z15445",
-            SoftwareCertificateId: "CERT-PROD",
-            Username: "",
-            Password: "",
-            CipherKey: "",
-            KonsultaEndpoint: productionEndpoint);
-
-        var result = await controller.ConfigureCredentials(request, CancellationToken.None);
-
-        result.Should().BeOfType<BadRequestObjectResult>();
-        var badRequest = (BadRequestObjectResult)result;
-        var response = (ApiResponse<TenantConfigurationStatusResponse>)badRequest.Value!;
-        response.Succeeded.Should().BeFalse();
-        response.Message.Should().Contain("Accreditation number, username, and password are required.");
-
-        await _tenantRepository.DidNotReceiveWithAnyArgs().UpsertTenantAsync(Arg.Any<PhilHealthTenant>(), Arg.Any<CancellationToken>());
-    }
-
-    [Theory]
-    [InlineData("https://staging.philhealth.gov.ph/KONSULTA/SOAP/")]
-    [InlineData("https://staging.philhealth.gov.ph/KONSULTA/SOAP")]
-    [InlineData("https://staging.philhealth.gov.ph/soap/")]
-    [InlineData("/soap/konsulta/")]
-    [InlineData("/soap/konsulta")]
-    public async Task Configure_WithBlankCredentialsOnStagingEndpointVariants_InProductionEnv_ReturnsOk(
-        string stagingEndpoint)
-    {
-        var env = new FakeHostEnv("Production");
-        var controller = new TenantsController(
-            _tenantRepository,
-            _soapClient,
-            _dataProtection,
-            NullLogger<TenantsController>.Instance,
-            env);
-
-        var request = new ConfigureTenantCredentialsRequest(
-            TenantId: Guid.NewGuid(),
-            FacilityName: "Staging Clinic",
-            AccreditationNumber: "P10038831",
-            PmccNumber: "Z15445",
             SoftwareCertificateId: "KON-DUMMYCERTS-Z15445",
-            Username: "",
-            Password: "",
-            CipherKey: "",
-            KonsultaEndpoint: stagingEndpoint);
+            SecretKey: "secret_123",
+            CipherKey: "cipher_key_32_bytes_long_secret!",
+            BaseUrl: "https://staging.philhealth.gov.ph",
+            IsActive: true);
 
-        _tenantRepository.UpsertTenantAsync(Arg.Any<PhilHealthTenant>(), Arg.Any<CancellationToken>())
-            .Returns(ci => Task.FromResult(ci.Arg<PhilHealthTenant>()));
+        var expectedStatus = new TenantConfigurationStatusResponse(
+            request.TenantId,
+            null,
+            request.FacilityName,
+            request.AccreditationNumber,
+            request.PmccNumber,
+            request.SoftwareCertificateId,
+            HasSecretKey: true,
+            HasCipherKey: true,
+            request.BaseUrl!,
+            true,
+            DateTimeOffset.UtcNow);
 
-        var result = await controller.ConfigureCredentials(request, CancellationToken.None);
+        _mediator.Send(Arg.Any<ConfigureTenantCredentialsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(expectedStatus);
+
+        var result = await controller.Configure(request, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
-        var okResult = (OkObjectResult)result;
-        var response = (ApiResponse<TenantConfigurationStatusResponse>)okResult.Value!;
-        response.Succeeded.Should().BeTrue();
-        response.Data!.IsConfigured.Should().BeTrue();
+        var ok = (OkObjectResult)result;
+        var apiRes = (ApiResponse<TenantConfigurationStatusResponse>)ok.Value!;
+        apiRes.Succeeded.Should().BeTrue();
+        apiRes.Data!.HasSecretKey.Should().BeTrue();
+        apiRes.Data.HasCipherKey.Should().BeTrue();
+        apiRes.Data.AccreditationNumber.Should().Be("H91001234");
     }
 
     [Fact]
-    public async Task Configure_TrimsKonsultaEndpoint_BeforePersistingToTenant()
+    public async Task ConfigureCommandHandler_EncryptsSecretAndCipherKeys()
     {
-        var env = new FakeHostEnv("Development");
-        var controller = new TenantsController(
-            _tenantRepository,
-            _soapClient,
-            _dataProtection,
-            NullLogger<TenantsController>.Instance,
-            env);
+        var handler = new ConfigureTenantCredentialsCommandHandler(_tenantRepo, _dataProtection);
 
         PhilHealthTenant? capturedTenant = null;
-        _tenantRepository.UpsertTenantAsync(Arg.Do<PhilHealthTenant>(t => capturedTenant = t), Arg.Any<CancellationToken>())
+        _tenantRepo.UpsertTenantAsync(Arg.Do<PhilHealthTenant>(t => capturedTenant = t), Arg.Any<CancellationToken>())
             .Returns(ci => Task.FromResult(ci.Arg<PhilHealthTenant>()));
 
         var request = new ConfigureTenantCredentialsRequest(
             TenantId: Guid.NewGuid(),
-            FacilityName: "Trimming Test Clinic",
-            AccreditationNumber: "P10038831",
+            BranchId: null,
+            FacilityName: "Downtown Clinic",
+            AccreditationNumber: "H10000001",
             PmccNumber: "Z15445",
-            SoftwareCertificateId: "KON-DUMMYCERTS-Z15445",
-            Username: "",
-            Password: "",
-            CipherKey: "",
-            KonsultaEndpoint: "   https://staging.philhealth.gov.ph/KONSULTA/SOAP/   ");
+            SoftwareCertificateId: "CERT-001",
+            SecretKey: "super_secret_key",
+            CipherKey: "super_cipher_key_12345678901234",
+            BaseUrl: "https://pcapi.philhealth.gov.ph",
+            IsActive: true);
 
-        var result = await controller.ConfigureCredentials(request, CancellationToken.None);
+        var response = await handler.Handle(new ConfigureTenantCredentialsCommand(request), CancellationToken.None);
 
-        result.Should().BeOfType<OkObjectResult>();
         capturedTenant.Should().NotBeNull();
-        capturedTenant!.KonsultaEndpoint.Should().Be("https://staging.philhealth.gov.ph/KONSULTA/SOAP/");
+        capturedTenant!.EncryptedSecretKey.Should().NotBeNullOrEmpty();
+        capturedTenant.EncryptedSecretKey.Should().NotBe("super_secret_key"); // Must be protected!
+        capturedTenant.EncryptedCipherKey.Should().NotBeNullOrEmpty();
+        capturedTenant.EncryptedCipherKey.Should().NotBe("super_cipher_key_12345678901234"); // Must be protected!
+
+        response.HasSecretKey.Should().BeTrue();
+        response.HasCipherKey.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Configure_WithBlankCredentialsInDevelopmentEnvironment_ReturnsOk()
+    public void ConfigureCommandValidator_RejectsInvalidAccreditationNumber()
     {
-        var env = new FakeHostEnv("Development");
-        var controller = new TenantsController(
-            _tenantRepository,
-            _soapClient,
-            _dataProtection,
-            NullLogger<TenantsController>.Instance,
-            env);
+        var validator = new ConfigureTenantCredentialsCommandValidator();
 
-        var request = new ConfigureTenantCredentialsRequest(
+        var invalidAccre = new ConfigureTenantCredentialsRequest(
             TenantId: Guid.NewGuid(),
-            FacilityName: "Dev Clinic",
-            AccreditationNumber: "P10038831",
+            BranchId: null,
+            FacilityName: "Clinic",
+            AccreditationNumber: "SHORT", // not 9 chars
             PmccNumber: "Z15445",
-            SoftwareCertificateId: "CERT-DEV",
-            Username: "",
-            Password: "",
-            CipherKey: "",
-            KonsultaEndpoint: "https://konsulta.philhealth.gov.ph/KONSULTA/SOAP");
+            SoftwareCertificateId: "CERT",
+            SecretKey: "secret",
+            CipherKey: "cipher");
 
-        _tenantRepository.UpsertTenantAsync(Arg.Any<PhilHealthTenant>(), Arg.Any<CancellationToken>())
-            .Returns(ci => Task.FromResult(ci.Arg<PhilHealthTenant>()));
-
-        var result = await controller.ConfigureCredentials(request, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
+        var result = validator.Validate(new ConfigureTenantCredentialsCommand(invalidAccre));
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName.Contains("AccreditationNumber"));
     }
 
     [Fact]
-    public async Task Configure_WithMissingAccreditationNumber_ReturnsBadRequest()
+    public async Task GetStatus_ReturnsConfiguredStatus_WhenTenantExists()
     {
-        var controller = new TenantsController(
-            _tenantRepository,
-            _soapClient,
-            _dataProtection,
-            NullLogger<TenantsController>.Instance);
+        var tenantId = Guid.NewGuid();
+        var handler = new GetTenantStatusQueryHandler(_tenantRepo);
 
-        var request = new ConfigureTenantCredentialsRequest(
-            TenantId: Guid.NewGuid(),
-            FacilityName: "Dev Clinic",
-            AccreditationNumber: "",
-            PmccNumber: "Z15445",
-            SoftwareCertificateId: "CERT-DEV",
-            Username: "user",
-            Password: "pwd",
-            CipherKey: "");
+        _tenantRepo.GetByTenantIdAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new PhilHealthTenant
+            {
+                TenantId = tenantId,
+                FacilityName = "St. Jude Clinic",
+                AccreditationNumber = "H91001234",
+                PmccNumber = "Z15445",
+                SoftwareCertificateId = "CERT-123",
+                EncryptedSecretKey = "encrypted_secret",
+                EncryptedCipherKey = "encrypted_cipher",
+                BaseUrl = "https://pcapi.philhealth.gov.ph",
+                IsActive = true
+            });
 
-        var result = await controller.ConfigureCredentials(request, CancellationToken.None);
+        var result = await handler.Handle(new GetTenantStatusQuery(tenantId), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.FacilityName.Should().Be("St. Jude Clinic");
+        result.AccreditationNumber.Should().Be("H91001234");
+        result.HasSecretKey.Should().BeTrue();
+        result.HasCipherKey.Should().BeTrue();
+        result.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetStatus_ReturnsUnconfiguredStatus_WhenTenantDoesNotExist()
+    {
+        var tenantId = Guid.NewGuid();
+        var handler = new GetTenantStatusQueryHandler(_tenantRepo);
+
+        _tenantRepo.GetByTenantIdAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns((PhilHealthTenant?)null);
+
+        var result = await handler.Handle(new GetTenantStatusQuery(tenantId), CancellationToken.None);
+
+        result.HasSecretKey.Should().BeFalse();
+        result.HasCipherKey.Should().BeFalse();
+        result.IsActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TestConnection_ReturnsSuccess_WhenAuthenticationSucceeds()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenant = new PhilHealthTenant
+        {
+            TenantId = tenantId,
+            AccreditationNumber = "H10000001",
+            SoftwareCertificateId = "CERT-001",
+            EncryptedSecretKey = "enc_secret",
+            EncryptedCipherKey = "enc_cipher",
+            BaseUrl = "https://staging.philhealth.gov.ph"
+        };
+
+        _tenantRepo.GetByTenantIdAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(tenant);
+
+        _pcapiClient.AuthenticateAsync(tenant, Arg.Any<CancellationToken>())
+            .Returns(new PcapiTokenData("TOKEN_OK", "Bearer", 3600));
+
+        var handler = new TestTenantConnectionCommandHandler(_tenantRepo, _pcapiClient);
+        var result = await handler.Handle(new TestTenantConnectionCommand(tenantId), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Contain("Successfully authenticated");
+    }
+
+    [Fact]
+    public async Task TestConnection_ReturnsNotFound_WhenTenantNotConfigured()
+    {
+        var tenantId = Guid.NewGuid();
+        _tenantRepo.GetByTenantIdAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns((PhilHealthTenant?)null);
+
+        var handler = new TestTenantConnectionCommandHandler(_tenantRepo, _pcapiClient);
+        var result = await handler.Handle(new TestTenantConnectionCommand(tenantId), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.StatusCode.Should().Be(404);
+        result.Message.Should().Contain("Tenant credentials not configured");
     }
 }

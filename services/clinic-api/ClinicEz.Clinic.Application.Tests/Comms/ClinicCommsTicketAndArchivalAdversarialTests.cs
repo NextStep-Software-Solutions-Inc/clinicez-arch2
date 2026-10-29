@@ -276,7 +276,7 @@ public class ClinicCommsTicketAndArchivalAdversarialTests
     // =========================================================================
 
     [Fact]
-    public async Task CommsTranscriptArchivedHandler_PersistsVerifiedClinicRecordAttachment_WithSha256AndAudit()
+    public async Task CommsTranscriptArchivedHandler_PersistsVerifiedRecordAttachment_WithSha256AndAudit()
     {
         var db = CreateInMemoryDb();
         var convId = Guid.NewGuid();
@@ -285,7 +285,7 @@ public class ClinicCommsTicketAndArchivalAdversarialTests
         var sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
         // Seed clinic settings for resolver
-        db.ClinicSettings.Add(new ClinicSettings
+        db.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -344,10 +344,10 @@ public class ClinicCommsTicketAndArchivalAdversarialTests
         attachment.EncryptedHash.Should().Be(sha256);
 
         // ASSERT: WORM Audit entry saved
-        var audit = await db.ClinicAuditEntries.FirstOrDefaultAsync(e => e.Action == "comms.transcript.archived");
+        var audit = await db.AuditEntries.FirstOrDefaultAsync(e => e.Action == "comms.transcript.archived");
         audit.Should().NotBeNull();
         audit!.ActorName.Should().Be("Dr. Gregory House");
-        audit.TargetEntityType.Should().Be("ClinicRecordAttachment");
+        audit.TargetEntityType.Should().Be("RecordAttachment");
         audit.Outcome.Should().Be(ClinicAuditOutcomes.Success);
     }
 
@@ -362,7 +362,7 @@ public class ClinicCommsTicketAndArchivalAdversarialTests
         var sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
         // Seed clinic settings for resolver
-        db.ClinicSettings.Add(new ClinicSettings
+        db.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -417,10 +417,10 @@ public class ClinicCommsTicketAndArchivalAdversarialTests
         attachment.EncryptedHash.Should().Be(sha256);
 
         // ASSERT: WORM Audit entry saved
-        var audit = await db.ClinicAuditEntries.FirstOrDefaultAsync(e => e.Action == "comms.attachment.filed");
+        var audit = await db.AuditEntries.FirstOrDefaultAsync(e => e.Action == "comms.attachment.filed");
         audit.Should().NotBeNull();
         audit!.ActorName.Should().Be("Nurse Kelly");
-        audit.TargetEntityType.Should().Be("ClinicRecordAttachment");
+        audit.TargetEntityType.Should().Be("RecordAttachment");
         audit.Outcome.Should().Be(ClinicAuditOutcomes.Success);
     }
 }

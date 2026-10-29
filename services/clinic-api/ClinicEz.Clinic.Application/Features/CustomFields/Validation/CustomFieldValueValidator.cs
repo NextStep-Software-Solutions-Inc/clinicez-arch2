@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -105,23 +106,68 @@ public static class CustomFieldValueValidator
         return val;
     }
 
+    public static DateOnly GetTodayInClinic()
+    {
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+            return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+        }
+        catch
+        {
+            return DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
+        }
+    }
+
+    private static bool IsMatchingEntityType(string definitionEntityType, string targetEntityType)
+    {
+        if (string.Equals(definitionEntityType, targetEntityType, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if ((string.Equals(targetEntityType, "Patient", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(targetEntityType, "ClinicPatient", StringComparison.OrdinalIgnoreCase)) &&
+            (string.Equals(definitionEntityType, "Patient", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(definitionEntityType, "ClinicPatient", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     public static void ValidateAndNormalize(
         IDictionary<string, object?> customFields,
-        IEnumerable<ClinicCustomFieldDefinition> definitions,
-        string entityType = "ClinicPatient")
+        IEnumerable<CustomFieldDefinition> definitions,
+        string entityType = "Patient")
     {
-        if (customFields == null || customFields.Count == 0)
-            return;
-
         var activeDefs = definitions
-            .Where(d => d.IsActive && string.Equals(d.EntityType, entityType, StringComparison.OrdinalIgnoreCase))
+            .Where(d => d.IsActive && IsMatchingEntityType(d.EntityType, entityType))
             .ToList();
 
-        var defMap = new Dictionary<string, ClinicCustomFieldDefinition>(StringComparer.OrdinalIgnoreCase);
+        var defMap = new Dictionary<string, CustomFieldDefinition>(StringComparer.OrdinalIgnoreCase);
         foreach (var def in activeDefs)
         {
             defMap[def.FieldKey] = def;
         }
+
+        // 1. Mandatory field validation
+        foreach (var def in activeDefs)
+        {
+            if (def.IsRequired)
+            {
+                if (customFields == null ||
+                    !customFields.TryGetValue(def.FieldKey, out var fieldVal) ||
+                    IsBlankOrCleared(fieldVal))
+                {
+                    throw new ValidationException($"{def.Label} is required.");
+                }
+            }
+        }
+
+        if (customFields == null || customFields.Count == 0)
+            return;
+
+        var todayInClinic = GetTodayInClinic();
 
         foreach (var kvp in customFields.ToList())
         {
@@ -139,6 +185,38 @@ public static class CustomFieldValueValidator
                 {
                     throw new ValidationException($"{def.Label} must be a valid number.");
                 }
+                else if (def.DataType == CustomFieldDataType.Date)
+                {
+                    var rawString = kvp.Value?.ToString()?.Trim();
+                    if (!DateOnly.TryParseExact(rawString, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateVal))
+                    {
+                        throw new ValidationException($"{def.Label} must be a valid date in YYYY-MM-DD format.");
+                    }
+
+                    switch (def.BoundaryMode?.Trim().ToLowerInvariant())
+                    {
+                        case "pastortoday":
+                            if (dateVal > todayInClinic)
+                                throw new ValidationException($"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
+                            break;
+
+                        case "futureortoday":
+                            if (dateVal < todayInClinic)
+                                throw new ValidationException($"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
+                            break;
+
+                        case "futureonly":
+                            if (dateVal <= todayInClinic)
+                                throw new ValidationException($"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
+                            break;
+                    }
+
+                    if (!string.Equals(kvp.Key, def.FieldKey, StringComparison.Ordinal))
+                    {
+                        customFields.Remove(kvp.Key);
+                    }
+                    customFields[def.FieldKey] = dateVal.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                }
                 else
                 {
                     if (!string.Equals(kvp.Key, def.FieldKey, StringComparison.Ordinal))
@@ -154,8 +232,8 @@ public static class CustomFieldValueValidator
 
     public static async Task ValidateAndNormalizeAsync(
         IDictionary<string, object?> customFields,
-        IRepository<ClinicCustomFieldDefinition> repo,
-        string entityType = "ClinicPatient",
+        IRepository<CustomFieldDefinition> repo,
+        string entityType = "Patient",
         CancellationToken ct = default)
     {
         var definitions = await FetchDefinitionsAsync(repo, entityType, ct);
@@ -165,21 +243,33 @@ public static class CustomFieldValueValidator
     public static void MergeAndValidateForUpdate(
         IDictionary<string, object?> targetCustomFields,
         IDictionary<string, object?> submittedCustomFields,
-        IEnumerable<ClinicCustomFieldDefinition> definitions,
-        string entityType = "ClinicPatient")
+        IEnumerable<CustomFieldDefinition> definitions,
+        string entityType = "Patient")
     {
-        if (submittedCustomFields == null || submittedCustomFields.Count == 0)
-            return;
-
         var activeDefs = definitions
-            .Where(d => d.IsActive && string.Equals(d.EntityType, entityType, StringComparison.OrdinalIgnoreCase))
+            .Where(d => d.IsActive && IsMatchingEntityType(d.EntityType, entityType))
             .ToList();
 
-        var defMap = new Dictionary<string, ClinicCustomFieldDefinition>(StringComparer.OrdinalIgnoreCase);
+        var defMap = new Dictionary<string, CustomFieldDefinition>(StringComparer.OrdinalIgnoreCase);
         foreach (var def in activeDefs)
         {
             defMap[def.FieldKey] = def;
         }
+
+        if (submittedCustomFields == null || submittedCustomFields.Count == 0)
+        {
+            // Verify mandatory fields are present in target
+            foreach (var def in activeDefs)
+            {
+                if (def.IsRequired && (!targetCustomFields.TryGetValue(def.FieldKey, out var fieldVal) || IsBlankOrCleared(fieldVal)))
+                {
+                    throw new ValidationException($"{def.Label} is required.");
+                }
+            }
+            return;
+        }
+
+        var todayInClinic = GetTodayInClinic();
 
         foreach (var kvp in submittedCustomFields)
         {
@@ -187,6 +277,11 @@ public static class CustomFieldValueValidator
             {
                 if (IsBlankOrCleared(kvp.Value))
                 {
+                    if (def.IsRequired)
+                    {
+                        throw new ValidationException($"{def.Label} is required.");
+                    }
+
                     targetCustomFields.Remove(kvp.Key);
                     targetCustomFields.Remove(def.FieldKey);
                     var caseMatch = targetCustomFields.Keys
@@ -199,6 +294,40 @@ public static class CustomFieldValueValidator
                 else if (def.DataType == CustomFieldDataType.Number && !IsValidNumber(kvp.Value))
                 {
                     throw new ValidationException($"{def.Label} must be a valid number.");
+                }
+                else if (def.DataType == CustomFieldDataType.Date)
+                {
+                    var rawString = kvp.Value?.ToString()?.Trim();
+                    if (!DateOnly.TryParseExact(rawString, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateVal))
+                    {
+                        throw new ValidationException($"{def.Label} must be a valid date in YYYY-MM-DD format.");
+                    }
+
+                    switch (def.BoundaryMode?.Trim().ToLowerInvariant())
+                    {
+                        case "pastortoday":
+                            if (dateVal > todayInClinic)
+                                throw new ValidationException($"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
+                            break;
+
+                        case "futureortoday":
+                            if (dateVal < todayInClinic)
+                                throw new ValidationException($"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
+                            break;
+
+                        case "futureonly":
+                            if (dateVal <= todayInClinic)
+                                throw new ValidationException($"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
+                            break;
+                    }
+
+                    var caseMatch = targetCustomFields.Keys
+                        .FirstOrDefault(k => string.Equals(k, def.FieldKey, StringComparison.OrdinalIgnoreCase));
+                    if (caseMatch != null && !string.Equals(caseMatch, def.FieldKey, StringComparison.Ordinal))
+                    {
+                        targetCustomFields.Remove(caseMatch);
+                    }
+                    targetCustomFields[def.FieldKey] = dateVal.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                 }
                 else
                 {
@@ -217,25 +346,36 @@ public static class CustomFieldValueValidator
                 targetCustomFields[kvp.Key] = kvp.Value;
             }
         }
+
+        // Verify all required fields remain present in targetCustomFields
+        foreach (var def in activeDefs)
+        {
+            if (def.IsRequired && (!targetCustomFields.TryGetValue(def.FieldKey, out var val) || IsBlankOrCleared(val)))
+            {
+                throw new ValidationException($"{def.Label} is required.");
+            }
+        }
     }
 
     public static async Task MergeAndValidateForUpdateAsync(
         IDictionary<string, object?> targetCustomFields,
         IDictionary<string, object?> submittedCustomFields,
-        IRepository<ClinicCustomFieldDefinition> repo,
-        string entityType = "ClinicPatient",
+        IRepository<CustomFieldDefinition> repo,
+        string entityType = "Patient",
         CancellationToken ct = default)
     {
         var definitions = await FetchDefinitionsAsync(repo, entityType, ct);
         MergeAndValidateForUpdate(targetCustomFields, submittedCustomFields, definitions, entityType);
     }
 
-    private static async Task<List<ClinicCustomFieldDefinition>> FetchDefinitionsAsync(
-        IRepository<ClinicCustomFieldDefinition> repo,
+    private static async Task<List<CustomFieldDefinition>> FetchDefinitionsAsync(
+        IRepository<CustomFieldDefinition> repo,
         string entityType,
         CancellationToken ct)
     {
-        var query = repo.Query().Where(f => f.IsActive && f.EntityType == entityType);
+        var query = repo.Query().Where(f => f.IsActive && (
+            f.EntityType == entityType ||
+            ((entityType == "Patient" || entityType == "ClinicPatient") && (f.EntityType == "Patient" || f.EntityType == "ClinicPatient"))));
         try
         {
             return await query.ToListAsync(ct);

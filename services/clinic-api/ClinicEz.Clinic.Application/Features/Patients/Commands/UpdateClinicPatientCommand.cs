@@ -38,22 +38,55 @@ public sealed record UpdateClinicPatientCommand(
     string? Alerts = null,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string? VerificationStatus = null,
-    System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null) : IRequest<ClinicPatientDto>;
+    System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null) : IRequest<ClinicPatientDto>
+{
+    public UpdateClinicPatientCommand(
+        Guid Id,
+        string FirstName,
+        string LastName,
+        string? MiddleName,
+        string? Suffix,
+        DateOnly DateOfBirth,
+        ClinicEz.Clinic.Domain.Enums.Gender Gender,
+        string? CivilStatus,
+        string ContactNumber,
+        string? Email,
+        string? AddressLine = null,
+        string? Barangay = null,
+        string? City = null,
+        string? Province = null,
+        string? EmergencyContactName = null,
+        string? EmergencyContactPhone = null,
+        string? EmergencyContactRelationship = null,
+        string? PhilHealthNumber = null,
+        string? SeniorCitizenId = null,
+        string? PwdId = null,
+        string? BloodType = null,
+        string? Allergies = null,
+        string? ChronicConditions = null,
+        string? Alerts = null,
+        System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
+        string? VerificationStatus = null,
+        System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null)
+        : this(Id, FirstName, LastName, MiddleName, Suffix, DateOfBirth, Gender.ToString(), CivilStatus, ContactNumber, Email, AddressLine, Barangay, City, Province, EmergencyContactName, EmergencyContactPhone, EmergencyContactRelationship, PhilHealthNumber, SeniorCitizenId, PwdId, BloodType, Allergies, ChronicConditions, Alerts, CustomFields, VerificationStatus, MedicalHistories)
+    {
+    }
+}
 
 public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateClinicPatientCommand, ClinicPatientDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IRepository<PatientPastMedicalHistory>? _medicalRepo;
+    private readonly IRepository<PatientMedicalHistory>? _medicalRepo;
     private readonly IClinicContext? _clinicContext;
-    private readonly IRepository<ClinicCustomFieldDefinition>? _customFieldRepo;
+    private readonly IRepository<CustomFieldDefinition>? _customFieldRepo;
 
     public UpdateClinicPatientCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork,
-        IRepository<PatientPastMedicalHistory>? medicalRepo = null,
+        IRepository<PatientMedicalHistory>? medicalRepo = null,
         IClinicContext? clinicContext = null,
-        IRepository<ClinicCustomFieldDefinition>? customFieldRepo = null)
+        IRepository<CustomFieldDefinition>? customFieldRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -65,7 +98,9 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
     public async Task<ClinicPatientDto> Handle(UpdateClinicPatientCommand request, CancellationToken ct)
     {
         var patient = await _patientRepo.Query()
-            .Include(p => p.PastMedicalHistories)
+            .Include(p => p.MedicalHistories)
+            .Include(p => p.Alerts)
+            .Include(p => p.Allergies)
             .FirstOrDefaultAsync(p => p.Id == request.Id, ct);
 
         if (patient == null)
@@ -89,7 +124,7 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
                     nextCustomFields,
                     request.CustomFields,
                     _customFieldRepo,
-                    "ClinicPatient",
+                    "Patient",
                     ct);
             }
             else
@@ -128,29 +163,140 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         patient.MiddleName = request.MiddleName?.Trim();
         patient.Suffix = request.Suffix?.Trim();
         patient.DateOfBirth = request.DateOfBirth;
-        patient.Gender = request.Gender;
-        patient.CivilStatus = request.CivilStatus;
+        if (Enum.TryParse<Gender>(request.Gender, true, out var g)) patient.Gender = g;
+        if (Enum.TryParse<CivilStatus>(request.CivilStatus, true, out var cs)) patient.CivilStatus = cs; else if (request.CivilStatus == null) patient.CivilStatus = null;
         patient.ContactNumber = request.ContactNumber.Trim();
         patient.Email = request.Email?.Trim();
 
         patient.PhilHealthNumber = request.PhilHealthNumber?.Trim();
         patient.SeniorCitizenId = request.SeniorCitizenId?.Trim();
         patient.PwdId = request.PwdId?.Trim();
-        patient.BloodType = request.BloodType?.Trim();
-        patient.Allergies = request.Allergies?.Trim();
-        patient.Alerts = request.Alerts?.Trim();
+        if (Enum.TryParse<BloodType>(request.BloodType, true, out var bt)) patient.BloodType = bt; else if (request.BloodType == null) patient.BloodType = null;
         patient.CustomFields = nextCustomFields;
 
-        if (!string.IsNullOrWhiteSpace(request.VerificationStatus))
+        if (!string.IsNullOrWhiteSpace(request.VerificationStatus) && Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var vs))
         {
-            patient.VerificationStatus = request.VerificationStatus;
+            patient.VerificationStatus = vs;
         }
+
+        if (request.Allergies != null)
+        {
+            var allergens = request.Allergies.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (patient.Allergies != null)
+            {
+                foreach (var existing in patient.Allergies)
+                {
+                    if (!allergens.Any(a => string.Equals(a, existing.Allergen, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        existing.Status = AllergyStatus.Inactive;
+                        existing.IsDeleted = true;
+                    }
+                    else
+                    {
+                        existing.Status = AllergyStatus.Active;
+                        existing.IsDeleted = false;
+                    }
+                }
+            }
+
+            foreach (var a in allergens)
+            {
+                if (patient.Allergies == null || !patient.Allergies.Any(existing => string.Equals(existing.Allergen, a, StringComparison.OrdinalIgnoreCase)))
+                {
+                    (patient.Allergies ??= new List<PatientAllergy>()).Add(new PatientAllergy
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = patient.TenantId ?? _clinicContext?.TenantId ?? "default",
+                        ClinicId = patient.ClinicId != Guid.Empty ? patient.ClinicId : (_clinicContext?.ClinicId ?? Guid.Empty),
+                        PatientId = patient.Id,
+                        Category = AllergyCategory.Other,
+                        Allergen = a,
+                        Severity = AllergySeverity.Moderate,
+                        Status = AllergyStatus.Active,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = "ClinicStaff"
+                    });
+                }
+            }
+        }
+
+        if (request.Alerts != null)
+        {
+            var alertTitles = request.Alerts.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (patient.Alerts != null)
+            {
+                foreach (var existing in patient.Alerts)
+                {
+                    if (!alertTitles.Any(t => string.Equals(t, existing.Title, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        existing.Status = PatientAlertStatus.Resolved;
+                        existing.IsDeleted = true;
+                    }
+                    else
+                    {
+                        existing.Status = PatientAlertStatus.Active;
+                        existing.IsDeleted = false;
+                    }
+                }
+            }
+
+            foreach (var title in alertTitles)
+            {
+                if (patient.Alerts == null || !patient.Alerts.Any(existing => string.Equals(existing.Title, title, StringComparison.OrdinalIgnoreCase)))
+                {
+                    (patient.Alerts ??= new List<PatientAlert>()).Add(new PatientAlert
+                    {
+                        TenantId = patient.TenantId ?? _clinicContext?.TenantId ?? "default",
+                        ClinicId = patient.ClinicId != Guid.Empty ? patient.ClinicId : (_clinicContext?.ClinicId ?? Guid.Empty),
+                        PatientId = patient.Id,
+                        Title = title,
+                        Category = PatientAlertCategory.ClinicalSafety,
+                        Status = PatientAlertStatus.Active,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = "ClinicStaff"
+                    });
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ChronicConditions))
+        {
+            var split = request.ChronicConditions.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var cond in split)
+            {
+                if (!patient.MedicalHistories.Any(m => string.Equals(m.ConditionTitle, cond, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var hist = new PatientMedicalHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = patient.TenantId ?? string.Empty,
+                        ClinicId = patient.ClinicId,
+                        PatientId = patient.Id,
+                        Category = MedicalHistoryCategory.MedicalHistory,
+                        ConditionTitle = cond,
+                        IsChronicNcd = true,
+                        Status = ProblemStatus.Active,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = "ClinicStaff"
+                    };
+                    if (_medicalRepo != null) await _medicalRepo.AddAsync(hist, ct);
+                    patient.MedicalHistories.Add(hist);
+                }
+            }
+        }
+
         patient.UpdatedAt = DateTime.UtcNow;
         patient.UpdatedBy = "ClinicStaff";
 
         if (request.MedicalHistories != null && _medicalRepo != null)
         {
-            var existingEntries = await _medicalRepo.Query(m => m.PatientId == patient.Id)
+            var existingEntries = await _medicalRepo.Query(m => m.PatientId == patient.Id && m.Category == MedicalHistoryCategory.MedicalHistory)
                 .ToListAsync(ct);
 
             var tenantId = patient.TenantId ?? _clinicContext?.TenantId ?? "default";
@@ -158,13 +304,13 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
             var staffName = _clinicContext?.StaffId?.ToString() ?? "ClinicStaff";
 
             var matchedExistingIds = new System.Collections.Generic.HashSet<Guid>();
-            var updatedEntities = new System.Collections.Generic.List<PatientPastMedicalHistory>();
+            var updatedEntities = new System.Collections.Generic.List<PatientMedicalHistory>();
 
             foreach (var item in request.MedicalHistories)
             {
                 if (string.IsNullOrWhiteSpace(item.ConditionTitle)) continue;
 
-                PatientPastMedicalHistory? existing = null;
+                PatientMedicalHistory? existing = null;
 
                 // 1. Match by Id if provided
                 if (item.Id.HasValue && item.Id.Value != Guid.Empty)
@@ -206,7 +352,7 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
                     existing.Icd10Code = item.Icd10Code?.Trim();
                     existing.SpecificDescription = item.SpecificDescription?.Trim();
                     existing.OnsetDate = item.OnsetDate;
-                    existing.IsResolved = item.IsResolved;
+                    existing.Status = item.IsResolved ? ProblemStatus.Resolved : ProblemStatus.Active;
                     existing.ClinicalNotes = item.ClinicalNotes?.Trim();
                     existing.UpdatedAt = DateTime.UtcNow;
                     existing.UpdatedBy = staffName;
@@ -215,18 +361,19 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
                 }
                 else
                 {
-                    var newEntity = new PatientPastMedicalHistory
+                    var newEntity = new PatientMedicalHistory
                     {
                         Id = item.Id.HasValue && item.Id.Value != Guid.Empty ? item.Id.Value : Guid.NewGuid(),
                         TenantId = tenantId,
                         ClinicId = clinicId,
                         PatientId = patient.Id,
+                        Category = MedicalHistoryCategory.MedicalHistory,
                         ConditionTitle = item.ConditionTitle.Trim(),
                         PhilHealthMdiseaseCode = item.PhilHealthMdiseaseCode?.Trim(),
                         Icd10Code = item.Icd10Code?.Trim(),
                         SpecificDescription = item.SpecificDescription?.Trim(),
                         OnsetDate = item.OnsetDate,
-                        IsResolved = item.IsResolved,
+                        Status = item.IsResolved ? ProblemStatus.Resolved : ProblemStatus.Active,
                         ClinicalNotes = item.ClinicalNotes?.Trim(),
                         CreatedAt = DateTime.UtcNow,
                         CreatedBy = staffName
@@ -245,25 +392,13 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
                 }
             }
 
-            if (updatedEntities.Count > 0)
-            {
-                patient.ChronicConditions = string.Join(", ", updatedEntities.Select(i =>
-                    !string.IsNullOrWhiteSpace(i.SpecificDescription) ? i.SpecificDescription : i.ConditionTitle));
-            }
-            else
-            {
-                patient.ChronicConditions = null;
-            }
-
-            patient.PastMedicalHistories.Clear();
             foreach (var entity in updatedEntities)
             {
-                patient.PastMedicalHistories.Add(entity);
+                if (!patient.MedicalHistories.Any(m => m.Id == entity.Id))
+                {
+                    patient.MedicalHistories.Add(entity);
+                }
             }
-        }
-        else
-        {
-            patient.ChronicConditions = request.ChronicConditions?.Trim();
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

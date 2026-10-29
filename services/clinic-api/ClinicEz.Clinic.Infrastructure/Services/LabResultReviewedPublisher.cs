@@ -21,7 +21,7 @@ public sealed class LabResultReviewedPublisher : ILabResultReviewedPublisher
         _publisher = publisher;
     }
 
-    public async Task PublishAsync(ClinicLabOrder order, LabResultReviewedPayload review, CancellationToken ct)
+    public async Task PublishAsync(LabOrder order, LabResultReviewedPayload review, CancellationToken ct)
     {
         var address = await _addresses.ResolveAsync(order.ClinicId, order.PatientId, ct);
 

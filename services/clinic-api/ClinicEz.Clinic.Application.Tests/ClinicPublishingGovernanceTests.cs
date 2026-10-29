@@ -32,9 +32,9 @@ public class ClinicPublishingGovernanceTests
     public async Task ReadinessCheck_WhenMissingOperatingHours_ReturnsNotReady()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
         // Add doctor with PRC
         await staffRepo.AddAsync(new StaffMember
@@ -49,7 +49,7 @@ public class ClinicPublishingGovernanceTests
         }, CancellationToken.None);
 
         // Add active service
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _testClinicId,
             Code = "GEN-CONSULT",
@@ -60,7 +60,7 @@ public class ClinicPublishingGovernanceTests
         }, CancellationToken.None);
 
         // Settings without OperatingHours
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -82,9 +82,9 @@ public class ClinicPublishingGovernanceTests
     public async Task ReadinessCheck_WhenAllConditionsMet_ReturnsIsReadyTrue()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
 
         await staffRepo.AddAsync(new StaffMember
         {
@@ -97,7 +97,7 @@ public class ClinicPublishingGovernanceTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _testClinicId,
             Code = "WELLNESS",
@@ -107,7 +107,7 @@ public class ClinicPublishingGovernanceTests
             IsActive = true
         }, CancellationToken.None);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -129,12 +129,12 @@ public class ClinicPublishingGovernanceTests
     public async Task PublishClinic_WhenNotReady_ThrowsInvalidOperationException()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -156,9 +156,9 @@ public class ClinicPublishingGovernanceTests
     public async Task PublishClinic_WhenReady_PublishesAndEnqueuesOutboxEvent()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
         await staffRepo.AddAsync(new StaffMember
@@ -172,7 +172,7 @@ public class ClinicPublishingGovernanceTests
             IsActive = true
         }, CancellationToken.None);
 
-        await servicesRepo.AddAsync(new ClinicServiceItem
+        await servicesRepo.AddAsync(new ServiceItem
         {
             ClinicId = _testClinicId,
             Code = "MED-EXAM",
@@ -182,7 +182,7 @@ public class ClinicPublishingGovernanceTests
             IsActive = true
         }, CancellationToken.None);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -216,10 +216,10 @@ public class ClinicPublishingGovernanceTests
     public async Task ToggleBookingPause_TogglesAndEnqueuesOutboxEvent()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var interopPublisher = Substitute.For<IInteropPublisher>();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,

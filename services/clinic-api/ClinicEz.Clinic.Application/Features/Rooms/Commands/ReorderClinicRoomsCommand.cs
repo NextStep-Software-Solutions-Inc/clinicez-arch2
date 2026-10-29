@@ -23,12 +23,12 @@ public sealed class ReorderClinicRoomsCommandValidator : AbstractValidator<Reord
 
 public sealed class ReorderClinicRoomsCommandHandler : IRequestHandler<ReorderClinicRoomsCommand, bool>
 {
-    private readonly IRepository<ClinicRoom> _roomRepository;
+    private readonly IRepository<Room> _roomRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public ReorderClinicRoomsCommandHandler(
-        IRepository<ClinicRoom> roomRepository,
+        IRepository<Room> roomRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {

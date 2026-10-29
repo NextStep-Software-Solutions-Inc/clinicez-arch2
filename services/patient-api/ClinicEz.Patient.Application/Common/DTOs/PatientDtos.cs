@@ -29,7 +29,17 @@ public sealed record PatientAddressDto(
     string Type,
     string? HouseStreet, string? Barangay, string? CityMunicipality,
     string? Province, string? Region, string? ZipCode, string? Country,
-    bool IsPrimary, DateTime? UpdatedAt);
+    bool IsPrimary, DateTime? UpdatedAt,
+    string? StreetAddress = null,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null,
+    string? RegionName = null,
+    string? ProvinceName = null,
+    string? CityMunicipalityName = null,
+    string? BarangayName = null,
+    bool IsSameAsPermanent = false);
 
 public sealed record EmergencyContactDto(
     Guid Id, Guid ClientId,

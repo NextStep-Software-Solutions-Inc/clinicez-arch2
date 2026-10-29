@@ -73,12 +73,12 @@ public sealed class AppointmentReminderBackgroundService : BackgroundService
     public async Task<int> RunReminderCycleAsync(DateTime? utcNowOverride = null, CancellationToken ct = default)
     {
         var utcNow = utcNowOverride ?? DateTime.UtcNow;
-        List<ClinicSettings> activeClinics;
+        List<FacilitySettings> activeClinics;
 
         using (var initialScope = _scopeFactory.CreateScope())
         {
             var db = initialScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            activeClinics = await db.ClinicSettings
+            activeClinics = await db.Settings
                 .IgnoreQueryFilters()
                 .Where(s => !s.IsDeleted && s.EnableAppointmentReminders)
                 .AsNoTracking()
@@ -113,7 +113,7 @@ public sealed class AppointmentReminderBackgroundService : BackgroundService
     public async Task<int> ProcessClinicRemindersAsync(
         ApplicationDbContext db,
         IAppointmentNotificationDispatcher? dispatcher,
-        ClinicSettings clinic,
+        FacilitySettings clinic,
         DateTime utcNow,
         CancellationToken ct = default)
     {

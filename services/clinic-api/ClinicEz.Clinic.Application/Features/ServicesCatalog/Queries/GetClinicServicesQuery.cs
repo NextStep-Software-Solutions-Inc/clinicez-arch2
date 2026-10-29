@@ -16,16 +16,16 @@ public record GetClinicServicesQuery(string? Category = null, bool? IsActive = n
 
 public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQuery, List<ClinicServiceItemDto>>
 {
-    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
 
     public GetClinicServicesQueryHandler(
-        IRepository<ClinicServiceItem> serviceRepo,
+        IRepository<ServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<FacilitySettings>? settingsRepo = null)
     {
         _serviceRepo = serviceRepo;
         _unitOfWork = unitOfWork;
@@ -35,7 +35,7 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
 
     public async Task<List<ClinicServiceItemDto>> Handle(GetClinicServicesQuery request, CancellationToken cancellationToken)
     {
-        ClinicSettings? settings = null;
+        FacilitySettings? settings = null;
         if (_settingsRepo != null)
         {
             settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
@@ -58,7 +58,7 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
             .ToDictionary(g => g.Key, g => g.First());
 
         bool anyCreatedOrRestored = false;
-        var targetDefaults = new List<ClinicServiceItem>();
+        var targetDefaults = new List<ServiceItem>();
 
         if (isDental)
         {

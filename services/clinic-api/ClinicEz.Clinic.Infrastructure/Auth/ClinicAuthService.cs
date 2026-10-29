@@ -259,7 +259,7 @@ public sealed class ClinicAuthService : IClinicAuthService
         }
 
         // 5. Ensure settings has the validated license token stored and facility IDs synchronized
-        var dbSettings = await _db.ClinicSettings.IgnoreQueryFilters()
+        var dbSettings = await _db.Settings.IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.ClinicId == resolved.ClinicId && !s.IsDeleted, ct);
         if (dbSettings != null)
         {
@@ -317,7 +317,7 @@ public sealed class ClinicAuthService : IClinicAuthService
             return AuthOutcome.Fail(AuthFailure.InvalidRequest, "An administrator email is required.");
 
         await ClinicRoleSeeder.SeedDefaultRolesForClinicAsync(_db, resolved.TenantId, resolved.ClinicId, ct);
-        var adminRole = await _db.ClinicRoles.IgnoreQueryFilters()
+        var adminRole = await _db.Roles.IgnoreQueryFilters()
             .FirstOrDefaultAsync(r => r.ClinicId == resolved.ClinicId && r.IsSystem && r.Name == "Clinic Administrator", ct);
 
         var staff = await _db.StaffMembers.IgnoreQueryFilters()
@@ -567,7 +567,7 @@ public sealed class ClinicAuthService : IClinicAuthService
 
     private async Task<ResolvedWorkspace?> ResolveByClinicAsync(Guid clinicId, CancellationToken ct)
     {
-        var settings = await _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking()
+        var settings = await _db.Settings.IgnoreQueryFilters().AsNoTracking()
             .FirstOrDefaultAsync(s => s.ClinicId == clinicId && !s.IsDeleted, ct);
         return settings is null ? null : new ResolvedWorkspace(settings, settings.TenantId, settings.ClinicId);
     }
@@ -578,7 +578,7 @@ public sealed class ClinicAuthService : IClinicAuthService
         Guid familyId,
         string? deviceLabel,
         CancellationToken ct,
-        ClinicRefreshToken? replacing = null)
+        RefreshToken? replacing = null)
     {
         var now = DateTime.UtcNow;
         var claims = new List<Claim>
@@ -598,7 +598,7 @@ public sealed class ClinicAuthService : IClinicAuthService
 
         var rawRefresh = _tokens.GenerateRefreshToken();
         var refreshExpires = now.AddDays(Options.RefreshTokenDays);
-        var refresh = new ClinicRefreshToken
+        var refresh = new RefreshToken
         {
             Id = Guid.NewGuid(),
             StaffMemberId = staff.Id,

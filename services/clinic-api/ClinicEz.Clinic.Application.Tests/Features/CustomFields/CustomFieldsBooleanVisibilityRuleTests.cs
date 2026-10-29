@@ -27,17 +27,17 @@ public class CustomFieldsBooleanVisibilityRuleTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private async Task<(ClinicEz.Clinic.Infrastructure.Persistence.ApplicationDbContext context, IUnitOfWork uow, IRepository<ClinicCustomFieldDefinition> repo)> CreateContextWithBooleanParentAsync(string parentKey = "is_pregnant")
+    private async Task<(ClinicEz.Clinic.Infrastructure.Persistence.ApplicationDbContext context, IUnitOfWork uow, IRepository<CustomFieldDefinition> repo)> CreateContextWithBooleanParentAsync(string parentKey = "is_pregnant")
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
-        var parent = new ClinicCustomFieldDefinition
+        var parent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = parentKey,
             Label = "Is Pregnant",
             DataType = CustomFieldDataType.Boolean,
@@ -79,7 +79,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -101,7 +101,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -122,7 +122,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -143,7 +143,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -172,7 +172,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act & Assert
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -190,7 +190,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act & Assert
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -208,7 +208,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act & Assert
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -244,7 +244,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act & Assert
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -261,7 +261,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act & Assert
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -279,7 +279,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act & Assert
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -295,14 +295,14 @@ public class CustomFieldsBooleanVisibilityRuleTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
-        var parent = new ClinicCustomFieldDefinition
+        var parent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "affiliation",
             Label = "Affiliation",
             DataType = CustomFieldDataType.Text,
@@ -316,7 +316,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             rawJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -329,14 +329,14 @@ public class CustomFieldsBooleanVisibilityRuleTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
-        var parent = new ClinicCustomFieldDefinition
+        var parent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "college",
             Label = "College",
             DataType = CustomFieldDataType.Select,
@@ -350,7 +350,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             rawJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -368,7 +368,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             rawJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -381,14 +381,14 @@ public class CustomFieldsBooleanVisibilityRuleTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         const string rawJson = "{\"source\":\"custom_field\",\"field\":\"non_existent_key\",\"operator\":\"in\",\"value\":\"foo\"}";
 
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             rawJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -408,7 +408,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
         // Act
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             emptyJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -431,7 +431,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
             FieldKey: "allergy_details",
             Label: "Allergy Details",
             DataType: CustomFieldDataType.Text,
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             VisibilityRuleJson: "{\"source\":\"custom_field\",\"field\":\"has_allergies\",\"operator\":\"EQUALS\",\"value\":\"yes\"}");
 
         // Act
@@ -456,7 +456,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
             FieldKey: "allergy_details",
             Label: "Allergy Details",
             DataType: CustomFieldDataType.Text,
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             VisibilityRuleJson: "{\"source\":\"custom_field\",\"field\":\"has_allergies\",\"operator\":\"equals\",\"value\":\"maybe\"}");
 
         // Act & Assert
@@ -476,7 +476,7 @@ public class CustomFieldsBooleanVisibilityRuleTests
             FieldKey: "allergy_details",
             Label: "Allergy Details",
             DataType: CustomFieldDataType.Text,
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             VisibilityRuleJson: "{\"source\":\"custom_field\",\"field\":\"has_allergies\",\"operator\":\"contains\",\"value\":\"true\"}");
 
         // Act & Assert
@@ -490,12 +490,12 @@ public class CustomFieldsBooleanVisibilityRuleTests
     {
         // Arrange
         var (context, uow, repo) = await CreateContextWithBooleanParentAsync("is_employed");
-        var childField = new ClinicCustomFieldDefinition
+        var childField = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "company_name",
             Label = "Company Name",
             DataType = CustomFieldDataType.Text,
@@ -529,12 +529,12 @@ public class CustomFieldsBooleanVisibilityRuleTests
     {
         // Arrange
         var (context, uow, repo) = await CreateContextWithBooleanParentAsync("is_employed");
-        var childField = new ClinicCustomFieldDefinition
+        var childField = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "company_name",
             Label = "Company Name",
             DataType = CustomFieldDataType.Text,
@@ -563,14 +563,14 @@ public class CustomFieldsBooleanVisibilityRuleTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
-        var textParent = new ClinicCustomFieldDefinition
+        var textParent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "role_type",
             Label = "Role Type",
             DataType = CustomFieldDataType.Text,
@@ -578,12 +578,12 @@ public class CustomFieldsBooleanVisibilityRuleTests
         };
         await repo.AddAsync(textParent, CancellationToken.None);
 
-        var childField = new ClinicCustomFieldDefinition
+        var childField = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "badge_number",
             Label = "Badge Number",
             DataType = CustomFieldDataType.Text,

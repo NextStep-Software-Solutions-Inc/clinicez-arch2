@@ -153,6 +153,43 @@ public class ChallengerM3ZeroPhiAndOfflineSyncAdversarialTests : IDisposable
     }
 
     [Fact]
+    public void ZeroPhi_PortalYakapSubmissionDtos_PropertiesContainZeroForbiddenPhiKeywords()
+    {
+        var dtoTypes = new[]
+        {
+            typeof(PortalYakapBranchSummaryDto),
+            typeof(PortalYakapSubmissionDto),
+            typeof(PortalYakapSubmissionErrorDto),
+            typeof(PortalYakapMasterlistSyncResultDto),
+            typeof(YakapSubmissionRequestedPayload),
+            typeof(YakapSubmissionRespondedPayload)
+        };
+
+        var forbiddenKeywords = new[]
+        {
+            "PatientName", "FirstName", "LastName", "MiddleName", "FullName",
+            "PhilHealthPin", "Pin", "Diagnosis", "Diagnoses", "Icd", "ClinicalNote",
+            "RawXml", "XmlPayload", "Prescription", "ChiefComplaint"
+        };
+
+        foreach (var type in dtoTypes)
+        {
+            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var prop in properties)
+            {
+                foreach (var forbidden in forbiddenKeywords)
+                {
+                    Assert.False(
+                        prop.Name.Equals(forbidden, StringComparison.OrdinalIgnoreCase) ||
+                        prop.Name.StartsWith(forbidden, StringComparison.OrdinalIgnoreCase),
+                        $"Violation: YAKAP DTO {type.Name} contains forbidden PHI property '{prop.Name}' matching keyword '{forbidden}'."
+                    );
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void ZeroPhi_QueueBoardUpcomingItemDto_DisplayNameIsStrictlyNullByDefault()
     {
         var upcoming = new QueueBoardUpcomingItemDto

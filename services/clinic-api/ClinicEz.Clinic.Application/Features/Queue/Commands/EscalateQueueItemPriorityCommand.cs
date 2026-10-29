@@ -47,7 +47,7 @@ public sealed class EscalateQueueItemPriorityCommandHandler : IRequestHandler<Es
     public async Task<QueueItemDto> Handle(EscalateQueueItemPriorityCommand request, CancellationToken ct)
     {
         var item = await _queueRepository.Query(q => q.Id == request.QueueItemId && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(ct);
 
         if (item == null)
@@ -62,11 +62,11 @@ public sealed class EscalateQueueItemPriorityCommandHandler : IRequestHandler<Es
         item.UpdatedAt = now;
         item.UpdatedBy = staff;
 
-        if (item.TriageVitals != null && !string.IsNullOrWhiteSpace(request.EscalationReason))
+        if (item.PatientVitals != null && !string.IsNullOrWhiteSpace(request.EscalationReason))
         {
-            item.TriageVitals.TriageAcuityReason = request.EscalationReason.Trim();
-            item.TriageVitals.UpdatedAt = now;
-            item.TriageVitals.UpdatedBy = staff;
+            item.PatientVitals.TriageAcuityReason = request.EscalationReason.Trim();
+            item.PatientVitals.UpdatedAt = now;
+            item.PatientVitals.UpdatedBy = staff;
         }
 
         _queueRepository.Update(item);

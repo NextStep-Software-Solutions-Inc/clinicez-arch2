@@ -25,8 +25,15 @@ export interface BranchDto {
   philHealthAccreditationNumber?: string;
   philHealthPmccNumber?: string;
   philHealthSoftwareCertificateId?: string;
+  philHealthBaseUrl?: string;
   philHealthKonsultaEndpoint?: string;
   isPhilHealthAccredited: boolean;
+  hasSecretKey?: boolean;
+  hasCipherKey?: boolean;
+  regionPsgc?: string;
+  provincePsgc?: string;
+  cityMunicipalityPsgc?: string;
+  barangayPsgc?: string;
   facilities: BranchFacilitySummary[];
 }
 
@@ -43,6 +50,10 @@ export interface CreateBranchPayload {
   contactNumber?: string;
   contactEmail?: string;
   facilityIds?: string[];
+  regionPsgc?: string;
+  provincePsgc?: string;
+  cityMunicipalityPsgc?: string;
+  barangayPsgc?: string;
 }
 
 export interface UpdateBranchPayload {
@@ -57,26 +68,34 @@ export interface UpdateBranchPayload {
   contactNumber?: string;
   contactEmail?: string;
   isActive?: boolean;
+  regionPsgc?: string;
+  provincePsgc?: string;
+  cityMunicipalityPsgc?: string;
+  barangayPsgc?: string;
 }
 
 export interface ConfigureBranchPhilHealthPayload {
   accreditationNumber: string;
   pmccNumber?: string;
   softwareCertificateId?: string;
+  secretKey?: string;
+  cipherKey?: string;
+  baseUrl?: string;
+  isPhilHealthAccredited?: boolean;
   username?: string;
   password?: string;
-  cipherKey?: string;
   konsultaEndpoint?: string;
-  isPhilHealthAccredited?: boolean;
 }
 
 export interface TestBranchPhilHealthPayload {
   accreditationNumber?: string;
   pmccNumber?: string;
   softwareCertificateId?: string;
+  secretKey?: string;
+  cipherKey?: string;
+  baseUrl?: string;
   username?: string;
   password?: string;
-  cipherKey?: string;
   konsultaEndpoint?: string;
 }
 
@@ -84,6 +103,7 @@ export interface TestPhilHealthConnectionResult {
   success: boolean;
   message: string;
   token?: string | null;
+  latencyMs?: number;
 }
 
 export const branchService = {

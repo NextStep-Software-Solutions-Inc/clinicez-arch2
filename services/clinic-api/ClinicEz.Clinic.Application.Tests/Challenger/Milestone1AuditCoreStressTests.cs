@@ -329,7 +329,7 @@ public class Milestone1AuditCoreStressTests
         // ASSERT: ApplicationDbContext must have all 200 records persisted and redacted
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var persisted = await db.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+        var persisted = await db.AuditEntries.IgnoreQueryFilters().ToListAsync();
 
         persisted.Should().HaveCount(messageCount, "all enqueued records must be drained to persistence during worker lifecycle");
         foreach (var entry in persisted)
@@ -378,7 +378,7 @@ public class Milestone1AuditCoreStressTests
         // ASSERT: Because cancellationToken was cancelled, SaveChangesAsync failed and was caught/swallowed, resulting in 0 entries persisted
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var persisted = await db.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+        var persisted = await db.AuditEntries.IgnoreQueryFilters().ToListAsync();
 
         persisted.Should().BeEmpty("ProcessBatchAsync with cancelled stoppingToken silently aborts DB persistence, demonstrating vulnerability where in-flight batches are dropped during shutdown");
     }
@@ -622,7 +622,7 @@ public class Milestone1AuditCoreStressTests
 
         using (var db1 = CreateSharedDbContext(dbName, clinicId))
         {
-            db1.ClinicAuditEntries.Add(new ClinicAuditEntry
+            db1.AuditEntries.Add(new AuditEntry
             {
                 Id = entryId,
                 TenantId = "tenant_challenger_m1",
@@ -644,7 +644,7 @@ public class Milestone1AuditCoreStressTests
         // ACT & ASSERT: In separate DB context, attach entity and forcibly set State = Modified
         using (var db2 = CreateSharedDbContext(dbName, clinicId))
         {
-            var detachedEntry = new ClinicAuditEntry
+            var detachedEntry = new AuditEntry
             {
                 Id = entryId,
                 TenantId = "tenant_challenger_m1",
@@ -664,7 +664,7 @@ public class Milestone1AuditCoreStressTests
 
             Func<Task> act = async () => await db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
     }
 
@@ -678,7 +678,7 @@ public class Milestone1AuditCoreStressTests
 
         using (var db1 = CreateSharedDbContext(dbName, clinicId))
         {
-            db1.ClinicAuditEntries.Add(new ClinicAuditEntry
+            db1.AuditEntries.Add(new AuditEntry
             {
                 Id = entryId,
                 TenantId = "tenant_challenger_m1",
@@ -700,7 +700,7 @@ public class Milestone1AuditCoreStressTests
         // ACT & ASSERT: Load entry and flip individual property IsModified flags
         using (var db2 = CreateSharedDbContext(dbName, clinicId))
         {
-            var entry = await db2.ClinicAuditEntries.FindAsync(entryId);
+            var entry = await db2.AuditEntries.FindAsync(entryId);
             entry.Should().NotBeNull();
 
             // Direct property modification flag
@@ -708,7 +708,7 @@ public class Milestone1AuditCoreStressTests
 
             Func<Task> act = async () => await db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
     }
 
@@ -722,7 +722,7 @@ public class Milestone1AuditCoreStressTests
 
         using (var db1 = CreateSharedDbContext(dbName, clinicId))
         {
-            db1.ClinicAuditEntries.Add(new ClinicAuditEntry
+            db1.AuditEntries.Add(new AuditEntry
             {
                 Id = entryId,
                 TenantId = "tenant_challenger_m1",
@@ -744,14 +744,14 @@ public class Milestone1AuditCoreStressTests
         // ACT & ASSERT
         using (var db2 = CreateSharedDbContext(dbName, clinicId))
         {
-            var entry = await db2.ClinicAuditEntries.FindAsync(entryId);
+            var entry = await db2.AuditEntries.FindAsync(entryId);
             entry.Should().NotBeNull();
 
             db2.Entry(entry!).Property(e => e.MetadataJson).IsModified = true;
 
             Func<Task> act = async () => await db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
     }
 
@@ -765,7 +765,7 @@ public class Milestone1AuditCoreStressTests
 
         using (var db1 = CreateSharedDbContext(dbName, clinicId))
         {
-            db1.ClinicAuditEntries.Add(new ClinicAuditEntry
+            db1.AuditEntries.Add(new AuditEntry
             {
                 Id = entryId,
                 TenantId = "tenant_challenger_m1",
@@ -786,14 +786,14 @@ public class Milestone1AuditCoreStressTests
         // ACT & ASSERT: Attempt backdating timestamp
         using (var db2 = CreateSharedDbContext(dbName, clinicId))
         {
-            var entry = await db2.ClinicAuditEntries.FindAsync(entryId);
+            var entry = await db2.AuditEntries.FindAsync(entryId);
             entry.Should().NotBeNull();
 
             entry!.Timestamp = DateTime.UtcNow.AddDays(-30); // backdating attempt
 
             Func<Task> act = async () => await db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
     }
 
@@ -806,7 +806,7 @@ public class Milestone1AuditCoreStressTests
 
         using (var db1 = CreateSharedDbContext(dbName, clinicId))
         {
-            var entries = Enumerable.Range(1, 5).Select(i => new ClinicAuditEntry
+            var entries = Enumerable.Range(1, 5).Select(i => new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = "tenant_challenger_m1",
@@ -817,26 +817,26 @@ public class Milestone1AuditCoreStressTests
                 Action = $"operations.task_{i}",
                 ActorName = "Admin",
                 ActorRole = "Admin",
-                TargetEntityType = "ClinicSettings",
+                TargetEntityType = "FacilitySettings",
                 Outcome = "Success",
                 Description = $"Operation {i}"
             }).ToList();
 
-            await db1.ClinicAuditEntries.AddRangeAsync(entries);
+            await db1.AuditEntries.AddRangeAsync(entries);
             await db1.SaveChangesAsync();
         }
 
         // ACT & ASSERT: Attempt bulk purge via RemoveRange
         using (var db2 = CreateSharedDbContext(dbName, clinicId))
         {
-            var loaded = await db2.ClinicAuditEntries.ToListAsync();
+            var loaded = await db2.AuditEntries.ToListAsync();
             loaded.Should().HaveCount(5);
 
-            db2.ClinicAuditEntries.RemoveRange(loaded);
+            db2.AuditEntries.RemoveRange(loaded);
 
             Func<Task> act = async () => await db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
     }
 
@@ -849,7 +849,7 @@ public class Milestone1AuditCoreStressTests
 
         using (var db1 = CreateSharedDbContext(dbName, clinicId))
         {
-            var entries = Enumerable.Range(1, 3).Select(i => new ClinicAuditEntry
+            var entries = Enumerable.Range(1, 3).Select(i => new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = "tenant_challenger_m1",
@@ -865,24 +865,24 @@ public class Milestone1AuditCoreStressTests
                 Description = $"Event {i}"
             }).ToList();
 
-            await db1.ClinicAuditEntries.AddRangeAsync(entries);
+            await db1.AuditEntries.AddRangeAsync(entries);
             await db1.SaveChangesAsync();
         }
 
         // ACT & ASSERT: Attempt UpdateRange
         using (var db2 = CreateSharedDbContext(dbName, clinicId))
         {
-            var loaded = await db2.ClinicAuditEntries.ToListAsync();
+            var loaded = await db2.AuditEntries.ToListAsync();
             foreach (var item in loaded)
             {
                 item.Description = "Mass tampered description";
             }
 
-            db2.ClinicAuditEntries.UpdateRange(loaded);
+            db2.AuditEntries.UpdateRange(loaded);
 
             Func<Task> act = async () => await db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
     }
 
@@ -896,7 +896,7 @@ public class Milestone1AuditCoreStressTests
 
         using (var db1 = CreateSharedDbContext(dbName, clinicId))
         {
-            db1.ClinicAuditEntries.Add(new ClinicAuditEntry
+            db1.AuditEntries.Add(new AuditEntry
             {
                 Id = auditEntryId,
                 TenantId = "tenant_challenger_m1",
@@ -914,11 +914,11 @@ public class Milestone1AuditCoreStressTests
             await db1.SaveChangesAsync();
         }
 
-        // ACT: Attempt to add a new Appointment AND mutate an existing ClinicAuditEntry in the same transaction
+        // ACT: Attempt to add a new Appointment AND mutate an existing AuditEntry in the same transaction
         var newAppointmentId = Guid.NewGuid();
         using (var db2 = CreateSharedDbContext(dbName, clinicId))
         {
-            var auditEntry = await db2.ClinicAuditEntries.FindAsync(auditEntryId);
+            var auditEntry = await db2.AuditEntries.FindAsync(auditEntryId);
             auditEntry!.Description = "Tampered in mixed transaction";
 
             var appointment = new Appointment
@@ -937,7 +937,7 @@ public class Milestone1AuditCoreStressTests
 
             Func<Task> act = async () => await db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
 
         // ASSERT: In fresh context, verify the Appointment was rolled back and NOT persisted
@@ -946,7 +946,7 @@ public class Milestone1AuditCoreStressTests
             var savedAppt = await db3.Appointments.FindAsync(newAppointmentId);
             savedAppt.Should().BeNull("mixed transaction containing WORM mutation must atomically roll back");
 
-            var unmutatedAudit = await db3.ClinicAuditEntries.FindAsync(auditEntryId);
+            var unmutatedAudit = await db3.AuditEntries.FindAsync(auditEntryId);
             unmutatedAudit!.Description.Should().Be("Original consultation log");
         }
     }
@@ -962,7 +962,7 @@ public class Milestone1AuditCoreStressTests
         foreach (var cId in clinicIds)
         {
             using var db = CreateSharedDbContext(dbName, cId);
-            var entries = Enumerable.Range(1, 20).Select(i => new ClinicAuditEntry
+            var entries = Enumerable.Range(1, 20).Select(i => new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = $"tenant_{cId:N}",
@@ -978,7 +978,7 @@ public class Milestone1AuditCoreStressTests
                 Description = $"Audit entry {i} for clinic {cId}"
             }).ToList();
 
-            await db.ClinicAuditEntries.AddRangeAsync(entries);
+            await db.AuditEntries.AddRangeAsync(entries);
             await db.SaveChangesAsync();
         }
 
@@ -986,7 +986,7 @@ public class Milestone1AuditCoreStressTests
         var queryTasks = clinicIds.Select(cId => Task.Run(async () =>
         {
             using var db = CreateSharedDbContext(dbName, cId);
-            var visible = await db.ClinicAuditEntries.ToListAsync();
+            var visible = await db.AuditEntries.ToListAsync();
             return (ClinicId: cId, Count: visible.Count, Items: visible);
         })).ToArray();
 
@@ -1002,14 +1002,14 @@ public class Milestone1AuditCoreStressTests
         // Unauthenticated context sees 0 records
         using (var unauthenticatedDb = CreateSharedDbContext(dbName, Guid.Empty))
         {
-            var visible = await unauthenticatedDb.ClinicAuditEntries.ToListAsync();
+            var visible = await unauthenticatedDb.AuditEntries.ToListAsync();
             visible.Should().BeEmpty("unauthenticated or unknown clinic context must resolve to 0 audit entries");
         }
 
         // Global admin with IgnoreQueryFilters sees all 100 entries
         using (var adminDb = CreateSharedDbContext(dbName, Guid.Empty))
         {
-            var allEntries = await adminDb.ClinicAuditEntries.IgnoreQueryFilters().ToListAsync();
+            var allEntries = await adminDb.AuditEntries.IgnoreQueryFilters().ToListAsync();
             allEntries.Should().HaveCount(100, "all 100 entries exist across the 5 clinics");
         }
     }

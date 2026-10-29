@@ -8,11 +8,10 @@ namespace ClinicEz.Clinic.Domain.Entities;
 /// Relational record for a patient's individual tooth state in the dental odontogram.
 /// Tracks tooth status, affected surfaces, and clinical notes across encounters.
 /// </summary>
-public sealed class DentalToothRecord : BaseEntity
+public sealed class DentalToothRecord : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid PatientId { get; set; }
+    public Patient? Patient { get; set; }
     public string? PatientName { get; set; }
     public Guid? ConsultationId { get; set; }
 

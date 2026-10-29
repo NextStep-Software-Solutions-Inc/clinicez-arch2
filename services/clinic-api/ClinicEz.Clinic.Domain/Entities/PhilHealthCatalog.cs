@@ -21,6 +21,15 @@ public sealed class PhilHealthCatalogItem : BaseEntity
     public required string Code { get; set; }
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Statutory PhilHealth code equivalent when mapped.
+    /// Null for EHR-only catalog items (e.g. non-PhilHealth lab tests or private formulary items).
+    /// </summary>
+    public string? PhilHealthCode { get; set; }
+
+    /// <summary>Indicates whether selecting this option requires free-text specification.</summary>
+    public bool RequiresSpecifyText { get; set; } = false;
+
     /// <summary>PhilHealth "LIBRARY STATUS": only active entries may be used in new records. Items are deactivated, never deleted.</summary>
     public bool IsActive { get; set; } = true;
 

@@ -54,8 +54,12 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
     private static bool IsInternal(ClaimsPrincipal user) =>
         user.Identity?.IsAuthenticated == true && user.HasClaim(FacilityAuthSchemes.InternalClaim, "true");
 
+    private static bool IsKiosk(ClaimsPrincipal user) =>
+        user.Identity?.IsAuthenticated == true &&
+        string.Equals(user.FindFirst(ClinicClaimTypes.TokenType)?.Value, "kiosk", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsStaff(ClaimsPrincipal user) =>
-        user.Identity?.IsAuthenticated == true && !IsInternal(user);
+        user.Identity?.IsAuthenticated == true && !IsInternal(user) && !IsKiosk(user);
 
     private static string? Header(HttpContext http, string name) =>
         http.Request.Headers.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value)
@@ -71,7 +75,12 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
             var http = Http;
             if (http is null)
             {
-                return _configuration["ClinicSettings:TenantId"] ?? "tenant_default";
+                return _configuration["FacilitySettings:TenantId"] ?? _configuration["ClinicSettings:TenantId"] ?? "tenant_default";
+            }
+
+            if (IsKiosk(http.User))
+            {
+                return http.User.FindFirst(ClinicClaimTypes.TenantId)?.Value ?? string.Empty;
             }
 
             if (IsStaff(http.User))
@@ -88,7 +97,7 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
 
             if (http.Items.TryGetValue(InternalTenantItemKey, out var anonScopedTenant) && anonScopedTenant is string anonTenantId)
                 return anonTenantId;
-            return Header(http, "X-Tenant-Id") ?? _configuration["ClinicSettings:TenantId"] ?? "tenant_default";
+            return Header(http, "X-Tenant-Id") ?? _configuration["FacilitySettings:TenantId"] ?? _configuration["ClinicSettings:TenantId"] ?? "tenant_default";
         }
     }
 
@@ -101,7 +110,15 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
             var http = Http;
             if (http is null)
             {
-                return Guid.TryParse(_configuration["ClinicSettings:ClinicId"], out var configured) ? configured : Guid.Empty;
+                var clinicCfg = _configuration["FacilitySettings:ClinicId"] ?? _configuration["ClinicSettings:ClinicId"];
+                return Guid.TryParse(clinicCfg, out var configured) ? configured : Guid.Empty;
+            }
+
+            if (IsKiosk(http.User))
+            {
+                return Guid.TryParse(http.User.FindFirst(ClinicClaimTypes.ClinicId)?.Value, out var claimed)
+                    ? claimed
+                    : UnauthenticatedClinicId;
             }
 
             if (IsStaff(http.User))
@@ -136,6 +153,11 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
                 return Guid.TryParse(_configuration["ClinicSettings:BranchId"], out var configured) ? configured : null;
             }
 
+            if (IsKiosk(http.User))
+            {
+                return Guid.TryParse(http.User.FindFirst(ClinicClaimTypes.BranchId)?.Value, out var claimed) ? claimed : null;
+            }
+
             if (IsStaff(http.User))
             {
                 return Guid.TryParse(http.User.FindFirst(ClinicClaimTypes.BranchId)?.Value, out var claimed) ? claimed : null;
@@ -163,6 +185,16 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
             var http = Http;
             if (http is null || !IsStaff(http.User)) return null;
             return http.User.FindFirst(ClinicClaimTypes.Name)?.Value ?? http.User.Identity?.Name;
+        }
+    }
+
+    public string? StaffRole
+    {
+        get
+        {
+            var http = Http;
+            if (http is null || !IsStaff(http.User)) return null;
+            return http.User.FindFirst(ClinicClaimTypes.StaffRole)?.Value ?? http.User.FindFirst(ClaimTypes.Role)?.Value;
         }
     }
 

@@ -106,6 +106,13 @@
       "when": 1792646400000,
       "tag": "0015_health_records_and_upload_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792700000000,
+      "tag": "0016_add_psgc_address_columns",
+      "breakpoints": true
     }
   ]
 }

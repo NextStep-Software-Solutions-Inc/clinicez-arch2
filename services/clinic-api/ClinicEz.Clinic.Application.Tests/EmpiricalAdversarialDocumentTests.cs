@@ -23,9 +23,9 @@ public class EmpiricalAdversarialDocumentTests
     private static readonly byte[] Valid1x1PngBytes = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErmCC");
 
-    private static ClinicSettings CreateBaseSettings(string paperSize = "Letter")
+    private static FacilitySettings CreateBaseSettings(string paperSize = "Letter")
     {
-        return new ClinicSettings
+        return new FacilitySettings
         {
             TenantId = "adversarial-tenant",
             ClinicId = Guid.NewGuid(),
@@ -591,7 +591,7 @@ public class EmpiricalAdversarialDocumentTests
     public void Settings_With_Null_Header_SubHeader_Address_And_Contacts_Should_Not_Crash()
     {
         // Arrange
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-minimal",
             ClinicId = Guid.NewGuid(),

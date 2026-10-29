@@ -329,13 +329,13 @@ public sealed class SendAppointmentReminderCommandStressTests
         // Arrange: End-to-end integration between CommandHandler and real AppointmentNotificationDispatcher
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var syncPatientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -345,11 +345,11 @@ public sealed class SendAppointmentReminderCommandStressTests
             PatientCode = "P-999",
             DateOfBirth = new DateOnly(1988, 12, 18),
             ContactNumber = "0917-000-1111",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         await patientRepo.AddAsync(patient);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -414,12 +414,12 @@ public sealed class SendAppointmentReminderCommandStressTests
         // Arrange: Patient without linked mobile account (SyncPatientId == null)
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -429,7 +429,7 @@ public sealed class SendAppointmentReminderCommandStressTests
             PatientCode = "P-998",
             DateOfBirth = new DateOnly(1990, 1, 1),
             ContactNumber = "0917-222-3333",
-            SyncPatientId = null
+            CloudPatientId = null
         };
         await patientRepo.AddAsync(patient);
 

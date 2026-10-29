@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -134,13 +133,48 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
 
         // Locate or auto-provision ClinicPatient
         var tenantId = clinic.TenantId;
+
+        // 1. Locate existing ClinicPatient strictly by CloudPatientId or Id first
         var clinicPatient = await _dbContext.Patients
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(p =>
                 !p.IsDeleted && p.ClinicId == clinic.ClinicId &&
-                (p.Id == message.PatientId || p.SyncPatientId == message.PatientId ||
-                 (!string.IsNullOrEmpty(message.PhilHealthNumber) && p.PhilHealthNumber == message.PhilHealthNumber)),
+                (p.Id == message.PatientId || p.CloudPatientId == message.PatientId),
                 ct);
+
+        // 2. If not found by ID, attempt match by PhilHealthNumber ONLY with strict PIN validation & demographic verification
+        if (clinicPatient == null && !string.IsNullOrWhiteSpace(message.PhilHealthNumber) && PhilHealthPinNormalizer.IsValidPin(message.PhilHealthNumber))
+        {
+            var normalizedPin = PhilHealthPinNormalizer.Normalize(message.PhilHealthNumber);
+            var candidate = await _dbContext.Patients
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(p =>
+                    !p.IsDeleted && p.ClinicId == clinic.ClinicId &&
+                    p.PhilHealthNumber == normalizedPin,
+                    ct);
+
+            // Verify demographic alignment (LastName and DateOfBirth) before linking
+            if (candidate != null && candidate.CloudPatientId == null)
+            {
+                var lastNameMatches = !string.IsNullOrWhiteSpace(message.PatientLastName) &&
+                                      string.Equals(candidate.LastName, message.PatientLastName.Trim(), StringComparison.OrdinalIgnoreCase);
+                var dobMatches = message.DateOfBirth.HasValue && candidate.DateOfBirth == message.DateOfBirth.Value;
+
+                if (lastNameMatches && dobMatches)
+                {
+                    // Verify message.PatientId is not already bound to another patient
+                    var idAlreadyTaken = await _dbContext.Patients
+                        .IgnoreQueryFilters()
+                        .AnyAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.CloudPatientId == message.PatientId, ct);
+
+                    if (!idAlreadyTaken)
+                    {
+                        clinicPatient = candidate;
+                        clinicPatient.CloudPatientId = message.PatientId;
+                    }
+                }
+            }
+        }
 
         var isNewPatient = false;
         if (clinicPatient == null)
@@ -149,10 +183,10 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
             var idTaken = await _dbContext.Patients
                 .IgnoreQueryFilters()
                 .AnyAsync(p => p.Id == message.PatientId, ct);
-            clinicPatient = new ClinicPatient
+            clinicPatient = new Patient
             {
                 Id = idTaken ? Guid.NewGuid() : message.PatientId,
-                SyncPatientId = message.PatientId,
+                CloudPatientId = message.PatientId,
                 TenantId = tenantId,
                 ClinicId = clinic.ClinicId,
                 PatientCode = $"PAT-EXT-{DateTime.UtcNow:yyyyMMdd}-{message.PatientId.ToString("N")[..6].ToUpperInvariant()}",
@@ -161,22 +195,29 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                 MiddleName = message.PatientMiddleName,
                 Suffix = message.PatientSuffix,
                 DateOfBirth = message.DateOfBirth ?? new DateOnly(2000, 1, 1),
-                Gender = !string.IsNullOrWhiteSpace(message.Gender) ? message.Gender : "Other",
+                Gender = string.Equals(message.Gender, "Female", StringComparison.OrdinalIgnoreCase) || string.Equals(message.Gender, "F", StringComparison.OrdinalIgnoreCase) ? Gender.Female : Gender.Male,
                 ContactNumber = !string.IsNullOrWhiteSpace(message.ContactNumber) ? message.ContactNumber : "N/A",
                 Email = message.Email,
-                PhilHealthNumber = message.PhilHealthNumber,
+                PhilHealthNumber = PhilHealthPinNormalizer.Normalize(message.PhilHealthNumber),
                 CustomFields = new Dictionary<string, object?>()
             };
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(clinicPatient.PhilHealthNumber) && !string.IsNullOrWhiteSpace(message.PhilHealthNumber))
+            if (string.IsNullOrWhiteSpace(clinicPatient.PhilHealthNumber) && PhilHealthPinNormalizer.IsValidPin(message.PhilHealthNumber))
             {
-                clinicPatient.PhilHealthNumber = message.PhilHealthNumber;
+                clinicPatient.PhilHealthNumber = PhilHealthPinNormalizer.Normalize(message.PhilHealthNumber);
             }
-            if (clinicPatient.SyncPatientId == null)
+            if (clinicPatient.CloudPatientId == null)
             {
-                clinicPatient.SyncPatientId = message.PatientId;
+                var idAlreadyTaken = await _dbContext.Patients
+                    .IgnoreQueryFilters()
+                    .AnyAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.CloudPatientId == message.PatientId, ct);
+
+                if (!idAlreadyTaken)
+                {
+                    clinicPatient.CloudPatientId = message.PatientId;
+                }
             }
             if (string.IsNullOrWhiteSpace(clinicPatient.Email) && !string.IsNullOrWhiteSpace(message.Email))
             {
@@ -198,26 +239,57 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
             clinicPatient.CustomFields ??= new Dictionary<string, object?>();
         }
 
-        // Prepopulate PhilHealth & Dependent Sponsor profile in CustomFields
+        // Prepopulate PhilHealth & Dependent Sponsor profile in relational PatientPhilHealthMembership
         if (!string.IsNullOrWhiteSpace(message.PhilHealthNumber))
         {
             var isDependent = string.Equals(message.PhilHealthCategory, "DD", StringComparison.OrdinalIgnoreCase);
-            var profile = new PhilHealthPatientProfileDto
-            {
-                Pin = message.PhilHealthNumber,
-                MemberPin = isDependent ? message.SponsorPin : message.PhilHealthNumber,
-                MemberType = isDependent ? "DD" : "MM",
-                MemberLastName = isDependent ? message.SponsorLastName : (message.PatientLastName ?? clinicPatient.LastName),
-                MemberFirstName = isDependent ? message.SponsorFirstName : (message.PatientFirstName ?? clinicPatient.FirstName),
-                MemberMiddleName = isDependent ? message.SponsorMiddleName : (message.PatientMiddleName ?? clinicPatient.MiddleName),
-                MemberSuffix = isDependent ? message.SponsorSuffix : (message.PatientSuffix ?? clinicPatient.Suffix),
-                MemberBirthDate = isDependent ? message.SponsorDob?.ToString("yyyy-MM-dd") : (message.DateOfBirth ?? clinicPatient.DateOfBirth).ToString("yyyy-MM-dd"),
-                DependentRelationship = isDependent ? NormalizeRelationship(message.SponsorRelationship) : null,
-                Atc = "A",
-                IsWalkedIn = "N"
-            };
+            var membership = await _dbContext.PatientPhilHealthMemberships
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(m => m.PatientId == clinicPatient.Id, ct);
 
-            clinicPatient.CustomFields["philhealth_profile"] = profile;
+            if (membership == null)
+            {
+                membership = new PatientPhilHealthMembership
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ClinicId = clinic.ClinicId,
+                    PatientId = clinicPatient.Id,
+                    MemberPin = message.PhilHealthNumber,
+                    MemberType = isDependent ? PhilHealthMemberType.DD : PhilHealthMemberType.MM,
+                    PrincipalMemberPin = isDependent ? message.SponsorPin : null,
+                    PrincipalLastName = isDependent ? message.SponsorLastName : null,
+                    PrincipalFirstName = isDependent ? message.SponsorFirstName : null,
+                    PrincipalMiddleName = isDependent ? message.SponsorMiddleName : null,
+                    PrincipalSuffix = isDependent ? message.SponsorSuffix : null,
+                    PrincipalDateOfBirth = isDependent ? message.SponsorDob : null,
+                    DependentRelationship = isDependent && Enum.TryParse<PhilHealthDependentRelationship>(NormalizeRelationship(message.SponsorRelationship), true, out var rel) ? rel : null,
+                    DefaultWalkInAtc = "A",
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "System:PatientBookingEvent"
+                };
+                clinicPatient.PhilHealthMembership = membership;
+                await _dbContext.PatientPhilHealthMemberships.AddAsync(membership, ct);
+            }
+            else
+            {
+                membership.MemberPin = message.PhilHealthNumber;
+                membership.MemberType = isDependent ? PhilHealthMemberType.DD : PhilHealthMemberType.MM;
+                if (isDependent)
+                {
+                    membership.PrincipalMemberPin = message.SponsorPin;
+                    membership.PrincipalLastName = message.SponsorLastName;
+                    membership.PrincipalFirstName = message.SponsorFirstName;
+                    membership.PrincipalMiddleName = message.SponsorMiddleName;
+                    membership.PrincipalSuffix = message.SponsorSuffix;
+                    membership.PrincipalDateOfBirth = message.SponsorDob;
+                    if (Enum.TryParse<PhilHealthDependentRelationship>(NormalizeRelationship(message.SponsorRelationship), true, out var rel))
+                    {
+                        membership.DependentRelationship = rel;
+                    }
+                }
+                _dbContext.PatientPhilHealthMemberships.Update(membership);
+            }
         }
 
         if (isNewPatient)
@@ -286,7 +358,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
 
                 if (existingAttachment == null)
                 {
-                    var attachment = new ClinicRecordAttachment
+                    var attachment = new RecordAttachment
                     {
                         Id = file.FileId != Guid.Empty ? file.FileId : Guid.NewGuid(),
                         TenantId = tenantId,
@@ -311,6 +383,16 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                 }
                 else
                 {
+                    // Prohibit cross-patient attachment hijacking: if the existing attachment belongs
+                    // to another patient, log a security warning and do not reassign ownership.
+                    if (existingAttachment.PatientId != clinicPatient.Id)
+                    {
+                        _logger.LogWarning(
+                            "[AppointmentBookedHandler] Cross-patient attachment hijacking blocked: attachment {FileId} belongs to patient {ExistingPatientId}, not {BookingPatientId}",
+                            file.FileId, existingAttachment.PatientId, clinicPatient.Id);
+                        continue;
+                    }
+
                     existingAttachment.PatientId = clinicPatient.Id;
                     _dbContext.RecordAttachments.Update(existingAttachment);
                 }

@@ -97,7 +97,7 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -105,7 +105,7 @@ public class ChallengerM2DispenseSecurityAdversarialTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1985, 3, 15),
-            Gender = "Male",
+            Gender = Gender.Male,
             PatientCode = "P-12345",
             ContactNumber = "09123456789"
         };
@@ -165,7 +165,7 @@ public class ChallengerM2DispenseSecurityAdversarialTests
         apptRepo.Query(Arg.Any<System.Linq.Expressions.Expression<Func<Appointment, bool>>>())
             .Returns(call => db.Appointments.Where(call.Arg<System.Linq.Expressions.Expression<Func<Appointment, bool>>>()));
 
-        var patientRepo = Substitute.For<IRepository<ClinicPatient>>();
+        var patientRepo = Substitute.For<IRepository<Patient>>();
         patientRepo.GetByIdAsync(patient.Id, Arg.Any<CancellationToken>()).Returns(patient);
 
         var uow = Substitute.For<IUnitOfWork>();
@@ -250,7 +250,7 @@ public class ChallengerM2DispenseSecurityAdversarialTests
                 return p == null ? db.Consultations : db.Consultations.Where(p);
             });
 
-        var patientRepo = Substitute.For<IRepository<ClinicPatient>>();
+        var patientRepo = Substitute.For<IRepository<Patient>>();
         var staffRepo = Substitute.For<IRepository<StaffMember>>();
         staffRepo.Query(Arg.Any<System.Linq.Expressions.Expression<Func<StaffMember, bool>>>(), Arg.Any<bool?>())
             .Returns(call =>
@@ -258,12 +258,12 @@ public class ChallengerM2DispenseSecurityAdversarialTests
                 var p = call.Arg<System.Linq.Expressions.Expression<Func<StaffMember, bool>>>();
                 return p == null ? db.StaffMembers : db.StaffMembers.Where(p);
             });
-        var settingsRepo = Substitute.For<IRepository<ClinicSettings>>();
-        settingsRepo.Query(Arg.Any<System.Linq.Expressions.Expression<Func<ClinicSettings, bool>>>(), Arg.Any<bool?>())
+        var settingsRepo = Substitute.For<IRepository<FacilitySettings>>();
+        settingsRepo.Query(Arg.Any<System.Linq.Expressions.Expression<Func<FacilitySettings, bool>>>(), Arg.Any<bool?>())
             .Returns(call =>
             {
-                var p = call.Arg<System.Linq.Expressions.Expression<Func<ClinicSettings, bool>>>();
-                return p == null ? db.ClinicSettings : db.ClinicSettings.Where(p);
+                var p = call.Arg<System.Linq.Expressions.Expression<Func<FacilitySettings, bool>>>();
+                return p == null ? db.Settings : db.Settings.Where(p);
             });
 
         var uow = Substitute.For<IUnitOfWork>();
@@ -393,7 +393,7 @@ public class ChallengerM2DispenseSecurityAdversarialTests
                 var p = call.Arg<System.Linq.Expressions.Expression<Func<ConsultationEncounter, bool>>>();
                 return p == null ? db.Consultations : db.Consultations.Where(p);
             });
-        var patientRepo = Substitute.For<IRepository<ClinicPatient>>();
+        var patientRepo = Substitute.For<IRepository<Patient>>();
         var staffRepo = Substitute.For<IRepository<StaffMember>>();
         staffRepo.Query(Arg.Any<System.Linq.Expressions.Expression<Func<StaffMember, bool>>>(), Arg.Any<bool?>())
             .Returns(call =>
@@ -401,12 +401,12 @@ public class ChallengerM2DispenseSecurityAdversarialTests
                 var p = call.Arg<System.Linq.Expressions.Expression<Func<StaffMember, bool>>>();
                 return p == null ? db.StaffMembers : db.StaffMembers.Where(p);
             });
-        var settingsRepo = Substitute.For<IRepository<ClinicSettings>>();
-        settingsRepo.Query(Arg.Any<System.Linq.Expressions.Expression<Func<ClinicSettings, bool>>>(), Arg.Any<bool?>())
+        var settingsRepo = Substitute.For<IRepository<FacilitySettings>>();
+        settingsRepo.Query(Arg.Any<System.Linq.Expressions.Expression<Func<FacilitySettings, bool>>>(), Arg.Any<bool?>())
             .Returns(call =>
             {
-                var p = call.Arg<System.Linq.Expressions.Expression<Func<ClinicSettings, bool>>>();
-                return p == null ? db.ClinicSettings : db.ClinicSettings.Where(p);
+                var p = call.Arg<System.Linq.Expressions.Expression<Func<FacilitySettings, bool>>>();
+                return p == null ? db.Settings : db.Settings.Where(p);
             });
         var uow = Substitute.For<IUnitOfWork>();
 
@@ -426,8 +426,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var encounter = new ConsultationEncounter
@@ -477,8 +477,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var originalToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         originalToken.Length.Should().Be(65);
@@ -554,8 +554,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var encounter = new ConsultationEncounter
@@ -612,8 +612,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var encounter = new ConsultationEncounter
@@ -666,8 +666,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}"; // lowercase hex
         var uppercaseToken = validToken.ToUpperInvariant();     // uppercase hex
@@ -910,8 +910,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "St. Jude Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "St. Jude Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var patientId = Guid.NewGuid();
@@ -1014,8 +1014,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var encounter = new ConsultationEncounter
@@ -1073,8 +1073,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var encounter = new ConsultationEncounter
@@ -1130,8 +1130,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var otherClinicId = Guid.NewGuid();
         var validToken = $"{otherClinicId:N}.{Guid.NewGuid():N}";
@@ -1184,8 +1184,8 @@ public class ChallengerM2DispenseSecurityAdversarialTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
-        db.ClinicSettings.Add(settings);
+        var settings = new FacilitySettings { TenantId = _tenantId, ClinicId = _clinicId, ClinicName = "Main Clinic" };
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var encounter = new ConsultationEncounter

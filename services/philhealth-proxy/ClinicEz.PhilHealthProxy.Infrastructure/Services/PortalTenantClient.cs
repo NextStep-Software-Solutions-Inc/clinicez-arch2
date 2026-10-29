@@ -1,5 +1,8 @@
+using System;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using ClinicEz.PhilHealthProxy.Domain.Entities;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
 using ClinicEz.Shared.Interop;
@@ -61,7 +64,7 @@ public sealed class PortalTenantClient : ITenantRepository
             return cachedTenant;
         }
 
-        _logger.LogInformation("[PortalTenantClient] Cache miss for Tenant {TenantId}. Fetching from Portal API...", tenantId);
+        _logger.LogInformation("[PortalTenantClient] Cache miss for Tenant {TenantId}. Fetching from Portal...", tenantId);
 
         if (_requests is not null)
         {
@@ -79,11 +82,6 @@ public sealed class PortalTenantClient : ITenantRepository
 
                 var tenant = MapToTenant(reply.Config);
                 _cache.Set(cacheKey, tenant, CacheDuration);
-                if (!string.IsNullOrEmpty(reply.Config.BranchId) && Guid.TryParse(reply.Config.BranchId, out var branchGuid))
-                {
-                    _cache.Set($"philhealth_branch_{branchGuid}", tenant, CacheDuration);
-                }
-
                 return tenant;
             }
             catch (Exception ex)
@@ -109,13 +107,7 @@ public sealed class PortalTenantClient : ITenantRepository
                 if (dto is null) return null;
 
                 var tenant = MapToTenant(dto);
-
                 _cache.Set(cacheKey, tenant, CacheDuration);
-                if (dto.BranchId.HasValue)
-                {
-                    _cache.Set($"philhealth_branch_{dto.BranchId.Value}", tenant, CacheDuration);
-                }
-
                 return tenant;
             }
             catch (Exception ex)
@@ -137,7 +129,7 @@ public sealed class PortalTenantClient : ITenantRepository
             return cachedTenant;
         }
 
-        _logger.LogInformation("[PortalTenantClient] Cache miss for Branch {BranchId}. Fetching from Portal API...", branchId);
+        _logger.LogInformation("[PortalTenantClient] Cache miss for Branch {BranchId}. Fetching from Portal...", branchId);
 
         if (_requests is not null)
         {
@@ -154,11 +146,8 @@ public sealed class PortalTenantClient : ITenantRepository
                 if (!reply.Found || reply.Config is null) return null;
 
                 var tenant = MapToTenant(reply.Config);
+                // STRICT MULTI-BRANCH ISOLATION FIX: Cache ONLY under branch key. Never overwrite philhealth_tenant_{tenantId}!
                 _cache.Set(cacheKey, tenant, CacheDuration);
-                if (Guid.TryParse(reply.Config.TenantId, out var tenantGuid))
-                {
-                    _cache.Set($"philhealth_tenant_{tenantGuid}", tenant, CacheDuration);
-                }
 
                 return tenant;
             }
@@ -185,9 +174,8 @@ public sealed class PortalTenantClient : ITenantRepository
                 if (dto is null) return null;
 
                 var tenant = MapToTenant(dto);
-
+                // STRICT MULTI-BRANCH ISOLATION FIX: Cache ONLY under branch key. Never overwrite philhealth_tenant_{tenantId}!
                 _cache.Set(cacheKey, tenant, CacheDuration);
-                _cache.Set($"philhealth_tenant_{dto.TenantId}", tenant, CacheDuration);
 
                 return tenant;
             }
@@ -201,20 +189,24 @@ public sealed class PortalTenantClient : ITenantRepository
         return null;
     }
 
+    public void InvalidateCache(Guid tenantId, Guid? branchId = null)
+    {
+        _cache.Remove($"philhealth_tenant_{tenantId}");
+        if (branchId.HasValue)
+        {
+            _cache.Remove($"philhealth_branch_{branchId.Value}");
+        }
+        _logger.LogInformation("[PortalTenantClient] Invalidated cache for Tenant {TenantId}, Branch {BranchId}", tenantId, branchId);
+    }
+
     public async Task<PhilHealthTenant> UpsertTenantAsync(PhilHealthTenant tenant, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("[PortalTenantClient] Upserting PhilHealth config for Tenant {TenantId}...", tenant.TenantId);
+        _logger.LogInformation("[PortalTenantClient] Upserting PhilHealth config for Tenant {TenantId}, Branch {BranchId}...", tenant.TenantId, tenant.BranchId);
 
-        string username = string.Empty;
-        if (!string.IsNullOrEmpty(tenant.EncryptedUsername))
+        string secretKey = string.Empty;
+        if (!string.IsNullOrEmpty(tenant.EncryptedSecretKey))
         {
-            try { username = _protector.Unprotect(tenant.EncryptedUsername); } catch { username = tenant.EncryptedUsername; }
-        }
-
-        string password = string.Empty;
-        if (!string.IsNullOrEmpty(tenant.EncryptedPassword))
-        {
-            try { password = _protector.Unprotect(tenant.EncryptedPassword); } catch { password = tenant.EncryptedPassword; }
+            try { secretKey = _protector.Unprotect(tenant.EncryptedSecretKey); } catch { secretKey = tenant.EncryptedSecretKey; }
         }
 
         string cipherKey = string.Empty;
@@ -230,13 +222,14 @@ public sealed class PortalTenantClient : ITenantRepository
                 var payload = new PhilHealthConfigPayload
                 {
                     TenantId = tenant.TenantId.ToString(),
+                    BranchId = tenant.BranchId?.ToString(),
+                    FacilityName = tenant.FacilityName,
                     AccreditationNumber = tenant.AccreditationNumber,
                     PmccNumber = tenant.PmccNumber,
                     SoftwareCertificateId = tenant.SoftwareCertificateId,
-                    Username = username,
-                    Password = password,
+                    SecretKey = secretKey,
                     CipherKey = cipherKey,
-                    KonsultaEndpoint = tenant.KonsultaEndpoint,
+                    BaseUrl = tenant.BaseUrl,
                     IsActive = tenant.IsActive
                 };
 
@@ -250,7 +243,15 @@ public sealed class PortalTenantClient : ITenantRepository
 
                 if (reply.Succeeded)
                 {
-                    _cache.Set($"philhealth_tenant_{tenant.TenantId}", tenant, CacheDuration);
+                    InvalidateCache(tenant.TenantId, tenant.BranchId);
+                    if (tenant.BranchId.HasValue)
+                    {
+                        _cache.Set($"philhealth_branch_{tenant.BranchId.Value}", tenant, CacheDuration);
+                    }
+                    else
+                    {
+                        _cache.Set($"philhealth_tenant_{tenant.TenantId}", tenant, CacheDuration);
+                    }
                 }
             }
             catch (Exception ex)
@@ -265,27 +266,36 @@ public sealed class PortalTenantClient : ITenantRepository
         {
             var payload = new
             {
+                TenantId = tenant.TenantId,
+                BranchId = tenant.BranchId,
+                FacilityName = tenant.FacilityName,
                 AccreditationNumber = tenant.AccreditationNumber,
                 PmccNumber = tenant.PmccNumber,
                 SoftwareCertificateId = tenant.SoftwareCertificateId,
-                Username = username,
-                Password = password,
+                SecretKey = secretKey,
                 CipherKey = cipherKey,
-                KonsultaEndpoint = tenant.KonsultaEndpoint,
+                BaseUrl = tenant.BaseUrl,
                 IsPhilHealthAccredited = tenant.IsActive
             };
 
             try
             {
-                var response = await _httpClient.PutAsJsonAsync(
-                    $"/api/v1/internal/tenants/{tenant.TenantId}/philhealth-config",
-                    payload,
-                    cancellationToken);
+                var path = tenant.BranchId.HasValue
+                    ? $"/api/v1/internal/branches/{tenant.BranchId.Value}/philhealth-config"
+                    : $"/api/v1/internal/tenants/{tenant.TenantId}/philhealth-config";
 
+                var response = await _httpClient.PutAsJsonAsync(path, payload, cancellationToken);
                 response.EnsureSuccessStatusCode();
 
-                // Update in-memory cache with 1-hour TTL
-                _cache.Set($"philhealth_tenant_{tenant.TenantId}", tenant, CacheDuration);
+                InvalidateCache(tenant.TenantId, tenant.BranchId);
+                if (tenant.BranchId.HasValue)
+                {
+                    _cache.Set($"philhealth_branch_{tenant.BranchId.Value}", tenant, CacheDuration);
+                }
+                else
+                {
+                    _cache.Set($"philhealth_tenant_{tenant.TenantId}", tenant, CacheDuration);
+                }
             }
             catch (Exception ex)
             {
@@ -301,14 +311,16 @@ public sealed class PortalTenantClient : ITenantRepository
         return new PhilHealthTenant
         {
             TenantId = Guid.TryParse(dto.TenantId, out var tid) ? tid : Guid.Empty,
+            BranchId = !string.IsNullOrEmpty(dto.BranchId) && Guid.TryParse(dto.BranchId, out var bid) ? bid : null,
             FacilityName = dto.FacilityName,
             AccreditationNumber = dto.AccreditationNumber,
             PmccNumber = dto.PmccNumber,
             SoftwareCertificateId = dto.SoftwareCertificateId,
-            EncryptedUsername = !string.IsNullOrEmpty(dto.Username) ? _protector.Protect(dto.Username) : string.Empty,
-            EncryptedPassword = !string.IsNullOrEmpty(dto.Password) ? _protector.Protect(dto.Password) : string.Empty,
+            EncryptedSecretKey = !string.IsNullOrEmpty(dto.SecretKey) ? _protector.Protect(dto.SecretKey)
+                                : (!string.IsNullOrEmpty(dto.Password) ? _protector.Protect(dto.Password) : string.Empty),
             EncryptedCipherKey = !string.IsNullOrEmpty(dto.CipherKey) ? _protector.Protect(dto.CipherKey) : string.Empty,
-            KonsultaEndpoint = !string.IsNullOrWhiteSpace(dto.KonsultaEndpoint) ? dto.KonsultaEndpoint : "https://staging.philhealth.gov.ph/KONSULTA/SOAP",
+            BaseUrl = !string.IsNullOrWhiteSpace(dto.BaseUrl) ? dto.BaseUrl
+                     : (!string.IsNullOrWhiteSpace(dto.KonsultaEndpoint) ? dto.KonsultaEndpoint : "https://pcapi.philhealth.gov.ph"),
             IsActive = dto.IsActive,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -319,14 +331,16 @@ public sealed class PortalTenantClient : ITenantRepository
         return new PhilHealthTenant
         {
             TenantId = dto.TenantId,
+            BranchId = dto.BranchId,
             FacilityName = dto.FacilityName,
             AccreditationNumber = dto.AccreditationNumber,
             PmccNumber = dto.PmccNumber,
             SoftwareCertificateId = dto.SoftwareCertificateId,
-            EncryptedUsername = !string.IsNullOrEmpty(dto.Username) ? _protector.Protect(dto.Username) : string.Empty,
-            EncryptedPassword = !string.IsNullOrEmpty(dto.Password) ? _protector.Protect(dto.Password) : string.Empty,
+            EncryptedSecretKey = !string.IsNullOrEmpty(dto.SecretKey) ? _protector.Protect(dto.SecretKey)
+                                : (!string.IsNullOrEmpty(dto.Password) ? _protector.Protect(dto.Password) : string.Empty),
             EncryptedCipherKey = !string.IsNullOrEmpty(dto.CipherKey) ? _protector.Protect(dto.CipherKey) : string.Empty,
-            KonsultaEndpoint = !string.IsNullOrWhiteSpace(dto.KonsultaEndpoint) ? dto.KonsultaEndpoint : "https://staging.philhealth.gov.ph/KONSULTA/SOAP",
+            BaseUrl = !string.IsNullOrWhiteSpace(dto.BaseUrl) ? dto.BaseUrl
+                     : (!string.IsNullOrWhiteSpace(dto.KonsultaEndpoint) ? dto.KonsultaEndpoint : "https://pcapi.philhealth.gov.ph"),
             IsActive = dto.IsActive,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -339,9 +353,10 @@ public sealed class PortalTenantClient : ITenantRepository
         [property: JsonPropertyName("accreditationNumber")] string AccreditationNumber,
         [property: JsonPropertyName("pmccNumber")] string PmccNumber,
         [property: JsonPropertyName("softwareCertificateId")] string SoftwareCertificateId,
-        [property: JsonPropertyName("username")] string Username,
-        [property: JsonPropertyName("password")] string Password,
-        [property: JsonPropertyName("cipherKey")] string CipherKey,
-        [property: JsonPropertyName("konsultaEndpoint")] string KonsultaEndpoint,
+        [property: JsonPropertyName("secretKey")] string? SecretKey,
+        [property: JsonPropertyName("password")] string? Password,
+        [property: JsonPropertyName("cipherKey")] string? CipherKey,
+        [property: JsonPropertyName("baseUrl")] string? BaseUrl,
+        [property: JsonPropertyName("konsultaEndpoint")] string? KonsultaEndpoint,
         [property: JsonPropertyName("isActive")] bool IsActive);
 }

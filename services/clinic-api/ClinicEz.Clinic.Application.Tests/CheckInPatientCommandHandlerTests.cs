@@ -155,10 +155,10 @@ public class CheckInPatientCommandHandlerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         MessagingTestKit.SeedClinic(context, clinicId, tenantId, "Apex Clinic");
-        context.Patients.Add(new ClinicPatient
+        context.Patients.Add(new Patient
         {
             Id = clinicPatientId,
-            SyncPatientId = patientAppAccountId,
+            CloudPatientId = patientAppAccountId,
             TenantId = tenantId,
             ClinicId = clinicId,
             PatientCode = "PAT-1",
@@ -229,7 +229,7 @@ public class CheckInPatientCommandHandlerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         MessagingTestKit.SeedClinic(context, clinicId, tenantId);
-        var walkIn = new ClinicPatient
+        var walkIn = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,

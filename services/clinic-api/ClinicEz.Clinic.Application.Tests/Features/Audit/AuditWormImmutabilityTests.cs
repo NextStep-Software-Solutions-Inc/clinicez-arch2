@@ -39,7 +39,7 @@ public class AuditWormImmutabilityTests
         var clinicId = Guid.NewGuid();
         using var db = CreateContext(clinicId);
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_worm",
@@ -56,11 +56,11 @@ public class AuditWormImmutabilityTests
             Description = "Consultation successfully signed"
         };
 
-        await db.ClinicAuditEntries.AddAsync(entry);
+        await db.AuditEntries.AddAsync(entry);
         var saveCount = await db.SaveChangesAsync();
 
         saveCount.Should().BeGreaterThan(0);
-        var saved = await db.ClinicAuditEntries.FindAsync(entry.Id);
+        var saved = await db.AuditEntries.FindAsync(entry.Id);
         saved.Should().NotBeNull();
         saved!.Action.Should().Be("clinical.consultation.signed");
     }
@@ -71,7 +71,7 @@ public class AuditWormImmutabilityTests
         var clinicId = Guid.NewGuid();
         using var db = CreateContext(clinicId);
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_worm",
@@ -89,11 +89,11 @@ public class AuditWormImmutabilityTests
             IsDeleted = true // Attempt pre-deleted insertion
         };
 
-        await db.ClinicAuditEntries.AddAsync(entry);
+        await db.AuditEntries.AddAsync(entry);
 
         var act = () => db.SaveChangesAsync();
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class AuditWormImmutabilityTests
         var clinicId = Guid.NewGuid();
         using var db = CreateContext(clinicId);
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_worm",
@@ -118,7 +118,7 @@ public class AuditWormImmutabilityTests
             Description = "Original void reason: customer duplicate"
         };
 
-        await db.ClinicAuditEntries.AddAsync(entry);
+        await db.AuditEntries.AddAsync(entry);
         await db.SaveChangesAsync();
 
         // Attempt mutation
@@ -126,7 +126,7 @@ public class AuditWormImmutabilityTests
 
         var act = () => db.SaveChangesAsync();
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class AuditWormImmutabilityTests
         var clinicId = Guid.NewGuid();
         using var db = CreateContext(clinicId);
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_worm",
@@ -151,15 +151,15 @@ public class AuditWormImmutabilityTests
             Description = "Failed brute force login"
         };
 
-        await db.ClinicAuditEntries.AddAsync(entry);
+        await db.AuditEntries.AddAsync(entry);
         await db.SaveChangesAsync();
 
         // Attempt hard delete
-        db.ClinicAuditEntries.Remove(entry);
+        db.AuditEntries.Remove(entry);
 
         var act = () => db.SaveChangesAsync();
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class AuditWormImmutabilityTests
         var clinicId = Guid.NewGuid();
         using var db = CreateContext(clinicId);
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_worm",
@@ -184,7 +184,7 @@ public class AuditWormImmutabilityTests
             Description = "Rejected by PhilHealth SOAP validator"
         };
 
-        db.ClinicAuditEntries.Add(entry);
+        db.AuditEntries.Add(entry);
         db.SaveChanges();
 
         // Attempt soft-delete mutation
@@ -192,7 +192,7 @@ public class AuditWormImmutabilityTests
 
         var act = () => db.SaveChanges();
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class AuditWormImmutabilityTests
         var entryId = Guid.NewGuid();
         using (var db1 = new ApplicationDbContext(options, config, clinicContext))
         {
-            db1.ClinicAuditEntries.Add(new ClinicAuditEntry
+            db1.AuditEntries.Add(new AuditEntry
             {
                 Id = entryId,
                 TenantId = "tenant_worm",
@@ -224,7 +224,7 @@ public class AuditWormImmutabilityTests
                 Action = "operations.template.updated",
                 ActorName = "Admin",
                 ActorRole = "Admin",
-                TargetEntityType = "ClinicSettings",
+                TargetEntityType = "FacilitySettings",
                 Outcome = "Success",
                 Description = "Updated settings"
             });
@@ -233,13 +233,13 @@ public class AuditWormImmutabilityTests
 
         using (var db2 = new ApplicationDbContext(options, config, clinicContext))
         {
-            var loaded = await db2.ClinicAuditEntries.FindAsync(entryId);
+            var loaded = await db2.AuditEntries.FindAsync(entryId);
             loaded.Should().NotBeNull();
             loaded!.Description = "Tampered in second context";
 
             var act = () => db2.SaveChangesAsync();
             await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+                .WithMessage("*AuditEntry is append-only (WORM)*");
         }
     }
 }

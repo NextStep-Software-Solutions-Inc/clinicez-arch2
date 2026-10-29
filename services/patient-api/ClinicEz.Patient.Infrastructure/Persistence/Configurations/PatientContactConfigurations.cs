@@ -36,12 +36,21 @@ public sealed class PatientAddressConfiguration : IEntityTypeConfiguration<Patie
         builder.HasKey(a => a.Id);
         builder.Property(a => a.Type).HasConversion<string>().HasMaxLength(20);
         builder.Property(a => a.HouseStreet).HasMaxLength(200);
+        builder.Property(a => a.StreetAddress).HasMaxLength(300);
         builder.Property(a => a.Barangay).HasMaxLength(100);
         builder.Property(a => a.CityMunicipality).HasMaxLength(100);
         builder.Property(a => a.Province).HasMaxLength(100);
         builder.Property(a => a.Region).HasMaxLength(100);
         builder.Property(a => a.ZipCode).HasMaxLength(10);
         builder.Property(a => a.Country).HasMaxLength(80);
+        builder.Property(a => a.RegionPsgc).HasMaxLength(10);
+        builder.Property(a => a.ProvincePsgc).HasMaxLength(10);
+        builder.Property(a => a.CityMunicipalityPsgc).HasMaxLength(10);
+        builder.Property(a => a.BarangayPsgc).HasMaxLength(10);
+        builder.Property(a => a.RegionName).HasMaxLength(150);
+        builder.Property(a => a.ProvinceName).HasMaxLength(150);
+        builder.Property(a => a.CityMunicipalityName).HasMaxLength(150);
+        builder.Property(a => a.BarangayName).HasMaxLength(150);
         builder.Property(a => a.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(a => a.UpdatedBy).HasMaxLength(128);
 

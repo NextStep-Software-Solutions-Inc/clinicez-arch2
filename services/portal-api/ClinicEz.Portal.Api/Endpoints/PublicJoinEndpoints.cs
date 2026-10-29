@@ -229,6 +229,26 @@ public sealed class PublicJoinEndpoints : IEndpoint
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(payload.RegionPsgc) && (payload.RegionPsgc.Length != 10 || !payload.RegionPsgc.All(char.IsDigit)))
+        {
+            return Results.BadRequest(new { Success = false, Message = "Region PSGC code must be a 10-digit numeric string." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.ProvincePsgc) && (payload.ProvincePsgc.Length != 10 || !payload.ProvincePsgc.All(char.IsDigit)))
+        {
+            return Results.BadRequest(new { Success = false, Message = "Province PSGC code must be a 10-digit numeric string." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.CityMunicipalityPsgc) && (payload.CityMunicipalityPsgc.Length != 10 || !payload.CityMunicipalityPsgc.All(char.IsDigit)))
+        {
+            return Results.BadRequest(new { Success = false, Message = "City / Municipality PSGC code must be a 10-digit numeric string." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.BarangayPsgc) && (payload.BarangayPsgc.Length != 10 || !payload.BarangayPsgc.All(char.IsDigit)))
+        {
+            return Results.BadRequest(new { Success = false, Message = "Barangay PSGC code must be a 10-digit numeric string." });
+        }
+
         if (payload.Attachments != null && payload.Attachments.Count > 0)
         {
             if (payload.Attachments.Count > 5)

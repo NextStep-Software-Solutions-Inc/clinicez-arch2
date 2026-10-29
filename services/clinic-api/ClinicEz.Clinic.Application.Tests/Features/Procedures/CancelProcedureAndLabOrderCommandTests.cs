@@ -35,13 +35,13 @@ public class CancelProcedureAndLabOrderCommandTests
     public async Task CancelProcedure_WhenOrdered_CancelsProcedureAndRevertsQueueStatusIfNoOtherProcedures()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(db, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(db, sieve);
 
         var doctorId = Guid.NewGuid();
-        var doctorRoom = new ClinicRoom
+        var doctorRoom = new Room
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -52,7 +52,7 @@ public class CancelProcedureAndLabOrderCommandTests
             DisplayOrder = 1,
             IsActive = true
         };
-        await db.ClinicRooms.AddAsync(doctorRoom);
+        await db.Rooms.AddAsync(doctorRoom);
 
         var doctor = new StaffMember
         {
@@ -83,7 +83,7 @@ public class CancelProcedureAndLabOrderCommandTests
         };
         await db.QueueItems.AddAsync(queueItem);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -128,9 +128,9 @@ public class CancelProcedureAndLabOrderCommandTests
     public async Task CancelProcedure_WhenCompleted_ThrowsValidationException()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -160,13 +160,13 @@ public class CancelProcedureAndLabOrderCommandTests
     public async Task RecordProcedureExecution_WithMultipleProcedures_KeepsPendingProcedureUntilAllCompleted()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(db, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(db, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(db, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(db, sieve);
 
         var doctorId = Guid.NewGuid();
-        var doctorRoom = new ClinicRoom
+        var doctorRoom = new Room
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -177,7 +177,7 @@ public class CancelProcedureAndLabOrderCommandTests
             DisplayOrder = 1,
             IsActive = true
         };
-        await db.ClinicRooms.AddAsync(doctorRoom);
+        await db.Rooms.AddAsync(doctorRoom);
 
         var doctor = new StaffMember
         {
@@ -208,7 +208,7 @@ public class CancelProcedureAndLabOrderCommandTests
         };
         await db.QueueItems.AddAsync(queueItem);
 
-        var proc1 = new ClinicalProcedure
+        var proc1 = new Procedure
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -222,7 +222,7 @@ public class CancelProcedureAndLabOrderCommandTests
             OrderedByDoctorId = doctorId,
             ScheduledAt = DateTime.UtcNow
         };
-        var proc2 = new ClinicalProcedure
+        var proc2 = new Procedure
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -269,12 +269,12 @@ public class CancelProcedureAndLabOrderCommandTests
     }
 
     [Fact]
-    public async Task CancelClinicLabOrder_WhenOrdered_CancelsOrderAndAllPendingItems()
+    public async Task CancelLabOrder_WhenOrdered_CancelsOrderAndAllPendingItems()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
 
-        var order = new ClinicLabOrder
+        var order = new LabOrder
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -284,7 +284,7 @@ public class CancelProcedureAndLabOrderCommandTests
             PatientName = "Jane Doe",
             Status = LabOrderStatus.Ordered,
             OrderDate = DateTime.UtcNow,
-            Items = new List<ClinicLabOrderItem>
+            Items = new List<LabOrderItem>
             {
                 new() { TestName = "CBC", Category = "Hematology", Status = LabOrderStatus.Ordered }
             }

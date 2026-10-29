@@ -1,39 +1,67 @@
-export const STANDARD_BLOOD_TYPES = [
-  'A+',
-  'A-',
-  'B+',
-  'B-',
-  'AB+',
-  'AB-',
-  'O+',
-  'O-',
-  'Unknown',
-] as const;
+import type { EhrOptionDescriptor } from './options';
 
-export type StandardBloodType = (typeof STANDARD_BLOOD_TYPES)[number];
+export type StandardBloodType =
+  | 'A+'
+  | 'A-'
+  | 'B+'
+  | 'B-'
+  | 'AB+'
+  | 'AB-'
+  | 'O+'
+  | 'O-'
+  | 'Unknown'
+  | string;
 
 export interface BloodTypeMeta {
-  value: StandardBloodType;
+  value: string;
   label: string;
-  antigen: 'A' | 'B' | 'AB' | 'O' | 'Unknown';
-  rhFactor: 'Positive' | 'Negative' | 'Unknown';
+  antigen: string;
+  rhFactor: string;
 }
 
-export const BLOOD_TYPE_METADATA: Record<StandardBloodType, BloodTypeMeta> = {
-  'A+': { value: 'A+', label: 'A Positive (A+)', antigen: 'A', rhFactor: 'Positive' },
-  'A-': { value: 'A-', label: 'A Negative (A-)', antigen: 'A', rhFactor: 'Negative' },
-  'B+': { value: 'B+', label: 'B Positive (B+)', antigen: 'B', rhFactor: 'Positive' },
-  'B-': { value: 'B-', label: 'B Negative (B-)', antigen: 'B', rhFactor: 'Negative' },
-  'AB+': { value: 'AB+', label: 'AB Positive (AB+)', antigen: 'AB', rhFactor: 'Positive' },
-  'AB-': { value: 'AB-', label: 'AB Negative (AB-)', antigen: 'AB', rhFactor: 'Negative' },
-  'O+': { value: 'O+', label: 'O Positive (O+)', antigen: 'O', rhFactor: 'Positive' },
-  'O-': { value: 'O-', label: 'O Negative (O-)', antigen: 'O', rhFactor: 'Negative' },
-  'Unknown': { value: 'Unknown', label: 'Unknown / Untested', antigen: 'Unknown', rhFactor: 'Unknown' },
-};
-
 /**
- * Checks if a string value is a canonical StandardBloodType.
+ * Validates whether a string is a standard ABO/Rh blood type or Unknown.
+ * Replaces static array lookup with pure regular expression validation.
  */
 export function isStandardBloodType(val: unknown): val is StandardBloodType {
-  return typeof val === 'string' && (STANDARD_BLOOD_TYPES as readonly string[]).includes(val);
+  if (typeof val !== 'string') return false;
+  return /^(A|B|AB|O)[+-]$/.test(val) || val === 'Unknown';
+}
+
+/**
+ * Generates blood type metadata dynamically from canonical label without static dictionaries.
+ */
+export function getBloodTypeMeta(val: string): BloodTypeMeta {
+  const trimmed = val.trim();
+  if (trimmed === 'Unknown' || !trimmed) {
+    return { value: 'Unknown', label: 'Unknown / Untested', antigen: 'Unknown', rhFactor: 'Unknown' };
+  }
+  const isPositive = trimmed.endsWith('+');
+  const antigen = trimmed.replace(/[+-]/g, '');
+  return {
+    value: trimmed,
+    label: `${antigen} ${isPositive ? 'Positive' : 'Negative'} (${trimmed})`,
+    antigen,
+    rhFactor: isPositive ? 'Positive' : 'Negative',
+  };
+}
+
+/**
+ * Converts dynamic EhrOptionDescriptor or string into canonical blood type string.
+ */
+export function normalizeBloodTypeOption(option: EhrOptionDescriptor | string | null | undefined): string {
+  if (!option) return 'Unknown';
+  if (typeof option === 'string') return option;
+  return option.code || option.label || 'Unknown';
+}
+
+/**
+ * Converts blood type metadata into an EhrOptionDescriptor.
+ */
+export function toBloodTypeOptionDescriptor(meta: BloodTypeMeta): EhrOptionDescriptor {
+  return {
+    code: meta.value,
+    label: meta.label,
+    philHealthCode: meta.value === 'Unknown' ? null : meta.value,
+  };
 }

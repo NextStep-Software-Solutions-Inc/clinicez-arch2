@@ -24,9 +24,9 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IRepository<PaymentRecord> _paymentRepo;
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
-    private readonly IRepository<ClinicalProcedure> _procedureRepo;
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
-    private readonly IRepository<ClinicPatient>? _patientRepo;
+    private readonly IRepository<Procedure> _procedureRepo;
+    private readonly IRepository<LabOrder> _labOrderRepo;
+    private readonly IRepository<Patient>? _patientRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicAnalyticsQueryHandler(
@@ -34,10 +34,10 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         IRepository<Invoice> invoiceRepo,
         IRepository<PaymentRecord> paymentRepo,
         IRepository<ConsultationEncounter> consultationRepo,
-        IRepository<ClinicalProcedure> procedureRepo,
-        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<Procedure> procedureRepo,
+        IRepository<LabOrder> labOrderRepo,
         IClinicContext clinicContext,
-        IRepository<ClinicPatient>? patientRepo = null)
+        IRepository<Patient>? patientRepo = null)
     {
         _queueRepo = queueRepo;
         _invoiceRepo = invoiceRepo;
@@ -292,7 +292,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
                 else if (age >= 60) seniorCount++;
                 else adultCount++;
 
-                var g = p.Gender?.ToLowerInvariant() ?? "";
+                var g = p.Gender.ToString().ToLowerInvariant();
                 if (g.StartsWith("m")) maleCount++;
                 else if (g.StartsWith("f")) femaleCount++;
                 else otherGenderCount++;

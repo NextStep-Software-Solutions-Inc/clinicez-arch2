@@ -36,7 +36,7 @@ public class ClinicOperationsSuiteTests
     public async Task RegisterPatient_ShouldGenerateSequentialCode_AndStoreHealthcareIds()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new RegisterClinicPatientCommandHandler(repo, uow, _clinicContext);
 
         var command = new RegisterClinicPatientCommand(
@@ -80,7 +80,7 @@ public class ClinicOperationsSuiteTests
     public async Task SearchPatients_ShouldFilterByNameAndPhilHealth()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var regHandler = new RegisterClinicPatientCommandHandler(repo, uow, _clinicContext);
         var searchHandler = new GetClinicPatientsQueryHandler(repo);
 
@@ -104,10 +104,10 @@ public class ClinicOperationsSuiteTests
     public async Task SearchPatients_ShouldMatchExactPartialAndUnhyphenatedClinicEzId_AndProjectClinicEzId()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var searchHandler = new GetClinicPatientsQueryHandler(repo);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -119,7 +119,7 @@ public class ClinicOperationsSuiteTests
             Suffix = "Jr.",
             ClinicEzId = "CE-WDP9-FMBJ",
             DateOfBirth = new DateOnly(1993, 4, 12),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09171112233",
             PhilHealthNumber = "12-345678901-2"
         };
@@ -152,10 +152,10 @@ public class ClinicOperationsSuiteTests
     public async Task SearchPatients_ShouldMatchCompoundGivenNames_FullNames_AndInvertedNames()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var searchHandler = new GetClinicPatientsQueryHandler(repo);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -167,7 +167,7 @@ public class ClinicOperationsSuiteTests
             Suffix = "Jr.",
             ClinicEzId = "CE-WDP9-FMBJ",
             DateOfBirth = new DateOnly(1993, 4, 12),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09171112233",
             PhilHealthNumber = "12-345678901-2"
         };
@@ -226,7 +226,7 @@ public class ClinicOperationsSuiteTests
     public async Task SearchPatients_FilterModeAndPaging_ShouldFilterCorrectly()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var regHandler = new RegisterClinicPatientCommandHandler(repo, uow, _clinicContext);
         var searchHandler = new GetClinicPatientsQueryHandler(repo);
 
@@ -478,7 +478,7 @@ public class ClinicOperationsSuiteTests
     public async Task RecordsAttachment_UploadAndQuery_ShouldPersistFileMetadata()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
         var uploadHandler = new UploadRecordAttachmentCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetPatientRecordAttachmentsQueryHandler(repo);
 
@@ -507,10 +507,10 @@ public class ClinicOperationsSuiteTests
     }
 
     [Fact]
-    public async Task ClinicSettings_GetDefaultAndEdit_ShouldPersistPreferences()
+    public async Task FacilitySettings_GetDefaultAndEdit_ShouldPersistPreferences()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var getHandler = new GetClinicSettingsQueryHandler(repo, _clinicContext, uow);
         var updateHandler = new UpdateClinicSettingsCommandHandler(repo, _clinicContext, uow);
 
