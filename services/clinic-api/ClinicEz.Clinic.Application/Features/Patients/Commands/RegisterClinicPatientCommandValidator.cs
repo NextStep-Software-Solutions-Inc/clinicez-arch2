@@ -29,6 +29,12 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
             .NotEmpty().WithMessage("Contact number is required.")
             .MaximumLength(30).WithMessage("Contact number must not exceed 30 characters.");
 
+        When(x => !string.IsNullOrWhiteSpace(x.GenderIdentity), () =>
+        {
+            RuleFor(x => x.GenderIdentity!)
+                .MaximumLength(50).WithMessage("Gender identity must not exceed 50 characters.");
+        });
+
         When(x => !string.IsNullOrWhiteSpace(x.PhilHealthNumber), () =>
         {
             RuleFor(x => x.PhilHealthNumber!)

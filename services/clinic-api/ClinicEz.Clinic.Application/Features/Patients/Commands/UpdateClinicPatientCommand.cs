@@ -38,7 +38,9 @@ public sealed record UpdateClinicPatientCommand(
     string? Alerts = null,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string? VerificationStatus = null,
-    System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null) : IRequest<ClinicPatientDto>
+    System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null,
+    string? Sex = null,
+    string? GenderIdentity = null) : IRequest<ClinicPatientDto>
 {
     public UpdateClinicPatientCommand(
         Guid Id,
@@ -67,8 +69,10 @@ public sealed record UpdateClinicPatientCommand(
         string? Alerts = null,
         System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
         string? VerificationStatus = null,
-        System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null)
-        : this(Id, FirstName, LastName, MiddleName, Suffix, DateOfBirth, Gender.ToString(), CivilStatus, ContactNumber, Email, AddressLine, Barangay, City, Province, EmergencyContactName, EmergencyContactPhone, EmergencyContactRelationship, PhilHealthNumber, SeniorCitizenId, PwdId, BloodType, Allergies, ChronicConditions, Alerts, CustomFields, VerificationStatus, MedicalHistories)
+        System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null,
+        string? Sex = null,
+        string? GenderIdentity = null)
+        : this(Id, FirstName, LastName, MiddleName, Suffix, DateOfBirth, Gender.ToString(), CivilStatus, ContactNumber, Email, AddressLine, Barangay, City, Province, EmergencyContactName, EmergencyContactPhone, EmergencyContactRelationship, PhilHealthNumber, SeniorCitizenId, PwdId, BloodType, Allergies, ChronicConditions, Alerts, CustomFields, VerificationStatus, MedicalHistories, Sex, GenderIdentity)
     {
     }
 }
@@ -163,8 +167,16 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         patient.MiddleName = request.MiddleName?.Trim();
         patient.Suffix = request.Suffix?.Trim();
         patient.DateOfBirth = request.DateOfBirth;
-        if (Enum.TryParse<Gender>(request.Gender, true, out var g)) patient.Gender = g;
-        if (Enum.TryParse<CivilStatus>(request.CivilStatus, true, out var cs)) patient.CivilStatus = cs; else if (request.CivilStatus == null) patient.CivilStatus = null;
+        if (!string.IsNullOrWhiteSpace(request.Sex) || !string.IsNullOrWhiteSpace(request.Gender))
+        {
+            patient.Sex = RegisterClinicPatientCommandHandler.ParseBiologicalSex(request.Sex, request.Gender);
+        }
+        if (request.GenderIdentity != null)
+        {
+            patient.GenderIdentity = RegisterClinicPatientCommandHandler.NormalizeGenderIdentity(request.GenderIdentity);
+        }
+        var parsedCivilStatus = RegisterClinicPatientCommandHandler.ParseCivilStatus(request.CivilStatus);
+        if (parsedCivilStatus.HasValue) patient.CivilStatus = parsedCivilStatus.Value; else if (request.CivilStatus == null) patient.CivilStatus = null;
         patient.ContactNumber = request.ContactNumber.Trim();
         patient.Email = request.Email?.Trim();
 

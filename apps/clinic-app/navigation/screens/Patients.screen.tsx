@@ -12,7 +12,7 @@ import {
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
 import { useNavigation, useFocusEffect, type StaticScreenProps } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, PsgcAddressSelector } from '@ui';
+import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, PsgcAddressSelector, Select, type SelectOption } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
@@ -204,11 +204,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formMiddleName, setFormMiddleName] = useState('');
   const [formDob, setFormDob] = useState('');
   const [formGender, setFormGender] = useState('Male');
+  const [formGenderIdentity, setFormGenderIdentity] = useState('');
   const [formCivilStatus, setFormCivilStatus] = useState('Single');
   const { options: dynamicSexOptions } = useEhrOptions('sex');
   const sexOptions = useMemo(() => {
     return dynamicSexOptions.map((o) => o.label);
   }, [dynamicSexOptions]);
+
+  const { options: dynamicGenderIdentityOptions } = useEhrOptions('gender_identity');
+  const genderIdentitySelectOptions = useMemo<SelectOption[]>(() => {
+    return dynamicGenderIdentityOptions.map((o) => ({
+      value: o.code,
+      label: o.label,
+      requiresCustom: Boolean(o.requiresSpecifyText),
+    }));
+  }, [dynamicGenderIdentityOptions]);
 
   const { options: dynamicCivilStatusOptions } = useEhrOptions('civil_status');
   const civilStatusOptions = useMemo(() => {
@@ -694,7 +704,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       lastName: formLastName.trim(),
       middleName: formMiddleName.trim() || undefined,
       dateOfBirth: formDob.trim(),
-      gender: formGender,
+      gender: formGender === 'Male' || formGender === 'Female' ? formGender : 'Other',
+      sex: formGender,
+      genderIdentity: formGenderIdentity.trim() || undefined,
       civilStatus: formCivilStatus,
       contactNumber: formPhone.trim(),
       email: formEmail.trim() || undefined,
@@ -854,6 +866,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormMiddleName('');
     setFormDob('');
     setFormGender('Male');
+    setFormGenderIdentity('');
     setFormCivilStatus('Single');
     setFormPhone('');
     setFormEmail('');
@@ -1985,40 +1998,86 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </View>
               </View>
 
-              {/* Sex / Gender Selector */}
-              <View>
-                <ThemedText style={styles.inputLabel}>Sex / Gender *</ThemedText>
-                <View style={styles.categoryRow}>
-                  {sexOptions.map((gender) => (
-                    <Pressable
-                      key={gender}
-                      style={[styles.categoryPill, formGender === gender && styles.categoryPillActive]}
-                      onPress={() => setFormGender(gender)}
-                    >
-                      <ThemedText style={[styles.categoryPillText, formGender === gender && styles.categoryPillTextActive]}>
-                        {gender}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
+              {/* Biological Sex & Gender Identity Side-by-Side */}
+              <View style={styles.formRow}>
+                <View style={styles.demographicFieldCol}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.demographicFieldLabel}>
+                    Sex<ThemedText color={theme.colors.emergency}> *</ThemedText>
+                  </ThemedText>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.horizontalPillScroll}
+                    contentContainerStyle={styles.horizontalPillRow}
+                  >
+                    {sexOptions.map((sex) => {
+                      const isSelected = formGender === sex;
+                      return (
+                        <Pressable
+                          key={sex}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: isSelected }}
+                          accessibilityLabel={`Sex: ${sex}`}
+                          style={[styles.scrollableCategoryPill, isSelected && styles.categoryPillActive]}
+                          onPress={() => setFormGender(sex)}
+                        >
+                          <ThemedText
+                            numberOfLines={1}
+                            style={[styles.categoryPillText, isSelected && styles.categoryPillTextActive]}
+                          >
+                            {sex}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+                <View style={styles.demographicFieldCol}>
+                  <Select
+                    label="Gender Identity"
+                    placeholder="Select gender identity"
+                    value={formGenderIdentity}
+                    options={genderIdentitySelectOptions}
+                    onSelect={setFormGenderIdentity}
+                    allowClear
+                    allowCustom
+                    modalTitle="Select Gender Identity"
+                  />
                 </View>
               </View>
 
-              {/* Civil Status Selector */}
-              <View>
-                <ThemedText style={styles.inputLabel}>Civil Status</ThemedText>
-                <View style={styles.categoryRow}>
-                  {civilStatusOptions.map((status) => (
-                    <Pressable
-                      key={status}
-                      style={[styles.categoryPill, formCivilStatus === status && styles.categoryPillActive]}
-                      onPress={() => setFormCivilStatus(status)}
-                    >
-                      <ThemedText style={[styles.categoryPillText, formCivilStatus === status && styles.categoryPillTextActive]}>
-                        {status}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
+              {/* Civil Status Selector (Horizontally Scrollable) */}
+              <View style={styles.demographicFieldGroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.demographicFieldLabel}>
+                  Civil Status
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.horizontalPillScroll}
+                  contentContainerStyle={styles.horizontalPillRow}
+                >
+                  {civilStatusOptions.map((status) => {
+                    const isSelected = formCivilStatus === status;
+                    return (
+                      <Pressable
+                        key={status}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`Civil Status: ${status}`}
+                        style={[styles.scrollableCategoryPill, isSelected && styles.categoryPillActive]}
+                        onPress={() => setFormCivilStatus(status)}
+                      >
+                        <ThemedText
+                          numberOfLines={1}
+                          style={[styles.categoryPillText, isSelected && styles.categoryPillTextActive]}
+                        >
+                          {status}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
 
               <View style={styles.formRow}>
@@ -3622,6 +3681,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 4,
+  },
+  demographicFieldCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: theme.spacing.xs,
+  },
+  demographicFieldGroup: {
+    gap: theme.spacing.xs,
+  },
+  demographicFieldLabel: {
+    marginBottom: 2,
+  },
+  horizontalPillScroll: {
+    width: '100%',
+    flexGrow: 0,
+  },
+  horizontalPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingRight: theme.spacing.xs,
+  },
+  scrollableCategoryPill: {
+    flexShrink: 0,
+    minHeight: theme.sizes.controlMd,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryPill: {
     flex: 1,

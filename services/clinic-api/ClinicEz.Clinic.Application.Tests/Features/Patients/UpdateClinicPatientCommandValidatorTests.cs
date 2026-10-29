@@ -358,4 +358,31 @@ public class UpdateClinicPatientCommandValidatorTests
         result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateClinicPatientCommand.Email)
             && e.ErrorMessage.Contains("must not exceed 255 characters"));
     }
+
+    [Theory]
+    [InlineData("Male", "MAN")]
+    [InlineData("Female", "WOMAN")]
+    [InlineData("Intersex", "NON_BINARY")]
+    [InlineData("Unknown", "PREFER_NOT_TO_ANSWER")]
+    public void Validate_ValidBiologicalSexAndGenderIdentity_Passes(string sex, string genderIdentity)
+    {
+        var command = CreateValidCommand(gender: sex is "Male" or "Female" ? sex : "Other") with
+        {
+            Sex = sex,
+            GenderIdentity = genderIdentity
+        };
+        var result = _validator.Validate(command);
+
+        result.IsValid.Should().BeTrue();
+        RegisterClinicPatientCommandHandler.ParseBiologicalSex(sex, command.Gender).ToString().Should().Be(sex);
+    }
+
+    [Fact]
+    public void ParseCivilStatus_MapsCohabitingAndOtherLabelsCleanly()
+    {
+        RegisterClinicPatientCommandHandler.ParseCivilStatus("Cohabiting / Common-Law")
+            .Should().Be(ClinicEz.Clinic.Domain.Enums.CivilStatus.Cohabiting);
+        RegisterClinicPatientCommandHandler.ParseCivilStatus("Other Civil Status")
+            .Should().Be(ClinicEz.Clinic.Domain.Enums.CivilStatus.Other);
+    }
 }

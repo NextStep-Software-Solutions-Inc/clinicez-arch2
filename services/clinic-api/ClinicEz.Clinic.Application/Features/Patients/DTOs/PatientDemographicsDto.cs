@@ -29,7 +29,9 @@ public sealed record PatientDemographicsDto(
     string? Alerts = null,
     string? PatientCode = null,
     string? ClinicEzId = null,
-    string VerificationStatus = "Verified"
+    string VerificationStatus = "Verified",
+    string? Sex = null,
+    string? GenderIdentity = null
 )
 {
     /// <summary>Parity alias for full date of birth property naming.</summary>

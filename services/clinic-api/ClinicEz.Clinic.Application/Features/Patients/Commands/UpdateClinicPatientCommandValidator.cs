@@ -35,6 +35,23 @@ public sealed class UpdateClinicPatientCommandValidator : AbstractValidator<Upda
             .Must(g => g is "Male" or "Female" or "Other")
             .WithMessage("Gender must be 'Male', 'Female', or 'Other'.");
 
+        When(x => !string.IsNullOrWhiteSpace(x.Sex), () =>
+        {
+            RuleFor(x => x.Sex!)
+                .Must(s =>
+                    s.Equals("Male", StringComparison.OrdinalIgnoreCase) ||
+                    s.Equals("Female", StringComparison.OrdinalIgnoreCase) ||
+                    s.Equals("Intersex", StringComparison.OrdinalIgnoreCase) ||
+                    s.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                .WithMessage("Sex must be 'Male', 'Female', 'Intersex', or 'Unknown'.");
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.GenderIdentity), () =>
+        {
+            RuleFor(x => x.GenderIdentity!)
+                .MaximumLength(50).WithMessage("Gender identity must not exceed 50 characters.");
+        });
+
         When(x => !string.IsNullOrWhiteSpace(x.PhilHealthNumber), () =>
         {
             RuleFor(x => x.PhilHealthNumber!)

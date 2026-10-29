@@ -207,6 +207,8 @@ class OfflineSyncService {
       dateOfBirth: payload.dateOfBirth,
       age: ageFromDateOfBirth(payload.dateOfBirth),
       gender: payload.gender,
+      sex: payload.sex ?? payload.gender,
+      genderIdentity: payload.genderIdentity ?? null,
       civilStatus: payload.civilStatus,
       contactNumber: payload.contactNumber,
       email: payload.email,

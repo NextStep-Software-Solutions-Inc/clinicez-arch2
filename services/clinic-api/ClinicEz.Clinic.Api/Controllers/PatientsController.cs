@@ -151,7 +151,9 @@ public sealed class PatientsController : ControllerBase
             request.Alerts,
             request.CustomFields,
             request.VerificationStatus,
-            request.MedicalHistories);
+            request.MedicalHistories,
+            request.Sex,
+            request.GenderIdentity);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicPatientDto>.Success(result, "Patient profile updated successfully."));
@@ -610,4 +612,6 @@ public sealed record UpdatePatientRequest(
     string? Alerts,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string? VerificationStatus = null,
-    List<MedicalHistoryEntryDto>? MedicalHistories = null);
+    List<MedicalHistoryEntryDto>? MedicalHistories = null,
+    string? Sex = null,
+    string? GenderIdentity = null);

@@ -1766,6 +1766,8 @@ export interface ClinicPatient {
   dateOfBirth: string;
   age: number;
   gender: string;
+  sex?: string;
+  genderIdentity?: string | null;
   civilStatus?: string;
   contactNumber: string;
   email?: string;
@@ -1854,6 +1856,8 @@ export interface RegisterPatientPayload {
   suffix?: string;
   dateOfBirth: string;
   gender: string;
+  sex?: string;
+  genderIdentity?: string | null;
   civilStatus?: string;
   contactNumber: string;
   email?: string;

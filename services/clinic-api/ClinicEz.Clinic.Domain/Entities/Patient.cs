@@ -38,7 +38,11 @@ public class Patient : ClinicScopedEntity
         set
         {
             _gender = value;
-            _sex = value == Gender.Female ? BiologicalSex.Female : (value == Gender.Male ? BiologicalSex.Male : BiologicalSex.Unknown);
+            _sex = value == Gender.Female
+                ? BiologicalSex.Female
+                : (value == Gender.Male
+                    ? BiologicalSex.Male
+                    : (_sex == BiologicalSex.Intersex ? BiologicalSex.Intersex : BiologicalSex.Unknown));
         }
     }
 

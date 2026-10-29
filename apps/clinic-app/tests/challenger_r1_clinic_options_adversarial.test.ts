@@ -414,4 +414,20 @@ describe('CHALLENGER R1 CLINIC OPTIONS - Suite 3: Zero Static Option Arrays Inva
     expect(clinicServiceSrc).toContain('async getOptionSet(optionSet: string): Promise<EhrOptionDescriptor[]>');
     expect(clinicServiceSrc).toContain('return optionsService.getOptionSet(optionSet);');
   });
+
+  test('Dimension 14: Walk-in registration and EditPatientModal separate Sex and Gender Identity side-by-side and render Civil Status horizontally scrollable', () => {
+    const patientsScreenSrc = readFileSync(join(CLINIC_APP_ROOT, 'navigation/screens/Patients.screen.tsx'), 'utf8');
+    const editModalSrc = readFileSync(join(CLINIC_APP_ROOT, 'components/patient/EditPatientModal.tsx'), 'utf8');
+
+    expect(patientsScreenSrc).not.toContain('Sex / Gender *');
+    expect(editModalSrc).not.toContain('Sex / Gender *');
+
+    expect(patientsScreenSrc).toContain("useEhrOptions('gender_identity')");
+    expect(patientsScreenSrc).toContain('label="Gender Identity"');
+    expect(patientsScreenSrc).toContain('style={styles.horizontalPillScroll}');
+
+    expect(editModalSrc).toContain("clinicService.getOptionSet('gender_identity')");
+    expect(editModalSrc).toContain('label="Gender Identity"');
+    expect(editModalSrc).toContain('style={styles.pillScroll}');
+  });
 });

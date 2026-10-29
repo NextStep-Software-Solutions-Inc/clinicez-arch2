@@ -6,7 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl, PsgcAddressSelector } from '../ui';
+import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl, PsgcAddressSelector, Select, type SelectOption } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition, type PatientAddressDto } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
@@ -249,8 +249,10 @@ export function EditPatientModal({
   const [suffix, setSuffix] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<string>('Male');
+  const [genderIdentity, setGenderIdentity] = useState<string>('');
   const [civilStatus, setCivilStatus] = useState<string>('Single');
   const [genderOptions, setGenderOptions] = useState<string[]>([]);
+  const [genderIdentityOptions, setGenderIdentityOptions] = useState<SelectOption[]>([]);
   const [civilStatusOptions, setCivilStatusOptions] = useState<string[]>([]);
   const [relationshipOptions, setRelationshipOptions] = useState<
     Array<{ code: string; label: string; description?: string }>
@@ -262,6 +264,17 @@ export function EditPatientModal({
     clinicService.getOptionSet('sex').then((opts) => {
       if (isMounted && opts && opts.length > 0) {
         setGenderOptions(opts.map((o) => o.label));
+      }
+    });
+    clinicService.getOptionSet('gender_identity').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setGenderIdentityOptions(
+          opts.map((o) => ({
+            value: o.code,
+            label: o.label,
+            requiresCustom: Boolean(o.requiresSpecifyText),
+          }))
+        );
       }
     });
     clinicService.getOptionSet('civil_status').then((opts) => {
@@ -437,7 +450,10 @@ export function EditPatientModal({
     setSuffix(patient.suffix || '');
     setDateOfBirth(patient.dateOfBirth || '');
     setGender(
-      patient.gender || 'Male'
+      patient.sex || patient.gender || 'Male'
+    );
+    setGenderIdentity(
+      patient.genderIdentity || ''
     );
     setCivilStatus(
       patient.civilStatus || 'Single'
@@ -627,7 +643,9 @@ export function EditPatientModal({
       middleName: middleName.trim() || undefined,
       suffix: suffix.trim() || undefined,
       dateOfBirth: dateOfBirth.trim(),
-      gender,
+      gender: gender === 'Male' || gender === 'Female' ? gender : 'Other',
+      sex: gender,
+      genderIdentity: genderIdentity.trim(),
       civilStatus,
       contactNumber: contactNumber.trim(),
       email: email.trim() || undefined,
@@ -814,48 +832,90 @@ export function EditPatientModal({
               </View>
             </View>
 
-            {/* Sex / Gender Selector */}
-            <View>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                Sex / Gender *
-              </ThemedText>
-              <View style={styles.pillRow}>
-                {genderOptions.map((item) => {
-                  const isSelected = gender.toLowerCase() === item.toLowerCase();
-                  return (
-                    <Pressable
-                      key={item}
-                      style={[styles.pill, isSelected && styles.pillActive]}
-                      onPress={() => setGender(item)}
-                    >
-                      <ThemedText
-                        variant="smallBold"
-                        color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+            {/* Biological Sex & Gender Identity Side-by-Side */}
+            <View style={styles.formRow}>
+              <View style={[styles.formCol, { minWidth: 0 }]}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                  Sex<ThemedText color={theme.colors.emergency}> *</ThemedText>
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.pillScroll}
+                  contentContainerStyle={styles.pillScrollRow}
+                >
+                  {genderOptions.map((item) => {
+                    const normalizedGender = gender.toLowerCase();
+                    const normalizedItem = item.toLowerCase();
+                    const isSelected =
+                      normalizedGender === normalizedItem ||
+                      (normalizedGender === 'other' && normalizedItem === 'unknown');
+                    return (
+                      <Pressable
+                        key={item}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`Sex: ${item}`}
+                        style={[styles.scrollablePill, isSelected && styles.pillActive]}
+                        onPress={() => setGender(item)}
                       >
-                        {item}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
+                        <ThemedText
+                          variant="smallBold"
+                          numberOfLines={1}
+                          color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                        >
+                          {item}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+              <View style={[styles.formCol, { minWidth: 0 }]}>
+                <Select
+                  label="Gender Identity"
+                  placeholder="Select gender identity"
+                  value={genderIdentity}
+                  options={genderIdentityOptions}
+                  onSelect={setGenderIdentity}
+                  allowClear
+                  allowCustom
+                  modalTitle="Select Gender Identity"
+                />
               </View>
             </View>
 
-            {/* Civil Status Selector */}
-            <View>
+            {/* Civil Status Selector (Horizontally Scrollable) */}
+            <View style={{ gap: theme.spacing.xs }}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
                 Civil Status
               </ThemedText>
-              <View style={styles.pillRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.pillScroll}
+                contentContainerStyle={styles.pillScrollRow}
+              >
                 {civilStatusOptions.map((item) => {
-                  const isSelected = civilStatus.toLowerCase() === item.toLowerCase();
+                  const normCurrent = civilStatus.toLowerCase();
+                  const normItem = item.toLowerCase();
+                  const isSelected =
+                    normCurrent === normItem ||
+                    ((normCurrent === 'cohabiting' || normCurrent === 'commonlaw') &&
+                      normItem.startsWith('cohabiting')) ||
+                    (normCurrent === 'other' && normItem === 'other civil status');
                   return (
                     <Pressable
                       key={item}
-                      style={[styles.pill, isSelected && styles.pillActive]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`Civil Status: ${item}`}
+                      style={[styles.scrollablePill, isSelected && styles.pillActive]}
                       onPress={() => setCivilStatus(item)}
                     >
                       <ThemedText
                         variant="smallBold"
+                        numberOfLines={1}
                         color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
                       >
                         {item}
@@ -863,7 +923,7 @@ export function EditPatientModal({
                     </Pressable>
                   );
                 })}
-              </View>
+              </ScrollView>
             </View>
 
             {/* Contact & Address Section */}
@@ -1329,6 +1389,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
     marginTop: 2,
+  },
+  pillScroll: {
+    width: '100%',
+    flexGrow: 0,
+  },
+  pillScrollRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingRight: theme.spacing.xs,
+  },
+  scrollablePill: {
+    flexShrink: 0,
+    minHeight: theme.sizes.controlMd,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pill: {
     flex: 1,

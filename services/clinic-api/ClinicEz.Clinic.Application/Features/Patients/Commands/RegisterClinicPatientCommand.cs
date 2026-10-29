@@ -59,7 +59,9 @@ public sealed record RegisterClinicPatientCommand(
     string? PreferredName = null,
     string? Nationality = null,
     string? Religion = null,
-    Guid? SyncPatientId = null) : IRequest<ClinicPatientDto>;
+    Guid? SyncPatientId = null,
+    string? Sex = null,
+    string? GenderIdentity = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -178,8 +180,9 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             MiddleName = request.MiddleName?.Trim(),
             Suffix = request.Suffix?.Trim(),
             DateOfBirth = request.DateOfBirth,
-            Gender = Enum.TryParse<Gender>(request.Gender, true, out var g) ? g : Gender.Male,
-            CivilStatus = Enum.TryParse<CivilStatus>(request.CivilStatus, true, out var cs) ? cs : null,
+            Sex = ParseBiologicalSex(request.Sex, request.Gender),
+            GenderIdentity = NormalizeGenderIdentity(request.GenderIdentity),
+            CivilStatus = ParseCivilStatus(request.CivilStatus),
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
             PhilHealthNumber = request.PhilHealthNumber?.Trim(),
@@ -568,6 +571,64 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             Allergies: allergiesText,
             ChronicConditions: chronicConditions,
             Alerts: alertsText,
-            SyncPatientId: p.CloudPatientId);
+            SyncPatientId: p.CloudPatientId,
+            Sex: p.Sex.ToString(),
+            GenderIdentity: p.GenderIdentity);
+    }
+
+    public static BiologicalSex ParseBiologicalSex(string? sex, string? fallbackGender)
+    {
+        var candidate = !string.IsNullOrWhiteSpace(sex) ? sex.Trim() : fallbackGender?.Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return BiologicalSex.Male;
+        }
+
+        if (Enum.TryParse<BiologicalSex>(candidate, true, out var parsedSex))
+        {
+            return parsedSex;
+        }
+
+        return candidate.ToUpperInvariant() switch
+        {
+            "M" => BiologicalSex.Male,
+            "F" => BiologicalSex.Female,
+            "I" => BiologicalSex.Intersex,
+            "U" or "OTHER" => BiologicalSex.Unknown,
+            _ => BiologicalSex.Male
+        };
+    }
+
+    public static CivilStatus? ParseCivilStatus(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if (Enum.TryParse<CivilStatus>(trimmed, true, out var parsed))
+        {
+            return parsed;
+        }
+
+        return trimmed.ToUpperInvariant() switch
+        {
+            "COHABITING / COMMON-LAW" or "COHABITING" => CivilStatus.Cohabiting,
+            "COMMON-LAW" or "COMMON LAW" => CivilStatus.CommonLaw,
+            "OTHER CIVIL STATUS" or "OTHER_CIVIL_STATUS" => CivilStatus.Other,
+            _ => null
+        };
+    }
+
+    public static string? NormalizeGenderIdentity(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= 50 ? trimmed : trimmed[..50];
     }
 }

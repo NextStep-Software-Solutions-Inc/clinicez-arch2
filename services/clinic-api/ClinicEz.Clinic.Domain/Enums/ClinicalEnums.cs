@@ -16,7 +16,8 @@ public enum CivilStatus
     Divorced,
     Annulled,
     Cohabiting,
-    CommonLaw
+    CommonLaw,
+    Other
 }
 
 public enum BloodType

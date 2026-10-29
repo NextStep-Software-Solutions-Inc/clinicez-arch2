@@ -13,6 +13,7 @@ export interface SelectOption {
   badge?: string;
   category?: string;
   icon?: IconName;
+  requiresCustom?: boolean;
 }
 
 export interface SelectProps {
@@ -72,7 +73,8 @@ export default function Select({
   }, [options, searchQuery]);
 
   const handleSelect = (optVal: string) => {
-    if (optVal === 'Other' && allowCustom) {
+    const picked = options.find((o) => o.value === optVal);
+    if ((optVal === 'Other' || picked?.requiresCustom) && allowCustom) {
       setIsEnteringCustom(true);
       return;
     }
