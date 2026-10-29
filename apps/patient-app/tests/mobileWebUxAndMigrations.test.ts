@@ -152,7 +152,7 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     expect(profileWebSource.includes('<ProfileCard')).toBe(true);
     expect(profileWebSource.includes('<SettingsSection title="About You"')).toBe(true);
     expect(profileWebSource.includes('<SettingsSection title="Medical History"')).toBe(true);
-    expect(profileWebSource.includes('title="Health Records"')).toBe(true);
+    expect(profileWebSource.includes('title="Health Records"')).toBe(false);
   });
 
   test('Pushed web screens omit redundant large inline page headers that duplicate WebPageHeader', () => {

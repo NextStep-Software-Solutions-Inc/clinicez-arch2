@@ -31,7 +31,7 @@ env:
 
 jobs:
   test-and-typecheck:
-    name: Type Check & Verify Patient Web
+    name: Quality Gates & PWA Build Verification
     runs-on: ubuntu-latest
     environment: Development
 
@@ -49,17 +49,38 @@ jobs:
         with:
           node-version: '24.22.1'
 
+      - name: Restore Bun Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Type check patient app
-        run: bun run typecheck:patient
+        run: bun run --cwd apps/patient-app typecheck
+
+      - name: Design token check
+        run: node apps/patient-app/scripts/check-tokens.mjs --strict
+
+      - name: Test design tokens
+        run: bun test packages/design-tokens/src/tokens.test.ts
+
+      - name: Run patient app test suite
+        run: bun run --cwd apps/patient-app test
+
+      - name: Verify Web PWA export build
+        run: bun run --cwd apps/patient-app build:web
 
   deploy:
     name: Build & Deploy to Vercel (Preview)
     runs-on: ubuntu-latest
     needs: test-and-typecheck
     environment: Development
+    if: github.event_name != 'pull_request'
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PATIENT_WEB || secrets.VERCEL_PROJECT_ID }}
@@ -90,9 +111,18 @@ jobs:
         with:
           node-version: '24.22.1'
 
+      - name: Restore Bun Cache
+        if: steps.check-env.outputs.configured == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         if: steps.check-env.outputs.configured == 'true'
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Install Vercel CLI
         if: steps.check-env.outputs.configured == 'true'
@@ -100,15 +130,12 @@ jobs:
 
       - name: Pull Vercel Environment Information
         if: steps.check-env.outputs.configured == 'true'
-        # working-directory: apps/patient-app
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
         if: steps.check-env.outputs.configured == 'true'
-        # working-directory: apps/patient-app
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Prebuilt Artifacts to Vercel
         if: steps.check-env.outputs.configured == 'true'
-        # working-directory: apps/patient-app
         run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}

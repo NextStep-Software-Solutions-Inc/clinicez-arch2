@@ -29,8 +29,11 @@ export default function TeleconsultCallScreen({ route }: Props) {
   const navigation = useNavigation<any>();
 
   const callId = route.params?.callId ?? 'call-session';
-  const clinicianName = route.params?.clinicianName ?? 'Dr. Maria Santos, MD';
+  const clinicianName = route.params?.clinicianName ?? 'Attending Clinician';
   const isRecorded = route.params?.isRecorded ?? false;
+  const isDemo =
+    process.env.EXPO_PUBLIC_ENABLE_DEMO_TELECONSULT === 'true' ||
+    process.env.EXPO_PUBLIC_DEMO_TELECONSULT === 'true';
 
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
@@ -68,7 +71,7 @@ export default function TeleconsultCallScreen({ route }: Props) {
             {clinicianName}
           </ThemedText>
           <ThemedText variant="caption" color="textMuted">
-            Encrypted Teleconsultation • {callId}
+            {isDemo ? `Encrypted Teleconsultation • ${callId}` : 'Encrypted Teleconsultation'}
           </ThemedText>
         </View>
 
@@ -76,7 +79,11 @@ export default function TeleconsultCallScreen({ route }: Props) {
           {isRecorded && (
             <Badge label="REC" tone="danger" size="sm" />
           )}
-          <Badge label="Connected" tone="success" size="sm" />
+          <Badge
+            label={isDemo ? 'Connected' : 'Waiting for Host'}
+            tone={isDemo ? 'success' : 'warning'}
+            size="sm"
+          />
         </View>
       </View>
 
@@ -107,8 +114,10 @@ export default function TeleconsultCallScreen({ route }: Props) {
             <ThemedText variant="h3" style={{ marginTop: spacing.sm }}>
               {clinicianName}
             </ThemedText>
-            <ThemedText variant="small" color="textSecondary">
-              Attending Physician (Audio & Video Live)
+            <ThemedText variant="small" color="textSecondary" style={{ textAlign: 'center', marginTop: spacing.xs, paddingHorizontal: spacing.md }}>
+              {isDemo
+                ? 'Attending Physician (Audio & Video Live)'
+                : 'Teleconsultation session will connect once your physician initiates the call room'}
             </ThemedText>
           </View>
 

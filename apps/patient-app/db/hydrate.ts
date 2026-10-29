@@ -11,7 +11,7 @@
  */
 
 import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import {
   patients,
   patientGovernmentIds,
@@ -114,13 +114,15 @@ export async function upsertPatientSummary(
  * 3. Inserts or updates the canonical server row (with serverId=item.id).
  * 4. Removes any stale local rows for this patient that are not on the server and not pending in syncQueue.
  */
-async function reconcileListEntity<TItem extends { id: string; clientId?: string | null }>(
+export async function reconcileListEntity<TItem extends { id: string; clientId?: string | null }>(
   table: any,
   patientId: string,
   serverItems: TItem[] | undefined | null,
   pendingEntityIds: Set<string>,
-  mapRow: (item: TItem, index: number) => any,
+  mapRow: (item: TItem, index: number, existing?: any) => any,
+  dbOverride?: any,
 ): Promise<void> {
+  const targetDb = dbOverride || originalDb;
   const items = serverItems || [];
   const serverIds = new Set<string>();
 
@@ -133,23 +135,41 @@ async function reconcileListEntity<TItem extends { id: string; clientId?: string
       continue;
     }
 
+    // Query existing local row so we preserve local-only columns
+    let existingRow: any = null;
+    try {
+      const whereConds = [eq(table.id, item.id)];
+      if (item.clientId) whereConds.push(eq(table.id, item.clientId));
+      if (table.serverId) whereConds.push(eq(table.serverId, item.id));
+      const candidates = await targetDb
+        .select()
+        .from(table)
+        .where(whereConds.length > 1 ? or(...whereConds) : whereConds[0])
+        .limit(1);
+      if (candidates && candidates.length > 0) {
+        existingRow = candidates[0];
+      }
+    } catch {
+      // Ignore query errors
+    }
+
     // If there is an existing local row that had the client-generated ID, remove it so it's not orphaned
     if (item.clientId && item.clientId !== '00000000-0000-0000-0000-000000000000' && item.clientId !== item.id) {
-      await originalDb.delete(table).where(eq(table.id, item.clientId));
+      await targetDb.delete(table).where(eq(table.id, item.clientId));
     }
 
     const row = {
-      ...mapRow(item, i),
+      ...mapRow(item, i, existingRow),
       serverId: item.id,
     };
-    await originalDb
+    await targetDb
       .insert(table)
       .values(row)
       .onConflictDoUpdate({ target: table.id, set: row });
   }
 
   // Remove stale local rows that are no longer on the server and are not pending in the sync queue
-  const localRows = await originalDb
+  const localRows = await targetDb
     .select({ id: table.id, serverId: table.serverId })
     .from(table)
     .where(eq(table.patientId, patientId));
@@ -158,7 +178,7 @@ async function reconcileListEntity<TItem extends { id: string; clientId?: string
     const isServerKnown = serverIds.has(local.id) || (local.serverId && serverIds.has(local.serverId));
     const isPending = pendingEntityIds.has(local.id) || (local.serverId && pendingEntityIds.has(local.serverId));
     if (!isServerKnown && !isPending) {
-      await originalDb.delete(table).where(eq(table.id, local.id));
+      await targetDb.delete(table).where(eq(table.id, local.id));
     }
   }
 }
@@ -184,6 +204,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
         const payload = JSON.parse(q.payloadJson);
         if (payload.id) pendingEntityIds.add(payload.id);
         if (payload.clientId) pendingEntityIds.add(payload.clientId);
+        if (payload.patientId) pendingEntityIds.add(payload.patientId);
       } catch {
         // ignore parse error
       }
@@ -300,17 +321,17 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.emergencyContacts,
     pendingEntityIds,
-    (ec, i) => ({
+    (ec, i, existing) => ({
       id: ec.id,
       patientId,
       sortOrder: ec.isPrimary ? 1 : i + 2,
       name: ec.fullName,
-      relationship: ec.relationship ?? null,
-      phone: ec.mobile ?? '',
-      altPhone: ec.altPhone ?? null,
-      email: null as string | null,
-      address: null as string | null,
-      createdAt: ts,
+      relationship: ec.relationship ?? existing?.relationship ?? null,
+      phone: ec.mobile ?? existing?.phone ?? '',
+      altPhone: ec.altPhone ?? existing?.altPhone ?? null,
+      email: existing?.email ?? null,
+      address: existing?.address ?? null,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(ec.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -327,17 +348,17 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.healthcareProviders,
     pendingEntityIds,
-    (hp, i) => {
+    (hp, i, existing) => {
       const typeKey = i === 0 ? 'primary_care' : i === 1 ? 'specialist_1' : 'specialist_2';
       return {
         id: hp.id,
         patientId,
         providerType: (providerTypeMap[hp.providerType] ?? typeKey) as 'primary_care' | 'specialist_1' | 'specialist_2',
-        name: hp.name ?? null,
-        specialty: hp.specialty ?? null,
-        clinicHospital: hp.clinicHospital ?? null,
-        phone: hp.phone ?? null,
-        createdAt: ts,
+        name: hp.name ?? existing?.name ?? null,
+        specialty: hp.specialty ?? existing?.specialty ?? null,
+        clinicHospital: hp.clinicHospital ?? existing?.clinicHospital ?? null,
+        phone: hp.phone ?? existing?.phone ?? null,
+        createdAt: existing?.createdAt ?? ts,
         updatedAt: toDate(hp.updatedAt) ?? ts,
         syncedAt: ts,
         deletedAt: null,
@@ -351,15 +372,15 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.allergies,
     pendingEntityIds,
-    (al) => ({
+    (al, _i, existing) => ({
       id: al.id,
       patientId,
-      allergen: al.allergenName,
-      reactionType: al.reaction ?? null,
-      severity: (al.severity as any) ?? null,
-      management: al.notes ?? null,
-      isActive: true,
-      createdAt: ts,
+      allergen: al.allergenName ?? (al as any).allergen ?? existing?.allergen,
+      reactionType: al.reaction ?? (al as any).reactionType ?? existing?.reactionType ?? null,
+      severity: (al.severity as any) ?? existing?.severity ?? null,
+      management: al.notes ?? (al as any).management ?? existing?.management ?? null,
+      isActive: existing?.isActive ?? true,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(al.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -372,18 +393,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.medications,
     pendingEntityIds,
-    (med) => ({
+    (med, _i, existing) => ({
       id: med.id,
       patientId,
-      drugName: med.medicationName,
-      dosage: med.dosage ?? null,
-      dosageForm: null as string | null,
-      frequency: med.frequency ?? null,
-      prescribingPhysician: med.prescribedBy ?? null,
-      startDate: med.startDate ?? null,
-      indication: med.purpose ?? null,
-      isActive: med.isCurrentlyTaking,
-      createdAt: ts,
+      drugName: med.medicationName ?? (med as any).drugName ?? existing?.drugName,
+      dosage: med.dosage ?? existing?.dosage ?? null,
+      dosageForm: existing?.dosageForm ?? (med as any).route ?? null,
+      frequency: med.frequency ?? existing?.frequency ?? null,
+      prescribingPhysician: med.prescribedBy ?? existing?.prescribingPhysician ?? null,
+      startDate: med.startDate ?? existing?.startDate ?? null,
+      indication: med.purpose ?? existing?.indication ?? null,
+      isActive: med.isCurrentlyTaking ?? existing?.isActive ?? true,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(med.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -495,6 +516,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   //     Local schema differs significantly — map best-effort
   if (record.socialHistory && !pendingEntityIds.has(patientId)) {
     const sh = record.socialHistory;
+    let existingSh: any = null;
+    try {
+      const rows = await originalDb
+        .select()
+        .from(patientSocialHistory)
+        .where(eq(patientSocialHistory.patientId, patientId))
+        .limit(1);
+      existingSh = rows[0] || null;
+    } catch {
+      // Ignore query error
+    }
+
     let mappedSmokingStatus: 'Never' | 'Former' | 'Current' | null = null;
     if (sh.smokingStatus) {
       const s = sh.smokingStatus.toLowerCase();
@@ -506,31 +539,31 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     const row = {
       id: sh.id,
       patientId,
-      tobaccoStatus: mappedSmokingStatus,
-      cigsPerDay: sh.cigsPerDay ?? null,
-      packYears: sh.packYears ?? null,
-      quitDate: sh.quitDate ?? null,
-      otherTobaccoProducts: sh.otherTobaccoProducts ?? null,
-      alcoholUseLevel: sh.alcoholUse ?? null,
-      alcoholType: sh.alcoholType ?? null,
-      alcoholFrequencyDaysPerWeek: sh.alcoholFrequencyDaysPerWeek ?? null,
-      alcoholQuantityPerOccasion: sh.alcoholQuantityPerOccasion ?? null,
-      substanceUse: sh.usesSubstances,
-      substanceName: sh.substanceName ?? null,
-      substanceRoute: sh.substanceRoute ?? null,
-      substanceFrequency: sh.substanceFrequency ?? null,
-      activityLevel: sh.activityLevel ?? null,
-      exerciseType: sh.exerciseType ?? null,
-      exerciseFrequencyDaysPerWeek: sh.exerciseFrequencyDaysPerWeek ?? null,
-      dietPattern: sh.dietPattern ?? null,
-      foodRestrictions: sh.foodRestrictions ?? null,
-      sleepAvgHours: sh.sleepAvgHours ?? null,
-      sleepQuality: (sh.sleepQuality as any) ?? null,
-      isSexuallyActive: sh.isSexuallyActive ?? null,
-      waterIntake: sh.waterIntake ?? null,
-      caffeineUse: null as string | null,
-      dailyScreenTime: null as string | null,
-      createdAt: ts,
+      tobaccoStatus: mappedSmokingStatus ?? existingSh?.tobaccoStatus ?? 'Never',
+      cigsPerDay: sh.cigsPerDay ?? existingSh?.cigsPerDay ?? null,
+      packYears: sh.packYears ?? existingSh?.packYears ?? null,
+      quitDate: sh.quitDate ?? existingSh?.quitDate ?? null,
+      otherTobaccoProducts: sh.otherTobaccoProducts ?? existingSh?.otherTobaccoProducts ?? null,
+      alcoholUseLevel: sh.alcoholUse ?? existingSh?.alcoholUseLevel ?? null,
+      alcoholType: sh.alcoholType ?? existingSh?.alcoholType ?? null,
+      alcoholFrequencyDaysPerWeek: sh.alcoholFrequencyDaysPerWeek ?? existingSh?.alcoholFrequencyDaysPerWeek ?? null,
+      alcoholQuantityPerOccasion: sh.alcoholQuantityPerOccasion ?? existingSh?.alcoholQuantityPerOccasion ?? null,
+      substanceUse: sh.usesSubstances ?? existingSh?.substanceUse ?? false,
+      substanceName: sh.substanceName ?? existingSh?.substanceName ?? null,
+      substanceRoute: sh.substanceRoute ?? existingSh?.substanceRoute ?? null,
+      substanceFrequency: sh.substanceFrequency ?? existingSh?.substanceFrequency ?? null,
+      activityLevel: sh.activityLevel ?? existingSh?.activityLevel ?? null,
+      exerciseType: sh.exerciseType ?? existingSh?.exerciseType ?? null,
+      exerciseFrequencyDaysPerWeek: sh.exerciseFrequencyDaysPerWeek ?? existingSh?.exerciseFrequencyDaysPerWeek ?? null,
+      dietPattern: sh.dietPattern ?? existingSh?.dietPattern ?? null,
+      foodRestrictions: sh.foodRestrictions ?? existingSh?.foodRestrictions ?? null,
+      sleepAvgHours: sh.sleepAvgHours ?? existingSh?.sleepAvgHours ?? null,
+      sleepQuality: (sh.sleepQuality as any) ?? existingSh?.sleepQuality ?? null,
+      isSexuallyActive: sh.isSexuallyActive ?? existingSh?.isSexuallyActive ?? null,
+      waterIntake: sh.waterIntake ?? existingSh?.waterIntake ?? null,
+      caffeineUse: existingSh?.caffeineUse ?? null,
+      dailyScreenTime: existingSh?.dailyScreenTime ?? null,
+      createdAt: existingSh?.createdAt ?? ts,
       updatedAt: toDate(sh.updatedAt) ?? ts,
       syncedAt: ts,
       serverId: sh.id,
@@ -547,18 +580,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.familyHistories,
     pendingEntityIds,
-    (fh) => ({
+    (fh, _i, existing) => ({
       id: fh.id,
       patientId,
       condition: fh.conditionName,
-      affectedRelative: fh.relation ?? null,
-      side: null as ('Paternal' | 'Maternal' | 'Both' | 'Unknown' | null),
-      ageOfOnset: fh.ageOfOnset ?? null,
-      isDeceased: fh.isDeceased,
-      ageAtDeath: null as number | null,
-      causeOfDeath: null as string | null,
-      notes: fh.notes ?? null,
-      createdAt: ts,
+      affectedRelative: fh.relation ?? existing?.affectedRelative ?? null,
+      side: (existing?.side as any) ?? null,
+      ageOfOnset: fh.ageOfOnset ?? existing?.ageOfOnset ?? null,
+      isDeceased: fh.isDeceased ?? existing?.isDeceased ?? false,
+      ageAtDeath: existing?.ageAtDeath ?? null,
+      causeOfDeath: existing?.causeOfDeath ?? null,
+      notes: fh.notes ?? existing?.notes ?? null,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(fh.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -568,16 +601,28 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   // 15. occupation (singleton)  (local: occupation, employer, industry, workEnvironment, yearsInOccupation, hazardExposure)
   if (record.occupation && !pendingEntityIds.has(patientId)) {
     const occ = record.occupation;
+    let existingOcc: any = null;
+    try {
+      const rows = await originalDb
+        .select()
+        .from(patientOccupation)
+        .where(eq(patientOccupation.patientId, patientId))
+        .limit(1);
+      existingOcc = rows[0] || null;
+    } catch {
+      // Ignore query error
+    }
+
     const row = {
       id: occ.id,
       patientId,
-      occupation: occ.occupation ?? null,
-      employer: occ.employer ?? null,
-      industry: occ.industry ?? null,
-      workEnvironment: (occ.workEnvironment as any) ?? null,
-      yearsInOccupation: occ.yearsInOccupation ?? null,
-      hazardExposure: occ.hazardExposure ?? null,
-      createdAt: ts,
+      occupation: occ.occupation ?? existingOcc?.occupation ?? null,
+      employer: occ.employer ?? existingOcc?.employer ?? null,
+      industry: occ.industry ?? existingOcc?.industry ?? null,
+      workEnvironment: (occ.workEnvironment as any) ?? existingOcc?.workEnvironment ?? null,
+      yearsInOccupation: occ.yearsInOccupation ?? existingOcc?.yearsInOccupation ?? null,
+      hazardExposure: occ.hazardExposure ?? existingOcc?.hazardExposure ?? null,
+      createdAt: existingOcc?.createdAt ?? ts,
       updatedAt: toDate(occ.updatedAt) ?? ts,
       syncedAt: ts,
       serverId: occ.id,
@@ -594,16 +639,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     patientId,
     record.travelHistories,
     pendingEntityIds,
-    (th) => ({
+    (th, _i, existing) => ({
       id: th.id,
       patientId,
       destination: th.destination,
-      cityProvince: th.cityProvince ?? null,
-      departureDate: th.departureDate ?? null,
-      returnDate: th.returnDate ?? null,
-      purpose: (th.purpose as any) ?? null,
-      illnessDuringAfterTravel: th.illnessDuringAfterTravel ?? null,
-      createdAt: ts,
+      cityProvince: th.cityProvince ?? existing?.cityProvince ?? null,
+      departureDate: th.departureDate ?? existing?.departureDate ?? null,
+      returnDate: th.returnDate ?? existing?.returnDate ?? null,
+      purpose: (th.purpose as any) ?? existing?.purpose ?? null,
+      illnessDuringAfterTravel: th.illnessDuringAfterTravel ?? existing?.illnessDuringAfterTravel ?? null,
+      createdAt: existing?.createdAt ?? ts,
       updatedAt: toDate(th.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
@@ -614,6 +659,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   //     Local schema uses: gravida, para, abortion, livingChildren, lmp, cycleLength, etc.
   if (record.obstetricProfile && !pendingEntityIds.has(patientId)) {
     const op = record.obstetricProfile;
+    let existingOp: any = null;
+    try {
+      const rows = await originalDb
+        .select()
+        .from(patientObstetricProfile)
+        .where(eq(patientObstetricProfile.patientId, patientId))
+        .limit(1);
+      existingOp = rows[0] || null;
+    } catch {
+      // Ignore query error
+    }
+
     let ageAtMenarche: number | null = null;
     if (op.menarche) {
       const parsed = parseInt(op.menarche, 10);
@@ -628,34 +685,37 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
         }
       }
     }
+    if (ageAtMenarche === null && existingOp?.ageAtMenarche !== undefined) {
+      ageAtMenarche = existingOp.ageAtMenarche;
+    }
 
     const row = {
       id: op.id,
       patientId,
-      gravida: op.gravida ?? null,
-      para: op.para ?? null,
-      abortion: op.abortusCount ?? null,
-      livingChildren: op.livingChildren ?? null,
-      lmp: op.lastMenstrualPeriod ?? null,
+      gravida: op.gravida ?? existingOp?.gravida ?? null,
+      para: op.para ?? existingOp?.para ?? null,
+      abortion: op.abortusCount ?? existingOp?.abortion ?? null,
+      livingChildren: op.livingChildren ?? existingOp?.livingChildren ?? null,
+      lmp: op.lastMenstrualPeriod ?? existingOp?.lmp ?? null,
       ageAtMenarche,
-      cycleLength: op.menstrualCycleLengthDays ?? null,
-      cycleDuration: null as number | null,
-      regularity: null as ('Regular' | 'Irregular' | null),
-      dysmenorrheaSeverity: op.hasDysmenorrhea ? 'Mild' as const : 'None' as const,
-      menopausalStatus: null as ('PreMenopausal' | 'Peri' | 'PostMenopausal' | 'NA' | null),
-      ageAtMenopause: null as number | null,
-      padsPerDay: null as number | null,
-      ageAtOnsetSexualActivity: null as number | null,
-      currentContraceptiveMethod: null as string | null,
-      menstruationApplicable: true,
-      deliveryCnt: null as number | null,
-      deliveryType: null as string | null,
-      fullTermDeliveries: null as number | null,
-      prematureDeliveries: null as number | null,
-      pregnancyInducedHypertension: null as boolean | null,
-      onFamilyPlanning: null as boolean | null,
-      pregnancyApplicable: true,
-      createdAt: ts,
+      cycleLength: op.menstrualCycleLengthDays ?? existingOp?.cycleLength ?? null,
+      cycleDuration: existingOp?.cycleDuration ?? null,
+      regularity: existingOp?.regularity ?? null,
+      dysmenorrheaSeverity: op.hasDysmenorrhea ? ('Mild' as const) : (existingOp?.dysmenorrheaSeverity ?? ('None' as const)),
+      menopausalStatus: existingOp?.menopausalStatus ?? null,
+      ageAtMenopause: existingOp?.ageAtMenopause ?? null,
+      padsPerDay: existingOp?.padsPerDay ?? null,
+      ageAtOnsetSexualActivity: existingOp?.ageAtOnsetSexualActivity ?? null,
+      currentContraceptiveMethod: existingOp?.currentContraceptiveMethod ?? null,
+      menstruationApplicable: existingOp?.menstruationApplicable ?? true,
+      deliveryCnt: existingOp?.deliveryCnt ?? null,
+      deliveryType: existingOp?.deliveryType ?? null,
+      fullTermDeliveries: existingOp?.fullTermDeliveries ?? null,
+      prematureDeliveries: existingOp?.prematureDeliveries ?? null,
+      pregnancyInducedHypertension: existingOp?.pregnancyInducedHypertension ?? null,
+      onFamilyPlanning: existingOp?.onFamilyPlanning ?? null,
+      pregnancyApplicable: existingOp?.pregnancyApplicable ?? true,
+      createdAt: existingOp?.createdAt ?? ts,
       updatedAt: toDate(op.updatedAt) ?? ts,
       syncedAt: ts,
       serverId: op.id,

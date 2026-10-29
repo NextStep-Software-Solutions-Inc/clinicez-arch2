@@ -169,7 +169,7 @@ export default function HealthcareProvidersScreen() {
             <ProfileFormField label="Provider Type" value={typeLabel(field.value)} onPressIn={() => setTypeModal(true)} picker />
           )} />
           <Controller control={control} name="name" render={({ field }) => (
-            <ProfileFormField label="Doctor's Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Dr. Maria Santos" />
+            <ProfileFormField label="Doctor's Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Dr. Juan dela Cruz" />
           )} />
           <Controller control={control} name="specialty" render={({ field }) => (
             <ProfileFormField label="Specialty" value={field.value} onChangeText={field.onChange} placeholder="e.g. Internal Medicine" />

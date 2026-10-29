@@ -24,6 +24,8 @@ type Props = StaticScreenProps<
   | {
       /** Pre-selected file IDs (e.g. when editing an existing draft) */
       preselectedIds?: string[];
+      appointmentId?: string;
+      id?: string;
     }
   | undefined
 >;
@@ -121,7 +123,9 @@ export default function AttachFilesScreen({ route }: Props) {
   const { spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
-  const preselectedIds = route.params?.preselectedIds ?? peekAttachedFileSelection();
+  const rawParams = (route?.params ?? {}) as any;
+  const appointmentId = rawParams?.appointmentId ?? rawParams?.id;
+  const preselectedIds = rawParams?.preselectedIds ?? peekAttachedFileSelection();
 
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(true);

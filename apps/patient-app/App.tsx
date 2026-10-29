@@ -91,6 +91,28 @@ if (Platform.OS !== 'web') {
   );
 }
 
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  if (typeof document !== 'undefined' && !document.querySelector('link[rel="manifest"]')) {
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = '/manifest.json';
+    document.head.appendChild(link);
+  }
+
+  if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          // Registration successful
+        })
+        .catch((err) => {
+          console.error('[SW] Service Worker registration failed:', err);
+        });
+    });
+  }
+}
+
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
 function LockOverlay({ backgroundColor }: { backgroundColor: ColorValue }) {
@@ -149,8 +171,8 @@ function AppWithTheme() {
                     <DialogHost />
                     <CustomAlertModal
                       visible={showUserNotFoundAlert}
-                      title="Account Not Found"
-                      message={`The user profile for Clerk ID: "${userId || ''}" was not found in our database. Please contact support or register your account.`}
+                      title="Profile Setup Incomplete"
+                      message="We could not find a health profile linked to this account yet. Please sign out and try again when connected, or contact clinic support."
                       buttonText="Sign Out"
                       iconName="alert"
                       onClose={async () => {

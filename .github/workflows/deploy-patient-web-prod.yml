@@ -1,6 +1,10 @@
 name: Deploy Patient Web (Prod)
 
 on:
+  push:
+    tags:
+      - 'patient-app-v*'
+      - 'patient-web-v*'
   release:
     types: [published]
   workflow_dispatch:
@@ -17,17 +21,15 @@ env:
 
 jobs:
   test-and-typecheck:
-    name: Type Check & Verify Patient Web
+    name: Production Quality Gates & Verification
     runs-on: ubuntu-latest
     environment: Production
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'release' && (
         startsWith(github.event.release.tag_name, 'patient-web-') ||
-        startsWith(github.event.release.tag_name, 'patient-web/') ||
-        startsWith(github.event.release.tag_name, 'patient-web@') ||
-        startsWith(github.event.release.tag_name, 'patient-app-') ||
-        startsWith(github.event.release.tag_name, 'patient-app/')
+        startsWith(github.event.release.tag_name, 'patient-app-')
       ))
 
     steps:
@@ -44,11 +46,31 @@ jobs:
         with:
           node-version: '24.22.1'
 
+      - name: Restore Bun Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Type check patient app
-        run: bun run typecheck:patient
+        run: bun run --cwd apps/patient-app typecheck
+
+      - name: Design token check
+        run: node apps/patient-app/scripts/check-tokens.mjs --strict
+
+      - name: Test design tokens
+        run: bun test packages/design-tokens/src/tokens.test.ts
+
+      - name: Run full patient app test suite
+        run: bun run --cwd apps/patient-app test
+
+      - name: Verify Web PWA export build
+        run: bun run --cwd apps/patient-app build:web
 
   deploy:
     name: Build & Deploy to Vercel (Production)
@@ -57,12 +79,10 @@ jobs:
     environment: Production
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'release' && (
         startsWith(github.event.release.tag_name, 'patient-web-') ||
-        startsWith(github.event.release.tag_name, 'patient-web/') ||
-        startsWith(github.event.release.tag_name, 'patient-web@') ||
-        startsWith(github.event.release.tag_name, 'patient-app-') ||
-        startsWith(github.event.release.tag_name, 'patient-app/')
+        startsWith(github.event.release.tag_name, 'patient-app-')
       ))
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -94,9 +114,18 @@ jobs:
         with:
           node-version: '24.22.1'
 
+      - name: Restore Bun Cache
+        if: steps.check-env.outputs.configured == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         if: steps.check-env.outputs.configured == 'true'
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Install Vercel CLI
         if: steps.check-env.outputs.configured == 'true'
@@ -104,15 +133,12 @@ jobs:
 
       - name: Pull Vercel Environment Information
         if: steps.check-env.outputs.configured == 'true'
-        # working-directory: apps/patient-app
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
         if: steps.check-env.outputs.configured == 'true'
-        # working-directory: apps/patient-app
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Prebuilt Artifacts to Vercel
         if: steps.check-env.outputs.configured == 'true'
-        # working-directory: apps/patient-app
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

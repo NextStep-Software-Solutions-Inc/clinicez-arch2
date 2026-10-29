@@ -27,7 +27,7 @@ import {
   patientPhysicalExamProfile,
   patientNcdQuestionnaire,
 } from '@db/schema/index';
-import { isNull, count } from 'drizzle-orm';
+import { isNull, count, and, eq } from 'drizzle-orm';
 import ProfileCard from 'components/ProfileCard';
 import { SettingsSection, SettingsRow } from '@ui/SettingsItem';
 import { useContentInsets } from 'hooks/useContentInsets';
@@ -51,47 +51,45 @@ type Counts = {
   family: number;
   travel: number;
   pregnancies: number;
-  vitals: number;
-  consults: number;
-  rxs: number;
-  labs: number;
-  imaging: number;
-  vaccinations: number;
-  assessments: number;
-  physicalExams: number;
-  ncdQuestionnaires: number;
 };
 
-async function loadCounts(): Promise<Counts> {
+async function loadCounts(patientId: string): Promise<Counts> {
+  if (!patientId) {
+    return {
+      addresses: 0,
+      emergency: 0,
+      providers: 0,
+      allergies: 0,
+      medications: 0,
+      surgeries: 0,
+      illnesses: 0,
+      chronic: 0,
+      disabilities: 0,
+      immunizations: 0,
+      family: 0,
+      travel: 0,
+      pregnancies: 0,
+    };
+  }
+
   const [
     addressCount, emergencyCount, providerCount, allergyCount, medicationCount,
     surgeryCount, illnessCount, chronicCount, disabilityCount, immunizationCount,
-    familyCount, travelCount, pregnancyCount, vitalCount, consultCount,
-    rxCount, labCount, imagingCount, vaccinationCount, assessmentCount,
-    physicalExamCount, ncdQuestionnaireCount,
+    familyCount, travelCount, pregnancyCount,
   ] = await Promise.all([
-    db.select({ c: count() }).from(patientAddresses).where(isNull(patientAddresses.deletedAt)),
-    db.select({ c: count() }).from(emergencyContacts).where(isNull(emergencyContacts.deletedAt)),
-    db.select({ c: count() }).from(patientHealthcareProviders).where(isNull(patientHealthcareProviders.deletedAt)),
-    db.select({ c: count() }).from(patientAllergies).where(isNull(patientAllergies.deletedAt)),
-    db.select({ c: count() }).from(patientMedications).where(isNull(patientMedications.deletedAt)),
-    db.select({ c: count() }).from(patientSurgicalHistory).where(isNull(patientSurgicalHistory.deletedAt)),
-    db.select({ c: count() }).from(patientPastIllnesses).where(isNull(patientPastIllnesses.deletedAt)),
-    db.select({ c: count() }).from(patientChronicConditions).where(isNull(patientChronicConditions.deletedAt)),
-    db.select({ c: count() }).from(patientDisabilities).where(isNull(patientDisabilities.deletedAt)),
-    db.select({ c: count() }).from(patientImmunizationsSelf).where(isNull(patientImmunizationsSelf.deletedAt)),
-    db.select({ c: count() }).from(patientFamilyHistory).where(isNull(patientFamilyHistory.deletedAt)),
-    db.select({ c: count() }).from(patientTravelHistory).where(isNull(patientTravelHistory.deletedAt)),
-    db.select({ c: count() }).from(patientPregnancies).where(isNull(patientPregnancies.deletedAt)),
-    db.select({ c: count() }).from(vitalSigns),
-    db.select({ c: count() }).from(consultations),
-    db.select({ c: count() }).from(prescriptions),
-    db.select({ c: count() }).from(labResults),
-    db.select({ c: count() }).from(imagingResults),
-    db.select({ c: count() }).from(vaccinationsAdministered),
-    db.select({ c: count() }).from(clinicalAssessments),
-    db.select({ c: count() }).from(patientPhysicalExamProfile),
-    db.select({ c: count() }).from(patientNcdQuestionnaire),
+    db.select({ c: count() }).from(patientAddresses).where(and(eq(patientAddresses.patientId, patientId), isNull(patientAddresses.deletedAt))),
+    db.select({ c: count() }).from(emergencyContacts).where(and(eq(emergencyContacts.patientId, patientId), isNull(emergencyContacts.deletedAt))),
+    db.select({ c: count() }).from(patientHealthcareProviders).where(and(eq(patientHealthcareProviders.patientId, patientId), isNull(patientHealthcareProviders.deletedAt))),
+    db.select({ c: count() }).from(patientAllergies).where(and(eq(patientAllergies.patientId, patientId), isNull(patientAllergies.deletedAt))),
+    db.select({ c: count() }).from(patientMedications).where(and(eq(patientMedications.patientId, patientId), isNull(patientMedications.deletedAt))),
+    db.select({ c: count() }).from(patientSurgicalHistory).where(and(eq(patientSurgicalHistory.patientId, patientId), isNull(patientSurgicalHistory.deletedAt))),
+    db.select({ c: count() }).from(patientPastIllnesses).where(and(eq(patientPastIllnesses.patientId, patientId), isNull(patientPastIllnesses.deletedAt))),
+    db.select({ c: count() }).from(patientChronicConditions).where(and(eq(patientChronicConditions.patientId, patientId), isNull(patientChronicConditions.deletedAt))),
+    db.select({ c: count() }).from(patientDisabilities).where(and(eq(patientDisabilities.patientId, patientId), isNull(patientDisabilities.deletedAt))),
+    db.select({ c: count() }).from(patientImmunizationsSelf).where(and(eq(patientImmunizationsSelf.patientId, patientId), isNull(patientImmunizationsSelf.deletedAt))),
+    db.select({ c: count() }).from(patientFamilyHistory).where(and(eq(patientFamilyHistory.patientId, patientId), isNull(patientFamilyHistory.deletedAt))),
+    db.select({ c: count() }).from(patientTravelHistory).where(and(eq(patientTravelHistory.patientId, patientId), isNull(patientTravelHistory.deletedAt))),
+    db.select({ c: count() }).from(patientPregnancies).where(and(eq(patientPregnancies.patientId, patientId), isNull(patientPregnancies.deletedAt))),
   ]);
 
   return {
@@ -108,15 +106,6 @@ async function loadCounts(): Promise<Counts> {
     family: familyCount[0]?.c ?? 0,
     travel: travelCount[0]?.c ?? 0,
     pregnancies: pregnancyCount[0]?.c ?? 0,
-    vitals: vitalCount[0]?.c ?? 0,
-    consults: consultCount[0]?.c ?? 0,
-    rxs: rxCount[0]?.c ?? 0,
-    labs: labCount[0]?.c ?? 0,
-    imaging: imagingCount[0]?.c ?? 0,
-    vaccinations: vaccinationCount[0]?.c ?? 0,
-    assessments: assessmentCount[0]?.c ?? 0,
-    physicalExams: physicalExamCount[0]?.c ?? 0,
-    ncdQuestionnaires: ncdQuestionnaireCount[0]?.c ?? 0,
   };
 }
 
@@ -137,8 +126,10 @@ export default function ProfileScreen() {
   // ── helpers ──────────────────────────────────────────────────────────────
 
   const reloadCounts = useCallback(() => {
-    loadCounts().then(setCounts).catch(console.error);
-  }, []);
+    if (internalPatientId) {
+      loadCounts(internalPatientId).then(setCounts).catch(console.error);
+    }
+  }, [internalPatientId]);
 
   /**
    * Fetches the full patient record from the backend and hydrates local SQLite.
@@ -385,75 +376,6 @@ export default function ProfileScreen() {
           iconColor={colors.purple}
           right={{ type: 'chevron' }}
           onPress={() => navigation.navigate('Main', { screen: 'MentalHealthScreen' })}
-        />
-      </SettingsSection>
-
-      <SettingsSection
-        title="Health Records"
-        footer="These records are entered by your healthcare provider and cannot be edited here."
-      >
-        <SettingsRow
-          title="Vital Signs"
-          icon={{ android: 'monitor_heart', ios: 'waveform.path.ecg' }}
-          iconColor={colors.emergency}
-          right={c ? { type: 'value', label: plural(c.vitals, 'record') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
-        />
-        <SettingsRow
-          title="Consultations"
-          icon={{ android: 'chat_bubble', ios: 'stethoscope' }}
-          iconColor={colors.primary}
-          right={c ? { type: 'value', label: plural(c.consults, 'consult') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'ConsultationsScreen' })}
-        />
-        <SettingsRow
-          title="Prescriptions"
-          icon={{ android: 'receipt_long', ios: 'doc.text.fill' }}
-          iconColor={colors.purple}
-          right={c ? { type: 'value', label: plural(c.rxs, 'Rx') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
-        />
-        <SettingsRow
-          title="Lab Results"
-          icon={{ android: 'science', ios: 'flask.fill' }}
-          iconColor={colors.success}
-          right={c ? { type: 'value', label: plural(c.labs, 'result') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'LabResultsScreen' })}
-        />
-        <SettingsRow
-          title="Imaging Results"
-          icon={{ android: 'image', ios: 'photo.fill' }}
-          iconColor={colors.warning}
-          right={c ? { type: 'value', label: plural(c.imaging, 'image') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'ImagingResultsScreen' })}
-        />
-        <SettingsRow
-          title="Vaccinations (Provider)"
-          icon={{ android: 'vaccines', ios: 'syringe.fill' }}
-          iconColor={colors.info}
-          right={c ? { type: 'value', label: plural(c.vaccinations, 'vaccine') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'VaccinationsAdministeredScreen' })}
-        />
-        <SettingsRow
-          title="Clinical Assessments"
-          icon={{ android: 'assignment', ios: 'list.clipboard.fill' }}
-          iconColor={colors.textSecondary}
-          right={c ? { type: 'value', label: plural(c.assessments, 'assessment') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'ClinicalAssessmentsScreen' })}
-        />
-        <SettingsRow
-          title="Physical Exam"
-          icon={{ android: 'monitor', ios: 'stethoscope' }}
-          iconColor={colors.primary}
-          right={c ? { type: 'value', label: plural(c.physicalExams, 'record') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'PhysicalExamScreen' })}
-        />
-        <SettingsRow
-          title="NCD Questionnaire"
-          icon={{ android: 'quiz', ios: 'checklist' }}
-          iconColor={colors.purple}
-          right={c ? { type: 'value', label: plural(c.ncdQuestionnaires, 'record') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('Main', { screen: 'NcdQuestionnaireScreen' })}
         />
       </SettingsSection>
     </ScrollView>

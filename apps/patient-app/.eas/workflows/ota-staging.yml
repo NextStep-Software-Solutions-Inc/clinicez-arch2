@@ -6,9 +6,23 @@ on:
       - 'main'
 
 jobs:
+  quality_gate:
+    name: Typecheck, Token Lint & Tests
+    runs-on: linux-medium
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Typecheck
+        run: bun run --cwd apps/patient-app typecheck
+      - name: Design Token Check
+        run: bun run --cwd apps/patient-app lint:tokens
+      - name: Automated Tests
+        run: bun run --cwd apps/patient-app test
+
   update:
     name: Publish Staging
+    needs: [quality_gate]
     type: update
     environment: preview
     params:
-      branch: staging
+      channel: staging

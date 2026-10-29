@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollView, Linking } from 'react-native';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import { dialog } from '@utils/dialog';
@@ -8,6 +9,17 @@ import { dialog } from '@utils/dialog';
 const APP_VERSION = Constants.expoConfig?.version ?? '—';
 const BUILD_NUMBER =
   (Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.android?.versionCode) ?? '—';
+const APP_ENV =
+  Constants.expoConfig?.extra?.appVariant ??
+  (Constants.expoConfig?.extra?.isProduction ? 'production' : 'development');
+const GIT_BRANCH = Constants.expoConfig?.extra?.appBranch || 'main';
+const CHANNEL =
+  Updates.channel ?? Constants.expoConfig?.extra?.channel ?? 'production';
+const BUNDLE_ID =
+  Constants.expoConfig?.ios?.bundleIdentifier ??
+  Constants.expoConfig?.android?.package ??
+  'com.nextstepsoftware.clinicez.patient';
+const DB_NAME = Constants.expoConfig?.extra?.sqliteDbName ?? 'Clinic EZ_patient.db';
 
 const openUrl = async (url: string) => {
   const supported = await Linking.canOpenURL(url);
@@ -41,6 +53,26 @@ export default function AboutSettingsScreen() {
         <SettingsRow
           title="Build"
           right={{ type: 'value', label: String(BUILD_NUMBER) }}
+        />
+        <SettingsRow
+          title="Environment"
+          right={{ type: 'value', label: String(APP_ENV) }}
+        />
+        <SettingsRow
+          title="Git Branch"
+          right={{ type: 'value', label: String(GIT_BRANCH) }}
+        />
+        <SettingsRow
+          title="Release Channel"
+          right={{ type: 'value', label: String(CHANNEL) }}
+        />
+        <SettingsRow
+          title="Package / Bundle ID"
+          right={{ type: 'value', label: String(BUNDLE_ID) }}
+        />
+        <SettingsRow
+          title="Database"
+          right={{ type: 'value', label: String(DB_NAME) }}
         />
       </SettingsSection>
 

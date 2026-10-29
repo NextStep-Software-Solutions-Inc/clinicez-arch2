@@ -116,6 +116,25 @@ function mapSlugToSeedDocumentTypeId(raw?: string | null): string | null {
   }
 }
 
+function getCatalogFromSqlite(): DocumentTypeLike[] {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const dbModule = require('@db/index');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { documentTypes } = require('@db/schema/documentTypes');
+    const db = dbModule.originalDb ?? dbModule.db;
+    if (db && typeof db.select === 'function') {
+      const rows = db.select().from(documentTypes).all?.();
+      if (Array.isArray(rows) && rows.length > 0) {
+        return rows;
+      }
+    }
+  } catch {
+    // Non-fatal if DB not yet loaded or in mock environments
+  }
+  return [];
+}
+
 /**
  * Resolves a category slug, code, or UUID against the locally synced backend `document_types` catalog first,
  * falling back to canonical seed UUIDs only when no catalog rows exist yet.
@@ -125,8 +144,9 @@ export function resolveDocumentTypeId(
   fallbackCategory?: string | null,
   catalog?: readonly DocumentTypeLike[]
 ): string {
-  const activeCatalog = catalog?.filter((t) => t.isActive !== false) ?? [];
-  const allCatalog = catalog ?? [];
+  const resolvedCatalog = (catalog && catalog.length > 0) ? catalog : getCatalogFromSqlite();
+  const activeCatalog = resolvedCatalog.filter((t) => t.isActive !== false);
+  const allCatalog = resolvedCatalog;
 
   if (allCatalog.length > 0) {
     for (const candidateInput of [categoryOrId, fallbackCategory]) {

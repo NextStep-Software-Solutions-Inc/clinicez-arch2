@@ -14,11 +14,17 @@ import { ListRow, SectionHeader } from '../../components/ui/Primitives';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useContentInsets } from '../../hooks/useContentInsets';
 import { usePatientId } from '../../hooks/usePatientId';
+import { desc, eq } from 'drizzle-orm';
+import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { getHomeDashboard } from '../../services/discovery/discoveryService';
 import { HomeDashboard, HealthMetric, AppointmentLineupItem } from '../../services/discovery/types';
 import YakapPromoCard from '../../components/yakap/YakapPromoCard';
 import YakapActiveCard from '../../components/yakap/YakapActiveCard';
 import { useYakapRegistrationStatus } from '../../hooks/useYakapRegistrationStatus';
+import { db } from '../../db/index';
+import { consultations, type Consultation } from '../../db/schema/consultations';
+import { vitalSigns, type VitalSign } from '../../db/schema/vitalSigns';
+import AfterVisitSummaryCard from '../../components/records/AfterVisitSummaryCard';
 
 function MetricCard({ metric }: { metric: HealthMetric }) {
   const { colors, radii, spacing, shadows } = useAppTheme();
@@ -108,6 +114,8 @@ export default function HomeScreen() {
   const { user } = useUser();
   const patientId = usePatientId();
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
+  const [recentConsultation, setRecentConsultation] = useState<Consultation | null>(null);
+  const [recentVitals, setRecentVitals] = useState<VitalSign | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const contentInsets = useContentInsets();
   const yakapStatus = useYakapRegistrationStatus(patientId);
@@ -123,6 +131,43 @@ export default function HomeScreen() {
         .finally(() => {
           if (mounted) setIsLoading(false);
         });
+
+      if (patientId) {
+        Promise.all([
+          db
+            .select()
+            .from(consultations)
+            .where(eq(consultations.patientId, patientId))
+            .orderBy(desc(consultations.visitDate))
+            .limit(1),
+          db
+            .select()
+            .from(vitalSigns)
+            .where(eq(vitalSigns.patientId, patientId))
+            .orderBy(desc(vitalSigns.measuredAt))
+            .limit(1),
+        ])
+          .then(([cList, vList]) => {
+            if (!mounted) return;
+            const c = cList[0] ?? null;
+            if (c && c.visitDate) {
+              try {
+                const diff = differenceInCalendarDays(new Date(), parseISO(c.visitDate));
+                if (diff >= 0 && diff <= 7) {
+                  setRecentConsultation(c);
+                  setRecentVitals(vList[0] ?? null);
+                } else {
+                  setRecentConsultation(null);
+                }
+              } catch {
+                setRecentConsultation(null);
+              }
+            } else {
+              setRecentConsultation(null);
+            }
+          })
+          .catch(console.error);
+      }
 
       void yakapStatus.refresh();
     };
@@ -181,6 +226,20 @@ export default function HomeScreen() {
         />
       ) : (
         <YakapPromoCard />
+      )}
+
+      {/* 7-Day Pinned After-Visit Summary (AVS) Card */}
+      {recentConsultation && (
+        <View style={styles.sectionWrap}>
+          <SectionHeader title="Recent Visit Summary" />
+          <AfterVisitSummaryCard
+            consultation={recentConsultation}
+            vitals={recentVitals}
+            isPinned={true}
+            onBookFollowUp={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
+            onMessageClinic={() => navigation.navigate('MainBottomTabs', { screen: 'MessagesScreen' })}
+          />
+        </View>
       )}
 
       <View style={styles.sectionWrap}>

@@ -259,7 +259,7 @@ export default function LoginScreenWeb() {
         <View style={[styles.trustRow, { gap: spacing.xs }]}>
           <AppIcon name="shield" size={14} color="textMuted" />
           <ThemedText variant="caption" color="textMuted">
-            Protected by end-to-end encryption & HIPAA security safeguards
+            Protected by end-to-end encryption & Data Privacy Act of 2012 (RA 10173) safeguards
           </ThemedText>
         </View>
 

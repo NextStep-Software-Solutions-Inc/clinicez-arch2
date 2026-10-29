@@ -23,21 +23,25 @@ import type { AvailableSlot, AppointmentItem } from '../../../services/appointme
 import { dialog } from '../../../utils/dialog';
 
 type Props = StaticScreenProps<{
-  appointmentId: string;
-  clinicId: string;
-  currentScheduledAt: string;
+  appointmentId?: string;
+  id?: string;
+  clinicId?: string;
+  currentScheduledAt?: string;
 }>;
 
 export default function RescheduleScreen({ route }: Props) {
   const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
 
-  const { appointmentId, clinicId, currentScheduledAt } = route.params;
+  const rawParams = (route.params ?? {}) as any;
+  const appointmentId = rawParams.appointmentId ?? rawParams.id ?? '';
+  const [clinicId, setClinicId] = useState<string>(rawParams.clinicId ?? '');
+  const [currentScheduledAt, setCurrentScheduledAt] = useState<string>(rawParams.currentScheduledAt ?? '');
 
   // Current appointment info
   const currentDateLabel = (() => {
     try {
-      return format(parseISO(currentScheduledAt), 'EEEE, MMMM d, yyyy · h:mm a');
+      return currentScheduledAt ? format(parseISO(currentScheduledAt), 'EEEE, MMMM d, yyyy · h:mm a') : '';
     } catch {
       return '';
     }
@@ -46,12 +50,15 @@ export default function RescheduleScreen({ route }: Props) {
   // New schedule
   const [selectedDate, setSelectedDate] = useState(() => {
     try {
-      const d = parseISO(currentScheduledAt);
-      d.setDate(d.getDate() + 1);
-      return format(d, 'yyyy-MM-dd');
-    } catch {
-      return format(new Date(), 'yyyy-MM-dd');
-    }
+      if (rawParams.currentScheduledAt) {
+        const d = parseISO(rawParams.currentScheduledAt);
+        d.setDate(d.getDate() + 1);
+        return format(d, 'yyyy-MM-dd');
+      }
+    } catch {}
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return format(tomorrow, 'yyyy-MM-dd');
   });
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -66,13 +73,19 @@ export default function RescheduleScreen({ route }: Props) {
   // Fetch appointment detail
   useEffect(() => {
     let mounted = true;
-    getAppointmentDetail(appointmentId, db).then((item) => {
-      if (mounted) setAppointment(item);
-    });
+    if (appointmentId) {
+      getAppointmentDetail(appointmentId, db).then((item) => {
+        if (mounted && item) {
+          setAppointment(item);
+          if (!clinicId) setClinicId(item.clinic.id);
+          if (!currentScheduledAt && item.scheduledAt) setCurrentScheduledAt(item.scheduledAt);
+        }
+      });
+    }
     return () => {
       mounted = false;
     };
-  }, [appointmentId]);
+  }, [appointmentId, clinicId, currentScheduledAt]);
 
   // Load slots when date changes
   useEffect(() => {

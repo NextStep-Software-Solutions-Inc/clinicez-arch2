@@ -30,6 +30,7 @@ export const syncQueue = sqliteTable('sync_queue', {
       'patient_ncd_questionnaire',
       'file',
       'file_folder',
+      'file_records',
       'clinic_memberships',
       'organization_memberships',
       'booking_drafts',
@@ -40,10 +41,11 @@ export const syncQueue = sqliteTable('sync_queue', {
   operation: text('operation', { enum: ['create', 'update', 'delete'] }).notNull(),
   payloadJson: text('payload_json').notNull(),
   status: text('status', {
-    enum: ['pending', 'syncing', 'synced', 'failed', 'dead'],
+    enum: ['pending', 'syncing', 'synced', 'failed', 'dead', 'rejected'],
   })
     .notNull()
     .default('pending'),
+  errorMessage: text('error_message'),
   retryCount: integer('retry_count').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });

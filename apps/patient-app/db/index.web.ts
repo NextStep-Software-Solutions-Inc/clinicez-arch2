@@ -7,6 +7,21 @@ import migrations from '../drizzle/migrations';
 const IDB_NAME = 'ClinicEzPatientDb';
 const IDB_STORE = 'sqlite_snapshot';
 const IDB_KEY = 'latest_db_bytes';
+const TAB_SYNC_CHANNEL = 'ClinicEzPatientDbSync';
+const TAB_ID = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+let tabBroadcastChannel: BroadcastChannel | null = null;
+function getBroadcastChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null;
+  if (!tabBroadcastChannel) {
+    try {
+      tabBroadcastChannel = new BroadcastChannel(TAB_SYNC_CHANNEL);
+    } catch {
+      return null;
+    }
+  }
+  return tabBroadcastChannel;
+}
 
 function openIndexedDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -55,8 +70,31 @@ async function writeSnapshot(): Promise<void> {
       req.onerror = () => reject(req.error);
     });
     idb.close();
+    getBroadcastChannel()?.postMessage({ type: 'snapshot_saved', tabId: TAB_ID, at: Date.now() });
   } catch (err) {
     console.warn('[WebDB] Failed to persist SQLite snapshot to IndexedDB:', err);
+  }
+}
+
+export async function clearWebDatabaseSnapshot(): Promise<void> {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  dirty = false;
+  try {
+    const idb = await openIndexedDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.delete(IDB_KEY);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    idb.close();
+    getBroadcastChannel()?.postMessage({ type: 'snapshot_cleared', tabId: TAB_ID, at: Date.now() });
+  } catch (err) {
+    console.warn('[WebDB] Failed to clear IndexedDB snapshot:', err);
   }
 }
 
@@ -168,6 +206,9 @@ function ensureRequiredColumns(rawDb: Database): boolean {
       { name: 'city_municipality_name', type: 'text' },
       { name: 'barangay_name', type: 'text' },
       { name: 'is_same_as_permanent', type: 'integer', defaultValue: '0' },
+    ],
+    sync_queue: [
+      { name: 'error_message', type: 'text' },
     ],
   };
 

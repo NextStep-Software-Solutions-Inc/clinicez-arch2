@@ -71,6 +71,18 @@ export const webBlobStorage: IBlobStorage = {
     }
   },
 
+  async saveBlobFromUri(blobKey: string, sourceUri: string): Promise<string> {
+    if (sourceUri === blobKey) {
+      return blobKey;
+    }
+    const response = await fetch(sourceUri);
+    if (!response.ok) {
+      throw new Error(`Failed to read source blob URI: HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    return this.saveBlob(blobKey, blob, blob.type || 'application/octet-stream');
+  },
+
   async downloadAndSaveBlob(blobKey: string, remoteUrl: string, token: string | null): Promise<string> {
     const response = await fetch(remoteUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
