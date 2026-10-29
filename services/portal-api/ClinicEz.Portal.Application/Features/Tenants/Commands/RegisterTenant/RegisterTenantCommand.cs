@@ -32,7 +32,14 @@ public class RegisterTenantCommandValidator : AbstractValidator<RegisterTenantCo
         RuleFor(x => x.Email).NotEmpty().EmailAddress();
         RuleFor(x => x.Password).NotEmpty().MinimumLength(8);
         RuleFor(x => x.Name).NotEmpty();
-        RuleFor(x => x.TenantSlug).NotEmpty();
+        RuleFor(x => x.TenantSlug)
+            .NotEmpty().WithMessage("Workplace URL slug is required.")
+            .MaximumLength(ReservedTenantSlugs.MaxSlugLength)
+            .WithMessage($"Slug cannot exceed {ReservedTenantSlugs.MaxSlugLength} characters.")
+            .Matches(ReservedTenantSlugs.DnsLabelPattern)
+            .WithMessage("Slug can only contain lowercase letters, numbers, and hyphens.")
+            .Must(slug => !ReservedTenantSlugs.IsReserved(slug))
+            .WithMessage("This workplace URL slug is reserved by Clinic EZ. Please choose another.");
         RuleFor(x => x.TenantType).NotEmpty();
     }
 }
@@ -46,8 +53,13 @@ public class RegisterTenantCommandHandler(
 {
     public async Task<string> Handle(RegisterTenantCommand request, CancellationToken cancellationToken)
     {
-        // Pre-check: Ensure slug is not already taken
-        var slug = request.TenantSlug.ToLowerInvariant();
+        // Pre-check: Ensure slug is not reserved or already taken
+        var slug = request.TenantSlug.Trim().ToLowerInvariant();
+        if (ReservedTenantSlugs.IsReserved(slug))
+        {
+            throw new ValidationException("This workplace URL slug is reserved by Clinic EZ. Please choose another.");
+        }
+
         if (await context.Tenants.AnyAsync(t => t.TenantSlug.ToLower() == slug, cancellationToken))
         {
             throw new ValidationException("Workplace URL slug is already taken. Please choose another.");

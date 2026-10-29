@@ -30,7 +30,7 @@ Set each value as a repository / environment **secret or variable** (Settings �
 | `PORTAL_BASE_URL` | yes | clinic-api | Public base URL of the portal web app; lab orders link to `{PORTAL_BASE_URL}/upload/lab/{token}` (`Clinic__PortalBaseUrl`). Variable or secret. |
 | `HUB_PUBLIC_URL` | yes | portal-api | Public base URL of the cloud hub, handed to on-premise sites with their credentials (`Hub__PublicUrl`). Variable or secret. |
 | `SMTP_USER` / `SMTP_PASSWORD` | no | portal-api | Mail server credentials (secrets, e.g. Resend API key). Non-secret mail configuration (Host, Port, Security, FromEmail, FromName, ReplyTo, ContactInbox) is managed dynamically in Platform Settings (`admin.<BASE_DOMAIN>/settings`). |
-| `FRONTEND_BASE_URL` | no | portal-api | Web portal base URL, used for billing redirects and workspace links when a request carries no `Origin` / `Referer` (`FrontendBaseUrl`). Variable. |
+| `FRONTEND_BASE_URL` | no | portal-api | Tenant Portal base URL (`FrontendBaseUrl`, defaults to `https://portal.<BASE_DOMAIN>`), used for staff invitations, claim links, password resets, and billing redirects when a request carries no `Origin` / `Referer`. Variable. |
 | `ADMIN_BASE_URL` | no | portal-api | Standalone Admin Panel base URL (`AdminBaseUrl`, defaults to `https://admin.<BASE_DOMAIN>`), used for platform admin invitation emails, copyable invite links (`/invitations/{token}`), and admin password-reset links (`/reset-password/{token}`). Variable or secret. |
 | `CLERK_AUTHORITY` | yes | portal-api | Clerk issuer URL tokens are validated against (`Clerk__Authority`). Variable or secret `PORTAL_CLERK_AUTHORITY`; the dev workflow falls back to the Clerk development instance. |
 | `PATIENT_CLERK_AUTHORITY` / `PATIENT_CLERK_AUDIENCE` | authority: yes | patient-api | Clerk issuer and audience patient tokens are validated against (`Clerk__Authority` / `Clerk__Audience`). The authority has no built-in default: the compose file and the deploy fail without it. Secret or variable. |
@@ -130,9 +130,29 @@ Shared infrastructure such as PostgreSQL and the Interop Hub is **not** prefixed
 `interop-hub`). Reverse-proxy hosts (Nginx Proxy Manager) must forward to the unprefixed names,
 e.g. `portal-api:8080`.
 
-## 2. Vercel (UIs)
+## 2. Vercel (UIs) & Domain Matrix
 
 `EXPO_PUBLIC_*` / `NEXT_PUBLIC_*` / `VITE_*` values are inlined at build time. Redeploy after changing them.
+
+| Web Surface | Local Port | Production / Dev Domains | Vercel Project Secret | Responsibility |
+|---|---|---|---|---|
+| `apps/marketing-web` | `3002` | `<BASE_DOMAIN>` (primary), `www.<BASE_DOMAIN>`, `home.<BASE_DOMAIN>` | `VERCEL_PROJECT_ID_MARKETING_WEB` | Static/ISR public landing, `/pricing`, `/products/*`, `/solution/*`, `/blogs/*`, `/contact-us`, legal pages, `sitemap.xml` (no Clerk bundle) |
+| `apps/portal-web` | `3000` | `portal.<BASE_DOMAIN>` + `*.<BASE_DOMAIN>` (`<tenantSlug>.<BASE_DOMAIN>`) | `VERCEL_PROJECT_ID_PORTAL_WEB` | Pre-tenant auth & workspace setup (`portal.*`), authenticated tenant workspaces (`<tenantSlug>.*`), and shared clinical token portals (`/claim`, `/join`, `/teleconsult`, `/verify`, `/upload`, `/queue-tv`) |
+| `apps/admin-web` | `3001` | `admin.<BASE_DOMAIN>` | `VERCEL_PROJECT_ID_ADMIN_WEB` | Platform Superadmin governance SPA |
+
+> [!NOTE]
+> **DNS Wildcard Precedence (RFC 4592 §2.2.1):** Explicit DNS records (`@`, `www`, `home`, `portal`, `admin`, `*.clinic`, `*.lab`, `*.pharmacy`, `*.org`, `*-api`) always take strict precedence over `*.<BASE_DOMAIN>`, so `<tenantSlug>.<BASE_DOMAIN>` never conflicts with platform or facility subdomains. In addition, `portal-api` and `portal-web` block all reserved subdomain labels (`home`, `www`, `portal`, `admin`, `app`, `clinic`, `lab`, `pharmacy`, `org`, etc.) during tenant registration.
+
+### `apps/marketing-web` (`<BASE_DOMAIN>`, `www.<BASE_DOMAIN>`, `home.<BASE_DOMAIN>`)
+
+GitHub Actions Vercel deployment workflows (`deploy-marketing-web-dev.yml` / `deploy-marketing-web-prod.yml`) read `VERCEL_ORG_ID`, `VERCEL_TOKEN`, and `VERCEL_PROJECT_ID_MARKETING_WEB`. Set Vercel Project **Root Directory** to `apps/marketing-web`, attach `<BASE_DOMAIN>` as primary domain, and attach `www.<BASE_DOMAIN>` and `home.<BASE_DOMAIN>` as aliases (`308` redirect to primary recommended for canonical SEO).
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_BASE_DOMAIN` | Shared platform base domain (`<base domain>`), used to derive `https://<base domain>`, `https://portal.<base domain>`, and `https://portal-api.<base domain>/api/v1`. |
+| `NEXT_PUBLIC_MARKETING_URL` | Optional explicit canonical marketing site origin override (e.g. `https://<base domain>` or `http://localhost:3002`). |
+| `NEXT_PUBLIC_PORTAL_URL` | Optional explicit Tenant Portal entry origin override for `Log in` / `Get Started` / plan CTAs (defaults to `https://portal.<base domain>` or `http://localhost:3000`). |
+| `NEXT_PUBLIC_PORTAL_API_URL` | Optional explicit Portal API URL override for `/public/plans`, `/public/blogs`, `/contact`, and `/newsletter/subscribe`. |
 
 ### `apps/admin-web` (`admin.<BASE_DOMAIN>`)
 
@@ -141,8 +161,9 @@ GitHub Actions Vercel deployment workflows (`deploy-admin-web-dev.yml` / `deploy
 | Variable | Purpose |
 |---|---|
 | `VITE_PORTAL_API_URL` | Portal API base URL (`https://portal-api.<base domain>/api/v1`). |
-| `VITE_BASE_DOMAIN` | Platform base domain (`<base domain>`) used to construct external tenant workspace (`https://<slug>.<base domain>`) and public blog links. |
-| `VITE_PORTAL_WEB_URL` | Optional explicit Tenant Portal / Public Web origin override (e.g. `https://portal.<base domain>` or `http://localhost:3000`). |
+| `VITE_BASE_DOMAIN` | Platform base domain (`<base domain>`) used to construct external tenant workspace (`https://<slug>.<base domain>`) and public blog links (`https://<base domain>/blogs/<slug>`). |
+| `VITE_PORTAL_WEB_URL` | Optional explicit Tenant Portal origin override for local dev (default `http://localhost:3000`). |
+| `VITE_MARKETING_WEB_URL` | Optional explicit Public Marketing Web origin override for local dev (default `http://localhost:3002`). |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk frontend publishable key (`pk_test_*` / `pk_live_*`). No Clerk secret key is required by the static SPA. |
 | `VITE_ADMIN_IDLE_TIMEOUT_MINUTES` | Cross-tab inactivity auto-logout timeout in minutes (default `15`, with 60s countdown modal). |
 | `VITE_ADMIN_REQUIRE_MFA` | Enforce Clerk 2FA / TOTP enrollment before accessing governance routes (`false` in dev, `true` recommended in prod). |
@@ -164,11 +185,13 @@ See `apps/admin-web/.env.example`.
 Without `EXPO_PUBLIC_CLINIC_API_URL`/`EXPO_PUBLIC_BASE_DOMAIN`, the API URL is inferred from the page host
 `<facility>.<service>.<baseDomain>` → `https://<service>-api.<baseDomain>`.
 
-### `apps/portal-web`
+### `apps/portal-web` (`portal.<BASE_DOMAIN>` + `*.<BASE_DOMAIN>`)
 
-`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_API_URL`, `PORTAL_API_URL`, `NEXT_PUBLIC_BASE_DOMAIN`, `NEXT_PUBLIC_SITE_URL`,
+Attach both `portal.<BASE_DOMAIN>` and wildcard `*.<BASE_DOMAIN>` to the `apps/portal-web` Vercel project (Root Directory: `apps/portal-web`).
+
+`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_API_URL`, `PORTAL_API_URL`, `NEXT_PUBLIC_BASE_DOMAIN`, `NEXT_PUBLIC_PORTAL_URL`, `NEXT_PUBLIC_MARKETING_URL`,
 `NEXT_PUBLIC_SERVICE_SUBDOMAINS`, `NEXT_PUBLIC_SUBDOMAIN_{CLINIC,LABORATORY,PHARMACY,ORGANIZATION}`,
-`NEXT_PUBLIC_{CONTACT,SALES,BILLING,SUPPORT}_EMAIL`, `NEXT_PUBLIC_STORAGE_PUBLIC_URL`. See `apps/portal-web/.env.example`.
+`NEXT_PUBLIC_STORAGE_PUBLIC_URL`. See `apps/portal-web/.env.example`.
 
 ### `apps/patient-app`
 

@@ -142,8 +142,8 @@ describe('Adversarial Challenge 2: Cross-Surface URL Resolvers under Malicious S
     expect(getPublicSiteUrl('blog/post-1')).toBe('https://clinicez.com/blog/post-1');
 
     (globalThis as any).window = { location: { hostname: 'localhost' } };
-    expect(getPublicSiteUrl('/blog/post-1')).toBe('http://localhost:3000/blog/post-1');
-    expect(getPublicSiteUrl('blog/post-1')).toBe('http://localhost:3000/blog/post-1');
+    expect(getPublicSiteUrl('/blog/post-1')).toBe('http://localhost:3002/blog/post-1');
+    expect(getPublicSiteUrl('blog/post-1')).toBe('http://localhost:3002/blog/post-1');
   });
 });
 

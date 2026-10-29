@@ -1,17 +1,21 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { ClinicEzLogo } from "@/components/ClinicEzLogo";
 import { CustomSignUpForm } from "../_components/CustomSignUpForm";
 import { SignUpTrialBadge } from "../_components/SignUpTrialBadge";
-import { getPortalApiUrl } from "@/utils/domain";
+import { resolveSignUpRedirectTarget } from "../_lib/signUpFlow";
+import { getMarketingSiteUrl, getPortalApiUrl } from "@/utils/domain";
 import { type BillingPublicConfig } from "@/services/billing.service";
 
 export const dynamic = "force-dynamic";
 
-async function fetchServerPublicConfig(): Promise<BillingPublicConfig | null> {
+async function fetchServerPublicConfig(host?: string): Promise<BillingPublicConfig | null> {
   try {
-    const apiBase = getPortalApiUrl();
+    const apiBase = getPortalApiUrl(host);
     const res = await fetch(`${apiBase}/billing/public-config`, {
       cache: "no-store",
       headers: { Accept: "application/json" },
@@ -23,8 +27,37 @@ async function fetchServerPublicConfig(): Promise<BillingPublicConfig | null> {
   }
 }
 
-export default async function SignUpPage() {
-  const publicConfig = await fetchServerPublicConfig();
+interface SignUpPageProps {
+  searchParams?: Promise<{
+    plan?: string;
+    billing?: string;
+    redirect_url?: string;
+  }>;
+}
+
+export default async function SignUpPage({ searchParams }: SignUpPageProps = {}) {
+  const headerList = await headers();
+  const host =
+    headerList.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    headerList.get("host") ||
+    "";
+
+  const { userId } = await auth();
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+
+  if (userId) {
+    redirect(
+      resolveSignUpRedirectTarget({
+        redirectUrl: resolvedSearchParams?.redirect_url,
+        plan: resolvedSearchParams?.plan,
+        billing: resolvedSearchParams?.billing,
+        alreadySignedIn: true,
+      })
+    );
+  }
+
+  const publicConfig = await fetchServerPublicConfig(host);
+  const marketingHomeUrl = getMarketingSiteUrl("/", host);
 
   return (
     <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
@@ -34,7 +67,7 @@ export default async function SignUpPage() {
 
       {/* Top Header Logo */}
       <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between z-10">
-        <Link href="/" className="inline-flex items-center gap-2.5 group shrink-0">
+        <Link href={marketingHomeUrl} className="inline-flex items-center gap-2.5 group shrink-0">
           <ClinicEzLogo markClassName="h-8 w-8" textClassName="text-xl font-bold tracking-tight text-foreground" />
         </Link>
         <Link 

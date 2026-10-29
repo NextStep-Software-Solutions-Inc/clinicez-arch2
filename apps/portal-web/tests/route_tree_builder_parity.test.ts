@@ -26,8 +26,8 @@ const EXCLUDED_DIRS = new Set([
   "dashboard",
   "portal",
   "[tenant]",
-  // Marketing / corporate landing pages under (main)
-  "(main)",
+  // Workspace onboarding & registration flow (authenticated/portal shell, not patient QR/token builder)
+  "tenants",
   // Clerk authentication flows
   "sign-in",
   "sign-up",
@@ -83,7 +83,11 @@ export function discoverPublicRoutes(appDir: string): string[] {
         else if (/^\(.*\)$/.test(name)) walk(next, segments);
         else walk(next, [...segments, name]);
       } else if (ROUTE_FILE.test(entry.name)) {
-        routes.add("/" + segments.join("/"));
+        // Root src/app/page.tsx is the portal.{domain} auth gateway redirect (/sync-auth or /sign-in),
+        // not a canonical unauthenticated patient/verification route.
+        if (segments.length > 0) {
+          routes.add("/" + segments.join("/"));
+        }
       }
     }
   };

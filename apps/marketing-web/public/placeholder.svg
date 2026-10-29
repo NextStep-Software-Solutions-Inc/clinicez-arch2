@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F1F5F9" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D6963" />
+      <stop offset="100%" stop-color="#14B8A6" />
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg)" rx="16" />
+  <g transform="translate(160, 90)">
+    <rect width="80" height="80" rx="20" fill="url(#primaryGrad)" opacity="0.12" />
+    <path d="M40 24v32M24 40h32" stroke="#0D6963" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+  <text x="50%" y="210" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#64748B">
+    Clinic EZ Healthcare Facility
+  </text>
+  <text x="50%" y="232" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#94A3B8">
+    Nextstep Software Corporation
+  </text>
+</svg>

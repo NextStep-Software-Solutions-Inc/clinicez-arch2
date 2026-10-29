@@ -91,6 +91,9 @@ jobs:
       - name: Test portal web
         run: bun run test:portal
 
+      - name: Test marketing web
+        run: bun run test:marketing
+
       - name: Test admin web
         run: bun run test:admin
 
@@ -100,11 +103,17 @@ jobs:
       - name: Lint portal web
         run: bun run lint:portal
 
+      - name: Lint marketing web
+        run: bun run lint:marketing
+
       - name: Lint admin web
         run: bun run lint:admin
 
       - name: Build portal web
         run: bun run build:portal
+
+      - name: Build marketing web
+        run: bun run build:marketing
 
       - name: Build admin web
         run: bun run build:admin

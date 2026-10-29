@@ -1,10 +1,19 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { Sparkles, CheckCircle2, ShieldCheck } from "lucide-react";
 import { ClinicEzLogo } from "@/components/ClinicEzLogo";
+import { getMarketingSiteUrl } from "@/utils/domain";
 import { CustomSignInForm } from "../_components/CustomSignInForm";
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const headerList = await headers();
+  const host =
+    headerList.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    headerList.get("host") ||
+    "";
+  const marketingHomeUrl = getMarketingSiteUrl("/", host);
+
   return (
     <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
       {/* Decorative background glows */}
@@ -13,7 +22,7 @@ export default function SignInPage() {
 
       {/* Top Header Logo */}
       <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between z-10">
-        <Link href="/" className="inline-flex items-center gap-2.5 group shrink-0">
+        <Link href={marketingHomeUrl} className="inline-flex items-center gap-2.5 group shrink-0">
           <ClinicEzLogo markClassName="h-8 w-8" textClassName="text-xl font-bold tracking-tight text-foreground" />
         </Link>
         <Link 

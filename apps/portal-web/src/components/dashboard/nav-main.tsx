@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
+import { isTenantSubdomainHost } from "@/utils/domain"
 import QuickCreateDialog from "./QuickCreateDialog"
 import WorkspaceSearchDialog from "./WorkspaceSearchDialog"
 
@@ -35,6 +36,41 @@ interface NavItem {
   }[]
 }
 
+export function resolveDashboardNavHref(
+  tenant: string | undefined,
+  itemUrl?: string,
+  onSubdomain: boolean = isTenantSubdomainHost(),
+): string {
+  if (!itemUrl) return ""
+  if (onSubdomain || !tenant) {
+    return itemUrl
+  }
+  return `/${tenant}${itemUrl}`
+}
+
+export function isDashboardNavActive(
+  pathname: string | null | undefined,
+  tenant: string | undefined,
+  itemUrl?: string,
+  allowSubPath: boolean = true,
+): boolean {
+  if (!pathname || !itemUrl) return false
+  const prefixed = tenant ? `/${tenant}${itemUrl}` : itemUrl
+
+  if (pathname === itemUrl || pathname === prefixed) {
+    return true
+  }
+
+  if (allowSubPath && itemUrl !== "/dashboard") {
+    return (
+      pathname.startsWith(`${itemUrl}/`) ||
+      pathname.startsWith(`${prefixed}/`)
+    )
+  }
+
+  return false
+}
+
 export function NavMain({
   items,
 }: {
@@ -42,6 +78,7 @@ export function NavMain({
 }) {
   const { tenant } = useParams<{ tenant: string }>()
   const pathname = usePathname()
+  const onSubdomain = isTenantSubdomainHost()
   
   // Track open state of expandable menus
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({})
@@ -135,15 +172,15 @@ export function NavMain({
                   </SidebarMenuButton>
                   
                   {isOpen && (
-                    <SidebarMenuSub className="ml-4 border-l border-slate-100 dark:border-slate-800 pl-2 mt-1 space-y-1">
+                    <SidebarMenuSub className="ml-4 border-l border-border pl-2 mt-1 space-y-1">
                       {item.items?.map((subItem) => {
-                        const subPath = `/${tenant}${subItem.url}`
-                        const isSubActive = pathname === subPath
+                        const subHref = resolveDashboardNavHref(tenant, subItem.url, onSubdomain)
+                        const isSubActive = isDashboardNavActive(pathname, tenant, subItem.url, true)
                         
                         return (
                           <SidebarMenuSubItem key={subItem.title}>
                             <SidebarMenuSubButton asChild isActive={isSubActive}>
-                              <Link href={subPath} className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-primary transition-colors">
+                              <Link href={subHref} className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
                                 {subItem.icon && <subItem.icon className="h-4 w-4" />}
                                 <span className="text-xs font-semibold">{subItem.title}</span>
                               </Link>
@@ -157,8 +194,8 @@ export function NavMain({
               )
             }
 
-            const newPath = item.url ? `/${tenant}${item.url}` : ""
-            const isActive = pathname === newPath || (!!item.url && item.url !== "/dashboard" && pathname?.startsWith(`${newPath}/`))
+            const newPath = resolveDashboardNavHref(tenant, item.url, onSubdomain)
+            const isActive = isDashboardNavActive(pathname, tenant, item.url, true)
             
             return (
               <SidebarMenuItem key={item.title}>

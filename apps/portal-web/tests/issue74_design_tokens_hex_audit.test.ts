@@ -15,17 +15,19 @@ const WORKSPACE_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(WORKSPACE_ROOT, "src");
 
 const ISSUE_74_FRONTEND_COMPONENTS = [
+  "app/page.tsx",
   "app/sign-up/[[...sign-up]]/page.tsx",
   "app/sign-up/_components/SignUpTrialBadge.tsx",
   "app/sign-up/_components/CustomSignUpForm.tsx",
-  "app/(main)/pricing/_components/PricingClient.tsx",
+  "app/tenants/register/layout.tsx",
+  "app/tenants/register/page.tsx",
+  "app/tenants/register/_components/TenantRegistrationClient.tsx",
   "app/[tenant]/dashboard/overview/WorkspaceOverviewClient.tsx",
   "components/dashboard/TrialCountdownBanner.tsx",
   "components/join/JoinClient.tsx",
   "components/join/ProgressiveClaimCard.tsx",
-  "app/(main)/contact-us/_components/ContactUsClient.tsx",
-  "components/NewsletterForm.tsx",
   "components/join/MobileAppStoreBadges.tsx",
+  "lib/planPricing.ts",
   "app/join/page.tsx",
   "app/join/[tenantSlug]/[facilitySlug]/page.tsx",
   "components/join/JoinLandingClient.tsx",

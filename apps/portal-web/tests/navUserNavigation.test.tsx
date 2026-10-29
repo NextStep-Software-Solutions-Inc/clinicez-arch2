@@ -65,6 +65,7 @@ import {
   getSubscriptionPlansHref,
   getUserInitials,
 } from "../src/components/dashboard/nav-user";
+import { getMarketingSiteUrl } from "../src/utils/domain";
 import {
   NotificationsDialog,
   NotificationsDialogBody,
@@ -122,12 +123,13 @@ describe("Issue #117 — Workspace Team Profile Menu Navigation & Clerk Billing 
       );
     });
 
-    test("falls back to /pricing when outside a tenant context", () => {
-      expect(getSubscriptionPlansHref(undefined)).toBe("/pricing");
-      expect(getSubscriptionPlansHref(null)).toBe("/pricing");
-      expect(getSubscriptionPlansHref("")).toBe("/pricing");
-      expect(getSubscriptionPlansHref("   ")).toBe("/pricing");
-      expect(getSubscriptionPlansHref([])).toBe("/pricing");
+    test("falls back to marketing /pricing URL when outside a tenant context", () => {
+      const expectedPricingUrl = getMarketingSiteUrl("/pricing");
+      expect(getSubscriptionPlansHref(undefined)).toBe(expectedPricingUrl);
+      expect(getSubscriptionPlansHref(null)).toBe(expectedPricingUrl);
+      expect(getSubscriptionPlansHref("")).toBe(expectedPricingUrl);
+      expect(getSubscriptionPlansHref("   ")).toBe(expectedPricingUrl);
+      expect(getSubscriptionPlansHref([])).toBe(expectedPricingUrl);
     });
   });
 

@@ -20,6 +20,7 @@ let mockAuthResult: {
 };
 
 let mockCookieValues: Record<string, string> = {};
+let mockHeaderValues: Record<string, string> = {};
 
 mock.module("@clerk/nextjs/server", () => ({
   auth: mock(async () => mockAuthResult),
@@ -31,6 +32,9 @@ mock.module("next/headers", () => ({
       const val = mockCookieValues[name];
       return val ? { name, value: val } : undefined;
     },
+  })),
+  headers: mock(async () => ({
+    get: (name: string) => mockHeaderValues[name.toLowerCase()] ?? null,
   })),
 }));
 
@@ -51,6 +55,7 @@ describe("SyncAuthPage 4-Priority Post-Authentication Gateway Routing", () => {
 
   beforeEach(() => {
     mockCookieValues = {};
+    mockHeaderValues = {};
     mockAuthResult = {
       userId: "user_test_123",
       getToken: async () => "jwt_valid_token",
@@ -62,9 +67,13 @@ describe("SyncAuthPage 4-Priority Post-Authentication Gateway Routing", () => {
     staffService.getPendingSelfInvitation = originalGetPendingSelfInvitation;
   });
 
-  const runSyncAuth = async (): Promise<string> => {
+  const runSyncAuth = async (
+    searchParams?: Record<string, string | string[] | undefined>,
+  ): Promise<string> => {
     try {
-      await SyncAuthPage();
+      await SyncAuthPage(
+        searchParams ? { searchParams: Promise.resolve(searchParams) } : undefined,
+      );
       throw new Error("Expected redirect was not thrown");
     } catch (err: any) {
       if (err instanceof RedirectError) {
@@ -130,15 +139,63 @@ describe("SyncAuthPage 4-Priority Post-Authentication Gateway Routing", () => {
   });
 
   describe("Priority 2: Owned Workspace or Active Membership", () => {
-    test("P2.1: Routes to /{tenantSlug}/dashboard when user has owned workspace and no cookie", async () => {
-      tenantService.getTenantByOwner = mock(async () => ({
-        tenantSlug: "st-jude-hospital",
-        name: "St. Jude Hospital",
-        tenantType: "Workplace",
-      })) as any;
+    test("P2.1: Routes to /{tenantSlug}/dashboard when user has owned workspace on plain localhost", async () => {
+      const prevBaseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
+      delete process.env.NEXT_PUBLIC_BASE_DOMAIN;
+      try {
+        tenantService.getTenantByOwner = mock(async () => ({
+          tenantSlug: "st-jude-hospital",
+          name: "St. Jude Hospital",
+          tenantType: "Workplace",
+        })) as any;
 
-      const dest = await runSyncAuth();
-      expect(dest).toBe("/st-jude-hospital/dashboard");
+        const dest = await runSyncAuth();
+        expect(dest).toBe("/st-jude-hospital/dashboard");
+      } finally {
+        if (prevBaseDomain !== undefined) {
+          process.env.NEXT_PUBLIC_BASE_DOMAIN = prevBaseDomain;
+        }
+      }
+    });
+
+    test("P2.2: Routes to canonical https://{tenantSlug}.{baseDomain}/dashboard when accessed via portal.{baseDomain}", async () => {
+      const prevBaseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
+      delete process.env.NEXT_PUBLIC_BASE_DOMAIN;
+      try {
+        mockHeaderValues["x-forwarded-host"] = "portal.dev.clinicez.net";
+        tenantService.getTenantByOwner = mock(async () => ({
+          tenantSlug: "st-jude-hospital",
+          name: "St. Jude Hospital",
+          tenantType: "Workplace",
+        })) as any;
+
+        const dest = await runSyncAuth();
+        expect(dest).toBe("https://st-jude-hospital.dev.clinicez.net/dashboard");
+      } finally {
+        if (prevBaseDomain !== undefined) {
+          process.env.NEXT_PUBLIC_BASE_DOMAIN = prevBaseDomain;
+        }
+      }
+    });
+
+    test("P2.3: Routes to http://{tenantSlug}.localhost:3000/dashboard when accessed via portal.localhost:3000", async () => {
+      const prevBaseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
+      delete process.env.NEXT_PUBLIC_BASE_DOMAIN;
+      try {
+        mockHeaderValues["host"] = "portal.localhost:3000";
+        tenantService.getTenantByOwner = mock(async () => ({
+          tenantSlug: "st-jude-hospital",
+          name: "St. Jude Hospital",
+          tenantType: "Workplace",
+        })) as any;
+
+        const dest = await runSyncAuth();
+        expect(dest).toBe("http://st-jude-hospital.localhost:3000/dashboard");
+      } finally {
+        if (prevBaseDomain !== undefined) {
+          process.env.NEXT_PUBLIC_BASE_DOMAIN = prevBaseDomain;
+        }
+      }
     });
   });
 
@@ -214,6 +271,15 @@ describe("SyncAuthPage 4-Priority Post-Authentication Gateway Routing", () => {
 
       const dest = await runSyncAuth();
       expect(dest).toBe("/tenants/register");
+    });
+
+    test("P4.2: Preserves plan and billing query params when routing to /tenants/register", async () => {
+      mockCookieValues = {};
+      tenantService.getTenantByOwner = mock(async () => null) as any;
+      staffService.getPendingSelfInvitation = mock(async () => null) as any;
+
+      const dest = await runSyncAuth({ plan: "Pro", billing: "annual" });
+      expect(dest).toBe("/tenants/register?plan=Pro&billing=annual");
     });
   });
 });

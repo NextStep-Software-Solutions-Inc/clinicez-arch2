@@ -15,7 +15,7 @@ import {
   IconFileCertificate,
 } from "@tabler/icons-react"
 
-import { NavMain } from "@/components/dashboard/nav-main"
+import { NavMain, resolveDashboardNavHref } from "@/components/dashboard/nav-main"
 import { NavUser } from "@/components/dashboard/nav-user"
 import { NotificationsDialog } from "@/components/dashboard/NotificationsDialog"
 import { WorkspaceSwitcher } from "@/components/dashboard/WorkspaceSwitcher"
@@ -125,7 +125,7 @@ export function AppSidebar({
                 asChild
                 className="data-[slot=sidebar-menu-button]:!p-1.5"
               >
-                <a href={`/${tenant}/dashboard`}>
+                <a href={resolveDashboardNavHref(tenant, "/dashboard")}>
                   {logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={logoUrl} alt="" className="!size-5 rounded object-contain" referrerPolicy="no-referrer" />
