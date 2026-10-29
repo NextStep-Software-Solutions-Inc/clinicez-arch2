@@ -86,7 +86,7 @@ export interface DemographicCohort {
 }
 
 export function resolveCohort(
-  patient: { age?: number; dateOfBirth?: string; gender?: string } | null | undefined
+  patient: { age?: number; dateOfBirth?: string; sex?: string } | null | undefined
 ): DemographicCohort {
   if (!patient) {
     return {
@@ -103,7 +103,7 @@ export function resolveCohort(
     };
   }
 
-  const female = (patient.gender || '').toLowerCase().startsWith('f');
+  const female = (patient.sex || '').toLowerCase().startsWith('f');
   let years = typeof patient.age === 'number' ? patient.age : 0;
   let months = years * 12;
 

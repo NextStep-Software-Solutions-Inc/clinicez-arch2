@@ -72,7 +72,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "12-345678901-2", // Hyphenated in DB
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -137,7 +137,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "123456789012", // Unhyphenated in DB
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1982, 3, 4),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -196,7 +196,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1985, 8, 15),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -254,7 +254,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "030263078507",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1985, 8, 15),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -317,7 +317,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000004",
             DateOfBirth = new DateOnly(1978, 12, 16),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         // Pre-existing 2026 enlistment with allocated control numbers
@@ -399,7 +399,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000005",
             DateOfBirth = new DateOnly(1980, 3, 19),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
 
         // Pre-existing 2025 expired entry
@@ -523,7 +523,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         var patientB = new Patient
@@ -537,7 +537,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "12-345678901-2", // Same PIN in different tenant
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
 
         dbContext.Patients.AddRange(patientA, patientB);
@@ -587,7 +587,7 @@ public class YakapMasterlistSyncTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000099",
             DateOfBirth = new DateOnly(1863, 11, 30),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();

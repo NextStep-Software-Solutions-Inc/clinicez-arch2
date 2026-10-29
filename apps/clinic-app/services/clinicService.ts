@@ -1522,7 +1522,7 @@ export interface PediatricZScoreResult {
 
 export interface CalculatePediatricZScorePayload {
   dateOfBirth: string;
-  gender: string;
+  sex: string;
   lengthOrHeightCm: number;
   weightKg: number;
   isMeasuredRecumbent?: boolean;
@@ -1533,7 +1533,8 @@ export interface PatientDemographics {
   dob?: string;
   dateOfBirth?: string;
   age: number;
-  gender: string;
+  sex: string;
+  genderIdentity?: string | null;
   civilStatus?: string | null;
   contactNumber: string;
   email?: string | null;
@@ -1765,8 +1766,7 @@ export interface ClinicPatient {
   fullName: string;
   dateOfBirth: string;
   age: number;
-  gender: string;
-  sex?: string;
+  sex: string;
   genderIdentity?: string | null;
   civilStatus?: string;
   contactNumber: string;
@@ -1855,8 +1855,7 @@ export interface RegisterPatientPayload {
   middleName?: string;
   suffix?: string;
   dateOfBirth: string;
-  gender: string;
-  sex?: string;
+  sex: string;
   genderIdentity?: string | null;
   civilStatus?: string;
   contactNumber: string;

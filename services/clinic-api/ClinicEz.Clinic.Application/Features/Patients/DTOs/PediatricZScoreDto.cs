@@ -14,7 +14,7 @@ public sealed record PediatricZScoreDto(
 
 public sealed record CalculatePediatricZScoreRequest(
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     decimal LengthOrHeightCm,
     decimal WeightKg,
     bool IsMeasuredRecumbent = false,

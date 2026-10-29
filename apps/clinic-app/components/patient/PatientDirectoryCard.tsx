@@ -72,7 +72,7 @@ export function hasStatAllergy(allergies?: string | null): boolean {
  * Formats the full chronological age (`yrs, mos, wks, days`) and core demographic line.
  */
 export function formatPatientDemographicsLine(
-  patient: Pick<ClinicPatient, 'dateOfBirth' | 'age' | 'gender' | 'civilStatus' | 'bloodType'>,
+  patient: Pick<ClinicPatient, 'dateOfBirth' | 'age' | 'sex' | 'civilStatus' | 'bloodType'>,
   referenceDate?: Date
 ): string {
   const ageDisplay = patient.dateOfBirth
@@ -83,7 +83,7 @@ export function formatPatientDemographicsLine(
 
   return [
     ageDisplay,
-    patient.gender,
+    patient.sex,
     patient.civilStatus,
     patient.bloodType ? `Blood type ${patient.bloodType}` : null,
   ]

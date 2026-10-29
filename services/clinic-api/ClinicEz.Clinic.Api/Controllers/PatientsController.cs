@@ -131,7 +131,7 @@ public sealed class PatientsController : ControllerBase
             request.MiddleName,
             request.Suffix,
             request.DateOfBirth,
-            request.Gender,
+            request.Sex,
             request.CivilStatus,
             request.ContactNumber,
             request.Email,
@@ -152,7 +152,6 @@ public sealed class PatientsController : ControllerBase
             request.CustomFields,
             request.VerificationStatus,
             request.MedicalHistories,
-            request.Sex,
             request.GenderIdentity);
 
         var result = await _sender.Send(command, ct);
@@ -532,7 +531,7 @@ public sealed class PatientsController : ControllerBase
     {
         var query = new CalculatePediatricZScoreQuery(
             request.DateOfBirth,
-            request.Gender,
+            request.Sex,
             request.LengthOrHeightCm,
             request.WeightKg,
             request.IsMeasuredRecumbent,
@@ -592,7 +591,7 @@ public sealed record UpdatePatientRequest(
     string? MiddleName,
     string? Suffix,
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -613,5 +612,4 @@ public sealed record UpdatePatientRequest(
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string? VerificationStatus = null,
     List<MedicalHistoryEntryDto>? MedicalHistories = null,
-    string? Sex = null,
     string? GenderIdentity = null);

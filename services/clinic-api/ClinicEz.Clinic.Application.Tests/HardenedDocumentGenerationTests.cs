@@ -102,7 +102,7 @@ public class HardenedDocumentGenerationTests
             FirstName = "Maria Clara",
             LastName = "De Los Santos",
             DateOfBirth = new DateOnly(1992, 5, 14),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             PhilHealthNumber = "PHIC-12-050192831-2"
         };
 
@@ -361,7 +361,7 @@ public class HardenedDocumentGenerationTests
             FirstName = "Juanito",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1980, 8, 20),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             PhilHealthNumber = "PHIC-18-091238471-1"
         };
 
@@ -1329,7 +1329,7 @@ public class HardenedDocumentGenerationTests
             FirstName = "Maria Clara",
             LastName = "De Los Santos",
             DateOfBirth = new DateOnly(1992, 5, 14),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             PhilHealthNumber = "PHIC-12-050192831-2"
         };
     }

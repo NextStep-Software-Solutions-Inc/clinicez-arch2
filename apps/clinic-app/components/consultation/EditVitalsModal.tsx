@@ -179,7 +179,7 @@ export default function EditVitalsModal({
       const isRecumbent = cohort.isInfant || form.posture === 'RECUMBENT';
       const [res] = await clinicService.calculatePediatricZScore({
         dateOfBirth: patientRecord.dateOfBirth!,
-        gender: cohort.isFemale ? 'Female' : 'Male',
+        sex: cohort.isFemale ? 'Female' : 'Male',
         weightKg: w ?? 0,
         lengthOrHeightCm: effectiveLen ?? 0,
         isMeasuredRecumbent: isRecumbent,
@@ -331,7 +331,7 @@ export default function EditVitalsModal({
       title={title}
       subtitle={
         patientRecord
-          ? `${patientRecord.fullName} (${patientRecord.age}yo ${patientRecord.gender}) • Code: ${patientRecord.patientCode || 'PAT'}`
+          ? `${patientRecord.fullName} (${patientRecord.age}yo ${patientRecord.sex}) • Code: ${patientRecord.patientCode || 'PAT'}`
           : 'Update patient vitals and screening'
       }
       maxWidth={640}

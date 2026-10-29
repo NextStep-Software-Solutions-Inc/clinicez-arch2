@@ -136,7 +136,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
     lastName: 'Santos',
     dateOfBirth: '2025-06-01',
     age: 1,
-    gender: 'Male',
+    sex: 'Male',
     civilStatus: 'Single',
     contactNumber: '09171234567',
     verificationStatus: 'Verified',
@@ -154,7 +154,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
     lastName: 'Reyes',
     dateOfBirth: '2006-03-15',
     age: 20,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Single',
     contactNumber: '09181234567',
     verificationStatus: 'Verified',
@@ -172,7 +172,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
     lastName: 'Cruz',
     dateOfBirth: '1952-11-20',
     age: 73,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Widowed',
     contactNumber: '09191234567',
     verificationStatus: 'Verified',
@@ -346,8 +346,8 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
 
     test('initial cohort auto-detection matrices across patient demographic spectra', () => {
       // Helper replicating getInitialCohort in both modals
-      const computeInitialCohort = (age: number, gender: string, isSenior?: boolean) => {
-        const g = (gender || '').toLowerCase();
+      const computeInitialCohort = (age: number, sex: string, isSenior?: boolean) => {
+        const g = (sex || '').toLowerCase();
         if (age < 18) return 'lib_immchild';
         if (g === 'female' && age >= 9 && age <= 26) return 'lib_immyoungw';
         if (age >= 60 || isSenior) return 'lib_immelderly';
@@ -387,7 +387,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           visible: true,
           onClose: () => {},
           patient: mockPatientChild,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           onAdministerVaccine: async () => {},
         })
       );
@@ -400,7 +400,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           visible: true,
           onClose: () => {},
           patient: mockPatientAdultFemale,
-          demographics: { age: 20, gender: 'Female' } as PatientDemographics,
+          demographics: { age: 20, sex: 'Female' } as PatientDemographics,
           onAdministerVaccine: async () => {},
         })
       );
@@ -413,7 +413,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           visible: true,
           onClose: () => {},
           patient: mockPatientSenior,
-          demographics: { age: 73, gender: 'Female', isSenior: true } as PatientDemographics,
+          demographics: { age: 73, sex: 'Female', isSenior: true } as PatientDemographics,
           onAdministerVaccine: async () => {},
         })
       );
@@ -675,7 +675,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           visible: true,
           onClose: () => {},
           patient: mockPatientChild,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           onAdministerVaccine: async () => {},
         })
       );
@@ -717,7 +717,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
           visible: true,
           onClose: () => {},
           patient: mockPatientChild,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           onRecordHistoricalVaccine: async () => {},
         })
       );
@@ -738,7 +738,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockPatientChild,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           immunizations: [],
           onAdministerVaccine: async () => {},
           onRecordHistoricalVaccine: async () => {},

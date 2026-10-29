@@ -279,7 +279,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         if (_patientRepo != null && distinctPatientIds.Count > 0)
         {
             var patients = await _patientRepo.Query(p => distinctPatientIds.Contains(p.Id))
-                .Select(p => new { p.DateOfBirth, p.Gender })
+                .Select(p => new { p.DateOfBirth, p.Sex })
                 .ToListAsync(cancellationToken);
 
             var todayDateOnly = DateOnly.FromDateTime(today);
@@ -292,7 +292,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
                 else if (age >= 60) seniorCount++;
                 else adultCount++;
 
-                var g = p.Gender.ToString().ToLowerInvariant();
+                var g = p.Sex.ToString().ToLowerInvariant();
                 if (g.StartsWith("m")) maleCount++;
                 else if (g.StartsWith("f")) femaleCount++;
                 else otherGenderCount++;

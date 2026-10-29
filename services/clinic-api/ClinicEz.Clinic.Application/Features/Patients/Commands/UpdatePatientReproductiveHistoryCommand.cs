@@ -70,8 +70,8 @@ public sealed class UpdatePatientReproductiveHistoryCommandHandler : IRequestHan
             throw new NotFoundException($"Patient '{request.PatientId}' not found in this clinic.");
         }
 
-        // Gender check: male patients are not applicable
-        var isMale = patient.Gender == Gender.Male;
+        // Sex check: male patients are not applicable
+        var isMale = patient.Sex == BiologicalSex.Male;
         var effectiveApplicable = !isMale && request.IsApplicable;
 
         var entry = await _reproductiveRepo.Query(r => r.PatientId == request.PatientId)

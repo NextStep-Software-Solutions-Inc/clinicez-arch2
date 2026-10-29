@@ -112,7 +112,7 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             order.PatientId,
             order.PatientName,
             patientAge,
-            patient?.Gender.ToString() ?? "Unknown",
+            patient?.Sex.ToString() ?? "Unknown",
             patient?.PhilHealthNumber,
             order.ClinicalDiagnosis,
             order.Notes,

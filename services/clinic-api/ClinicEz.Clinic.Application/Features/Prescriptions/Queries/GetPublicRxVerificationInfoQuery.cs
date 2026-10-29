@@ -88,7 +88,7 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
             encounter.PatientName,
             patientInitials,
             patientAge,
-            patient?.Gender.ToString() ?? "Unknown",
+            patient?.Sex.ToString() ?? "Unknown",
             patient?.Allergies != null && patient.Allergies.Count > 0 ? string.Join(", ", patient.Allergies.Select(a => a.Allergen)) : null,
             encounter.Assessment,
             encounter.Prescriptions.Select(p => new PrescriptionSlipItemDto(

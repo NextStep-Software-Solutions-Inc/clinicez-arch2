@@ -12,7 +12,7 @@ interface BulkStudentImportModalProps {
 }
 
 const CSV_COLUMNS =
-  'student_id,first_name,last_name,middle_name,gender,dob,contact_number,email,college,program,year_level';
+  'student_id,first_name,last_name,middle_name,sex,dob,contact_number,email,college,program,year_level';
 
 export function BulkStudentImportModal({
   visible,
@@ -77,8 +77,14 @@ export function BulkStudentImportModal({
       const lastName = record['last_name'] || record['lastname'] || record['lname'] || '';
       const middleName = record['middle_name'] || record['middlename'] || record['mname'] || '';
       const studentId = record['student_id'] || record['id_number'] || record['studentid'] || record['id'] || '';
-      const genderRaw = (record['gender'] || record['sex'] || '').toLowerCase();
-      const gender = (genderRaw.startsWith('f') ? 'Female' : 'Male') as 'Male' | 'Female';
+      const sexRaw = (record['sex'] || '').toLowerCase();
+      const sex = sexRaw.startsWith('f')
+        ? 'Female'
+        : sexRaw.startsWith('i')
+        ? 'Intersex'
+        : sexRaw.startsWith('u')
+        ? 'Unknown'
+        : 'Male';
       const dob = record['dob'] || record['date_of_birth'] || record['birthdate'] || '';
       const contactNumber = record['contact_number'] || record['contact'] || record['phone'] || '';
       const email = record['email'] || undefined;
@@ -90,8 +96,8 @@ export function BulkStudentImportModal({
         errors.push(`Row ${rowNum}: Missing required first name or last name.`);
         return;
       }
-      if (!genderRaw) {
-        errors.push(`Row ${rowNum}: Missing gender.`);
+      if (!sexRaw) {
+        errors.push(`Row ${rowNum}: Missing sex.`);
         return;
       }
       if (!dob || !contactNumber) {
@@ -103,7 +109,7 @@ export function BulkStudentImportModal({
         firstName,
         lastName,
         middleName: middleName || undefined,
-        gender,
+        sex,
         dateOfBirth: dob,
         civilStatus: 'Single',
         contactNumber,

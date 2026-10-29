@@ -133,7 +133,7 @@ export interface ClinicCustomFieldDefinition {
 }
 
 export interface StaticPatientValues {
-  gender?: string;
+  sex?: string;
   civilStatus?: string;
   dateOfBirth?: string;
   age?: number;
@@ -449,16 +449,16 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
         isActive: true,
         visibilityRuleJson: JSON.stringify({
           source: 'static',
-          field: 'gender',
+          field: 'sex',
           operator: 'equals',
           value: 'Female',
         }),
       };
 
-      const femaleHarness = new DynamicCustomFieldsRendererHarness([pregnancyField], {}, { gender: 'Female' });
+      const femaleHarness = new DynamicCustomFieldsRendererHarness([pregnancyField], {}, { sex: 'Female' });
       expect(femaleHarness.visibleDefinitions).toHaveLength(1);
 
-      const maleHarness = new DynamicCustomFieldsRendererHarness([pregnancyField], {}, { gender: 'Male' });
+      const maleHarness = new DynamicCustomFieldsRendererHarness([pregnancyField], {}, { sex: 'Male' });
       expect(maleHarness.visibleDefinitions).toHaveLength(0);
     });
 

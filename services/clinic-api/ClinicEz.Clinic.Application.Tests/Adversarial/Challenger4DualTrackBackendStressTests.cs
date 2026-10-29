@@ -46,7 +46,7 @@ public sealed class Challenger4DualTrackBackendStressTests
         PhilHealthNumber = pin,
         ContactNumber = "09170009999",
         DateOfBirth = new DateOnly(1985, 6, 15),
-        Gender = Gender.Female,
+        Sex = BiologicalSex.Female,
         CustomFields = new Dictionary<string, object?>()
     };
 
@@ -204,7 +204,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             PhilHealthNumber = "030263078507",
             ContactNumber = "09171112222",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             CustomFields = new Dictionary<string, object?>()
         };
 
@@ -355,7 +355,7 @@ public sealed class Challenger4DualTrackBackendStressTests
             PhilHealthNumber = storedPinInDb,
             ContactNumber = "09170003333",
             DateOfBirth = new DateOnly(1980, 5, 20),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             CustomFields = new Dictionary<string, object?>()
         };
 

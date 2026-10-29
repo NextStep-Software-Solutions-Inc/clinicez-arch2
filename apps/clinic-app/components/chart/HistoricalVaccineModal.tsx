@@ -38,11 +38,11 @@ export default function HistoricalVaccineModal({
 }: HistoricalVaccineModalProps) {
   // Determine initial cohort by patient demographics
   const age = demographics?.age ?? patient?.age ?? 0;
-  const gender = (demographics?.gender || patient?.gender || '').toLowerCase();
+  const sex = (demographics?.sex || patient?.sex || '').toLowerCase();
 
   const getInitialCohort = (): 'lib_immchild' | 'lib_immyoungw' | 'lib_immpregw' | 'lib_immelderly' => {
     if (age < 18) return 'lib_immchild';
-    if (gender === 'female' && age >= 9 && age <= 49) return 'lib_immyoungw';
+    if (sex === 'female' && age >= 9 && age <= 49) return 'lib_immyoungw';
     if (age >= 60 || demographics?.isSenior) return 'lib_immelderly';
     return 'lib_immchild';
   };

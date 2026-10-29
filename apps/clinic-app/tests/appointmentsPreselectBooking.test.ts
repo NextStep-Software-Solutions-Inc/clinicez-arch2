@@ -184,7 +184,7 @@ describe('Book Appointment from Patient List & Post-Booking Success Dialog', () 
     fullName: 'Ambray, Cassandra',
     dateOfBirth: '1999-12-28',
     age: 26,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Single',
     contactNumber: '09357506035',
     verificationStatus: 'Verified',

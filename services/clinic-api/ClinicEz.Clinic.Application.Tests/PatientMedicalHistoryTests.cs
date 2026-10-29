@@ -262,7 +262,7 @@ public sealed class PatientMedicalHistoryTests
             LastName = "Penduko",
             ContactNumber = "09181112233",
             DateOfBirth = new DateOnly(1975, 5, 20),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         patient.Alerts.Add(new PatientAlert
         {
@@ -374,7 +374,7 @@ public sealed class PatientMedicalHistoryTests
             LastName = "Luna",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         await patientRepo.AddAsync(patient);
 
@@ -480,7 +480,7 @@ public sealed class PatientMedicalHistoryTests
             LastName = "Reyes",
             ContactNumber = "09170001122",
             DateOfBirth = new DateOnly(1995, 2, 2),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
         await patientRepo.AddAsync(patient);
 

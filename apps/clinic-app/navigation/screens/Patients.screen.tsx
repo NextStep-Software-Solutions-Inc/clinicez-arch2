@@ -203,7 +203,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formLastName, setFormLastName] = useState('');
   const [formMiddleName, setFormMiddleName] = useState('');
   const [formDob, setFormDob] = useState('');
-  const [formGender, setFormGender] = useState('Male');
+  const [formSex, setFormSex] = useState('Male');
   const [formGenderIdentity, setFormGenderIdentity] = useState('');
   const [formCivilStatus, setFormCivilStatus] = useState('Single');
   const { options: dynamicSexOptions } = useEhrOptions('sex');
@@ -612,7 +612,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
 
     // Defensive custom fields validation
-    const staticValues = { gender: formGender, civilStatus: formCivilStatus, dateOfBirth: formDob };
+    const staticValues = { sex: formSex, civilStatus: formCivilStatus, dateOfBirth: formDob };
     if (tenantCustomFields.length > 0) {
       const { isValid, errors } = validateCustomFields(tenantCustomFields, dynamicFieldValues, staticValues);
       if (!isValid) {
@@ -704,8 +704,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       lastName: formLastName.trim(),
       middleName: formMiddleName.trim() || undefined,
       dateOfBirth: formDob.trim(),
-      gender: formGender === 'Male' || formGender === 'Female' ? formGender : 'Other',
-      sex: formGender,
+      sex: formSex,
       genderIdentity: formGenderIdentity.trim() || undefined,
       civilStatus: formCivilStatus,
       contactNumber: formPhone.trim(),
@@ -865,7 +864,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormLastName('');
     setFormMiddleName('');
     setFormDob('');
-    setFormGender('Male');
+    setFormSex('Male');
     setFormGenderIdentity('');
     setFormCivilStatus('Single');
     setFormPhone('');
@@ -2011,7 +2010,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     contentContainerStyle={styles.horizontalPillRow}
                   >
                     {sexOptions.map((sex) => {
-                      const isSelected = formGender === sex;
+                      const isSelected = formSex === sex;
                       return (
                         <Pressable
                           key={sex}
@@ -2019,7 +2018,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                           accessibilityState={{ selected: isSelected }}
                           accessibilityLabel={`Sex: ${sex}`}
                           style={[styles.scrollableCategoryPill, isSelected && styles.categoryPillActive]}
-                          onPress={() => setFormGender(sex)}
+                          onPress={() => setFormSex(sex)}
                         >
                           <ThemedText
                             numberOfLines={1}
@@ -2271,7 +2270,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     }}
                     errors={dynamicFieldErrors}
                     staticValues={{
-                      gender: formGender,
+                      sex: formSex,
                       civilStatus: formCivilStatus,
                       dateOfBirth: formDob,
                     }}

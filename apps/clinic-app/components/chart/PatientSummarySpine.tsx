@@ -152,7 +152,7 @@ export function isPregnancyIcd10(code?: string): boolean {
 }
 
 export interface EvaluatePregnancyAlertOptions {
-  gender?: string;
+  sex?: string;
   alerts?: string;
   reproductiveHistory?: {
     isApplicable?: boolean;
@@ -175,11 +175,11 @@ export interface EvaluatePregnancyAlertOptions {
  *    - Active problem list contains ICD-10 pregnancy codes (Z33.1, Z34, Z35, O00-O9A).
  */
 export function evaluatePregnancyStatus(options: EvaluatePregnancyAlertOptions): boolean {
-  const { gender, alerts, reproductiveHistory, problems } = options;
+  const { sex, alerts, reproductiveHistory, problems } = options;
 
   // 1. Biological sex must be female
-  const isFemale = typeof gender === 'string' && (
-    gender.trim().toLowerCase() === 'female' || gender.trim().toLowerCase() === 'f'
+  const isFemale = typeof sex === 'string' && (
+    sex.trim().toLowerCase() === 'female' || sex.trim().toLowerCase() === 'f'
   );
   if (!isFemale) {
     return false;
@@ -332,7 +332,7 @@ export default function PatientSummarySpine({
   const fullName = demo?.patientName || patient?.fullName || chart?.patientName || 'Patient';
   const patientCode = demo?.patientCode || patient?.patientCode || '—';
   const age = demo?.age ?? patient?.age ?? 0;
-  const gender = demo?.gender || patient?.gender || '—';
+  const sex = demo?.sex || patient?.sex || '—';
   const dob = demo?.dob || demo?.dateOfBirth || patient?.dateOfBirth;
   const bloodType = demo?.bloodType || patient?.bloodType;
   const isVerified = (demo?.verificationStatus || patient?.verificationStatus) !== 'PendingVerification';
@@ -408,7 +408,7 @@ export default function PatientSummarySpine({
 
     // 3. Pregnancy Alert (precise clinical criteria: female AND (alert OR remarks OR active ICD-10))
     const isPregnant = evaluatePregnancyStatus({
-      gender,
+      sex,
       alerts: alertsStr,
       reproductiveHistory: chart?.reproductiveHistory,
       problems: problemsProp || chart?.problems,
@@ -461,7 +461,7 @@ export default function PatientSummarySpine({
     demo?.alerts,
     patient?.allergies,
     patient?.alerts,
-    gender,
+    sex,
     problemsProp,
     chart?.problems,
   ]);
@@ -554,7 +554,7 @@ export default function PatientSummarySpine({
             </ThemedText>
             <ThemedText variant="caption" color={theme.colors.borderDark}>•</ThemedText>
             <ThemedText variant="caption" color={theme.colors.textSecondary}>
-              {dob ? formatLongAge(dob) : `${age} yrs`}, {gender}
+              {dob ? formatLongAge(dob) : `${age} yrs`}, {sex}
             </ThemedText>
             {dob ? (
               <>

@@ -106,7 +106,7 @@ internal static class Phase3TestKit
         LastName = "Santos",
         ContactNumber = "0917-123-4567",
         DateOfBirth = new DateOnly(1984, 3, 12),
-        Gender = Gender.Female,
+        Sex = BiologicalSex.Female,
         CloudPatientId = syncPatientId
     };
 

@@ -168,7 +168,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 (Feature 16)', () 
         totalVisits: 12,
         demographics: {
           age: 62,
-          gender: 'Male',
+          sex: 'Male',
           contactNumber: '09181234567',
           philHealthNumber: '180250000018',
           seniorCitizenId: 'SC-998877',

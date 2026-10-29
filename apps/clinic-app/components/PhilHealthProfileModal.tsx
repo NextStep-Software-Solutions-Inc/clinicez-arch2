@@ -269,7 +269,7 @@ export default function PhilHealthProfileModal({
   const [profile, setProfile] = useState<PhilHealthPatientProfile | null>(null);
   const [showAllVaccines, setShowAllVaccines] = useState(false);
 
-  const isFemale = patient?.gender?.toLowerCase().startsWith('f') ?? false;
+  const isFemale = patient?.sex?.toLowerCase().startsWith('f') ?? false;
   const age = patient?.age ?? 0;
   const isPediatric = age < 18;
   const isSenior = age >= 60;
@@ -1329,7 +1329,7 @@ export default function PhilHealthProfileModal({
       visible={visible}
       onClose={onClose}
       title="PhilHealth patient profile"
-      subtitle={`${patient.fullName} · ${patient.gender} · ${patient.age} yrs · PIN: ${patient.philHealthNumber || 'Not enlisted'}`}
+      subtitle={`${patient.fullName} · ${patient.sex} · ${patient.age} yrs · PIN: ${patient.philHealthNumber || 'Not enlisted'}`}
       maxWidth={900}
       maxHeight="95%"
       footer={

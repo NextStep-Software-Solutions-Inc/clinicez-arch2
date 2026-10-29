@@ -42,7 +42,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1992, 4, 15),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09171234567"
         };
 
@@ -61,7 +61,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1988, 11, 20),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09181234567"
         };
 
@@ -89,7 +89,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Clara",
             LastName = "Reyes",
             DateOfBirth = new DateOnly(1950, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09201234567",
             PhilHealthNumber = "12-345678901-2",
             SeniorCitizenId = "SC-2020-001",
@@ -112,7 +112,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Andres",
             LastName = "Bonifacio",
             DateOfBirth = new DateOnly(1975, 5, 10),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09211234567"
         };
 
@@ -230,7 +230,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Test",
             LastName = "User",
             DateOfBirth = new DateOnly(2000, 1, 1),
-            Gender = Gender.Other,
+            Sex = BiologicalSex.Unknown,
             ContactNumber = "09000000000"
         };
 
@@ -307,7 +307,7 @@ public class CustomFieldsUnificationE2ETests
             FirstName = "Gloria",
             LastName = "Macapagal",
             DateOfBirth = new DateOnly(1955, 4, 5),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170001122",
             PhilHealthNumber = "12-345678901-2",
             SeniorCitizenId = "SC-PAMP-101"

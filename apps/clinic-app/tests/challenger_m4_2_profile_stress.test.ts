@@ -142,7 +142,7 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
     firstName: 'Consuelo',
     lastName: 'Reyes',
     dateOfBirth: '1978-11-20',
-    gender: 'Female',
+    sex: 'Female',
     philHealthNumber: '09-123456789-0',
     chronicConditions: 'Hypertension, Asthma',
     status: 'Active',

@@ -135,7 +135,7 @@ export default function CardiometabolicRiskTab({
   const cvdCalc = useMemo(() => {
     return calculatePhilPenRisk({
       ageYears: patient.age,
-      gender: patient.gender,
+      sex: patient.sex,
       isSmoker,
       systolicBp: latestVitals?.systolicBp,
       diastolicBp: latestVitals?.diastolicBp,
@@ -150,7 +150,7 @@ export default function CardiometabolicRiskTab({
     });
   }, [
     patient.age,
-    patient.gender,
+    patient.sex,
     isSmoker,
     latestVitals?.systolicBp,
     latestVitals?.diastolicBp,

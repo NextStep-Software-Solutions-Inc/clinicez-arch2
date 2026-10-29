@@ -61,8 +61,8 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
                 <ThemedText variant="caption" color={theme.colors.borderDark}>•</ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   {patient.dateOfBirth
-                    ? `${formatLongAge(patient.dateOfBirth)}, ${patient.gender}`
-                    : `${patient.age ? `${patient.age} yrs, ` : ''}${patient.gender}`}
+                    ? `${formatLongAge(patient.dateOfBirth)}, ${patient.sex}`
+                    : `${patient.age ? `${patient.age} yrs, ` : ''}${patient.sex}`}
                 </ThemedText>
                 {patient.dateOfBirth ? (
                   <>

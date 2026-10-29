@@ -73,7 +73,7 @@ public sealed class ChallengerM1Pure1NfStressTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1985, 6, 15),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09171234567"
         };
     }
@@ -595,7 +595,7 @@ public sealed class ChallengerM1Pure1NfStressTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1990, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09171234567",
             Email: null,
@@ -634,7 +634,7 @@ public sealed class ChallengerM1Pure1NfStressTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1990, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09171234567",
             Email: null,

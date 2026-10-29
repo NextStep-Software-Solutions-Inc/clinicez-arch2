@@ -194,7 +194,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
     fullName: 'Remedios Del Fierro',
     age: 46,
     dateOfBirth: '1980-08-20',
-    gender: 'Female',
+    sex: 'Female',
     contactNumber: '09175558888',
     philHealthNumber: '123456789018',
     allergies: 'Penicillin, Aspirin',
@@ -213,7 +213,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
         totalVisits: 8,
         demographics: {
           age: 46,
-          gender: 'Female',
+          sex: 'Female',
           contactNumber: '09175558888',
           philHealthNumber: '123456789018',
           seniorCitizenId: null,
@@ -1041,7 +1041,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
         age: 0,
         contactNumber: '',
         dateOfBirth: '',
-        gender: '',
+        sex: '',
         createdAt: '',
       };
 

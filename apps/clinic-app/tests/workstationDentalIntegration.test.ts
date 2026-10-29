@@ -179,7 +179,7 @@ const mockPatient: ClinicPatient = {
   fullName: 'Jose Rizal',
   firstName: 'Jose',
   lastName: 'Rizal',
-  gender: 'Male',
+  sex: 'Male',
   dateOfBirth: '1990-06-19',
   bloodType: 'O+',
   isVerified: true,

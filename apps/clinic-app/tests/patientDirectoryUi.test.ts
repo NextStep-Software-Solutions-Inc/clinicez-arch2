@@ -147,7 +147,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     fullName: 'Ambray, Cassandra',
     dateOfBirth: '1999-12-28',
     age: 26,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Single',
     contactNumber: '09357506035',
     barangay: 'Poblacion',

@@ -1,12 +1,5 @@
 namespace ClinicEz.Clinic.Domain.Enums;
 
-public enum Gender
-{
-    Male,
-    Female,
-    Other
-}
-
 public enum CivilStatus
 {
     Single,

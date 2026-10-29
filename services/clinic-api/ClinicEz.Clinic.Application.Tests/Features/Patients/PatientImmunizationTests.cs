@@ -44,7 +44,7 @@ public class PatientImmunizationTests
             PatientCode = "PAT-001",
             FirstName = "Juan",
             LastName = "Dela Cruz",
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             DateOfBirth = new DateOnly(2020, 1, 1),
             ContactNumber = "09171234567",
             CloudPatientId = syncPatientId

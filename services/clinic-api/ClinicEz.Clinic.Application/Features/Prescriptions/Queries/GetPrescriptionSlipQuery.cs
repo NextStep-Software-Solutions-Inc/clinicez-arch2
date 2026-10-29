@@ -111,7 +111,7 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
             encounter.PatientId,
             encounter.PatientName,
             patientAge,
-            patient?.Gender.ToString() ?? "Unknown",
+            patient?.Sex.ToString() ?? "Unknown",
             patient?.PhilHealthNumber,
             patient?.Allergies != null && patient.Allergies.Count > 0 ? string.Join(", ", patient.Allergies.Select(a => a.Allergen)) : null,
             encounter.Assessment,

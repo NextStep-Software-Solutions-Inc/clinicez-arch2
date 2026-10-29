@@ -444,7 +444,7 @@ public class UpdateTriageVitalsCommandHandlerTests
             FirstName = "Totoy",
             LastName = "Bibo",
             DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-24)),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09171234567"
         };
         await context.Patients.AddAsync(patient);

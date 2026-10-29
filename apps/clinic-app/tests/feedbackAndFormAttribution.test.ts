@@ -231,7 +231,7 @@ describe('Task 3 & 4: Form Field Error Attribution with ApiError', () => {
       lastName: 'Dela Cruz',
       middleName: 'Perez',
       dateOfBirth: '1992-04-10',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-123-4567',
       philHealthNumber: '12-345678901-8',
       verificationStatus: 'Verified',

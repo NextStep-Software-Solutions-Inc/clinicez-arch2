@@ -1925,7 +1925,7 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       expect(isBooleanTriggerField('is_pregnant', [booleanField, textField])).toBe(true);
       expect(isBooleanTriggerField('affiliation', [booleanField, textField])).toBe(false);
       expect(isBooleanTriggerField('non_existent', [booleanField, textField])).toBe(false);
-      expect(isBooleanTriggerField('gender', [booleanField, textField], 'static')).toBe(false);
+      expect(isBooleanTriggerField('sex', [booleanField, textField], 'static')).toBe(false);
     });
 
     test('F1-3: Switching trigger field to Boolean auto-resets operator from "in" or "contains" to "equals"', () => {

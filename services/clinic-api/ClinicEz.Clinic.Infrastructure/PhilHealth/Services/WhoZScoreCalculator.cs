@@ -18,7 +18,7 @@ public sealed class WhoZScoreCalculator : IWhoZScoreCalculator
 
     public WhoZScoreEvaluation? Calculate(
         DateOnly dateOfBirth,
-        string gender,
+        string sex,
         decimal lengthOrHeightCm,
         decimal weightKg,
         bool isMeasuredRecumbent = false,
@@ -38,7 +38,7 @@ public sealed class WhoZScoreCalculator : IWhoZScoreCalculator
             return null;
         }
 
-        var normSex = gender.Trim().StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F" : "M";
+        var normSex = sex.Trim().StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F" : "M";
 
         // Posture adjustment at 24-month boundary:
         // 0-23m: Standard is recumbent length. If measured standing, ADD 0.7 cm.

@@ -288,7 +288,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             LastName = last,
             Suffix = suffix,
             DateOfBirth = ParseDate(demographics.DateOfBirth) ?? new DateOnly(2000, 1, 1),
-            Gender = NormalizeGender(demographics.Sex),
+            Sex = ParseSex(demographics.Sex),
             ContactNumber = !string.IsNullOrWhiteSpace(demographics.MobileNumber) ? demographics.MobileNumber.Trim() : "N/A",
             Email = Clean(demographics.Email),
             PhilHealthNumber = Clean(demographics.PhilHealthPin),
@@ -325,7 +325,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         if (parsedDob.HasValue) patient.DateOfBirth = parsedDob.Value;
 
         if (!string.IsNullOrWhiteSpace(demographics.Sex))
-            patient.Gender = NormalizeGender(demographics.Sex);
+            patient.Sex = ParseSex(demographics.Sex);
 
         if (!string.IsNullOrWhiteSpace(demographics.MobileNumber)) patient.ContactNumber = demographics.MobileNumber.Trim();
         if (!string.IsNullOrWhiteSpace(demographics.Email)) patient.Email = demographics.Email.Trim();
@@ -437,11 +437,12 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
     private static DateOnly? ParseDate(string? value) =>
         DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
 
-    private static Gender NormalizeGender(string? sex) => sex?.Trim().ToLowerInvariant() switch
+    private static BiologicalSex ParseSex(string? sex) => sex?.Trim().ToLowerInvariant() switch
     {
-        "male" or "m" => Gender.Male,
-        "female" or "f" => Gender.Female,
-        _ => Gender.Other
+        "male" or "m" => BiologicalSex.Male,
+        "female" or "f" => BiologicalSex.Female,
+        "intersex" or "i" => BiologicalSex.Intersex,
+        _ => BiologicalSex.Unknown
     };
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

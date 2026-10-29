@@ -63,7 +63,7 @@ public sealed class PatientPhysicalExamPersistenceTests
             PatientCode = "P-TEST-PE-01",
             FirstName = "Juan",
             LastName = "Dela Cruz",
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             DateOfBirth = new DateOnly(1990, 5, 20),
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09171234567"
@@ -128,7 +128,7 @@ public sealed class PatientPhysicalExamPersistenceTests
             PatientCode = "P-TEST-PE-02",
             FirstName = "Maria",
             LastName = "Santos",
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             DateOfBirth = new DateOnly(1985, 3, 15),
             PhilHealthNumber = "99-123456789-0",
             ContactNumber = "09171234567"
@@ -182,7 +182,7 @@ public sealed class PatientPhysicalExamPersistenceTests
             PatientCode = "P-TEST-PE-CMD",
             FirstName = "Andres",
             LastName = "Bonifacio",
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             DateOfBirth = new DateOnly(1980, 11, 30),
             PhilHealthNumber = "11-223344556-7",
             ContactNumber = "09181234567"
@@ -292,7 +292,7 @@ public sealed class PatientPhysicalExamPersistenceTests
             PatientCode = "P-TEST-PE-NORM",
             FirstName = "Clara",
             LastName = "Reyes",
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             DateOfBirth = new DateOnly(1995, 8, 12),
             PhilHealthNumber = "33-445566778-9",
             ContactNumber = "09191234567"
@@ -343,7 +343,7 @@ public sealed class PatientPhysicalExamPersistenceTests
             PatientCode = "P-TEST-PE-03",
             FirstName = "Roberto",
             LastName = "Luna",
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             DateOfBirth = new DateOnly(1975, 11, 8),
             PhilHealthNumber = "12-345678901-9",
             ContactNumber = "09171234567"
@@ -408,7 +408,7 @@ public sealed class PatientPhysicalExamPersistenceTests
             PatientCode = "P-TEST-PARTIAL",
             FirstName = "Apolinario",
             LastName = "Mabini",
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             DateOfBirth = new DateOnly(1864, 7, 23),
             PhilHealthNumber = "12-998877665-1",
             ContactNumber = "09171234567"

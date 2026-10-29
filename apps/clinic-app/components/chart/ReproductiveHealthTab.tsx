@@ -38,7 +38,7 @@ export default function ReproductiveHealthTab({
   const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
   const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
 
-  const isFemale = patient.gender?.toLowerCase().startsWith('f') ?? false;
+  const isFemale = patient.sex?.toLowerCase().startsWith('f') ?? false;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -132,7 +132,7 @@ export default function ReproductiveHealthTab({
             Reproductive Health Profiling Not Applicable
           </ThemedText>
           <ThemedText variant="body" color={theme.colors.textSecondary} style={{ textAlign: 'center' }}>
-            Patient gender is recorded as <ThemedText variant="bodyBold" color={theme.colors.text}>{patient.gender}</ThemedText>.
+            Patient sex is recorded as <ThemedText variant="bodyBold" color={theme.colors.text}>{patient.sex}</ThemedText>.
             Women&apos;s reproductive health and obstetric indicators (menstrual cycles, gravidity/parity, contraception)
             are restricted to female patients per PhilHealth Yakap statutory schemas.
           </ThemedText>

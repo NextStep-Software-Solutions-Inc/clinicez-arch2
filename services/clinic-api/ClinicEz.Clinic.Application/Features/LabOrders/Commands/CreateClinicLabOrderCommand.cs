@@ -313,7 +313,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,
                 DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
                 Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
-                Gender = patient.Gender.ToString(),
+                Gender = patient.Sex.ToString(),
                 ContactNumber = patient.ContactNumber
             },
             Icd10Code = request.ClinicalDiagnosis,

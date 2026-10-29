@@ -175,7 +175,7 @@ const adversaryPatient: ClinicPatient = {
   fullName: 'Adversarial Test Patient',
   firstName: 'Adversarial',
   lastName: 'Patient',
-  gender: 'Female',
+  sex: 'Female',
   dateOfBirth: '1985-12-30',
   bloodType: 'AB+',
   isVerified: true,

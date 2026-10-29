@@ -326,7 +326,7 @@ clinicService.getPatients = (async (q: string) => [
       fullName: 'Ambray, Cassandra',
       patientCode: 'PAT-20261013-3EFFEA',
       age: 26,
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '09357506035',
     },
   ],

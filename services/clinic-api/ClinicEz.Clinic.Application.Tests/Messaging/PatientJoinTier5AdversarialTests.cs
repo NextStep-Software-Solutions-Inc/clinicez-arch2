@@ -707,7 +707,7 @@ public class PatientJoinTier5AdversarialTests
         await CreateHandler(db).HandleAsync(payload, Delivered(payload, to), CancellationToken.None);
 
         var patient = await db.Patients.IgnoreQueryFilters().FirstAsync(p => p.ClinicId == clinicId);
-        patient.Gender.Should().Be(Gender.Other);
+        patient.Sex.Should().Be(BiologicalSex.Unknown);
         patient.ContactNumber.Should().Be("N/A");
         patient.MiddleName.Should().BeNull();
         patient.Suffix.Should().BeNull();

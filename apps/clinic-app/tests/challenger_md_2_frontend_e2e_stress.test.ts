@@ -182,7 +182,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
     fullName: 'Maria Santos',
     firstName: 'Maria',
     lastName: 'Santos',
-    gender: 'Female',
+    sex: 'Female',
     dateOfBirth: '1995-04-12',
     age: 31,
     bloodType: 'A+',
@@ -271,7 +271,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
     patientId: 'pt-adversarial-001',
     demographics: {
       fullName: 'Maria Santos',
-      gender: 'Female',
+      sex: 'Female',
       dateOfBirth: '1995-04-12',
     },
     consultations: [],

@@ -20,32 +20,7 @@ public class Patient : ClinicScopedEntity
 
     public DateOnly DateOfBirth { get; set; }
 
-    private BiologicalSex _sex = BiologicalSex.Male;
-    public BiologicalSex Sex
-    {
-        get => _sex;
-        set
-        {
-            _sex = value;
-            _gender = value == BiologicalSex.Female ? Gender.Female : (value == BiologicalSex.Male ? Gender.Male : Gender.Other);
-        }
-    }
-
-    private Gender _gender = Gender.Male;
-    public Gender Gender
-    {
-        get => _gender;
-        set
-        {
-            _gender = value;
-            _sex = value == Gender.Female
-                ? BiologicalSex.Female
-                : (value == Gender.Male
-                    ? BiologicalSex.Male
-                    : (_sex == BiologicalSex.Intersex ? BiologicalSex.Intersex : BiologicalSex.Unknown));
-        }
-    }
-
+    public BiologicalSex Sex { get; set; } = BiologicalSex.Male;
     public string? GenderIdentity { get; set; }
     public CivilStatus? CivilStatus { get; set; }
     public BloodType? BloodType { get; set; }

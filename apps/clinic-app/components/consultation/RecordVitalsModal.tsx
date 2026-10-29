@@ -97,7 +97,7 @@ export default function RecordVitalsModal({
       const isRecumbent = cohort.isInfant || form.posture === 'RECUMBENT';
       const [res] = await clinicService.calculatePediatricZScore({
         dateOfBirth: patient.dateOfBirth!,
-        gender: cohort.isFemale ? 'Female' : 'Male',
+        sex: cohort.isFemale ? 'Female' : 'Male',
         weightKg: w ?? 0,
         lengthOrHeightCm: effectiveLen ?? 0,
         isMeasuredRecumbent: isRecumbent,
@@ -229,7 +229,7 @@ export default function RecordVitalsModal({
       title={title}
       subtitle={
         patient
-          ? `${patient.fullName} (${patient.age}yo ${patient.gender}) • Code: ${patient.patientCode || 'PAT'}`
+          ? `${patient.fullName} (${patient.age}yo ${patient.sex}) • Code: ${patient.patientCode || 'PAT'}`
           : 'Consultation triage vitals'
       }
       maxWidth={640}

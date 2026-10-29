@@ -9,8 +9,8 @@ import { computePatientLocation } from './patientLocation';
 export const STANDARD_SEARCH_FIELDS = [
   { key: 'patientCode', label: 'Patient Code / ID', defaultChecked: true },
   { key: 'age', label: 'Age (e.g. 28y)', defaultChecked: false },
-  { key: 'dateOfBirth', label: 'Date of Birth (YYYY-MM-DD)', defaultChecked: false },
-  { key: 'gender', label: 'Sex / Gender', defaultChecked: false },
+  { key: 'dateOfBirth', label: 'Date of Birth', defaultChecked: false },
+  { key: 'sex', label: 'Sex', defaultChecked: false },
   { key: 'contactNumber', label: 'Contact Phone Number', defaultChecked: false },
   { key: 'philHealthNumber', label: 'PhilHealth PIN', defaultChecked: false },
   { key: 'barangay', label: 'Address / Location', defaultChecked: false },
@@ -56,8 +56,8 @@ export default function PatientSearchResultRow({
         return patient.age != null ? { value: `${patient.age}y` } : null;
       case 'dateOfBirth':
         return patient.dateOfBirth ? { label: 'DOB', value: patient.dateOfBirth } : null;
-      case 'gender':
-        return patient.gender ? { value: patient.gender } : null;
+      case 'sex':
+        return patient.sex ? { value: patient.sex } : null;
       case 'contactNumber':
         return patient.contactNumber ? { value: patient.contactNumber } : null;
       case 'philHealthNumber':

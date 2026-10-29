@@ -56,7 +56,7 @@ public class DevPatientSeederTests
             Assert.False(string.IsNullOrWhiteSpace(p.LastName));
             Assert.False(string.IsNullOrWhiteSpace(p.ContactNumber));
             Assert.False(string.IsNullOrWhiteSpace(p.PhilHealthNumber));
-            Assert.Contains(p.Gender, new[] { Gender.Male, Gender.Female, Gender.Other });
+            Assert.Contains(p.Sex, new[] { BiologicalSex.Male, BiologicalSex.Female, BiologicalSex.Unknown });
             Assert.True(p.BloodType.HasValue);
             Assert.True(p.DateOfBirth < DateOnly.FromDateTime(DateTime.UtcNow));
             Assert.NotNull(p.CustomFields);
@@ -250,7 +250,7 @@ public class DevPatientSeederTests
             LastName = "Santos",
             ContactNumber = "0917-123-4567",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             CreatedBy = "staff-user-123"
         });
         await context.SaveChangesAsync();
@@ -299,7 +299,7 @@ public class DevPatientSeederTests
             LastName = "Dela Cruz",
             ContactNumber = "0918-987-6543",
             DateOfBirth = new DateOnly(1985, 5, 20),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             CreatedBy = "admin"
         });
         await context.SaveChangesAsync();

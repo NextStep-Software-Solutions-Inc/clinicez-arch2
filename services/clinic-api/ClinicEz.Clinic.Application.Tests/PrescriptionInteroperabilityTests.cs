@@ -46,7 +46,7 @@ public class PrescriptionInteroperabilityTests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1984, 5, 20),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09171234567"
         };
         await db.Patients.AddAsync(patient);

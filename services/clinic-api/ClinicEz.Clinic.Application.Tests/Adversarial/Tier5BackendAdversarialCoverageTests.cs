@@ -53,7 +53,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
         PhilHealthNumber = pin,
         ContactNumber = "09170000001",
         DateOfBirth = new DateOnly(1990, 1, 1),
-        Gender = Gender.Male
+        Sex = BiologicalSex.Male
     };
 
     private static ConsultationEncounter CreateTestEncounter(
@@ -288,7 +288,7 @@ public sealed class Tier5BackendAdversarialCoverageTests
             LastName = "B",
             ContactNumber = "09170000000",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             CustomFields = null!
         };
         patientWithNullCustomFields.GetYakapEnlistments().Should().BeEmpty();

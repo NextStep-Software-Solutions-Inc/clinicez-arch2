@@ -42,7 +42,6 @@ public sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
             entity.Property(e => e.ContactNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.LandlineNumber).HasMaxLength(50);
             entity.Property(e => e.AlternateContactNumber).HasMaxLength(50);
-            entity.Property(e => e.Gender).HasMaxLength(50);
             entity.Property(e => e.Sex).HasConversion<string>().HasMaxLength(50);
             entity.Property(e => e.GenderIdentity).HasMaxLength(50);
             entity.Property(e => e.Occupation).HasMaxLength(100);

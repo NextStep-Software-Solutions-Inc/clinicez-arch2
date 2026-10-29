@@ -132,7 +132,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
     lastName: 'Dela Cruz',
     dateOfBirth: '2025-01-01',
     age: 1,
-    gender: 'Male',
+    sex: 'Male',
     civilStatus: 'Single',
     contactNumber: '09170000001',
     verificationStatus: 'Verified',
@@ -150,7 +150,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
     lastName: 'Santos',
     dateOfBirth: '2008-05-15',
     age: 18,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Single',
     contactNumber: '09170000002',
     verificationStatus: 'Verified',
@@ -168,7 +168,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
     lastName: 'Reyes',
     dateOfBirth: '1955-03-20',
     age: 71,
-    gender: 'Male',
+    sex: 'Male',
     civilStatus: 'Married',
     contactNumber: '09170000003',
     verificationStatus: 'Verified',
@@ -224,7 +224,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockChildPatient,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           immunizations: [],
           onAdministerVaccine: async () => {},
           onRecordHistoricalVaccine: async () => {},
@@ -240,7 +240,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockChildPatient,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           immunizations: [],
           onAdministerVaccine: async () => {},
           onRecordHistoricalVaccine: async () => {},
@@ -275,7 +275,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockChildPatient,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           immunizations: mockSampleImmunizations,
           onAdministerVaccine: async () => {},
           onRecordHistoricalVaccine: async () => {},
@@ -331,7 +331,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
           visible: true,
           onClose: () => {},
           patient: mockChildPatient,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           onAdministerVaccine: async () => {},
         })
       );
@@ -416,7 +416,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
           visible: true,
           onClose: () => {},
           patient: mockChildPatient,
-          demographics: { age: 1, gender: 'Male' } as PatientDemographics,
+          demographics: { age: 1, sex: 'Male' } as PatientDemographics,
           onRecordHistoricalVaccine: async () => {},
         })
       );
@@ -477,7 +477,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
         React.createElement(HistoricalVaccineModal, {
           visible: true,
           onClose: () => {},
-          demographics: { age: 5, gender: 'Female' } as PatientDemographics,
+          demographics: { age: 5, sex: 'Female' } as PatientDemographics,
           onRecordHistoricalVaccine: async () => {},
         })
       );
@@ -488,7 +488,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
         React.createElement(HistoricalVaccineModal, {
           visible: true,
           onClose: () => {},
-          demographics: { age: 18, gender: 'Female' } as PatientDemographics,
+          demographics: { age: 18, sex: 'Female' } as PatientDemographics,
           onRecordHistoricalVaccine: async () => {},
         })
       );
@@ -499,7 +499,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
         React.createElement(HistoricalVaccineModal, {
           visible: true,
           onClose: () => {},
-          demographics: { age: 65, gender: 'Male', isSenior: true } as PatientDemographics,
+          demographics: { age: 65, sex: 'Male', isSenior: true } as PatientDemographics,
           onRecordHistoricalVaccine: async () => {},
         })
       );

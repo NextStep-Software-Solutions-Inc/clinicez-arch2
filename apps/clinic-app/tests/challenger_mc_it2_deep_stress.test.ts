@@ -160,7 +160,7 @@ const createTestPatient = (overrides?: Partial<ClinicPatient>): ClinicPatient =>
   fullName: 'Juan Batumbakal',
   firstName: 'Juan',
   lastName: 'Batumbakal',
-  gender: 'Male',
+  sex: 'Male',
   dateOfBirth: '2015-05-20',
   age: 11,
   bloodType: 'O+',

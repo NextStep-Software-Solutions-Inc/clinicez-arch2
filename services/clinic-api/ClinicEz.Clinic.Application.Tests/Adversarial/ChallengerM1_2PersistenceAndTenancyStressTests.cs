@@ -640,7 +640,7 @@ public class ChallengerM1_2PersistenceAndTenancyStressTests
             FirstName = "Crisostomo",
             LastName = "Ibarra",
             DateOfBirth = new DateOnly(1995, 6, 19),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0917-000-8888",
             CustomFields = complexData
         };
@@ -684,7 +684,7 @@ public class ChallengerM1_2PersistenceAndTenancyStressTests
             FirstName = "Simoun",
             LastName = "Radical",
             DateOfBirth = new DateOnly(1988, 12, 30),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0918-111-2222",
             CustomFields = initialFields
         };
@@ -727,7 +727,7 @@ public class ChallengerM1_2PersistenceAndTenancyStressTests
             FirstName = "Elias",
             LastName = "Piloto",
             DateOfBirth = new DateOnly(1992, 5, 5),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0919-333-4444",
             CustomFields = new Dictionary<string, object?>()
         };

@@ -643,7 +643,7 @@ public class ChallengerM1PersistenceIntegrityStressTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1985, 3, 15),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0917-123-4567"
         };
 
@@ -919,7 +919,7 @@ public class ChallengerM1PersistenceIntegrityStressTests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1992, 4, 10),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "0918-000-0001"
         };
         contextA.Patients.Add(pat1);
@@ -936,7 +936,7 @@ public class ChallengerM1PersistenceIntegrityStressTests
             FirstName = "Rosa",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1994, 8, 22),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "0918-000-0002"
         };
         contextA.Patients.Add(pat2);
@@ -1014,7 +1014,7 @@ public class ChallengerM1PersistenceIntegrityStressTests
             FirstName = "Pedro",
             LastName = "Penduko",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0917-000-1111"
         };
         contextA.Patients.Add(patient);

@@ -88,7 +88,7 @@ public sealed class ChallengerM1DeltaDomainAndLifecycleStressTests
             LastName = "Dela Cruz",
             MiddleName = "Mercado",
             DateOfBirth = new DateOnly(1988, 4, 12),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09171234567",
             VerificationStatus = PatientVerificationStatus.Verified
         };
@@ -482,7 +482,7 @@ public sealed class ChallengerM1DeltaDomainAndLifecycleStressTests
             FirstName = "Regular",
             LastName = "Patient",
             DateOfBirth = new DateOnly(1995, 10, 5),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09201112233",
             PhilHealthNumber = null, // Zero PhilHealth PIN
             VerificationStatus = PatientVerificationStatus.Verified

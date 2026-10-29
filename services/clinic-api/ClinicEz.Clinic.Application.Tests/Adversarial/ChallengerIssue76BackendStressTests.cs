@@ -72,7 +72,7 @@ public class ChallengerIssue76BackendStressTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1992, 4, 12),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: "Single",
             ContactNumber: "0917-555-0101",
             Email: $"{firstName.ToLower()}@example.com",
@@ -657,7 +657,7 @@ public class ChallengerIssue76BackendStressTests
             FirstName = "Maria",
             LastName = "Clara",
             DateOfBirth = new DateOnly(1996, 7, 10),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "0917-888-9999",
             CustomFields = new Dictionary<string, object?> { ["tuition_fee"] = 15000 }
         };
@@ -677,7 +677,7 @@ public class ChallengerIssue76BackendStressTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: patient.DateOfBirth,
-            Gender: patient.Gender,
+            Sex: patient.Sex.ToString(),
             CivilStatus: "Single",
             ContactNumber: patient.ContactNumber,
             Email: null,

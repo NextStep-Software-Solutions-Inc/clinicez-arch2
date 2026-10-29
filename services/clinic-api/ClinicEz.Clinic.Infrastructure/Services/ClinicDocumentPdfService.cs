@@ -75,7 +75,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             patient?.DateOfBirth,
             cert.IssueDate,
             patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
-        var patientGender = patient?.Gender.ToString() ?? "Patient";
+        var patientGender = patient?.Sex.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
@@ -629,7 +629,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             patient?.DateOfBirth,
             referral.ReferralDate,
             patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
-        var patientGender = patient?.Gender.ToString() ?? "Patient";
+        var patientGender = patient?.Sex.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
@@ -907,7 +907,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         var primaryColor = config.GetSafePrimaryColorHex();
 
         var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : (int?)null;
-        var patientGender = patient?.Gender.ToString();
+        var patientGender = patient?.Sex.ToString();
         var patientIdStr = patient?.PatientCode ?? (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty ? invoice.PatientId.Value.ToString("N")[..8] : "N/A");
         var docName = doctor != null
             ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : $"Dr. {doctor.FirstName} {doctor.LastName}")

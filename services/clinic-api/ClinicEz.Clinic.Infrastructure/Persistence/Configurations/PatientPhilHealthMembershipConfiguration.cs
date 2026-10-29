@@ -30,7 +30,7 @@ public sealed class PatientPhilHealthMembershipConfiguration : IEntityTypeConfig
             entity.Property(e => e.PrincipalFirstName).HasMaxLength(100);
             entity.Property(e => e.PrincipalMiddleName).HasMaxLength(100);
             entity.Property(e => e.PrincipalSuffix).HasMaxLength(20);
-            entity.Property(e => e.PrincipalGender).HasMaxLength(50);
+            entity.Property(e => e.PrincipalSex).HasConversion<string>().HasMaxLength(50);
             entity.Property(e => e.MembershipCategoryCode).HasMaxLength(50);
             entity.Property(e => e.MembershipCategoryDesc).HasMaxLength(200);
             entity.Property(e => e.EmployerPin).HasMaxLength(20);

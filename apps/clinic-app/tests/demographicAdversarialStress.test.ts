@@ -136,7 +136,7 @@ describe('Adversarial Demographic Stress Suite', () => {
     fullName: 'Consuelo Alcantara Villaruel Sr.',
     dateOfBirth: '1970-07-07',
     age: 56,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Widowed',
     contactNumber: '+63 917 555 1234',
     email: 'consuelo.v@example.com',
@@ -168,7 +168,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       middleName: 'Alcantara',
       suffix: 'Sr.',
       dateOfBirth: '1970-07-07',
-      gender: 'Female',
+      sex: 'Female',
       civilStatus: 'Widowed',
       contactNumber: '+63 917 555 1234',
       email: 'consuelo.v@example.com',
@@ -203,7 +203,7 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(lastPutPayload.middleName).toBe('Alcantara');
     expect(lastPutPayload.suffix).toBe('Sr.');
     expect(lastPutPayload.dateOfBirth).toBe('1970-07-07');
-    expect(lastPutPayload.gender).toBe('Female');
+    expect(lastPutPayload.sex).toBe('Female');
     expect(lastPutPayload.civilStatus).toBe('Widowed');
     expect(lastPutPayload.contactNumber).toBe('+63 917 555 1234');
     expect(lastPutPayload.email).toBe('consuelo.v@example.com');
@@ -235,18 +235,18 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(lastPutPayload.alerts).toBe('Fall Risk, Hard of Hearing');
   });
 
-  test('ADV-2: Gender selection correctly handles all 3 values (Male, Female, Other)', async () => {
-    for (const g of ['Male', 'Female', 'Other'] as const) {
+  test('ADV-2: Sex selection correctly handles all 4 values (Male, Female, Intersex, Unknown)', async () => {
+    for (const g of ['Male', 'Female', 'Intersex', 'Unknown'] as const) {
       const payload: RegisterPatientPayload = {
         firstName: 'Alex',
         lastName: 'Santos',
         dateOfBirth: '1992-02-02',
-        gender: g,
+        sex: g,
         contactNumber: '0917-111-2222',
       };
       const [res, err] = await clinicService.updatePatient('pat-gender-test', payload);
       expect(err).toBeNull();
-      expect(lastPutPayload.gender).toBe(g);
+      expect(lastPutPayload.sex).toBe(g);
     }
   });
 
@@ -256,7 +256,7 @@ describe('Adversarial Demographic Stress Suite', () => {
         firstName: 'Corazon',
         lastName: 'Aquino',
         dateOfBirth: '1960-01-01',
-        gender: 'Female',
+        sex: 'Female',
         civilStatus: cs,
         contactNumber: '0917-222-3333',
       };
@@ -272,7 +272,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'Dr. Gregory',
       lastName: 'House',
       dateOfBirth: '1965-06-11',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-444-5555',
       customFields: {
         classification: 'Employee',
@@ -291,7 +291,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'Peter',
       lastName: 'Parker',
       dateOfBirth: '2005-08-10',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-666-7777',
       customFields: {
         classification: 'Student',
@@ -314,7 +314,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'John',
       lastName: 'Doe',
       dateOfBirth: '1988-04-12',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-888-9999',
       customFields: {
         classification: 'General',
@@ -331,7 +331,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       firstName: 'Ramon',
       lastName: 'Magsaysay',
       dateOfBirth: '1955-08-31',
-      gender: 'Male',
+      sex: 'Male',
       civilStatus: 'Married',
       contactNumber: '0917-999-0000',
       sendToTriage: true,
@@ -343,7 +343,7 @@ describe('Adversarial Demographic Stress Suite', () => {
     const [registered, err] = await clinicService.registerPatient(walkInPayload);
     expect(err).toBeNull();
     expect(lastPostUrl).toBe('/patients');
-    expect(lastPostPayload.gender).toBe('Male');
+    expect(lastPostPayload.sex).toBe('Male');
     expect(lastPostPayload.civilStatus).toBe('Married');
     expect(lastPostPayload.sendToTriage).toBe(true);
     expect(lastPostPayload.priority).toBe('Urgent');
@@ -361,7 +361,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       fullName: 'Sam Smith',
       dateOfBirth: '1992-05-19',
       age: 33,
-      gender: 'Other',
+      sex: 'Intersex',
       civilStatus: 'Separated',
       contactNumber: '0917-000-0000',
       createdAt: '2026-01-01T00:00:00Z',
@@ -374,7 +374,7 @@ describe('Adversarial Demographic Stress Suite', () => {
       onSaved: () => {},
     });
 
-    expect(element.props.patient.gender).toBe('Other');
+    expect(element.props.patient.sex).toBe('Intersex');
     expect(element.props.patient.civilStatus).toBe('Separated');
   });
 });

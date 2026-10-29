@@ -39,7 +39,7 @@ public class ClinicalDocumentsFooterAgeAndSignatoryTests
         FirstName = name.Split(' ')[0],
         LastName = name.Split(' ').Length > 1 ? name.Split(' ')[1] : "Patient",
         DateOfBirth = dob,
-        Gender = Enum.TryParse<Gender>(gender, true, out var g) ? g : Gender.Female
+        Sex = Enum.TryParse<BiologicalSex>(gender, true, out var g) ? g : BiologicalSex.Female
     };
 
     private static MedicalCertificate CreateCert(string patientName = "Maria Santos", DateOnly? issueDate = null) => new()

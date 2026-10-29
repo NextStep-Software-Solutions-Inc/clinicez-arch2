@@ -112,7 +112,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = patientPin,
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1995, 5, 20),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         dbContext.Patients.Add(unassignedPatient);
         await dbContext.SaveChangesAsync();
@@ -165,7 +165,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000001",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         const string initialCaseNo = "C00921202600001";
@@ -248,7 +248,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09180000002",
             DateOfBirth = new DateOnly(1985, 6, 12),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
 
         const string initialCaseNo = "C00921202600002";
@@ -333,7 +333,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000003",
             DateOfBirth = new DateOnly(1930, 1, 6),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
 
         // Historical 2024 enlistment
@@ -426,7 +426,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000004",
             DateOfBirth = new DateOnly(1864, 7, 23),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         const string caseNo = "C00921202600777";
@@ -505,7 +505,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09180000005",
             DateOfBirth = new DateOnly(1875, 11, 14),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -563,7 +563,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000006",
             DateOfBirth = new DateOnly(1868, 10, 13),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
 
         var patientTransferred = new Patient
@@ -577,7 +577,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "030263078507",
             ContactNumber = "09180000007",
             DateOfBirth = new DateOnly(1850, 8, 30),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         dbContext.Patients.AddRange(patientActive, patientTransferred);
@@ -650,7 +650,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09180000008",
             DateOfBirth = new DateOnly(1861, 6, 19),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         var patientInTenantB = new Patient
@@ -664,7 +664,7 @@ public class ChallengerM3_2PinAndMasterlistSyncAdversarialTests
             PhilHealthNumber = "12-345678901-2", // Same PIN
             ContactNumber = "09180000009",
             DateOfBirth = new DateOnly(1861, 6, 19),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         dbContext.Patients.AddRange(patientInTenantA, patientInTenantB);

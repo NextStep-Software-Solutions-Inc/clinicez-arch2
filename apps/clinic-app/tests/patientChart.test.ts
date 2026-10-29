@@ -429,7 +429,7 @@ describe('Milestone 3 Features 14, 15, 16: Patient Chart & Clinical Spine', () =
           totalVisits: 3,
           demographics: {
             age: 45,
-            gender: 'Male',
+            sex: 'Male',
             contactNumber: '09171234567',
             philHealthNumber: '123456789018',
             seniorCitizenId: null,

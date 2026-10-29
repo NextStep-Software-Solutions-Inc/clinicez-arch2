@@ -13,7 +13,7 @@ public sealed record PatientPhilHealthMembershipDto(
     string? PrincipalMiddleName = null,
     string? PrincipalSuffix = null,
     DateOnly? PrincipalDateOfBirth = null,
-    string? PrincipalGender = null,
+    string? PrincipalSex = null,
     string? MembershipCategoryCode = null,
     string? MembershipCategoryDesc = null,
     string? EmployerPin = null,

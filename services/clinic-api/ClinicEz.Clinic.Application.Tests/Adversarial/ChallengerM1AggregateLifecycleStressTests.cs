@@ -86,7 +86,7 @@ public sealed class ChallengerM1AggregateLifecycleStressTests
             LastName = "Santos",
             MiddleName = "Cruz",
             DateOfBirth = new DateOnly(1990, 5, 20),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09181234567",
             VerificationStatus = PatientVerificationStatus.Verified
         };

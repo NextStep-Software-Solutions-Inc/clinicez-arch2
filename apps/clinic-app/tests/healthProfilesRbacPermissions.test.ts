@@ -228,7 +228,7 @@ describe('Issue #52 — Consultations Patient Chart Profile RBAC & Doctor Permis
     lastName: 'Clara',
     dateOfBirth: '1988-05-12',
     age: 38,
-    gender: 'Female',
+    sex: 'Female',
     philHealthNumber: '12-345678901-2',
     status: 'Active',
   };

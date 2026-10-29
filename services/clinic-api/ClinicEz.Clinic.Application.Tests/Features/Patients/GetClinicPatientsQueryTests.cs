@@ -45,7 +45,7 @@ public class GetClinicPatientsQueryTests
             FirstName = "Alice",
             LastName = "Adams",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09110000001"
         };
         var p2 = new Patient
@@ -57,7 +57,7 @@ public class GetClinicPatientsQueryTests
             FirstName = "Bob",
             LastName = "Brown",
             DateOfBirth = new DateOnly(1991, 2, 2),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09110000002"
         };
         var p3 = new Patient
@@ -69,7 +69,7 @@ public class GetClinicPatientsQueryTests
             FirstName = "Charlie",
             LastName = "Clark",
             DateOfBirth = new DateOnly(1992, 3, 3),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09110000003"
         };
         var p4 = new Patient
@@ -81,7 +81,7 @@ public class GetClinicPatientsQueryTests
             FirstName = "David",
             LastName = "Davis",
             DateOfBirth = new DateOnly(1993, 4, 4),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09110000004"
         };
         var p5 = new Patient
@@ -93,7 +93,7 @@ public class GetClinicPatientsQueryTests
             FirstName = "Eva",
             LastName = "Evans",
             DateOfBirth = new DateOnly(1994, 5, 5),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09110000005"
         };
 

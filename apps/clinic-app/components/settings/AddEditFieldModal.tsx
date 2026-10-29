@@ -102,7 +102,7 @@ export interface AddEditFieldModalProps {
 }
 
 const STATIC_FIELD_OPTIONS = [
-  { key: 'gender', label: 'Gender / Biological Sex' },
+  { key: 'sex', label: 'Sex' },
   { key: 'civilStatus', label: 'Civil Status (Single, Married, etc.)' },
   { key: 'affiliation', label: 'Institutional Affiliation' },
   { key: 'age', label: 'Patient Age' },

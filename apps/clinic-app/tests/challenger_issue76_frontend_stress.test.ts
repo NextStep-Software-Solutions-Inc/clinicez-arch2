@@ -571,7 +571,7 @@ describe('Adversarial Stress Suite — Frontend Custom Field Engine (Issue #76)'
       isActive: true,
       visibilityRuleJson: JSON.stringify({
         source: 'static',
-        field: 'gender',
+        field: 'sex',
         operator: 'equals',
         value: 'Female',
       }),
@@ -639,7 +639,7 @@ describe('Adversarial Stress Suite — Frontend Custom Field Engine (Issue #76)'
 
     test('4.4 Conditional visibility: required field hidden by static rule never blocks validation', () => {
       // Patient is Male -> num_pregnancies is hidden
-      const staticValues = { gender: 'Male' };
+      const staticValues = { sex: 'Male' };
       const res = validateCustomFields(
         [requiredNumDef, staticConditionalDef],
         { systolic_bp: 120 },
@@ -652,7 +652,7 @@ describe('Adversarial Stress Suite — Frontend Custom Field Engine (Issue #76)'
       const resFemaleEmpty = validateCustomFields(
         [requiredNumDef, staticConditionalDef],
         { systolic_bp: 120 },
-        { gender: 'Female' }
+        { sex: 'Female' }
       );
       expect(resFemaleEmpty.isValid).toBe(false);
       expect(resFemaleEmpty.errors.num_pregnancies).toBe('Number of Pregnancies is required.');
@@ -661,7 +661,7 @@ describe('Adversarial Stress Suite — Frontend Custom Field Engine (Issue #76)'
       const resFemaleInvalid = validateCustomFields(
         [requiredNumDef, staticConditionalDef],
         { systolic_bp: 120, num_pregnancies: 'two' },
-        { gender: 'Female' }
+        { sex: 'Female' }
       );
       expect(resFemaleInvalid.isValid).toBe(false);
       expect(resFemaleInvalid.errors.num_pregnancies).toBe('Number of Pregnancies must be a valid number.');
@@ -670,7 +670,7 @@ describe('Adversarial Stress Suite — Frontend Custom Field Engine (Issue #76)'
       const resFemaleValid = validateCustomFields(
         [requiredNumDef, staticConditionalDef],
         { systolic_bp: 120, num_pregnancies: 2 },
-        { gender: 'Female' }
+        { sex: 'Female' }
       );
       expect(resFemaleValid.isValid).toBe(true);
       expect(resFemaleValid.errors.num_pregnancies).toBeUndefined();

@@ -105,7 +105,7 @@ public class ChallengerM2DispenseSecurityAdversarialTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1985, 3, 15),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             PatientCode = "P-12345",
             ContactNumber = "09123456789"
         };

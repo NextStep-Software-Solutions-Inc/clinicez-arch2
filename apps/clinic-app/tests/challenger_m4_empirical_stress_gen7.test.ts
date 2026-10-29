@@ -144,7 +144,7 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
     firstName: 'Maria',
     lastName: 'Del Fierro',
     dateOfBirth: '1979-11-23',
-    gender: 'Female',
+    sex: 'Female',
     philHealthNumber: '02-123456789-0',
     chronicConditions: undefined,
     status: 'Active',

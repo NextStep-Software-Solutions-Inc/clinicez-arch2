@@ -55,7 +55,7 @@ public class GetPatientChartQueryHandlerTests
             MiddleName = "Mercado",
             Suffix = "Jr.",
             DateOfBirth = new DateOnly(1985, 8, 20),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             CivilStatus = CivilStatus.Married,
             ContactNumber = "09171234567",
             Email = "juan@example.com",
@@ -183,7 +183,7 @@ public class GetPatientChartQueryHandlerTests
         // Demographics
         chart.Demographics.Should().NotBeNull();
         chart.Demographics!.Dob.Should().Be(new DateOnly(1985, 8, 20));
-        chart.Demographics.Gender.Should().Be("Male");
+        chart.Demographics.Sex.Should().Be("Male");
         chart.Demographics.ContactNumber.Should().Be("09171234567");
         chart.Demographics.PhilHealthNumber.Should().Be("12-345678901-8");
         chart.Demographics.BloodType.Should().Be("O+");

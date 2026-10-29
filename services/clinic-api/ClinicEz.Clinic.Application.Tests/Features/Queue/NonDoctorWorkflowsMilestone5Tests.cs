@@ -135,7 +135,7 @@ public class NonDoctorWorkflowsMilestone5Tests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(1990, 5, 15),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "+639171234567"
         };
         await patientRepo.AddAsync(clinicPatient, CancellationToken.None);

@@ -93,10 +93,10 @@ export default function StatutoryImmunizationsTab({
 
   // Determine patient age and cohort suitability
   const age = demoProp?.age ?? patient?.age ?? 0;
-  const gender = (demoProp?.gender || patient?.gender || '').toLowerCase();
+  const sex = (demoProp?.sex || patient?.sex || '').toLowerCase();
 
   const isChild = age < 18;
-  const isYoungWoman = gender === 'female' && age >= 9 && age <= 49;
+  const isYoungWoman = sex === 'female' && age >= 9 && age <= 49;
   const isSenior = age >= 60 || demoProp?.isSenior;
 
   const filteredImmunizations = useMemo(() => {

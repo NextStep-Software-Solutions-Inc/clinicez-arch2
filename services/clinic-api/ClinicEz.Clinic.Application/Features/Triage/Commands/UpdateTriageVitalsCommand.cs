@@ -224,7 +224,7 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
                     {
                         var evaluation = _zScoreCalculator.Calculate(
                             patient.DateOfBirth,
-                            patient.Gender.ToString(),
+                            patient.Sex.ToString(),
                             effectiveLengthHeight.Value,
                             effectiveWeight.Value,
                             vitals.IsMeasuredRecumbent || vitals.BodyLengthCm.HasValue);

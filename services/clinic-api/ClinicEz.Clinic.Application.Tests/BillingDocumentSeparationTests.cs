@@ -40,7 +40,7 @@ public class BillingDocumentSeparationTests
             LastName = "Angeles",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1995, 5, 12),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             PatientCode = "P-10023"
         };
 

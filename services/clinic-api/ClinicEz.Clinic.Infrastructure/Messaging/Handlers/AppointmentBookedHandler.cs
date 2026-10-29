@@ -195,7 +195,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                 MiddleName = message.PatientMiddleName,
                 Suffix = message.PatientSuffix,
                 DateOfBirth = message.DateOfBirth ?? new DateOnly(2000, 1, 1),
-                Gender = string.Equals(message.Gender, "Female", StringComparison.OrdinalIgnoreCase) || string.Equals(message.Gender, "F", StringComparison.OrdinalIgnoreCase) ? Gender.Female : Gender.Male,
+                Sex = ClinicEz.Clinic.Application.Features.Patients.Commands.RegisterClinicPatientCommandHandler.ParseBiologicalSex(message.Gender),
                 ContactNumber = !string.IsNullOrWhiteSpace(message.ContactNumber) ? message.ContactNumber : "N/A",
                 Email = message.Email,
                 PhilHealthNumber = PhilHealthPinNormalizer.Normalize(message.PhilHealthNumber),

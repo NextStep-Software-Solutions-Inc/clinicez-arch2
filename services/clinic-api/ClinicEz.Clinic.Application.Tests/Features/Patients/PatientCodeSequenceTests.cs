@@ -60,7 +60,7 @@ public class PatientCodeSequenceTests
             FirstName = "Alice",
             LastName = "Smith",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170000001",
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -77,7 +77,7 @@ public class PatientCodeSequenceTests
             FirstName = "Bob",
             LastName = "Jones",
             DateOfBirth = new DateOnly(1985, 5, 5),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000002",
             IsDeleted = true,
             CreatedAt = DateTime.UtcNow
@@ -93,7 +93,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 3, 10),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09170000003",
             Email: null,
@@ -143,7 +143,7 @@ public class PatientCodeSequenceTests
             FirstName = "First",
             LastName = "Patient",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09171110001",
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -159,7 +159,7 @@ public class PatientCodeSequenceTests
             FirstName = "Second",
             LastName = "Deleted",
             DateOfBirth = new DateOnly(1991, 2, 2),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09171110002",
             IsDeleted = true,
             CreatedAt = DateTime.UtcNow
@@ -208,7 +208,7 @@ public class PatientCodeSequenceTests
             FirstName = "Archived",
             LastName = "Student",
             DateOfBirth = new DateOnly(2003, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09180000001",
             IsDeleted = true,
             CreatedAt = DateTime.UtcNow
@@ -222,7 +222,7 @@ public class PatientCodeSequenceTests
             LastName: "Santos",
             MiddleName: "Cruz",
             DateOfBirth: new DateOnly(2004, 5, 20),
-            Gender: "Female",
+            Sex: "Female",
             ContactNumber: "09180000002",
             Email: "maria.santos@student.ustp.edu.ph",
             AddressLine: "456 University Ave",
@@ -267,7 +267,7 @@ public class PatientCodeSequenceTests
             FirstName = "Other",
             LastName = "Clinic1",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09190000001",
             IsDeleted = true,
             CreatedAt = DateTime.UtcNow
@@ -281,7 +281,7 @@ public class PatientCodeSequenceTests
             FirstName = "Other",
             LastName = "Clinic2",
             DateOfBirth = new DateOnly(1981, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09190000002",
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -296,7 +296,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1999, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09179998888",
             Email: null,
@@ -342,7 +342,7 @@ public class PatientCodeSequenceTests
             FirstName = "Gap",
             LastName = "One",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170001111",
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -356,7 +356,7 @@ public class PatientCodeSequenceTests
             FirstName = "Gap",
             LastName = "Five",
             DateOfBirth = new DateOnly(1992, 2, 2),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170005555",
             IsDeleted = true, // soft-deleted gap end
             CreatedAt = DateTime.UtcNow
@@ -371,7 +371,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 5, 5),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09170006666",
             Email: null,
@@ -417,7 +417,7 @@ public class PatientCodeSequenceTests
             FirstName = "Non",
             LastName = "Numeric",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170001111",
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -431,7 +431,7 @@ public class PatientCodeSequenceTests
             FirstName = "Numeric",
             LastName = "Patient",
             DateOfBirth = new DateOnly(1992, 2, 2),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170003333",
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -446,7 +446,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 5, 5),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: null,
             ContactNumber: "09170004444",
             Email: null,
@@ -490,7 +490,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1990, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09170001234",
             Email: null,
@@ -628,7 +628,7 @@ public class PatientCodeSequenceTests
                 MiddleName: null,
                 Suffix: null,
                 DateOfBirth: new DateOnly(1990, 1, 1),
-                Gender: "Male",
+                Sex: "Male",
                 CivilStatus: null,
                 ContactNumber: $"0917000{i:D4}",
                 Email: null,
@@ -738,7 +738,7 @@ public class PatientCodeSequenceTests
             FirstName = "PreExisting",
             LastName = "Collision",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170002222",
             CreatedAt = DateTime.UtcNow
         });
@@ -751,7 +751,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 1, 1),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: null,
             ContactNumber: "09170003333",
             Email: null,
@@ -906,7 +906,7 @@ public class PatientCodeSequenceTests
             FirstName = "External",
             LastName = "Intake",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170009999",
             CreatedAt = DateTime.UtcNow
         });
@@ -919,7 +919,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09170008888",
             Email: null,
@@ -981,7 +981,7 @@ public class PatientCodeSequenceTests
             FirstName = "PreExisting",
             LastName = "Collision",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170002222",
             CreatedAt = DateTime.UtcNow
         });
@@ -993,7 +993,7 @@ public class PatientCodeSequenceTests
             LastName: "Santos",
             MiddleName: "Cruz",
             DateOfBirth: new DateOnly(2004, 5, 20),
-            Gender: "Female",
+            Sex: "Female",
             ContactNumber: "09180000002",
             Email: "maria.santos@student.edu.ph",
             AddressLine: "University Ave",
@@ -1052,7 +1052,7 @@ public class PatientCodeSequenceTests
             FirstName = "PreExisting",
             LastName = "BulkCollision",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170002222",
             CreatedAt = DateTime.UtcNow
         });
@@ -1136,7 +1136,7 @@ public class PatientCodeSequenceTests
             FirstName = "PreExisting",
             LastName = "Collision",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170002222",
             CreatedAt = DateTime.UtcNow
         });
@@ -1156,7 +1156,7 @@ public class PatientCodeSequenceTests
             MiddleName: "Middle",
             Suffix: "Jr",
             DateOfBirth: new DateOnly(1995, 5, 15),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: "Single",
             ContactNumber: "09170009999",
             Email: "complex@test.com",
@@ -1249,7 +1249,7 @@ public class PatientCodeSequenceTests
             FirstName = "PreExisting",
             LastName = "JoinCollision",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170002222",
             CreatedAt = DateTime.UtcNow
         });
@@ -1423,7 +1423,7 @@ public class PatientCodeSequenceTests
                     MiddleName: null,
                     Suffix: null,
                     DateOfBirth: new DateOnly(1990, 1, 1),
-                    Gender: "Male",
+                    Sex: "Male",
                     CivilStatus: null,
                     ContactNumber: $"0917000{workerIndex:D4}",
                     Email: null,
@@ -1512,7 +1512,7 @@ public class PatientCodeSequenceTests
                 FirstName = "Legacy",
                 LastName = "Patient2026",
                 DateOfBirth = new DateOnly(1980, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170002026",
                 CreatedAt = DateTime.UtcNow
             },
@@ -1525,7 +1525,7 @@ public class PatientCodeSequenceTests
                 FirstName = "Legacy",
                 LastName = "Patient2027",
                 DateOfBirth = new DateOnly(1985, 1, 1),
-                Gender = Gender.Female,
+                Sex = BiologicalSex.Female,
                 ContactNumber = "09170002027",
                 CreatedAt = DateTime.UtcNow
             }
@@ -1597,7 +1597,7 @@ public class PatientCodeSequenceTests
             FirstName = "LargeSeq",
             LastName = "Patient",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170250000",
             CreatedAt = DateTime.UtcNow
         });
@@ -1664,7 +1664,7 @@ public class PatientCodeSequenceTests
                 FirstName = "Collision1",
                 LastName = "P",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170000001",
                 CreatedAt = DateTime.UtcNow
             },
@@ -1677,7 +1677,7 @@ public class PatientCodeSequenceTests
                 FirstName = "Collision2",
                 LastName = "P",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170000002",
                 CreatedAt = DateTime.UtcNow
             },
@@ -1690,7 +1690,7 @@ public class PatientCodeSequenceTests
                 FirstName = "Collision3",
                 LastName = "P",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170000003",
                 CreatedAt = DateTime.UtcNow
             }
@@ -1709,7 +1709,7 @@ public class PatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 1, 1),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: null,
             ContactNumber: "09170009999",
             Email: null,
@@ -1754,7 +1754,7 @@ public class PatientCodeSequenceTests
             FirstName = "Collision",
             LastName = "Bulk",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000001",
             CreatedAt = DateTime.UtcNow
         });
@@ -1773,7 +1773,7 @@ public class PatientCodeSequenceTests
                 MiddleName: null,
                 Suffix: null,
                 DateOfBirth: new DateOnly(1990, 1, 1),
-                Gender: "Male",
+                Sex: "Male",
                 CivilStatus: null,
                 ContactNumber: "09170001111",
                 Email: null,
@@ -1822,7 +1822,7 @@ public class PatientCodeSequenceTests
             FirstName = "Collision",
             LastName = "Student",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000001",
             CreatedAt = DateTime.UtcNow
         });
@@ -1839,7 +1839,7 @@ public class PatientCodeSequenceTests
             LastName: "Student",
             MiddleName: null,
             DateOfBirth: new DateOnly(2002, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             ContactNumber: "09170005555",
             Email: null,
             AddressLine: null,

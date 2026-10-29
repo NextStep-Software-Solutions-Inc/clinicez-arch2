@@ -95,7 +95,7 @@ export function buildPreselectedPatientFromRoute(
     fullName,
     dateOfBirth: '',
     age: 0,
-    gender: '',
+    sex: '',
     contactNumber: '',
     verificationStatus: 'Verified',
     createdAt: '',

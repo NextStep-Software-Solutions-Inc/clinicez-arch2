@@ -695,7 +695,7 @@ export default function DashboardScreen() {
     }
     const heightCm = parseOptionalFloat(triage.height);
     const weightKg = parseOptionalFloat(triage.weight);
-    if (!heightCm || !weightKg || !triagePatient.dateOfBirth || !triagePatient.gender) {
+    if (!heightCm || !weightKg || !triagePatient.dateOfBirth || !triagePatient.sex) {
       setZScorePreview(null);
       return;
     }
@@ -704,7 +704,7 @@ export default function DashboardScreen() {
     const timer = setTimeout(async () => {
       const [res] = await clinicService.calculatePediatricZScore({
         dateOfBirth: triagePatient.dateOfBirth,
-        gender: triagePatient.gender,
+        sex: triagePatient.sex,
         lengthOrHeightCm: heightCm,
         weightKg,
         isMeasuredRecumbent: triage.posture === 'RECUMBENT',
@@ -2153,7 +2153,7 @@ export default function DashboardScreen() {
         subtitle={
           triageItem
             ? `${triageItem.queueNumber} • ${triageItem.patientName}${
-                triagePatient ? ` (${triagePatient.age}yo ${triagePatient.gender})` : ''
+                triagePatient ? ` (${triagePatient.age}yo ${triagePatient.sex})` : ''
               }`
             : undefined
         }

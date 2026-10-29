@@ -123,7 +123,7 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             {
                 var evaluation = _zScoreCalculator.Calculate(
                     patient.DateOfBirth,
-                    patient.Gender.ToString(),
+                    patient.Sex.ToString(),
                     effectiveLengthHeight.Value,
                     request.WeightKg.Value,
                     request.IsMeasuredRecumbent || request.BodyLengthCm.HasValue);

@@ -153,8 +153,8 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                       style={styles.identityValue}
                     >
                       {patient.dateOfBirth
-                        ? `${formatCompressedLongAge(patient.dateOfBirth)}, ${patient.gender}`
-                        : `${patient.age ? `${patient.age}Y, ` : ''}${patient.gender}`}
+                        ? `${formatCompressedLongAge(patient.dateOfBirth)}, ${patient.sex}`
+                        : `${patient.age ? `${patient.age}Y, ` : ''}${patient.sex}`}
                     </ThemedText>
                   </View>
 

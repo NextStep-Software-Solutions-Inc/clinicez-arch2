@@ -62,7 +62,7 @@ public class AdversarialSearchChallengeTests
             Suffix = suffix,
             ClinicEzId = clinicEzId,
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = contactNumber ?? "09171234567",
             PhilHealthNumber = philHealthNumber
         };

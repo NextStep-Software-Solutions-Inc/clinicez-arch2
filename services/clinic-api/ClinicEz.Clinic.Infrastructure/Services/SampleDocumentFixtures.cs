@@ -41,7 +41,7 @@ public static class SampleDocumentFixtures
         FirstName = "Maria Clara",
         LastName = "De Los Santos",
         DateOfBirth = new DateOnly(1992, 5, 14),
-        Gender = Gender.Female,
+        Sex = BiologicalSex.Female,
         PhilHealthNumber = "12-050192831-2"
     };
 

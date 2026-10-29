@@ -129,7 +129,7 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
     lastName: 'Aquino-Santos',
     dateOfBirth: '1975-01-25',
     age: 51,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Married',
     contactNumber: '09171234567',
     verificationStatus: 'Verified',
@@ -152,7 +152,7 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
       patientName: 'Corazon Aquino-Santos',
       dateOfBirth: '1975-01-25',
       age: 51,
-      gender: 'Female',
+      sex: 'Female',
       bloodType: 'O+',
       verificationStatus: 'Verified',
       contactNumber: '09171234567',
@@ -541,7 +541,7 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
         fullName: 'Maria Remedios De La Santisima Trinidad Gonzaga y Perez-Escudero',
         dateOfBirth: '1940-12-31',
         age: 86,
-        gender: 'Female',
+        sex: 'Female',
         philHealthNumber: '12-345678901-2',
       };
 

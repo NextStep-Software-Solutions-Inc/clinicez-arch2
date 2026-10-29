@@ -144,7 +144,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
     fullName: 'Juan Dela Cruz',
     firstName: 'Juan',
     lastName: 'Dela Cruz',
-    gender: 'Male',
+    sex: 'Male',
     dateOfBirth: '1988-06-15',
     age: 38,
     bloodType: 'O+',
@@ -245,7 +245,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
     patientId: 'pt-juan-001',
     demographics: {
       fullName: 'Juan Dela Cruz',
-      gender: 'Male',
+      sex: 'Male',
       dateOfBirth: '1988-06-15',
     },
     consultations: [],

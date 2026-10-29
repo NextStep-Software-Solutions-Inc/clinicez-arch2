@@ -424,7 +424,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         existingPatient.MiddleName = null;
         existingPatient.Suffix = null;
         existingPatient.DateOfBirth = new DateOnly(2000, 1, 1);
-        existingPatient.Gender = Gender.Other;
+        existingPatient.Sex = BiologicalSex.Unknown;
         existingPatient.PhilHealthNumber = null;
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         _db.Patients.Add(existingPatient);
@@ -456,7 +456,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         healed.LastName.Should().Be("Maureal");
         healed.Suffix.Should().Be("Jr.");
         healed.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        healed.Gender.Should().Be(Gender.Male);
+        healed.Sex.Should().Be(BiologicalSex.Male);
         healed.PhilHealthNumber.Should().Be("12-345678901-2");
     }
 
@@ -469,7 +469,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         existingPatient.FirstName = "Juan";
         existingPatient.LastName = "Cruz";
         existingPatient.DateOfBirth = new DateOnly(2000, 1, 1);
-        existingPatient.Gender = Gender.Other;
+        existingPatient.Sex = BiologicalSex.Unknown;
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         _db.Patients.Add(existingPatient);
         await _db.SaveChangesAsync();
@@ -498,7 +498,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         healed.LastName.Should().Be("Cruz");
         healed.Suffix.Should().Be("Sr.");
         healed.DateOfBirth.Should().Be(new DateOnly(1980, 1, 10));
-        healed.Gender.Should().Be(Gender.Male);
+        healed.Sex.Should().Be(BiologicalSex.Male);
         healed.ClinicEzId.Should().Be("CE-NEW-ID");
     }
 
@@ -536,7 +536,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         healed.FirstName.Should().Be("Ely An");
         healed.LastName.Should().Be("Maureal");
         healed.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        healed.Gender.Should().Be(Gender.Male);
+        healed.Sex.Should().Be(BiologicalSex.Male);
     }
 
     [Fact]
@@ -606,6 +606,6 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         patient2.LastName.Should().Be("Maureal");
         patient2.Suffix.Should().Be("Jr.");
         patient2.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        patient2.Gender.Should().Be(Gender.Male);
+        patient2.Sex.Should().Be(BiologicalSex.Male);
     }
 }

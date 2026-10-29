@@ -441,7 +441,7 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
       isActive: true,
       visibilityRuleJson: JSON.stringify({
         source: 'static',
-        field: 'gender',
+        field: 'sex',
         operator: 'equals',
         value: 'Female',
       }),
@@ -450,7 +450,7 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
     test('ADV-4.1: Conditionally hiding previously saved fields sets them to null for backend clearing', () => {
       const patient: Partial<ClinicPatient> = {
         id: 'patient-student-female',
-        gender: 'Female',
+        sex: 'Female',
         customFields: {
           affiliation: 'Student',
           student_id: 'USTP-2024-001',
@@ -468,7 +468,7 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
         last_menstrual_period: '2026-01-10', // Hidden now!
       };
       const staticValues = {
-        gender: 'Male',
+        sex: 'Male',
       };
 
       const result = mergePatientCustomFields({
@@ -488,7 +488,7 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
     test('ADV-4.2: Conditionally hidden fields that NEVER existed in DB are omitted (not null)', () => {
       const patient: Partial<ClinicPatient> = {
         id: 'patient-guest-male',
-        gender: 'Male',
+        sex: 'Male',
         customFields: {
           affiliation: 'Guest',
         },
@@ -499,7 +499,7 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
         affiliation: 'Guest',
       };
       const staticValues = {
-        gender: 'Male',
+        sex: 'Male',
       };
 
       const result = mergePatientCustomFields({
@@ -683,7 +683,7 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
         lastName: 'Dela Cruz',
         fullName: 'Dela Cruz, Juan',
         dateOfBirth: '1990-01-01',
-        gender: 'Male',
+        sex: 'Male',
         contactNumber: '09170001111',
         verificationStatus: 'Verified',
         customFields: {
@@ -714,7 +714,7 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
         lastName: 'Santos',
         fullName: 'Santos, Pedro',
         dateOfBirth: '1985-06-15',
-        gender: 'Male',
+        sex: 'Male',
         contactNumber: '09180002222',
         verificationStatus: 'Verified',
         customFields: {

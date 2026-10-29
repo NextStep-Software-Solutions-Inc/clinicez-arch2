@@ -43,7 +43,7 @@ public class PatientMedicalHistorysAndAllergiesTests
             PatientCode = "PAT-002",
             FirstName = "Maria",
             LastName = "Santos",
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             DateOfBirth = new DateOnly(1985, 3, 15),
             ContactNumber = "09171234567"
         };
@@ -230,7 +230,7 @@ public class PatientMedicalHistorysAndAllergiesTests
     {
         var input = new PhilPenSurveyInput(
             AgeYears: 45,
-            Gender: "Male",
+            Sex: "Male",
             IsSmoker: false,
             SystolicBp: 190, // Hypertensive crisis >= 180
             DiastolicBp: 115,
@@ -249,7 +249,7 @@ public class PatientMedicalHistorysAndAllergiesTests
     {
         var input = new PhilPenSurveyInput(
             AgeYears: 55,
-            Gender: "Male",
+            Sex: "Male",
             IsSmoker: true,
             SystolicBp: 145,
             TotalCholesterolMgDl: null, // Missing lab
@@ -268,7 +268,7 @@ public class PatientMedicalHistorysAndAllergiesTests
     {
         var input = new PhilPenSurveyInput(
             AgeYears: 25,
-            Gender: "Female",
+            Sex: "Female",
             IsSmoker: false,
             SystolicBp: 115,
             TotalCholesterolMgDl: 170m

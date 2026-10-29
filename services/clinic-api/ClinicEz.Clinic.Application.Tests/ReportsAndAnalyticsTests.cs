@@ -125,7 +125,7 @@ public class ReportsAndAnalyticsTests
             FirstName = "Lourdes",
             LastName = "Velasco",
             DateOfBirth = new DateOnly(1950, 1, 1), // Senior
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             CivilStatus = CivilStatus.Married,
             ContactNumber = "09170001111",
             CustomFields = new Dictionary<string, object?>

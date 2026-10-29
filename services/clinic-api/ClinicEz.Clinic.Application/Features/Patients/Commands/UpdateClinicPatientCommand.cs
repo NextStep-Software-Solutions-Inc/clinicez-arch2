@@ -18,7 +18,7 @@ public sealed record UpdateClinicPatientCommand(
     string? MiddleName,
     string? Suffix,
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -39,43 +39,7 @@ public sealed record UpdateClinicPatientCommand(
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string? VerificationStatus = null,
     System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null,
-    string? Sex = null,
-    string? GenderIdentity = null) : IRequest<ClinicPatientDto>
-{
-    public UpdateClinicPatientCommand(
-        Guid Id,
-        string FirstName,
-        string LastName,
-        string? MiddleName,
-        string? Suffix,
-        DateOnly DateOfBirth,
-        ClinicEz.Clinic.Domain.Enums.Gender Gender,
-        string? CivilStatus,
-        string ContactNumber,
-        string? Email,
-        string? AddressLine = null,
-        string? Barangay = null,
-        string? City = null,
-        string? Province = null,
-        string? EmergencyContactName = null,
-        string? EmergencyContactPhone = null,
-        string? EmergencyContactRelationship = null,
-        string? PhilHealthNumber = null,
-        string? SeniorCitizenId = null,
-        string? PwdId = null,
-        string? BloodType = null,
-        string? Allergies = null,
-        string? ChronicConditions = null,
-        string? Alerts = null,
-        System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
-        string? VerificationStatus = null,
-        System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null,
-        string? Sex = null,
-        string? GenderIdentity = null)
-        : this(Id, FirstName, LastName, MiddleName, Suffix, DateOfBirth, Gender.ToString(), CivilStatus, ContactNumber, Email, AddressLine, Barangay, City, Province, EmergencyContactName, EmergencyContactPhone, EmergencyContactRelationship, PhilHealthNumber, SeniorCitizenId, PwdId, BloodType, Allergies, ChronicConditions, Alerts, CustomFields, VerificationStatus, MedicalHistories, Sex, GenderIdentity)
-    {
-    }
-}
+    string? GenderIdentity = null) : IRequest<ClinicPatientDto>;
 
 public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateClinicPatientCommand, ClinicPatientDto>
 {
@@ -167,9 +131,9 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         patient.MiddleName = request.MiddleName?.Trim();
         patient.Suffix = request.Suffix?.Trim();
         patient.DateOfBirth = request.DateOfBirth;
-        if (!string.IsNullOrWhiteSpace(request.Sex) || !string.IsNullOrWhiteSpace(request.Gender))
+        if (!string.IsNullOrWhiteSpace(request.Sex))
         {
-            patient.Sex = RegisterClinicPatientCommandHandler.ParseBiologicalSex(request.Sex, request.Gender);
+            patient.Sex = RegisterClinicPatientCommandHandler.ParseBiologicalSex(request.Sex);
         }
         if (request.GenderIdentity != null)
         {

@@ -85,6 +85,6 @@ public sealed class PatientSearchProvider : ISearchProvider
         if (!string.IsNullOrWhiteSpace(patient.PwdId))
             return ("PWD", SearchBadgeVariant.Neutral);
 
-        return (patient.Gender.ToString(), SearchBadgeVariant.Routine);
+        return (patient.Sex.ToString(), SearchBadgeVariant.Routine);
     }
 }

@@ -151,7 +151,7 @@ const mockPatient: ClinicPatient = {
   clinicId: 'clinic-1',
   patientCode: 'PAT-ADV-001',
   fullName: 'Adversarial Test Patient',
-  gender: 'Female',
+  sex: 'Female',
   dateOfBirth: '1995-05-15',
   isVerified: true,
   createdAt: '2026-01-01T00:00:00Z',

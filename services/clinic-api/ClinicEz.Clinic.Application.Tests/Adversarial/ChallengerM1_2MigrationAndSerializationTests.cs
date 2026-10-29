@@ -492,7 +492,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             FullName: "Silang, Gabriel L. Jr.",
             DateOfBirth: new DateOnly(1995, 8, 25),
             Age: 31,
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: "Married",
             ContactNumber: "09175554433",
             Email: "gabriel.silang@example.com",
@@ -566,7 +566,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
         var demographics = new PatientDemographicsDto(
             Dob: new DateOnly(1960, 5, 12),
             Age: 65,
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: "Widowed",
             ContactNumber: "09187778899",
             Email: "maria.reyes@example.com",
@@ -645,7 +645,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
         var dto = new PatientDemographicsDto(
             Dob: new DateOnly(2026 - age, 1, 1),
             Age: age,
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09000000000",
             Email: null,
@@ -681,7 +681,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             FirstName = "Teresa",
             LastName = "Magbanua",
             DateOfBirth = new DateOnly(1985, 10, 13),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09171112233"
         };
 
@@ -732,7 +732,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             FirstName = "Melchora",
             LastName = "Aquino",
             DateOfBirth = new DateOnly(1930, 1, 6),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09179998877"
         };
         patient.CustomFields["yakap_enlistments"] = doc.RootElement.Clone();
@@ -755,7 +755,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
             FirstName = "Apolinario",
             LastName = "Mabini",
             DateOfBirth = new DateOnly(1970, 7, 23),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170002233"
         };
 
@@ -782,7 +782,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
         var dto = new PatientDemographicsDto(
             Dob: new DateOnly(1990, 1, 1),
             Age: 36,
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: null,
             ContactNumber: "09000000000",
             Email: null,
@@ -812,7 +812,7 @@ public class ChallengerM1_2MigrationAndSerializationTests
         var dto = new PatientDemographicsDto(
             Dob: new DateOnly(1990, 1, 1),
             Age: 36,
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: null,
             ContactNumber: "09000000000",
             Email: null,

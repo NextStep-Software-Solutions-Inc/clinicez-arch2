@@ -56,7 +56,7 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
 
         var patientIds = encounters.Select(e => e.PatientId).Distinct().ToList();
         var patients = await _patientRepo.Query(p => patientIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.DateOfBirth, p.Gender })
+            .Select(p => new { p.Id, p.DateOfBirth, p.Sex })
             .ToListAsync(cancellationToken);
         var patientLookup = patients.ToDictionary(p => p.Id);
 
@@ -73,7 +73,7 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
                 int calcAge = today.Year - patient.DateOfBirth.Year;
                 if (patient.DateOfBirth > today.AddYears(-calcAge)) calcAge--;
                 age = calcAge;
-                gender = patient.Gender.ToString();
+                gender = patient.Sex.ToString();
             }
 
             foreach (var diag in enc.Diagnoses)

@@ -19,7 +19,7 @@ public sealed class PatientPhilHealthMembership : ClinicScopedEntity
     public string? PrincipalMiddleName { get; set; }
     public string? PrincipalSuffix { get; set; }
     public DateOnly? PrincipalDateOfBirth { get; set; }
-    public Gender? PrincipalGender { get; set; }
+    public BiologicalSex? PrincipalSex { get; set; }
 
     public string? MembershipCategoryCode { get; set; }
     public string? MembershipCategoryDesc { get; set; }

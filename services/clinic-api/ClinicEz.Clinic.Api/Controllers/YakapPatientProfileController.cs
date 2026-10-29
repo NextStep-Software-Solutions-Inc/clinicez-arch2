@@ -156,7 +156,7 @@ public sealed class YakapPatientProfileController : ControllerBase
         if (DateOnly.FromDateTime(asOf) < birthDate.AddYears(ageYears))
             ageYears--;
 
-        bool isFemale = patient.Gender == ClinicEz.Clinic.Domain.Enums.Gender.Female;
+        bool isFemale = patient.Sex == ClinicEz.Clinic.Domain.Enums.BiologicalSex.Female;
         bool isPediatric = ageYears < 18;
         bool isSenior = ageYears >= 60;
 
@@ -698,7 +698,7 @@ public sealed class YakapPatientProfileController : ControllerBase
         int updateAgeYears = updateAsOf.Year - updateBirthDate.Year;
         if (DateOnly.FromDateTime(updateAsOf) < updateBirthDate.AddYears(updateAgeYears))
             updateAgeYears--;
-        bool updateIsFemale = patient.Gender == ClinicEz.Clinic.Domain.Enums.Gender.Female;
+        bool updateIsFemale = patient.Sex == ClinicEz.Clinic.Domain.Enums.BiologicalSex.Female;
         bool updateIsPediatric = updateAgeYears < 18;
         bool updateIsSenior = updateAgeYears >= 60;
 

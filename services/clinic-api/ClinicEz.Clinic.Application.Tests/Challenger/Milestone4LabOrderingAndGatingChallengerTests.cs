@@ -79,7 +79,7 @@ public class Milestone4LabOrderingAndGatingChallengerTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1990, 5, 15),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09171234567"
         };
         await db.Patients.AddAsync(patient);

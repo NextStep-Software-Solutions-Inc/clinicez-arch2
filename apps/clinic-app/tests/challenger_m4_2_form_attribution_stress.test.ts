@@ -515,7 +515,7 @@ describe('Challenger 2 Empirical Verification: Form Field Error Attribution & To
         middleName: 'Santos',
         suffix: 'Jr.',
         dateOfBirth: '1985-11-20',
-        gender: 'Female',
+        sex: 'Female',
         civilStatus: 'Married',
         contactNumber: '0918-987-6543',
         email: 'rosa.alcantara@example.com',

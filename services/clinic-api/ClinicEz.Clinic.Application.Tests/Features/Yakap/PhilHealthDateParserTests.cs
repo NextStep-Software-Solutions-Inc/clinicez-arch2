@@ -152,7 +152,7 @@ public class PhilHealthDateParserTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1985, 5, 15),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();

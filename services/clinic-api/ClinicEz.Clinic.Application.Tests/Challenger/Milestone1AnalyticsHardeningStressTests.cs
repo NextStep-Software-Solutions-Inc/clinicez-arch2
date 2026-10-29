@@ -95,7 +95,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Maria",
             LastName = "Clara",
             DateOfBirth = new DateOnly(1995, 5, 20),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170000001"
         };
         await patientRepo.AddAsync(patient1);
@@ -159,7 +159,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Crisostomo",
             LastName = "Ibarra",
             DateOfBirth = new DateOnly(1980, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000002"
         };
         await patientRepo.AddAsync(patient2);
@@ -290,7 +290,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Deleted",
             LastName = "Patient",
             DateOfBirth = new DateOnly(1985, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000003",
             IsDeleted = true,
             DeletedAt = DateTime.UtcNow
@@ -792,7 +792,7 @@ public class Milestone1AnalyticsHardeningStressTests
             FirstName = "Solo",
             LastName = "Patient",
             DateOfBirth = new DateOnly(2015, 6, 1), // 11yo pediatric
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170000004"
         };
         await patientRepo.AddAsync(patient);

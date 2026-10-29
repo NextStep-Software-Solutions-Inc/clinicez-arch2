@@ -58,7 +58,7 @@ public sealed class PhilHealthProfileImmunizationSyncTests
             FirstName = "Marco",
             LastName = "Penida",
             ContactNumber = "09171234567",
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             DateOfBirth = new DateOnly(1999, 1, 21),
             PhilHealthNumber = "12-121212121-7"
         };
@@ -122,7 +122,7 @@ public sealed class PhilHealthProfileImmunizationSyncTests
             FirstName = "Marco",
             LastName = "Penida",
             ContactNumber = "09171234567",
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             DateOfBirth = new DateOnly(1999, 1, 21),
             PhilHealthNumber = "12-121212121-7"
         };

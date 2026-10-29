@@ -377,7 +377,7 @@ public class Milestone2And3QuestPdfStressTests
             LastName = "Santos",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1955, 3, 15),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             SeniorCitizenId = "OSCA-987654",
             PwdId = "PWD-123456"
         };

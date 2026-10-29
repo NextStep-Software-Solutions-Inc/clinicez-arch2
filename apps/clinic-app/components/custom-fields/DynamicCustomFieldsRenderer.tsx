@@ -13,7 +13,7 @@ import type {
 } from '../../services/clinicService';
 
 export interface StaticPatientValues {
-  gender?: string;
+  sex?: string;
   civilStatus?: string;
   dateOfBirth?: string;
   age?: number;
@@ -81,7 +81,7 @@ export function isFieldVisible(
     let actualValue: any;
 
     if (rule.source === 'static') {
-      if (rule.field === 'gender') actualValue = staticValues.gender;
+      if (rule.field === 'sex') actualValue = staticValues.sex;
       else if (rule.field === 'civilStatus') actualValue = staticValues.civilStatus;
       else if (rule.field === 'dateOfBirth') actualValue = staticValues.dateOfBirth;
       else if (rule.field === 'age') actualValue = staticValues.age;

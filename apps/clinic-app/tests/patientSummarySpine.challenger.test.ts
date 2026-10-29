@@ -419,7 +419,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
       patientAllergiesRaw?: string;
       patientAlerts?: string;
       demoAlerts?: string;
-      gender?: string;
+      sex?: string;
       chartReproductiveApplicable?: boolean;
       reproductiveHistory?: {
         isApplicable?: boolean;
@@ -471,7 +471,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
           : undefined;
 
       const isPregnant = evaluatePregnancyStatus({
-        gender: params.gender,
+        sex: params.sex,
         alerts: alertsStr,
         reproductiveHistory: repHistory,
         problems: params.problems,
@@ -574,7 +574,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('8.4 Pregnancy alert fires when clinical alerts indicate active gestation', () => {
       const alerts = extractRedAlerts({
-        gender: 'Female',
+        sex: 'Female',
         demoAlerts: 'Active Pregnancy (G2P1 28wks gestation)',
       });
       expect(alerts.some((a) => a.title === 'PREGNANCY / OB ALERT')).toBe(true);
@@ -583,13 +583,13 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
     test('8.5 Identifies reproductive history isApplicable precision behavior', () => {
       // Under refined logic, chart.reproductiveHistory.isApplicable alone does NOT flag pregnancy alert
       const alertsWithReproductive = extractRedAlerts({
-        gender: 'Female',
+        sex: 'Female',
         chartReproductiveApplicable: true,
       });
       expect(alertsWithReproductive.some((a) => a.title === 'PREGNANCY / OB ALERT')).toBe(false);
 
       const alertsWithoutReproductive = extractRedAlerts({
-        gender: 'Female',
+        sex: 'Female',
         chartReproductiveApplicable: false,
       });
       expect(alertsWithoutReproductive.some((a) => a.title === 'PREGNANCY / OB ALERT')).toBe(false);
@@ -652,7 +652,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.2 Scenario 1: Baseline Post-Menarche Female with isApplicable only evaluates to false', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { isApplicable: true },
       });
       expect(result).toBe(false);
@@ -660,7 +660,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.3 Scenario 2: Menopausal Female explicitly excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { isApplicable: true, isMenopausal: true },
       });
       expect(result).toBe(false);
@@ -668,7 +668,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.4 Scenario 3: Elderly Menopausal by recorded Menopause Age excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { menopauseAge: 51 },
       });
       expect(result).toBe(false);
@@ -676,7 +676,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.5 Scenario 4: Explicitly Negative Pregnancy in Alerts excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         alerts: 'Pregnancy test: negative',
       });
       expect(result).toBe(false);
@@ -684,7 +684,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.6 Scenario 5: Explicitly Negative Pregnancy in Remarks excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { remarks: 'Patient confirmed not pregnant' },
       });
       expect(result).toBe(false);
@@ -692,7 +692,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.7 Scenario 6: Male Patient with Misplaced Alert unconditionally excludes active pregnancy', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Male',
+        sex: 'Male',
         alerts: 'Pregnancy protocol',
       });
       expect(result).toBe(false);
@@ -700,7 +700,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.8 Scenario 7: Active Pregnancy via Alerts triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         alerts: 'Active Pregnancy (G2P1 28wks gestation)',
       });
       expect(result).toBe(true);
@@ -708,7 +708,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.9 Scenario 8: Active Pregnancy via Remarks triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         reproductiveHistory: { remarks: 'Confirmed intrauterine pregnancy, EDD Dec 2026' },
       });
       expect(result).toBe(true);
@@ -716,7 +716,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.10 Scenario 9: Active Pregnancy via ICD-10 Z34.0 triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p1',
@@ -736,7 +736,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.11 Scenario 10: Active Pregnancy via ICD-10 Z33.1 triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p2',
@@ -756,7 +756,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.12 Scenario 11: Active Pregnancy via ICD-10 O24.4 triggers alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p3',
@@ -776,7 +776,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
 
     test('9.13 Scenario 12: Resolved Pregnancy Problem does NOT trigger alert', () => {
       const result = evaluatePregnancyStatus({
-        gender: 'Female',
+        sex: 'Female',
         problems: [
           {
             id: 'p4',
@@ -850,7 +850,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
         age: 35,
         contactNumber: '09171234567',
         dateOfBirth: '1991-01-01',
-        gender: 'Male',
+        sex: 'Male',
         createdAt: '2026-01-01T00:00:00Z',
       };
 
@@ -887,7 +887,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
         age: 35,
         contactNumber: '09171234567',
         dateOfBirth: '1991-01-01',
-        gender: 'Male',
+        sex: 'Male',
         createdAt: '2026-01-01T00:00:00Z',
       };
 
@@ -929,7 +929,7 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
         age: 35,
         contactNumber: '09171234567',
         dateOfBirth: '1991-01-01',
-        gender: 'Male',
+        sex: 'Male',
         createdAt: '2026-01-01T00:00:00Z',
       };
 

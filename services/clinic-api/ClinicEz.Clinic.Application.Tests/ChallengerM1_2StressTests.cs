@@ -276,7 +276,7 @@ public class ChallengerM1_2StressTests
             FirstName = "Baby",
             LastName = "Doe",
             DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow), // Newborn (age 0)
-            Gender = Gender.Other,
+            Sex = BiologicalSex.Unknown,
             ContactNumber = "09000000000"
         };
         await patientRepo.AddAsync(patientOtherGender);

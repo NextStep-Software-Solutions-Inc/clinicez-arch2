@@ -128,7 +128,7 @@ public class LabOrdersAndInteroperabilityTests
             LastName = "Santos",
             ContactNumber = "0917-123-4567",
             DateOfBirth = new DateOnly(1984, 3, 12),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             PhilHealthNumber = "12-050412345-6"
         }, CancellationToken.None);
 
@@ -307,7 +307,7 @@ public class LabOrdersAndInteroperabilityTests
             LastName = "Santos",
             ContactNumber = "0917-123-4567",
             DateOfBirth = new DateOnly(1984, 3, 12),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             PhilHealthNumber = "12-050412345-6"
         };
         db.StaffMembers.Add(doctor);

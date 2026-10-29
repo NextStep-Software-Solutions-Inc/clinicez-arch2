@@ -391,7 +391,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,
                 DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
                 Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
-                Gender = patient.Gender.ToString(),
+                Gender = patient.Sex.ToString(),
                 Allergies = patient.Allergies != null && patient.Allergies.Count > 0
                     ? string.Join(", ", patient.Allergies.Select(a => a.Allergen))
                     : "None"

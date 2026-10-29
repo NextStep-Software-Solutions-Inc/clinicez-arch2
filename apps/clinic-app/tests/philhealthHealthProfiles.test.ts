@@ -271,7 +271,7 @@ describe('PhilPEN 10-Year CVD Risk Calculation & Real-Time Sync', () => {
     it('triggers immediate Band E override for hypertensive emergency (SBP >= 180)', () => {
       const res = calculatePhilPenRisk({
         ageYears: 45,
-        gender: 'Female',
+        sex: 'Female',
         systolicBp: 185,
         diastolicBp: 95,
       });
@@ -285,7 +285,7 @@ describe('PhilPEN 10-Year CVD Risk Calculation & Real-Time Sync', () => {
     it('triggers immediate Band E override for established CVD (prior angina / heart attack / stroke)', () => {
       const res = calculatePhilPenRisk({
         ageYears: 50,
-        gender: 'Female',
+        sex: 'Female',
         hasAnginaOrHeartAttack: true,
         hasStrokeOrTia: false,
       });
@@ -299,7 +299,7 @@ describe('PhilPEN 10-Year CVD Risk Calculation & Real-Time Sync', () => {
     it('elevates to minimum Band D for prolonged severe chest pain (>30m)', () => {
       const res = calculatePhilPenRisk({
         ageYears: 35,
-        gender: 'Female',
+        sex: 'Female',
         severeChestPainOver30Mins: true,
       });
 
@@ -310,7 +310,7 @@ describe('PhilPEN 10-Year CVD Risk Calculation & Real-Time Sync', () => {
     it('computes low risk Band A for healthy young adult', () => {
       const res = calculatePhilPenRisk({
         ageYears: 25,
-        gender: 'Female',
+        sex: 'Female',
         isSmoker: false,
         systolicBp: 110,
         diagnosedDiabetes: false,
@@ -325,7 +325,7 @@ describe('PhilPEN 10-Year CVD Risk Calculation & Real-Time Sync', () => {
     it('computes moderate risk Band B with aging and smoking', () => {
       const res = calculatePhilPenRisk({
         ageYears: 55, // +3
-        gender: 'Male', // +1
+        sex: 'Male', // +1
         isSmoker: true, // +3
         systolicBp: 120, // 0
         diagnosedDiabetes: false, // 0

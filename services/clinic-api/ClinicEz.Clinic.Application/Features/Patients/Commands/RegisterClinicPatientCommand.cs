@@ -23,7 +23,7 @@ public sealed record RegisterClinicPatientCommand(
     string? MiddleName,
     string? Suffix,
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -60,7 +60,6 @@ public sealed record RegisterClinicPatientCommand(
     string? Nationality = null,
     string? Religion = null,
     Guid? SyncPatientId = null,
-    string? Sex = null,
     string? GenderIdentity = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
@@ -180,7 +179,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             MiddleName = request.MiddleName?.Trim(),
             Suffix = request.Suffix?.Trim(),
             DateOfBirth = request.DateOfBirth,
-            Sex = ParseBiologicalSex(request.Sex, request.Gender),
+            Sex = ParseBiologicalSex(request.Sex),
             GenderIdentity = NormalizeGenderIdentity(request.GenderIdentity),
             CivilStatus = ParseCivilStatus(request.CivilStatus),
             ContactNumber = request.ContactNumber.Trim(),
@@ -546,7 +545,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             fullName,
             p.DateOfBirth,
             age,
-            p.Gender.ToString(),
+            p.Sex.ToString(),
             p.CivilStatus?.ToString(),
             p.ContactNumber,
             p.Email,
@@ -572,18 +571,17 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             ChronicConditions: chronicConditions,
             Alerts: alertsText,
             SyncPatientId: p.CloudPatientId,
-            Sex: p.Sex.ToString(),
             GenderIdentity: p.GenderIdentity);
     }
 
-    public static BiologicalSex ParseBiologicalSex(string? sex, string? fallbackGender)
+    public static BiologicalSex ParseBiologicalSex(string? sex)
     {
-        var candidate = !string.IsNullOrWhiteSpace(sex) ? sex.Trim() : fallbackGender?.Trim();
-        if (string.IsNullOrWhiteSpace(candidate))
+        if (string.IsNullOrWhiteSpace(sex))
         {
             return BiologicalSex.Male;
         }
 
+        var candidate = sex.Trim();
         if (Enum.TryParse<BiologicalSex>(candidate, true, out var parsedSex))
         {
             return parsedSex;

@@ -24,7 +24,7 @@ public interface IWhoZScoreCalculator
     /// </summary>
     WhoZScoreEvaluation? Calculate(
         DateOnly dateOfBirth,
-        string gender,
+        string sex,
         decimal lengthOrHeightCm,
         decimal weightKg,
         bool isMeasuredRecumbent = false,

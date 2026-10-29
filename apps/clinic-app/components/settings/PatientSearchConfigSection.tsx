@@ -101,7 +101,7 @@ export default function PatientSearchConfigSection({
     fullName: 'Penida, Marco',
     dateOfBirth: '1998-05-14',
     age: 28,
-    gender: 'Male',
+    sex: 'Male',
     civilStatus: 'Single',
     contactNumber: '+63 917 123 4567',
     philHealthNumber: '12-345678901-2',

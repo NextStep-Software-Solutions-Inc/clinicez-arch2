@@ -103,17 +103,17 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
     test('1.1 Post-menarche nulliparous female (reproductiveHistory.isApplicable === true) NEVER triggers alert', () => {
       // Extensive permutations of post-menarche female profiles
       const permutations = [
-        { gender: 'Female', reproductiveHistory: { isApplicable: true } },
-        { gender: 'female', reproductiveHistory: { isApplicable: true, remarks: '' } },
-        { gender: 'F', reproductiveHistory: { isApplicable: true } },
-        { gender: 'f', reproductiveHistory: { isApplicable: true } },
-        { gender: ' Female ', reproductiveHistory: { isApplicable: true } },
-        { gender: 'Female', reproductiveHistory: { isApplicable: true, isMenopausal: false } },
-        { gender: 'Female', reproductiveHistory: { isApplicable: true, remarks: 'Normal regular menses' } },
-        { gender: 'Female', reproductiveHistory: { isApplicable: true, remarks: 'Menarche at age 13, nulliparous' } },
-        { gender: 'Female', reproductiveHistory: { isApplicable: true }, problems: [] },
+        { sex: 'Female', reproductiveHistory: { isApplicable: true } },
+        { sex: 'female', reproductiveHistory: { isApplicable: true, remarks: '' } },
+        { sex: 'F', reproductiveHistory: { isApplicable: true } },
+        { sex: 'f', reproductiveHistory: { isApplicable: true } },
+        { sex: ' Female ', reproductiveHistory: { isApplicable: true } },
+        { sex: 'Female', reproductiveHistory: { isApplicable: true, isMenopausal: false } },
+        { sex: 'Female', reproductiveHistory: { isApplicable: true, remarks: 'Normal regular menses' } },
+        { sex: 'Female', reproductiveHistory: { isApplicable: true, remarks: 'Menarche at age 13, nulliparous' } },
+        { sex: 'Female', reproductiveHistory: { isApplicable: true }, problems: [] },
         {
-          gender: 'Female',
+          sex: 'Female',
           reproductiveHistory: { isApplicable: true },
           problems: [
             {
@@ -137,18 +137,18 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
     test('1.2 Menopausal patients unconditionally evaluate to false across all inputs', () => {
       const menopausalCases = [
         // Boolean flag
-        { gender: 'Female', reproductiveHistory: { isApplicable: true, isMenopausal: true } },
-        { gender: 'Female', reproductiveHistory: { isMenopausal: true }, alerts: 'Pregnant' },
+        { sex: 'Female', reproductiveHistory: { isApplicable: true, isMenopausal: true } },
+        { sex: 'Female', reproductiveHistory: { isMenopausal: true }, alerts: 'Pregnant' },
         // Menopause age > 0
-        { gender: 'Female', reproductiveHistory: { menopauseAge: 50 } },
-        { gender: 'Female', reproductiveHistory: { menopauseAge: 45 }, alerts: 'G3P2 pregnancy' },
+        { sex: 'Female', reproductiveHistory: { menopauseAge: 50 } },
+        { sex: 'Female', reproductiveHistory: { menopauseAge: 45 }, alerts: 'G3P2 pregnancy' },
         // Lexical alerts match
-        { gender: 'Female', alerts: 'Menopausal female' },
-        { gender: 'Female', alerts: 'Post-menopausal' },
-        { gender: 'Female', alerts: 'Patient reached menopause' },
+        { sex: 'Female', alerts: 'Menopausal female' },
+        { sex: 'Female', alerts: 'Post-menopausal' },
+        { sex: 'Female', alerts: 'Patient reached menopause' },
         // Lexical remarks match
-        { gender: 'Female', reproductiveHistory: { remarks: 'Postmenopausal since 2020' } },
-        { gender: 'Female', reproductiveHistory: { remarks: 'Menopausal bleeding workup' } },
+        { sex: 'Female', reproductiveHistory: { remarks: 'Postmenopausal since 2020' } },
+        { sex: 'Female', reproductiveHistory: { remarks: 'Menopausal bleeding workup' } },
       ];
 
       for (const m of menopausalCases) {
@@ -158,12 +158,12 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
 
     test('1.3 Male patients unconditionally evaluate to false even with corrupted/misplaced data', () => {
       const maleCases = [
-        { gender: 'Male', alerts: 'Pregnant' },
-        { gender: 'male', alerts: 'Active Pregnancy' },
-        { gender: 'M', alerts: 'Intrauterine pregnancy' },
-        { gender: 'm', reproductiveHistory: { remarks: 'EDD: 2026-11-20' } },
+        { sex: 'Male', alerts: 'Pregnant' },
+        { sex: 'male', alerts: 'Active Pregnancy' },
+        { sex: 'M', alerts: 'Intrauterine pregnancy' },
+        { sex: 'm', reproductiveHistory: { remarks: 'EDD: 2026-11-20' } },
         {
-          gender: 'Male',
+          sex: 'Male',
           problems: [
             {
               id: 'p1',
@@ -177,10 +177,10 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
           ],
         },
         // Non-female gender strings
-        { gender: undefined, alerts: 'Pregnant' },
-        { gender: '', alerts: 'Pregnant' },
-        { gender: 'Unknown', alerts: 'Pregnant' },
-        { gender: 'Other', alerts: 'Pregnant' },
+        { sex: undefined, alerts: 'Pregnant' },
+        { sex: '', alerts: 'Pregnant' },
+        { sex: 'Unknown', alerts: 'Pregnant' },
+        { sex: 'Other', alerts: 'Pregnant' },
       ];
 
       for (const mc of maleCases) {
@@ -190,20 +190,20 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
 
     test('1.4 Explicit non-pregnancy statements in alerts or remarks cleanly suppress alerts', () => {
       const negativeCases = [
-        { gender: 'Female', alerts: 'Pregnancy test negative' },
-        { gender: 'Female', alerts: 'Pregnancy test: negative' },
-        { gender: 'Female', alerts: 'UPT negative' },
-        { gender: 'Female', alerts: 'UPT: negative' },
-        { gender: 'Female', alerts: 'Beta-hCG negative' },
-        { gender: 'Female', alerts: 'Beta-hCG: negative' },
-        { gender: 'Female', alerts: 'Patient is not pregnant' },
-        { gender: 'Female', alerts: 'Non-pregnant' },
-        { gender: 'Female', alerts: 'Negative for pregnancy' },
-        { gender: 'Female', alerts: 'Pregnancy is resolved' },
-        { gender: 'Female', alerts: 'Pregnancy ended' },
-        { gender: 'Female', reproductiveHistory: { remarks: 'UPT is negative' } },
-        { gender: 'Female', reproductiveHistory: { remarks: 'Beta-hCG test: negative' } },
-        { gender: 'Female', reproductiveHistory: { remarks: 'Patient confirmed non-pregnant' } },
+        { sex: 'Female', alerts: 'Pregnancy test negative' },
+        { sex: 'Female', alerts: 'Pregnancy test: negative' },
+        { sex: 'Female', alerts: 'UPT negative' },
+        { sex: 'Female', alerts: 'UPT: negative' },
+        { sex: 'Female', alerts: 'Beta-hCG negative' },
+        { sex: 'Female', alerts: 'Beta-hCG: negative' },
+        { sex: 'Female', alerts: 'Patient is not pregnant' },
+        { sex: 'Female', alerts: 'Non-pregnant' },
+        { sex: 'Female', alerts: 'Negative for pregnancy' },
+        { sex: 'Female', alerts: 'Pregnancy is resolved' },
+        { sex: 'Female', alerts: 'Pregnancy ended' },
+        { sex: 'Female', reproductiveHistory: { remarks: 'UPT is negative' } },
+        { sex: 'Female', reproductiveHistory: { remarks: 'Beta-hCG test: negative' } },
+        { sex: 'Female', reproductiveHistory: { remarks: 'Patient confirmed non-pregnant' } },
       ];
 
       for (const nc of negativeCases) {
@@ -216,7 +216,7 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
 
       for (const status of resolvedStatuses) {
         const result = evaluatePregnancyStatus({
-          gender: 'Female',
+          sex: 'Female',
           problems: [
             {
               id: 'p1',
@@ -261,7 +261,7 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
         expect(isPregnancyIcd10(code.toLowerCase())).toBe(true);
 
         const alertFired = evaluatePregnancyStatus({
-          gender: 'Female',
+          sex: 'Female',
           problems: [
             {
               id: 'p1',
@@ -297,16 +297,16 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
 
     test('1.7 Affirmative text triggers in alerts and remarks', () => {
       const positiveTexts = [
-        { gender: 'Female', alerts: 'Active Pregnancy' },
-        { gender: 'Female', alerts: '32 weeks gestation' },
-        { gender: 'Female', alerts: 'G2P1 14 wks gestating' },
-        { gender: 'Female', alerts: 'Gravid 2, Para 1' },
-        { gender: 'Female', alerts: 'Intrauterine pregnancy' },
-        { gender: 'Female', alerts: 'Confirmed IUP' },
-        { gender: 'Female', reproductiveHistory: { remarks: '1st trimester scan normal' } },
-        { gender: 'Female', reproductiveHistory: { remarks: 'Expected delivery date: Nov 2026' } },
-        { gender: 'Female', reproductiveHistory: { remarks: 'EDD 2026-11-20' } },
-        { gender: 'Female', reproductiveHistory: { remarks: 'EDC Dec 2026' } },
+        { sex: 'Female', alerts: 'Active Pregnancy' },
+        { sex: 'Female', alerts: '32 weeks gestation' },
+        { sex: 'Female', alerts: 'G2P1 14 wks gestating' },
+        { sex: 'Female', alerts: 'Gravid 2, Para 1' },
+        { sex: 'Female', alerts: 'Intrauterine pregnancy' },
+        { sex: 'Female', alerts: 'Confirmed IUP' },
+        { sex: 'Female', reproductiveHistory: { remarks: '1st trimester scan normal' } },
+        { sex: 'Female', reproductiveHistory: { remarks: 'Expected delivery date: Nov 2026' } },
+        { sex: 'Female', reproductiveHistory: { remarks: 'EDD 2026-11-20' } },
+        { sex: 'Female', reproductiveHistory: { remarks: 'EDC Dec 2026' } },
       ];
 
       for (const pt of positiveTexts) {
@@ -563,7 +563,7 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
         firstName: 'Maria',
         lastName: 'Santos',
         dateOfBirth: '1995-05-15',
-        gender: 'Female',
+        sex: 'Female',
         contactNumber: '09171234567',
         philHealthNumber: '123456789012',
         allergies: 'None',
@@ -575,7 +575,7 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
         patientName: 'Maria Santos',
         demographics: {
           dob: '1995-05-15',
-          gender: 'Female',
+          sex: 'Female',
           contactNumber: '09171234567',
           philHealthNumber: '123456789012',
           alerts: 'Low fall risk',
@@ -608,7 +608,7 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
       };
 
       const isPregnant = evaluatePregnancyStatus({
-        gender: chart.demographics?.gender,
+        sex: chart.demographics?.sex,
         alerts: chart.demographics?.alerts,
         reproductiveHistory: chart.reproductiveHistory,
         problems: chart.problems,
@@ -625,7 +625,7 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
         patientName: 'Ana Reyes',
         demographics: {
           dob: '1998-02-10',
-          gender: 'Female',
+          sex: 'Female',
           contactNumber: '09179876543',
           alerts: 'Morse Fall Scale: 70 (High Risk)',
         },
@@ -657,7 +657,7 @@ describe('EMPIRICAL CHALLENGER R2 — Adversarial Stress Harness', () => {
       };
 
       const isPregnant = evaluatePregnancyStatus({
-        gender: chart.demographics?.gender,
+        sex: chart.demographics?.sex,
         alerts: chart.demographics?.alerts,
         reproductiveHistory: chart.reproductiveHistory,
         problems: chart.problems,

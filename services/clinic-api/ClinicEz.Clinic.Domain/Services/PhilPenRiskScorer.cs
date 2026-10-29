@@ -13,7 +13,7 @@ public enum PhilPenCvdRiskBand
 
 public sealed record PhilPenSurveyInput(
     int AgeYears,
-    string Gender,
+    string Sex,
     bool IsSmoker,
     int SystolicBp,
     int? DiastolicBp = null,
@@ -69,8 +69,8 @@ public static class PhilPenRiskScorer
         else if (input.AgeYears >= 50) points += 3;
         else if (input.AgeYears >= 40) points += 2;
 
-        // Gender & Smoking
-        if (input.Gender.Equals("Male", StringComparison.OrdinalIgnoreCase)) points += 1;
+        // Biological Sex & Smoking
+        if (input.Sex.Equals("Male", StringComparison.OrdinalIgnoreCase)) points += 1;
         if (input.IsSmoker) points += 3;
 
         // Diabetes / Glycemia

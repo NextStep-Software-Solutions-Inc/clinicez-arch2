@@ -857,7 +857,7 @@ public static class DevPatientSeeder
                     MiddleName = middleName,
                     Suffix = suffix,
                     DateOfBirth = dateOfBirth,
-                    Gender = isFemale ? Gender.Female : Gender.Male,
+                    Sex = isFemale ? BiologicalSex.Female : BiologicalSex.Male,
                     CivilStatus = civilStatusEnum,
                     ContactNumber = contactNumber,
                     Email = email,

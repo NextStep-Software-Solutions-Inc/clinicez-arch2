@@ -45,7 +45,7 @@ public class ClinicOperationsSuiteTests
             MiddleName: "Delos",
             Suffix: null,
             DateOfBirth: new DateOnly(1955, 6, 15), // Senior Citizen
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: "Married",
             ContactNumber: "09171234567",
             Email: "maria.santos@email.com",
@@ -119,7 +119,7 @@ public class ClinicOperationsSuiteTests
             Suffix = "Jr.",
             ClinicEzId = "CE-WDP9-FMBJ",
             DateOfBirth = new DateOnly(1993, 4, 12),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09171112233",
             PhilHealthNumber = "12-345678901-2"
         };
@@ -167,7 +167,7 @@ public class ClinicOperationsSuiteTests
             Suffix = "Jr.",
             ClinicEzId = "CE-WDP9-FMBJ",
             DateOfBirth = new DateOnly(1993, 4, 12),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09171112233",
             PhilHealthNumber = "12-345678901-2"
         };
@@ -237,7 +237,7 @@ public class ClinicOperationsSuiteTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 3, 10),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09181111111",
             Email: null,
@@ -263,7 +263,7 @@ public class ClinicOperationsSuiteTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1998, 8, 12),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: null,
             ContactNumber: "09182222222",
             Email: null,
@@ -289,7 +289,7 @@ public class ClinicOperationsSuiteTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1955, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09183333333",
             Email: null,
@@ -315,7 +315,7 @@ public class ClinicOperationsSuiteTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(2000, 4, 15),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09184444444",
             Email: null,

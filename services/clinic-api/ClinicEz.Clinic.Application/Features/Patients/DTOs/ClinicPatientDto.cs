@@ -25,7 +25,7 @@ public sealed record ClinicPatientDto(
     string FullName,
     DateOnly DateOfBirth,
     int Age,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -55,6 +55,5 @@ public sealed record ClinicPatientDto(
     string? ChronicConditions = null,
     string? Alerts = null,
     Guid? SyncPatientId = null,
-    string? Sex = null,
     string? GenderIdentity = null
 );

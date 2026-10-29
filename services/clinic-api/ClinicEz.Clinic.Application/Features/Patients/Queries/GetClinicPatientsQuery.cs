@@ -133,7 +133,6 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.Suffix,
                 p.DateOfBirth,
                 p.Sex,
-                p.Gender,
                 p.GenderIdentity,
                 p.CivilStatus,
                 p.ContactNumber,
@@ -180,7 +179,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 fullName,
                 p.DateOfBirth,
                 age,
-                p.Gender.ToString(),
+                p.Sex.ToString(),
                 p.CivilStatus?.ToString(),
                 p.ContactNumber,
                 p.Email,
@@ -210,7 +209,6 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 ChronicConditions: null,
                 Alerts: p.HasActiveSafetyAlert ? "Active Safety Alert" : null,
                 SyncPatientId: p.CloudPatientId,
-                Sex: p.Sex.ToString(),
                 GenderIdentity: p.GenderIdentity);
         }).ToList().AsReadOnly();
     }

@@ -640,7 +640,7 @@ public class Tier5AdversarialHardeningTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1985, 3, 15),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "+639170000001"
         };
         await patientRepo.AddAsync(patient);

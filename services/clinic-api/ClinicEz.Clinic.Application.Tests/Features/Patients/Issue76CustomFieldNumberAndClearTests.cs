@@ -62,7 +62,7 @@ public class Issue76CustomFieldNumberAndClearTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 5, 20),
-            Gender: "Female",
+            Sex: "Female",
             CivilStatus: "Single",
             ContactNumber: "0917-111-2222",
             Email: $"{firstName.ToLower()}@example.com",
@@ -447,7 +447,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Juan",
             LastName = "Luna",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0918-000-0000",
             CustomFields = new Dictionary<string, object?> { ["student_gpa"] = "3.75" }
         };
@@ -467,7 +467,7 @@ public class Issue76CustomFieldNumberAndClearTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: patient.DateOfBirth,
-            Gender: patient.Gender,
+            Sex: patient.Sex.ToString(),
             CivilStatus: "Single",
             ContactNumber: patient.ContactNumber,
             Email: null,
@@ -499,7 +499,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Marcelo",
             LastName = "Del Pilar",
             DateOfBirth = new DateOnly(1985, 3, 15),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0919-111-2222",
             CustomFields = new Dictionary<string, object?>
             {
@@ -525,7 +525,7 @@ public class Issue76CustomFieldNumberAndClearTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: patient.DateOfBirth,
-            Gender: patient.Gender,
+            Sex: patient.Sex.ToString(),
             CivilStatus: "Married",
             ContactNumber: patient.ContactNumber,
             Email: null,
@@ -565,7 +565,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Melchora",
             LastName = "Aquino",
             DateOfBirth = new DateOnly(1970, 1, 6),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "0920-333-4444",
             CustomFields = new Dictionary<string, object?>
             {
@@ -589,7 +589,7 @@ public class Issue76CustomFieldNumberAndClearTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: patient.DateOfBirth,
-            Gender: patient.Gender,
+            Sex: patient.Sex.ToString(),
             CivilStatus: "Widowed",
             ContactNumber: patient.ContactNumber,
             Email: null,
@@ -625,7 +625,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Gregorio",
             LastName = "Del Pilar",
             DateOfBirth = new DateOnly(1995, 11, 14),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0921-555-6666",
             CustomFields = new Dictionary<string, object?>
             {
@@ -648,7 +648,7 @@ public class Issue76CustomFieldNumberAndClearTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: patient.DateOfBirth,
-            Gender: patient.Gender,
+            Sex: patient.Sex.ToString(),
             CivilStatus: "Single",
             ContactNumber: patient.ContactNumber,
             Email: null,
@@ -693,7 +693,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Diego",
             LastName = "Silang",
             DateOfBirth = new DateOnly(1980, 12, 16),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0922-777-8888",
             CustomFields = new Dictionary<string, object?>()
         };
@@ -714,7 +714,7 @@ public class Issue76CustomFieldNumberAndClearTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: patient.DateOfBirth,
-            Gender: patient.Gender,
+            Sex: patient.Sex.ToString(),
             CivilStatus: "Single",
             ContactNumber: patient.ContactNumber,
             Email: null,
@@ -751,7 +751,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Josh",
             LastName = "Gram",
             DateOfBirth = new DateOnly(1998, 6, 15),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "0917-000-0001",
             CustomFields = new Dictionary<string, object?>
             {
@@ -781,7 +781,7 @@ public class Issue76CustomFieldNumberAndClearTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: patient.DateOfBirth,
-            Gender: patient.Gender,
+            Sex: patient.Sex.ToString(),
             CivilStatus: "Single",
             ContactNumber: patient.ContactNumber,
             Email: null,

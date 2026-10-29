@@ -732,7 +732,7 @@ public class PatientShareSnapshotHandlerTests
         existingPatient.MiddleName = null;
         existingPatient.Suffix = null;
         existingPatient.DateOfBirth = new DateOnly(2000, 1, 1);
-        existingPatient.Gender = Gender.Other;
+        existingPatient.Sex = BiologicalSex.Unknown;
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         _db.Patients.Add(existingPatient);
         await _db.SaveChangesAsync();
@@ -769,7 +769,7 @@ public class PatientShareSnapshotHandlerTests
         healed.LastName.Should().Be("Maureal");
         healed.Suffix.Should().Be("Jr.");
         healed.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        healed.Gender.Should().Be(Gender.Male);
+        healed.Sex.Should().Be(BiologicalSex.Male);
         healed.ContactNumber.Should().Be("0917-999-8888");
     }
 }

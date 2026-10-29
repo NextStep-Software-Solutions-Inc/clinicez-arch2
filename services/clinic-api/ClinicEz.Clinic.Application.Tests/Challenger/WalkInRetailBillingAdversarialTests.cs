@@ -524,7 +524,7 @@ public class WalkInRetailBillingAdversarialTests
             LastName = "Luna",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             CloudPatientId = Guid.NewGuid()
         };
         await context.Set<Patient>().AddAsync(registeredPatient);

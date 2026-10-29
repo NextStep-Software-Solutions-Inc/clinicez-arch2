@@ -143,13 +143,9 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
             MiddleName = message.MiddleName?.Trim(),
             Suffix = message.Suffix?.Trim(),
             DateOfBirth = message.DateOfBirth,
-            Gender = string.IsNullOrWhiteSpace(message.Sex)
-                ? Gender.Other
-                : (string.Equals(message.Sex.Trim(), "Female", StringComparison.OrdinalIgnoreCase) || string.Equals(message.Sex.Trim(), "F", StringComparison.OrdinalIgnoreCase)
-                    ? Gender.Female
-                    : (string.Equals(message.Sex.Trim(), "Male", StringComparison.OrdinalIgnoreCase) || string.Equals(message.Sex.Trim(), "M", StringComparison.OrdinalIgnoreCase)
-                        ? Gender.Male
-                        : (Enum.TryParse<Gender>(message.Sex.Trim(), true, out var parsedGender) ? parsedGender : Gender.Other))),
+            Sex = string.IsNullOrWhiteSpace(message.Sex)
+                ? BiologicalSex.Unknown
+                : ClinicEz.Clinic.Application.Features.Patients.Commands.RegisterClinicPatientCommandHandler.ParseBiologicalSex(message.Sex),
             CivilStatus = Enum.TryParse<CivilStatus>(message.CivilStatus, true, out var cs) ? cs : null,
             ContactNumber = !string.IsNullOrWhiteSpace(message.ContactNumber) ? message.ContactNumber.Trim() : "N/A",
             Email = message.Email?.Trim(),

@@ -55,7 +55,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"Seed{i}",
                 LastName = "Test",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = $"091700000{i:D2}",
                 IsDeleted = isDel,
                 CreatedAt = DateTime.UtcNow
@@ -141,7 +141,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"C1_{i}",
                 LastName = "Test",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170000001",
                 IsDeleted = i > 10,
                 CreatedAt = DateTime.UtcNow
@@ -160,7 +160,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"C2_{i}",
                 LastName = "Test",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Female,
+                Sex = BiologicalSex.Female,
                 ContactNumber = "09170000002",
                 IsDeleted = i > 3,
                 CreatedAt = DateTime.UtcNow
@@ -224,7 +224,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = $"Scatter_{idx}",
                 LastName = "Patient",
                 DateOfBirth = new DateOnly(1995, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170000099",
                 IsDeleted = isDeleted,
                 CreatedAt = DateTime.UtcNow
@@ -286,7 +286,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = "Boundary",
                 LastName = "Student",
                 DateOfBirth = new DateOnly(2002, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09180000000",
                 IsDeleted = true,
                 CreatedAt = DateTime.UtcNow
@@ -338,7 +338,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = "Weird",
                 LastName = "Code",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170000000",
                 IsDeleted = true, // even if soft-deleted
                 CreatedAt = DateTime.UtcNow
@@ -382,7 +382,7 @@ public class AdversarialPatientCodeSequenceTests
                 FirstName = "OldYear",
                 LastName = "Patient",
                 DateOfBirth = new DateOnly(1990, 1, 1),
-                Gender = Gender.Male,
+                Sex = BiologicalSex.Male,
                 ContactNumber = "09170000000",
                 IsDeleted = true,
                 CreatedAt = DateTime.UtcNow
@@ -463,7 +463,7 @@ public class AdversarialPatientCodeSequenceTests
             MiddleName: null,
             Suffix: null,
             DateOfBirth: new DateOnly(1995, 6, 15),
-            Gender: "Male",
+            Sex: "Male",
             CivilStatus: null,
             ContactNumber: "09170009999",
             Email: null,
@@ -491,7 +491,7 @@ public class AdversarialPatientCodeSequenceTests
             LastName: last,
             MiddleName: null,
             DateOfBirth: new DateOnly(2004, 1, 1),
-            Gender: "Male",
+            Sex: "Male",
             ContactNumber: "09180009999",
             Email: $"{first.ToLower()}@student.edu",
             AddressLine: "Campus",

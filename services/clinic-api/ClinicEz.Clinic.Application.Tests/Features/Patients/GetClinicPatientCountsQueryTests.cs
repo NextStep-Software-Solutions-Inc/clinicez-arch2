@@ -43,7 +43,7 @@ public sealed class GetPatientCountsQueryTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1995, 5, 10),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000001",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }
         };
@@ -58,7 +58,7 @@ public sealed class GetPatientCountsQueryTests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(2005, 8, 15),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170000002",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "Student", ["student_id"] = "STU-2026-001" }
         };
@@ -73,7 +73,7 @@ public sealed class GetPatientCountsQueryTests
             FirstName = "Pedro",
             LastName = "Penduko",
             DateOfBirth = new DateOnly(1988, 3, 20),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000003",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "Employee", ["employee_id"] = "EMP-9001" }
         };
@@ -88,7 +88,7 @@ public sealed class GetPatientCountsQueryTests
             FirstName = "Lola",
             LastName = "Nena",
             DateOfBirth = new DateOnly(1950, 1, 1),
-            Gender = Gender.Female,
+            Sex = BiologicalSex.Female,
             ContactNumber = "09170000004",
             SeniorCitizenId = "SC-12345",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }
@@ -105,7 +105,7 @@ public sealed class GetPatientCountsQueryTests
             FirstName = "Cardo",
             LastName = "Dalisay",
             DateOfBirth = new DateOnly(1982, 11, 2),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000005",
             PwdId = "PWD-9999",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }
@@ -140,7 +140,7 @@ public sealed class GetPatientCountsQueryTests
             FirstName = "Andres",
             LastName = "Bonifacio",
             DateOfBirth = new DateOnly(1980, 11, 30),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000010",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "Employee" }
         };
@@ -155,7 +155,7 @@ public sealed class GetPatientCountsQueryTests
             FirstName = "Apolinario",
             LastName = "Mabini",
             DateOfBirth = new DateOnly(1975, 7, 23),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             ContactNumber = "09170000011",
             PwdId = "PWD-001",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }

@@ -93,7 +93,7 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     fullName: 'Maria Dela Cruz',
     firstName: 'Maria',
     lastName: 'Dela Cruz',
-    gender: 'Female',
+    sex: 'Female',
     dateOfBirth: '1995-05-15',
     age: 31,
     contactNumber: '09171234567',

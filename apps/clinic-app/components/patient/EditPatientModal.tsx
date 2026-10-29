@@ -248,10 +248,10 @@ export function EditPatientModal({
   const [lastName, setLastName] = useState('');
   const [suffix, setSuffix] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [gender, setGender] = useState<string>('Male');
+  const [sex, setSex] = useState<string>('Male');
   const [genderIdentity, setGenderIdentity] = useState<string>('');
   const [civilStatus, setCivilStatus] = useState<string>('Single');
-  const [genderOptions, setGenderOptions] = useState<string[]>([]);
+  const [sexOptions, setSexOptions] = useState<string[]>([]);
   const [genderIdentityOptions, setGenderIdentityOptions] = useState<SelectOption[]>([]);
   const [civilStatusOptions, setCivilStatusOptions] = useState<string[]>([]);
   const [relationshipOptions, setRelationshipOptions] = useState<
@@ -263,7 +263,7 @@ export function EditPatientModal({
     let isMounted = true;
     clinicService.getOptionSet('sex').then((opts) => {
       if (isMounted && opts && opts.length > 0) {
-        setGenderOptions(opts.map((o) => o.label));
+        setSexOptions(opts.map((o) => o.label));
       }
     });
     clinicService.getOptionSet('gender_identity').then((opts) => {
@@ -424,8 +424,8 @@ export function EditPatientModal({
   };
 
   const staticValues = useMemo(
-    () => ({ gender, civilStatus, dateOfBirth }),
-    [gender, civilStatus, dateOfBirth]
+    () => ({ sex, civilStatus, dateOfBirth }),
+    [sex, civilStatus, dateOfBirth]
   );
 
   const [saving, setSaving] = useState(false);
@@ -449,8 +449,8 @@ export function EditPatientModal({
     setLastName(patient.lastName || '');
     setSuffix(patient.suffix || '');
     setDateOfBirth(patient.dateOfBirth || '');
-    setGender(
-      patient.sex || patient.gender || 'Male'
+    setSex(
+      patient.sex || 'Male'
     );
     setGenderIdentity(
       patient.genderIdentity || ''
@@ -643,8 +643,7 @@ export function EditPatientModal({
       middleName: middleName.trim() || undefined,
       suffix: suffix.trim() || undefined,
       dateOfBirth: dateOfBirth.trim(),
-      gender: gender === 'Male' || gender === 'Female' ? gender : 'Other',
-      sex: gender,
+      sex,
       genderIdentity: genderIdentity.trim(),
       civilStatus,
       contactNumber: contactNumber.trim(),
@@ -844,12 +843,8 @@ export function EditPatientModal({
                   style={styles.pillScroll}
                   contentContainerStyle={styles.pillScrollRow}
                 >
-                  {genderOptions.map((item) => {
-                    const normalizedGender = gender.toLowerCase();
-                    const normalizedItem = item.toLowerCase();
-                    const isSelected =
-                      normalizedGender === normalizedItem ||
-                      (normalizedGender === 'other' && normalizedItem === 'unknown');
+                  {sexOptions.map((item) => {
+                    const isSelected = sex.toLowerCase() === item.toLowerCase();
                     return (
                       <Pressable
                         key={item}
@@ -857,7 +852,7 @@ export function EditPatientModal({
                         accessibilityState={{ selected: isSelected }}
                         accessibilityLabel={`Sex: ${item}`}
                         style={[styles.scrollablePill, isSelected && styles.pillActive]}
-                        onPress={() => setGender(item)}
+                        onPress={() => setSex(item)}
                       >
                         <ThemedText
                           variant="smallBold"

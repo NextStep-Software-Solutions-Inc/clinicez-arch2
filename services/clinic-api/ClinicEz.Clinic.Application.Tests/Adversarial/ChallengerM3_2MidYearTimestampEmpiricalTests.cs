@@ -65,7 +65,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1863, 11, 30),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -126,7 +126,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "03-026307850-7",
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1875, 12, 15),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -181,7 +181,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1731, 3, 19),
-            Gender = Gender.Female
+            Sex = BiologicalSex.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -234,7 +234,7 @@ public class ChallengerM3_2MidYearTimestampEmpiricalTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000004",
             DateOfBirth = new DateOnly(1866, 10, 29),
-            Gender = Gender.Male
+            Sex = BiologicalSex.Male
         };
 
         const string expectedCaseNo = "C00921202600888";

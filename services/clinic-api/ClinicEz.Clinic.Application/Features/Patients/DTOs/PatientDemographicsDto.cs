@@ -8,7 +8,7 @@ namespace ClinicEz.Clinic.Application.Features.Patients.DTOs;
 public sealed record PatientDemographicsDto(
     DateOnly Dob,
     int Age,
-    string Gender,
+    string Sex,
     string? CivilStatus,
     string ContactNumber,
     string? Email,
@@ -30,7 +30,6 @@ public sealed record PatientDemographicsDto(
     string? PatientCode = null,
     string? ClinicEzId = null,
     string VerificationStatus = "Verified",
-    string? Sex = null,
     string? GenderIdentity = null
 )
 {

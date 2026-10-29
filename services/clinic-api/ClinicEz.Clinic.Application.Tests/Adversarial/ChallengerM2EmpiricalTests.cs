@@ -84,7 +84,7 @@ public class ChallengerM2EmpiricalTests
             LastName = lastName,
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = Enum.TryParse<Gender>(gender, true, out var g) ? g : Gender.Other,
+            Sex = Enum.TryParse<BiologicalSex>(gender, true, out var g) ? g : BiologicalSex.Unknown,
             CustomFields = customFields ?? new Dictionary<string, object?>()
         };
     }

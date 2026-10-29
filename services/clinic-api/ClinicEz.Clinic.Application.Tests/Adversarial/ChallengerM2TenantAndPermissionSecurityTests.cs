@@ -475,12 +475,13 @@ public class ChallengerM2TenantAndPermissionSecurityTests
     [InlineData(null, null, "PWD-44123", "Female", "PWD", "neutral")]
     [InlineData(null, null, null, "Female", "Female", "routine")]
     [InlineData(null, null, null, "Male", "Male", "routine")]
-    [InlineData(null, null, null, "Other", "Other", "routine")]
+    [InlineData(null, null, null, "Intersex", "Intersex", "routine")]
+    [InlineData(null, null, null, "Unknown", "Unknown", "routine")]
     public async Task PatientSearchProvider_BadgesMapCorrectlyToSemanticVariants(
         string? alerts,
         string? seniorId,
         string? pwdId,
-        string? gender,
+        string? sex,
         string expectedBadgeText,
         string expectedBadgeVariant)
     {
@@ -501,7 +502,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             DateOfBirth = new DateOnly(1985, 5, 5),
             SeniorCitizenId = seniorId,
             PwdId = pwdId,
-            Gender = Enum.TryParse<Gender>(gender, true, out var g) ? g : Gender.Male
+            Sex = Enum.TryParse<BiologicalSex>(sex, true, out var g) ? g : BiologicalSex.Male
         };
         if (!string.IsNullOrWhiteSpace(alerts))
         {
@@ -630,7 +631,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             LastName = "Luna",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1980, 10, 23),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             IsDeleted = false
         };
 
@@ -644,7 +645,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             LastName = "Luna",
             ContactNumber = "09170000002",
             DateOfBirth = new DateOnly(1980, 10, 23),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             IsDeleted = false
         };
 
@@ -658,7 +659,7 @@ public class ChallengerM2TenantAndPermissionSecurityTests
             LastName = "Luna",
             ContactNumber = "09170000003",
             DateOfBirth = new DateOnly(1980, 10, 23),
-            Gender = Gender.Male,
+            Sex = BiologicalSex.Male,
             IsDeleted = true // SOFT DELETED
         };
 

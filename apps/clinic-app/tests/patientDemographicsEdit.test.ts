@@ -133,7 +133,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     fullName: 'Maria Delos Santos Jr.',
     dateOfBirth: '1990-01-01',
     age: 34,
-    gender: 'Female',
+    sex: 'Female',
     civilStatus: 'Married',
     contactNumber: '0917-123-4567',
     email: 'maria.santos@example.com',
@@ -169,12 +169,12 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     createdAt: '2026-01-01T00:00:00Z',
   };
 
-  test('F1: Gender options include Male, Female, and Other, and persist to update payload', async () => {
+  test('F1: Sex options include Male, Female, Intersex, and Unknown, and persist to update payload', async () => {
     const payload: RegisterPatientPayload = {
       firstName: 'Alex',
       lastName: 'Dela Cruz',
       dateOfBirth: '1995-05-15',
-      gender: 'Other',
+      sex: 'Intersex',
       civilStatus: 'Single',
       contactNumber: '0919-555-1234',
       verificationStatus: 'Verified',
@@ -183,7 +183,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     const [updated, err] = await clinicService.updatePatient('pat-test-id', payload);
     expect(err).toBeNull();
     expect(lastPutUrl).toBe('/patients/pat-test-id');
-    expect(lastPutPayload.gender).toBe('Other');
+    expect(lastPutPayload.sex).toBe('Intersex');
     expect(lastPutPayload.civilStatus).toBe('Single');
   });
 
@@ -194,7 +194,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       middleName: 'Mendoza',
       suffix: 'III',
       dateOfBirth: '1985-10-20',
-      gender: 'Male',
+      sex: 'Male',
       civilStatus: 'Separated',
       contactNumber: '0917-000-1111',
       email: 'juan.delacruz@example.com',
@@ -225,7 +225,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     expect(lastPutUrl).toBe('/patients/pat-juan-id');
     expect(lastPutPayload.firstName).toBe('Juan');
     expect(lastPutPayload.suffix).toBe('III');
-    expect(lastPutPayload.gender).toBe('Male');
+    expect(lastPutPayload.sex).toBe('Male');
     expect(lastPutPayload.civilStatus).toBe('Separated');
     expect(lastPutPayload.bloodType).toBe('A+');
     expect(lastPutPayload.philHealthNumber).toBe('01-025000001-0');
@@ -265,7 +265,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     expect(element).toBeDefined();
     expect(element.props.visible).toBe(true);
     expect(element.props.patient.firstName).toBe('Maria');
-    expect(element.props.patient.gender).toBe('Female');
+    expect(element.props.patient.sex).toBe('Female');
     expect(element.props.patient.civilStatus).toBe('Married');
   });
 
@@ -278,7 +278,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     // Demographics string construction matching patient card pattern
     const cardDemographics = [
       longAge,
-      samplePatient.gender,
+      samplePatient.sex,
       samplePatient.civilStatus,
       samplePatient.bloodType ? `Blood type ${samplePatient.bloodType}` : null,
     ].filter(Boolean).join(' • ');
@@ -291,7 +291,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Pedro',
       lastName: 'Penduko',
       dateOfBirth: '2000-02-02',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0912-345-6789',
       verificationStatus: 'Unverified',
     };
@@ -305,7 +305,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Bea',
       lastName: 'Reyes',
       dateOfBirth: '2004-03-12',
-      gender: 'Female',
+      sex: 'Female',
       civilStatus: 'Single',
       contactNumber: '0922-123-4567',
       customFields: {
@@ -332,7 +332,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Bea',
       lastName: 'Reyes',
       dateOfBirth: '2004-03-12',
-      gender: 'Female',
+      sex: 'Female',
       civilStatus: 'Single',
       contactNumber: '0922-123-4567',
       customFields: {
@@ -361,7 +361,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Jose',
       lastName: 'Rizal',
       dateOfBirth: '1980-06-19',
-      gender: 'Male',
+      sex: 'Male',
       contactNumber: '0917-111-2222',
       philHealthNumber: '12-345678901-2', // invalid check digit
     };
@@ -384,7 +384,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       fullName: 'Ana Cruz',
       dateOfBirth: '2001-01-01',
       age: 25,
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '09170000000',
       createdAt: '2026-01-01T00:00:00Z',
     };
@@ -443,7 +443,7 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       firstName: 'Maria',
       lastName: 'Santos',
       dateOfBirth: '1990-01-01',
-      gender: 'Female',
+      sex: 'Female',
       contactNumber: '0917-123-4567',
       allergies: 'Amoxicillin (Medication - STAT), Eggs (Food)',
       structuredAllergies: [

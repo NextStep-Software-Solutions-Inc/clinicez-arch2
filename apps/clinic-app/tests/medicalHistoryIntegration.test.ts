@@ -142,7 +142,7 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
     firstName: 'Rosa',
     lastName: 'Santos',
     dateOfBirth: '1985-06-15',
-    gender: 'Female',
+    sex: 'Female',
     philHealthNumber: '12-345678901-2',
     chronicConditions: 'Hypertension, Asthma',
     status: 'Active',

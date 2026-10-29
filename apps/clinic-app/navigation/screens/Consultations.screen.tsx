@@ -945,7 +945,7 @@ export default function ConsultationsScreen() {
       patientId: selectedPatient.patientId,
       patientName: selectedPatient.patientName,
       patientAge: patientRecord.age,
-      patientGender: patientRecord.gender,
+      patientGender: patientRecord.sex,
       philHealthNumber: patientRecord.philHealthNumber,
       patientAllergies: patientRecord.allergies || undefined,
       clinicalDiagnosis: assessment || undefined,
@@ -3092,7 +3092,7 @@ export default function ConsultationsScreen() {
   const patientMeta = selectedPatient
     ? [
         `Ticket ${selectedPatient.queueNumber}`,
-        patientRecord ? `${patientAgeString ? `${patientAgeString}, ` : ''}${patientRecord.gender}` : null,
+        patientRecord ? `${patientAgeString ? `${patientAgeString}, ` : ''}${patientRecord.sex}` : null,
         selectedPatient.chiefComplaint ? `Chief complaint: ${selectedPatient.chiefComplaint}` : null,
       ]
         .filter(Boolean)
@@ -5268,7 +5268,7 @@ export default function ConsultationsScreen() {
                   age: 0,
                   contactNumber: '',
                   dateOfBirth: '',
-                  gender: '',
+                  sex: '',
                   createdAt: '',
                 }}
                 chart={patientChart}

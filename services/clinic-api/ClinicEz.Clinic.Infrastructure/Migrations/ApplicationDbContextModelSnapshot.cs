@@ -3564,11 +3564,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("Gender")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<string>("GenderIdentity")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -5187,10 +5182,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("PrincipalGender")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<string>("PrincipalLastName")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -5214,6 +5205,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("PrincipalMiddleName")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PrincipalSex")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("PrincipalSuffix")
                         .HasMaxLength(20)

@@ -30,21 +30,18 @@ public sealed class UpdateClinicPatientCommandValidator : AbstractValidator<Upda
             .NotEmpty().WithMessage("Contact number is required.")
             .MaximumLength(30).WithMessage("Contact number must not exceed 30 characters.");
 
-        RuleFor(x => x.Gender)
-            .NotEmpty().WithMessage("Gender is required.")
-            .Must(g => g is "Male" or "Female" or "Other")
-            .WithMessage("Gender must be 'Male', 'Female', or 'Other'.");
-
-        When(x => !string.IsNullOrWhiteSpace(x.Sex), () =>
-        {
-            RuleFor(x => x.Sex!)
-                .Must(s =>
-                    s.Equals("Male", StringComparison.OrdinalIgnoreCase) ||
-                    s.Equals("Female", StringComparison.OrdinalIgnoreCase) ||
-                    s.Equals("Intersex", StringComparison.OrdinalIgnoreCase) ||
-                    s.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
-                .WithMessage("Sex must be 'Male', 'Female', 'Intersex', or 'Unknown'.");
-        });
+        RuleFor(x => x.Sex)
+            .NotEmpty().WithMessage("Sex is required.")
+            .Must(s =>
+                s.Equals("Male", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("Female", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("Intersex", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("M", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("F", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("I", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("U", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Sex must be 'Male', 'Female', 'Intersex', or 'Unknown'.");
 
         When(x => !string.IsNullOrWhiteSpace(x.GenderIdentity), () =>
         {

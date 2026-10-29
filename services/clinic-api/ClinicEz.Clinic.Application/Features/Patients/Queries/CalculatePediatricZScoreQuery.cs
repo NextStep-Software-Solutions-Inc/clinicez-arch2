@@ -9,7 +9,7 @@ namespace ClinicEz.Clinic.Application.Features.Patients.Queries;
 
 public sealed record CalculatePediatricZScoreQuery(
     DateOnly DateOfBirth,
-    string Gender,
+    string Sex,
     decimal LengthOrHeightCm,
     decimal WeightKg,
     bool IsMeasuredRecumbent = false,
@@ -28,7 +28,7 @@ public sealed class CalculatePediatricZScoreQueryHandler : IRequestHandler<Calcu
     {
         var eval = _calculator.Calculate(
             request.DateOfBirth,
-            request.Gender,
+            request.Sex,
             request.LengthOrHeightCm,
             request.WeightKg,
             request.IsMeasuredRecumbent,
