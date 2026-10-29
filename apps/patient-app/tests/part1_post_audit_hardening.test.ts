@@ -87,7 +87,7 @@ describe('Part 1 Post-Audit Runtime & CI Hardening', () => {
     expect(clinicUrl).not.toContain('undefined');
   });
 
-  test('EAS OTA workflows use valid runs-on syntax and sanitized per-branch channel outputs', () => {
+  test('EAS OTA workflows use valid runs_on syntax and sanitized per-branch channel outputs', () => {
     const patientProdOta = fs.readFileSync(
       path.join(APP_ROOT, '.eas/workflows/ota-production.yml'),
       'utf8'
@@ -96,10 +96,10 @@ describe('Part 1 Post-Audit Runtime & CI Hardening', () => {
       path.join(REPO_ROOT, 'apps/clinic-app/.eas/workflows/ota-production.yml'),
       'utf8'
     );
-    expect(patientProdOta).toContain('runs-on: linux-medium');
-    expect(patientProdOta).not.toContain('runs_on:');
-    expect(clinicProdOta).toContain('runs-on: linux-medium');
-    expect(clinicProdOta).not.toContain('runs_on:');
+    expect(patientProdOta).toContain('runs_on: linux-medium');
+    expect(patientProdOta).not.toContain('runs-on:');
+    expect(clinicProdOta).toContain('runs_on: linux-medium');
+    expect(clinicProdOta).not.toContain('runs-on:');
     expect(clinicProdOta).toContain("'clinic-app-v*'");
 
     const previewOta = fs.readFileSync(

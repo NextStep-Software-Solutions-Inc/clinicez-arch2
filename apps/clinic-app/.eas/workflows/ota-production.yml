@@ -1,5 +1,9 @@
 name: Production OTA Update
 
+defaults:
+  tools:
+    bun: "1.3.14"
+
 on:
   push:
     tags:
@@ -8,16 +12,17 @@ on:
 jobs:
   quality_gate:
     name: Typecheck, Token Lint & Tests
-    runs-on: linux-medium
+    runs_on: linux-medium
     steps:
       - uses: eas/checkout
       - uses: eas/install_node_modules
-      - name: Typecheck
-        run: bun run --cwd apps/clinic-app typecheck
-      - name: Design Token Check
-        run: bun run --cwd apps/clinic-app lint:tokens
-      - name: Automated Tests
-        run: bun run --cwd apps/clinic-app test
+      - name: Typecheck, Token Lint & Tests
+        run: |
+          APP_DIR=$([ -d "apps/clinic-app" ] && echo "apps/clinic-app" || echo ".")
+          [ -d "$APP_DIR/node_modules" ] || [ -d "node_modules" ] || [ -d "../../node_modules" ] || bun install --frozen-lockfile
+          bun run --cwd "$APP_DIR" typecheck
+          bun run --cwd "$APP_DIR" lint:tokens
+          bun run --cwd "$APP_DIR" test
 
   update:
     name: Publish Production
