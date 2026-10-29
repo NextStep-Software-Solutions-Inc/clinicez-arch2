@@ -2,6 +2,7 @@ name: Production OTA Update
 
 defaults:
   tools:
+    node: "24.22.1"
     bun: "1.3.14"
 
 on:
@@ -15,14 +16,14 @@ jobs:
     runs_on: linux-medium
     steps:
       - uses: eas/checkout
-      - uses: eas/install_node_modules
-      - name: Typecheck, Token Lint & Tests
+      - name: Install Monorepo Dependencies & Run Quality Gates
         run: |
-          APP_DIR=$([ -d "apps/patient-app" ] && echo "apps/patient-app" || echo ".")
-          [ -d "$APP_DIR/node_modules" ] || [ -d "node_modules" ] || [ -d "../../node_modules" ] || bun install --frozen-lockfile
-          bun run --cwd "$APP_DIR" typecheck
-          bun run --cwd "$APP_DIR" lint:tokens
-          bun run --cwd "$APP_DIR" test
+          REPO_ROOT=$(git rev-parse --show-toplevel)
+          cd "$REPO_ROOT"
+          bun install --frozen-lockfile
+          bun run --cwd apps/patient-app typecheck
+          bun run --cwd apps/patient-app lint:tokens
+          bun run --cwd apps/patient-app test
 
   update:
     name: Publish Production

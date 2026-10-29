@@ -1,21 +1,40 @@
 # ─────────────────────────────────────────────────────────────────
 # Root .easignore – Monorepo EAS Build Exclusions
+# Note: When .easignore is present at the VCS root, EAS CLI uses it
+# INSTEAD of .gitignore — so node_modules and build outputs MUST be
+# excluded here while keeping all Bun workspace package directories!
 # ─────────────────────────────────────────────────────────────────
+
+# ── Node / Build / Framework Outputs ──────────────────────────────
+**/node_modules/
+**/.pnp/
+**/.next/
+**/.vercel/
+**/.expo/
+**/.expo-shared/
+**/dist/
+**/web-build/
+**/build/
+**/out/
+**/coverage/
+*.tsbuildinfo
+apps/patient-app/android/
+apps/patient-app/ios/
+apps/clinic-app/android/
+apps/clinic-app/ios/
 
 # ── .NET Backend Services (DO NOT UPLOAD TO EAS) ─────────────────
 services/
+packages/shared-dotnet/
+packages/shared-dotnet.Tests/
 **/bin/
 **/obj/
 *.sln
 *.csproj
 .vs/
 
-# ── Non-EAS Web Frontend Apps (Keep EAS mobile apps & shared packages) ────
-apps/portal-web/
-apps/admin-web/
-apps/laboratory-app/
-apps/pharmacy-app/
-apps/cashier-app/
+# ── Heavy Web Marketing Assets (keep workspace package.json intact) ─
+apps/portal-web/public/
 
 # ── Local Database & Secrets ──────────────────────────────────────
 *.db
@@ -24,22 +43,24 @@ apps/cashier-app/
 .env
 .env.local
 .env.*.local
+secrets.json
+configuration*.txt
 credentials*.txt
 keys/
 
-# ── Dev tooling, agent metadata, docs & tests ─────────────────────
+# ── Dev tooling, agent metadata, logs & VCS ───────────────────────
+.DS_Store
+Thumbs.db
+*.log
 .agents/
 .github/
 .git/
 .vscode/
 .idea/
-coverage/
 *.md
 !README.md
-*.tsbuildinfo
 
 # ── Lockfile & Workspace Inclusions (MANDATORY) ───────────────────
 !bun.lock
 !packages/
-!apps/patient-app/
-!apps/clinic-app/
+!apps/

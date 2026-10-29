@@ -6,7 +6,6 @@
   "build": {
     "development": {
       "node": "24.22.1",
-      "bun": "1.3.14",
       "developmentClient": true,
       "distribution": "internal",
       "environment": "development",
@@ -31,7 +30,6 @@
     },
     "preview": {
       "node": "24.22.1",
-      "bun": "1.3.14",
       "distribution": "internal",
       "environment": "preview",
       "env": {
@@ -43,7 +41,6 @@
     },
     "staging": {
       "node": "24.22.1",
-      "bun": "1.3.14",
       "distribution": "internal",
       "environment": "preview",
       "channel": "staging",
@@ -56,7 +53,6 @@
     },
     "production": {
       "node": "24.22.1",
-      "bun": "1.3.14",
       "distribution": "store",
       "environment": "production",
       "channel": "production",
