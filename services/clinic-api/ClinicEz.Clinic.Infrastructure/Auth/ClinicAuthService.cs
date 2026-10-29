@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Auth.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -30,6 +31,8 @@ public interface IClinicAuthService
     Task LogoutAsync(string? refreshToken, CancellationToken ct = default);
 
     Task<AuthOutcome> BootstrapAsync(BootstrapRequest request, CancellationToken ct = default);
+
+    Task<AuthOutcome> RecoverAdminAsync(RecoverAdminRequest request, CancellationToken ct = default);
 
     Task<AuthOutcome> ChangePasswordAsync(Guid staffId, ChangePasswordRequest request, string? deviceLabel, CancellationToken ct = default);
 
@@ -361,6 +364,104 @@ public sealed class ClinicAuthService : IClinicAuthService
 
         _logger.LogInformation("[Auth] Facility {ClinicId} bootstrapped its first administrator.", resolved.ClinicId);
         var tokens = await IssueTokensAsync(staff, resolved, Guid.NewGuid(), "bootstrap", ct);
+        return AuthOutcome.Success(tokens);
+    }
+
+    public async Task<AuthOutcome> RecoverAdminAsync(RecoverAdminRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.LicenseToken))
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "License key is required.");
+
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "New password is required.");
+
+        var problems = _hasher.ValidateStrength(request.NewPassword, Options.MinPasswordLength);
+        if (problems.Count > 0) return AuthOutcome.Fail(AuthFailure.WeakPassword, problems[0], problems);
+
+        var presented = request.LicenseToken.Trim();
+
+        // 1. Possession of a valid, untampered facility license token proves ownership (verified offline).
+        var validation = _license.Validate(presented, Guid.Empty, null);
+        if (validation.IsMissing) return AuthOutcome.Fail(AuthFailure.ActivationRequired, "Facility activation required.");
+        if (validation.IsTampered) return AuthOutcome.Fail(AuthFailure.LicenseTampered, "The facility license failed verification.");
+        if (validation.IsExpired) return AuthOutcome.Fail(AuthFailure.ActivationRequired, "The facility license has expired.");
+
+        var payload = validation.Payload;
+        var tokenClinicId = payload?.FacilityId ?? Guid.Empty;
+
+        // 2. Resolve the target facility: prefer direct binding to the token's FacilityId, fallback to workspace hint.
+        ResolvedWorkspace? resolved = null;
+        if (tokenClinicId != Guid.Empty)
+        {
+            resolved = await ResolveByClinicAsync(tokenClinicId, ct);
+        }
+
+        if (resolved is null)
+        {
+            resolved = await _workspaces.ResolveAsync(request.Workspace, ct);
+        }
+
+        if (resolved is null)
+        {
+            return AuthOutcome.Fail(AuthFailure.WorkspaceNotFound, "Workspace was not found. Activate the facility license first.");
+        }
+
+        // 3. Verify facility/tenant binding
+        var isDummyPlaceholder = resolved.ClinicId == Guid.Empty ||
+                                 resolved.ClinicId == LegacyDefaultClinicId ||
+                                 string.Equals(resolved.TenantId, "tenant_default", StringComparison.OrdinalIgnoreCase);
+
+        var expectedClinicId = isDummyPlaceholder ? Guid.Empty : resolved.ClinicId;
+        var expectedTenantId = isDummyPlaceholder ? null : resolved.TenantId;
+
+        var facilityValidation = _license.Validate(presented, expectedClinicId, expectedTenantId);
+        if (!facilityValidation.IsValid)
+        {
+            var installed = resolved.Settings.LicenseToken ?? string.Empty;
+            if (!FixedTimeEquals(presented, installed))
+            {
+                return AuthOutcome.Fail(AuthFailure.InvalidRequest, "The license key does not match this facility.");
+            }
+        }
+
+        var email = NormalizeEmail(request.Email) ?? NormalizeEmail(payload?.OwnerEmail);
+        if (email is null)
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "An administrator email is required.");
+
+        var staff = await _db.StaffMembers.IgnoreQueryFilters()
+            .Include(s => s.ClinicRole)
+            .FirstOrDefaultAsync(s => s.ClinicId == resolved.ClinicId && !s.IsDeleted && s.Email != null && s.Email.ToLower() == email, ct);
+
+        if (staff is null)
+            return AuthOutcome.Fail(AuthFailure.NotFound, "No staff member matching this email address was found in this facility.");
+
+        bool isClinicAdmin = staff.Role == StaffRole.Admin ||
+                             string.Equals(staff.ClinicRole?.Name, GovernanceSafetyChecker.SystemAdminRoleName, StringComparison.OrdinalIgnoreCase) ||
+                             GovernanceSafetyChecker.IsSystemAdministrator(staff);
+
+        if (!isClinicAdmin)
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "Only clinic administrator accounts can be recovered using the facility license key.");
+
+        var now = DateTime.UtcNow;
+        staff.PasswordHash = _hasher.Hash(request.NewPassword);
+        staff.MustChangePassword = false;
+        staff.FailedLoginCount = 0;
+        staff.LockoutEnd = null;
+        staff.LastLoginAt = now;
+        staff.TokenVersion++;
+        staff.IsActive = true;
+        staff.Status = StaffAccountStatus.Active;
+        staff.UpdatedAt = now;
+        staff.UpdatedBy = "System:AdminRecovery";
+
+        await RevokeAllRefreshTokensAsync(staff.Id, now, ct, false);
+        await _db.SaveChangesAsync(ct);
+        _accessCache.Invalidate(staff.Id);
+
+        _logger.LogWarning("[Auth] Administrator {StaffId} ({Email}) credentials recovered via facility license key for clinic {ClinicId}.",
+            staff.Id, staff.Email, staff.ClinicId);
+
+        var tokens = await IssueTokensAsync(staff, resolved, Guid.NewGuid(), request.DeviceLabel ?? "admin-recovery", ct);
         return AuthOutcome.Success(tokens);
     }
 

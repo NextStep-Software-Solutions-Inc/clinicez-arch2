@@ -4,6 +4,7 @@ import * as ReactNative from 'react-native';
 
 const AppState = (ReactNative as any).AppState ?? (ReactNative as any).default?.AppState;
 import {
+  AdminRecoveryInput,
   AuthUser,
   BootstrapInput,
   bootstrapAdmin,
@@ -14,6 +15,7 @@ import {
   login as loginRequest,
   logout as logoutRequest,
   onSessionExpired,
+  recoverAdmin as recoverAdminRequest,
   restoreSession,
   resumeOnline,
   subscribeSession,
@@ -50,6 +52,7 @@ export interface AuthContextValue {
   /** Resolves to an error message, or `null` on success. */
   login: (email: string, password: string) => Promise<string | null>;
   bootstrap: (input: BootstrapInput) => Promise<string | null>;
+  recoverAdmin: (input: AdminRecoveryInput) => Promise<string | null>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
   /** Called by the unlock screen once the PIN / biometric check passed. */
   completeUnlock: () => void;
@@ -71,6 +74,7 @@ const AuthContext = createContext<AuthContextValue>({
   notice: null,
   login: noop,
   bootstrap: noop,
+  recoverAdmin: noop,
   changePassword: noop,
   completeUnlock: () => {},
   useDifferentAccount: async () => {},
@@ -244,6 +248,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [afterSignIn],
   );
 
+  const recoverAdmin = useCallback(
+    async (input: AdminRecoveryInput) => {
+      const [signedIn, error] = await recoverAdminRequest(input);
+      if (error || !signedIn) {
+        return error?.errors?.length
+          ? error.errors.map((e) => e.message).join(' ')
+          : (error?.message ?? 'Recovery failed.');
+      }
+      setNotice(null);
+      afterSignIn(signedIn);
+      return null;
+    },
+    [afterSignIn],
+  );
+
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string) => {
       const [updated, error] = await changePasswordRequest(currentPassword, newPassword);
@@ -289,6 +308,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       notice,
       login,
       bootstrap,
+      recoverAdmin,
       changePassword,
       completeUnlock,
       useDifferentAccount,
@@ -296,7 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       retry,
       can,
     }),
-    [state, user, permissions, offline, notice, login, bootstrap, changePassword, completeUnlock, useDifferentAccount, logout, retry, can],
+    [state, user, permissions, offline, notice, login, bootstrap, recoverAdmin, changePassword, completeUnlock, useDifferentAccount, logout, retry, can],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

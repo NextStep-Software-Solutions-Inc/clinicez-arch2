@@ -1,7 +1,8 @@
-# BRIEFING — 2026-10-28T21:03:22Z
+# BRIEFING — 2026-10-29T06:55:00Z
 
 ## Mission
-Extract the ClinicEZ Platform Administration Panel out of `apps/portal-web` into a standalone, security-hardened `apps/admin-web` Single-Page Application (`Vite + React 19 + TanStack Router + Tailwind CSS v4`) served on `admin.{domain}` against `services/portal-api`, and restyle its Governance Workstation shell and dashboard strictly per `.agents/skills/clinicez-ui-ux-expert/SKILL.md` and `@clinicez/design-tokens` with zero functional regression, zero legacy `/admin/*` backward-compatibility shims, and zero database changes.
+Implement a secure, first-class Clinic Administrator account recovery mechanism in ClinicEZ using cryptographic Facility License Key verification across the backend API (`clinic-api`), the workstation frontend (`clinic-app`), and operational tooling.
+
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -60,6 +61,14 @@ Extract the ClinicEZ Platform Administration Panel out of `apps/portal-web` into
 - Active Crons: task-29 (Progress Reporting), task-31 (Liveness Check)
 - Victory Auditor (victory_auditor_admin_migration): 2985f7fb-511d-4e09-87d0-1a9e7857f159
 - Cleaned up: task-29 killed, task-31 killed, all subagents killed
+- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_admin_recovery): [to be spawned]
+- Active Crons: pending spawn
+- Victory Auditor: to be spawned on victory claim
+- Active Project Orchestrator (orchestrator_admin_recovery): a09a15fc-793c-49d1-8768-909a7078516d
+- Active Crons: task-31 (Progress Reporting), task-34 (Liveness Check)
+- Victory Auditor (victory_auditor_admin_recovery): ecd09233-8139-4dde-82f3-e3e3f021e6a6
+- Cleaned up: task-31 killed, task-34 killed, all subagents killed
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -172,20 +181,22 @@ Extract the ClinicEZ Platform Administration Panel out of `apps/portal-web` into
 - STRICTLY ZERO database changes, 0 migrations, 0 entity changes
 - Clean-cut removal of admin from apps/portal-web (0 files remaining, reserved slug preserved in proxy)
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
+- Route to General (`teamwork_preview_orchestrator`) for Clinic Administrator account recovery mechanism
+- Anonymous, rate-limited endpoint POST /api/v1/auth/recover-admin with IFacilityLicenseValidator cryptographic check
+- Reset PasswordHash, clear lockout/failed counters, increment TokenVersion, revoke refresh tokens LAN-wide, issue fresh JWTs
+- StaffRole.Admin verification (reject non-admins with 403)
+- Workstation recovery screen in clinic-app with ClinicEZ teal palette (#0D6963) and accessible LoginScreen entry point
+- Operational CLI scripts (reset-admin-credentials.sh and .ps1)
+- Comprehensive automated verification (ClinicAuthServiceTests, adminRecovery.test.ts, staffInvitations.test.ts, tsc)
+- Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Extract the ClinicEZ Platform Administration Panel out of `apps/portal-web` into a standalone, security-hardened `apps/admin-web` Single-Page Application (`Vite + React 19 + TanStack Router + Tailwind CSS v4`) served on `admin.{domain}` against `services/portal-api`, and restyle its Governance Workstation shell and dashboard strictly per `.agents/skills/clinicez-ui-ux-expert/SKILL.md` and `@clinicez/design-tokens` with zero functional regression, zero legacy `/admin/*` backward-compatibility shims, and zero database changes.
+- **Last user request**: Implement a secure, first-class Clinic Administrator account recovery mechanism in ClinicEZ using cryptographic Facility License Key verification across the backend API (`clinic-api`), the workstation frontend (`clinic-app`), and operational tooling.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded request verbatim to `.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-28T21:03:22Z`.
-  - Routed to General path (`teamwork_preview_orchestrator`).
-  - Created working directory `.agents/teamwork/orchestrator_admin_migration`.
-  - Dispatched Project Orchestrator (b107e165-4772-4937-83b0-dd48a3b509e1).
-  - Configured Cron 1 Progress Reporting (`*/8 * * * *`, task-29) and Cron 2 Liveness Check (`*/10 * * * *`, task-31).
-  - Orchestrator reported completion across M1–M5 with unanimous GATE approval.
-  - Dispatched independent Victory Auditor (`2985f7fb-511d-4e09-87d0-1a9e7857f159`).
-  - Independent Victory Audit completed: **VERDICT: VICTORY CONFIRMED**.
-  - All background tasks and subagents cleanly terminated.
+  - Recorded request verbatim to `.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-29T06:47:27Z`.
+  - Decided route: General path (`teamwork_preview_orchestrator`).
+  - Pre-flight audit: not required.
 
 ## Project Status
 - **Phase**: complete
@@ -193,19 +204,15 @@ Extract the ClinicEZ Platform Administration Panel out of `apps/portal-web` into
 - **Active Subagents**: none (cleaned up)
 - **Active Tasks**: none (cleaned up)
 
+
 ## Victory Audit Status
 - **Triggered**: yes
 - **Verdict**: VICTORY CONFIRMED
 - **Retry count**: 0
-- **Auditor**: 2985f7fb-511d-4e09-87d0-1a9e7857f159 (victory_auditor_admin_migration)
+- **Auditor**: ecd09233-8139-4dde-82f3-e3e3f021e6a6
+
 
 ## Artifact Index
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/sentinel/handoff.md — Sentinel final completion handoff report
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/PROJECT.md — Global Architecture, Inventory & Milestones
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/TEST_INFRA.md — E2E Testing Track Architecture & Methodology
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/TEST_READY.md — Authoritative E2E Test Readiness Verification
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/orchestrator_admin_migration/GATE_STATUS.md — Final Gate Verification Record
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/orchestrator_admin_migration/handoff.md — Orchestrator Hard Handoff
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/victory_auditor_admin_migration/handoff.md — Independent Victory Audit Report (VICTORY CONFIRMED)
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report

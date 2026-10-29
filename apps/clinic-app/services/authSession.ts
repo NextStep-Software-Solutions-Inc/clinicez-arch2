@@ -210,6 +210,29 @@ export async function bootstrapAdmin(input: BootstrapInput): Promise<AuthResult<
   return [user!, null];
 }
 
+export interface AdminRecoveryInput {
+  licenseToken: string;
+  email?: string;
+  newPassword: string;
+  workspace?: string;
+}
+
+/** Recovers an administrator account using facility cryptographic license key proof. */
+export async function recoverAdmin(input: AdminRecoveryInput): Promise<AuthResult<AuthUser>> {
+  const licenseToken = input.licenseToken.trim();
+  const email = input.email?.trim();
+  const [tokens, error] = await post<AuthTokens>('/auth/recover-admin', {
+    licenseToken,
+    email: email || undefined,
+    newPassword: input.newPassword,
+    workspace: input.workspace || undefined,
+    deviceLabel: deviceLabel(),
+  });
+  if (error || !tokens) return [null, error ?? new ApiError('Recovery failed.', 0)];
+  await persist(tokens, email || null);
+  return [user!, null];
+}
+
 export async function changePassword(currentPassword: string, newPassword: string): Promise<AuthResult<AuthUser>> {
   if (!(await ensureFreshToken())) return [null, new ApiError('Your session has expired. Sign in again.', 401)];
   const [tokens, error] = await post<AuthTokens>('/auth/change-password', { currentPassword, newPassword }, true);
