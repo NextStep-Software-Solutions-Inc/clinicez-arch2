@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -10,22 +10,38 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "TvDisplayPin",
-                schema: "public",
-                table: "FacilityQueueBoards",
-                type: "character varying(50)",
-                maxLength: 50,
-                nullable: true);
+            if (migrationBuilder.ActiveProvider == "Npgsql.EntityFrameworkCore.PostgreSQL")
+            {
+                migrationBuilder.Sql(
+                    """ALTER TABLE public."FacilityQueueBoards" ADD COLUMN IF NOT EXISTS "TvDisplayPin" character varying(50);""");
+            }
+            else
+            {
+                migrationBuilder.AddColumn<string>(
+                    name: "TvDisplayPin",
+                    schema: "public",
+                    table: "FacilityQueueBoards",
+                    type: "character varying(50)",
+                    maxLength: 50,
+                    nullable: true);
+            }
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "TvDisplayPin",
-                schema: "public",
-                table: "FacilityQueueBoards");
+            if (migrationBuilder.ActiveProvider == "Npgsql.EntityFrameworkCore.PostgreSQL")
+            {
+                migrationBuilder.Sql(
+                    """ALTER TABLE public."FacilityQueueBoards" DROP COLUMN IF EXISTS "TvDisplayPin";""");
+            }
+            else
+            {
+                migrationBuilder.DropColumn(
+                    name: "TvDisplayPin",
+                    schema: "public",
+                    table: "FacilityQueueBoards");
+            }
         }
     }
 }
