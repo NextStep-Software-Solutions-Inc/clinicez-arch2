@@ -1,5 +1,125 @@
+import type { PatientGuardianDto } from '../../services/clinicService';
+
 export type MemberType = 'MM' | 'DD';
 export type PrincipalRelationship = 'C' | 'S' | 'P' | 'D';
+
+export interface GuardianSponsorPrefill {
+  fullName: string;
+  shortName: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  suffix: string;
+  relationship: PrincipalRelationship;
+  rawPin: string;
+  formattedPin: string;
+  birthDate: string;
+  buttonLabel: string;
+}
+
+function maskPhilHealthPinPure(input?: string | null): { rawPin: string; formattedPin: string } {
+  const digits = (input || '').replace(/\D/g, '').slice(0, 12);
+  if (!digits) {
+    return { rawPin: '', formattedPin: '' };
+  }
+  if (digits.length <= 2) {
+    return { rawPin: digits, formattedPin: digits };
+  }
+  if (digits.length <= 11) {
+    return { rawPin: digits, formattedPin: `${digits.slice(0, 2)}-${digits.slice(2)}` };
+  }
+  return {
+    rawPin: digits,
+    formattedPin: `${digits.slice(0, 2)}-${digits.slice(2, 11)}-${digits.slice(11, 12)}`,
+  };
+}
+
+export function canUseGuardianAsSponsor(guardian?: PatientGuardianDto | null): boolean {
+  if (!guardian) return false;
+  return Boolean(
+    guardian.firstName?.trim() ||
+      guardian.lastName?.trim() ||
+      guardian.philHealthPin?.replace(/\D/g, '').trim()
+  );
+}
+
+export function mapGuardianRelationshipToDependent(
+  relationshipCode?: string | null,
+  options?: { patientDob?: string | null; pwdId?: string | null }
+): PrincipalRelationship {
+  const code = (relationshipCode || '').trim().toUpperCase();
+  if (code === 'SPOUSE' || code === 'S') {
+    return 'S';
+  }
+  if (code === 'CHILD' || code === 'SON' || code === 'DAUGHTER' || code === 'P') {
+    return 'P';
+  }
+
+  let patientAge: number | null = null;
+  const dob = options?.patientDob?.trim() || '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
+  if (match) {
+    const now = new Date();
+    let age = now.getFullYear() - Number(match[1]);
+    const mDiff = now.getMonth() + 1 - Number(match[2]);
+    if (mDiff < 0 || (mDiff === 0 && now.getDate() < Number(match[3]))) {
+      age -= 1;
+    }
+    if (age >= 0) {
+      patientAge = age;
+    }
+  }
+
+  if (options?.pwdId?.trim() && patientAge !== null && patientAge >= 21) {
+    return 'D';
+  }
+
+  if (
+    patientAge !== null &&
+    patientAge >= 60 &&
+    code !== '' &&
+    code !== 'MOTHER' &&
+    code !== 'FATHER' &&
+    code !== 'GRANDPARENT'
+  ) {
+    return 'P';
+  }
+
+  return 'C';
+}
+
+export function buildPrincipalSponsorFromGuardian(
+  guardian?: PatientGuardianDto | null,
+  options?: { patientDob?: string | null; pwdId?: string | null }
+): GuardianSponsorPrefill | null {
+  if (!guardian || !canUseGuardianAsSponsor(guardian)) {
+    return null;
+  }
+
+  const firstName = (guardian.firstName || '').trim();
+  const middleName = (guardian.middleName || '').trim();
+  const lastName = (guardian.lastName || '').trim();
+  const suffix = (guardian.suffix || '').trim();
+  const fullName = [firstName, middleName, lastName, suffix].filter(Boolean).join(' ');
+  const shortName = [firstName, lastName].filter(Boolean).join(' ');
+  const { rawPin, formattedPin } = maskPhilHealthPinPure(guardian.philHealthPin);
+  const birthDate = (guardian.birthDate || '').trim();
+  const relationship = mapGuardianRelationshipToDependent(guardian.relationshipCode, options);
+
+  return {
+    fullName,
+    shortName,
+    firstName,
+    middleName,
+    lastName,
+    suffix,
+    relationship,
+    rawPin,
+    formattedPin,
+    birthDate,
+    buttonLabel: shortName ? `Use Guardian (${shortName})` : 'Use Legal Guardian',
+  };
+}
 
 export interface PhilHealthRelationshipOption {
   label: string;

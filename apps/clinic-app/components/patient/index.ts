@@ -75,3 +75,10 @@ export {
   validateGuardianDraft,
   type GuardianSectionProps,
 } from './GuardianSection';
+
+export {
+  canUseGuardianAsSponsor,
+  mapGuardianRelationshipToDependent,
+  buildPrincipalSponsorFromGuardian,
+  type GuardianSponsorPrefill,
+} from './memberType';
