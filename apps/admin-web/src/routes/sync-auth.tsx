@@ -5,19 +5,25 @@ import { useAuth, useClerk } from '@clerk/clerk-react';
 import { adminService } from '@/services/admin.service';
 import { setupAxiosInterceptors } from '@/lib/api';
 import { IconShieldX, IconLogout } from '@tabler/icons-react';
+import { ClinicEzLogo, ClinicEzMark } from '@/components/ClinicEzLogo';
 
 function SyncAuthPage() {
   const [status, setStatus] = useState<'syncing' | 'unauthorized' | 'error'>('syncing');
   const [errorMessage, setErrorMessage] = useState('');
 
   let getToken: any = null;
+  let isLoaded = true;
   let isSignedIn = false;
   let signOut: any = async () => {};
 
   try {
     const auth = useAuth();
     getToken = auth.getToken;
-    isSignedIn = auth.isSignedIn ?? false;
+    isLoaded = auth.isLoaded;
+    isSignedIn = Boolean(auth.isSignedIn);
+    if (auth.getToken) {
+      setupAxiosInterceptors(auth.getToken);
+    }
     const clerk = useClerk();
     signOut = clerk.signOut;
   } catch {
@@ -26,7 +32,11 @@ function SyncAuthPage() {
 
   useEffect(() => {
     async function sync() {
-      if (!getToken || !isSignedIn) {
+      if (!isLoaded) {
+        return;
+      }
+      if (!isSignedIn || !getToken) {
+        window.location.href = '/sign-in';
         return;
       }
 
@@ -47,14 +57,17 @@ function SyncAuthPage() {
     }
 
     sync();
-  }, [getToken, isSignedIn]);
+  }, [isLoaded, getToken, isSignedIn]);
 
   if (status === 'syncing') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-text">
-        <div className="flex items-center gap-3 text-text-muted text-xs">
-          <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          <span>Synchronizing administrative authorization profile...</span>
+        <div className="flex flex-col items-center gap-4">
+          <ClinicEzMark variant="squircle" className="h-11 w-11 shrink-0 drop-shadow-sm animate-pulse" />
+          <div className="flex items-center gap-2.5 text-text-muted text-xs">
+            <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <span>Synchronizing administrative authorization profile...</span>
+          </div>
         </div>
       </div>
     );
@@ -64,12 +77,19 @@ function SyncAuthPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
         <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl text-center space-y-5">
+          <div className="flex justify-center pb-1">
+            <ClinicEzLogo
+              markClassName="h-8 w-9 shrink-0"
+              textClassName="text-lg font-bold tracking-tight text-text"
+              subtitle="Governance"
+            />
+          </div>
           <div className="inline-flex p-3 rounded-2xl bg-red-500/10 text-red-600 dark:text-red-400">
             <IconShieldX className="h-8 w-8" />
           </div>
           <h2 className="text-lg font-bold text-text">Access Restricted</h2>
           <p className="text-xs text-text-secondary leading-relaxed">
-            Your authenticated account is not registered as a Platform Administrator in ClinicEZ Central. Please contact your organization owner to request access.
+            Your authenticated account is not registered as a Platform Administrator in Clinic EZ Central. Please contact your organization owner to request access.
           </p>
           <div className="pt-2">
             <button
@@ -92,6 +112,13 @@ function SyncAuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
       <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl text-center space-y-5">
+        <div className="flex justify-center pb-1">
+          <ClinicEzLogo
+            markClassName="h-8 w-9 shrink-0"
+            textClassName="text-lg font-bold tracking-tight text-text"
+            subtitle="Governance"
+          />
+        </div>
         <div className="inline-flex p-3 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
           <IconShieldX className="h-8 w-8" />
         </div>

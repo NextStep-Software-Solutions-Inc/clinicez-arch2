@@ -105,7 +105,7 @@ function BlogPage() {
     setEditingBlog(null);
     setTitle('');
     setSlug('');
-    setAuthor('ClinicEZ Editorial Team');
+    setAuthor('Clinic EZ Editorial Team');
     setCategory('Clinical Governance');
     setStatus('Published');
     setBannerUrl('');
@@ -485,7 +485,7 @@ function BlogPage() {
                       type="text"
                       value={author}
                       onChange={(e) => setAuthor(e.target.value)}
-                      placeholder="ClinicEZ Editorial Team"
+                      placeholder="Clinic EZ Editorial Team"
                       className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
                     />
                   </div>
@@ -626,7 +626,7 @@ function BlogPage() {
               </div>
               <div>
                 <h3 className="font-bold text-base text-text">Delete Article</h3>
-                <p className="text-xs text-text-muted">ClinicEZ Editorial Operations</p>
+                <p className="text-xs text-text-muted">Clinic EZ Editorial Operations</p>
               </div>
             </div>
 

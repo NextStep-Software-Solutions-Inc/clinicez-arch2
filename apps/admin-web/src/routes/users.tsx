@@ -901,7 +901,7 @@ function UsersPage() {
               </div>
               <div>
                 <h3 className="font-bold text-base text-text">Delete Administrator Account</h3>
-                <p className="text-xs text-text-muted">ClinicEZ Security Governance</p>
+                <p className="text-xs text-text-muted">Clinic EZ Security Governance</p>
               </div>
             </div>
 

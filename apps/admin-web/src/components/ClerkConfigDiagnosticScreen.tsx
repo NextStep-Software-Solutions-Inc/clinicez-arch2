@@ -1,5 +1,6 @@
 import React from 'react';
 import { IconAlertTriangle, IconTerminal } from '@tabler/icons-react';
+import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 
 export function ClerkConfigDiagnosticScreen() {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001';
@@ -8,6 +9,13 @@ export function ClerkConfigDiagnosticScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
       <div className="max-w-xl w-full bg-surface border border-border rounded-3xl p-8 shadow-xl space-y-6">
+        <div className="pb-4 border-b border-border flex items-center justify-between">
+          <ClinicEzLogo
+            markClassName="h-7 w-8 shrink-0"
+            textClassName="text-base font-bold tracking-tight text-text"
+            subtitle="Governance"
+          />
+        </div>
         <div className="flex items-center gap-4">
           <div className="p-3.5 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
             <IconAlertTriangle className="h-8 w-8" />
@@ -27,7 +35,7 @@ export function ClerkConfigDiagnosticScreen() {
             <code>VITE_CLERK_PUBLISHABLE_KEY</code> is unset in this environment.
           </p>
           <p className="leading-relaxed">
-            The ClinicEZ Governance Workstation requires a valid Clerk Publishable Key to initialize administrative authentication and session security.
+            The Clinic EZ Governance Workstation requires a valid Clerk Publishable Key to initialize administrative authentication and session security.
           </p>
         </div>
 

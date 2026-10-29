@@ -348,7 +348,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
             <span>Select:</span>
             <kbd className="px-1.5 py-0.5 rounded bg-surface border border-border font-mono">↵</kbd>
           </div>
-          <div>ClinicEZ Governance Workstation</div>
+          <div>Clinic EZ Governance Workstation</div>
         </div>
       </div>
     </div>

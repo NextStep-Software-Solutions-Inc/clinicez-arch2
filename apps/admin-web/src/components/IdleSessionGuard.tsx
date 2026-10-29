@@ -161,7 +161,7 @@ export function IdleSessionGuard({ children }: IdleSessionGuardProps) {
                   Session Inactivity Warning
                 </h3>
                 <p className="text-xs text-text-muted mt-0.5">
-                  ClinicEZ Governance Workstation
+                  Clinic EZ Governance Workstation
                 </p>
               </div>
             </div>

@@ -333,7 +333,7 @@ function PlansPage() {
               </div>
               <div>
                 <h3 className="font-bold text-base text-text">Delete Commercial Plan</h3>
-                <p className="text-xs text-text-muted">ClinicEZ Commercial Operations</p>
+                <p className="text-xs text-text-muted">Clinic EZ Commercial Operations</p>
               </div>
             </div>
 

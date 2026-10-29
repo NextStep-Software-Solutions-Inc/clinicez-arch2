@@ -241,7 +241,7 @@ export const CAPABILITY_FLAGS: CapabilityFlagMetadata[] = [
   {
     key: 'feature.on_prem',
     label: 'Local Edge Server Deployments (On-Premises)',
-    description: 'Deploy ClinicEZ local appliance server within internal clinic hospital LAN',
+    description: 'Deploy Clinic EZ local appliance server within internal clinic hospital LAN',
     defaultVal: false,
     icon: IconServer,
   },

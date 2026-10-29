@@ -2,6 +2,7 @@ import React from 'react';
 import { useUser, useClerk } from '@clerk/clerk-react';
 import { IconShieldLock, IconArrowRight, IconLogout } from '@tabler/icons-react';
 import { isAdminMfaRequired, hasVerifiedMfa } from '@/lib/mfaGuard';
+import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 
 interface MfaGateProps {
   children: React.ReactNode;
@@ -39,6 +40,14 @@ export function MfaGate({ children }: MfaGateProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
       <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl text-center space-y-6 animate-in fade-in duration-200">
+        <div className="flex justify-center">
+          <ClinicEzLogo
+            markClassName="h-8 w-9 shrink-0"
+            textClassName="text-lg font-bold tracking-tight text-text"
+            subtitle="Governance"
+          />
+        </div>
+
         <div className="inline-flex p-4 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 mx-auto">
           <IconShieldLock className="h-10 w-10" />
         </div>
@@ -48,7 +57,7 @@ export function MfaGate({ children }: MfaGateProps) {
             Two-Factor Authentication Required
           </h1>
           <p className="text-xs text-text-secondary leading-relaxed">
-            Platform Administrator accounts require Multi-Factor Authentication (2FA/TOTP) enrollment before accessing the ClinicEZ Governance Workstation.
+            Platform Administrator accounts require Multi-Factor Authentication (2FA/TOTP) enrollment before accessing the Clinic EZ Governance Workstation.
           </p>
         </div>
 

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { ClerkProvider } from '@clerk/clerk-react';
+import { ApiProvider } from './components/ApiProvider';
 import { ClerkConfigDiagnosticScreen } from './components/ClerkConfigDiagnosticScreen';
 import { router } from './router';
 import './index.css';
@@ -23,7 +24,9 @@ if (rootElement) {
     root.render(
       <React.StrictMode>
         <ClerkProvider publishableKey={clerkPubKey}>
-          <RouterProvider router={router} />
+          <ApiProvider>
+            <RouterProvider router={router} />
+          </ApiProvider>
         </ClerkProvider>
       </React.StrictMode>
     );

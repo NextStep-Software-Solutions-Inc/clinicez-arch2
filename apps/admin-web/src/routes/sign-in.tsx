@@ -1,8 +1,9 @@
 import React from 'react';
-import { createRoute, useSearch } from '@tanstack/react-router';
+import { createRoute } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root';
 import { SignIn } from '@clerk/clerk-react';
-import { IconShieldLock, IconAlertCircle } from '@tabler/icons-react';
+import { IconAlertCircle } from '@tabler/icons-react';
+import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 
 function SignInPage() {
   const searchParams = new URLSearchParams(
@@ -13,16 +14,21 @@ function SignInPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-text">
       <div className="max-w-md w-full space-y-6">
-        <div className="text-center space-y-2">
-          <div className="inline-flex h-12 w-12 rounded-2xl bg-primary items-center justify-center text-white font-bold text-xl shadow-md mx-auto">
-            C
+        <div className="text-center space-y-2.5">
+          <div className="flex justify-center">
+            <ClinicEzLogo
+              markClassName="h-10 w-11 shrink-0 drop-shadow-xs"
+              textClassName="text-2xl font-bold tracking-tight text-text"
+            />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-text">
-            ClinicEZ Governance Workstation
-          </h1>
-          <p className="text-xs text-text-muted">
-            Platform Administration & Central Oversight
-          </p>
+          <div className="space-y-1">
+            <h1 className="text-base font-bold tracking-tight text-text">
+              Governance Workstation
+            </h1>
+            <p className="text-xs text-text-muted">
+              Platform Administration & Central Oversight
+            </p>
+          </div>
         </div>
 
         {reason === 'session_expired' && (

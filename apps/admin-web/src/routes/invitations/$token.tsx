@@ -3,8 +3,10 @@ import { createRoute, Link } from '@tanstack/react-router';
 import { Route as rootRoute } from '../__root';
 import { adminService, AdminInvitationDetailsDto } from '@/services/admin.service';
 import { useAuth } from '@clerk/clerk-react';
-import { IconMailCheck, IconAlertTriangle, IconCheck, IconArrowRight } from '@tabler/icons-react';
+import { IconMailCheck, IconArrowRight } from '@tabler/icons-react';
 import { toast } from 'sonner';
+import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import { setupAxiosInterceptors } from '@/lib/api';
 
 function InvitationAcceptPage() {
   const { token } = Route.useParams();
@@ -16,7 +18,10 @@ function InvitationAcceptPage() {
   let isSignedIn = false;
   try {
     const auth = useAuth();
-    isSignedIn = auth.isSignedIn ?? false;
+    isSignedIn = Boolean(auth.isSignedIn);
+    if (auth.getToken) {
+      setupAxiosInterceptors(auth.getToken);
+    }
   } catch {
     // outside clerk provider in unit tests
   }
@@ -41,7 +46,7 @@ function InvitationAcceptPage() {
     try {
       setAccepting(true);
       await adminService.acceptInvitation(token);
-      toast.success('Invitation accepted successfully! Welcome to ClinicEZ Governance.');
+      toast.success('Invitation accepted successfully! Welcome to Clinic EZ Governance.');
       window.location.href = '/';
     } catch (err: any) {
       toast.error(err?.message || 'Failed to accept invitation.');
@@ -64,6 +69,13 @@ function InvitationAcceptPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
       <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl space-y-6">
+        <div className="pb-4 border-b border-border flex items-center justify-between">
+          <ClinicEzLogo
+            markClassName="h-7 w-8 shrink-0"
+            textClassName="text-base font-bold tracking-tight text-text"
+            subtitle="Governance"
+          />
+        </div>
         <div className="flex items-center gap-4">
           <div className="p-3.5 rounded-2xl bg-primary-subtle text-primary">
             <IconMailCheck className="h-8 w-8" />
@@ -72,7 +84,7 @@ function InvitationAcceptPage() {
             <h1 className="text-xl font-bold tracking-tight text-text">
               Platform Admin Invitation
             </h1>
-            <p className="text-xs text-text-muted mt-0.5">ClinicEZ Governance Workstation</p>
+            <p className="text-xs text-text-muted mt-0.5">Clinic EZ Governance Workstation</p>
           </div>
         </div>
 

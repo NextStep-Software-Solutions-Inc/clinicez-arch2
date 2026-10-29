@@ -4,6 +4,9 @@ import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
 import { Route as rootRoute } from './__root';
 import { MfaGate } from '@/components/MfaGate';
 import { CommandPalette } from '@/components/CommandPalette';
+import { ClinicEzLogo, ClinicEzMark } from '@/components/ClinicEzLogo';
+import { setupAxiosInterceptors } from '@/lib/api';
+import { getEnvironmentBadge, readRuntimeEnvironmentSignals } from '@/lib/envBadge';
 import { hasVerifiedMfa } from '@/lib/mfaGuard';
 import {
   IconDashboard,
@@ -27,16 +30,7 @@ import {
   IconCommand,
 } from '@tabler/icons-react';
 
-export function getEnvironmentBadge(hostname: string): 'LOCAL' | 'DEV' | 'PROD' {
-  const h = hostname.toLowerCase();
-  if (h.includes('localhost') || h.includes('127.0.0.1') || h.includes('lvh.me')) {
-    return 'LOCAL';
-  }
-  if (h.includes('dev.') || h.includes('staging.')) {
-    return 'DEV';
-  }
-  return 'PROD';
-}
+export { getEnvironmentBadge } from '@/lib/envBadge';
 
 interface NavItem {
   label: string;
@@ -106,8 +100,11 @@ function AuthLayout() {
 
   try {
     const auth = useAuth();
-    isSignedIn = auth.isSignedIn ?? true;
-    isLoaded = auth.isLoaded ?? true;
+    isLoaded = auth.isLoaded;
+    isSignedIn = Boolean(auth.isSignedIn);
+    if (auth.getToken) {
+      setupAxiosInterceptors(auth.getToken);
+    }
     const userRes = useUser();
     user = userRes.user;
     const clerk = useClerk();
@@ -156,14 +153,17 @@ function AuthLayout() {
   };
 
   const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  const envBadge = getEnvironmentBadge(hostname);
+  const envBadge = getEnvironmentBadge(hostname, readRuntimeEnvironmentSignals());
 
   if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-text">
-        <div className="flex items-center gap-3 text-text-muted text-sm">
-          <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          <span>Loading ClinicEZ Governance Workstation...</span>
+        <div className="flex flex-col items-center gap-4">
+          <ClinicEzMark variant="squircle" className="h-11 w-11 shrink-0 drop-shadow-sm animate-pulse" />
+          <div className="flex items-center gap-2.5 text-text-muted text-sm">
+            <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <span>Loading Clinic EZ Governance Workstation...</span>
+          </div>
         </div>
       </div>
     );
@@ -173,6 +173,13 @@ function AuthLayout() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
         <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl text-center space-y-5">
+          <div className="flex justify-center pb-1">
+            <ClinicEzLogo
+              markClassName="h-8 w-9 shrink-0"
+              textClassName="text-lg font-bold tracking-tight text-text"
+              subtitle="Governance"
+            />
+          </div>
           <div className="inline-flex p-3 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
             <IconShield className="h-8 w-8" />
           </div>
@@ -222,24 +229,24 @@ function AuthLayout() {
           }`}
         >
           {/* Logo / Workstation Header */}
-          <div className="h-16 flex items-center justify-between px-5 border-b border-sidebar-border">
-            <Link to="/" className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-lg shadow-sm">
-                C
-              </div>
-              {sidebarOpen && (
-                <div className="flex flex-col">
-                  <span className="font-bold text-sm tracking-tight text-text">ClinicEZ</span>
-                  <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">
-                    Governance
-                  </span>
-                </div>
-              )}
+          <div
+            className={`h-16 flex items-center justify-between border-b border-sidebar-border ${
+              sidebarOpen ? 'px-4' : 'px-2.5'
+            }`}
+          >
+            <Link to="/" className="flex items-center min-w-0">
+              <ClinicEzLogo
+                variant="squircle"
+                markClassName={`${sidebarOpen ? 'h-9 w-9' : 'h-8 w-8'} shrink-0 drop-shadow-xs`}
+                textClassName="font-bold text-sm tracking-tight text-text leading-tight"
+                subtitle="Governance"
+                showWordmark={sidebarOpen}
+              />
             </Link>
             <button
               type="button"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-text-muted hover:text-text p-1.5 rounded-lg transition-colors cursor-pointer"
+              className="text-text-muted hover:text-text p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
               aria-label="Toggle sidebar"
             >
               <IconChevronRight
@@ -309,12 +316,12 @@ function AuthLayout() {
             />
             <div className="relative w-72 bg-sidebar border-r border-sidebar-border flex flex-col z-10 p-4 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-sidebar-border">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-base shadow-sm">
-                    C
-                  </div>
-                  <span className="font-bold text-sm text-text">ClinicEZ Governance</span>
-                </div>
+                <ClinicEzLogo
+                  variant="squircle"
+                  markClassName="h-8 w-8 shrink-0 drop-shadow-xs"
+                  textClassName="font-bold text-sm tracking-tight text-text leading-tight"
+                  subtitle="Governance"
+                />
                 <button
                   type="button"
                   onClick={() => setMobileDrawerOpen(false)}

@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { createRoute, Link } from '@tanstack/react-router';
 import { Route as rootRoute } from '../__root';
 import { apiClient } from '@/lib/api';
-import { IconKey, IconCheck, IconAlertCircle } from '@tabler/icons-react';
+import { IconKey } from '@tabler/icons-react';
 import { toast } from 'sonner';
+import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 
 function ResetPasswordPage() {
   const { token } = Route.useParams();
@@ -77,6 +78,13 @@ function ResetPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">
       <div className="max-w-md w-full bg-surface border border-border rounded-3xl p-8 shadow-xl space-y-6">
+        <div className="pb-4 border-b border-border flex items-center justify-between">
+          <ClinicEzLogo
+            markClassName="h-7 w-8 shrink-0"
+            textClassName="text-base font-bold tracking-tight text-text"
+            subtitle="Governance"
+          />
+        </div>
         <div className="flex items-center gap-4">
           <div className="p-3.5 rounded-2xl bg-primary-subtle text-primary">
             <IconKey className="h-8 w-8" />
@@ -85,7 +93,7 @@ function ResetPasswordPage() {
             <h1 className="text-xl font-bold tracking-tight text-text">
               Reset Administrator Password
             </h1>
-            <p className="text-xs text-text-muted mt-0.5">ClinicEZ Governance Workstation</p>
+            <p className="text-xs text-text-muted mt-0.5">Clinic EZ Governance Workstation</p>
           </div>
         </div>
 
