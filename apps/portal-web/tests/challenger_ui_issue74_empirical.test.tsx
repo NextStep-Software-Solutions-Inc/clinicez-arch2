@@ -248,19 +248,21 @@ describe("Challenger UI Empirical Verification Suite (Issue #74)", () => {
   // =========================================================================
   describe("Dimension 3: Automated AST / Regex Scan for Raw Hex Color Literals", () => {
     const MODIFIED_FRONTEND_FILES = [
+      "src/app/page.tsx",
       "src/app/sign-up/[[...sign-up]]/page.tsx",
       "src/app/sign-up/_components/SignUpTrialBadge.tsx",
       "src/app/sign-up/_components/CustomSignUpForm.tsx",
-      "src/app/(main)/pricing/_components/PricingClient.tsx",
+      "src/app/tenants/register/layout.tsx",
+      "src/app/tenants/register/page.tsx",
+      "src/app/tenants/register/_components/TenantRegistrationClient.tsx",
       "src/app/[tenant]/dashboard/overview/WorkspaceOverviewClient.tsx",
       "src/components/dashboard/TrialCountdownBanner.tsx",
       "src/components/join/JoinClient.tsx",
       "src/components/join/ProgressiveClaimCard.tsx",
-      "src/app/(main)/contact-us/_components/ContactUsClient.tsx",
-      "src/components/NewsletterForm.tsx",
       "src/components/join/MobileAppStoreBadges.tsx",
       "src/hooks/useBilling.ts",
       "src/hooks/usePublicConfig.ts",
+      "src/lib/planPricing.ts",
       "src/services/billing.service.ts",
       "src/utils/domain.ts",
     ];

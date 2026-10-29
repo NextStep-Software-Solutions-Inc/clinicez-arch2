@@ -151,6 +151,55 @@
         "typescript": "~6.0.3",
       },
     },
+    "apps/marketing-web": {
+      "name": "@clinicez/marketing-web",
+      "version": "1.0.0",
+      "dependencies": {
+        "@clinicez/design-tokens": "workspace:*",
+        "@radix-ui/react-accordion": "^1.2.11",
+        "@radix-ui/react-dialog": "^1.1.14",
+        "@radix-ui/react-label": "^2.1.7",
+        "@radix-ui/react-select": "^2.2.5",
+        "@radix-ui/react-separator": "^1.1.7",
+        "@radix-ui/react-slot": "^1.2.3",
+        "@radix-ui/react-tabs": "^1.1.12",
+        "@radix-ui/react-tooltip": "^1.2.7",
+        "@shared/safe": "workspace:*",
+        "@tabler/icons-react": "^3.34.1",
+        "@vercel/analytics": "^2.0.1",
+        "@vercel/speed-insights": "^2.0.0",
+        "axios": "^1.18.1",
+        "class-variance-authority": "^0.7.1",
+        "clsx": "^2.1.1",
+        "embla-carousel-autoplay": "^8.6.0",
+        "embla-carousel-react": "^8.6.0",
+        "framer-motion": "^12.23.12",
+        "geist": "1.7.0",
+        "lucide-react": "^0.535.0",
+        "next": "^16.2.10",
+        "next-themes": "^0.4.6",
+        "node-emoji": "^2.2.0",
+        "radix-ui": "^1.6.2",
+        "react": "^19.2.7",
+        "react-dom": "^19.2.7",
+        "react-icons": "^5.5.0",
+        "sonner": "^2.0.7",
+        "swr": "^2.4.2",
+        "tailwind-merge": "^3.3.1",
+        "zod": "^4.6.5",
+      },
+      "devDependencies": {
+        "@tailwindcss/postcss": "^4",
+        "@types/node": "^24.19.2",
+        "@types/react": "^19.2.17",
+        "@types/react-dom": "^19.2.3",
+        "eslint": "^9",
+        "eslint-config-next": "^16.2.10",
+        "tailwindcss": "^4",
+        "tw-animate-css": "^1.3.6",
+        "typescript": "~6.0.3",
+      },
+    },
     "apps/patient-app": {
       "name": "@clinicez/patient-app",
       "version": "1.0.0",
@@ -544,6 +593,8 @@
     "@clinicez/design-tokens": ["@clinicez/design-tokens@workspace:packages/design-tokens"],
 
     "@clinicez/laboratory-app": ["@clinicez/laboratory-app@workspace:apps/laboratory-app"],
+
+    "@clinicez/marketing-web": ["@clinicez/marketing-web@workspace:apps/marketing-web"],
 
     "@clinicez/patient-app": ["@clinicez/patient-app@workspace:apps/patient-app"],
 
@@ -2894,6 +2945,8 @@
     "@clinicez/laboratory-app/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
 
     "@clinicez/laboratory-app/react-dom": ["react-dom@19.2.3", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.3" } }, "sha512-yELu4WmLPw5Mr/lmeEpox5rw3RETacE++JgHqQzd2dg+YbJuat3jH4ingc+WPZhxaoFzdv9y33G+F7Nl5O0GBg=="],
+
+    "@clinicez/marketing-web/tailwindcss": ["tailwindcss@4.3.3", "", {}, "sha512-gOhV3P7ufE62QDGg1zVaTgCR+EtPv92k2nIhVcVKcLmxT1sUBsQGhnZj175j+MqRt4zLF7ic+sCYjfhxMxj7YQ=="],
 
     "@clinicez/patient-app/expo-document-picker": ["expo-document-picker@56.0.4", "", { "peerDependencies": { "expo": "*" } }, "sha512-75Apf74XNkYYohObIH19VZw42xpe0gmEnPccuzGXKVAzlvTYCfibSgW17F+6vt4paOfZEnAoZ1QFZM6dmaujRA=="],
 

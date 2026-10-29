@@ -1,15 +1,36 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
+import { createRequire } from "module";
 import * as path from "path";
+
+const clinicRequire = createRequire(
+  path.resolve(__dirname, "../../clinic-app/package.json"),
+);
+
+function mockClinicModule(specifier: string, factory: () => Record<string, unknown>) {
+  mock.module(specifier, factory);
+  try {
+    const resolved = clinicRequire.resolve(specifier);
+    mock.module(resolved, factory);
+  } catch {
+    // Fallback if package is not separately resolved under clinic-app
+  }
+}
 
 mock.module("next/navigation", () => ({
   useParams: () => ({ tenant: "apex-health" }),
-  useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {} }),
+  useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {}, refresh: () => {}, back: () => {}, forward: () => {} }),
   usePathname: () => "/apex-health/dashboard/overview",
   useSearchParams: () => new URLSearchParams(),
+  redirect: (url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  },
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
 }));
 
-mock.module("react-native", () => ({
+mockClinicModule("react-native", () => ({
   Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFillObject: {} },
   View: "View",
@@ -34,7 +55,7 @@ mock.module("react-native", () => ({
   },
 }));
 
-mock.module("react-native-svg", () => ({
+mockClinicModule("react-native-svg", () => ({
   Svg: "Svg",
   Path: "Path",
   Circle: "Circle",
@@ -55,11 +76,11 @@ mock.module("../../clinic-app/constants/fonts", () => ({
   fontAssets: {},
 }));
 
-mock.module("@expo-google-fonts/geist", () => ({
+mockClinicModule("@expo-google-fonts/geist", () => ({
   useFonts: () => [true],
 }));
 
-mock.module("@expo-google-fonts/geist-mono", () => ({
+mockClinicModule("@expo-google-fonts/geist-mono", () => ({
   useFonts: () => [true],
 }));
 

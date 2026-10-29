@@ -16,25 +16,26 @@ param()
 $ErrorActionPreference = 'Stop'
 Set-Location (git rev-parse --show-toplevel)
 
-# 1. Assert exactly 0 files under apps/portal-web/src/app/api/ (BFF eliminated)
-$portalApiDir = "apps/portal-web/src/app/api"
-$portalApiFiles = @()
-if (Test-Path $portalApiDir) {
-    $portalApiFiles = @(Get-ChildItem -Path $portalApiDir -Recurse -File -ErrorAction SilentlyContinue)
-}
-$gitApiFiles = @(& git ls-files -- "apps/portal-web/src/app/api" 2>$null)
+# 1. Assert exactly 0 files under apps/portal-web/src/app/api/ and apps/marketing-web/src/app/api/ (BFF eliminated)
+foreach ($bffDir in @("apps/portal-web/src/app/api", "apps/marketing-web/src/app/api")) {
+    $bffFiles = @()
+    if (Test-Path $bffDir) {
+        $bffFiles = @(Get-ChildItem -Path $bffDir -Recurse -File -ErrorAction SilentlyContinue)
+    }
+    $gitBffFiles = @(& git ls-files -- $bffDir 2>$null)
 
-if ($portalApiFiles.Count -gt 0 -or $gitApiFiles.Count -gt 0) {
-    Write-Host "Forbidden App Router API route files found under $portalApiDir (expected exactly 0):" -ForegroundColor Red
-    $portalApiFiles | ForEach-Object { Write-Host "  $($_.FullName)" }
-    $gitApiFiles | ForEach-Object { Write-Host "  git: $_" }
-    exit 1
+    if ($bffFiles.Count -gt 0 -or $gitBffFiles.Count -gt 0) {
+        Write-Host "Forbidden App Router API route files found under $bffDir (expected exactly 0):" -ForegroundColor Red
+        $bffFiles | ForEach-Object { Write-Host "  $($_.FullName)" }
+        $gitBffFiles | ForEach-Object { Write-Host "  git: $_" }
+        exit 1
+    }
 }
 
-# 2. Assert exactly 0 occurrences of CLINIC_API_URL or ClinicApiUrl in apps/portal-web, apps/admin-web (excluding tests), services/portal-api, and services/patient-api
-$clinicApiHits = & git grep --untracked -n -I -i -E 'CLINIC_API_URL|ClinicApiUrl' -- 'apps/portal-web' 'apps/admin-web' 'services/portal-api' 'services/patient-api' ':(exclude)apps/portal-web/tests/**' ':(exclude)apps/admin-web/tests/**' 2>$null
+# 2. Assert exactly 0 occurrences of CLINIC_API_URL or ClinicApiUrl in apps/portal-web, apps/marketing-web, apps/admin-web (excluding tests), services/portal-api, and services/patient-api
+$clinicApiHits = & git grep --untracked -n -I -i -E 'CLINIC_API_URL|ClinicApiUrl' -- 'apps/portal-web' 'apps/marketing-web' 'apps/admin-web' 'services/portal-api' 'services/patient-api' ':(exclude)apps/portal-web/tests/**' ':(exclude)apps/marketing-web/tests/**' ':(exclude)apps/admin-web/tests/**' 2>$null
 if ($LASTEXITCODE -eq 0 -and $clinicApiHits) {
-    Write-Host 'Forbidden Clinic API URL references found in apps/portal-web, apps/admin-web, services/portal-api, or services/patient-api:' -ForegroundColor Red
+    Write-Host 'Forbidden Clinic API URL references found in apps/portal-web, apps/marketing-web, apps/admin-web, services/portal-api, or services/patient-api:' -ForegroundColor Red
     $clinicApiHits | ForEach-Object { Write-Host "  $_" }
     exit 1
 }
@@ -76,7 +77,8 @@ $allowedPathspecs = @(
     ':(exclude)*.lock',
     ':(exclude)bun.lock',
     ':(exclude)**/lib_medicine*.json',
-    ':(exclude)apps/portal-web/src/**/emoji*'
+    ':(exclude)apps/portal-web/src/**/emoji*',
+    ':(exclude)apps/marketing-web/src/**/emoji*'
 )
 
 $pattern = 'rabbitmq|rabbit_mq|masstransit|amqp://|amqps://|\bRABBITMQ_'

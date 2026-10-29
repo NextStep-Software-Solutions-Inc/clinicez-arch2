@@ -40,6 +40,7 @@ import {
   CLERK_PORTAL_APPEARANCE,
   sanitizeStaleClerkBillingHash,
 } from "@/lib/clerkAppearance"
+import { getMarketingSiteUrl, isTenantSubdomainHost } from "@/utils/domain"
 
 export function getSubscriptionPlansHref(
   tenant?: string | string[] | null,
@@ -47,7 +48,10 @@ export function getSubscriptionPlansHref(
   const raw = Array.isArray(tenant) ? tenant[0] : tenant
   const slug = typeof raw === "string" ? raw.trim() : ""
   if (!slug) {
-    return "/pricing"
+    return getMarketingSiteUrl("/pricing")
+  }
+  if (isTenantSubdomainHost()) {
+    return "/dashboard/billing?tab=plans"
   }
   return `/${encodeURIComponent(slug)}/dashboard/billing?tab=plans`
 }

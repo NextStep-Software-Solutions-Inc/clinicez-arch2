@@ -1,5 +1,6 @@
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Billing;
+using ClinicEz.Portal.Application.Features.Tenants;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using Microsoft.AspNetCore.Builder;
@@ -28,6 +29,17 @@ public sealed class LookupTenantEndpoint : IEndpoint
             }
 
             var cleanSlug = slug.Trim().ToLowerInvariant();
+            if (ReservedTenantSlugs.IsReserved(cleanSlug))
+            {
+                return Results.NotFound(new
+                {
+                    Exists = false,
+                    IsReserved = true,
+                    Code = "slug_reserved",
+                    Message = $"Workspace URL '{slug}' is reserved by Clinic EZ."
+                });
+            }
+
             var tenant = await context.Tenants
                 .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == cleanSlug, ct);

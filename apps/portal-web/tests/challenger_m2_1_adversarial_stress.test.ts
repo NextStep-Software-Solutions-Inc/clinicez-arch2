@@ -364,13 +364,16 @@ describe("Adversarial Stress Test: sync-auth Gateway Priority Routing", () => {
     auth: async () => mockAuthResult,
   }));
 
-  // Mock Next.js cookies
+  // Mock Next.js cookies & headers
   mock.module("next/headers", () => ({
     cookies: async () => ({
       get: (name: string) => {
         const val = mockCookiesStore.get(name);
         return val ? { name, value: val } : undefined;
       },
+    }),
+    headers: async () => ({
+      get: () => null,
     }),
   }));
 

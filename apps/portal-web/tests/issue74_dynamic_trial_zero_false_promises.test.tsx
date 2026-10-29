@@ -183,20 +183,19 @@ describe("Issue #74: Dynamic Free-Trial Duration & Zero False Promises", () => {
     });
   });
 
-  describe("Tier 4: Pricing Page Direct Public Config", () => {
-    test("T4.1: PricingClient uses usePublicConfig for defaultBillingCadence (never unauthenticated payment-config)", () => {
-      const pricingPath = path.join(
-        SRC_DIR,
-        "app",
-        "(main)",
-        "pricing",
-        "_components",
-        "PricingClient.tsx"
-      );
-      const content = fs.readFileSync(pricingPath, "utf-8");
+  describe("Tier 4: Public Config Hook & Marketing Surface Extraction", () => {
+    test("T4.1: usePublicConfig powers dynamic defaultBillingCadence without unauthenticated payment-config, and marketing (main) is extracted", () => {
+      const mainGroupPath = path.join(SRC_DIR, "app", "(main)");
+      expect(fs.existsSync(mainGroupPath)).toBe(false);
+
+      const usePublicConfigPath = path.join(SRC_DIR, "hooks", "usePublicConfig.ts");
+      const content = fs.readFileSync(usePublicConfigPath, "utf-8");
 
       expect(content).not.toContain("usePaymentConfig");
-      expect(content).toContain("usePublicConfig");
+      expect(content).toContain("getPublicConfig");
+
+      const planPricingPath = path.join(SRC_DIR, "lib", "planPricing.ts");
+      expect(fs.existsSync(planPricingPath)).toBe(true);
     });
   });
 });

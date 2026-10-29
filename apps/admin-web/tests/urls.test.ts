@@ -25,7 +25,7 @@ describe('Cross-Surface URL Resolvers', () => {
 
   it('generates correct public site URL for home and blog', () => {
     const rootUrl = getPublicSiteUrl('/');
-    expect(rootUrl.endsWith('/') || rootUrl.includes('localhost:3000')).toBe(true);
+    expect(rootUrl.endsWith('/') || rootUrl.includes('localhost:3002')).toBe(true);
 
     const blogUrl = getPublicSiteUrl('/blogs/philhealth-case1-compliance');
     expect(blogUrl).toContain('/blogs/philhealth-case1-compliance');

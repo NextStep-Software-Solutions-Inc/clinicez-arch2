@@ -32,6 +32,9 @@ mock.module("next/headers", () => ({
       return val ? { name, value: val } : undefined;
     },
   })),
+  headers: mock(async () => ({
+    get: () => null,
+  })),
 }));
 
 mock.module("next/navigation", () => ({

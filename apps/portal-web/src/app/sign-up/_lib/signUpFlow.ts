@@ -394,3 +394,68 @@ export function buildSignInHref(redirectUrl?: string | null): string {
   }
   return "/sign-in";
 }
+
+function isSafeRelativePath(value: string): boolean {
+  return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\");
+}
+
+function mergeOnboardingParams(
+  targetPath: string,
+  plan?: string | null,
+  billing?: string | null
+): string {
+  const qIndex = targetPath.indexOf("?");
+  const basePath = qIndex >= 0 ? targetPath.slice(0, qIndex) : targetPath;
+  const existingQuery = qIndex >= 0 ? targetPath.slice(qIndex + 1) : "";
+  const qs = new URLSearchParams(existingQuery);
+
+  const cleanPlan = plan?.trim() || "";
+  const cleanBilling = billing?.trim() || "";
+
+  if (cleanPlan && !qs.get("plan")) {
+    qs.set("plan", cleanPlan);
+  }
+  if (cleanBilling && !qs.get("billing")) {
+    qs.set("billing", cleanBilling);
+  }
+
+  const serialized = qs.toString();
+  return serialized ? `${basePath}?${serialized}` : basePath;
+}
+
+/**
+ * Resolves the post-authentication destination for fresh sign-ups AND already-signed-in
+ * users arriving on /sign-up (for instance from marketing-web pricing cards with ?plan=...&billing=...).
+ */
+export function resolveSignUpRedirectTarget(params: {
+  redirectUrl?: string | null;
+  plan?: string | null;
+  billing?: string | null;
+  alreadySignedIn?: boolean;
+}): string {
+  const rawRedirect = params.redirectUrl?.trim() || "";
+  const safeRedirect =
+    rawRedirect && isSafeRelativePath(rawRedirect) && !rawRedirect.startsWith("/sign-up")
+      ? rawRedirect
+      : "";
+
+  const cleanPlan = params.plan?.trim() || "";
+  const cleanBilling = params.billing?.trim() || "";
+
+  if (safeRedirect.startsWith("/tenants/register")) {
+    return mergeOnboardingParams(safeRedirect, cleanPlan, cleanBilling);
+  }
+
+  if (cleanPlan || cleanBilling) {
+    if (safeRedirect && !safeRedirect.startsWith("/sync-auth")) {
+      return safeRedirect;
+    }
+    return mergeOnboardingParams("/tenants/register", cleanPlan, cleanBilling);
+  }
+
+  if (safeRedirect) {
+    return safeRedirect;
+  }
+
+  return "/sync-auth";
+}

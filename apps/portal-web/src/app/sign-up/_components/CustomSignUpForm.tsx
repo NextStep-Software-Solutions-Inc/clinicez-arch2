@@ -29,6 +29,7 @@ import {
   parseSignUpError,
   resolvePostVerificationAction,
   buildSignInHref,
+  resolveSignUpRedirectTarget,
 } from "../_lib/signUpFlow";
 
 // Handles Clerk username conflict error codes including form_username_exists via parseSignUpError
@@ -40,7 +41,11 @@ interface CustomSignUpFormProps {
 export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect_url") || "/sync-auth";
+  const redirectUrl = resolveSignUpRedirectTarget({
+    redirectUrl: searchParams.get("redirect_url"),
+    plan: searchParams.get("plan"),
+    billing: searchParams.get("billing"),
+  });
 
   const { trialDays: liveTrialDays, isError: isPublicConfigError } = usePublicConfig(
     initialTrialDays !== undefined
