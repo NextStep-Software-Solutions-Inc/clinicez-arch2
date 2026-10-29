@@ -23,37 +23,38 @@ public static class DependencyInjection
     {
         services.AddMemoryCache();
 
-        // 1. Configure DbContext for Interop Inbox/Outbox
-        var dbConnection = configuration.GetConnectionString("DefaultConnection");
-        if (!string.IsNullOrWhiteSpace(dbConnection))
-        {
-            services.AddDbContext<PhilHealthProxyDbContext>(opts =>
-                opts.UseNpgsql(dbConnection, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "philhealth")));
-        }
-        else
-        {
-            services.AddDbContext<PhilHealthProxyDbContext>(opts =>
-                opts.UseInMemoryDatabase("PhilHealthProxy_Interop"));
-        }
+        // 1. Wire Interop Inbox/Outbox only when Interop transport is configured
+        var hasInteropConfig =
+            !string.IsNullOrWhiteSpace(configuration["Messaging:HubUrl"]) ||
+            !string.IsNullOrWhiteSpace(configuration["HUB_URL"]) ||
+            string.Equals(configuration["Messaging:Transport"], "InProcess", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(configuration["HUB_TRANSPORT"], "InProcess", StringComparison.OrdinalIgnoreCase);
 
-        services.AddScoped<IInteropDbContext>(sp => sp.GetRequiredService<PhilHealthProxyDbContext>());
-
-        // 2. Wire Interop SDK with Responder and Reply handlers
-        services.AddInterop<PhilHealthProxyDbContext>(configuration, handlers => handlers
-            .Respond<PhilHealthRequestPayload, PhilHealthResponsePayload, PhilHealthRequestResponder>(
-                InteropTypes.PhilHealthRequest,
-                InteropTypes.PhilHealthResponse)
-            .HandleReply(InteropTypes.PhilHealthConfigResponded)
-            .HandleReply(InteropTypes.PhilHealthConfigUpsertResponded));
-
-        services.PostConfigure<InteropOptions>(o =>
+        if (hasInteropConfig)
         {
-            if (string.IsNullOrWhiteSpace(o.HubUrl))
+            var dbConnection = configuration.GetConnectionString("DefaultConnection");
+            if (!string.IsNullOrWhiteSpace(dbConnection))
             {
-                o.Transport = "InProcess";
-                o.Enabled = false;
+                services.AddDbContext<PhilHealthProxyDbContext>(opts =>
+                    opts.UseNpgsql(dbConnection, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "philhealth")));
             }
-        });
+            else
+            {
+                services.AddDbContext<PhilHealthProxyDbContext>(opts =>
+                    opts.UseInMemoryDatabase("PhilHealthProxy_Interop"));
+            }
+
+            services.AddScoped<IInteropDbContext>(sp => sp.GetRequiredService<PhilHealthProxyDbContext>());
+
+            services.AddInterop<PhilHealthProxyDbContext>(configuration, handlers => handlers
+                .Respond<PhilHealthRequestPayload, PhilHealthResponsePayload, PhilHealthRequestResponder>(
+                    InteropTypes.PhilHealthRequest,
+                    InteropTypes.PhilHealthResponse)
+                .HandleReply(InteropTypes.PhilHealthConfigResponded)
+                .HandleReply(InteropTypes.PhilHealthConfigUpsertResponded));
+
+            services.AddScoped<PhilHealthRequestResponder>();
+        }
 
         // 3. Resilient HTTP Client connecting to Portal API for credentials
         var portalBaseUrl = (configuration["PortalApi:BaseUrl"]
@@ -86,8 +87,6 @@ public static class DependencyInjection
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
-
-        services.AddScoped<PhilHealthRequestResponder>();
 
         // 6. Data Protection
         services.AddInMemoryEncryptedDataProtection(configuration, "ClinicEz.PhilHealthProxy");
