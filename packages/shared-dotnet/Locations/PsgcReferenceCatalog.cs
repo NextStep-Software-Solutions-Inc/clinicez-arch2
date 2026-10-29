@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.Json.Serialization;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Shared.Locations;
 
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum PsgcReferenceLevel : byte
 {
     Region = 1,

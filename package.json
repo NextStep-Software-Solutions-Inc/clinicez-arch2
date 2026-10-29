@@ -8,10 +8,6 @@
     "apps/*",
     "packages/*"
   ],
-  "overrides": {
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
-  },
   "scripts": {
     "lint:portal": "bun --cwd apps/portal-web lint",
     "test:portal": "bun test apps/portal-web/tests",
@@ -32,7 +28,7 @@
     "test:tokens": "bun --cwd packages/design-tokens test",
     "test:patient": "bun test apps/patient-app/tests",
     "typecheck:clinic": "tsc --noEmit -p apps/clinic-app",
-    "test:clinic": "bun test --isolate --timeout 20000 apps/clinic-app/tests",
+    "test:clinic": "bun --cwd apps/clinic-app test --isolate --timeout 20000 tests",
     "lint:clinic": "bun apps/clinic-app/scripts/check-tokens.mjs && bun apps/clinic-app/scripts/check-no-external-hosts.mjs",
     "typecheck:lab": "tsc --noEmit -p apps/laboratory-app",
     "typecheck:pharmacy": "tsc --noEmit -p apps/pharmacy-app",
