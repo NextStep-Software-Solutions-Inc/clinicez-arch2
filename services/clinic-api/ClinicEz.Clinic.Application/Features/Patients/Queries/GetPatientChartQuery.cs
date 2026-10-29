@@ -144,6 +144,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         if (_patientRepo != null)
         {
             patient = await _patientRepo.Query(p => p.Id == request.PatientId)
+                .Include(p => p.Addresses)
+                .Include(p => p.Guardians)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(cancellationToken);
         }
@@ -329,6 +331,20 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 ? string.Join("; ", alertDtos.Where(a => a.IsActive).Select(a => $"{a.Category}: {a.Title}"))
                 : null;
 
+            var primaryAddress = patient.Addresses
+                .Where(a => !a.IsDeleted)
+                .OrderBy(a => a.AddressType == PatientAddressType.Permanent ? 0 : 1)
+                .FirstOrDefault();
+
+            var emergencyGuardian = patient.Guardians
+                .Where(g => !g.IsDeleted && g.IsEmergencyContact)
+                .OrderByDescending(g => g.IsPrimaryGuardian)
+                .FirstOrDefault();
+
+            var emergencyGuardianFullName = emergencyGuardian != null
+                ? $"{emergencyGuardian.FirstName} {emergencyGuardian.LastName}".Trim()
+                : null;
+
             demographicsDto = new PatientDemographicsDto(
                 Dob: patient.DateOfBirth,
                 Age: age,
@@ -336,10 +352,19 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 CivilStatus: patient.CivilStatus?.ToString(),
                 ContactNumber: patient.ContactNumber,
                 Email: patient.Email,
-                AddressLine: patient.Addresses.FirstOrDefault()?.StreetAddress ?? GetCustomFieldString(patient, "primary_address_line"),
-                Barangay: patient.Addresses.FirstOrDefault()?.BarangayName ?? GetCustomFieldString(patient, "primary_barangay"),
-                City: GetCustomFieldString(patient, "primary_city"),
-                Province: GetCustomFieldString(patient, "primary_province"),
+                AddressLine: (primaryAddress != null && !string.IsNullOrWhiteSpace(primaryAddress.StreetAddress) ? primaryAddress.StreetAddress : null)
+                    ?? GetCustomFieldString(patient, "primary_address_line")
+                    ?? GetCustomFieldString(patient, "secondary_address_line"),
+                Barangay: primaryAddress?.BarangayName
+                    ?? GetCustomFieldString(patient, "primary_barangay")
+                    ?? GetCustomFieldString(patient, "secondary_barangay"),
+                City: primaryAddress?.CityMunicipalityName
+                    ?? GetCustomFieldString(patient, "primary_city")
+                    ?? GetCustomFieldString(patient, "secondary_city"),
+                Province: primaryAddress?.ProvinceName
+                    ?? primaryAddress?.RegionName
+                    ?? GetCustomFieldString(patient, "primary_province")
+                    ?? GetCustomFieldString(patient, "secondary_province"),
                 PhilHealthNumber: philhealthDto?.PhilHealthPin ?? patient.PhilHealthNumber,
                 SeniorCitizenId: patient.SeniorCitizenId,
                 PwdId: patient.PwdId,
@@ -358,9 +383,15 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 MemberStatus: memberStatus,
                 PhilHealthAtc: atc,
                 ActiveCaseNo: activeCaseNo,
-                EmergencyContactName: patient.EmergencyContactName ?? GetCustomFieldString(patient, "emergency_contact_name"),
-                EmergencyContactPhone: patient.EmergencyContactNumber ?? GetCustomFieldString(patient, "emergency_contact_phone"),
-                EmergencyContactRelationship: patient.EmergencyContactRelationship ?? GetCustomFieldString(patient, "emergency_contact_relationship"),
+                EmergencyContactName: patient.EmergencyContactName
+                    ?? emergencyGuardianFullName
+                    ?? GetCustomFieldString(patient, "emergency_contact_name"),
+                EmergencyContactPhone: patient.EmergencyContactNumber
+                    ?? (emergencyGuardian != null && !string.IsNullOrWhiteSpace(emergencyGuardian.ContactNumber) ? emergencyGuardian.ContactNumber : null)
+                    ?? GetCustomFieldString(patient, "emergency_contact_phone"),
+                EmergencyContactRelationship: patient.EmergencyContactRelationship
+                    ?? (emergencyGuardian != null ? (emergencyGuardian.RelationshipOtherSpecify ?? emergencyGuardian.RelationshipCode) : null)
+                    ?? GetCustomFieldString(patient, "emergency_contact_relationship"),
                 Alerts: alertsSummary,
                 PatientCode: patient.PatientCode,
                 ClinicEzId: patient.ClinicEzId,
@@ -941,7 +972,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             Alerts: alertDtos,
             MedicalHistories: medicalHistoryDtos,
             PhysicalExams: physicalExamDtos,
-            LatestPhysicalExam: latestPhysicalExamDto
+            LatestPhysicalExam: latestPhysicalExamDto,
+            Addresses: patient != null ? Commands.RegisterClinicPatientCommandHandler.MapAddresses(patient.Addresses) : null,
+            Guardians: patient != null ? Commands.RegisterClinicPatientCommandHandler.MapGuardians(patient.Guardians) : null
         );
     }
 

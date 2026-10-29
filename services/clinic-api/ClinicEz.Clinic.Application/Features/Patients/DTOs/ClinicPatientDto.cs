@@ -55,5 +55,7 @@ public sealed record ClinicPatientDto(
     string? ChronicConditions = null,
     string? Alerts = null,
     Guid? SyncPatientId = null,
-    string? GenderIdentity = null
+    string? GenderIdentity = null,
+    List<PatientAddressDto>? Addresses = null,
+    List<PatientGuardianDto>? Guardians = null
 );

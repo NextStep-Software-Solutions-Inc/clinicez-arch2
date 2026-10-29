@@ -413,15 +413,15 @@ describe('Empirical Adversarial Challenger Suite: Locality & Form Unification', 
   // SUITE 2: EditPatientModal Component & Baseline Definitions
   // =========================================================================
   describe('Suite 2: EditPatientModal Structure & Baseline Definitions', () => {
-    test('2.1 BASELINE_PATIENT_CUSTOM_FIELDS contains all 7 address and emergency contact definitions partitioned cleanly', () => {
+    test('2.1 BASELINE_PATIENT_CUSTOM_FIELDS contains all 7 secondary address and emergency contact definitions partitioned cleanly', () => {
       const addressKeys = BASELINE_PATIENT_CUSTOM_FIELDS.filter((f) => f.category === 'Address').map((f) => f.fieldKey);
       const emergencyKeys = BASELINE_PATIENT_CUSTOM_FIELDS.filter((f) => f.category === 'Emergency Contacts').map((f) => f.fieldKey);
 
       expect(addressKeys).toEqual([
-        'primary_address_line',
-        'primary_barangay',
-        'primary_city',
-        'primary_province',
+        'secondary_address_line',
+        'secondary_barangay',
+        'secondary_city',
+        'secondary_province',
       ]);
 
       expect(emergencyKeys).toEqual([
@@ -431,7 +431,7 @@ describe('Empirical Adversarial Challenger Suite: Locality & Form Unification', 
       ]);
     });
 
-    test('2.2 EditPatientModal renders dynamic custom field sections without hardcoded address/contact inputs', () => {
+    test('2.2 EditPatientModal renders Secondary Address, Legal Guardian, and Emergency Contact sections without hardcoded legacy address inputs', () => {
       const mockPatient: ClinicPatient = {
         id: 'pat-test-render',
         tenantId: 'tenant-1',
@@ -447,9 +447,9 @@ describe('Empirical Adversarial Challenger Suite: Locality & Form Unification', 
         contactNumber: '0917-186-3113',
         createdAt: '2026-01-01T00:00:00Z',
         customFields: {
-          primary_barangay: 'Tondo',
-          primary_city: 'Manila',
-          primary_province: 'Metro Manila',
+          secondary_barangay: 'Tondo',
+          secondary_city: 'Manila',
+          secondary_province: 'Metro Manila',
           emergency_contact_name: 'Gregoria de Jesus',
           emergency_contact_phone: '0918-186-3113',
           emergency_contact_relationship: 'Spouse',
@@ -465,8 +465,9 @@ describe('Empirical Adversarial Challenger Suite: Locality & Form Unification', 
         })
       );
 
-      // Section headers for dynamic custom fields are rendered
-      expect(markup).toContain('Address Details');
+      // Section headers for Secondary Address, Legal Guardian, and Emergency Contact are rendered
+      expect(markup).toContain('Secondary Address');
+      expect(markup).toContain('Legal Guardian');
       expect(markup).toContain('Emergency Contact');
 
       // Must NOT contain hardcoded static inputs for legacy fields

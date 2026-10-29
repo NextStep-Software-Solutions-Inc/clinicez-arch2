@@ -60,7 +60,12 @@ import StructuredMedicalHistoryModal, {
 } from '../../components/patient/StructuredMedicalHistoryModal';
 import ClinicalAlertsSection from '../../components/patient/ClinicalAlertsSection';
 import YakapEnlistmentSection from '../../components/patient/YakapEnlistmentSection';
-import EditPatientModal from '../../components/patient/EditPatientModal';
+import EditPatientModal, { LEGACY_PRIMARY_ADDRESS_FIELD_KEYS } from '../../components/patient/EditPatientModal';
+import GuardianSection, {
+  isMinorFromDob,
+  normalizeGuardianPayload,
+  validateGuardianDraft,
+} from '../../components/patient/GuardianSection';
 import PatientDirectoryCard, {
   PatientDirectoryTableHeader,
   type PatientDirectoryViewMode,
@@ -95,6 +100,7 @@ import {
   DuplicateMatch,
   VisitType,
   PatientAddressDto,
+  PatientGuardianDto,
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { getSetting } from '../../services/runtimeConfig';
@@ -265,7 +271,39 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     isSameAsPermanent: false,
     streetAddress: '',
   });
+  const [formGuardian, setFormGuardian] = useState<PatientGuardianDto | null>(null);
+  const [formGuardianErrors, setFormGuardianErrors] = useState<Record<string, string>>({});
+  const [isGuardianPinValid, setIsGuardianPinValid] = useState<boolean | null>(null);
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
+
+  const clearFormGuardianError = (field: string) => {
+    setFormGuardianErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const activeTenantCustomFields = useMemo(
+    () => tenantCustomFields.filter((f) => !LEGACY_PRIMARY_ADDRESS_FIELD_KEYS.has(f.fieldKey)),
+    [tenantCustomFields]
+  );
+  const secondaryAddressCustomFields = useMemo(
+    () => activeTenantCustomFields.filter((f) => f.category === 'Address'),
+    [activeTenantCustomFields]
+  );
+  const emergencyCustomFields = useMemo(
+    () => activeTenantCustomFields.filter((f) => f.category === 'Emergency Contacts'),
+    [activeTenantCustomFields]
+  );
+  const otherCustomFields = useMemo(
+    () =>
+      activeTenantCustomFields.filter(
+        (f) => f.category !== 'Address' && f.category !== 'Emergency Contacts'
+      ),
+    [activeTenantCustomFields]
+  );
 
   // Duplicate Patient Warning Modal Safeguard states
   const [duplicateWarningVisible, setDuplicateWarningVisible] = useState(false);
@@ -611,10 +649,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       return;
     }
 
+    const guardianCheck = validateGuardianDraft(
+      formGuardian,
+      isMinorFromDob(formDob),
+      isGuardianPinValid
+    );
+    if (!guardianCheck.isValid) {
+      setFormGuardianErrors(guardianCheck.errors);
+      Alert.alert('Invalid Legal Guardian Details', guardianCheck.summary);
+      return;
+    }
+
     // Defensive custom fields validation
     const staticValues = { sex: formSex, civilStatus: formCivilStatus, dateOfBirth: formDob };
-    if (tenantCustomFields.length > 0) {
-      const { isValid, errors } = validateCustomFields(tenantCustomFields, dynamicFieldValues, staticValues);
+    if (activeTenantCustomFields.length > 0) {
+      const { isValid, errors } = validateCustomFields(activeTenantCustomFields, dynamicFieldValues, staticValues);
       if (!isValid) {
         setDynamicFieldErrors(errors);
         const errorMessages = Object.values(errors);
@@ -670,8 +719,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setSavingPatient(true);
 
     const customFields: Record<string, any> = {};
-    if (tenantCustomFields.length > 0) {
-      const cleanCustom = sanitizeCustomFieldsPayload(tenantCustomFields, dynamicFieldValues, staticValues);
+    if (activeTenantCustomFields.length > 0) {
+      const cleanCustom = sanitizeCustomFieldsPayload(activeTenantCustomFields, dynamicFieldValues, staticValues);
       Object.assign(customFields, cleanCustom);
     } else {
       if (formClassification === 'Student') {
@@ -723,6 +772,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
       medicalHistories: formMedicalHistories.length > 0 ? formMedicalHistories : undefined,
       addresses: formAddress.regionPsgc || formAddress.streetAddress ? [formAddress] : undefined,
+      guardians: (() => {
+        const g = normalizeGuardianPayload(formGuardian);
+        return g ? [g] : undefined;
+      })(),
       regionPsgc: formAddress.regionPsgc || undefined,
       provincePsgc: formAddress.provincePsgc || undefined,
       cityMunicipalityPsgc: formAddress.cityMunicipalityPsgc || undefined,
@@ -895,6 +948,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       isSameAsPermanent: false,
       streetAddress: '',
     });
+    setFormGuardian(null);
+    setFormGuardianErrors({});
+    setIsGuardianPinValid(null);
   };
 
   const handleUseExistingProfile = async (patientId: string) => {
@@ -2230,22 +2286,73 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </View>
               </View>
 
-              {/* Permanent Cascading PSGC Address */}
+              {/* Home Address (Official 1NF PatientAddress Entity) */}
               <View style={{ marginBottom: theme.spacing.md }}>
                 <PsgcAddressSelector
                   value={formAddress}
-                  onChange={(next) => {
-                    setFormAddress(next);
-                    setDynamicFieldValues((prev) => ({
-                      ...prev,
-                      primary_address_line: next.streetAddress,
-                      primary_barangay: next.barangayName || '',
-                      primary_city: next.cityMunicipalityName || '',
-                      primary_province: next.provinceName || '',
-                    }));
-                  }}
+                  onChange={setFormAddress}
                 />
               </View>
+
+              {/* Legal Guardian (Official 1NF PatientGuardian Entity) */}
+              <GuardianSection
+                guardian={formGuardian}
+                onChange={setFormGuardian}
+                patientDateOfBirth={formDob}
+                errors={formGuardianErrors}
+                onClearError={clearFormGuardianError}
+                onPinValidityChange={setIsGuardianPinValid}
+              />
+
+              {/* Secondary Address (Dynamic Custom Fields) */}
+              {secondaryAddressCustomFields.length > 0 && (
+                <View style={{ marginBottom: theme.spacing.sm }}>
+                  <ThemedText style={styles.inputLabel}>Secondary Address</ThemedText>
+                  <DynamicCustomFieldsRenderer
+                    fields={secondaryAddressCustomFields}
+                    values={dynamicFieldValues}
+                    onChange={(key, val) => {
+                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
+                      setDynamicFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                    }}
+                    errors={dynamicFieldErrors}
+                    staticValues={{
+                      sex: formSex,
+                      civilStatus: formCivilStatus,
+                      dateOfBirth: formDob,
+                    }}
+                  />
+                </View>
+              )}
+
+              {/* Emergency Contact (Dynamic Custom Fields) */}
+              {emergencyCustomFields.length > 0 && (
+                <View style={{ marginBottom: theme.spacing.sm }}>
+                  <ThemedText style={styles.inputLabel}>Emergency Contact</ThemedText>
+                  <DynamicCustomFieldsRenderer
+                    fields={emergencyCustomFields}
+                    values={dynamicFieldValues}
+                    onChange={(key, val) => {
+                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
+                      setDynamicFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                    }}
+                    errors={dynamicFieldErrors}
+                    staticValues={{
+                      sex: formSex,
+                      civilStatus: formCivilStatus,
+                      dateOfBirth: formDob,
+                    }}
+                  />
+                </View>
+              )}
 
               {/* PhilHealth YAKAP Annual Enlistment Lifecycle Section */}
               <YakapEnlistmentSection
@@ -2254,11 +2361,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               />
 
               {/* Institutional & Custom Metadata Section */}
-              {tenantCustomFields.length > 0 && (
+              {otherCustomFields.length > 0 && (
                 <View style={{ marginBottom: theme.spacing.sm }}>
                   <ThemedText style={styles.inputLabel}>Additional Details</ThemedText>
                   <DynamicCustomFieldsRenderer
-                    fields={tenantCustomFields}
+                    fields={otherCustomFields}
                     values={dynamicFieldValues}
                     onChange={(key, val) => {
                       setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));

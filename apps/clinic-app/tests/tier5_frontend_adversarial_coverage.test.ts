@@ -693,12 +693,12 @@ describe('Tier 5 White-Box Frontend Adversarial Challenger Test Suite', () => {
   // SUITE 4: components/patient/EditPatientModal.tsx Demographic Unification
   // =========================================================================
   describe('Suite 4: EditPatientModal.tsx CustomFields Unification & YAKAP Preservation', () => {
-    it('4.1 BASELINE_PATIENT_CUSTOM_FIELDS contains all 7 address and emergency contact keys', () => {
+    it('4.1 BASELINE_PATIENT_CUSTOM_FIELDS contains all 7 secondary address and emergency contact keys', () => {
       const fieldKeys = BASELINE_PATIENT_CUSTOM_FIELDS.map((f: any) => f.fieldKey);
-      expect(fieldKeys).toContain('primary_address_line');
-      expect(fieldKeys).toContain('primary_barangay');
-      expect(fieldKeys).toContain('primary_city');
-      expect(fieldKeys).toContain('primary_province');
+      expect(fieldKeys).toContain('secondary_address_line');
+      expect(fieldKeys).toContain('secondary_barangay');
+      expect(fieldKeys).toContain('secondary_city');
+      expect(fieldKeys).toContain('secondary_province');
       expect(fieldKeys).toContain('emergency_contact_name');
       expect(fieldKeys).toContain('emergency_contact_phone');
       expect(fieldKeys).toContain('emergency_contact_relationship');

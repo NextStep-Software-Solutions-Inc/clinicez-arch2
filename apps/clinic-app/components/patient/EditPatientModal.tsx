@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl, PsgcAddressSelector, Select, type SelectOption } from '../ui';
 import { theme } from '../../constants/theme';
-import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition, type PatientAddressDto } from '../../services/clinicService';
+import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition, type PatientAddressDto, type PatientGuardianDto } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
 import {
@@ -30,31 +30,45 @@ import StructuredMedicalHistoryModal, {
 } from './StructuredMedicalHistoryModal';
 import ClinicalAlertsSection from './ClinicalAlertsSection';
 import YakapEnlistmentSection from './YakapEnlistmentSection';
+import GuardianSection, {
+  isMinorFromDob,
+  normalizeGuardianPayload,
+  validateGuardianDraft,
+} from './GuardianSection';
 
 export { parseChronicConditionsStringToStructured };
 
+export const LEGACY_PRIMARY_ADDRESS_FIELD_KEYS = new Set([
+  'primary_address_line',
+  'primary_barangay',
+  'primary_city',
+  'primary_province',
+  'primary_postal_code',
+  'secondary_city_province',
+]);
+
 export const BASELINE_PATIENT_CUSTOM_FIELDS: ClinicCustomFieldDefinition[] = [
   {
-    id: 'default-primary-address-line',
+    id: 'default-secondary-address-line',
     tenantId: '',
     clinicId: '',
     entityType: 'ClinicPatient',
-    fieldKey: 'primary_address_line',
-    label: 'Address Line / Street',
+    fieldKey: 'secondary_address_line',
+    label: 'Secondary Street Address',
     dataType: 'Text',
     category: 'Address',
     isRequired: false,
     displayOrder: 1,
-    placeholder: 'House / Unit / Street',
+    placeholder: 'Dormitory, Boarding House, Work, or Provincial Street',
     isActive: true,
   },
   {
-    id: 'default-primary-barangay',
+    id: 'default-secondary-barangay',
     tenantId: '',
     clinicId: '',
     entityType: 'ClinicPatient',
-    fieldKey: 'primary_barangay',
-    label: 'Barangay',
+    fieldKey: 'secondary_barangay',
+    label: 'Secondary Barangay',
     dataType: 'Text',
     category: 'Address',
     isRequired: false,
@@ -63,26 +77,26 @@ export const BASELINE_PATIENT_CUSTOM_FIELDS: ClinicCustomFieldDefinition[] = [
     isActive: true,
   },
   {
-    id: 'default-primary-city',
+    id: 'default-secondary-city',
     tenantId: '',
     clinicId: '',
     entityType: 'ClinicPatient',
-    fieldKey: 'primary_city',
-    label: 'City / Municipality',
+    fieldKey: 'secondary_city',
+    label: 'Secondary City / Municipality',
     dataType: 'Text',
     category: 'Address',
     isRequired: false,
     displayOrder: 3,
-    placeholder: 'City',
+    placeholder: 'City / Municipality',
     isActive: true,
   },
   {
-    id: 'default-primary-province',
+    id: 'default-secondary-province',
     tenantId: '',
     clinicId: '',
     entityType: 'ClinicPatient',
-    fieldKey: 'primary_province',
-    label: 'Province',
+    fieldKey: 'secondary_province',
+    label: 'Secondary Province',
     dataType: 'Text',
     category: 'Address',
     isRequired: false,
@@ -372,6 +386,9 @@ export function EditPatientModal({
     isSameAsPermanent: false,
     streetAddress: '',
   });
+  const [guardian, setGuardian] = useState<PatientGuardianDto | null>(null);
+  const [guardianErrors, setGuardianErrors] = useState<Record<string, string>>({});
+  const [isGuardianPinValid, setIsGuardianPinValid] = useState<boolean | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -384,8 +401,20 @@ export function EditPatientModal({
     });
   };
 
+  const clearGuardianError = (field: string) => {
+    setGuardianErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
   const effectiveCustomFields = useMemo(() => {
-    const existingKeys = new Set(tenantCustomFields.map((f) => f.fieldKey));
+    const activeTenantFields = tenantCustomFields.filter(
+      (f) => !LEGACY_PRIMARY_ADDRESS_FIELD_KEYS.has(f.fieldKey)
+    );
+    const existingKeys = new Set(activeTenantFields.map((f) => f.fieldKey));
     const missingBaseline = BASELINE_PATIENT_CUSTOM_FIELDS.map((bf) => {
       if (bf.fieldKey === 'emergency_contact_relationship' && emergencyRelationshipOptions.length > 0) {
         return { ...bf, options: emergencyRelationshipOptions };
@@ -394,7 +423,7 @@ export function EditPatientModal({
     }).filter(
       (bf) => !existingKeys.has(bf.fieldKey)
     );
-    return [...tenantCustomFields, ...missingBaseline].sort(
+    return [...activeTenantFields, ...missingBaseline].sort(
       (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
     );
   }, [tenantCustomFields, emergencyRelationshipOptions]);
@@ -503,12 +532,33 @@ export function EditPatientModal({
       streetAddress: existingPerm?.streetAddress ?? (patient as any).addressLine ?? cf['primary_address_line'] ?? '',
       zipCode: existingPerm?.zipCode ?? patient.zipCode ?? null,
     });
+    const existingGuardian =
+      patient.guardians && patient.guardians.length > 0
+        ? patient.guardians.find((g) => g.isPrimaryGuardian) || patient.guardians[0]
+        : null;
+    setGuardian(
+      existingGuardian
+        ? {
+            id: existingGuardian.id,
+            firstName: existingGuardian.firstName || '',
+            lastName: existingGuardian.lastName || '',
+            middleName: existingGuardian.middleName || '',
+            suffix: existingGuardian.suffix || '',
+            birthDate: existingGuardian.birthDate || '',
+            sex: existingGuardian.sex || '',
+            contactNumber: existingGuardian.contactNumber || '',
+            relationshipCode: existingGuardian.relationshipCode || '',
+            relationshipOtherSpecify: existingGuardian.relationshipOtherSpecify || '',
+            philHealthPin: existingGuardian.philHealthPin || '',
+            isPrimaryGuardian: existingGuardian.isPrimaryGuardian ?? true,
+            isEmergencyContact: existingGuardian.isEmergencyContact ?? true,
+          }
+        : null
+    );
+    setGuardianErrors({});
+    setIsGuardianPinValid(null);
     setCustomFieldValues({
       ...cf,
-      primary_address_line: existingPerm?.streetAddress ?? cf['primary_address_line'] ?? (patient as any).addressLine ?? '',
-      primary_barangay: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (patient as any).barangay ?? '',
-      primary_city: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (patient as any).city ?? '',
-      primary_province: existingPerm?.provinceName ?? cf['primary_province'] ?? (patient as any).province ?? '',
       emergency_contact_name: cf['emergency_contact_name'] ?? (patient as any).emergencyContactName ?? '',
       emergency_contact_phone: cf['emergency_contact_phone'] ?? (patient as any).emergencyContactPhone ?? '',
       emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (patient as any).emergencyContactRelationship ?? '',
@@ -568,6 +618,17 @@ export function EditPatientModal({
         'Invalid PhilHealth PIN',
         'Please provide a valid 12-digit PhilHealth Identification Number (Mod-11 check passed) or leave it blank.'
       );
+      return;
+    }
+
+    const guardianCheck = validateGuardianDraft(
+      guardian,
+      isMinorFromDob(dateOfBirth),
+      isGuardianPinValid
+    );
+    if (!guardianCheck.isValid) {
+      setGuardianErrors(guardianCheck.errors);
+      Alert.alert('Invalid Legal Guardian Details', guardianCheck.summary);
       return;
     }
 
@@ -637,6 +698,8 @@ export function EditPatientModal({
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
       : undefined;
 
+    const normalizedGuardian = normalizeGuardianPayload(guardian);
+
     const payload: RegisterPatientPayload = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -660,6 +723,11 @@ export function EditPatientModal({
       verificationStatus: patient.verificationStatus || 'Verified',
       medicalHistories: structuredMedicalHistories,
       addresses: permanentAddress.regionPsgc || permanentAddress.streetAddress ? [permanentAddress] : undefined,
+      guardians: normalizedGuardian
+        ? [normalizedGuardian]
+        : patient.guardians && patient.guardians.length > 0
+          ? []
+          : undefined,
       regionPsgc: permanentAddress.regionPsgc || undefined,
       provincePsgc: permanentAddress.provincePsgc || undefined,
       cityMunicipalityPsgc: permanentAddress.cityMunicipalityPsgc || undefined,
@@ -955,28 +1023,19 @@ export function EditPatientModal({
               </View>
             </View>
 
-            {/* Cascading PSGC Address Details */}
+            {/* Home Address (Official 1NF PatientAddress Entity) */}
             <View style={{ marginBottom: theme.spacing.md }}>
               <PsgcAddressSelector
                 value={permanentAddress}
-                onChange={(next) => {
-                  setPermanentAddress(next);
-                  setCustomFieldValues((prev) => ({
-                    ...prev,
-                    primary_address_line: next.streetAddress,
-                    primary_barangay: next.barangayName || '',
-                    primary_city: next.cityMunicipalityName || '',
-                    primary_province: next.provinceName || '',
-                  }));
-                }}
+                onChange={setPermanentAddress}
               />
             </View>
 
-            {/* Address Details (Dynamic Custom Fields) */}
+            {/* Secondary Address (Dynamic Custom Fields) */}
             {addressFields.length > 0 && (
               <>
                 <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-                  Address Details
+                  Secondary Address
                 </ThemedText>
                 <DynamicCustomFieldsRenderer
                   fields={addressFields}
@@ -987,6 +1046,16 @@ export function EditPatientModal({
                 />
               </>
             )}
+
+            {/* Legal Guardian (Official 1NF PatientGuardian Entity) */}
+            <GuardianSection
+              guardian={guardian}
+              onChange={setGuardian}
+              patientDateOfBirth={dateOfBirth}
+              errors={guardianErrors}
+              onClearError={clearGuardianError}
+              onPinValidityChange={setIsGuardianPinValid}
+            />
 
             {/* Emergency Contact (Dynamic Custom Fields) */}
             {emergencyFields.length > 0 && (

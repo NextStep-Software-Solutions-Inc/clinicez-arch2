@@ -27,6 +27,10 @@ public sealed class GetClinicPatientByIdQueryHandler : IRequestHandler<GetClinic
         var patient = await _patientRepo.Query()
             .AsNoTracking()
             .Include(p => p.MedicalHistories)
+            .Include(p => p.Addresses)
+            .Include(p => p.Guardians)
+            .Include(p => p.Alerts)
+            .Include(p => p.Allergies)
             .FirstOrDefaultAsync(p => p.Id == request.Id, ct);
 
         return patient == null ? null : RegisterClinicPatientCommandHandler.MapToDto(patient);

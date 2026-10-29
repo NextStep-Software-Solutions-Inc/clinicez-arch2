@@ -60,7 +60,9 @@ public sealed record RegisterClinicPatientCommand(
     string? Nationality = null,
     string? Religion = null,
     Guid? SyncPatientId = null,
-    string? GenderIdentity = null) : IRequest<ClinicPatientDto>;
+    string? GenderIdentity = null,
+    List<PatientAddressDto>? Addresses = null,
+    List<PatientGuardianDto>? Guardians = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -193,6 +195,9 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             PreferredName = request.PreferredName?.Trim(),
             Nationality = request.Nationality?.Trim(),
             Religion = request.Religion?.Trim(),
+            EmergencyContactName = NullIfWhiteSpace(request.EmergencyContactName),
+            EmergencyContactNumber = NullIfWhiteSpace(request.EmergencyContactPhone),
+            EmergencyContactRelationship = NullIfWhiteSpace(request.EmergencyContactRelationship),
             CustomFields = customFields,
             VerificationStatus = Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var vs) ? vs : PatientVerificationStatus.Verified,
             CreatedAt = DateTime.UtcNow,
@@ -202,6 +207,78 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         if (effectiveCloudPatientId.HasValue && effectiveCloudPatientId.Value != Guid.Empty)
         {
             patient.LinkCloudAccount(effectiveCloudPatientId.Value, null);
+        }
+
+        var actor = _clinicContext.StaffId?.ToString() ?? "ClinicStaff";
+
+        if (request.Addresses != null && request.Addresses.Count > 0)
+        {
+            var deduplicatedAddresses = request.Addresses
+                .Where(HasAddressContent)
+                .GroupBy(a => ParseAddressType(a.AddressType))
+                .Select(g => (AddressType: g.Key, Dto: g.Last()));
+
+            foreach (var (addressType, addr) in deduplicatedAddresses)
+            {
+                patient.Addresses.Add(new PatientAddress
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    AddressType = addressType,
+                    IsSameAsPermanent = addr.IsSameAsPermanent,
+                    RegionPsgc = NullIfWhiteSpace(addr.RegionPsgc),
+                    ProvincePsgc = NullIfWhiteSpace(addr.ProvincePsgc),
+                    CityMunicipalityPsgc = NullIfWhiteSpace(addr.CityMunicipalityPsgc),
+                    BarangayPsgc = NullIfWhiteSpace(addr.BarangayPsgc),
+                    RegionName = NullIfWhiteSpace(addr.RegionName),
+                    ProvinceName = NullIfWhiteSpace(addr.ProvinceName),
+                    CityMunicipalityName = NullIfWhiteSpace(addr.CityMunicipalityName),
+                    BarangayName = NullIfWhiteSpace(addr.BarangayName),
+                    StreetAddress = addr.StreetAddress?.Trim() ?? string.Empty,
+                    ZipCode = NullIfWhiteSpace(addr.ZipCode),
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = actor
+                });
+            }
+        }
+
+        if (request.Guardians != null && request.Guardians.Count > 0)
+        {
+            foreach (var g in request.Guardians.Where(HasGuardianContent))
+            {
+                var relCode = NormalizeGuardianRelationshipCode(g.RelationshipCode);
+                var guardian = new PatientGuardian
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    FirstName = g.FirstName.Trim(),
+                    LastName = g.LastName.Trim(),
+                    MiddleName = NullIfWhiteSpace(g.MiddleName),
+                    Suffix = NullIfWhiteSpace(g.Suffix),
+                    BirthDate = g.BirthDate,
+                    Sex = string.IsNullOrWhiteSpace(g.Sex) ? null : ParseBiologicalSex(g.Sex),
+                    ContactNumber = g.ContactNumber?.Trim() ?? string.Empty,
+                    RelationshipCode = relCode,
+                    RelationshipOtherSpecify = NullIfWhiteSpace(g.RelationshipOtherSpecify),
+                    PhilHealthPin = NormalizeGuardianPin(g.PhilHealthPin),
+                    IsPrimaryGuardian = g.IsPrimaryGuardian,
+                    IsEmergencyContact = g.IsEmergencyContact,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = actor
+                };
+                patient.Guardians.Add(guardian);
+
+                if (guardian.IsEmergencyContact && string.IsNullOrWhiteSpace(patient.EmergencyContactName))
+                {
+                    patient.EmergencyContactName = $"{guardian.FirstName} {guardian.LastName}".Trim();
+                    patient.EmergencyContactNumber = NullIfWhiteSpace(guardian.ContactNumber);
+                    patient.EmergencyContactRelationship = guardian.RelationshipOtherSpecify ?? guardian.RelationshipCode;
+                }
+            }
         }
 
         await _patientRepo.AddAsync(patient, ct);
@@ -533,6 +610,9 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             : null;
         if (string.IsNullOrWhiteSpace(alertsText)) alertsText = null;
 
+        var addressesDto = MapAddresses(p.Addresses);
+        var guardiansDto = MapGuardians(p.Guardians);
+
         return new ClinicPatientDto(
             p.Id,
             p.TenantId,
@@ -571,7 +651,109 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             ChronicConditions: chronicConditions,
             Alerts: alertsText,
             SyncPatientId: p.CloudPatientId,
-            GenderIdentity: p.GenderIdentity);
+            GenderIdentity: p.GenderIdentity,
+            Addresses: addressesDto,
+            Guardians: guardiansDto);
+    }
+
+    public static List<PatientAddressDto>? MapAddresses(IEnumerable<PatientAddress>? addresses)
+    {
+        if (addresses == null) return null;
+        var list = addresses
+            .Where(a => !a.IsDeleted)
+            .OrderBy(a => a.AddressType == PatientAddressType.Permanent ? 0 : 1)
+            .Select(a => new PatientAddressDto(
+                AddressType: a.AddressType.ToString(),
+                IsSameAsPermanent: a.IsSameAsPermanent,
+                RegionPsgc: a.RegionPsgc,
+                ProvincePsgc: a.ProvincePsgc,
+                CityMunicipalityPsgc: a.CityMunicipalityPsgc,
+                BarangayPsgc: a.BarangayPsgc,
+                RegionName: a.RegionName,
+                ProvinceName: a.ProvinceName,
+                CityMunicipalityName: a.CityMunicipalityName,
+                BarangayName: a.BarangayName,
+                StreetAddress: a.StreetAddress,
+                ZipCode: a.ZipCode,
+                Id: a.Id))
+            .ToList();
+        return list.Count > 0 ? list : null;
+    }
+
+    public static List<PatientGuardianDto>? MapGuardians(IEnumerable<PatientGuardian>? guardians)
+    {
+        if (guardians == null) return null;
+        var list = guardians
+            .Where(g => !g.IsDeleted)
+            .OrderByDescending(g => g.IsPrimaryGuardian)
+            .ThenBy(g => g.CreatedAt)
+            .Select(g => new PatientGuardianDto(
+                FirstName: g.FirstName,
+                LastName: g.LastName,
+                RelationshipCode: g.RelationshipCode,
+                ContactNumber: g.ContactNumber,
+                MiddleName: g.MiddleName,
+                Suffix: g.Suffix,
+                BirthDate: g.BirthDate,
+                Sex: g.Sex?.ToString(),
+                RelationshipOtherSpecify: g.RelationshipOtherSpecify,
+                PhilHealthPin: g.PhilHealthPin,
+                IsPrimaryGuardian: g.IsPrimaryGuardian,
+                IsEmergencyContact: g.IsEmergencyContact,
+                Id: g.Id))
+            .ToList();
+        return list.Count > 0 ? list : null;
+    }
+
+    public static PatientAddressType ParseAddressType(string? addressType)
+    {
+        if (!string.IsNullOrWhiteSpace(addressType) &&
+            Enum.TryParse<PatientAddressType>(addressType.Trim(), true, out var parsed))
+        {
+            return parsed;
+        }
+        return PatientAddressType.Permanent;
+    }
+
+    public static bool HasAddressContent(PatientAddressDto? addr)
+    {
+        if (addr == null) return false;
+        return !string.IsNullOrWhiteSpace(addr.RegionPsgc)
+            || !string.IsNullOrWhiteSpace(addr.ProvincePsgc)
+            || !string.IsNullOrWhiteSpace(addr.CityMunicipalityPsgc)
+            || !string.IsNullOrWhiteSpace(addr.BarangayPsgc)
+            || !string.IsNullOrWhiteSpace(addr.RegionName)
+            || !string.IsNullOrWhiteSpace(addr.ProvinceName)
+            || !string.IsNullOrWhiteSpace(addr.CityMunicipalityName)
+            || !string.IsNullOrWhiteSpace(addr.BarangayName)
+            || !string.IsNullOrWhiteSpace(addr.StreetAddress)
+            || !string.IsNullOrWhiteSpace(addr.ZipCode);
+    }
+
+    public static bool HasGuardianContent(PatientGuardianDto? g)
+    {
+        if (g == null) return false;
+        return !string.IsNullOrWhiteSpace(g.FirstName) || !string.IsNullOrWhiteSpace(g.LastName);
+    }
+
+    public static string NormalizeGuardianRelationshipCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return "LEGAL_GUARDIAN";
+        var trimmed = code.Trim();
+        return trimmed.Length <= 50 ? trimmed : trimmed[..50];
+    }
+
+    public static string? NormalizeGuardianPin(string? pin)
+    {
+        if (string.IsNullOrWhiteSpace(pin)) return null;
+        var digits = new string(pin.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(digits)) return null;
+        return digits.Length <= 12 ? digits : digits[..12];
+    }
+
+    public static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     public static BiologicalSex ParseBiologicalSex(string? sex)

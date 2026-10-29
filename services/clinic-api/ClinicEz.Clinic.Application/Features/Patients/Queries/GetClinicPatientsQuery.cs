@@ -153,7 +153,41 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.IsDeceased,
                 p.DeceasedAt,
                 p.HasActiveSafetyAlert,
-                p.CloudPatientId
+                p.CloudPatientId,
+                Addresses = p.Addresses
+                    .Where(a => !a.IsDeleted)
+                    .Select(a => new PatientAddressDto(
+                        a.AddressType.ToString(),
+                        a.IsSameAsPermanent,
+                        a.RegionPsgc,
+                        a.ProvincePsgc,
+                        a.CityMunicipalityPsgc,
+                        a.BarangayPsgc,
+                        a.RegionName,
+                        a.ProvinceName,
+                        a.CityMunicipalityName,
+                        a.BarangayName,
+                        a.StreetAddress,
+                        a.ZipCode,
+                        a.Id))
+                    .ToList(),
+                Guardians = p.Guardians
+                    .Where(g => !g.IsDeleted)
+                    .Select(g => new PatientGuardianDto(
+                        g.FirstName,
+                        g.LastName,
+                        g.RelationshipCode,
+                        g.ContactNumber,
+                        g.MiddleName,
+                        g.Suffix,
+                        g.BirthDate,
+                        g.Sex != null ? g.Sex.Value.ToString() : null,
+                        g.RelationshipOtherSpecify,
+                        g.PhilHealthPin,
+                        g.IsPrimaryGuardian,
+                        g.IsEmergencyContact,
+                        g.Id))
+                    .ToList()
             })
             .ToListAsync(ct);
 
@@ -209,7 +243,9 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 ChronicConditions: null,
                 Alerts: p.HasActiveSafetyAlert ? "Active Safety Alert" : null,
                 SyncPatientId: p.CloudPatientId,
-                GenderIdentity: p.GenderIdentity);
+                GenderIdentity: p.GenderIdentity,
+                Addresses: p.Addresses.Count > 0 ? p.Addresses : null,
+                Guardians: p.Guardians.Count > 0 ? p.Guardians : null);
         }).ToList().AsReadOnly();
     }
 }

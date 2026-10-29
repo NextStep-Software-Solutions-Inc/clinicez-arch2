@@ -4383,8 +4383,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("RelationshipCode")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("RelationshipOtherSpecify")
                         .HasMaxLength(100)

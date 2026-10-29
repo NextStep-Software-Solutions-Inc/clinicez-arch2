@@ -46,5 +46,7 @@ public record PatientChartDto(
     List<PatientAlertDto>? Alerts = null,
     List<PatientMedicalHistoryDto>? MedicalHistories = null,
     List<PatientPhysicalExamDto>? PhysicalExams = null,
-    PatientPhysicalExamDto? LatestPhysicalExam = null
+    PatientPhysicalExamDto? LatestPhysicalExam = null,
+    List<PatientAddressDto>? Addresses = null,
+    List<PatientGuardianDto>? Guardians = null
 );

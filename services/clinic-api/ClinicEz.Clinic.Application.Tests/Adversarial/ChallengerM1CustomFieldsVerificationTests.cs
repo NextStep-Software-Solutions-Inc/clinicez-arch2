@@ -384,48 +384,60 @@ public class ChallengerM1CustomFieldsVerificationTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
+
+        // Seed a legacy primary_address_line custom field to ensure installing intake retires it
+        await createHandler.Handle(new CreateCustomFieldDefinitionCommand("primary_address_line", "Legacy Primary Address", CustomFieldDataType.Text, Category: "Address", IsRequired: true, DisplayOrder: 1), CancellationToken.None);
 
         // Act - Run 1
         var run1 = await installHandler.Handle(new InstallCustomFieldTemplateCommand(ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey), CancellationToken.None);
-        run1.Should().HaveCount(15);
+        run1.Should().HaveCount(13);
+        run1.Should().NotContain(f => f.FieldKey == "primary_address_line");
 
         // Act - Run 2 & 3 (Idempotency)
         var run2 = await installHandler.Handle(new InstallCustomFieldTemplateCommand(ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey), CancellationToken.None);
-        run2.Should().HaveCount(15);
+        run2.Should().HaveCount(13);
         var run3 = await installHandler.Handle(new InstallCustomFieldTemplateCommand("intake"), CancellationToken.None); // alias
-        run3.Should().HaveCount(15);
+        run3.Should().HaveCount(13);
 
-        // Assert - Physical DB record count must remain exactly 15
+        // Assert - Active DB record count must remain 13, and retired legacy primary_address_line is inactive
         var allInDb = await repo.Query().ToListAsync();
-        allInDb.Should().HaveCount(15);
+        allInDb.Count(f => f.IsActive).Should().Be(13);
+        allInDb.First(f => f.FieldKey == "primary_address_line").IsActive.Should().BeFalse();
 
-        // Verify Address Fields
-        var primaryAddr = allInDb.First(f => f.FieldKey == "primary_address_line");
-        primaryAddr.Label.Should().Be("Primary Address (House/Unit/Street)");
-        primaryAddr.Category.Should().Be("Address");
-        primaryAddr.IsRequired.Should().BeTrue();
-        primaryAddr.DisplayOrder.Should().Be(1);
-
-        var primaryBrgy = allInDb.First(f => f.FieldKey == "primary_barangay");
-        primaryBrgy.Category.Should().Be("Address");
-        primaryBrgy.DisplayOrder.Should().Be(2);
-
-        var primaryCity = allInDb.First(f => f.FieldKey == "primary_city");
-        primaryCity.Category.Should().Be("Address");
-        primaryCity.IsRequired.Should().BeTrue();
-        primaryCity.DisplayOrder.Should().Be(3);
-
+        // Verify Secondary Address Fields (Home Address is an official PatientAddress entity)
         var secondaryAddr = allInDb.First(f => f.FieldKey == "secondary_address_line");
+        secondaryAddr.Label.Should().Be("Secondary Street Address");
         secondaryAddr.Category.Should().Be("Address");
         secondaryAddr.IsRequired.Should().BeFalse();
-        secondaryAddr.DisplayOrder.Should().Be(6);
+        secondaryAddr.DisplayOrder.Should().Be(1);
+
+        var secondaryBrgy = allInDb.First(f => f.FieldKey == "secondary_barangay");
+        secondaryBrgy.Category.Should().Be("Address");
+        secondaryBrgy.IsRequired.Should().BeFalse();
+        secondaryBrgy.DisplayOrder.Should().Be(2);
+
+        var secondaryCity = allInDb.First(f => f.FieldKey == "secondary_city");
+        secondaryCity.Category.Should().Be("Address");
+        secondaryCity.IsRequired.Should().BeFalse();
+        secondaryCity.DisplayOrder.Should().Be(3);
+
+        var secondaryProvince = allInDb.First(f => f.FieldKey == "secondary_province");
+        secondaryProvince.Category.Should().Be("Address");
+        secondaryProvince.IsRequired.Should().BeFalse();
+        secondaryProvince.DisplayOrder.Should().Be(4);
+
+        var secondaryPostal = allInDb.First(f => f.FieldKey == "secondary_postal_code");
+        secondaryPostal.Category.Should().Be("Address");
+        secondaryPostal.IsRequired.Should().BeFalse();
+        secondaryPostal.DisplayOrder.Should().Be(5);
 
         // Verify Emergency Contact Fields
         var emergencyName = allInDb.First(f => f.FieldKey == "emergency_contact_name");
         emergencyName.Category.Should().Be("Emergency Contacts");
         emergencyName.IsRequired.Should().BeTrue();
-        emergencyName.DisplayOrder.Should().Be(8);
+        emergencyName.DisplayOrder.Should().Be(6);
 
         var emergencyRel = allInDb.First(f => f.FieldKey == "emergency_contact_relationship");
         emergencyRel.Category.Should().Be("Emergency Contacts");
@@ -461,7 +473,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         // Verify Standalone presets
         var addrTemplate = ClinicCustomFieldTemplatesCatalog.GetTemplate(ClinicCustomFieldTemplatesCatalog.PatientIntakeAddressKey);
         addrTemplate.Should().NotBeNull();
-        addrTemplate!.FieldCount.Should().Be(7);
+        addrTemplate!.FieldCount.Should().Be(5);
 
         var emergTemplate = ClinicCustomFieldTemplatesCatalog.GetTemplate(ClinicCustomFieldTemplatesCatalog.PatientIntakeEmergencyKey);
         emergTemplate.Should().NotBeNull();

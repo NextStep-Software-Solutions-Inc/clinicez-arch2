@@ -59,6 +59,27 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
 
         var existingMap = existingFields.ToDictionary(f => f.FieldKey, StringComparer.OrdinalIgnoreCase);
 
+        if (string.Equals(template.Key, ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(template.Key, ClinicCustomFieldTemplatesCatalog.PatientIntakeAddressKey, StringComparison.OrdinalIgnoreCase))
+        {
+            var retiredPrimaryAddressKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "primary_address_line",
+                "primary_barangay",
+                "primary_city",
+                "primary_province",
+                "primary_postal_code",
+                "secondary_city_province"
+            };
+
+            foreach (var obsolete in existingFields.Where(f => retiredPrimaryAddressKeys.Contains(f.FieldKey) && f.IsActive))
+            {
+                obsolete.IsActive = false;
+                obsolete.UpdatedAt = DateTime.UtcNow;
+                obsolete.UpdatedBy = "ClinicAdmin";
+            }
+        }
+
         foreach (var fieldTemplate in template.Fields)
         {
             if (existingMap.TryGetValue(fieldTemplate.FieldKey, out var existing))

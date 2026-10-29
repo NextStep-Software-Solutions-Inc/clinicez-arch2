@@ -358,6 +358,22 @@ export interface PatientAddressDto {
   zipCode?: string | null;
 }
 
+export interface PatientGuardianDto {
+  id?: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string | null;
+  suffix?: string | null;
+  birthDate?: string | null;
+  sex?: string | null;
+  contactNumber: string;
+  relationshipCode: string;
+  relationshipOtherSpecify?: string | null;
+  philHealthPin?: string | null;
+  isPrimaryGuardian: boolean;
+  isEmergencyContact: boolean;
+}
+
 export interface EncounterReviewOfSystemsItemDto {
   id?: string;
   optionCode: string;
@@ -1663,6 +1679,8 @@ export interface PatientChart {
   dentalProcedures?: ClinicalProcedureRecord[];
   medicalCertificates?: MedicalCertificateRecord[];
   referralLetters?: ReferralLetterRecord[];
+  addresses?: PatientAddressDto[];
+  guardians?: PatientGuardianDto[];
 }
 
 export type ToothStatus =
@@ -1795,6 +1813,7 @@ export interface ClinicPatient {
   activeQueueItemId?: string | null;
   pastMedicalHistories?: MedicalHistoryItemPayload[];
   addresses?: PatientAddressDto[];
+  guardians?: PatientGuardianDto[];
   regionPsgc?: string | null;
   provincePsgc?: string | null;
   cityMunicipalityPsgc?: string | null;
@@ -1879,6 +1898,7 @@ export interface RegisterPatientPayload {
   structuredAllergies?: CreateAllergyPayload[];
   medicalHistories?: MedicalHistoryItemPayload[];
   addresses?: PatientAddressDto[];
+  guardians?: PatientGuardianDto[];
   regionPsgc?: string | null;
   provincePsgc?: string | null;
   cityMunicipalityPsgc?: string | null;

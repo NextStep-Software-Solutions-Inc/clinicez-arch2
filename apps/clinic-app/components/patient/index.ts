@@ -65,3 +65,13 @@ export {
   default as YakapEnlistmentSection,
   type YakapEnlistmentSectionProps,
 } from './YakapEnlistmentSection';
+
+export {
+  default as GuardianSection,
+  createEmptyGuardianDraft,
+  isMinorFromDob,
+  hasAnyGuardianInput,
+  normalizeGuardianPayload,
+  validateGuardianDraft,
+  type GuardianSectionProps,
+} from './GuardianSection';

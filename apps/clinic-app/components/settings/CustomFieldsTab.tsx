@@ -91,9 +91,9 @@ export interface TemplateBundlePreset {
 const TEMPLATE_BUNDLES: TemplateBundlePreset[] = [
   {
     key: 'intake',
-    title: 'Patient Intake: Address & Emergency Contacts',
-    subtitle: '14 Fields · Primary & Secondary Addresses + Emergency Contacts with phone, relationship, and address',
-    badge: '14 Fields · Intake Standard',
+    title: 'Patient Intake: Secondary Address & Emergency Contacts',
+    subtitle: '13 Fields · Secondary Address + Primary & Secondary Emergency Contacts',
+    badge: '13 Fields · Intake Standard',
     icon: 'emergency',
   },
   {
