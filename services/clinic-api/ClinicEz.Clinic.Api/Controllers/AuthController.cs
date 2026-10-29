@@ -73,6 +73,11 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> Bootstrap([FromBody] BootstrapRequest request, CancellationToken ct) =>
         ToResult(await _auth.BootstrapAsync(request with { Workspace = request.Workspace ?? WorkspaceHeader }, ct));
 
+    [HttpPost("recover-admin")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RecoverAdmin([FromBody] RecoverAdminRequest request, CancellationToken ct) =>
+        ToResult(await _auth.RecoverAdminAsync(request with { Workspace = request.Workspace ?? WorkspaceHeader }, ct));
+
     [HttpGet("invitations/{token}")]
     [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<ClinicStaffInvitationDetailsDto>>> GetInvitationDetails(string token, CancellationToken ct)
@@ -134,7 +139,7 @@ public sealed class AuthController : ControllerBase
             AuthFailure.WorkspaceNotFound => StatusCodes.Status404NotFound,
             AuthFailure.NotFound => StatusCodes.Status404NotFound,
             AuthFailure.ActivationRequired => StatusCodes.Status403Forbidden,
-            AuthFailure.LicenseTampered => StatusCodes.Status403Forbidden,
+            AuthFailure.LicenseTampered => StatusCodes.Status400BadRequest,
             AuthFailure.AlreadyBootstrapped => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };

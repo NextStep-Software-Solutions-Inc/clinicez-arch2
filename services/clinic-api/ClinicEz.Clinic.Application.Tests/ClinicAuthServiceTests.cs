@@ -439,4 +439,250 @@ public class ClinicAuthServiceTests
         current.Should().NotBeNull();
         current!.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
     }
+
+    [Fact]
+    public async Task RecoverAdmin_ValidLicenseAndAdminEmail_SucceedsAndUnlocksAccount()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var admin = await f.Db.StaffMembers.SingleAsync();
+        var initialVersion = admin.TokenVersion;
+        admin.FailedLoginCount = 5;
+        admin.LockoutEnd = DateTime.UtcNow.AddMinutes(15);
+        admin.MustChangePassword = true;
+        await f.Db.SaveChangesAsync();
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "owner@clinic.test",
+            "New-Strong-Pass-123!",
+            "workstation-1");
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeTrue(outcome.Message);
+        outcome.Tokens.Should().NotBeNull();
+        outcome.Tokens!.AccessToken.Should().NotBeNullOrWhiteSpace();
+        outcome.Tokens.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        outcome.Tokens.User.Email.Should().Be("owner@clinic.test");
+        outcome.Tokens.User.Role.Should().Be("Admin");
+
+        var updatedAdmin = await f.Db.StaffMembers.SingleAsync();
+        updatedAdmin.FailedLoginCount.Should().Be(0);
+        updatedAdmin.LockoutEnd.Should().BeNull();
+        updatedAdmin.MustChangePassword.Should().BeFalse();
+        updatedAdmin.IsActive.Should().BeTrue();
+        updatedAdmin.Status.Should().Be(StaffAccountStatus.Active);
+        updatedAdmin.TokenVersion.Should().Be(initialVersion + 1);
+
+        // Subsequent login succeeds with the new password
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", "New-Strong-Pass-123!", "workstation-1"));
+        login.Ok.Should().BeTrue(login.Message);
+        login.Tokens.Should().NotBeNull();
+
+        // Old password no longer works
+        var oldLogin = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, "workstation-1"));
+        oldLogin.Ok.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_DefaultsToLicenseOwnerEmail_WhenEmailNotProvided()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            null,
+            "BrandNew-Strong-99!",
+            "workstation-1");
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeTrue(outcome.Message);
+        outcome.Tokens.Should().NotBeNull();
+        outcome.Tokens!.User.Email.Should().Be("owner@clinic.test");
+
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", "BrandNew-Strong-99!", null));
+        login.Ok.Should().BeTrue(login.Message);
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RejectsNonAdminStaff()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var nurse = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = f.TenantId,
+            ClinicId = f.ClinicId,
+            FirstName = "Nancy",
+            LastName = "Nurse",
+            Email = "nurse@clinic.test",
+            Role = StaffRole.Nurse,
+            IsActive = true,
+            PasswordHash = new FacilityPasswordHasher().Hash("NurseOriginalPass1!"),
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "test"
+        };
+        f.Db.StaffMembers.Add(nurse);
+        await f.Db.SaveChangesAsync();
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "nurse@clinic.test",
+            "Attempted-Admin-Pass-1!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.InvalidRequest);
+        outcome.Message.Should().Contain("Only clinic administrator");
+
+        var storedNurse = await f.Db.StaffMembers.SingleAsync(s => s.Id == nurse.Id);
+        storedNurse.PasswordHash.Should().Be(nurse.PasswordHash);
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RejectsTamperedLicense()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var tampered = f.License[..^4] + "AAAA";
+
+        var request = new RecoverAdminRequest(
+            null,
+            tampered,
+            "owner@clinic.test",
+            "New-Strong-Pass-123!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.LicenseTampered);
+
+        // Password remains original
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null));
+        login.Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RejectsForeignLicenseNotMatchingFacility()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var foreignClinicId = Guid.NewGuid();
+        var foreignTenantId = Guid.NewGuid().ToString();
+        var foreignLicense = SignLicense(foreignClinicId, foreignTenantId, "foreign@clinic.test");
+
+        var request = new RecoverAdminRequest(
+            f.ClinicId.ToString(),
+            foreignLicense,
+            "owner@clinic.test",
+            "New-Strong-Pass-123!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.InvalidRequest);
+        outcome.Message.Should().Be("The license key does not match this facility.");
+
+        // Credentials were not mutated
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null));
+        login.Ok.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("short1")]
+    [InlineData("alllettersnodigits")]
+    [InlineData("12345678901234")]
+    public async Task RecoverAdmin_RejectsWeakPassword(string weakPassword)
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "owner@clinic.test",
+            weakPassword,
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.WeakPassword);
+
+        // Password was not mutated
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null));
+        login.Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_RevokesExistingActiveSessionsAndRefreshTokens()
+    {
+        var f = await CreateAsync();
+        var boot = (await f.Service.BootstrapAsync(Bootstrap(f))).Tokens!;
+
+        var admin = await f.Db.StaffMembers.SingleAsync();
+        var initialVersion = admin.TokenVersion;
+
+        var session1 = (await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, "device-1"))).Tokens!;
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "owner@clinic.test",
+            "Recovered-Strong-Pass-1!",
+            "device-recovery");
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeTrue(outcome.Message);
+        f.AccessCache.Received().Invalidate(admin.Id);
+
+        // Pre-recovery refresh tokens are revoked
+        (await f.Service.RefreshAsync(boot.RefreshToken)).Ok.Should().BeFalse();
+        (await f.Service.RefreshAsync(session1.RefreshToken)).Ok.Should().BeFalse();
+
+        // TokenVersion is bumped in database
+        var reloadedAdmin = await f.Db.StaffMembers.SingleAsync();
+        reloadedAdmin.TokenVersion.Should().Be(initialVersion + 1);
+
+        // New recovery refresh token is valid
+        var refreshed = await f.Service.RefreshAsync(outcome.Tokens!.RefreshToken);
+        refreshed.Ok.Should().BeTrue(refreshed.Message);
+    }
+
+    [Fact]
+    public async Task RecoverAdmin_FailsWhenStaffNotFound()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var request = new RecoverAdminRequest(
+            null,
+            f.License,
+            "nonexistent@clinic.test",
+            "New-Strong-Pass-123!",
+            null);
+
+        var outcome = await f.Service.RecoverAdminAsync(request);
+
+        outcome.Ok.Should().BeFalse();
+        outcome.Failure.Should().Be(AuthFailure.NotFound);
+        outcome.Message.Should().Contain("No staff member matching this email address was found in this facility.");
+    }
 }
+

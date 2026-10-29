@@ -2009,3 +2009,53 @@ Work strictly inside the local monorepo directory `/Users/macuser/.gemini/antigr
 - [ ] Launching `apps/admin-web` on port `3001` and `apps/portal-web` on port `3000` locally succeeds: `http://localhost:3001/` and `http://localhost:3001/sign-in` return `200` and render cleanly in a headless browser / DOM smoke check with `0` uncaught console/page errors, while `http://localhost:3000/admin` returns `404` (confirming clean removal without redirect shims), and all spawned local server processes are cleanly terminated afterward.
 - [ ] Programmatic token check (`bun run lint:admin`) exits `0` and verifies **0** hardcoded `#hex` color values and **0** direct `palette` imports across all `.tsx`/`.jsx` files in `apps/admin-web/src/`.
 - [ ] An independent `clinicez-ui-ux-expert` audit against `.agents/skills/clinicez-ui-ux-expert/SKILL.md` Section 6 confirms: (1) semantic `@clinicez/design-tokens` light (`#0D6963` Teal) and dark (`#34C3A6` Teal on `#0A1020`/`#0F172A` Slate) theme mappings in CSS variables, (2) high-density Governance Workstation shell with collapsible grouped sidebar, `⌘K` command palette, dynamic environment badge, MFA/session indicator, and theme toggle, (3) explicit 4-state UX (Skeleton, Empty with CTA, Error with Retry, Active) on `/` and data views, (4) responsive layouts across desktop (`>=1024px`), tablet (`768px-1023px`), and mobile (`<768px`), and (5) 100% functional parity across all 9 admin modules (`Overview`, `Tenants`, `Tenant Detail`, `Plans`, `Leads`, `Blog CRM`, `Subscribers`, `Roles & Access`, `Admin Users`, `Platform Settings`), 4 operational dialogs, invitation acceptance, and password reset.
+
+
+## 2026-10-29T06:47:27Z
+
+Implement a secure, first-class Clinic Administrator account recovery mechanism in ClinicEZ using cryptographic Facility License Key verification across the backend API (`clinic-api`), the workstation frontend (`clinic-app`), and operational tooling.
+
+Working directory: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials`
+Integrity mode: development
+
+## Requirements
+
+### R1. Backend Admin Recovery Endpoint (`clinic-api`)
+Implement an anonymous, rate-limited endpoint `POST /api/v1/auth/recover-admin` in `ClinicEz.Clinic.Api` and `ClinicAuthService`:
+- Validates the cryptographic signature of the presented `LicenseToken` using `IFacilityLicenseValidator` against the facility.
+- Validates password strength policy (minimum length, character complexity).
+- Resolves the staff member by email (or defaults to the license owner email) and verifies that the account holds the `Administrator` role (`StaffRole.Admin` or role name `"Clinic Administrator"`).
+- Updates the administrator's password hash (`PasswordHash`), clears `FailedLoginCount` and `LockoutEnd`, sets `MustChangePassword = false`, marks `IsActive = true` and `Status = Active`, increments `TokenVersion`, and updates audit timestamps.
+- Invalidate staff access cache, revokes all existing refresh tokens for the administrator across the LAN, and issues fresh JWT access/refresh tokens.
+
+### R2. Frontend Workstation Recovery Screen (`clinic-app`)
+Implement the recovery user experience in the clinic workstation app:
+- Add a recovery service call in `services/authSession.ts` and expose it through `context/AuthContext.tsx`.
+- Create `components/auth/AdminRecoveryScreen.tsx` adhering to the ClinicEZ teal palette (`#0D6963`) that collects Facility License Key, administrator email, and new password with validation.
+- Update `components/auth/LoginScreen.tsx` to provide an accessible entry point ("Are you the clinic admin? Recover account") that seamlessly toggles the recovery view.
+
+### R3. Operational CLI Recovery Tooling (`scripts/`)
+Provide operational recovery scripts (`scripts/reset-admin-credentials.sh` and `.ps1`) allowing developers and system administrators on the production VPS or local environment to clear lockouts or generate valid one-time invitation links without writing raw SQL.
+
+### R4. Automated Verification Suite
+Add comprehensive tests:
+- Backend: Unit tests in `ClinicAuthServiceTests.cs` verifying valid recovery, tampered/foreign license rejection, non-admin rejection, weak password rejection, and session revocation.
+- Frontend: Unit tests in `apps/clinic-app/tests/adminRecovery.test.ts` verifying input validation and token handling.
+
+## Acceptance Criteria
+
+### Security & Cryptographic Integrity
+- [ ] Non-administrator accounts (e.g. Doctor, Nurse, Cashier) cannot be reset via `/api/v1/auth/recover-admin`.
+- [ ] Tampered, malformed, or mismatched facility license keys return proper HTTP 400/409 errors and prevent credential mutation.
+- [ ] Account recovery revokes all existing refresh tokens and increments `TokenVersion`, immediately invalidating active sessions on other devices.
+- [ ] Account lockout (`LockoutEnd`) and failed attempts counter are safely reset to 0 upon successful recovery.
+
+### Frontend Workstation UX
+- [ ] Users can navigate from `LoginScreen` to `AdminRecoveryScreen` and back to sign in.
+- [ ] Passwords under 8 characters or missing required characters trigger clear client-side validation errors before network submission.
+- [ ] Successful recovery persists session tokens and transitions `AuthGate` into the signed-in workstation state.
+
+### Automated Tests
+- [ ] `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceTests"` passes cleanly with 0 failures.
+- [ ] `bun x tsc --noEmit -p apps/clinic-app` succeeds with 0 type errors.
+- [ ] `bun test apps/clinic-app/tests/staffInvitations.test.ts` and new recovery tests pass cleanly.

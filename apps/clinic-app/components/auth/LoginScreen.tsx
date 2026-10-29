@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import ThemedText from '../ui/ThemedText';
@@ -9,6 +9,7 @@ import { useFacilityLicense } from '../FacilityActivationGate';
 import { useConnection } from '../connection/ConnectionGate';
 import { isValidEmail } from '../../services/passwordPolicy';
 import { AuthScreen, ErrorNotice, InfoNotice, authStyles } from './AuthScreen';
+import AdminRecoveryScreen from './AdminRecoveryScreen';
 
 /** Email + password sign-in against the facility's own user store. Works on a LAN with no internet. */
 export default function LoginScreen() {
@@ -18,6 +19,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +42,15 @@ export default function LoginScreen() {
       setBusy(false);
     }
   };
+
+  if (showRecovery) {
+    return (
+      <AdminRecoveryScreen
+        onBackToLogin={() => setShowRecovery(false)}
+        initialEmail={email}
+      />
+    );
+  }
 
   return (
     <AuthScreen
@@ -100,7 +111,33 @@ export default function LoginScreen() {
         <ThemedText variant="caption" color={theme.colors.textMuted}>
           Forgot your password? Ask a clinic administrator to issue a temporary one.
         </ThemedText>
+
+        <View style={styles.recoveryPrompt}>
+          <ThemedText variant="caption" color={theme.colors.textMuted}>
+            Are you the clinic admin?{' '}
+          </ThemedText>
+          <Pressable
+            onPress={() => setShowRecovery(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Are you the clinic admin? Recover account"
+            hitSlop={theme.spacing.xs}
+          >
+            <ThemedText variant="captionBold" color={theme.colors.primary}>
+              Recover account
+            </ThemedText>
+          </Pressable>
+        </View>
       </View>
     </AuthScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  recoveryPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    marginTop: theme.spacing.xs,
+  },
+});

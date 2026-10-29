@@ -69,3 +69,10 @@ public sealed record BootstrapRequest(string? Workspace, string? LicenseToken, s
 public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 
 public sealed record SetCredentialsRequest(string? TemporaryPassword);
+
+public sealed record RecoverAdminRequest(
+    string? Workspace,
+    string? LicenseToken,
+    string? Email,
+    string? NewPassword,
+    string? DeviceLabel = null);
