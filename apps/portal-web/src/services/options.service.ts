@@ -117,7 +117,11 @@ export const optionsService = {
       }
 
       if (response.ok) {
-        const payload: OptionsManifestResponse = await response.json();
+        const raw = await response.json();
+        const payload: OptionsManifestResponse =
+          raw && typeof raw === "object" && "data" in raw && raw.data
+            ? raw.data
+            : raw;
         const etag = response.headers.get("etag") || response.headers.get("ETag") || "";
         cachedManifest = { version: etag, data: payload };
 

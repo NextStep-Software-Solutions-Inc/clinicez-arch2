@@ -1,5 +1,6 @@
 import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
+import { optionsService } from './optionsService';
 import { SyncStatus, type SearchResponseDto, type ApiError, type EhrOptionDescriptor } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
@@ -2589,13 +2590,7 @@ export const clinicService = {
   },
 
   async getOptionSet(optionSet: string): Promise<EhrOptionDescriptor[]> {
-    try {
-      const res = await clinicApiClient.get<EhrOptionDescriptor[] | { data: EhrOptionDescriptor[] }>(`/options/${encodeURIComponent(optionSet)}`);
-      const data = (res as any)?.data?.data ?? (res as any)?.data ?? res;
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
-    }
+    return optionsService.getOptionSet(optionSet);
   },
 
   getPrescriptionSlipPdfUrl(consultationId: string, options?: { wet?: boolean }) {

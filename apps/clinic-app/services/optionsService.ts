@@ -14,6 +14,14 @@ interface CachedOptionSet {
 const memoryCache = new Map<string, CachedOptionSet>();
 const STORAGE_PREFIX = 'clinicez.ehr.options.';
 
+function sanitizeDescriptors(items: unknown): EhrOptionDescriptor[] {
+  if (!Array.isArray(items)) return [];
+  return items.filter(
+    (item): item is EhrOptionDescriptor =>
+      Boolean(item && typeof item === 'object' && typeof (item as EhrOptionDescriptor).code === 'string' && typeof (item as EhrOptionDescriptor).label === 'string'),
+  );
+}
+
 export const optionsService = {
   /**
    * Retrieves an option set by name. Uses two-tier caching (memory + device storage)
@@ -30,8 +38,11 @@ export const optionsService = {
       try {
         const stored = await getSecureItem(cacheKey);
         if (stored) {
-          cached = JSON.parse(stored) as CachedOptionSet;
-          memoryCache.set(optionSet, cached);
+          const parsed = JSON.parse(stored) as CachedOptionSet;
+          if (parsed && Array.isArray(parsed.data)) {
+            cached = { ...parsed, data: sanitizeDescriptors(parsed.data) };
+            memoryCache.set(optionSet, cached);
+          }
         }
       } catch {
         // Fallback gracefully
@@ -72,14 +83,15 @@ export const optionsService = {
 
       if (response.status === 200) {
         const envelope = response.data;
-        const data: EhrOptionDescriptor[] =
+        const raw =
           envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data
             ? envelope.data
             : Array.isArray(envelope)
             ? envelope
-            : [];
+            : null;
 
-        if (Array.isArray(data)) {
+        if (Array.isArray(raw)) {
+          const data = sanitizeDescriptors(raw);
           const etag = response.headers?.etag || response.headers?.ETag || '';
           const entry: CachedOptionSet = {
             version: etag,
@@ -110,8 +122,11 @@ export const optionsService = {
     if (!base) return null;
     const url = joinApiUrl(ensureApiPrefix(base), '/options/manifest');
     try {
-      const response = await axios.get<OptionsManifestResponse>(url, { timeout: 10_000 });
-      return response.data;
+      const response = await axios.get(url, { timeout: 10_000 });
+      const envelope = response.data;
+      return envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data
+        ? (envelope.data as OptionsManifestResponse)
+        : (envelope as OptionsManifestResponse);
     } catch {
       return null;
     }

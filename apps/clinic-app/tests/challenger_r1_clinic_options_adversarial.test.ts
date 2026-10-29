@@ -30,6 +30,7 @@ mock.module('../services/secureStorage', () => ({
 mock.module('../services/authSession', () => ({
   ensureFreshToken: mock(async () => 'mock-access-token'),
   getAccessToken: mock(() => 'mock-access-token'),
+  refreshSession: mock(async () => false),
 }));
 
 mock.module('../services/runtimeConfig', () => ({
@@ -87,6 +88,7 @@ mock.module('react-native', () => ({
 
 // Load services and helpers under test
 const { optionsService } = await import('../services/optionsService');
+const { clinicService } = await import('../services/clinicService');
 const {
   partitionBloodTypeOptions,
   isStandardBloodType,
@@ -437,5 +439,47 @@ describe('CHALLENGER R1 CLINIC OPTIONS - Suite 3: Zero Static Option Arrays Inva
       const content = readFileSync(fullPath, 'utf8');
       expect(content.includes('useEhrOptions') || content.includes('optionsService') || content.includes('getOptionSet')).toBe(true);
     }
+  });
+
+  test('Dimension 13: clinicService.getOptionSet delegates to optionsService and never leaks [data, error] tuple into opts.map(o => o.label)', async () => {
+    optionsService.clearMemoryCache();
+    inMemoryStore.clear();
+
+    const mockDescriptors: EhrOptionDescriptor[] = [
+      { code: 'MALE', label: 'Male', philHealthCode: 'M', philHealthLibrary: 'lib_sex' },
+      { code: 'FEMALE', label: 'Female', philHealthCode: 'F', philHealthLibrary: 'lib_sex' },
+    ];
+
+    const getSpy = spyOn(axios, 'get').mockResolvedValueOnce({
+      status: 200,
+      headers: { etag: '"etag-sex-regression"' },
+      data: { succeeded: true, data: mockDescriptors },
+    } as any);
+
+    const opts = await clinicService.getOptionSet('sex');
+    expect(opts.map((o) => o.label)).toEqual(['Male', 'Female']);
+
+    getSpy.mockRestore();
+  });
+
+  test('Dimension 14: optionsService.getManifest unwraps ApiResponse<OptionsManifestResponse> envelope', async () => {
+    const getSpy = spyOn(axios, 'get').mockResolvedValueOnce({
+      status: 200,
+      data: {
+        succeeded: true,
+        data: {
+          manifestVersion: 'abc123manifest',
+          optionSets: { sex: 'hash-sex', civil_status: 'hash-civil' },
+        },
+      },
+    } as any);
+
+    const manifest = await optionsService.getManifest();
+    expect(manifest).toEqual({
+      manifestVersion: 'abc123manifest',
+      optionSets: { sex: 'hash-sex', civil_status: 'hash-civil' },
+    });
+
+    getSpy.mockRestore();
   });
 });
