@@ -33,18 +33,18 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var problemRepo = TestDbHelper.CreateRepository<PatientProblem>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var problemRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var attachRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var attachRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -55,14 +55,14 @@ public class GetPatientChartQueryHandlerTests
             MiddleName = "Mercado",
             Suffix = "Jr.",
             DateOfBirth = new DateOnly(1985, 8, 20),
-            Gender = "Male",
-            CivilStatus = "Married",
+            Gender = Gender.Male,
+            CivilStatus = CivilStatus.Married,
             ContactNumber = "09171234567",
             Email = "juan@example.com",
             PhilHealthNumber = "12-345678901-8",
             SeniorCitizenId = null,
             PwdId = "PWD-12345",
-            BloodType = "O+",
+            BloodType = BloodType.OPositive,
             CustomFields = new Dictionary<string, object?>
             {
                 ["yakap_enlistments"] = new List<Dictionary<string, object?>>
@@ -79,20 +79,20 @@ public class GetPatientChartQueryHandlerTests
         await patientRepo.AddAsync(patient, CancellationToken.None);
 
         // Problem
-        var problem = new PatientProblem
+        var problem = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
             PatientId = patientId,
             Icd10Code = "I10",
-            ProblemTitle = "Essential (primary) hypertension",
+            ConditionTitle = "Essential (primary) hypertension",
             Status = ProblemStatus.Active,
             Severity = ProblemSeverity.Moderate,
             IsChronicNcd = true,
             OnsetDate = new DateOnly(2020, 1, 15),
-            RecordedByDoctorId = Guid.NewGuid(),
-            RecordedByDoctorName = "Dr. Jose Santos"
+            RecordedByStaffId = Guid.NewGuid(),
+            RecordedByStaffName = "Dr. Jose Santos"
         };
         await problemRepo.AddAsync(problem, CancellationToken.None);
 
@@ -145,7 +145,7 @@ public class GetPatientChartQueryHandlerTests
         await immRepo.AddAsync(imm, CancellationToken.None);
 
         // Attachment
-        var attach = new ClinicRecordAttachment
+        var attach = new RecordAttachment
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -218,11 +218,11 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new GetPatientChartQueryHandler(
             consultRepo, triageRepo, procRepo, labRepo, invoiceRepo, _clinicContext,
@@ -246,9 +246,9 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
 
         var handler = new GetPatientChartQueryHandler(consultRepo, triageRepo, procRepo, labRepo, invoiceRepo, _clinicContext);
@@ -264,15 +264,15 @@ public class GetPatientChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -378,7 +378,7 @@ public class GetPatientChartQueryHandlerTests
         }, CancellationToken.None);
 
         // Dental procedure with tooth tagging
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -394,7 +394,7 @@ public class GetPatientChartQueryHandlerTests
         }, CancellationToken.None);
 
         // Non-dental procedure
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -434,7 +434,7 @@ public class GetPatientChartQueryHandlerTests
         tooth16Decay.Surface.Should().Be("MD");
         tooth16Decay.RecordedBy.Should().Be("Dr. Santos"); // CreatedBy fallback
 
-        // 2. ClinicalProcedureDto retains ToothNumber and ToothSurface
+        // 2. ProcedureDto retains ToothNumber and ToothSurface
         chart.ProceduresHistory.Should().HaveCount(2);
         var dentalProc = chart.ProceduresHistory.First(p => p.ToothNumber == 16);
         dentalProc.ToothNumber.Should().Be(16);

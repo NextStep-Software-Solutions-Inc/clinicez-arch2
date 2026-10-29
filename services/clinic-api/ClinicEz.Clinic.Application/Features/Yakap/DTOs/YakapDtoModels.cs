@@ -476,27 +476,8 @@ public sealed record YakapMasterlistProxyResponse(
     string? RawXml,
     string? ErrorMessage);
 
-public sealed record ConfigurePhilHealthCredentialsProxyRequest(
-    System.Guid TenantId,
-    string FacilityName,
-    string AccreditationNumber,
-    string PmccNumber,
-    string SoftwareCertificateId,
-    string Username,
-    string Password,
-    string CipherKey,
-    string? KonsultaEndpoint = null);
-
-public sealed record PhilHealthConfigStatusResponse(
-    System.Guid TenantId,
-    string FacilityName,
-    string AccreditationNumber,
-    string PmccNumber,
-    string SoftwareCertificateId,
-    string KonsultaEndpoint,
-    bool IsConfigured,
-    bool IsActive,
-    System.DateTimeOffset? UpdatedAt);
+// Note: ConfigurePhilHealthCredentialsProxyRequest and PhilHealthConfigStatusResponse
+// are canonically defined in ClinicEz.Clinic.Application.Common.Interfaces.
 
 public sealed record ConfigureClinicPhilHealthCredentialsRequest(
     string FacilityName,

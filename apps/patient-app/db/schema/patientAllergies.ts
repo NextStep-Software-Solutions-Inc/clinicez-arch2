@@ -9,7 +9,7 @@ export const patientAllergies = sqliteTable('patient_allergies', {
     .references(() => patients.id, { onDelete: 'cascade' }),
   allergen: text('allergen').notNull(),
   reactionType: text('reaction_type'),
-  severity: text('severity', { enum: ['Mild', 'Moderate', 'Severe', 'LifeThreatening'] }),
+  severity: text('severity'),
   management: text('management'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   // Timestamps

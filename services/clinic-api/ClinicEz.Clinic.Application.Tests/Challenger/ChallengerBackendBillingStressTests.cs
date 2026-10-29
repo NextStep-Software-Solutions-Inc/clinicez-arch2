@@ -45,7 +45,7 @@ public class ChallengerBackendBillingStressTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -136,7 +136,7 @@ public class ChallengerBackendBillingStressTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -194,7 +194,7 @@ public class ChallengerBackendBillingStressTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -258,7 +258,7 @@ public class ChallengerBackendBillingStressTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -323,7 +323,7 @@ public class ChallengerBackendBillingStressTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -398,7 +398,7 @@ public class ChallengerBackendBillingStressTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
@@ -482,7 +482,7 @@ public class ChallengerBackendBillingStressTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var docAId = Guid.NewGuid();
         var docAName = "Dr. Alice Ramos";
@@ -595,7 +595,7 @@ public class ChallengerBackendBillingStressTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var docAId = Guid.NewGuid();
         var docAName = "Dr. Alice Ramos";
@@ -691,7 +691,7 @@ public class ChallengerBackendBillingStressTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 

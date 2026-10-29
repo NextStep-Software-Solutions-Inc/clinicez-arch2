@@ -15,9 +15,9 @@ public sealed record GetClinicPatientByIdQuery(Guid Id) : IRequest<ClinicPatient
 
 public sealed class GetClinicPatientByIdQueryHandler : IRequestHandler<GetClinicPatientByIdQuery, ClinicPatientDto?>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
 
-    public GetClinicPatientByIdQueryHandler(IRepository<ClinicPatient> patientRepo)
+    public GetClinicPatientByIdQueryHandler(IRepository<Patient> patientRepo)
     {
         _patientRepo = patientRepo;
     }
@@ -26,7 +26,7 @@ public sealed class GetClinicPatientByIdQueryHandler : IRequestHandler<GetClinic
     {
         var patient = await _patientRepo.Query()
             .AsNoTracking()
-            .Include(p => p.PastMedicalHistories)
+            .Include(p => p.MedicalHistories)
             .FirstOrDefaultAsync(p => p.Id == request.Id, ct);
 
         return patient == null ? null : RegisterClinicPatientCommandHandler.MapToDto(patient);

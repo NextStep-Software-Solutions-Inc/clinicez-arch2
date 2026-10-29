@@ -74,4 +74,6 @@ public sealed record ClinicSettingsDto(
     string? BranchKonsultaEndpoint = null,
     string? TenantSlug = null,
     string? FacilitySlug = null,
-    string? TvDisplayPin = null);
+    string? TvDisplayPin = null,
+    bool IsKioskIntakeEnabled = false,
+    int KioskTokenVersion = 1);

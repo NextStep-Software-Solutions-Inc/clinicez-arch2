@@ -8,7 +8,7 @@ namespace ClinicEz.Clinic.Domain.Entities;
 /// (flaky LAN, app killed mid-sync) can resend the same request with the same key and receive this stored result instead
 /// of creating a duplicate patient, upload or order.
 /// </summary>
-public sealed class IdempotencyRecord : BaseEntity
+public sealed class IdempotencyRecord : ClinicScopedEntity
 {
     /// <summary>Who sent it (clinic + staff member), so keys never collide across users.</summary>
     public required string Scope { get; set; }

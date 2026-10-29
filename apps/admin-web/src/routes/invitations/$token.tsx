@@ -2,29 +2,52 @@ import React, { useEffect, useState } from 'react';
 import { createRoute, Link } from '@tanstack/react-router';
 import { Route as rootRoute } from '../__root';
 import { adminService, AdminInvitationDetailsDto } from '@/services/admin.service';
-import { useAuth } from '@clerk/clerk-react';
-import { IconMailCheck, IconArrowRight } from '@tabler/icons-react';
+import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
+import {
+  IconMailCheck,
+  IconArrowRight,
+  IconAlertTriangle,
+  IconSwitchHorizontal,
+} from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 import { setupAxiosInterceptors } from '@/lib/api';
+import {
+  isUserEmailMatched,
+  INVITATION_EMAIL_MISMATCH_MESSAGE,
+  type ClerkEmailLikeUser,
+} from '@/lib/invitationEmailMatcher';
 
 function InvitationAcceptPage() {
   const { token } = Route.useParams();
   const [invite, setInvite] = useState<AdminInvitationDetailsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   let isSignedIn = false;
+  let user: ClerkEmailLikeUser | null | undefined = null;
+  let signOutFn: ((opts?: { redirectUrl?: string }) => Promise<void>) | null = null;
+
   try {
     const auth = useAuth();
+    const userState = useUser();
+    const clerk = useClerk();
     isSignedIn = Boolean(auth.isSignedIn);
+    user = userState.user;
+    signOutFn = clerk.signOut;
     if (auth.getToken) {
       setupAxiosInterceptors(auth.getToken);
     }
   } catch {
     // outside clerk provider in unit tests
   }
+
+  const isEmailMatched = Boolean(
+    isSignedIn && user && invite?.email && isUserEmailMatched(user, invite.email)
+  );
+  const isEmailMismatch = Boolean(isSignedIn && invite && !isEmailMatched);
 
   useEffect(() => {
     async function fetchInvite() {
@@ -43,6 +66,7 @@ function InvitationAcceptPage() {
   }, [token]);
 
   const handleAccept = async () => {
+    if (!invite || !isEmailMatched) return;
     try {
       setAccepting(true);
       await adminService.acceptInvitation(token);
@@ -52,6 +76,18 @@ function InvitationAcceptPage() {
       toast.error(err?.message || 'Failed to accept invitation.');
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+    if (!token || !token.trim() || !signOutFn) return;
+    setSwitchingAccount(true);
+    try {
+      const trimmedToken = token.trim();
+      await signOutFn({ redirectUrl: `/invitations/${encodeURIComponent(trimmedToken)}` });
+    } catch {
+      setSwitchingAccount(false);
+      toast.error('Failed to switch account. Please sign out and try again.');
     }
   };
 
@@ -89,9 +125,17 @@ function InvitationAcceptPage() {
         </div>
 
         {error ? (
-          <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 space-y-2">
-            <p className="font-semibold">Unable to accept invitation:</p>
-            <p>{error}</p>
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 space-y-2">
+              <p className="font-semibold">Unable to accept invitation:</p>
+              <p>{error}</p>
+            </div>
+            <Link
+              to="/"
+              className="w-full flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-text bg-surface-muted hover:bg-border rounded-xl transition-colors"
+            >
+              Return to Homepage
+            </Link>
           </div>
         ) : invite ? (
           <div className="space-y-4">
@@ -110,12 +154,39 @@ function InvitationAcceptPage() {
               </div>
             </div>
 
-            {isSignedIn ? (
+            {isEmailMismatch ? (
+              <div className="space-y-3">
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-700 dark:text-amber-300 space-y-1.5">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <IconAlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Account Mismatch</span>
+                  </div>
+                  <p>{INVITATION_EMAIL_MISMATCH_MESSAGE}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSwitchAccount}
+                  disabled={switchingAccount}
+                  className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  <IconSwitchHorizontal className="h-4 w-4" />
+                  <span>
+                    {switchingAccount ? 'Switching Account...' : 'Switch Account & Sign In'}
+                  </span>
+                </button>
+                <Link
+                  to="/"
+                  className="w-full flex items-center justify-center px-4 py-2.5 text-xs font-semibold text-text bg-surface-muted hover:bg-border rounded-xl transition-colors"
+                >
+                  Return to Homepage
+                </Link>
+              </div>
+            ) : isSignedIn && !isEmailMismatch ? (
               <button
                 type="button"
                 onClick={handleAccept}
-                disabled={accepting}
-                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-sm"
+                disabled={accepting || !isEmailMatched}
+                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-semibold text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors cursor-pointer shadow-sm disabled:opacity-50"
               >
                 {accepting ? 'Activating Account...' : 'Accept Invitation & Enter Workstation'}
                 <IconArrowRight className="h-4 w-4" />

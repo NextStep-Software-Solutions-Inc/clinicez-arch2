@@ -8,20 +8,16 @@ import {
   IconCrown,
   IconDashboard,
   IconGauge,
-  IconHospital,
-  IconInnerShadowTop,
-  IconPill,
   IconReportMoney,
   IconSettings,
-  IconTestPipe,
   IconCreditCard,
   IconUsers,
-  IconMapPin,
   IconFileCertificate,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/dashboard/nav-main"
 import { NavUser } from "@/components/dashboard/nav-user"
+import { NotificationsDialog } from "@/components/dashboard/NotificationsDialog"
 import { WorkspaceSwitcher } from "@/components/dashboard/WorkspaceSwitcher"
 import {
   Sidebar,
@@ -45,11 +41,17 @@ export function AppSidebar({
   name?: string; 
   clinicName?: string; 
   logoUrl?: string;
-  user?: any 
+  user?: {
+    name: string;
+    email: string;
+    avatar: string;
+    role?: string;
+  }
 } & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();
   const tenant = params.tenant as string || "demo-tenant";
   const displayName = name || clinicName;
+  const [notificationsOpen, setNotificationsOpen] = React.useState(false);
 
   const data = {
     user: user || {
@@ -114,35 +116,45 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
-            >
-              <a href={`/${tenant}/dashboard`}>
-                {logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={logoUrl} alt="" className="!size-5 rounded object-contain" referrerPolicy="no-referrer" />
-                ) : (
-                  <ClinicEzMark variant="squircle" className="!size-6 shrink-0" />
-                )}
-                <span className="text-base font-bold text-foreground truncate">{displayName} | Workspace</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <WorkspaceSwitcher currentSlug={tenant} />
-      </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavSecondary items={data.navSecondary} />
-      </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={data.user} />
-      </SidebarFooter>
-    </Sidebar>
+    <>
+      <Sidebar collapsible="offcanvas" {...props}>
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                className="data-[slot=sidebar-menu-button]:!p-1.5"
+              >
+                <a href={`/${tenant}/dashboard`}>
+                  {logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoUrl} alt="" className="!size-5 rounded object-contain" referrerPolicy="no-referrer" />
+                  ) : (
+                    <ClinicEzMark variant="squircle" className="!size-6 shrink-0" />
+                  )}
+                  <span className="text-base font-bold text-foreground truncate">{displayName} | Workspace</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <WorkspaceSwitcher currentSlug={tenant} />
+        </SidebarHeader>
+        <SidebarContent>
+          <NavMain items={data.navMain} />
+          <NavSecondary items={data.navSecondary} />
+        </SidebarContent>
+        <SidebarFooter>
+          <NavUser
+            user={data.user}
+            onOpenNotifications={() => setNotificationsOpen(true)}
+          />
+        </SidebarFooter>
+      </Sidebar>
+
+      <NotificationsDialog
+        open={notificationsOpen}
+        onOpenChange={setNotificationsOpen}
+      />
+    </>
   )
 }

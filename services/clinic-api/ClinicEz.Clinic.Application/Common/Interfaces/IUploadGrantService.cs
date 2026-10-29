@@ -10,7 +10,7 @@ namespace ClinicEz.Clinic.Application.Common.Interfaces;
 public sealed record MintedUploadGrant(string Token, string Url, DateTime ExpiresAt);
 
 /// <summary>A resolved grant with the order it belongs to and what the public upload page may show about it.</summary>
-public sealed record UploadGrantContext(UploadGrant Grant, ClinicLabOrder Order, ClinicSettings? Clinic, ClinicPatient? Patient)
+public sealed record UploadGrantContext(UploadGrant Grant, LabOrder Order, FacilitySettings? Clinic, Patient? Patient)
 {
     public bool IsUsable(DateTime utcNow) =>
         Grant.RevokedAt == null && Grant.ExpiresAt > utcNow && Grant.Used < Grant.MaxUploads;
@@ -27,7 +27,7 @@ public interface IUploadGrantService
     /// Adds a new grant to the current unit of work (the caller saves) and revokes the order's earlier unused grants of
     /// the same kind. Throws when <c>Clinic:PortalBaseUrl</c> (or <c>PORTAL_BASE_URL</c>) is not configured.
     /// </summary>
-    Task<MintedUploadGrant> MintAsync(ClinicLabOrder order, UploaderKind kind, CancellationToken ct);
+    Task<MintedUploadGrant> MintAsync(LabOrder order, UploaderKind kind, CancellationToken ct);
 
     /// <summary>Null when the token is malformed, unknown or revoked; expiry and exhaustion are reported by <see cref="UploadGrantContext.IsUsable"/>.</summary>
     Task<UploadGrantContext?> ResolveAsync(string token, CancellationToken ct);

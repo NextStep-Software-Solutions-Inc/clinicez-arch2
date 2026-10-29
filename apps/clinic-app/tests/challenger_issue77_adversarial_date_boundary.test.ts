@@ -698,10 +698,9 @@ describe('Adversarial Challenge Suite: Issue #77 Date Boundary & Custom Field En
       });
 
       expect(result['last_physical_exam_date']).toBe('2026-02-14');
-      expect(result['yakap_enlistments']).toEqual([{ caseNo: 'CASE-001', transNo: 'TRANS-001' }]);
+      expect(result['yakap_enlistments']).toBeUndefined();
       expect(result['member_type']).toBe('MM');
-      expect(result['philhealth_profile']).toBeDefined();
-      expect(result['philhealth_profile'].pin).toBe('12-345678901-2');
+      expect(result['philhealth_profile']).toBeUndefined();
     });
   });
 });

@@ -10,11 +10,8 @@ public enum ShareImportStatus { Pending, Imported, Denied, Failed }
 /// One staff-initiated request to import a patient's shared record (scan-to-fetch). Its id is the interop correlation id
 /// of the <c>patient.share.redeem</c> request, so the patient plane's <c>patient.share.snapshot</c> reply finds it.
 /// </summary>
-public sealed class ShareImport : BaseEntity
+public sealed class ShareImport : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
-
     public Guid? RequestedByStaffId { get; set; }
     public string Purpose { get; set; } = "Consultation";
 
@@ -25,7 +22,8 @@ public sealed class ShareImport : BaseEntity
     public string? DenialReason { get; set; }
     public ShareDenialCode? DenialCode { get; set; }
 
-    public Guid? ClinicPatientId { get; set; }
+    public Guid? PatientId { get; set; }
+    public Patient? Patient { get; set; }
     public string? PatientName { get; set; }
     public string? ClinicEzId { get; set; }
     public Guid? GrantId { get; set; }

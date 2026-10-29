@@ -43,13 +43,13 @@ public sealed class UpdatePatientReproductiveHistoryCommandValidator : AbstractV
 
 public sealed class UpdatePatientReproductiveHistoryCommandHandler : IRequestHandler<UpdatePatientReproductiveHistoryCommand, PatientReproductiveHistoryDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientReproductiveHistory> _reproductiveRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdatePatientReproductiveHistoryCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientReproductiveHistory> reproductiveRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
@@ -71,7 +71,7 @@ public sealed class UpdatePatientReproductiveHistoryCommandHandler : IRequestHan
         }
 
         // Gender check: male patients are not applicable
-        var isMale = patient.Gender.Equals("Male", StringComparison.OrdinalIgnoreCase);
+        var isMale = patient.Gender == Gender.Male;
         var effectiveApplicable = !isMale && request.IsApplicable;
 
         var entry = await _reproductiveRepo.Query(r => r.PatientId == request.PatientId)

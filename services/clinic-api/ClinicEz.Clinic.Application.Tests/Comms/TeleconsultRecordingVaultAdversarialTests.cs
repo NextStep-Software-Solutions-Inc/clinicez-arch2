@@ -45,14 +45,14 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
 
         // Facility explicitly disabled teleconsult recording
-        context.ClinicSettings.Add(new ClinicSettings
+        context.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -79,15 +79,15 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var segmentRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSegment>(context, sieve);
         var storage = Substitute.For<IClinicStorageService>();
 
-        context.ClinicSettings.Add(new ClinicSettings
+        context.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -97,7 +97,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
             TeleconsultRecordingRetentionDays = 90
         });
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -133,7 +133,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
         rejectedSession.RecordingState.Should().Be("Blocked");
 
         // Verify WORM audit log written
-        var auditEntry = await context.ClinicAuditEntries
+        var auditEntry = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.recording.consent.rejected");
         auditEntry.Should().NotBeNull();
         auditEntry!.Severity.Should().Be(ClinicAuditSeverities.Urgent);
@@ -164,7 +164,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
         var segmentRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSegment>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var storage = Substitute.For<IClinicStorageService>();
 
         var sessionId = Guid.NewGuid();
@@ -242,7 +242,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
             Arg.Any<CancellationToken>());
 
         // WORM audit entry created
-        var audit = await context.ClinicAuditEntries
+        var audit = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.recording.finalized");
         audit.Should().NotBeNull();
         audit!.Description.Should().Contain("HasGaps: True");
@@ -254,7 +254,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var storage = Substitute.For<IClinicStorageService>();
 
         var services = new ServiceCollection();
@@ -334,7 +334,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
 
         await storage.Received(1).DeleteEncryptedFileAsync("vault/case-99/seg0.cez", Arg.Any<CancellationToken>());
 
-        var purgeAudit = await context.ClinicAuditEntries
+        var purgeAudit = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.recording.purged");
         purgeAudit.Should().NotBeNull();
         purgeAudit!.Outcome.Should().Be(ClinicAuditOutcomes.Success);
@@ -346,7 +346,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
 
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
@@ -407,7 +407,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
         // Arrange
         var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
 
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -423,21 +423,21 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
             Description = "Immutable audit log entry test."
         };
 
-        context.ClinicAuditEntries.Add(audit);
+        context.AuditEntries.Add(audit);
         await context.SaveChangesAsync();
 
         // Act & Assert 1: Modification throws InvalidOperationException
         audit.Description = "Tampered description";
         var modifyAct = () => context.SaveChangesAsync();
         await modifyAct.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
 
         // Act & Assert 2: Deletion throws InvalidOperationException
         context.Entry(audit).State = EntityState.Unchanged;
-        context.ClinicAuditEntries.Remove(audit);
+        context.AuditEntries.Remove(audit);
         var deleteAct = () => context.SaveChangesAsync();
         await deleteAct.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
     }
 
     [Fact]
@@ -447,7 +447,7 @@ public sealed class TeleconsultRecordingVaultAdversarialTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
         var segmentRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSegment>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var storage = Substitute.For<IClinicStorageService>();
 
         var sessionId = Guid.NewGuid();

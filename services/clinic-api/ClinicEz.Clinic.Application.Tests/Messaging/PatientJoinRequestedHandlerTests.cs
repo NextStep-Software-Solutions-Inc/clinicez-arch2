@@ -118,7 +118,7 @@ public class PatientJoinRequestedHandlerTests
         patient.LastName.Should().Be("Rizal");
         patient.MiddleName.Should().Be("Protacio");
         patient.Suffix.Should().Be("Jr");
-        patient.VerificationStatus.Should().Be("PendingVerification");
+        patient.VerificationStatus.Should().Be(PatientVerificationStatus.PendingVerification);
         patient.PatientCode.Should().MatchRegex(@"^PAT-\d{4}-\d{5}$");
         patient.CustomFields.Should().ContainKey("join_tracking_id");
         patient.CustomFields["join_tracking_id"]!.ToString().Should().Be(correlationId.ToString());
@@ -309,17 +309,15 @@ public class PatientJoinRequestedHandlerTests
 
         var patient = await db.Patients.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.ClinicId == clinicId);
         patient.Should().NotBeNull();
-        patient!.CustomFields.Should().ContainKey("philhealth_profile");
-
-        var profile = patient.CustomFields["philhealth_profile"] as PhilHealthPatientProfileDto;
-        profile.Should().NotBeNull();
-        profile!.MemberType.Should().Be("DD");
-        profile.Pin.Should().Be("10-000000000-5");
-        profile.MemberPin.Should().Be("12-345678901-8");
-        profile.DependentRelationship.Should().Be("P");
-        profile.MemberLastName.Should().Be("Rizal");
-        profile.MemberFirstName.Should().Be("Juan Protacio");
-        profile.MemberBirthDate.Should().Be("1980-05-01");
+        var membership = await db.PatientPhilHealthMemberships.IgnoreQueryFilters().FirstOrDefaultAsync(m => m.PatientId == patient!.Id);
+        membership.Should().NotBeNull();
+        membership!.MemberType.Should().Be(PhilHealthMemberType.DD);
+        patient.PhilHealthNumber.Should().Be("10-000000000-5");
+        membership.PrincipalMemberPin.Should().Be("12-345678901-8");
+        membership.DependentRelationship.Should().Be(PhilHealthDependentRelationship.P);
+        membership.PrincipalLastName.Should().Be("Rizal");
+        membership.PrincipalFirstName.Should().Be("Juan Protacio");
+        membership.PrincipalDateOfBirth.Should().Be(new DateOnly(1980, 5, 1));
     }
 
     [Fact]
@@ -339,15 +337,11 @@ public class PatientJoinRequestedHandlerTests
 
         var patient = await db.Patients.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.ClinicId == clinicId);
         patient.Should().NotBeNull();
-        patient!.CustomFields.Should().ContainKey("philhealth_profile");
-
-        var profile = patient.CustomFields["philhealth_profile"] as PhilHealthPatientProfileDto;
-        profile.Should().NotBeNull();
-        profile!.MemberType.Should().Be("MM");
-        profile.Pin.Should().Be("12-345678901-8");
-        profile.MemberPin.Should().Be("12-345678901-8");
-        profile.MemberLastName.Should().Be("Rizal");
-        profile.MemberFirstName.Should().Be("Juan");
+        var membership = await db.PatientPhilHealthMemberships.IgnoreQueryFilters().FirstOrDefaultAsync(m => m.PatientId == patient!.Id);
+        membership.Should().NotBeNull();
+        membership!.MemberType.Should().Be(PhilHealthMemberType.MM);
+        patient.PhilHealthNumber.Should().Be("12-345678901-8");
+        membership.MemberPin.Should().Be("12-345678901-8");
     }
 
     [Fact]
@@ -435,7 +429,7 @@ public class PatientJoinRequestedHandlerTests
 
         var year = DateTime.UtcNow.Year;
         // Seed soft-deleted patient with PAT-yyyy-00005
-        db.Patients.Add(new ClinicPatient
+        db.Patients.Add(new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,

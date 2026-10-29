@@ -15,7 +15,11 @@ public record UpdateFacilityCommand(
     string TenantId,
     string Name,
     FacilityStatus? Status = null,
-    string? Slug = null
+    string? Slug = null,
+    string? RegionPsgc = null,
+    string? ProvincePsgc = null,
+    string? CityMunicipalityPsgc = null,
+    string? BarangayPsgc = null
 ) : IRequest<bool>;
 
 public class UpdateFacilityCommandValidator : AbstractValidator<UpdateFacilityCommand>
@@ -78,6 +82,11 @@ public class UpdateFacilityCommandHandler(IApplicationDbContext context, IHubOnb
         {
             facility.Status = request.Status.Value;
         }
+
+        if (request.RegionPsgc != null) facility.RegionPsgc = request.RegionPsgc;
+        if (request.ProvincePsgc != null) facility.ProvincePsgc = request.ProvincePsgc;
+        if (request.CityMunicipalityPsgc != null) facility.CityMunicipalityPsgc = request.CityMunicipalityPsgc;
+        if (request.BarangayPsgc != null) facility.BarangayPsgc = request.BarangayPsgc;
 
         facility.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);

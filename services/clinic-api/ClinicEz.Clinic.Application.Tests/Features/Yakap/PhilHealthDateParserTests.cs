@@ -141,7 +141,7 @@ public class PhilHealthDateParserTests
 
         var (dbContext, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -152,7 +152,7 @@ public class PhilHealthDateParserTests
             PhilHealthNumber = "12-345678901-2",
             ContactNumber = "09170000001",
             DateOfBirth = new DateOnly(1985, 5, 15),
-            Gender = "Female"
+            Gender = Gender.Female
         };
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
@@ -178,9 +178,9 @@ public class PhilHealthDateParserTests
         var updatedPatient = await dbContext.Patients.FirstAsync(p => p.Id == patient.Id);
         var enlistments = updatedPatient.GetYakapEnlistments();
         enlistments.Should().ContainSingle();
-        enlistments[0].EnlistedAt.Should().Be(expectedEnlistedAt);
+        enlistments[0].EnlistmentDate.Should().Be(DateOnly.Parse(expectedEnlistedAt));
         enlistments[0].EffectiveYear.Should().Be(expectedEffectiveYear);
-        enlistments[0].ValidUntil.Should().Be($"{expectedEffectiveYear}-12-31");
+        enlistments[0].ValidUntil.Should().Be(new DateOnly(expectedEffectiveYear, 12, 31));
         enlistments[0].Status.Should().Be(YakapEnlistmentStatus.Active);
     }
 }

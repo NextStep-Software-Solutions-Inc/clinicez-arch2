@@ -50,7 +50,7 @@ public class TwoTierPublishingFlowTests
     {
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinic.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinic.Id);
             if (settings != null)
             {
                 settings.OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM";
@@ -74,7 +74,7 @@ public class TwoTierPublishingFlowTests
             };
             db.StaffMembers.Add(doctor);
 
-            var service = new ClinicServiceItem
+            var service = new ServiceItem
             {
                 Id = Guid.NewGuid(),
                 TenantId = clinic.Tenant,
@@ -253,7 +253,7 @@ public class TwoTierPublishingFlowTests
         await cell.PumpAsync();
 
         var grantedState = await cell.Clinic.DbAsync(async db =>
-            (await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(x => x.ClinicId == clinic.Id)).IsWorkspaceEligible);
+            (await db.Settings.IgnoreQueryFilters().SingleAsync(x => x.ClinicId == clinic.Id)).IsWorkspaceEligible);
         grantedState.Should().BeTrue();
 
         await SendPortalDirectoryUpdateAsync(cell, clinic, isWorkspaceEligible: false, toPatient: false, toClinic: true);
@@ -261,7 +261,7 @@ public class TwoTierPublishingFlowTests
 
         var isEligible = await cell.Clinic.DbAsync(async db =>
         {
-            var s = await db.ClinicSettings.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.ClinicId == clinic.Id);
+            var s = await db.Settings.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.ClinicId == clinic.Id);
             return s != null && s.IsWorkspaceEligible;
         });
         isEligible.Should().BeFalse("Clinic settings must reflect revocation from Portal");
@@ -660,7 +660,7 @@ public class TwoTierPublishingFlowTests
         await cell.PumpAsync();
 
         var clinicEligibleAfterGrant = await cell.Clinic.DbAsync(async db =>
-            (await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinic.Id)).IsWorkspaceEligible);
+            (await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinic.Id)).IsWorkspaceEligible);
         clinicEligibleAfterGrant.Should().BeTrue("Clinic workstation must receive IsWorkspaceEligible = true from Portal over Interop Hub");
 
         var stage1 = await QueryPatientClinicAsync(cell, clinic.Id);
@@ -690,7 +690,7 @@ public class TwoTierPublishingFlowTests
         await cell.PumpAsync();
 
         var clinicEligibleAfterRevoke = await cell.Clinic.DbAsync(async db =>
-            (await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinic.Id)).IsWorkspaceEligible);
+            (await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinic.Id)).IsWorkspaceEligible);
         clinicEligibleAfterRevoke.Should().BeFalse("Clinic workstation must receive IsWorkspaceEligible = false upon Portal revocation");
 
         var stage3 = await QueryPatientClinicAsync(cell, clinic.Id);

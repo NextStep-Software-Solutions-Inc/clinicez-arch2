@@ -1840,7 +1840,16 @@ describe("Tier 4: Real-World Scenarios & Live Server Smoke Matrix", () => {
         isValid: true,
       };
 
-      const html = renderToString(React.createElement(RxVerifyClient, { token: "RX-20261025-0042", initialData: rxData as any }));
+      const html = renderToString(
+        React.createElement(RxVerifyClient, {
+          token: "RX-20261025-0042",
+          initialData: rxData as any,
+          initialDrugstoreOptions: [
+            { code: "MERCURY_DRUG", label: "Mercury Drug", isActive: true },
+            { code: "OTHER", label: "Other", requiresSpecifyText: true, isActive: true },
+          ],
+        })
+      );
       expect(html).toContain("Drugstore Chain *");
       expect(html).toContain("Mercury Drug");
     });

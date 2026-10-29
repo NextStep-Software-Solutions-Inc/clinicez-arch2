@@ -86,7 +86,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         // Context 1 attempts to add settings with an already-cancelled token
         await using (var db1 = CreateContext(sharedDbName))
         {
-            var settings = new ClinicSettings
+            var settings = new FacilitySettings
             {
                 TenantId = _tenantId,
                 ClinicId = _clinicId,
@@ -94,7 +94,7 @@ public class ChallengerM2_1AdversarialProjectionTests
                 JoinCode = "SHOULD_NOT_LEAK",
                 IsJoinEnabled = true
             };
-            db1.ClinicSettings.Add(settings);
+            db1.Settings.Add(settings);
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -109,7 +109,7 @@ public class ChallengerM2_1AdversarialProjectionTests
             var outboxMessages = await db2.InteropOutbox.ToListAsync();
             outboxMessages.Should().BeEmpty("Failed/cancelled transactions must leave 0 outbox messages in store");
 
-            var settingsInDb = await db2.ClinicSettings.IgnoreQueryFilters().ToListAsync();
+            var settingsInDb = await db2.Settings.IgnoreQueryFilters().ToListAsync();
             settingsInDb.Should().BeEmpty("Entity must not be saved when transaction is cancelled");
         }
     }
@@ -123,7 +123,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         // Context 1 adds multiple entities, but second interceptor throws during saving
         await using (var db1 = CreateContext(sharedDbName, throwingInterceptor))
         {
-            db1.ClinicSettings.Add(new ClinicSettings
+            db1.Settings.Add(new FacilitySettings
             {
                 TenantId = _tenantId,
                 ClinicId = _clinicId,
@@ -169,7 +169,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         await using (var db1 = CreateContext(sharedDbName, throwingInterceptor))
         {
             // Settings
-            db1.ClinicSettings.Add(new ClinicSettings
+            db1.Settings.Add(new FacilitySettings
             {
                 TenantId = _tenantId,
                 ClinicId = _clinicId,
@@ -265,7 +265,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         var yesterdayManila = todayManila.AddDays(-1);
         var tomorrowManila = todayManila.AddDays(1);
 
-        db.ClinicSettings.Add(new ClinicSettings
+        db.Settings.Add(new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -368,7 +368,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         // Pre-seed yesterday's stale ticket in DB
         await using (var dbSeed = CreateContext(sharedDbName))
         {
-            dbSeed.ClinicSettings.Add(new ClinicSettings
+            dbSeed.Settings.Add(new FacilitySettings
             {
                 TenantId = _tenantId,
                 ClinicId = _clinicId,
@@ -441,7 +441,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         var patientId1 = Guid.Parse("11111111-2222-3333-4444-555555555555");
         var patientId2 = Guid.Parse("66666666-7777-8888-9999-000000000000");
 
-        db.ClinicSettings.Add(new ClinicSettings
+        db.Settings.Add(new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -511,7 +511,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         var todayManila = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
         var secretPatientName = "Extremely Confidential VIP Patient";
 
-        db.ClinicSettings.Add(new ClinicSettings
+        db.Settings.Add(new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -570,7 +570,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         var sharedDbName = $"Adv_Proj_JoinCode_{Guid.NewGuid():N}";
         await using var db = CreateContext(sharedDbName);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = targetClinicId,
@@ -579,7 +579,7 @@ public class ChallengerM2_1AdversarialProjectionTests
             IsJoinEnabled = true
         };
 
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
         await db.SaveChangesAsync();
 
         // 1. Entity in DB should have the expected join code
@@ -602,7 +602,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         var sharedDbName = $"Adv_Proj_NullJoin_{Guid.NewGuid():N}";
         await using var db = CreateContext(sharedDbName);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -611,7 +611,7 @@ public class ChallengerM2_1AdversarialProjectionTests
             IsJoinEnabled = false
         };
 
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
         await db.SaveChangesAsync();
 
         settings.JoinCode.Should().BeNull();
@@ -632,7 +632,7 @@ public class ChallengerM2_1AdversarialProjectionTests
         var sharedDbName = $"Adv_Proj_ConsecutiveJoin_{Guid.NewGuid():N}";
         await using var db = CreateContext(sharedDbName);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -641,7 +641,7 @@ public class ChallengerM2_1AdversarialProjectionTests
             IsJoinEnabled = true
         };
 
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
         await db.SaveChangesAsync();
 
         var expectedPrefix = _clinicId.ToString("N")[..4].ToUpperInvariant();
@@ -669,14 +669,14 @@ public class ChallengerM2_1AdversarialProjectionTests
         var clinic1 = Guid.Parse("1111aaaa-0000-0000-0000-000000000000");
         var clinic2 = Guid.Parse("2222bbbb-0000-0000-0000-000000000000");
 
-        var settings1 = new ClinicSettings
+        var settings1 = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = clinic1,
             ClinicName = "Clinic One",
             JoinCode = "COMMON"
         };
-        var settings2 = new ClinicSettings
+        var settings2 = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = clinic2,
@@ -684,7 +684,7 @@ public class ChallengerM2_1AdversarialProjectionTests
             JoinCode = "COMMON"
         };
 
-        db.ClinicSettings.AddRange(settings1, settings2);
+        db.Settings.AddRange(settings1, settings2);
         await db.SaveChangesAsync();
 
         settings1.JoinCode.Should().Be("1111-COMMON");

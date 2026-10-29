@@ -19,13 +19,13 @@ using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests.Features.Patients;
 
-public class PatientProblemsAndAllergiesTests
+public class PatientMedicalHistorysAndAllergiesTests
 {
     private readonly Guid _clinicId = Guid.NewGuid();
     private const string TenantId = "tenant-test";
     private readonly IClinicContext _clinicContext;
 
-    public PatientProblemsAndAllergiesTests()
+    public PatientMedicalHistorysAndAllergiesTests()
     {
         _clinicContext = Substitute.For<IClinicContext>();
         _clinicContext.ClinicId.Returns(_clinicId);
@@ -33,9 +33,9 @@ public class PatientProblemsAndAllergiesTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private ClinicPatient SeedPatient(ApplicationDbContext db)
+    private Patient SeedPatient(ApplicationDbContext db)
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
@@ -43,7 +43,7 @@ public class PatientProblemsAndAllergiesTests
             PatientCode = "PAT-002",
             FirstName = "Maria",
             LastName = "Santos",
-            Gender = "Female",
+            Gender = Gender.Female,
             DateOfBirth = new DateOnly(1985, 3, 15),
             ContactNumber = "09171234567"
         };
@@ -56,13 +56,13 @@ public class PatientProblemsAndAllergiesTests
     // 1. Structured Problems Tests
     // ==========================================
     [Fact]
-    public async Task CreatePatientProblem_ValidCommand_PersistsProblemAndEnforcesMultiTenant()
+    public async Task CreatePatientMedicalHistory_ValidCommand_PersistsProblemAndEnforcesMultiTenant()
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var patient = SeedPatient(db);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var problemRepo = TestDbHelper.CreateRepository<PatientProblem>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
+        var problemRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(db, sieve);
 
         var handler = new CreatePatientProblemCommandHandler(patientRepo, problemRepo, uow, _clinicContext);
 
@@ -90,7 +90,7 @@ public class PatientProblemsAndAllergiesTests
         result.ClinicId.Should().Be(_clinicId);
         result.RecordedByDoctorName.Should().Be("Dr. Jose Rizal, MD");
 
-        var inDb = await db.PatientProblems.FirstOrDefaultAsync(p => p.Id == result.Id);
+        var inDb = await db.PatientMedicalHistories.FirstOrDefaultAsync(p => p.Id == result.Id);
         inDb.Should().NotBeNull();
         inDb!.ClinicId.Should().Be(_clinicId);
     }
@@ -118,24 +118,24 @@ public class PatientProblemsAndAllergiesTests
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var patient = SeedPatient(db);
 
-        var problem = new PatientProblem
+        var problem = new PatientMedicalHistory
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
             ClinicId = _clinicId,
             PatientId = patient.Id,
             Icd10Code = "J18.9",
-            ProblemTitle = "Community acquired pneumonia",
+            ConditionTitle = "Community acquired pneumonia",
             Status = ProblemStatus.Active,
             Severity = ProblemSeverity.Moderate,
             OnsetDate = new DateOnly(2026, 2, 1),
-            RecordedByDoctorId = Guid.NewGuid(),
-            RecordedByDoctorName = "Dr. Rizal"
+            RecordedByStaffId = Guid.NewGuid(),
+            RecordedByStaffName = "Dr. Rizal"
         };
-        db.PatientProblems.Add(problem);
+        db.PatientMedicalHistories.Add(problem);
         await db.SaveChangesAsync();
 
-        var problemRepo = TestDbHelper.CreateRepository<PatientProblem>(db, sieve);
+        var problemRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(db, sieve);
         var handler = new UpdatePatientProblemStatusCommandHandler(problemRepo, uow, _clinicContext);
 
         var resolvedDate = new DateOnly(2026, 2, 20);
@@ -163,7 +163,7 @@ public class PatientProblemsAndAllergiesTests
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var patient = SeedPatient(db);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(db, sieve);
 
         var handler = new CreatePatientAllergyCommandHandler(patientRepo, allergyRepo, uow, _clinicContext);
@@ -187,8 +187,8 @@ public class PatientProblemsAndAllergiesTests
         result.IsAnaphylactic.Should().BeTrue();
         result.Severity.Should().Be("LifeThreatening");
 
-        var updatedPatient = await db.Patients.FindAsync(patient.Id);
-        updatedPatient!.Allergies.Should().Contain("Penicillin");
+        var updatedPatient = await db.Patients.Include(p => p.Allergies).FirstOrDefaultAsync(p => p.Id == patient.Id);
+        updatedPatient!.Allergies.Should().Contain(a => a.Allergen == "Penicillin");
     }
 
     [Fact]
@@ -344,7 +344,7 @@ public class PatientProblemsAndAllergiesTests
             new() { GenericName = "Propranolol", Dosage = "40mg" }
         };
 
-        var activeProblems = new List<PatientProblem>
+        var activeProblems = new List<PatientMedicalHistory>
         {
             new()
             {
@@ -352,10 +352,10 @@ public class PatientProblemsAndAllergiesTests
                 ClinicId = _clinicId,
                 PatientId = Guid.NewGuid(),
                 Icd10Code = "K25.0",
-                ProblemTitle = "Acute gastric ulcer with hemorrhage",
+                ConditionTitle = "Acute gastric ulcer with hemorrhage",
                 Status = ProblemStatus.Active,
-                RecordedByDoctorId = Guid.NewGuid(),
-                RecordedByDoctorName = "Dr. Rizal"
+                RecordedByStaffId = Guid.NewGuid(),
+                RecordedByStaffName = "Dr. Rizal"
             },
             new()
             {
@@ -363,10 +363,10 @@ public class PatientProblemsAndAllergiesTests
                 ClinicId = _clinicId,
                 PatientId = Guid.NewGuid(),
                 Icd10Code = "J45.909",
-                ProblemTitle = "Bronchial Asthma",
+                ConditionTitle = "Bronchial Asthma",
                 Status = ProblemStatus.Active,
-                RecordedByDoctorId = Guid.NewGuid(),
-                RecordedByDoctorName = "Dr. Rizal"
+                RecordedByStaffId = Guid.NewGuid(),
+                RecordedByStaffName = "Dr. Rizal"
             }
         };
 

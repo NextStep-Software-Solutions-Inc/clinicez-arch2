@@ -71,16 +71,16 @@ public record CreateInvoiceCommand(
 public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
 {
     private readonly IRepository<Invoice> _invoiceRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IBillingRequestPublisher _billingPublisher;
 
     public CreateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
@@ -91,9 +91,9 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
     public CreateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicSettings>? settingsRepo,
+        IRepository<FacilitySettings>? settingsRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IBillingRequestPublisher billingPublisher)
@@ -127,7 +127,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
         var effectivePatientId = request.PatientId.HasValue && request.PatientId.Value != Guid.Empty
             ? request.PatientId.Value
-            : Guid.Empty;
+            : (request.IsWalkInRetail ? Guid.Empty : (Guid?)null);
 
         var effectivePatientName = !string.IsNullOrWhiteSpace(request.WalkInCustomerName)
             ? request.WalkInCustomerName.Trim()
@@ -448,6 +448,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             InvoiceDate = DateTime.UtcNow,
             PatientId = effectivePatientId,
             PatientName = effectivePatientName,
+            IsWalkInRetail = request.IsWalkInRetail,
             QueueItemId = request.QueueItemId,
             AppointmentId = request.AppointmentId,
             ConsultationId = request.ConsultationId,
@@ -522,7 +523,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
         var syncPatientId = await _patientRepo
             .Query(p => p.ClinicId == _clinicContext.ClinicId && p.Id == invoice.PatientId)
-            .Select(p => p.SyncPatientId)
+            .Select(p => p.CloudPatientId)
             .FirstOrDefaultAsync(ct);
 
         var lines = invoice.LineItems

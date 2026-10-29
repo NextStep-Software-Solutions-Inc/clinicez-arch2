@@ -27,8 +27,8 @@ public sealed class DocumentsController : ControllerBase
     private readonly IRepository<MedicalCertificate> _medCertRepo;
     private readonly IRepository<ReferralLetter> _referralRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IUnitOfWork? _unitOfWork;
 
     public DocumentsController(
@@ -37,8 +37,8 @@ public sealed class DocumentsController : ControllerBase
         IRepository<MedicalCertificate> medCertRepo,
         IRepository<ReferralLetter> referralRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicSettings> settingsRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<FacilitySettings> settingsRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork? unitOfWork = null)
     {
         _sender = sender;
@@ -61,7 +61,7 @@ public sealed class DocumentsController : ControllerBase
         var cert = await _medCertRepo.GetByIdAsync(id, ct);
         if (cert == null) return NotFound($"Medical certificate '{id}' was not found.");
 
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = cert.TenantId,
             ClinicId = cert.ClinicId,
@@ -96,7 +96,7 @@ public sealed class DocumentsController : ControllerBase
         var referral = await _referralRepo.GetByIdAsync(id, ct);
         if (referral == null) return NotFound($"Referral letter '{id}' was not found.");
 
-        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new FacilitySettings
         {
             TenantId = referral.TenantId,
             ClinicId = referral.ClinicId,

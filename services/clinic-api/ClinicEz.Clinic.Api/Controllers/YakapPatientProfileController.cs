@@ -6,9 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
 using ClinicEz.Clinic.Application.Common.Interfaces;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
-using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -27,25 +25,23 @@ namespace ClinicEz.Clinic.Api.Controllers;
 [Route("api/v1/yakap/patients/{patientId:guid}/profile")]
 public sealed class YakapPatientProfileController : ControllerBase
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<TriageVitals> _vitalsRepo;
-    private readonly IRepository<PatientPastMedicalHistory> _medicalRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<PatientVitals> _vitalsRepo;
+    private readonly IRepository<PatientMedicalHistory> _medicalRepo;
     private readonly IRepository<PatientFamilyHistory> _familyRepo;
     private readonly IRepository<PatientImmunization> _immunizationRepo;
     private readonly IRepository<PatientSocialHistory> _socialRepo;
     private readonly IRepository<PatientReproductiveHistory> _reproductiveRepo;
     private readonly IRepository<NcdRiskAssessment> _ncdRepo;
-    private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
+    private readonly IRepository<PatientPhysicalExam>? _physicalExamRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly PhilHealthCatalogResolver _catalogResolver;
     private readonly IPhilHealthCatalogLookup _catalogLookup;
-    private readonly ILegacyPatientProfileIngestionService _ingestionService;
 
     public YakapPatientProfileController(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<TriageVitals> vitalsRepo,
-        IRepository<PatientPastMedicalHistory> medicalRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<PatientVitals> vitalsRepo,
+        IRepository<PatientMedicalHistory> medicalRepo,
         IRepository<PatientFamilyHistory> familyRepo,
         IRepository<PatientImmunization> immunizationRepo,
         IRepository<PatientSocialHistory> socialRepo,
@@ -54,10 +50,8 @@ public sealed class YakapPatientProfileController : ControllerBase
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IPhilHealthCatalogLookup catalog,
-        ILegacyPatientProfileIngestionService ingestionService,
-        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null)
+        IRepository<PatientPhysicalExam>? physicalExamRepo = null)
     {
-        _catalogResolver = new PhilHealthCatalogResolver(catalog);
         _catalogLookup = catalog;
         _patientRepo = patientRepo;
         _vitalsRepo = vitalsRepo;
@@ -70,7 +64,6 @@ public sealed class YakapPatientProfileController : ControllerBase
         _physicalExamRepo = physicalExamRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
-        _ingestionService = ingestionService;
     }
 
     /// <summary>
@@ -92,8 +85,6 @@ public sealed class YakapPatientProfileController : ControllerBase
             return NotFound(ApiResponse<PhilHealthPatientProfileDto>.Fail("Patient not found in this clinic."));
         }
 
-        await _ingestionService.EnsureIngestedAsync(patientId, ct);
-
         // Load relational medical histories and family histories
         var relMedHistories = await _medicalRepo.Query(m => m.PatientId == patientId)
             .OrderBy(m => m.ConditionTitle)
@@ -109,37 +100,42 @@ public sealed class YakapPatientProfileController : ControllerBase
             .ToListAsync(ct);
 
         var relChildImms = relImms
-            .Where(i => i.PhilHealthLibrary.Equals("lib_immchild", StringComparison.OrdinalIgnoreCase))
+            .Where(i => i.PhilHealthLibrary != null && i.PhilHealthLibrary.Equals("lib_immchild", StringComparison.OrdinalIgnoreCase))
             .Select(i => i.PhilHealthCode)
             .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("999", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var relYoungwImms = relImms
-            .Where(i => i.PhilHealthLibrary.Equals("lib_immyoungw", StringComparison.OrdinalIgnoreCase))
+            .Where(i => i.PhilHealthLibrary != null && i.PhilHealthLibrary.Equals("lib_immyoungw", StringComparison.OrdinalIgnoreCase))
             .Select(i => i.PhilHealthCode)
             .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("999", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var relPregwImms = relImms
-            .Where(i => i.PhilHealthLibrary.Equals("lib_immpregw", StringComparison.OrdinalIgnoreCase))
+            .Where(i => i.PhilHealthLibrary != null && i.PhilHealthLibrary.Equals("lib_immpregw", StringComparison.OrdinalIgnoreCase))
             .Select(i => i.PhilHealthCode)
             .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("999", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var relElderlyImms = relImms
-            .Where(i => i.PhilHealthLibrary.Equals("lib_immelderly", StringComparison.OrdinalIgnoreCase))
+            .Where(i => i.PhilHealthLibrary != null && i.PhilHealthLibrary.Equals("lib_immelderly", StringComparison.OrdinalIgnoreCase))
             .Select(i => i.PhilHealthCode)
             .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("999", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var relOtherImms = relImms
-            .Where(i => !i.PhilHealthLibrary.StartsWith("lib_imm", StringComparison.OrdinalIgnoreCase))
+            .Where(i => i.PhilHealthLibrary != null && !i.PhilHealthLibrary.StartsWith("lib_imm", StringComparison.OrdinalIgnoreCase))
             .Select(i => i.PhilHealthCode)
             .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("999", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -160,18 +156,28 @@ public sealed class YakapPatientProfileController : ControllerBase
         if (DateOnly.FromDateTime(asOf) < birthDate.AddYears(ageYears))
             ageYears--;
 
-        bool isFemale = patient.Gender.StartsWith("F", StringComparison.OrdinalIgnoreCase);
+        bool isFemale = patient.Gender == ClinicEz.Clinic.Domain.Enums.Gender.Female;
         bool isPediatric = ageYears < 18;
         bool isSenior = ageYears >= 60;
 
-        var defaultMedHistories = relMedHistories.Count > 0
-            ? relMedHistories.Select(m => new PhilHealthConditionEntryDto(
-                Code: !string.IsNullOrWhiteSpace(m.PhilHealthMdiseaseCode) ? m.PhilHealthMdiseaseCode : (_catalogResolver.ResolveKnownConditions(m.ConditionTitle).FirstOrDefault()?.Code ?? "998"),
-                SpecificDesc: !string.IsNullOrWhiteSpace(m.SpecificDescription) ? m.SpecificDescription : m.ConditionTitle)).ToList()
-            : _catalogResolver.ResolveKnownConditions(patient.ChronicConditions);
+        string ResolveConditionCode(string? code, string? title)
+        {
+            if (!string.IsNullOrWhiteSpace(code)) return code;
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                var match = _catalogLookup.FindByDescription("lib_mdiseases", title)
+                    ?? _catalogLookup.SearchByCodeOrDescription("lib_mdiseases", title).FirstOrDefault();
+                if (match != null) return match.Code;
+            }
+            return _catalogLookup.FindByDescription("lib_mdiseases", "Others")?.Code ?? "998";
+        }
+
+        var defaultMedHistories = relMedHistories.Select(m => new PhilHealthConditionEntryDto(
+            Code: ResolveConditionCode(m.PhilHealthMdiseaseCode, m.ConditionTitle),
+            SpecificDesc: !string.IsNullOrWhiteSpace(m.SpecificDescription) ? m.SpecificDescription : m.ConditionTitle)).ToList();
 
         var defaultFamHistories = relFamHistories.Select(f => new PhilHealthConditionEntryDto(
-            Code: !string.IsNullOrWhiteSpace(f.PhilHealthMdiseaseCode) ? f.PhilHealthMdiseaseCode : (_catalogResolver.ResolveKnownConditions(f.ConditionTitle).FirstOrDefault()?.Code ?? "998"),
+            Code: ResolveConditionCode(f.PhilHealthMdiseaseCode, f.ConditionTitle),
             SpecificDesc: !string.IsNullOrWhiteSpace(f.SpecificDescription) ? f.SpecificDescription : f.ConditionTitle)).ToList();
 
         var isDependentDefault = isPediatric;
@@ -234,12 +240,12 @@ public sealed class YakapPatientProfileController : ControllerBase
             DependentRelationship = isDependentDefault ? "C" : null,
             Atc = "A",
             IsWalkedIn = "Y",
-            BloodType = patient.BloodType,
+            BloodType = patient.BloodType?.ToString(),
             MedicalHistories = defaultMedHistories,
             SurgicalHistories = [],
             FamilyHistories = defaultFamHistories,
-            MedicalHistoryNotes = patient.PersonalMedicalHistoryNotes,
-            FamilyHistoryNotes = patient.FamilyMedicalHistoryNotes,
+            MedicalHistoryNotes = null,
+            FamilyHistoryNotes = null,
 
             // Relational Social & Behavioral History
             IsSmoker = relSocial?.IsSmoker ?? false,
@@ -303,40 +309,40 @@ public sealed class YakapPatientProfileController : ControllerBase
             HipCm = null,
             SkinId = !string.IsNullOrWhiteSpace(relPhysicalExam?.SkinId)
                 ? relPhysicalExam.SkinId
-                : _catalogResolver.EssentiallyNormalCode("lib_skin_extremities"),
+                : GetEssentiallyNormalCode("lib_skin_extremities"),
             SkinRemarks = relPhysicalExam?.SkinRemarks,
             HeentId = !string.IsNullOrWhiteSpace(relPhysicalExam?.HeentId)
                 ? relPhysicalExam.HeentId
-                : _catalogResolver.EssentiallyNormalCode("lib_heent"),
+                : GetEssentiallyNormalCode("lib_heent"),
             HeentRemarks = relPhysicalExam?.HeentRemarks,
             ChestId = !string.IsNullOrWhiteSpace(relPhysicalExam?.ChestId)
                 ? relPhysicalExam.ChestId
-                : _catalogResolver.EssentiallyNormalCode("lib_chest"),
-            ChestRemarks = relPhysicalExam?.ChestRemarks,
+                : GetEssentiallyNormalCode("lib_chest"),
+            ChestRemarks = relPhysicalExam?.ChestLungsRemarks,
             HeartId = !string.IsNullOrWhiteSpace(relPhysicalExam?.HeartId)
                 ? relPhysicalExam.HeartId
-                : _catalogResolver.EssentiallyNormalCode("lib_heart"),
+                : GetEssentiallyNormalCode("lib_heart"),
             HeartRemarks = relPhysicalExam?.HeartRemarks,
             AbdomenId = !string.IsNullOrWhiteSpace(relPhysicalExam?.AbdomenId)
                 ? relPhysicalExam.AbdomenId
-                : _catalogResolver.EssentiallyNormalCode("lib_abdomen"),
+                : GetEssentiallyNormalCode("lib_abdomen"),
             AbdomenRemarks = relPhysicalExam?.AbdomenRemarks,
             NeuroId = !string.IsNullOrWhiteSpace(relPhysicalExam?.NeuroId)
                 ? relPhysicalExam.NeuroId
-                : _catalogResolver.EssentiallyNormalCode("lib_neuro"),
-            NeuroRemarks = relPhysicalExam?.NeuroRemarks,
+                : GetEssentiallyNormalCode("lib_neuro"),
+            NeuroRemarks = relPhysicalExam?.NeurologicalRemarks,
             RectalId = !string.IsNullOrWhiteSpace(relPhysicalExam?.RectalId)
                 ? relPhysicalExam.RectalId
-                : _catalogResolver.EssentiallyNormalCode("lib_digital_rectal"),
-            RectalRemarks = relPhysicalExam?.RectalRemarks,
+                : GetEssentiallyNormalCode("lib_digital_rectal"),
+            RectalRemarks = relPhysicalExam?.DigitalRectalRemarks,
             GuId = !string.IsNullOrWhiteSpace(relPhysicalExam?.GuId)
                 ? relPhysicalExam.GuId
-                : _catalogResolver.EssentiallyNormalCode("lib_genitourinary"),
-            GuRemarks = relPhysicalExam?.GuRemarks,
+                : GetEssentiallyNormalCode("lib_genitourinary"),
+            GuRemarks = relPhysicalExam?.GenitourinaryRemarks,
             GenSurveyId = !string.IsNullOrWhiteSpace(relPhysicalExam?.GenSurveyId)
                 ? relPhysicalExam.GenSurveyId
                 : "1",
-            GenSurveyRemarks = relPhysicalExam?.GenSurveyRemarks,
+            GenSurveyRemarks = relPhysicalExam?.GeneralSurveyRemarks,
             NcdAnswers = ncdAnswers,
             LastUpdatedAt = DateTimeOffset.UtcNow,
             UpdatedBy = null
@@ -384,15 +390,10 @@ public sealed class YakapPatientProfileController : ControllerBase
             patient.PhilHealthNumber = updatedProfile.Pin;
         }
 
-        if (!string.IsNullOrWhiteSpace(updatedProfile.BloodType))
+        if (!string.IsNullOrWhiteSpace(updatedProfile.BloodType) &&
+            Enum.TryParse<ClinicEz.Clinic.Domain.Enums.BloodType>(updatedProfile.BloodType, true, out var parsedBloodType))
         {
-            patient.BloodType = updatedProfile.BloodType;
-        }
-
-        if (updatedProfile.MedicalHistories.Count > 0)
-        {
-            patient.ChronicConditions = string.Join(", ", updatedProfile.MedicalHistories
-                .Select(m => !string.IsNullOrWhiteSpace(m.SpecificDesc) ? m.SpecificDesc : m.Code));
+            patient.BloodType = parsedBloodType;
         }
 
         // Sync social history to core relational table
@@ -545,7 +546,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                 }
                 else
                 {
-                    var newMed = new PatientPastMedicalHistory
+                    var newMed = new PatientMedicalHistory
                     {
                         Id = Guid.NewGuid(),
                         TenantId = patient.TenantId ?? _clinicContext.TenantId,
@@ -629,9 +630,6 @@ public sealed class YakapPatientProfileController : ControllerBase
             }
         }
 
-        patient.PersonalMedicalHistoryNotes = updatedProfile.MedicalHistoryNotes?.Trim();
-        patient.FamilyMedicalHistoryNotes = updatedProfile.FamilyHistoryNotes?.Trim();
-
         // Sync immunizations to relational table
         var existingImms = await _immunizationRepo.Query(i => i.PatientId == patientId).ToListAsync(ct);
 
@@ -652,7 +650,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                 if (!exists)
                 {
                     var vaccineName = _catalogLookup.Find(library, code)?.Description
-                        ?? LegacyPatientProfileIngestionService.ResolveStatutoryVaccineName(library, code);
+                        ?? ResolveStatutoryVaccineName(library, code);
 
                     var newImm = new PatientImmunization
                     {
@@ -688,7 +686,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                 string.Equals(i.PhilHealthLibrary, library, StringComparison.OrdinalIgnoreCase) &&
                 i.IsHistorical && !i.ConsultationEncounterId.HasValue))
             {
-                if (!targetCodes.Contains(imm.PhilHealthCode))
+                if (imm.PhilHealthCode != null && !targetCodes.Contains(imm.PhilHealthCode))
                 {
                     _immunizationRepo.Remove(imm);
                 }
@@ -700,7 +698,7 @@ public sealed class YakapPatientProfileController : ControllerBase
         int updateAgeYears = updateAsOf.Year - updateBirthDate.Year;
         if (DateOnly.FromDateTime(updateAsOf) < updateBirthDate.AddYears(updateAgeYears))
             updateAgeYears--;
-        bool updateIsFemale = patient.Gender.StartsWith("F", StringComparison.OrdinalIgnoreCase);
+        bool updateIsFemale = patient.Gender == ClinicEz.Clinic.Domain.Enums.Gender.Female;
         bool updateIsPediatric = updateAgeYears < 18;
         bool updateIsSenior = updateAgeYears >= 60;
 
@@ -711,8 +709,63 @@ public sealed class YakapPatientProfileController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        await _ingestionService.SyncFromProfileAsync(patientId, updatedProfile, ct);
-
         return Ok(ApiResponse<PhilHealthPatientProfileDto>.Success(updatedProfile));
+    }
+
+    private string GetEssentiallyNormalCode(string library) =>
+        _catalogLookup.List(library)
+            .FirstOrDefault(r => r.IsActive && r.Description.StartsWith("Essentially normal", StringComparison.OrdinalIgnoreCase))
+            ?.Code ?? "1";
+
+    private static string ResolveStatutoryVaccineName(string library, string code)
+    {
+        var lib = (library ?? string.Empty).ToLowerInvariant();
+        var c = (code ?? string.Empty).Trim().ToUpperInvariant();
+
+        if (lib.Contains("child"))
+        {
+            return c switch
+            {
+                "C01" => "BCG (Bacillus Calmette-Guérin)",
+                "C02" => "OPV 1 (Oral Polio Vaccine 1)",
+                "C03" => "OPV 2 (Oral Polio Vaccine 2)",
+                "C04" => "OPV 3 (Oral Polio Vaccine 3)",
+                "C05" => "DPT-HepB-Hib 1 (Pentavalent 1)",
+                "C06" => "DPT-HepB-Hib 2 (Pentavalent 2)",
+                "C07" => "DPT-HepB-Hib 3 (Pentavalent 3)",
+                "C08" => "Measles Vaccine (MCV1)",
+                "C09" => "Hepatitis B (Birth Dose)",
+                "C10" => "Rotavirus Vaccine 1",
+                "C11" => "Rotavirus Vaccine 2",
+                "C12" => "Inactivated Polio Vaccine (IPV)",
+                "C13" => "MMR 1 (Measles, Mumps, Rubella)",
+                _ => $"Child Vaccine ({code})"
+            };
+        }
+
+        if (lib.Contains("preg"))
+        {
+            return c switch
+            {
+                "P01" => "Tetanus Toxoid / Td 1",
+                "P02" => "Tetanus Toxoid / Td 2",
+                "P03" => "Tetanus Toxoid / Td 3",
+                "P04" => "Tetanus Toxoid / Td 4",
+                "P05" => "Tetanus Toxoid / Td 5",
+                _ => $"Maternal Vaccine ({code})"
+            };
+        }
+
+        if (lib.Contains("elderly"))
+        {
+            return c switch
+            {
+                "E01" => "Pneumococcal Polysaccharide Vaccine (PPSV23 / PCV13)",
+                "E02" => "Seasonal Influenza Vaccine (Quadrivalent)",
+                _ => $"Senior Citizen Vaccine ({code})"
+            };
+        }
+
+        return $"Vaccine ({code})";
     }
 }

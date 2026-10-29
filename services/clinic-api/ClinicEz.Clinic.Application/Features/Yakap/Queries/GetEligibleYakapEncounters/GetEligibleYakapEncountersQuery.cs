@@ -24,21 +24,21 @@ public record GetEligibleYakapEncountersQuery(
 public class GetEligibleYakapEncountersQueryHandler : IRequestHandler<GetEligibleYakapEncountersQuery, ApiResponse<List<EligibleYakapEncounterDto>>>
 {
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<YakapTransmittal> _transmittalRepo;
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<YakapSubmission> _submissionRepo;
+    private readonly IRepository<LabOrder> _labOrderRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetEligibleYakapEncountersQueryHandler(
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<YakapTransmittal> transmittalRepo,
-        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<YakapSubmission> submissionRepo,
+        IRepository<LabOrder> labOrderRepo,
         IClinicContext clinicContext)
     {
         _encounterRepo = encounterRepo;
         _patientRepo = patientRepo;
-        _transmittalRepo = transmittalRepo;
+        _submissionRepo = submissionRepo;
         _labOrderRepo = labOrderRepo;
         _clinicContext = clinicContext;
     }
@@ -50,13 +50,13 @@ public class GetEligibleYakapEncountersQueryHandler : IRequestHandler<GetEligibl
         var clinicId = _clinicContext.ClinicId;
         var targetBranchId = request.BranchId ?? _clinicContext.BranchId;
 
-        // 1. Find encounter IDs already submitted or approved in non-failed transmittals
-        var submittedEncounterIds = await _transmittalRepo.Query(t =>
-                (targetBranchId.HasValue ? t.BranchId == targetBranchId.Value : t.ClinicId == clinicId) &&
-                t.Status != YakapTransmittalStatus.Failed)
-            .SelectMany(t => t.Items)
-            .Where(i => i.ConsultationEncounterId.HasValue)
-            .Select(i => i.ConsultationEncounterId!.Value)
+        // 1. Find encounter IDs already submitted or approved in non-failed submissions
+        var submittedEncounterIds = await _submissionRepo.Query(s =>
+                s.ClinicId == clinicId &&
+                s.ConsultationEncounterId.HasValue &&
+                s.ProcessingStatus != YakapProcessingStatus.Rejected &&
+                s.ProcessingStatus != YakapProcessingStatus.Failed)
+            .Select(s => s.ConsultationEncounterId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
 

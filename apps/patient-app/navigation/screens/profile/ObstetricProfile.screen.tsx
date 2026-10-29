@@ -29,6 +29,7 @@ import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncSer
 import { deletePatientPregnancy, deletePatientContraceptiveHistory } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
+import { useEhrOptions } from 'hooks/useEhrOptions';
 
 // ── Obstetric Profile Form ──────────────────────────────────────────────────
 
@@ -56,20 +57,6 @@ type PregForm = {
   complications: string;
 };
 
-const OUTCOME_OPTIONS = [
-  { label: 'Live Birth', value: 'LiveBirth' },
-  { label: 'Stillbirth', value: 'Stillbirth' },
-  { label: 'Miscarriage', value: 'Miscarriage' },
-  { label: 'Ectopic', value: 'Ectopic' },
-  { label: 'Induced Abortion', value: 'Abortion' },
-];
-const DELIVERY_OPTIONS = [
-  { label: 'Normal Spontaneous Vaginal', value: 'NSVD' },
-  { label: 'Caesarean Section', value: 'CS' },
-  { label: 'Forceps Delivery', value: 'Forceps' },
-  { label: 'Vacuum Extraction', value: 'Vacuum' },
-];
-
 // ── Contraceptive Form ──────────────────────────────────────────────────────
 
 type ContraForm = {
@@ -80,27 +67,16 @@ type ContraForm = {
   stopReason: string;
 };
 
-const CONTRA_OPTIONS = [
-  { label: 'Combined Oral Contraceptive Pill', value: 'COCP' },
-  { label: 'Progestin-Only Pill', value: 'POP' },
-  { label: 'Injectable (Depo-Provera)', value: 'Injectable' },
-  { label: 'IUD (Copper)', value: 'IUD_Copper' },
-  { label: 'IUD (Hormonal/Mirena)', value: 'IUD_Hormonal' },
-  { label: 'Implant', value: 'Implant' },
-  { label: 'Male Condom', value: 'MaleCondom' },
-  { label: 'Female Condom', value: 'FemaleCondom' },
-  { label: 'Bilateral Tubal Ligation', value: 'BTL' },
-  { label: 'Vasectomy (Partner)', value: 'Vasectomy' },
-  { label: 'Calendar / NFP', value: 'NFP' },
-  { label: 'None', value: 'None' },
-];
-
 export default function ObstetricProfileScreen() {
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
   const navigation = useNavigation();
   const headerHeight = useSafeHeaderHeight();
+
+  const { selectOptions: outcomeOptions } = useEhrOptions('pregnancy_outcome');
+  const { selectOptions: deliveryOptions } = useEhrOptions('delivery_type');
+  const { selectOptions: contraOptions } = useEhrOptions('contraceptive_method');
   const [saving, setSaving] = useState(false);
   const [savingPreg, setSavingPreg] = useState(false);
   const [savingContra, setSavingContra] = useState(false);
@@ -411,8 +387,8 @@ export default function ObstetricProfileScreen() {
 
             <ProfileSectionHeader title="Pregnancy History" />
             {pregnancies.map((p) => {
-              const outcomeLabel = OUTCOME_OPTIONS.find(o => o.value === p.outcome)?.label ?? p.outcome;
-              const deliveryLabel = DELIVERY_OPTIONS.find(o => o.value === p.deliveryType)?.label ?? p.deliveryType;
+              const outcomeLabel = outcomeOptions.find(o => o.value === p.outcome || o.label === p.outcome)?.label ?? p.outcome;
+              const deliveryLabel = deliveryOptions.find(o => o.value === p.deliveryType || o.label === p.deliveryType)?.label ?? p.deliveryType;
               const cardTitle = [outcomeLabel, p.year ? `${p.year}` : ''].filter(Boolean).join(' — ');
               return (
                 <ProfileListItemCard
@@ -444,7 +420,7 @@ export default function ObstetricProfileScreen() {
 
             <ProfileSectionHeader title="Contraceptive History" />
             {contraItems.map((c) => {
-              const methodLabel = CONTRA_OPTIONS.find(o => o.value === c.method)?.label ?? c.method;
+              const methodLabel = contraOptions.find(o => o.value === c.method || o.label === c.method)?.label ?? c.method;
               return (
                 <ProfileListItemCard
                   key={c.id}
@@ -481,7 +457,7 @@ export default function ObstetricProfileScreen() {
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Pregnancy" />
           <Controller control={pregForm.control} name="outcome" render={({ field }) => (
-            <ProfileFormField label="Outcome" value={OUTCOME_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setOutcomeModal(true)} placeholder="Select outcome" picker />
+            <ProfileFormField label="Outcome" value={outcomeOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''} onPressIn={() => setOutcomeModal(true)} placeholder="Select outcome" picker />
           )} />
           <Controller control={pregForm.control} name="year" render={({ field }) => (
             <ProfileFormField label="Year" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="YYYY" />
@@ -490,7 +466,7 @@ export default function ObstetricProfileScreen() {
             <ProfileFormField label="Gestational Age (weeks)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
           )} />
           <Controller control={pregForm.control} name="deliveryMode" render={({ field }) => (
-            <ProfileFormField label="Delivery Mode" value={DELIVERY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setDeliveryModal(true)} placeholder="Select mode" picker />
+            <ProfileFormField label="Delivery Mode" value={deliveryOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''} onPressIn={() => setDeliveryModal(true)} placeholder="Select mode" picker />
           )} />
           <Controller control={pregForm.control} name="complications" render={({ field }) => (
             <ProfileFormField label="Complications" value={field.value} onChangeText={field.onChange} multiline placeholder="None, or describe" />
@@ -504,7 +480,7 @@ export default function ObstetricProfileScreen() {
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Contraceptive Method" />
           <Controller control={contraForm.control} name="method" render={({ field }) => (
-            <ProfileFormField label="Method" value={CONTRA_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setContraModal(true)} placeholder="Select method" picker />
+            <ProfileFormField label="Method" value={contraOptions.find(o => o.value === field.value || o.label === field.value)?.label || field.value || ''} onPressIn={() => setContraModal(true)} placeholder="Select method" picker />
           )} />
           <Controller control={contraForm.control} name="isCurrent" render={({ field }) => (
             <ProfileToggle label="Currently Using" value={field.value} onValueChange={field.onChange} />
@@ -520,13 +496,13 @@ export default function ObstetricProfileScreen() {
       </ThemedBottomSheetModal>
 
       <Controller control={pregForm.control} name="outcome" render={({ field }) => (
-        <ProfileSelectModal visible={outcomeModal} title="Pregnancy Outcome" options={OUTCOME_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setOutcomeModal(false)} />
+        <ProfileSelectModal visible={outcomeModal} title="Pregnancy Outcome" options={outcomeOptions} selected={field.value} onSelect={field.onChange} onClose={() => setOutcomeModal(false)} />
       )} />
       <Controller control={pregForm.control} name="deliveryMode" render={({ field }) => (
-        <ProfileSelectModal visible={deliveryModal} title="Delivery Mode" options={DELIVERY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setDeliveryModal(false)} />
+        <ProfileSelectModal visible={deliveryModal} title="Delivery Mode" options={deliveryOptions} selected={field.value} onSelect={field.onChange} onClose={() => setDeliveryModal(false)} />
       )} />
       <Controller control={contraForm.control} name="method" render={({ field }) => (
-        <ProfileSelectModal visible={contraModal} title="Contraceptive Method" options={CONTRA_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setContraModal(false)} />
+        <ProfileSelectModal visible={contraModal} title="Contraceptive Method" options={contraOptions} selected={field.value} onSelect={field.onChange} onClose={() => setContraModal(false)} />
       )} />
     </BottomSheetModalProvider>
   );

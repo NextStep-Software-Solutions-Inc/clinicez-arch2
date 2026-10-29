@@ -758,13 +758,11 @@ public class AdminEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var email = httpContext.User.FindFirst("emails")?.Value 
-                        ?? httpContext.User.FindFirst(ClaimTypes.Email)?.Value 
-                        ?? httpContext.User.FindFirst("email")?.Value;
-
             try
             {
-                var result = await sender.Send(new AcceptAdminInvitationCommand(token, clerkUserId, email));
+                var verifiedEmails = ClinicEz.Portal.Api.Auth.ClaimEmailExtractor.ExtractVerifiedEmails(httpContext.User);
+                var primaryEmail = verifiedEmails.Count > 0 ? verifiedEmails[0] : null;
+                var result = await sender.Send(new AcceptAdminInvitationCommand(token, clerkUserId, primaryEmail, verifiedEmails));
                 return Results.Ok(result);
             }
             catch (KeyNotFoundException ex)

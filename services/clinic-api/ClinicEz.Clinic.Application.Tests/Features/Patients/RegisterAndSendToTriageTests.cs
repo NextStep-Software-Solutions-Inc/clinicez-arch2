@@ -31,7 +31,7 @@ public class RegisterAndSendToTriageTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, queueRepo: queueRepo);
@@ -129,7 +129,7 @@ public class RegisterAndSendToTriageTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, queueRepo: queueRepo);
@@ -177,10 +177,10 @@ public class RegisterAndSendToTriageTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
 
         var doctorId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
@@ -200,7 +200,7 @@ public class RegisterAndSendToTriageTests
         doctor.SetAssignedRoomIds(new List<Guid> { roomId });
         await staffRepo.AddAsync(doctor);
 
-        var room = new ClinicRoom
+        var room = new Room
         {
             Id = roomId,
             TenantId = _tenantId,

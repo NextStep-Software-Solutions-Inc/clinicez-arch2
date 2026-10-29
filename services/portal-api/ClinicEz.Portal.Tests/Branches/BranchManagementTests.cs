@@ -128,9 +128,9 @@ public class BranchManagementTests : IDisposable
             PhilHealthAccreditationNumber = "H92005678",
             PhilHealthPmccNumber = "Z1002",
             PhilHealthSoftwareCertificateId = "KON-UPTOWN-Z1002",
-            PhilHealthEncryptedUsername = protector.Protect("ph_user_123"),
-            PhilHealthEncryptedPassword = protector.Protect("SuperSecretP@ss"),
+            PhilHealthEncryptedSecretKey = protector.Protect("ph_secret_123"),
             PhilHealthEncryptedCipherKey = protector.Protect("32-BYTE-ENCRYPTION-CIPHER-KEY!"),
+            PhilHealthBaseUrl = "https://pcapi.philhealth.gov.ph",
             IsPhilHealthAccredited = true
         };
 
@@ -140,9 +140,9 @@ public class BranchManagementTests : IDisposable
         var loaded = await _context.Branches.FindAsync(branch.Id);
         Assert.NotNull(loaded);
 
-        Assert.Equal("ph_user_123", protector.Unprotect(loaded!.PhilHealthEncryptedUsername!));
-        Assert.Equal("SuperSecretP@ss", protector.Unprotect(loaded.PhilHealthEncryptedPassword!));
+        Assert.Equal("ph_secret_123", protector.Unprotect(loaded!.PhilHealthEncryptedSecretKey!));
         Assert.Equal("32-BYTE-ENCRYPTION-CIPHER-KEY!", protector.Unprotect(loaded.PhilHealthEncryptedCipherKey!));
+        Assert.Equal("https://pcapi.philhealth.gov.ph", loaded.PhilHealthBaseUrl);
     }
 
     [Fact]
@@ -230,18 +230,17 @@ public class BranchManagementTests : IDisposable
     }
 
     [Fact]
-    public async Task TestPhilHealthSoapTester_WhenSandboxEndpoint_ReturnsVerifiedSuccessWithToken()
+    public async Task TestPhilHealthPcapiTester_WhenSandboxEndpoint_ReturnsVerifiedSuccessWithToken()
     {
         var httpClient = new System.Net.Http.HttpClient();
-        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>.Instance;
-        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester(httpClient, logger);
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthPcapiTester>.Instance;
+        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthPcapiTester(httpClient, logger);
 
         var result = await tester.TestConnectionAsync(
             accreditationNumber: "H91001234",
-            username: "demo_soap_user",
-            password: "demo_password",
+            secretKey: "demo_pcapi_secret",
             softwareCertificateId: "CERT-2026-TEST",
-            endpoint: "/soap/konsulta");
+            baseUrl: "/api/v1/auth/token");
 
         Assert.True(result.Success);
         Assert.Contains("Simulation Sandbox Verified", result.Message);
@@ -270,61 +269,54 @@ public class BranchManagementTests : IDisposable
             LastRequest = request;
             return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
-                Content = new System.Net.Http.StringContent("<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:phi=\"http://philhealth.gov.ph/\"><soapenv:Body><phi:getTokenResponse><return>PROBE_TOKEN</return></phi:getTokenResponse></soapenv:Body></soapenv:Envelope>", System.Text.Encoding.UTF8, "text/xml")
+                Content = new System.Net.Http.StringContent("{\"token\":\"PROBE_TOKEN\",\"expires_in\":3600}", System.Text.Encoding.UTF8, "application/json")
             });
         }
     }
 
     [Theory]
-    // Trailing slash production endpoint (Security Bypass Regression Test)
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "", "valid_pass", "Username is required")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "   ", "valid_pass", "Username is required")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "valid_user", "", "Password is required")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "valid_user", "   ", "Password is required")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "", "", "Username is required")]
+    // Trailing slash production endpoint
+    [InlineData("https://pcapi.philhealth.gov.ph/", "", "Secret key is required")]
+    [InlineData("https://pcapi.philhealth.gov.ph/", "   ", "Secret key is required")]
     // Standard production endpoint without trailing slash
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP", "", "valid_pass", "Username is required")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP", "valid_user", "", "Password is required")]
-    // Production subpaths containing /soap/
-    [InlineData("https://claims.philhealth.gov.ph/soap/gateway", "", "valid_pass", "Username is required")]
-    [InlineData("https://claims.philhealth.gov.ph/soap/gateway/", "valid_user", "", "Password is required")]
+    [InlineData("https://pcapi.philhealth.gov.ph", "", "Secret key is required")]
+    // Production subpaths
+    [InlineData("https://claims.philhealth.gov.ph/pcapi/gateway", "", "Secret key is required")]
+    [InlineData("https://claims.philhealth.gov.ph/pcapi/gateway/", "", "Secret key is required")]
     // Production endpoints with untrimmed trailing whitespace and trailing slash
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/   ", "", "valid_pass", "Username is required")]
-    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/   ", "valid_user", "", "Password is required")]
-    public async Task TestPhilHealthSoapTester_WhenMissingMandatoryCredentialsOnProductionEndpoints_ReturnsDescriptiveFailure(
+    [InlineData("https://pcapi.philhealth.gov.ph/   ", "", "Secret key is required")]
+    public async Task TestPhilHealthPcapiTester_WhenMissingMandatoryCredentialsOnProductionEndpoints_ReturnsDescriptiveFailure(
         string endpoint,
-        string username,
-        string password,
+        string secretKey,
         string expectedErrorSubstr)
     {
         var handler = new CapturingProbeHandler();
         var httpClient = new System.Net.Http.HttpClient(handler);
-        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>.Instance;
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthPcapiTester>.Instance;
         var env = new FakeEnvironment("Production");
-        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester(httpClient, logger, env);
+        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthPcapiTester(httpClient, logger, env);
 
         var result = await tester.TestConnectionAsync(
             accreditationNumber: "H91001234",
-            username: username,
-            password: password,
+            secretKey: secretKey,
             softwareCertificateId: "CERT-2026",
-            endpoint: endpoint);
+            baseUrl: endpoint);
 
         Assert.False(result.Success);
-        Assert.Contains(expectedErrorSubstr, result.Message);
+        Assert.Contains(expectedErrorSubstr, result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, handler.CallCount);
         Assert.Null(handler.LastRequest);
     }
 
     [Theory]
-    [InlineData("https://staging.philhealth.gov.ph/KONSULTA/SOAP/")]
-    [InlineData("https://staging.philhealth.gov.ph/KONSULTA/SOAP")]
-    [InlineData("https://staging.philhealth.gov.ph/soap/")]
-    [InlineData("/soap/konsulta/")]
-    [InlineData("/soap/konsulta")]
+    [InlineData("https://staging.philhealth.gov.ph/pcapi/")]
+    [InlineData("https://staging.philhealth.gov.ph/pcapi")]
+    [InlineData("https://sandbox.philhealth.gov.ph/")]
+    [InlineData("/api/v1/auth/token/")]
+    [InlineData("/api/v1/auth/token")]
     public void IsStagingOrSandbox_TrailingSlashStagingEndpoints_EvaluatesToTrue(string stagingEndpoint)
     {
-        var result = ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester.IsStagingOrSandbox(stagingEndpoint);
+        var result = ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthPcapiTester.IsStagingOrSandbox(stagingEndpoint);
         Assert.True(result, $"Expected staging endpoint '{stagingEndpoint}' to evaluate to true.");
     }
 
@@ -338,33 +330,33 @@ public class BranchManagementTests : IDisposable
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             Name = "Downtown Branch",
-            PhilHealthEncryptedUsername = protector.Protect("existing_user"),
-            PhilHealthEncryptedPassword = protector.Protect("existing_pass")
+            PhilHealthEncryptedSecretKey = protector.Protect("existing_secret"),
+            PhilHealthEncryptedCipherKey = protector.Protect("existing_cipher")
         };
 
         // When request has null (omitted in JSON), preserve existing
-        string? requestUsernameNull = null;
-        string? requestPasswordNull = null;
+        string? requestSecretNull = null;
+        string? requestCipherNull = null;
 
-        if (requestUsernameNull != null)
-            branch.PhilHealthEncryptedUsername = protector.Protect(requestUsernameNull.Trim());
-        if (requestPasswordNull != null)
-            branch.PhilHealthEncryptedPassword = protector.Protect(requestPasswordNull);
+        if (requestSecretNull != null)
+            branch.PhilHealthEncryptedSecretKey = protector.Protect(requestSecretNull.Trim());
+        if (requestCipherNull != null)
+            branch.PhilHealthEncryptedCipherKey = protector.Protect(requestCipherNull.Trim());
 
-        Assert.Equal("existing_user", protector.Unprotect(branch.PhilHealthEncryptedUsername));
-        Assert.Equal("existing_pass", protector.Unprotect(branch.PhilHealthEncryptedPassword));
+        Assert.Equal("existing_secret", protector.Unprotect(branch.PhilHealthEncryptedSecretKey));
+        Assert.Equal("existing_cipher", protector.Unprotect(branch.PhilHealthEncryptedCipherKey));
 
         // When request has "" (explicit blank staging credentials), update to blank
-        string? requestUsernameBlank = "";
-        string? requestPasswordBlank = "";
+        string? requestSecretBlank = "";
+        string? requestCipherBlank = "";
 
-        if (requestUsernameBlank != null)
-            branch.PhilHealthEncryptedUsername = protector.Protect(requestUsernameBlank.Trim());
-        if (requestPasswordBlank != null)
-            branch.PhilHealthEncryptedPassword = protector.Protect(requestPasswordBlank);
+        if (requestSecretBlank != null)
+            branch.PhilHealthEncryptedSecretKey = protector.Protect(requestSecretBlank.Trim());
+        if (requestCipherBlank != null)
+            branch.PhilHealthEncryptedCipherKey = protector.Protect(requestCipherBlank.Trim());
 
-        Assert.Equal("", protector.Unprotect(branch.PhilHealthEncryptedUsername));
-        Assert.Equal("", protector.Unprotect(branch.PhilHealthEncryptedPassword));
+        Assert.Equal("", protector.Unprotect(branch.PhilHealthEncryptedSecretKey));
+        Assert.Equal("", protector.Unprotect(branch.PhilHealthEncryptedCipherKey));
     }
 }
 

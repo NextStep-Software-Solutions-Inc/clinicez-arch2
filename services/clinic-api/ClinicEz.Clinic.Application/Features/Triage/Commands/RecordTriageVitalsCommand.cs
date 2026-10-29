@@ -66,16 +66,16 @@ public sealed class RecordTriageVitalsCommandValidator : AbstractValidator<Recor
 public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTriageVitalsCommand, TriageVitalsDto>
 {
     private readonly IRepository<QueueItem> _queueRepository;
-    private readonly IRepository<TriageVitals> _vitalsRepository;
-    private readonly IRepository<ClinicPatient> _patientRepository;
+    private readonly IRepository<PatientVitals> _vitalsRepository;
+    private readonly IRepository<Patient> _patientRepository;
     private readonly Application.Common.Interfaces.IWhoZScoreCalculator? _zScoreCalculator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public RecordTriageVitalsCommandHandler(
         IRepository<QueueItem> queueRepository,
-        IRepository<TriageVitals> vitalsRepository,
-        IRepository<ClinicPatient> patientRepository,
+        IRepository<PatientVitals> vitalsRepository,
+        IRepository<Patient> patientRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         Application.Common.Interfaces.IWhoZScoreCalculator? zScoreCalculator = null)
@@ -91,7 +91,7 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
     public async Task<TriageVitalsDto> Handle(RecordTriageVitalsCommand request, CancellationToken cancellationToken)
     {
         var queueItem = await _queueRepository.Query(q => q.Id == request.QueueItemId && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (queueItem == null)
@@ -123,7 +123,7 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             {
                 var evaluation = _zScoreCalculator.Calculate(
                     patient.DateOfBirth,
-                    patient.Gender,
+                    patient.Gender.ToString(),
                     effectiveLengthHeight.Value,
                     request.WeightKg.Value,
                     request.IsMeasuredRecumbent || request.BodyLengthCm.HasValue);
@@ -139,10 +139,10 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             }
         }
 
-        var vitals = queueItem.TriageVitals;
+        var vitals = queueItem.PatientVitals;
         if (vitals == null)
         {
-            vitals = new TriageVitals
+            vitals = new PatientVitals
             {
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,

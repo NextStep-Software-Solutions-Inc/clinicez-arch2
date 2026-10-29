@@ -38,23 +38,23 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
         // Act - Create Student ID and College fields
         var field1 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
-            "student_id", "Student ID Number", CustomFieldDataType.Text, "ClinicPatient", "Student", true, 1), CancellationToken.None);
+            "student_id", "Student ID Number", CustomFieldDataType.Text, "Patient", "Student", true, 1), CancellationToken.None);
 
         var field2 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
-            "college", "College / Department", CustomFieldDataType.Select, "ClinicPatient", "Student", true, 2, "[\"Engineering\",\"Nursing\"]"), CancellationToken.None);
+            "college", "College / Department", CustomFieldDataType.Select, "Patient", "Student", true, 2, "[\"Engineering\",\"Nursing\"]"), CancellationToken.None);
 
         var field3 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
-            "employee_id", "Employee ID", CustomFieldDataType.Text, "ClinicPatient", "Employee", true, 1), CancellationToken.None);
+            "employee_id", "Employee ID", CustomFieldDataType.Text, "Patient", "Employee", true, 1), CancellationToken.None);
 
         // Query by Category "Student"
-        var studentFields = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient", "Student"), CancellationToken.None);
+        var studentFields = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient", "Student"), CancellationToken.None);
 
         // Assert
         field1.FieldKey.Should().Be("student_id");
@@ -70,7 +70,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
 
         var customFields = new Dictionary<string, object?>
@@ -127,7 +127,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var attachmentRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var attachmentRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var uploadHandler = new UploadRecordAttachmentCommandHandler(attachmentRepo, uow, _clinicContext);
         var verifyHandler = new VerifyRecordAttachmentCommandHandler(
@@ -195,7 +195,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var bulkHandler = new BulkRegisterClinicPatientsCommandHandler(patientRepo, uow, _clinicContext);
 
         var students = new List<BulkPatientItemDto>
@@ -222,8 +222,8 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var attachmentRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var attachmentRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
         var selfEnrollHandler = new PublicStudentSelfEnrollCommandHandler(patientRepo, attachmentRepo, uow, _clinicContext);
 
         var command = new PublicStudentSelfEnrollCommand(
@@ -273,7 +273,7 @@ public class TenantCustomFieldsAndVerificationTests
         var queryHandler = new GetCustomFieldTemplatesQueryHandler();
 
         // Act
-        var templates = await queryHandler.Handle(new GetCustomFieldTemplatesQuery("ClinicPatient"), CancellationToken.None);
+        var templates = await queryHandler.Handle(new GetCustomFieldTemplatesQuery("Patient"), CancellationToken.None);
 
         // Assert
         templates.Should().NotBeNull();
@@ -311,7 +311,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -341,7 +341,7 @@ public class TenantCustomFieldsAndVerificationTests
         employeeIdField.VisibilityRuleJson.Should().Contain("\"value\":\"Employee/Faculty\"");
 
         // Verify query returns ordered list
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queried.Should().HaveCount(8);
         queried[0].FieldKey.Should().Be("affiliation");
         queried[1].FieldKey.Should().Be("student_id");
@@ -353,7 +353,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // Act - Run 1
@@ -374,7 +374,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // Act & Assert
@@ -388,17 +388,17 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
-        var f1 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_alpha", "Alpha", CustomFieldDataType.Text, "ClinicPatient", null, false, 1), CancellationToken.None);
-        var f2 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_beta", "Beta", CustomFieldDataType.Text, "ClinicPatient", null, false, 2), CancellationToken.None);
-        var f3 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_gamma", "Gamma", CustomFieldDataType.Text, "ClinicPatient", null, false, 3), CancellationToken.None);
+        var f1 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_alpha", "Alpha", CustomFieldDataType.Text, "Patient", null, false, 1), CancellationToken.None);
+        var f2 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_beta", "Beta", CustomFieldDataType.Text, "Patient", null, false, 2), CancellationToken.None);
+        var f3 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_gamma", "Gamma", CustomFieldDataType.Text, "Patient", null, false, 3), CancellationToken.None);
 
         // Act - Reverse order via orderedIds: Gamma (3), Alpha (1), Beta (2)
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", orderedIds: new List<Guid> { f3.Id, f1.Id, f2.Id }), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", orderedIds: new List<Guid> { f3.Id, f1.Id, f2.Id }), CancellationToken.None);
 
         // Assert
         reordered.Should().HaveCount(3);
@@ -410,7 +410,7 @@ public class TenantCustomFieldsAndVerificationTests
         reordered[2].DisplayOrder.Should().Be(3);
 
         // Verify querying respects the new order
-        var queryResult = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queryResult = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queryResult[0].FieldKey.Should().Be("f_gamma");
         queryResult[1].FieldKey.Should().Be("f_alpha");
         queryResult[2].FieldKey.Should().Be("f_beta");
@@ -421,12 +421,12 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow);
 
-        var f1 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("order_a", "Item A", CustomFieldDataType.Text, "ClinicPatient", null, false, 10), CancellationToken.None);
-        var f2 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("order_b", "Item B", CustomFieldDataType.Text, "ClinicPatient", null, false, 20), CancellationToken.None);
+        var f1 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("order_a", "Item A", CustomFieldDataType.Text, "Patient", null, false, 10), CancellationToken.None);
+        var f2 = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("order_b", "Item B", CustomFieldDataType.Text, "Patient", null, false, 20), CancellationToken.None);
 
         // Act - Explicitly swap display orders
         var items = new List<CustomFieldOrderItem>
@@ -434,7 +434,7 @@ public class TenantCustomFieldsAndVerificationTests
             new(f1.Id, 50),
             new(f2.Id, 5)
         };
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand(items: items, entityType: "ClinicPatient"), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand(items: items, entityType: "Patient"), CancellationToken.None);
 
         // Assert - f2 (5) before f1 (50)
         reordered.Should().HaveCount(2);
@@ -449,12 +449,12 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var updateHandler = new UpdateCustomFieldDefinitionCommandHandler(repo, uow);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
-        var created = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("department", "Old Dept", CustomFieldDataType.Text, "ClinicPatient", null, false, 1), CancellationToken.None);
+        var created = await createHandler.Handle(new CreateCustomFieldDefinitionCommand("department", "Old Dept", CustomFieldDataType.Text, "Patient", null, false, 1), CancellationToken.None);
 
         // Act
         var updated = await updateHandler.Handle(new UpdateCustomFieldDefinitionCommand(
@@ -477,7 +477,7 @@ public class TenantCustomFieldsAndVerificationTests
         updated.DisplayOrder.Should().Be(5);
         updated.VisibilityRuleJson.Should().Contain("\"value\":\"Employee\"");
 
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         var found = queried.First(f => f.Id == created.Id);
         found.Label.Should().Be("Updated Department");
         found.VisibilityRuleJson.Should().Contain("\"value\":\"Employee\"");
@@ -488,7 +488,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var updateHandler = new UpdateCustomFieldDefinitionCommandHandler(repo, uow);
 
         // Act & Assert
@@ -502,11 +502,11 @@ public class TenantCustomFieldsAndVerificationTests
     }
 
     [Fact]
-    public async Task CustomFields_DynamicDictionary_ShouldPersistAndQueryCorrectlyOnClinicPatient()
+    public async Task CustomFields_DynamicDictionary_ShouldPersistAndQueryCorrectlyOnPatient()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var registerHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
 
         var customFields = new Dictionary<string, object?>
@@ -569,7 +569,7 @@ public class TenantCustomFieldsAndVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
 
         var visJson = "{\"source\":\"static\",\"field\":\"gender\",\"operator\":\"equals\",\"value\":\"Female\"}";
@@ -580,7 +580,7 @@ public class TenantCustomFieldsAndVerificationTests
             FieldKey: "special_track",
             Label: "Special Track",
             DataType: CustomFieldDataType.Select,
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             Category: "Student",
             IsRequired: true,
             DisplayOrder: 10,

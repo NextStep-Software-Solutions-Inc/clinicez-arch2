@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using ClinicEz.Clinic.Application.Features.Yakap.Services;
+using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Services;
 
-public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
+public sealed class PhilHealthSequenceGenerator : ClinicEz.Clinic.Domain.Interfaces.IPhilHealthSequenceGenerator
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<PhilHealthSequenceGenerator> _logger;
@@ -97,6 +97,7 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         CancellationToken ct = default)
     {
         var patient = await _dbContext.Patients
+            .Include(p => p.YakapEnlistments)
             .FirstOrDefaultAsync(p => p.Id == patientId, ct);
 
         if (patient == null)
@@ -112,7 +113,7 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         }
 
         int? requestedYear = int.TryParse(effectiveYear, out var ey) ? ey : null;
-        YakapEnlistmentEntry activeEntry;
+        PatientYakapEnlistment activeEntry;
 
         if (encounter != null || referenceDate.HasValue)
         {
@@ -148,7 +149,7 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         }
 
         // 2. Assign Enlistment Transaction Number if missing on active entry
-        var currentEnlistNo = activeEntry.EnlistmentNo;
+        var currentEnlistNo = activeEntry.EnlistmentTransNo;
         if (string.IsNullOrWhiteSpace(currentEnlistNo))
         {
             currentEnlistNo = await GenerateTransactionNumberAsync(
@@ -158,7 +159,7 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
                 accreditationNumber,
                 yearClean,
                 ct);
-            activeEntry.EnlistmentNo = currentEnlistNo;
+            activeEntry.EnlistmentTransNo = currentEnlistNo;
             patientModified = true;
         }
 
@@ -191,8 +192,6 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         if (encounter != null)
         {
             encounter.PhilHealthCaseNo = currentCaseNo;
-            encounter.HciCaseNo = currentCaseNo;
-            encounter.HciTransNo = currentEnlistNo;
 
             if (string.IsNullOrWhiteSpace(encounter.PhilHealthSoapTransNo))
             {
@@ -204,7 +203,6 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
                     yearClean,
                     ct);
             }
-            encounter.SoapTransNo = encounter.PhilHealthSoapTransNo;
             await _dbContext.SaveChangesAsync(ct);
             soapTransNo = encounter.PhilHealthSoapTransNo;
         }

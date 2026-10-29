@@ -27,7 +27,7 @@ public class ValidateConsultationYakapReadinessQueryTests
         _clinicContext.TenantId.Returns(_tenantId);
     }
 
-    private (ConsultationEncounter Encounter, StaffMember Doctor, ClinicPatient Patient, TriageVitals Vitals) CreateValidBaseline(Guid encounterId, Guid doctorId, Guid patientId)
+    private (ConsultationEncounter Encounter, StaffMember Doctor, Patient Patient, PatientVitals Vitals) CreateValidBaseline(Guid encounterId, Guid doctorId, Guid patientId)
     {
         var doctor = new StaffMember
         {
@@ -42,7 +42,7 @@ public class ValidateConsultationYakapReadinessQueryTests
             S2LicenseNumber = "S2-9988"
         };
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -68,7 +68,6 @@ public class ValidateConsultationYakapReadinessQueryTests
             DoctorS2License = "S2-9988",
             PhilHealthAtc = "A",
             PhilHealthSignSympCode = "01", // Fever
-            GeneralSurveyId = "1", // Essentially Normal
             Diagnoses = new List<EncounterDiagnosis>
             {
                 new() { Id = Guid.NewGuid(), Icd10Code = "J06.9", Description = "Acute upper respiratory infection", IsPrimary = true }
@@ -81,8 +80,9 @@ public class ValidateConsultationYakapReadinessQueryTests
 
         var findings = new NineSystemPhysicalExamFindings();
         encounter.SetPhysicalExamFindings(findings);
+        encounter.PhysicalExams.First().GenSurveyId = "1";
 
-        var vitals = new TriageVitals
+        var vitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -107,9 +107,9 @@ public class ValidateConsultationYakapReadinessQueryTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encounterId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
@@ -150,9 +150,9 @@ public class ValidateConsultationYakapReadinessQueryTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encounterId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
@@ -186,9 +186,9 @@ public class ValidateConsultationYakapReadinessQueryTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encounterId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
@@ -222,9 +222,9 @@ public class ValidateConsultationYakapReadinessQueryTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encounterId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
@@ -260,9 +260,9 @@ public class ValidateConsultationYakapReadinessQueryTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encounterId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
@@ -306,9 +306,9 @@ public class ValidateConsultationYakapReadinessQueryTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var handler = new ValidateConsultationYakapReadinessQueryHandler(
             consultRepo, patientRepo, staffRepo, vitalsRepo, _clinicContext);

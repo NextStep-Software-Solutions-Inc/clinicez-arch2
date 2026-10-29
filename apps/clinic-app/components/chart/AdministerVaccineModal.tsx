@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -11,6 +11,7 @@ import { theme } from '../../constants/theme';
 import { ThemedText, Button, Icon, Badge, ValidatedDateInput, validateDateString, Modal } from '../ui';
 import { notify } from '../../utils/feedback';
 import { useStaff } from '../../context/StaffContext';
+import { useEhrOptions } from '../../hooks/useEhrOptions';
 import { PHILHEALTH_STATUTORY_VACCINES } from './StatutoryImmunizationsTab';
 import type {
   ClinicPatient,
@@ -80,6 +81,10 @@ export default function AdministerVaccineModal({
   const [expirationDate, setExpirationDate] = useState('');
   const [doseSequence, setDoseSequence] = useState('1');
   const [isSeriesCompleted, setIsSeriesCompleted] = useState(false);
+  const { options: dynamicRoutes } = useEhrOptions('medicine_route');
+  const availableRoutes = useMemo(() => {
+    return dynamicRoutes.length > 0 ? dynamicRoutes.map((r) => r.label) : (VACCINE_ROUTES as readonly string[]);
+  }, [dynamicRoutes]);
   const [route, setRoute] = useState<string>(VACCINE_ROUTES[0]);
   const [injectionSite, setInjectionSite] = useState<string>(INJECTION_SITES[0]);
   const [brandName, setBrandName] = useState('');
@@ -394,7 +399,7 @@ export default function AdministerVaccineModal({
                 Administration Route *
               </ThemedText>
               <View style={styles.chipRow}>
-                {VACCINE_ROUTES.map((r) => (
+                {availableRoutes.map((r) => (
                   <Pressable
                     key={r}
                     onPress={() => setRoute(r)}

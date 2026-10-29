@@ -208,13 +208,13 @@ public class NonDoctorWorkflowsMilestone1Tests
     }
 
     [Fact]
-    public async Task RecordTriageVitals_WithPriority_PersistsPriorityAndStatusToPostgreSql()
+    public async Task RecordPatientVitals_WithPriority_PersistsPriorityAndStatusToPostgreSql()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
@@ -280,7 +280,7 @@ public class NonDoctorWorkflowsMilestone1Tests
             QueueNumber = "Q-010",
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Triaged,
-            TriageVitals = new TriageVitals
+            PatientVitals = new PatientVitals
             {
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
@@ -307,12 +307,12 @@ public class NonDoctorWorkflowsMilestone1Tests
         result.Priority.Should().Be(QueuePriority.Emergency);
 
         var reloadedItem = await context.Set<QueueItem>()
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstAsync(q => q.Id == queueItemId);
 
         reloadedItem.Priority.Should().Be(QueuePriority.Emergency);
-        reloadedItem.TriageVitals.Should().NotBeNull();
-        reloadedItem.TriageVitals!.TriageAcuityReason.Should().Be("Patient suddenly dyspneic with central cyanosis, SpO2 84%");
+        reloadedItem.PatientVitals.Should().NotBeNull();
+        reloadedItem.PatientVitals!.TriageAcuityReason.Should().Be("Patient suddenly dyspneic with central cyanosis, SpO2 84%");
     }
 
     [Fact]
@@ -336,9 +336,9 @@ public class NonDoctorWorkflowsMilestone1Tests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,

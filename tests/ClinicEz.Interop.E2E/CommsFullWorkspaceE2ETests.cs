@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 // Service-specific aliases to prevent type resolution ambiguities
 using ClinicAppointment = ClinicEz.Clinic.Domain.Entities.Appointment;
-using ClinicPatientEntity = ClinicEz.Clinic.Domain.Entities.ClinicPatient;
+using ClinicPatientEntity = ClinicEz.Clinic.Domain.Entities.Patient;
 using PatientEntity = ClinicEz.Patient.Domain.Entities.Patient;
 using PatientDbContext = ClinicEz.Patient.Infrastructure.Persistence.ApplicationDbContext;
 using PortalDbContext = ClinicEz.Portal.Infrastructure.Persistence.ApplicationDbContext;
@@ -1066,7 +1066,7 @@ public class CommsFullWorkspaceE2ETests
 
         // 3. Verify immutable WORM audit log in database
         var auditEntry = await cell.Clinic.DbAsync(async db =>
-            await db.ClinicAuditEntries
+            await db.AuditEntries
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(a => a.TargetEntityId == appointmentId.ToString() && a.Action == "teleconsult.admission.emergency_override"));
 
@@ -1103,11 +1103,14 @@ public class CommsFullWorkspaceE2ETests
                 PhilHealthNumber = "12-345678901-2"
             };
 
-            patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+            patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
             {
+                TenantId = clinic.Tenant,
+                ClinicId = clinic.Id,
+                PatientId = patientId,
                 EffectiveYear = 2026,
-                EnlistedAt = "2026-01-15",
-                ValidUntil = "2026-12-31",
+                EnlistmentDate = new DateOnly(2026, 1, 15),
+                ValidUntil = new DateOnly(2026, 12, 31),
                 Status = YakapEnlistmentStatus.Active
             });
 
@@ -1344,14 +1347,14 @@ public class CommsFullWorkspaceE2ETests
                 Role = StaffRole.Doctor
             };
 
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinic.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinic.Id);
             if (settings != null)
             {
                 settings.TeleconsultRecordingPolicy = "WorkspaceVaultOnly";
             }
             else
             {
-                db.ClinicSettings.Add(new ClinicSettings
+                db.Settings.Add(new FacilitySettings
                 {
                     Id = Guid.NewGuid(),
                     TenantId = clinic.Tenant,
@@ -1437,14 +1440,14 @@ public class CommsFullWorkspaceE2ETests
         // Seed clinic settings and consented recording session
         await cell.Clinic.DbAsync(async db =>
         {
-            var existingSettings = await db.ClinicSettings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinic.Id);
+            var existingSettings = await db.Settings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinic.Id);
             if (existingSettings != null)
             {
                 existingSettings.TeleconsultRecordingPolicy = "WorkspaceVaultOnly";
             }
             else
             {
-                db.ClinicSettings.Add(new ClinicSettings
+                db.Settings.Add(new FacilitySettings
                 {
                     Id = Guid.NewGuid(),
                     TenantId = clinic.Tenant,
@@ -1653,7 +1656,7 @@ public class CommsFullWorkspaceE2ETests
             expired.PurgedAtUtc.Should().NotBeNull();
 
             // WORM audit entry created for purged session
-            var audit = await db.ClinicAuditEntries.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.TargetEntityId == sessionExpiredId.ToString());
+            var audit = await db.AuditEntries.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.TargetEntityId == sessionExpiredId.ToString());
             audit.Should().NotBeNull();
             audit!.Action.Should().Be("teleconsult.recording.purged");
 
@@ -2344,7 +2347,7 @@ public class CommsFullWorkspaceE2ETests
         var now = DateTime.UtcNow;
 
         // 1. Seed addressed clinic in clinic-api
-        clinicDb.ClinicSettings.Add(new ClinicSettings
+        clinicDb.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -2417,10 +2420,10 @@ public class CommsFullWorkspaceE2ETests
         attachment.Notes.Should().Contain(transcriptSha256);
 
         // Assert: WORM audit entry created
-        var audit = await clinicDb.ClinicAuditEntries.IgnoreQueryFilters().FirstOrDefaultAsync(e => e.Action == "comms.transcript.archived");
+        var audit = await clinicDb.AuditEntries.IgnoreQueryFilters().FirstOrDefaultAsync(e => e.Action == "comms.transcript.archived");
         audit.Should().NotBeNull();
         audit!.ActorName.Should().Be("Nurse Receptionist");
-        audit.TargetEntityType.Should().Be("ClinicRecordAttachment");
+        audit.TargetEntityType.Should().Be("RecordAttachment");
         audit.Outcome.Should().Be(ClinicAuditOutcomes.Success);
     }
 

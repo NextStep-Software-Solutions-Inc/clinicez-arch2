@@ -21,7 +21,7 @@ public sealed class LabOrderJourney(TestCell cell, Fac clinic, Fac lab)
     public Fac Lab { get; } = lab;
 
     /// <summary>Doctor orders a test; the clinic issues it to <paramref name="target"/> (or onto a claim slip when null).</summary>
-    public async Task<ClinicLabOrderDto> OrderAsync(ClinicPatient patient, StaffMember doctor, Fac? target)
+    public async Task<ClinicLabOrderDto> OrderAsync(ClinicEz.Clinic.Domain.Entities.Patient patient, StaffMember doctor, Fac? target)
     {
         var order = await cell.Clinic.SendAsync(Clinic.Tenant, Clinic.Id, new CreateClinicLabOrderCommand(
             patient.Id,
@@ -36,10 +36,10 @@ public sealed class LabOrderJourney(TestCell cell, Fac clinic, Fac lab)
         return order;
     }
 
-    public Task<ClinicLabOrder> ClinicOrderAsync(Guid orderId) => cell.Clinic.DbAsync(db =>
+    public Task<LabOrder> ClinicOrderAsync(Guid orderId) => cell.Clinic.DbAsync(db =>
         db.LabOrders.IgnoreQueryFilters().Include(o => o.Items).SingleAsync(o => o.Id == orderId));
 
-    public Task<List<ClinicLabResult>> ClinicResultsAsync(Guid orderId) => cell.Clinic.DbAsync(db =>
+    public Task<List<LabResult>> ClinicResultsAsync(Guid orderId) => cell.Clinic.DbAsync(db =>
         db.LabResults.IgnoreQueryFilters().Where(r => r.LabOrderId == orderId).ToListAsync());
 
     /// <summary>The cashier of the lab's billing desk settles the invoice the lab requested, in full.</summary>

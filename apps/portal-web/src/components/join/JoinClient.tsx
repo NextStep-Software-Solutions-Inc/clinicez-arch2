@@ -45,6 +45,8 @@ import { JoinCodeModal } from "@/components/join/JoinCodeModal";
 import { OutsideDocumentDropzone } from "@/components/join/OutsideDocumentDropzone";
 import { DigitalPassCard } from "@/components/join/DigitalPassCard";
 import { getPatientApiUrl, getPortalApiUrl } from "@/utils/domain";
+import PsgcAddressPicker, { type PsgcAddressValue } from "@/components/common/PsgcAddressPicker";
+import { useEhrOptions } from "@/hooks/useEhrOptions";
 
 interface JoinClientProps {
   tenantSlug: string;
@@ -88,6 +90,45 @@ export default function JoinClient({
   const [contactNumber, setContactNumber] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
+  const [psgcAddress, setPsgcAddress] = useState<Partial<PsgcAddressValue>>({});
+
+  // Dynamic EHR Options
+  const { selectOptions: rawSexOptions } = useEhrOptions("sex");
+  const { selectOptions: rawCivilStatusOptions } = useEhrOptions("civil_status");
+
+  const sexOptions = useMemo(() => {
+    if (rawSexOptions && rawSexOptions.length > 0) {
+      return rawSexOptions.map((o) => {
+        let val: "Male" | "Female" | "Other" = "Other";
+        const lowerVal = (o.value || "").toLowerCase();
+        const lowerLabel = (o.label || "").toLowerCase();
+        if (lowerVal === "male" || lowerLabel === "male") val = "Male";
+        else if (lowerVal === "female" || lowerLabel === "female") val = "Female";
+        return { label: o.label, value: val };
+      });
+    }
+    return [
+      { label: "Male", value: "Male" as const },
+      { label: "Female", value: "Female" as const },
+      { label: "Other", value: "Other" as const },
+    ];
+  }, [rawSexOptions]);
+
+  const civilStatusOptions = useMemo(() => {
+    if (rawCivilStatusOptions && rawCivilStatusOptions.length > 0) {
+      return rawCivilStatusOptions.map((o) => ({
+        label: o.label,
+        value: o.label,
+      }));
+    }
+    return [
+      { label: "Single", value: "Single" },
+      { label: "Married", value: "Married" },
+      { label: "Widowed", value: "Widowed" },
+      { label: "Separated", value: "Separated" },
+      { label: "Other", value: "Other" },
+    ];
+  }, [rawCivilStatusOptions]);
 
   // Form State: PhilHealth & Member Type
   const [memberType, setMemberType] = useState<"MM" | "DD">("MM");
@@ -176,6 +217,21 @@ export default function JoinClient({
         if (data.contactNumber || data.mobile) setContactNumber(data.contactNumber || data.mobile);
         if (data.email) setEmail(data.email);
         if (data.address) setAddress(data.address);
+        if (data.regionPsgc || data.cityMunicipalityPsgc) {
+          setPsgcAddress({
+            regionPsgc: data.regionPsgc,
+            provincePsgc: data.provincePsgc,
+            cityMunicipalityPsgc: data.cityMunicipalityPsgc,
+            barangayPsgc: data.barangayPsgc,
+            regionName: data.regionName,
+            provinceName: data.provinceName,
+            cityMunicipalityName: data.cityMunicipalityName,
+            barangayName: data.barangayName,
+            streetAddress: data.streetAddress,
+            zipCode: data.zipCode,
+            formattedAddress: data.address || "",
+          });
+        }
 
         const pin = data.philHealthPin || data.governmentIds?.find((g: any) => g.idType === "PHILHEALTH")?.idNumber;
         if (pin) {
@@ -388,6 +444,34 @@ export default function JoinClient({
       contactNumber: contactNumber.trim(),
       email: email.trim() || undefined,
       address: address.trim() || undefined,
+      regionPsgc: psgcAddress.regionPsgc || undefined,
+      provincePsgc: psgcAddress.provincePsgc || undefined,
+      cityMunicipalityPsgc: psgcAddress.cityMunicipalityPsgc || undefined,
+      barangayPsgc: psgcAddress.barangayPsgc || undefined,
+      regionName: psgcAddress.regionName || undefined,
+      provinceName: psgcAddress.provinceName || undefined,
+      cityMunicipalityName: psgcAddress.cityMunicipalityName || undefined,
+      barangayName: psgcAddress.barangayName || undefined,
+      streetAddress: psgcAddress.streetAddress?.trim() || undefined,
+      zipCode: psgcAddress.zipCode?.trim() || undefined,
+      addresses: psgcAddress.regionPsgc
+        ? [
+            {
+              addressType: "Current",
+              isSameAsPermanent: true,
+              regionPsgc: psgcAddress.regionPsgc,
+              provincePsgc: psgcAddress.provincePsgc,
+              cityMunicipalityPsgc: psgcAddress.cityMunicipalityPsgc,
+              barangayPsgc: psgcAddress.barangayPsgc,
+              regionName: psgcAddress.regionName,
+              provinceName: psgcAddress.provinceName,
+              cityMunicipalityName: psgcAddress.cityMunicipalityName,
+              barangayName: psgcAddress.barangayName,
+              streetAddress: psgcAddress.streetAddress?.trim() || undefined,
+              zipCode: psgcAddress.zipCode?.trim() || undefined,
+            },
+          ]
+        : undefined,
       philHealthPin: philHealthPin.trim() || undefined,
       memberType,
       principalMemberPin: memberType === "DD" ? principalPin.trim() : undefined,
@@ -750,9 +834,11 @@ export default function JoinClient({
                   onChange={(e) => setSex(e.target.value as any)}
                   className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                 >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
+                  {sexOptions.map((opt) => (
+                    <option key={opt.value + opt.label} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -765,11 +851,11 @@ export default function JoinClient({
                   onChange={(e) => setCivilStatus(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
                 >
-                  <option value="Single">Single</option>
-                  <option value="Married">Married</option>
-                  <option value="Widowed">Widowed</option>
-                  <option value="Separated">Separated</option>
-                  <option value="Other">Other</option>
+                  {civilStatusOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -801,15 +887,12 @@ export default function JoinClient({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-foreground mb-1">
-                  Home / Residential Address
-                </label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="House No., Street, Barangay, City, Province"
-                  className="w-full px-3.5 py-2 rounded-xl border border-input text-sm bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+                <PsgcAddressPicker
+                  value={psgcAddress}
+                  onChange={(newAddress) => {
+                    setPsgcAddress(newAddress);
+                    setAddress(newAddress.formattedAddress);
+                  }}
                 />
               </div>
             </div>

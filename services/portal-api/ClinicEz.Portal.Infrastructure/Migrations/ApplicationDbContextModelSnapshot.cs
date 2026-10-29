@@ -303,8 +303,16 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("Barangay")
                         .HasColumnType("text");
 
+                    b.Property<string>("BarangayPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.Property<string>("City")
                         .HasColumnType("text");
+
+                    b.Property<string>("CityMunicipalityPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<string>("Code")
                         .HasColumnType("text");
@@ -342,31 +350,42 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("PhilHealthAccreditationNumber")
-                        .HasColumnType("text");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("PhilHealthBaseUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<string>("PhilHealthEncryptedCipherKey")
-                        .HasColumnType("text");
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
 
-                    b.Property<string>("PhilHealthEncryptedPassword")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PhilHealthEncryptedUsername")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PhilHealthKonsultaEndpoint")
-                        .HasColumnType("text");
+                    b.Property<string>("PhilHealthEncryptedSecretKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
 
                     b.Property<string>("PhilHealthPmccNumber")
-                        .HasColumnType("text");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("PhilHealthSoftwareCertificateId")
-                        .HasColumnType("text");
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Province")
                         .HasColumnType("text");
 
+                    b.Property<string>("ProvincePsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.Property<string>("Region")
                         .HasColumnType("text");
+
+                    b.Property<string>("RegionPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<string>("StreetAddress")
                         .HasColumnType("text");
@@ -712,6 +731,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("Barangay")
                         .HasColumnType("text");
 
+                    b.Property<string>("BarangayPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
@@ -724,6 +747,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.Property<string>("City")
                         .HasColumnType("text");
+
+                    b.Property<string>("CityMunicipalityPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<string>("Classification")
                         .HasColumnType("text");
@@ -825,8 +852,16 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("Province")
                         .HasColumnType("text");
 
+                    b.Property<string>("ProvincePsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.Property<string>("Region")
                         .HasColumnType("text");
+
+                    b.Property<string>("RegionPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<string>("Slug")
                         .IsRequired()

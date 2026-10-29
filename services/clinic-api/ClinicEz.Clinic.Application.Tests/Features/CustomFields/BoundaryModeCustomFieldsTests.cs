@@ -113,7 +113,7 @@ public class BoundaryModeCustomFieldsTests
     public async Task CreateCustomFieldDefinition_WithBoundaryMode_PersistsAndReturnsDto()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -142,7 +142,7 @@ public class BoundaryModeCustomFieldsTests
     public async Task UpdateCustomFieldDefinition_BoundaryMode_CanBeUpdatedAndCleared()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var updateHandler = new UpdateCustomFieldDefinitionCommandHandler(repo, uow);
@@ -183,7 +183,7 @@ public class BoundaryModeCustomFieldsTests
     public async Task ReorderCustomFields_PreservesBoundaryModeInProjection()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
@@ -203,10 +203,10 @@ public class BoundaryModeCustomFieldsTests
     }
 
     [Fact]
-    public async Task UpdateClinicPatient_ClearingCustomFieldWithExplicitNull_OverwritesPersistedValue()
+    public async Task UpdatePatient_ClearingCustomFieldWithExplicitNull_OverwritesPersistedValue()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var regHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
         var updHandler = new UpdateClinicPatientCommandHandler(patientRepo, uow, null, _clinicContext);
@@ -278,10 +278,10 @@ public class BoundaryModeCustomFieldsTests
     }
 
     [Fact]
-    public async Task UpdateClinicPatient_OmittingCustomField_PreservesPersistedValue()
+    public async Task UpdatePatient_OmittingCustomField_PreservesPersistedValue()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var regHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
         var updHandler = new UpdateClinicPatientCommandHandler(patientRepo, uow, null, _clinicContext);

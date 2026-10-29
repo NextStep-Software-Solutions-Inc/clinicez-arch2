@@ -4,9 +4,9 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using ClinicEz.Portal.Application.Features.PhilHealth;
 using ClinicEz.Portal.Infrastructure.PhilHealth;
 using Microsoft.Extensions.FileProviders;
@@ -43,17 +43,11 @@ public sealed class AdversarialChallengerM1It2Tests
                 LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
             }
 
-            var soapResponseXml = @"<soapenv:Envelope xmlns:soapenv=""http://schemas.xmlsoap.org/soap/envelope/"" xmlns:phi=""http://philhealth.gov.ph/"">
-   <soapenv:Body>
-      <phi:getTokenResponse>
-         <return>ADVERSARIAL_PROBE_TOKEN</return>
-      </phi:getTokenResponse>
-   </soapenv:Body>
-</soapenv:Envelope>";
+            var tokenJson = "{\"token\":\"ADVERSARIAL_PROBE_TOKEN\",\"expires_in\":3600}";
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(soapResponseXml, Encoding.UTF8, "text/xml")
+                Content = new StringContent(tokenJson, Encoding.UTF8, "application/json")
             };
         }
     }
@@ -108,7 +102,7 @@ public sealed class AdversarialChallengerM1It2Tests
     [InlineData("https://proxy.internal/soap/", false)]
     public void IsStagingOrSandbox_AdversarialStressTest_EvaluatesAccurately(string? endpoint, bool expected)
     {
-        var actual = PhilHealthSoapTester.IsStagingOrSandbox(endpoint);
+        var actual = PhilHealthPcapiTester.IsStagingOrSandbox(endpoint);
         Assert.Equal(expected, actual);
     }
 
@@ -119,22 +113,21 @@ public sealed class AdversarialChallengerM1It2Tests
     [InlineData("https://claims.philhealth.gov.ph/soap/gateway/")]
     [InlineData("https://claims.philhealth.gov.ph/soap/gateway///")]
     [InlineData("https://prod.philhealth.gov.ph/KONSULTA/SOAP/")]
-    public async Task PhilHealthSoapTester_AdversarialProductionEndpoints_StrictlyBlocksBlankCredentials(string endpoint)
+    public async Task PhilHealthPcapiTester_AdversarialProductionEndpoints_StrictlyBlocksBlankCredentials(string endpoint)
     {
         var handler = new CapturingProbeHandler();
         var httpClient = new HttpClient(handler);
         var env = new FakeEnvironment("Production");
-        var tester = new PhilHealthSoapTester(httpClient, NullLogger<PhilHealthSoapTester>.Instance, env);
+        var tester = new PhilHealthPcapiTester(httpClient, NullLogger<PhilHealthPcapiTester>.Instance, env);
 
         var result = await tester.TestConnectionAsync(
             accreditationNumber: "H91001234",
-            username: "",
-            password: "",
+            secretKey: "",
             softwareCertificateId: "CERT-PROD",
-            endpoint: endpoint);
+            baseUrl: endpoint);
 
         Assert.False(result.Success);
-        Assert.Contains("SOAP Username is required", result.Message);
+        Assert.Contains("Secret Key is required", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, handler.CallCount);
         Assert.Null(handler.LastRequest);
     }
@@ -145,33 +138,26 @@ public sealed class AdversarialChallengerM1It2Tests
     [InlineData("  https://staging.philhealth.gov.ph/KONSULTA/SOAP/  ")]
     [InlineData("https://staging.philhealth.gov.ph/soap/")]
     [InlineData("https://staging.philhealth.gov.ph/soap///")]
-    public async Task PhilHealthSoapTester_AdversarialStagingEndpoints_AllowsBlankCredentialsAndSendsXml(string endpoint)
+    public async Task PhilHealthPcapiTester_AdversarialStagingEndpoints_AllowsBlankCredentialsAndSendsXml(string endpoint)
     {
         var handler = new CapturingProbeHandler();
         var httpClient = new HttpClient(handler);
         var env = new FakeEnvironment("Production");
-        var tester = new PhilHealthSoapTester(httpClient, NullLogger<PhilHealthSoapTester>.Instance, env);
+        var tester = new PhilHealthPcapiTester(httpClient, NullLogger<PhilHealthPcapiTester>.Instance, env);
 
         var result = await tester.TestConnectionAsync(
             accreditationNumber: "P10038831",
-            username: "",
-            password: "",
+            secretKey: "",
             softwareCertificateId: "CERT-STAGING",
-            endpoint: endpoint);
+            baseUrl: endpoint);
 
         Assert.True(result.Success);
         Assert.Equal(1, handler.CallCount);
         Assert.NotNull(handler.LastRequestBody);
 
-        var xml = XDocument.Parse(handler.LastRequestBody!);
-        XNamespace phiNs = "http://philhealth.gov.ph/";
-        var usernameElem = xml.Descendants(phiNs + "pUsername").FirstOrDefault();
-        var passwordElem = xml.Descendants(phiNs + "pUserPassword").FirstOrDefault();
-
-        Assert.NotNull(usernameElem);
-        Assert.Empty(usernameElem!.Value);
-        Assert.NotNull(passwordElem);
-        Assert.Empty(passwordElem!.Value);
+        var doc = JsonDocument.Parse(handler.LastRequestBody!);
+        Assert.Equal("P10038831", doc.RootElement.GetProperty("accreditationNumber").GetString());
+        Assert.Equal("", doc.RootElement.GetProperty("secretKey").GetString());
     }
 
     [Theory]
@@ -179,22 +165,21 @@ public sealed class AdversarialChallengerM1It2Tests
     [InlineData("https://konsulta.philhealth.gov.ph/staging.philhealth.gov.ph/SOAP/")]
     [InlineData("https://notstaging.philhealth.gov.ph/soap/")]
     [InlineData("https://teststaging.philhealth.gov.ph/soap/")]
-    public async Task PhilHealthSoapTester_AdversarialProductionBypassAttempts_MustBeRejected(string endpoint)
+    public async Task PhilHealthPcapiTester_AdversarialProductionBypassAttempts_MustBeRejected(string endpoint)
     {
         var handler = new CapturingProbeHandler();
         var httpClient = new HttpClient(handler);
         var env = new FakeEnvironment("Production");
-        var tester = new PhilHealthSoapTester(httpClient, NullLogger<PhilHealthSoapTester>.Instance, env);
+        var tester = new PhilHealthPcapiTester(httpClient, NullLogger<PhilHealthPcapiTester>.Instance, env);
 
         var result = await tester.TestConnectionAsync(
             accreditationNumber: "H91001234",
-            username: "",
-            password: "",
+            secretKey: "",
             softwareCertificateId: "CERT-PROD",
-            endpoint: endpoint);
+            baseUrl: endpoint);
 
         Assert.False(result.Success);
-        Assert.Contains("SOAP Username is required", result.Message);
+        Assert.Contains("Secret Key is required", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, handler.CallCount);
         Assert.Null(handler.LastRequest);
     }

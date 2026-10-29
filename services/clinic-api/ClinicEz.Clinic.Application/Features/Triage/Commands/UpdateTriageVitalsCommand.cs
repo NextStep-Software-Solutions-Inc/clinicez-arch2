@@ -68,16 +68,16 @@ public sealed class UpdateTriageVitalsCommandValidator : AbstractValidator<Updat
 public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTriageVitalsCommand, TriageVitalsDto>
 {
     private readonly IRepository<QueueItem> _queueRepository;
-    private readonly IRepository<TriageVitals> _vitalsRepository;
-    private readonly IRepository<ClinicPatient> _patientRepository;
+    private readonly IRepository<PatientVitals> _vitalsRepository;
+    private readonly IRepository<Patient> _patientRepository;
     private readonly Application.Common.Interfaces.IWhoZScoreCalculator? _zScoreCalculator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdateTriageVitalsCommandHandler(
         IRepository<QueueItem> queueRepository,
-        IRepository<TriageVitals> vitalsRepository,
-        IRepository<ClinicPatient> patientRepository,
+        IRepository<PatientVitals> vitalsRepository,
+        IRepository<Patient> patientRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         Application.Common.Interfaces.IWhoZScoreCalculator? zScoreCalculator = null)
@@ -93,7 +93,7 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
     public async Task<TriageVitalsDto> Handle(UpdateTriageVitalsCommand request, CancellationToken cancellationToken)
     {
         var queueItem = await _queueRepository.Query(q => q.Id == request.QueueItemId && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (queueItem == null)
@@ -101,7 +101,7 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
             throw new NotFoundException($"Queue ticket '{request.QueueItemId}' not found in this clinic.");
         }
 
-        var vitals = queueItem.TriageVitals;
+        var vitals = queueItem.PatientVitals;
         if (vitals == null)
         {
             throw new NotFoundException($"No triage vitals found to update for queue ticket '{request.QueueItemId}'.");
@@ -224,7 +224,7 @@ public sealed class UpdateTriageVitalsCommandHandler : IRequestHandler<UpdateTri
                     {
                         var evaluation = _zScoreCalculator.Calculate(
                             patient.DateOfBirth,
-                            patient.Gender,
+                            patient.Gender.ToString(),
                             effectiveLengthHeight.Value,
                             effectiveWeight.Value,
                             vitals.IsMeasuredRecumbent || vitals.BodyLengthCm.HasValue);

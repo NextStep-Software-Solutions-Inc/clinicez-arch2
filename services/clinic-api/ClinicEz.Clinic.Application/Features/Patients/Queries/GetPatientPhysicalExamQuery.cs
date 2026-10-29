@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -16,20 +15,17 @@ public sealed record GetPatientPhysicalExamQuery(Guid PatientId) : IRequest<Pati
 
 public sealed class GetPatientPhysicalExamQueryHandler : IRequestHandler<GetPatientPhysicalExamQuery, PatientPhysicalExamProfileDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<PatientPhysicalExamProfile> _physicalExamRepo;
-    private readonly ILegacyPatientProfileIngestionService _legacyIngestion;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<PatientPhysicalExam> _physicalExamRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetPatientPhysicalExamQueryHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<PatientPhysicalExamProfile> physicalExamRepo,
-        ILegacyPatientProfileIngestionService legacyIngestion,
+        IRepository<Patient> patientRepo,
+        IRepository<PatientPhysicalExam> physicalExamRepo,
         IClinicContext clinicContext)
     {
         _patientRepo = patientRepo;
         _physicalExamRepo = physicalExamRepo;
-        _legacyIngestion = legacyIngestion;
         _clinicContext = clinicContext;
     }
 
@@ -43,9 +39,8 @@ public sealed class GetPatientPhysicalExamQueryHandler : IRequestHandler<GetPati
             throw new NotFoundException($"Patient '{request.PatientId}' not found in this clinic.");
         }
 
-        await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
-
         var exam = await _physicalExamRepo.Query(pe => pe.PatientId == request.PatientId)
+            .OrderByDescending(pe => pe.ExamDate)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (exam != null)
@@ -53,24 +48,24 @@ public sealed class GetPatientPhysicalExamQueryHandler : IRequestHandler<GetPati
             return new PatientPhysicalExamProfileDto(
                 exam.Id,
                 exam.PatientId,
-                exam.GenSurveyId,
-                exam.GenSurveyRemarks,
-                exam.SkinId,
+                GenSurveyId: exam.GenSurveyId ?? (exam.GeneralSurveyStatus == GeneralSurveyStatus.Normal ? "1" : "2"),
+                exam.GeneralSurveyRemarks,
+                SkinId: exam.SkinId ?? "1",
                 exam.SkinRemarks,
-                exam.HeentId,
+                HeentId: exam.HeentId ?? "11",
                 exam.HeentRemarks,
-                exam.ChestId,
-                exam.ChestRemarks,
-                exam.HeartId,
+                ChestId: exam.ChestId ?? "6",
+                exam.ChestLungsRemarks,
+                HeartId: exam.HeartId ?? "5",
                 exam.HeartRemarks,
-                exam.AbdomenId,
+                AbdomenId: exam.AbdomenId ?? "7",
                 exam.AbdomenRemarks,
-                exam.NeuroId,
-                exam.NeuroRemarks,
-                exam.RectalId,
-                exam.RectalRemarks,
-                exam.GuId,
-                exam.GuRemarks,
+                NeuroId: exam.NeuroId ?? "6",
+                exam.NeurologicalRemarks,
+                RectalId: exam.RectalId ?? "1",
+                exam.DigitalRectalRemarks,
+                GuId: exam.GuId ?? "1",
+                exam.GenitourinaryRemarks,
                 exam.CreatedAt,
                 exam.UpdatedAt);
         }

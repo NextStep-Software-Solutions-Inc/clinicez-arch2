@@ -13,4 +13,5 @@ public static class ClinicClaimTypes
     public const string StaffRole = "staff_role";
     public const string Name = "name";
     public const string Email = "email";
+    public const string TokenType = "token_type";
 }

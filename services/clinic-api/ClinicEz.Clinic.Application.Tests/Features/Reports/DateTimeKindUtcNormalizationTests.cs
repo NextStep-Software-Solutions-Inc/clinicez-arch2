@@ -108,8 +108,8 @@ public class DateTimeKindUtcNormalizationTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
         var handler = new GetClinicAnalyticsQueryHandler(
             queueRepo, invoiceRepo, paymentRepo, consultRepo, procRepo, labRepo, _clinicContext);
@@ -130,7 +130,7 @@ public class DateTimeKindUtcNormalizationTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new GetMorbidityReportQueryHandler(consultRepo, patientRepo, _clinicContext);
 
@@ -146,11 +146,11 @@ public class DateTimeKindUtcNormalizationTests
     }
 
     [Fact]
-    public async Task GetClinicLabOrdersQueryHandler_WithUnspecifiedDate_ExecutesWithoutException()
+    public async Task GetLabOrdersQueryHandler_WithUnspecifiedDate_ExecutesWithoutException()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var resultRepo = TestDbHelper.CreateRepository<ClinicLabResult>(context, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var resultRepo = TestDbHelper.CreateRepository<LabResult>(context, sieve);
 
         var handler = new GetClinicLabOrdersQueryHandler(orderRepo, resultRepo, _clinicContext);
 
@@ -165,7 +165,7 @@ public class DateTimeKindUtcNormalizationTests
     public async Task GetProceduresQueryHandler_WithUnspecifiedDate_ExecutesWithoutException()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var handler = new GetProceduresQueryHandler(procRepo, _clinicContext);
 
@@ -201,7 +201,7 @@ public class DateTimeKindUtcNormalizationTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var handler = new GetDoctorSharesReportQueryHandler(
             consultRepo, invoiceRepo, procRepo, _clinicContext);

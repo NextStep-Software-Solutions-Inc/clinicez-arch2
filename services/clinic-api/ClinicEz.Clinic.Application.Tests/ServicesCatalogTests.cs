@@ -34,11 +34,11 @@ public class ServicesCatalogTests
     }
 
     [Fact]
-    public async Task CreateClinicServiceItem_WithPhilHealthMapping_PersistsSuccessfully()
+    public async Task CreateServiceItem_WithPhilHealthMapping_PersistsSuccessfully()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new CreateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
 
         var command = new CreateClinicServiceItemCommand(
@@ -72,11 +72,11 @@ public class ServicesCatalogTests
     }
 
     [Fact]
-    public async Task CreateClinicServiceItem_DuplicateCode_ThrowsConflictException()
+    public async Task CreateServiceItem_DuplicateCode_ThrowsConflictException()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new CreateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
 
         var command1 = new CreateClinicServiceItemCommand("DIAG-CBC", "Complete Blood Count", "Diagnostic", 200m);
@@ -89,11 +89,11 @@ public class ServicesCatalogTests
     }
 
     [Fact]
-    public async Task UpdateClinicServiceItem_UpdatesPhilHealthMappingAndPrice()
+    public async Task UpdateServiceItem_UpdatesPhilHealthMappingAndPrice()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var createHandler = new CreateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
         var updateHandler = new UpdateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
 
@@ -132,11 +132,11 @@ public class ServicesCatalogTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var bulkHandler = new BulkImportServicesCommandHandler(repo, uow, _clinicContext);
 
         // Pre-populate an item
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -217,7 +217,7 @@ public class ServicesCatalogTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var queryHandler = new GetClinicServicesQueryHandler(repo, uow, _clinicContext);
 
         // Act
@@ -234,10 +234,10 @@ public class ServicesCatalogTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -275,10 +275,10 @@ public class ServicesCatalogTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -304,7 +304,7 @@ public class ServicesCatalogTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContext);
 
         // Act
@@ -329,11 +329,11 @@ public class ServicesCatalogTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContext);
 
         // Pre-populate an existing customized dental item and an unrelated medical item
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -344,7 +344,7 @@ public class ServicesCatalogTests
             Description = "Customized rate examination",
             IsActive = true
         });
-        await repo.AddAsync(new ClinicServiceItem
+        await repo.AddAsync(new ServiceItem
         {
             TenantId = TenantId,
             ClinicId = _clinicId,
@@ -407,12 +407,12 @@ public class ServicesCatalogTests
     [InlineData("Dental", "D1110")]
     [InlineData("Medicine", "PHIL-DRUG-PARA-500")]
     [InlineData("NursingService", "96372")]
-    public async Task CreateClinicServiceItem_UnderAnyCategory_SupportsOptionalPhilHealthCodeAndNormalizesBlankToNull(
+    public async Task CreateServiceItem_UnderAnyCategory_SupportsOptionalPhilHealthCodeAndNormalizesBlankToNull(
         string category,
         string philHealthCode)
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var handler = new CreateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
 
         // 1. With PhilHealthCode provided (even when IsPhilHealthFormulary is not explicitly set)
@@ -443,10 +443,10 @@ public class ServicesCatalogTests
     }
 
     [Fact]
-    public async Task UpdateClinicServiceItem_ClearingPhilHealthCode_ResetsCodeAndFormularyFlag()
+    public async Task UpdateServiceItem_ClearingPhilHealthCode_ResetsCodeAndFormularyFlag()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<ServiceItem>(context, sieve);
         var createHandler = new CreateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
         var updateHandler = new UpdateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
 

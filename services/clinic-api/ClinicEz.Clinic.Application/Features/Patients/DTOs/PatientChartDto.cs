@@ -40,5 +40,11 @@ public record PatientChartDto(
     List<DentalToothRecordDto>? DentalTeeth = null,
     List<ClinicalProcedureDto>? DentalProcedures = null,
     IReadOnlyList<MedicalCertificateDto>? MedicalCertificates = null,
-    IReadOnlyList<ReferralLetterDto>? ReferralLetters = null
+    IReadOnlyList<ReferralLetterDto>? ReferralLetters = null,
+    PatientPhilHealthMembershipDto? PhilHealthMembership = null,
+    List<PatientYakapEnlistmentDto>? YakapEnlistments = null,
+    List<PatientAlertDto>? Alerts = null,
+    List<PatientMedicalHistoryDto>? MedicalHistories = null,
+    List<PatientPhysicalExamDto>? PhysicalExams = null,
+    PatientPhysicalExamDto? LatestPhysicalExam = null
 );

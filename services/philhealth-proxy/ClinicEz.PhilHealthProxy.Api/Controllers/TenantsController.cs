@@ -1,246 +1,138 @@
 using System;
+using System.Collections.Generic;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using ClinicEz.PhilHealthProxy.Domain.Entities;
-using ClinicEz.PhilHealthProxy.Domain.Interfaces;
-using ClinicEz.PhilHealthProxy.Infrastructure.Services;
+using ClinicEz.PhilHealthProxy.Application.Features.Tenants.Commands;
+using ClinicEz.PhilHealthProxy.Application.Features.Tenants.Queries;
+using ClinicEz.PhilHealthProxy.Domain.Models;
 using ClinicEz.Shared.Common;
-using Microsoft.AspNetCore.DataProtection;
+using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.PhilHealthProxy.Api.Controllers;
 
-public record ConfigureTenantCredentialsRequest(
-    Guid TenantId,
-    string FacilityName,
-    string AccreditationNumber,
-    string PmccNumber,
-    string SoftwareCertificateId,
-    string Username,
-    string Password,
-    string CipherKey,
-    string? KonsultaEndpoint = null);
-
-public record TenantConfigurationStatusResponse(
-    Guid TenantId,
-    string FacilityName,
-    string AccreditationNumber,
-    string PmccNumber,
-    string SoftwareCertificateId,
-    string KonsultaEndpoint,
-    bool IsConfigured,
-    bool IsActive,
-    DateTimeOffset? UpdatedAt);
-
-[ApiController]
-[Route("api/[controller]")]
-public sealed class TenantsController : ControllerBase
+public static class PcapiUrlValidator
 {
-    private readonly ITenantRepository _tenantRepository;
-    private readonly IPhilHealthSoapClient _soapClient;
-    private readonly IDataProtector _protector;
-    private readonly ILogger<TenantsController> _logger;
-    private readonly IHostEnvironment? _environment;
-
-    public TenantsController(
-        ITenantRepository tenantRepository,
-        IPhilHealthSoapClient soapClient,
-        IDataProtectionProvider dataProtectionProvider,
-        ILogger<TenantsController> logger,
-        IHostEnvironment? environment = null)
+    private static readonly HashSet<string> AllowedHosts = new(StringComparer.OrdinalIgnoreCase)
     {
-        _tenantRepository = tenantRepository;
-        _soapClient = soapClient;
-        _protector = dataProtectionProvider.CreateProtector("ClinicEz.PhilHealthProxy.TenantCredentials");
-        _logger = logger;
-        _environment = environment;
-    }
+        "philhealth.gov.ph",
+        "staging.philhealth.gov.ph",
+        "pcapi.philhealth.gov.ph",
+        "pcapi-staging.philhealth.gov.ph"
+    };
 
-    private static bool IsStagingOrSandbox(string? endpoint)
+    public static bool IsSafeEndpoint(string? endpoint, IHostEnvironment? env)
     {
-        if (string.IsNullOrWhiteSpace(endpoint)) return true;
-        var trimmed = endpoint.Trim();
+        if (string.IsNullOrWhiteSpace(endpoint)) return false;
+        if (!Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri)) return false;
 
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        // In Development or Testing environments, allow localhost / simulator / sandbox
+        if (env != null && (env.IsDevelopment() || env.IsEnvironment("Testing")))
         {
-            var host = uri.DnsSafeHost;
-            var isPhilHealth = host.Equals("philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
-                               host.EndsWith(".philhealth.gov.ph", StringComparison.OrdinalIgnoreCase);
-
-            if (isPhilHealth)
+            if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.Equals("127.0.0.1") ||
+                uri.Host.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.Contains("simulator", StringComparison.OrdinalIgnoreCase))
             {
-                return host.Equals("staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
-                       host.EndsWith(".staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
-                       host.EndsWith("-staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase);
-            }
-
-            var normalizedPath = uri.AbsolutePath.TrimEnd('/');
-            return host.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
-                   host.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
-                   normalizedPath.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase) ||
-                   normalizedPath.Equals("/soap/konsulta", StringComparison.OrdinalIgnoreCase);
-        }
-
-        var normalized = trimmed.TrimEnd('/');
-        return normalized.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
-               normalized.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
-               normalized.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase) ||
-               normalized.Equals("/soap/konsulta", StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Securely configures or updates the PhilHealth SOAP credentials for a tenant.
-    /// Sensitive credentials (username, password, cipher key) are encrypted at rest using ASP.NET Core Data Protection.
-    /// </summary>
-    [HttpPost("configure")]
-    [ProducesResponseType<ApiResponse<TenantConfigurationStatusResponse>>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ConfigureCredentials(
-        [FromBody] ConfigureTenantCredentialsRequest request,
-        CancellationToken ct)
-    {
-        if (request.TenantId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail("Invalid TenantId."));
-        }
-
-        if (string.IsNullOrWhiteSpace(request.AccreditationNumber))
-        {
-            return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail("Accreditation number is required."));
-        }
-
-        var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-            ? request.KonsultaEndpoint.Trim()
-            : "/soap/konsulta";
-
-        var isProduction = _environment != null && _environment.IsProduction();
-        var isStagingOrSandbox = IsStagingOrSandbox(endpoint);
-
-        if (isProduction && !isStagingOrSandbox)
-        {
-            if (string.IsNullOrWhiteSpace(request.Username) ||
-                string.IsNullOrWhiteSpace(request.Password))
-            {
-                return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail("Accreditation number, username, and password are required."));
+                return true;
             }
         }
 
-        var cipherKey = !string.IsNullOrWhiteSpace(request.CipherKey)
-            ? request.CipherKey
-            : "CLINICEZ-YAKAP-DEV-KEY-32BYTES!";
-
-        var tenant = new PhilHealthTenant
+        // Must be HTTPS in Production
+        if (env != null && env.IsProduction() && uri.Scheme != Uri.UriSchemeHttps)
         {
-            TenantId = request.TenantId,
-            FacilityName = request.FacilityName ?? "Accredited Health Facility",
-            AccreditationNumber = request.AccreditationNumber.Trim(),
-            PmccNumber = request.PmccNumber ?? string.Empty,
-            SoftwareCertificateId = request.SoftwareCertificateId ?? string.Empty,
-            EncryptedUsername = _protector.Protect(request.Username?.Trim() ?? string.Empty),
-            EncryptedPassword = _protector.Protect(request.Password ?? string.Empty),
-            EncryptedCipherKey = _protector.Protect(cipherKey),
-            KonsultaEndpoint = endpoint,
-            IsActive = true
-        };
+            return false;
+        }
 
-        var saved = await _tenantRepository.UpsertTenantAsync(tenant, ct);
-        _logger.LogInformation("Configured PhilHealth credentials for tenant {TenantId} (Accreditation: {Accre})", saved.TenantId, saved.AccreditationNumber);
+        var host = uri.DnsSafeHost;
 
-        var response = new TenantConfigurationStatusResponse(
-            TenantId: saved.TenantId,
-            FacilityName: saved.FacilityName,
-            AccreditationNumber: saved.AccreditationNumber,
-            PmccNumber: saved.PmccNumber,
-            SoftwareCertificateId: saved.SoftwareCertificateId,
-            KonsultaEndpoint: saved.KonsultaEndpoint,
-            IsConfigured: true,
-            IsActive: saved.IsActive,
-            UpdatedAt: saved.UpdatedAt);
+        // Reject IP addresses directly in Production or non-dev
+        if (IPAddress.TryParse(host, out var ip))
+        {
+            if (IPAddress.IsLoopback(ip) || IsPrivateSubnet(ip)) return false;
+        }
 
-        return Ok(ApiResponse<TenantConfigurationStatusResponse>.Success(response));
+        // Allow PhilHealth domains
+        if (AllowedHosts.Contains(host) || host.EndsWith(".philhealth.gov.ph", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Check if simulated or sandbox endpoint
+        if (host.Contains("sandbox", StringComparison.OrdinalIgnoreCase) || host.Contains("simulator", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 
-    /// <summary>
-    /// Retrieves configuration metadata for the specified or current tenant without exposing sensitive secrets.
-    /// </summary>
-    [HttpGet("status")]
-    [ProducesResponseType<ApiResponse<TenantConfigurationStatusResponse>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetStatus(
-        [FromQuery] Guid? tenantId,
-        [FromServices] ICurrentTenant currentTenant,
-        CancellationToken ct)
+    private static bool IsPrivateSubnet(IPAddress ip)
     {
-        var targetTenantId = tenantId ?? currentTenant.TenantId;
-        if (!targetTenantId.HasValue || targetTenantId.Value == Guid.Empty)
-        {
-            return Ok(ApiResponse<TenantConfigurationStatusResponse>.Success(
-                new TenantConfigurationStatusResponse(
-                    TenantId: Guid.Empty,
-                    FacilityName: string.Empty,
-                    AccreditationNumber: string.Empty,
-                    PmccNumber: string.Empty,
-                    SoftwareCertificateId: string.Empty,
-                    KonsultaEndpoint: "/soap/konsulta",
-                    IsConfigured: false,
-                    IsActive: false,
-                    UpdatedAt: null)));
-        }
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        var bytes = ip.GetAddressBytes();
+        if (bytes.Length != 4) return false;
 
-        var tenant = await _tenantRepository.GetByTenantIdAsync(targetTenantId.Value, ct);
-        if (tenant == null)
-        {
-            return Ok(ApiResponse<TenantConfigurationStatusResponse>.Success(
-                new TenantConfigurationStatusResponse(
-                    TenantId: targetTenantId.Value,
-                    FacilityName: string.Empty,
-                    AccreditationNumber: string.Empty,
-                    PmccNumber: string.Empty,
-                    SoftwareCertificateId: string.Empty,
-                    KonsultaEndpoint: "/soap/konsulta",
-                    IsConfigured: false,
-                    IsActive: false,
-                    UpdatedAt: null)));
-        }
+        // 10.0.0.0/8
+        if (bytes[0] == 10) return true;
+        // 172.16.0.0/12
+        if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+        // 192.168.0.0/16
+        if (bytes[0] == 192 && bytes[1] == 168) return true;
+        // 169.254.0.0/16 (Link Local / Cloud Metadata)
+        if (bytes[0] == 169 && bytes[1] == 254) return true;
 
-        var response = new TenantConfigurationStatusResponse(
-            TenantId: tenant.TenantId,
-            FacilityName: tenant.FacilityName,
-            AccreditationNumber: tenant.AccreditationNumber,
-            PmccNumber: tenant.PmccNumber,
-            SoftwareCertificateId: tenant.SoftwareCertificateId,
-            KonsultaEndpoint: tenant.KonsultaEndpoint,
-            IsConfigured: true,
-            IsActive: tenant.IsActive,
-            UpdatedAt: tenant.UpdatedAt);
-
-        return Ok(ApiResponse<TenantConfigurationStatusResponse>.Success(response));
-    }
-
-    /// <summary>
-    /// Tests live connectivity and authentication with PhilHealth SOAP gateway using the tenant's credentials.
-    /// </summary>
-    [HttpPost("test-connection")]
-    [ProducesResponseType<ApiResponse<string>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> TestConnection(
-        [FromQuery] Guid? tenantId,
-        [FromServices] CurrentTenantService tenantService,
-        CancellationToken ct)
-    {
-        if (tenantId.HasValue && tenantId.Value != Guid.Empty)
-        {
-            tenantService.SetTenantId(tenantId.Value);
-        }
-
-        var result = await _soapClient.GetTokenAsync(ct);
-        if (result.IsSuccess)
-        {
-            return Ok(ApiResponse<string>.Success("Authentication successful! PhilHealth gateway accepted facility credentials."));
-        }
-
-        return Ok(ApiResponse<string>.Fail(result.ErrorMessage ?? "PhilHealth gateway rejected credentials."));
+        return false;
     }
 }
 
+[ApiController]
+[Route("api/[controller]")]
+public sealed class TenantsController(
+    IMediator mediator,
+    IHostEnvironment? environment = null)
+    : ControllerBase
+{
+    [HttpPost]
+    [ProducesResponseType<ApiResponse<TenantConfigurationStatusResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> Configure(
+        [FromBody] ConfigureTenantCredentialsRequest request,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(request.BaseUrl) && !PcapiUrlValidator.IsSafeEndpoint(request.BaseUrl, environment))
+        {
+            return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail(
+                $"The provided BaseUrl '{request.BaseUrl}' is not permitted by proxy SSRF security policy."));
+        }
+
+        var result = await mediator.Send(new ConfigureTenantCredentialsCommand(request), ct);
+        return Ok(ApiResponse<TenantConfigurationStatusResponse>.Success(result));
+    }
+
+    [HttpGet("status")]
+    [ProducesResponseType<ApiResponse<TenantConfigurationStatusResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStatus(
+        [FromQuery] Guid tenantId,
+        [FromQuery] Guid? branchId,
+        CancellationToken ct)
+    {
+        var result = await mediator.Send(new GetTenantStatusQuery(tenantId, branchId), ct);
+        return Ok(ApiResponse<TenantConfigurationStatusResponse>.Success(result));
+    }
+
+    [HttpPost("test-connection")]
+    [ProducesResponseType<ApiResponse<TestTenantConnectionResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> TestConnection(
+        [FromQuery] Guid tenantId,
+        [FromQuery] Guid? branchId,
+        CancellationToken ct)
+    {
+        var result = await mediator.Send(new TestTenantConnectionCommand(tenantId, branchId), ct);
+        return Ok(ApiResponse<TestTenantConnectionResponse>.Success(result));
+    }
+}

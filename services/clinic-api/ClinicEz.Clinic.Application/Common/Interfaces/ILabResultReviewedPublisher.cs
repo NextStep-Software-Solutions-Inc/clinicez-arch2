@@ -14,5 +14,5 @@ namespace ClinicEz.Clinic.Application.Common.Interfaces;
 /// </summary>
 public interface ILabResultReviewedPublisher
 {
-    Task PublishAsync(ClinicLabOrder order, LabResultReviewedPayload review, CancellationToken ct);
+    Task PublishAsync(LabOrder order, LabResultReviewedPayload review, CancellationToken ct);
 }

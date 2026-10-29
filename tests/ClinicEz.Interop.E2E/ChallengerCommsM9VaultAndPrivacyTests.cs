@@ -35,14 +35,14 @@ public class ChallengerCommsM9VaultAndPrivacyTests
     {
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinicId);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.ClinicId == clinicId);
             if (settings != null)
             {
                 settings.TeleconsultRecordingPolicy = policy;
             }
             else
             {
-                db.ClinicSettings.Add(new ClinicSettings
+                db.Settings.Add(new FacilitySettings
                 {
                     Id = Guid.NewGuid(),
                     TenantId = "test-tenant",
@@ -551,7 +551,7 @@ public class ChallengerCommsM9VaultAndPrivacyTests
         // 4. WORM Audit Trail: verify audit record was written
         await cell.Clinic.DbAsync(async db =>
         {
-            var audit = await db.ClinicAuditEntries.IgnoreQueryFilters()
+            var audit = await db.AuditEntries.IgnoreQueryFilters()
                 .FirstOrDefaultAsync(a => a.TargetEntityId == sessionId.ToString() && a.Action == "teleconsult.recording.playback.ticket_issued");
             audit.Should().NotBeNull("issuing a playback ticket must write a clinical WORM audit entry");
             audit!.ActorStaffId.Should().Be(doctorId);

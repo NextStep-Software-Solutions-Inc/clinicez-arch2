@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Common;
@@ -18,7 +19,7 @@ public sealed class YakapCredentialsTests
     private const string Tenant = "tenant-yakap";
     private readonly Guid _clinicId = Guid.NewGuid();
 
-    private (PhilHealthProxyClient Client, StubInteropRequestClient Hub) CreateClient(Func<PhilHealthRequestPayload, PhilHealthResponsePayload> reply)
+    private (IPhilHealthProxyClient Client, StubInteropRequestClient Hub) CreateClient(Func<PhilHealthRequestPayload, PhilHealthResponsePayload> reply)
     {
         var hub = new StubInteropRequestClient(call => reply((PhilHealthRequestPayload)call.Payload));
         var client = new PhilHealthProxyClient(hub, Phase3TestKit.Identity(_clinicId, Tenant), NullLogger<PhilHealthProxyClient>.Instance);
@@ -151,7 +152,7 @@ public sealed class YakapCredentialsTests
     public async Task AnUnprovisionedClinic_CannotReachPhilHealthAndSendsNothing()
     {
         var hub = new StubInteropRequestClient(_ => Ok(Status(Guid.NewGuid())));
-        var client = new PhilHealthProxyClient(
+        IPhilHealthProxyClient client = new PhilHealthProxyClient(
             hub, NSubstitute.Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IClinicIdentityProvider>(), NullLogger<PhilHealthProxyClient>.Instance);
 
         var response = await client.GetTenantConfigurationStatusAsync();

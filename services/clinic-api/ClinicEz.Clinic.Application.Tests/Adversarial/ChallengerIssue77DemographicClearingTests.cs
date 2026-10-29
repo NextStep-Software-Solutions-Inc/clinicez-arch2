@@ -38,14 +38,14 @@ public class ChallengerIssue77DemographicClearingTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private (ApplicationDbContext Context, IUnitOfWork Uow, IRepository<ClinicPatient> PatientRepo, RegisterClinicPatientCommandHandler RegHandler, UpdateClinicPatientCommandHandler UpdHandler)
+    private (ApplicationDbContext Context, IUnitOfWork Uow, IRepository<Patient> PatientRepo, RegisterClinicPatientCommandHandler RegHandler, UpdateClinicPatientCommandHandler UpdHandler)
         CreateHarness(string? sharedDbName = null)
     {
         var (context, uow, sieve) = sharedDbName != null
             ? TestDbHelper.CreateSharedTestContext(sharedDbName, _clinicContext)
             : TestDbHelper.CreateTestContext(_clinicContext);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var regHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
         var updHandler = new UpdateClinicPatientCommandHandler(patientRepo, uow, null, _clinicContext);
         return (context, uow, patientRepo, regHandler, updHandler);

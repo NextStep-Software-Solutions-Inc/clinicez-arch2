@@ -19,12 +19,12 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
 {
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public GetStaffMembersQueryHandler(
         IRepository<StaffMember> staffRepository,
         IClinicContext clinicContext,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _clinicContext = clinicContext;
@@ -114,12 +114,12 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
 {
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public GetStaffMemberByIdQueryHandler(
         IRepository<StaffMember> staffRepository,
         IClinicContext clinicContext,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _clinicContext = clinicContext;

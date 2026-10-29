@@ -178,7 +178,7 @@ public sealed class PatientsController : ControllerBase
     }
 
     [HttpPost("public/student-intake")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.Authorization.Authorize(Policy = ClinicPolicies.KioskIntake)]
     public async Task<ActionResult<ApiResponse<PublicStudentSelfEnrollResultDto>>> PublicStudentSelfEnroll(
         [FromBody] PublicStudentSelfEnrollCommand command,
         CancellationToken ct)

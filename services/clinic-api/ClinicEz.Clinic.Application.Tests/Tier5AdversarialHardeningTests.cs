@@ -60,7 +60,7 @@ public class Tier5AdversarialHardeningTests
         {
             var clinicId = Guid.NewGuid();
             var tenantId = $"tenant-concurrent-{i}";
-            var settings = new ClinicSettings
+            var settings = new FacilitySettings
             {
                 TenantId = tenantId,
                 ClinicId = clinicId,
@@ -115,10 +115,10 @@ public class Tier5AdversarialHardeningTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // 1. Daily EOD
         var eodHandler = new GetDailyEodReportQueryHandler(
@@ -187,7 +187,7 @@ public class Tier5AdversarialHardeningTests
     public void DatabaseBoundary_NewlyRegisteredClinic_NullSettings_PdfsShouldGenerateWithoutCrashing()
     {
         // Newly registered clinic with bare minimal or null settings
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -233,8 +233,8 @@ public class Tier5AdversarialHardeningTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
         var targetDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
         var exactMidnightStart = targetDate;
@@ -306,7 +306,7 @@ public class Tier5AdversarialHardeningTests
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var handler = new GetDoctorSharesReportQueryHandler(
             consultRepo, invoiceRepo, procRepo, _clinicContext);
@@ -563,7 +563,7 @@ public class Tier5AdversarialHardeningTests
     [Fact]
     public void SpecialUnicode_DoctorAndClinicNames_CJK_Cyrillic_Emoji_Arabic_Symbols_ShouldRenderWithoutCrash()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -625,14 +625,14 @@ public class Tier5AdversarialHardeningTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -640,7 +640,7 @@ public class Tier5AdversarialHardeningTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1985, 3, 15),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "+639170000001"
         };
         await patientRepo.AddAsync(patient);
@@ -695,7 +695,7 @@ public class Tier5AdversarialHardeningTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Encounter pointing to an unregistered/unknown patient ID
         var encounter = new ConsultationEncounter
@@ -735,8 +735,8 @@ public class Tier5AdversarialHardeningTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var doctorId = Guid.NewGuid();
         var doctorName = "Dr. Specialist Surgeon";
@@ -779,7 +779,7 @@ public class Tier5AdversarialHardeningTests
         await invoiceRepo.AddAsync(invoice);
 
         // Seed procedure
-        var proc = new ClinicalProcedure
+        var proc = new Procedure
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -881,8 +881,8 @@ public class Tier5AdversarialHardeningTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
         var singleDay = new DateTime(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc);
         var handler = new GetClinicAnalyticsQueryHandler(
@@ -901,7 +901,7 @@ public class Tier5AdversarialHardeningTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var docId = Guid.NewGuid();
         var docName = "Dr. Pro Bono Volunteer";
@@ -1036,7 +1036,7 @@ public class Tier5AdversarialHardeningTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var enc = new ConsultationEncounter
         {
@@ -1070,7 +1070,7 @@ public class Tier5AdversarialHardeningTests
     // HELPER FIXTURE GENERATORS
     // =========================================================================
 
-    private static ClinicSettings CreateDefaultSettings() => new()
+    private static FacilitySettings CreateDefaultSettings() => new()
     {
         TenantId = "tenant-001",
         ClinicId = Guid.NewGuid(),

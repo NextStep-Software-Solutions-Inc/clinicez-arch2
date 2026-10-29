@@ -1,18 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Text.Json;
 using System.Web;
 using ClinicEz.Clinic.Application.Common.Interfaces;
-using ClinicEz.Clinic.Application.Features.Yakap.Commands.CreateYakapTransmittal;
-using ClinicEz.Clinic.Application.Features.Yakap.Commands.SubmitYakapTransmittal;
-using ClinicEz.Clinic.Application.Features.Yakap.Commands.ValidateYakapTransmittal;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetEligibleYakapEncounters;
-using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalById;
-using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalRawXml;
-using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittals;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
-using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Shared.Common;
@@ -27,8 +21,9 @@ namespace ClinicEz.Clinic.Infrastructure.Messaging.Responders;
 
 /// <summary>
 /// Handles <c>yakap.transmittal.requested</c> messages arriving over the Interop Hub from <c>Party.Portal</c>.
-/// Runs in-process against the clinic's MediatR queries and commands within the addressed clinic scope,
+/// Runs in-process against the clinic's MediatR queries and services within the addressed clinic scope,
 /// returning <c>yakap.transmittal.responded</c> with the ApiResponse payload.
+/// Note: Legacy XML batch transmittals are deprecated in favor of YAKAP 2.0 direct submissions.
 /// </summary>
 public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>
 {
@@ -102,17 +97,17 @@ public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmitt
             return (method, rawPath) switch
             {
                 ("GET", "encounters/eligible") => await HandleGetEligibleEncountersAsync(queryParams, branchId, ct),
-                ("GET", "transmittals") => await HandleGetTransmittalsAsync(queryParams, branchId, ct),
+                ("GET", "transmittals") => HandleDeprecatedGetTransmittals(),
                 ("GET", _) when rawPath.StartsWith("transmittals/", StringComparison.OrdinalIgnoreCase) &&
                                (rawPath.EndsWith("/xml", StringComparison.OrdinalIgnoreCase) || rawPath.EndsWith("/raw-xml", StringComparison.OrdinalIgnoreCase))
-                    => await HandleGetRawXmlAsync(rawPath, ct),
+                    => Fail(410, "GONE", "Legacy XML batch transmittal documents are obsolete in YAKAP 2.0."),
                 ("GET", _) when rawPath.StartsWith("transmittals/", StringComparison.OrdinalIgnoreCase)
-                    => await HandleGetTransmittalByIdAsync(rawPath, ct),
-                ("POST", "transmittals") => await HandleCreateTransmittalAsync(request.Body, branchId, ct),
+                    => Fail(410, "GONE", "Legacy XML batch transmittals are obsolete in YAKAP 2.0."),
+                ("POST", "transmittals") => Fail(410, "GONE", "Legacy XML batch transmittal creation is obsolete in YAKAP 2.0."),
                 ("POST", _) when rawPath.StartsWith("transmittals/", StringComparison.OrdinalIgnoreCase) && rawPath.EndsWith("/validate", StringComparison.OrdinalIgnoreCase)
-                    => await HandleValidateTransmittalAsync(rawPath, ct),
+                    => Fail(410, "GONE", "Legacy XML batch transmittal validation is obsolete in YAKAP 2.0."),
                 ("POST", _) when rawPath.StartsWith("transmittals/", StringComparison.OrdinalIgnoreCase) && rawPath.EndsWith("/submit", StringComparison.OrdinalIgnoreCase)
-                    => await HandleSubmitTransmittalAsync(rawPath, ct),
+                    => Fail(410, "GONE", "Legacy XML batch transmittal submission is obsolete in YAKAP 2.0."),
                 ("GET", _) when rawPath.StartsWith("pin/", StringComparison.OrdinalIgnoreCase) && rawPath.EndsWith("/validate", StringComparison.OrdinalIgnoreCase)
                     => await HandleValidatePinAsync(rawPath, ct),
                 ("POST", "masterlist/extract") => await HandleExtractMasterlistAsync(request.Body, clinic.TenantId, clinic.ClinicId, ct),
@@ -140,86 +135,10 @@ public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmitt
         return Success(result);
     }
 
-    private async Task<YakapTransmittalRespondedPayload> HandleGetTransmittalsAsync(
-        NameValueCollection query,
-        Guid? branchId,
-        CancellationToken ct)
+    private static YakapTransmittalRespondedPayload HandleDeprecatedGetTransmittals()
     {
-        YakapTransmittalStatus? status = Enum.TryParse<YakapTransmittalStatus>(query["status"], true, out var st) ? st : null;
-        var reportTagging = query["reportTagging"];
-
-        var result = await _sender.Send(new GetYakapTransmittalsQuery(status, reportTagging, branchId), ct);
-        return Success(result);
-    }
-
-    private async Task<YakapTransmittalRespondedPayload> HandleGetTransmittalByIdAsync(string path, CancellationToken ct)
-    {
-        var parts = path.Split('/');
-        if (parts.Length < 2 || !Guid.TryParse(parts[1], out var id))
-        {
-            return Fail(400, "INVALID_ID", "Invalid transmittal ID format");
-        }
-
-        var result = await _sender.Send(new GetYakapTransmittalByIdQuery(id), ct);
-        return result.Succeeded ? Success(result) : Fail(404, "NOT_FOUND", result.Message ?? "Transmittal not found");
-    }
-
-    private async Task<YakapTransmittalRespondedPayload> HandleGetRawXmlAsync(string path, CancellationToken ct)
-    {
-        var parts = path.Split('/');
-        if (parts.Length < 3 || !Guid.TryParse(parts[1], out var id))
-        {
-            return Fail(400, "INVALID_ID", "Invalid transmittal ID format");
-        }
-
-        var result = await _sender.Send(new GetYakapTransmittalRawXmlQuery(id), ct);
-        return result.Succeeded ? Success(result) : Fail(404, "NOT_FOUND", result.Message ?? "Transmittal XML not found");
-    }
-
-    private async Task<YakapTransmittalRespondedPayload> HandleCreateTransmittalAsync(string? body, Guid? branchId, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            return Fail(400, "INVALID_BODY", "Request body is required for creating a transmittal.");
-        }
-
-        var command = JsonSerializer.Deserialize<CreateYakapTransmittalCommand>(body, JsonOptions);
-        if (command == null)
-        {
-            return Fail(400, "INVALID_BODY", "Malformed transmittal creation payload.");
-        }
-
-        if (branchId.HasValue && !command.BranchId.HasValue)
-        {
-            command = command with { BranchId = branchId };
-        }
-
-        var result = await _sender.Send(command, ct);
-        return result.Succeeded ? Success(result, 201) : Fail(400, "BAD_REQUEST", result.Message ?? "Failed to create transmittal");
-    }
-
-    private async Task<YakapTransmittalRespondedPayload> HandleValidateTransmittalAsync(string path, CancellationToken ct)
-    {
-        var parts = path.Split('/');
-        if (parts.Length < 3 || !Guid.TryParse(parts[1], out var id))
-        {
-            return Fail(400, "INVALID_ID", "Invalid transmittal ID format");
-        }
-
-        var result = await _sender.Send(new ValidateYakapTransmittalCommand(id), ct);
-        return result.Succeeded ? Success(result) : Fail(400, "VALIDATION_FAILED", result.Message ?? "Validation failed");
-    }
-
-    private async Task<YakapTransmittalRespondedPayload> HandleSubmitTransmittalAsync(string path, CancellationToken ct)
-    {
-        var parts = path.Split('/');
-        if (parts.Length < 3 || !Guid.TryParse(parts[1], out var id))
-        {
-            return Fail(400, "INVALID_ID", "Invalid transmittal ID format");
-        }
-
-        var result = await _sender.Send(new SubmitYakapTransmittalCommand(id), ct);
-        return result.Succeeded ? Success(result) : Fail(400, "SUBMISSION_FAILED", result.Message ?? "Submission failed");
+        var emptyList = ApiResponse<IReadOnlyList<object>>.Success(Array.Empty<object>());
+        return Success(emptyList);
     }
 
     private async Task<YakapTransmittalRespondedPayload> HandleValidatePinAsync(string path, CancellationToken ct)

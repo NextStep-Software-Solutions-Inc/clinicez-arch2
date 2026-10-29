@@ -45,16 +45,16 @@ public class Challenger1BackendEmpiricalStressTests
     public async Task Adversarial_SequentialMutations_RetainSingleRecord_AndAccumulateState()
     {
         // Stress test sequential updates on the exact same queue item.
-        // In-place mutation must strictly preserve TriageVitals.Id, keep row count at exactly 1,
+        // In-place mutation must strictly preserve PatientVitals.Id, keep row count at exactly 1,
         // and accumulate / overwrite fields as specified per call without data corruption.
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var originalVitalsId = Guid.NewGuid();
-        var originalVitals = new TriageVitals
+        var originalVitals = new PatientVitals
         {
             Id = originalVitalsId,
             TenantId = tenantId,
@@ -82,11 +82,11 @@ public class Challenger1BackendEmpiricalStressTests
             QueueNumber = "Q-CHALLENGER-01",
             Status = QueueStatus.Triaged,
             Priority = QueuePriority.Routine,
-            TriageVitals = originalVitals
+            PatientVitals = originalVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(originalVitals);
+        await context.PatientVitals.AddAsync(originalVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -178,10 +178,10 @@ public class Challenger1BackendEmpiricalStressTests
         ), CancellationToken.None);
 
         // Assertions
-        var totalVitalsRows = await context.TriageVitals.CountAsync(v => v.QueueItemId == queueItemId);
+        var totalVitalsRows = await context.PatientVitals.CountAsync(v => v.QueueItemId == queueItemId);
         totalVitalsRows.Should().Be(1, "Database row count must strictly remain 1 after 5 sequential in-place updates");
 
-        var dbVitals = await context.TriageVitals.FirstAsync(v => v.QueueItemId == queueItemId);
+        var dbVitals = await context.PatientVitals.FirstAsync(v => v.QueueItemId == queueItemId);
         dbVitals.Id.Should().Be(originalVitalsId, "Primary Key ID must never be mutated or regenerated");
         dbVitals.SystolicBp.Should().Be(125);
         dbVitals.DiastolicBp.Should().Be(82);
@@ -205,11 +205,11 @@ public class Challenger1BackendEmpiricalStressTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var foreignClinicId = Guid.NewGuid();
-        var foreignVitals = new TriageVitals
+        var foreignVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = "foreign_tenant",
@@ -229,11 +229,11 @@ public class Challenger1BackendEmpiricalStressTests
             PatientName = "Foreign Patient",
             QueueNumber = "Q-FOREIGN-01",
             Status = QueueStatus.Triaged,
-            TriageVitals = foreignVitals
+            PatientVitals = foreignVitals
         };
 
         await context.QueueItems.AddAsync(foreignQueueItem);
-        await context.TriageVitals.AddAsync(foreignVitals);
+        await context.PatientVitals.AddAsync(foreignVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -259,7 +259,7 @@ public class Challenger1BackendEmpiricalStressTests
             .WithMessage($"Queue ticket '{queueItemId}' not found in this clinic.");
 
         // Verify foreign vitals were untouched (using IgnoreQueryFilters since context has tenant filter)
-        var unchangedForeignVitals = await context.TriageVitals.IgnoreQueryFilters().FirstAsync(v => v.QueueItemId == queueItemId);
+        var unchangedForeignVitals = await context.PatientVitals.IgnoreQueryFilters().FirstAsync(v => v.QueueItemId == queueItemId);
         unchangedForeignVitals.SystolicBp.Should().Be(120);
     }
 
@@ -271,10 +271,10 @@ public class Challenger1BackendEmpiricalStressTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -293,11 +293,11 @@ public class Challenger1BackendEmpiricalStressTests
             PatientName = "Pedro Penduko",
             QueueNumber = "Q-CHALLENGER-02",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -340,7 +340,7 @@ public class Challenger1BackendEmpiricalStressTests
 
         res2.PainScore.Should().Be(0, "Subsequent update with null pain score must preserve 0");
 
-        var db = await context.TriageVitals.FirstAsync(v => v.QueueItemId == queueItemId);
+        var db = await context.PatientVitals.FirstAsync(v => v.QueueItemId == queueItemId);
         db.PainScore.Should().Be(0);
     }
 
@@ -355,10 +355,10 @@ public class Challenger1BackendEmpiricalStressTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -382,11 +382,11 @@ public class Challenger1BackendEmpiricalStressTests
             PatientName = "Jovita",
             QueueNumber = "Q-CHALLENGER-03",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -430,10 +430,10 @@ public class Challenger1BackendEmpiricalStressTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -459,11 +459,11 @@ public class Challenger1BackendEmpiricalStressTests
             PatientName = "Baby Juan",
             QueueNumber = "Q-CHALLENGER-04",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -512,10 +512,10 @@ public class Challenger1BackendEmpiricalStressTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -536,11 +536,11 @@ public class Challenger1BackendEmpiricalStressTests
             PatientName = "Andres",
             QueueNumber = "Q-CHALLENGER-05",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -576,10 +576,10 @@ public class Challenger1BackendEmpiricalStressTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -600,11 +600,11 @@ public class Challenger1BackendEmpiricalStressTests
             PatientName = "Emilio",
             QueueNumber = "Q-CHALLENGER-06",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -640,10 +640,10 @@ public class Challenger1BackendEmpiricalStressTests
         var (clinicId, tenantId, queueItemId, patientId, clinicContext) = CreateTestIds();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existingVitals = new TriageVitals
+        var existingVitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -666,11 +666,11 @@ public class Challenger1BackendEmpiricalStressTests
             PatientName = "Apolinario",
             QueueNumber = "Q-CHALLENGER-07",
             Status = QueueStatus.Triaged,
-            TriageVitals = existingVitals
+            PatientVitals = existingVitals
         };
 
         await context.QueueItems.AddAsync(queueItem);
-        await context.TriageVitals.AddAsync(existingVitals);
+        await context.PatientVitals.AddAsync(existingVitals);
         await context.SaveChangesAsync();
 
         var handler = new UpdateTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
@@ -896,7 +896,7 @@ public class Challenger1BackendEmpiricalStressTests
     public void Adversarial_FormatVitalsSummary_NeverOutputsMalformedStrings()
     {
         // 1. Only Diastolic BP provided (Systolic is null) -> BP must not output malformed "BP /80"
-        var diastolicOnly = new TriageVitals
+        var diastolicOnly = new PatientVitals
         {
             TenantId = "t",
             SystolicBp = null,
@@ -909,7 +909,7 @@ public class Challenger1BackendEmpiricalStressTests
         s1.Should().NotContain("/");
 
         // 2. Systolic only -> "BP 120"
-        var systolicOnly = new TriageVitals
+        var systolicOnly = new PatientVitals
         {
             TenantId = "t",
             SystolicBp = 120,
@@ -920,7 +920,7 @@ public class Challenger1BackendEmpiricalStressTests
         s2.Should().Be("BP 120 • HR 75");
 
         // 3. SpO2 and Temp only
-        var tempSpo2Only = new TriageVitals
+        var tempSpo2Only = new PatientVitals
         {
             TenantId = "t",
             TemperatureCelsius = 37.0m,
@@ -930,12 +930,12 @@ public class Challenger1BackendEmpiricalStressTests
         s3.Should().Be("Temp 37.0°C • SpO2 98%");
 
         // 4. PhilHealthZScoreCategory fallback when GrowthZScoreCategory is null
-        var zFallback = new TriageVitals
+        var zFallback = new PatientVitals
         {
             TenantId = "t",
             SystolicBp = 110,
             DiastolicBp = 70,
-            PhilHealthZScoreCategory = "Underweight"
+            GrowthZScoreCategory = "Underweight"
         };
         var s4 = QueueItemMappingExtensions.FormatVitalsSummary(zFallback);
         s4.Should().Be("BP 110/70 • Z: Underweight");

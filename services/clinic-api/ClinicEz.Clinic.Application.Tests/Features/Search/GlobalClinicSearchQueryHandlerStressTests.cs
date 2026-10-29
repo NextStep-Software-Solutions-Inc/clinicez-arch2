@@ -464,7 +464,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
     [InlineData("' OR '1'='1' --")]
     [InlineData("'; DROP TABLE Patients; --")]
     [InlineData("<script>alert('xss')</script>")]
-    [InlineData("SELECT * FROM \"ClinicPatients\" WHERE 1=1")]
+    [InlineData("SELECT * FROM \"Patients\" WHERE 1=1")]
     [InlineData("a")]
     [InlineData("  leading-and-trailing-spaces  ")]
     public async Task AdversarialAndBoundaryQueries_PassedCleanlyToProvidersWithoutCrashing(string queryInput)

@@ -16,11 +16,11 @@ public record GetPatientProblemsQuery(Guid PatientId, string? Status = null) : I
 
 public class GetPatientProblemsQueryHandler : IRequestHandler<GetPatientProblemsQuery, IReadOnlyList<PatientProblemDto>>
 {
-    private readonly IRepository<PatientProblem> _problemRepo;
+    private readonly IRepository<PatientMedicalHistory> _problemRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetPatientProblemsQueryHandler(
-        IRepository<PatientProblem> problemRepo,
+        IRepository<PatientMedicalHistory> problemRepo,
         IClinicContext clinicContext)
     {
         _problemRepo = problemRepo;
@@ -29,7 +29,7 @@ public class GetPatientProblemsQueryHandler : IRequestHandler<GetPatientProblems
 
     public async Task<IReadOnlyList<PatientProblemDto>> Handle(GetPatientProblemsQuery query, CancellationToken cancellationToken)
     {
-        var dbQuery = _problemRepo.Query(p => p.PatientId == query.PatientId && p.ClinicId == _clinicContext.ClinicId)
+        var dbQuery = _problemRepo.Query(p => p.PatientId == query.PatientId && p.ClinicId == _clinicContext.ClinicId && p.Category == MedicalHistoryCategory.ProblemListItem)
             .AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(query.Status) && Enum.TryParse<ProblemStatus>(query.Status, true, out var parsedStatus))
@@ -47,17 +47,17 @@ public class GetPatientProblemsQueryHandler : IRequestHandler<GetPatientProblems
             p.ClinicId,
             p.PatientId,
             p.ConsultationEncounterId,
-            p.Icd10Code,
-            p.ProblemTitle,
+            p.Icd10Code ?? string.Empty,
+            p.ConditionTitle,
             p.PhilHealthMdiseaseCode,
             p.Status.ToString(),
-            p.Severity.ToString(),
+            p.Severity?.ToString() ?? "Moderate",
             p.IsChronicNcd,
             p.OnsetDate,
             p.ResolvedDate,
             p.ClinicalNotes,
-            p.RecordedByDoctorId,
-            p.RecordedByDoctorName,
+            p.RecordedByStaffId ?? Guid.Empty,
+            p.RecordedByStaffName ?? string.Empty,
             p.CreatedAt
         )).ToList();
     }

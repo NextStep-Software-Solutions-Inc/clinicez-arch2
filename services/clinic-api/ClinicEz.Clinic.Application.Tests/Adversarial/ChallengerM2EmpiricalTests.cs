@@ -10,7 +10,6 @@ using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Application.Features.Procedures.DTOs;
 using ClinicEz.Clinic.Application.Features.Triage.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
@@ -73,22 +72,9 @@ public class ChallengerM2EmpiricalTests
         return (uow, ctx);
     }
 
-    private LegacyPatientProfileIngestionService CreateIngestionService(ApplicationDbContext db, Guid clinicId, string tenantId)
+    private Patient CreatePatient(Guid id, Guid clinicId, string tenantId, string firstName, string lastName, string gender, Dictionary<string, object?>? customFields = null)
     {
-        var (uow, ctx) = CreateUnitOfWorkAndContext(db, clinicId, tenantId);
-        return new LegacyPatientProfileIngestionService(
-            new Repository<ClinicPatient>(db, _sieveProcessor),
-            new Repository<PatientSurgicalHistory>(db, _sieveProcessor),
-            new Repository<PatientSocialHistory>(db, _sieveProcessor),
-            new Repository<PatientReproductiveHistory>(db, _sieveProcessor),
-            new Repository<NcdRiskAssessment>(db, _sieveProcessor),
-            uow,
-            ctx);
-    }
-
-    private ClinicPatient CreatePatient(Guid id, Guid clinicId, string tenantId, string firstName, string lastName, string gender, Dictionary<string, object?>? customFields = null)
-    {
-        return new ClinicPatient
+        return new Patient
         {
             Id = id,
             ClinicId = clinicId,
@@ -98,7 +84,7 @@ public class ChallengerM2EmpiricalTests
             LastName = lastName,
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = gender,
+            Gender = Enum.TryParse<Gender>(gender, true, out var g) ? g : Gender.Other,
             CustomFields = customFields ?? new Dictionary<string, object?>()
         };
     }
@@ -134,9 +120,8 @@ public class ChallengerM2EmpiricalTests
         // 2. Clinic A queries surgical histories for patientId
         using (var dbA = CreateScopedDbContext(dbName, clinicA, "tenant-a"))
         {
-            var ingestionA = CreateIngestionService(dbA, clinicA, "tenant-a");
             var repoA = new Repository<PatientSurgicalHistory>(dbA, _sieveProcessor);
-            var handlerA = new GetPatientSurgicalHistoriesQueryHandler(repoA, ingestionA);
+            var handlerA = new GetPatientSurgicalHistoriesQueryHandler(repoA);
 
             var result = await handlerA.Handle(new GetPatientSurgicalHistoriesQuery(patientId), CancellationToken.None);
 
@@ -174,9 +159,8 @@ public class ChallengerM2EmpiricalTests
         // 2. Clinic A queries social history for patientId
         using (var dbA = CreateScopedDbContext(dbName, clinicA, "tenant-a"))
         {
-            var ingestionA = CreateIngestionService(dbA, clinicA, "tenant-a");
             var repoA = new Repository<PatientSocialHistory>(dbA, _sieveProcessor);
-            var handlerA = new GetPatientSocialHistoryQueryHandler(repoA, ingestionA);
+            var handlerA = new GetPatientSocialHistoryQueryHandler(repoA);
 
             var result = await handlerA.Handle(new GetPatientSocialHistoryQuery(patientId), CancellationToken.None);
 
@@ -213,9 +197,8 @@ public class ChallengerM2EmpiricalTests
         // 2. Clinic A queries reproductive history for patientId
         using (var dbA = CreateScopedDbContext(dbName, clinicA, "tenant-a"))
         {
-            var ingestionA = CreateIngestionService(dbA, clinicA, "tenant-a");
             var repoA = new Repository<PatientReproductiveHistory>(dbA, _sieveProcessor);
-            var handlerA = new GetPatientReproductiveHistoryQueryHandler(repoA, ingestionA);
+            var handlerA = new GetPatientReproductiveHistoryQueryHandler(repoA);
 
             var result = await handlerA.Handle(new GetPatientReproductiveHistoryQuery(patientId), CancellationToken.None);
 
@@ -252,9 +235,8 @@ public class ChallengerM2EmpiricalTests
         // 2. Clinic A queries NCD assessments for patientId
         using (var dbA = CreateScopedDbContext(dbName, clinicA, "tenant-a"))
         {
-            var ingestionA = CreateIngestionService(dbA, clinicA, "tenant-a");
             var repoA = new Repository<NcdRiskAssessment>(dbA, _sieveProcessor);
-            var handlerA = new GetPatientNcdRiskAssessmentsQueryHandler(repoA, ingestionA);
+            var handlerA = new GetPatientNcdRiskAssessmentsQueryHandler(repoA);
 
             var result = await handlerA.Handle(new GetPatientNcdRiskAssessmentsQuery(patientId), CancellationToken.None);
 
@@ -316,20 +298,18 @@ public class ChallengerM2EmpiricalTests
         using (var dbA = CreateScopedDbContext(dbName, clinicA, "tenant-a"))
         {
             var (_, ctxA) = CreateUnitOfWorkAndContext(dbA, clinicA, "tenant-a");
-            var ingestionA = CreateIngestionService(dbA, clinicA, "tenant-a");
 
             var handlerA = new GetPatientChartQueryHandler(
                 new Repository<ConsultationEncounter>(dbA, _sieveProcessor),
-                new Repository<TriageVitals>(dbA, _sieveProcessor),
-                new Repository<ClinicalProcedure>(dbA, _sieveProcessor),
-                new Repository<ClinicLabOrder>(dbA, _sieveProcessor),
+                new Repository<PatientVitals>(dbA, _sieveProcessor),
+                new Repository<Procedure>(dbA, _sieveProcessor),
+                new Repository<LabOrder>(dbA, _sieveProcessor),
                 new Repository<Invoice>(dbA, _sieveProcessor),
                 ctxA,
                 new Repository<PatientSurgicalHistory>(dbA, _sieveProcessor),
                 new Repository<PatientSocialHistory>(dbA, _sieveProcessor),
                 new Repository<PatientReproductiveHistory>(dbA, _sieveProcessor),
-                new Repository<NcdRiskAssessment>(dbA, _sieveProcessor),
-                ingestionA);
+                new Repository<NcdRiskAssessment>(dbA, _sieveProcessor));
 
             var chart = await handlerA.Handle(new GetPatientChartQuery(patientId), CancellationToken.None);
 
@@ -364,7 +344,7 @@ public class ChallengerM2EmpiricalTests
         {
             var (uowA, ctxA) = CreateUnitOfWorkAndContext(dbA, clinicA, "tenant-a");
             var handlerA = new AddPatientSurgicalHistoryCommandHandler(
-                new Repository<ClinicPatient>(dbA, _sieveProcessor),
+                new Repository<Patient>(dbA, _sieveProcessor),
                 new Repository<PatientSurgicalHistory>(dbA, _sieveProcessor),
                 uowA,
                 ctxA);
@@ -481,7 +461,7 @@ public class ChallengerM2EmpiricalTests
         {
             var (uowA, ctxA) = CreateUnitOfWorkAndContext(dbA, clinicA, "tenant-a");
             var handlerA = new UpdatePatientSocialHistoryCommandHandler(
-                new Repository<ClinicPatient>(dbA, _sieveProcessor),
+                new Repository<Patient>(dbA, _sieveProcessor),
                 new Repository<PatientSocialHistory>(dbA, _sieveProcessor),
                 uowA,
                 ctxA);
@@ -515,7 +495,7 @@ public class ChallengerM2EmpiricalTests
         {
             var (uowA, ctxA) = CreateUnitOfWorkAndContext(dbA, clinicA, "tenant-a");
             var handlerA = new UpdatePatientReproductiveHistoryCommandHandler(
-                new Repository<ClinicPatient>(dbA, _sieveProcessor),
+                new Repository<Patient>(dbA, _sieveProcessor),
                 new Repository<PatientReproductiveHistory>(dbA, _sieveProcessor),
                 uowA,
                 ctxA);
@@ -549,7 +529,7 @@ public class ChallengerM2EmpiricalTests
         {
             var (uowA, ctxA) = CreateUnitOfWorkAndContext(dbA, clinicA, "tenant-a");
             var handlerA = new SaveNcdRiskAssessmentCommandHandler(
-                new Repository<ClinicPatient>(dbA, _sieveProcessor),
+                new Repository<Patient>(dbA, _sieveProcessor),
                 new Repository<NcdRiskAssessment>(dbA, _sieveProcessor),
                 uowA,
                 ctxA);
@@ -567,80 +547,86 @@ public class ChallengerM2EmpiricalTests
     // =========================================================================
 
     [Fact]
-    public async Task LegacyIngestion_SurgicalHistories_IngestedIntoRelationalTable_OnAccess()
+    public async Task Relational_SurgicalHistories_QueriedDirectly_FromTable()
     {
-        var dbName = $"Legacy_Surg_{Guid.NewGuid()}";
+        var dbName = $"Relational_Surg_{Guid.NewGuid()}";
         var clinicId = Guid.NewGuid();
-        var tenantId = "tenant-legacy";
+        var tenantId = "tenant-test";
         var patientId = Guid.NewGuid();
-
-        var legacyProfile = new PhilHealthPatientProfileDto
-        {
-            SurgicalHistories = new List<PhilHealthSurgicalEntryDto>
-            {
-                new("Appendectomy", "2018-05-12"),
-                new("Cholecystectomy", "2021-09-20"),
-                new("None", "1900-01-01") // Statutory fallback "None" should be ignored during ingestion
-            }
-        };
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Rosa", "Alvarez", "Female",
-                new Dictionary<string, object?> { ["philhealth_profile"] = legacyProfile }));
+            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Rosa", "Alvarez", "Female"));
+            db.PatientSurgicalHistories.AddRange(
+                new PatientSurgicalHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinicId,
+                    TenantId = tenantId,
+                    PatientId = patientId,
+                    ProcedureName = "Appendectomy",
+                    SurgeryDate = new DateOnly(2018, 5, 12)
+                },
+                new PatientSurgicalHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinicId,
+                    TenantId = tenantId,
+                    PatientId = patientId,
+                    ProcedureName = "Cholecystectomy",
+                    SurgeryDate = new DateOnly(2021, 9, 20)
+                });
             await db.SaveChangesAsync();
         }
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
             var repo = new Repository<PatientSurgicalHistory>(db, _sieveProcessor);
-            var handler = new GetPatientSurgicalHistoriesQueryHandler(repo, ingestion);
+            var handler = new GetPatientSurgicalHistoriesQueryHandler(repo);
 
             var results = await handler.Handle(new GetPatientSurgicalHistoriesQuery(patientId), CancellationToken.None);
 
-            // Verify query returns 2 surgeries and filtered out "None"
             results.Should().HaveCount(2);
             results.Select(s => s.ProcedureName).Should().Contain("Appendectomy", "Cholecystectomy");
 
-            // Verify relational table was actually populated
             var dbEntries = await db.PatientSurgicalHistories.Where(s => s.PatientId == patientId).ToListAsync();
             dbEntries.Should().HaveCount(2);
             dbEntries.All(e => e.ClinicId == clinicId && e.TenantId == tenantId).Should().BeTrue();
-            dbEntries.All(e => e.CreatedBy == "LegacyProfileIngestion").Should().BeTrue();
         }
     }
 
     [Fact]
-    public async Task LegacyIngestion_SocialHistory_IngestedIntoRelationalTable_OnAccess()
+    public async Task Relational_SocialHistory_QueriedDirectly_FromTable()
     {
-        var dbName = $"Legacy_Social_{Guid.NewGuid()}";
+        var dbName = $"Relational_Social_{Guid.NewGuid()}";
         var clinicId = Guid.NewGuid();
-        var tenantId = "tenant-legacy";
+        var tenantId = "tenant-test";
         var patientId = Guid.NewGuid();
-
-        var legacyProfile = new PhilHealthPatientProfileDto
-        {
-            IsSmoker = true,
-            CigarettesPerDay = "20",
-            IsAlcoholDrinker = true,
-            BottlesPerDay = "3",
-            IllDrugUser = false,
-            IsSexuallyActive = true
-        };
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Mateo", "Cruz", "Male",
-                new Dictionary<string, object?> { ["philhealth_profile"] = legacyProfile }));
+            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Mateo", "Cruz", "Male"));
+            db.PatientSocialHistories.Add(new PatientSocialHistory
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                TenantId = tenantId,
+                PatientId = patientId,
+                IsSmoker = true,
+                CigarettesPerDay = 20,
+                PacksPerDay = 1.0m,
+                IsAlcoholDrinker = true,
+                AlcoholBottlesPerDay = 3,
+                UsesIllicitDrugs = false,
+                IsSexuallyActive = true
+            });
             await db.SaveChangesAsync();
         }
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
             var repo = new Repository<PatientSocialHistory>(db, _sieveProcessor);
-            var handler = new GetPatientSocialHistoryQueryHandler(repo, ingestion);
+            var handler = new GetPatientSocialHistoryQueryHandler(repo);
 
             var result = await handler.Handle(new GetPatientSocialHistoryQuery(patientId), CancellationToken.None);
 
@@ -656,46 +642,41 @@ public class ChallengerM2EmpiricalTests
             var entity = await db.PatientSocialHistories.FirstOrDefaultAsync(s => s.PatientId == patientId);
             entity.Should().NotBeNull();
             entity!.ClinicId.Should().Be(clinicId);
-            entity.CreatedBy.Should().Be("LegacyProfileIngestion");
         }
     }
 
     [Fact]
-    public async Task LegacyIngestion_ReproductiveHistory_IngestedIntoRelationalTable_OnAccess()
+    public async Task Relational_ReproductiveHistory_QueriedDirectly_FromTable()
     {
-        var dbName = $"Legacy_Repro_{Guid.NewGuid()}";
+        var dbName = $"Relational_Repro_{Guid.NewGuid()}";
         var clinicId = Guid.NewGuid();
-        var tenantId = "tenant-legacy";
+        var tenantId = "tenant-test";
         var patientId = Guid.NewGuid();
-
-        var legacyProfile = new PhilHealthPatientProfileDto
-        {
-            MenstrualApplicable = true,
-            MenarcheAge = "13",
-            LastMensPeriod = "2026-09-01",
-            PeriodDurationDays = "5",
-            CycleIntervalDays = "28",
-            PadsPerDay = "3",
-            BirthControlMethod = "Oral Contraceptive Pill",
-            PregnancyApplicable = true,
-            Gravida = 2,
-            Para = 2,
-            FullTermCount = 2,
-            DeliveryType = "V"
-        };
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Maria", "Makiling", "Female",
-                new Dictionary<string, object?> { ["philhealth_profile"] = legacyProfile }));
+            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Maria", "Makiling", "Female"));
+            db.PatientReproductiveHistories.Add(new PatientReproductiveHistory
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                TenantId = tenantId,
+                PatientId = patientId,
+                IsApplicable = true,
+                MenarcheAge = 13,
+                LastMenstrualPeriod = new DateOnly(2026, 9, 1),
+                PeriodDurationDays = 5,
+                Gravidity = 2,
+                Parity = 2,
+                DeliveryType = "Vaginal"
+            });
             await db.SaveChangesAsync();
         }
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
             var repo = new Repository<PatientReproductiveHistory>(db, _sieveProcessor);
-            var handler = new GetPatientReproductiveHistoryQueryHandler(repo, ingestion);
+            var handler = new GetPatientReproductiveHistoryQueryHandler(repo);
 
             var result = await handler.Handle(new GetPatientReproductiveHistoryQuery(patientId), CancellationToken.None);
 
@@ -711,42 +692,42 @@ public class ChallengerM2EmpiricalTests
             var entity = await db.PatientReproductiveHistories.FirstOrDefaultAsync(r => r.PatientId == patientId);
             entity.Should().NotBeNull();
             entity!.ClinicId.Should().Be(clinicId);
-            entity.CreatedBy.Should().Be("LegacyProfileIngestion");
         }
     }
 
     [Fact]
-    public async Task LegacyIngestion_NcdRiskAssessment_IngestedIntoRelationalTable_OnAccess()
+    public async Task Relational_NcdRiskAssessment_QueriedDirectly_FromTable()
     {
-        var dbName = $"Legacy_Ncd_{Guid.NewGuid()}";
+        var dbName = $"Relational_Ncd_{Guid.NewGuid()}";
         var clinicId = Guid.NewGuid();
-        var tenantId = "tenant-legacy";
+        var tenantId = "tenant-test";
         var patientId = Guid.NewGuid();
-
-        var legacyProfile = new PhilHealthPatientProfileDto
-        {
-            NcdAnswers = new YakapNcdAnswersDto(
-                Qid1Yn: "Y",
-                Qid2Yn: "N",
-                Qid4Yn: "Y",
-                Qid5Ynx: "Y",
-                Qid17Abcde: "C",
-                Qid19Fbsmg: "135.5",
-                Qid20Choleval: "220.0")
-        };
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Danilo", "Ramos", "Male",
-                new Dictionary<string, object?> { ["philhealth_profile"] = legacyProfile }));
+            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Danilo", "Ramos", "Male"));
+            db.NcdRiskAssessments.Add(new NcdRiskAssessment
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                TenantId = tenantId,
+                PatientId = patientId,
+                AssessmentDate = DateTime.UtcNow,
+                EatsProcessedFoodWeekly = true,
+                ThreeServingsVegetablesDaily = false,
+                PhysicalActivityAtLeast150MinsWeekly = true,
+                DiagnosedDiabetes = "Y",
+                RiskBand = "BandC",
+                FastingBloodSugarMgDl = 135.5m,
+                TotalCholesterolMgDl = 220.0m
+            });
             await db.SaveChangesAsync();
         }
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
             var repo = new Repository<NcdRiskAssessment>(db, _sieveProcessor);
-            var handler = new GetPatientNcdRiskAssessmentsQueryHandler(repo, ingestion);
+            var handler = new GetPatientNcdRiskAssessmentsQueryHandler(repo);
 
             var results = await handler.Handle(new GetPatientNcdRiskAssessmentsQuery(patientId), CancellationToken.None);
 
@@ -763,46 +744,59 @@ public class ChallengerM2EmpiricalTests
             var entity = await db.NcdRiskAssessments.FirstOrDefaultAsync(n => n.PatientId == patientId);
             entity.Should().NotBeNull();
             entity!.ClinicId.Should().Be(clinicId);
-            entity.CreatedBy.Should().Be("LegacyProfileIngestion");
         }
     }
 
     [Fact]
-    public async Task LegacyIngestion_Idempotent_MultipleQueryCallsDoNotDuplicateRows()
+    public async Task Relational_Idempotent_MultipleQueryCallsDoNotDuplicateRows()
     {
-        var dbName = $"Legacy_Idempotent_{Guid.NewGuid()}";
+        var dbName = $"Relational_Idempotent_{Guid.NewGuid()}";
         var clinicId = Guid.NewGuid();
-        var tenantId = "tenant-legacy";
+        var tenantId = "tenant-test";
         var patientId = Guid.NewGuid();
-
-        var legacyProfile = new PhilHealthPatientProfileDto
-        {
-            SurgicalHistories = new List<PhilHealthSurgicalEntryDto>
-            {
-                new("Hernia Repair", "2020-03-10")
-            },
-            IsSmoker = false,
-            IsAlcoholDrinker = false,
-            NcdAnswers = new YakapNcdAnswersDto(Qid1Yn: "N", Qid17Abcde: "A")
-        };
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Jose", "Rizal", "Male",
-                new Dictionary<string, object?> { ["philhealth_profile"] = legacyProfile }));
+            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Jose", "Rizal", "Male"));
+            db.PatientSurgicalHistories.Add(new PatientSurgicalHistory
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                TenantId = tenantId,
+                PatientId = patientId,
+                ProcedureName = "Hernia Repair",
+                SurgeryDate = new DateOnly(2020, 3, 10)
+            });
+            db.PatientSocialHistories.Add(new PatientSocialHistory
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                TenantId = tenantId,
+                PatientId = patientId,
+                IsSmoker = false,
+                IsAlcoholDrinker = false
+            });
+            db.NcdRiskAssessments.Add(new NcdRiskAssessment
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                TenantId = tenantId,
+                PatientId = patientId,
+                AssessmentDate = DateTime.UtcNow,
+                RiskBand = "BandA"
+            });
             await db.SaveChangesAsync();
         }
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
             var surgRepo = new Repository<PatientSurgicalHistory>(db, _sieveProcessor);
             var socialRepo = new Repository<PatientSocialHistory>(db, _sieveProcessor);
             var ncdRepo = new Repository<NcdRiskAssessment>(db, _sieveProcessor);
 
-            var surgHandler = new GetPatientSurgicalHistoriesQueryHandler(surgRepo, ingestion);
-            var socialHandler = new GetPatientSocialHistoryQueryHandler(socialRepo, ingestion);
-            var ncdHandler = new GetPatientNcdRiskAssessmentsQueryHandler(ncdRepo, ingestion);
+            var surgHandler = new GetPatientSurgicalHistoriesQueryHandler(surgRepo);
+            var socialHandler = new GetPatientSocialHistoryQueryHandler(socialRepo);
+            var ncdHandler = new GetPatientNcdRiskAssessmentsQueryHandler(ncdRepo);
 
             // Execute 3 times consecutively
             for (int i = 0; i < 3; i++)
@@ -820,79 +814,26 @@ public class ChallengerM2EmpiricalTests
     }
 
     [Fact]
-    public async Task LegacyIngestion_HandlesJsonElementInCustomFields_Correctly()
+    public async Task Relational_HandlesEmptyRelationalTables_WithoutException()
     {
-        var dbName = $"Legacy_JsonElement_{Guid.NewGuid()}";
+        var dbName = $"Relational_Defensive_{Guid.NewGuid()}";
         var clinicId = Guid.NewGuid();
-        var tenantId = "tenant-legacy";
-        var patientId = Guid.NewGuid();
-
-        var legacyProfile = new PhilHealthPatientProfileDto
-        {
-            SurgicalHistories = new List<PhilHealthSurgicalEntryDto> { new("Tonsillectomy", "2015-08-01") },
-            IsSmoker = true,
-            CigarettesPerDay = "10"
-        };
-        var serialized = JsonSerializer.Serialize(legacyProfile);
-        using var jsonDoc = JsonDocument.Parse(serialized);
-        var jsonElement = jsonDoc.RootElement.Clone();
-
-        using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
-        {
-            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Andres", "Bonifacio", "Male",
-                new Dictionary<string, object?> { ["philhealth_profile"] = jsonElement }));
-            await db.SaveChangesAsync();
-        }
-
-        using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
-        {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
-            var surgRepo = new Repository<PatientSurgicalHistory>(db, _sieveProcessor);
-            var handler = new GetPatientSurgicalHistoriesQueryHandler(surgRepo, ingestion);
-
-            var results = await handler.Handle(new GetPatientSurgicalHistoriesQuery(patientId), CancellationToken.None);
-
-            results.Should().HaveCount(1);
-            results[0].ProcedureName.Should().Be("Tonsillectomy");
-        }
-    }
-
-    [Fact]
-    public async Task LegacyIngestion_HandlesMalformedOrEmptyCustomFields_WithoutException()
-    {
-        var dbName = $"Legacy_Defensive_{Guid.NewGuid()}";
-        var clinicId = Guid.NewGuid();
-        var tenantId = "tenant-legacy";
+        var tenantId = "tenant-test";
         var patient1 = Guid.NewGuid();
-        var patient2 = Guid.NewGuid();
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            // Patient 1 has empty CustomFields
-            db.Patients.Add(CreatePatient(patient1, clinicId, tenantId, "No", "CustomFields", "Female",
-                new Dictionary<string, object?>()));
-
-            // Patient 2 has invalid string in philhealth_profile
-            db.Patients.Add(CreatePatient(patient2, clinicId, tenantId, "Malformed", "CustomFields", "Female",
-                new Dictionary<string, object?>
-                {
-                    ["philhealth_profile"] = "THIS IS NOT A VALID JSON OBJECT {;;;;"
-                }));
+            db.Patients.Add(CreatePatient(patient1, clinicId, tenantId, "No", "Records", "Female"));
             await db.SaveChangesAsync();
         }
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
             var repo = new Repository<PatientSurgicalHistory>(db, _sieveProcessor);
-            var handler = new GetPatientSurgicalHistoriesQueryHandler(repo, ingestion);
+            var handler = new GetPatientSurgicalHistoriesQueryHandler(repo);
 
-            // Should complete gracefully with 0 surgical records and no exception
             var res1 = await handler.Handle(new GetPatientSurgicalHistoriesQuery(patient1), CancellationToken.None);
             res1.Should().BeEmpty();
-
-            var res2 = await handler.Handle(new GetPatientSurgicalHistoriesQuery(patient2), CancellationToken.None);
-            res2.Should().BeEmpty();
         }
     }
 
@@ -920,7 +861,7 @@ public class ChallengerM2EmpiricalTests
         {
             var (uow, ctx) = CreateUnitOfWorkAndContext(db, clinicId, tenantId);
             var handler = new UpdatePatientReproductiveHistoryCommandHandler(
-                new Repository<ClinicPatient>(db, _sieveProcessor),
+                new Repository<Patient>(db, _sieveProcessor),
                 new Repository<PatientReproductiveHistory>(db, _sieveProcessor),
                 uow,
                 ctx);
@@ -972,38 +913,40 @@ public class ChallengerM2EmpiricalTests
     }
 
     [Fact]
-    public async Task MaleReproductiveGuard_LegacyIngestion_ForcesApplicableFalse_ForMalePatient()
+    public async Task MaleReproductiveGuard_DirectPersistence_ForcesApplicableFalse_ForMalePatient()
     {
-        var dbName = $"Male_Legacy_Guard_{Guid.NewGuid()}";
+        var dbName = $"Male_Direct_Guard_{Guid.NewGuid()}";
         var clinicId = Guid.NewGuid();
         var tenantId = "tenant-male";
         var patientId = Guid.NewGuid();
 
-        // Legacy profile mistakenly has menstrual / obstetric flags enabled for a male
-        var legacyProfile = new PhilHealthPatientProfileDto
-        {
-            MenstrualApplicable = true,
-            MenarcheAge = "14",
-            PregnancyApplicable = true,
-            Gravida = 1,
-            Para = 1
-        };
-
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Emilio", "Aguinaldo", "Male",
-                new Dictionary<string, object?> { ["philhealth_profile"] = legacyProfile }));
+            db.Patients.Add(CreatePatient(patientId, clinicId, tenantId, "Emilio", "Aguinaldo", "Male"));
             await db.SaveChangesAsync();
         }
 
         using (var db = CreateScopedDbContext(dbName, clinicId, tenantId))
         {
-            var ingestion = CreateIngestionService(db, clinicId, tenantId);
-            await ingestion.EnsureIngestedAsync(patientId, CancellationToken.None);
+            var (uow, ctx) = CreateUnitOfWorkAndContext(db, clinicId, tenantId);
+            var handler = new UpdatePatientReproductiveHistoryCommandHandler(
+                new Repository<Patient>(db, _sieveProcessor),
+                new Repository<PatientReproductiveHistory>(db, _sieveProcessor),
+                uow,
+                ctx);
+
+            var command = new UpdatePatientReproductiveHistoryCommand(
+                PatientId: patientId,
+                IsApplicable: true,
+                MenarcheAge: 14,
+                Gravidity: 1,
+                Parity: 1);
+
+            await handler.Handle(command, CancellationToken.None);
 
             var entity = await db.PatientReproductiveHistories.FirstOrDefaultAsync(r => r.PatientId == patientId);
             entity.Should().NotBeNull();
-            entity!.IsApplicable.Should().BeFalse("Legacy ingestion must guard male patients by setting IsApplicable = false");
+            entity!.IsApplicable.Should().BeFalse("Male patients must have IsApplicable forced to false");
         }
     }
 
@@ -1027,7 +970,7 @@ public class ChallengerM2EmpiricalTests
         {
             var (uow, ctx) = CreateUnitOfWorkAndContext(db, clinicId, tenantId);
             var handler = new UpdatePatientReproductiveHistoryCommandHandler(
-                new Repository<ClinicPatient>(db, _sieveProcessor),
+                new Repository<Patient>(db, _sieveProcessor),
                 new Repository<PatientReproductiveHistory>(db, _sieveProcessor),
                 uow,
                 ctx);

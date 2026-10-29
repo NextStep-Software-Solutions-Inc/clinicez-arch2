@@ -2,6 +2,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ClinicEz.Clinic.Domain.Common;
 
+public interface IDomainEvent
+{
+    Guid EventId { get; }
+    DateTime OccurredOnUtc { get; }
+}
+
 public abstract class BaseEntity : IEntity
 {
     protected BaseEntity() { }
@@ -15,6 +21,28 @@ public abstract class BaseEntity : IEntity
     public string? DeletedBy { get; set; }
     [NotMapped]
     public bool AllowHardDelete { get; set; }
+
+    private readonly List<IDomainEvent> _domainEvents = new();
+
+    [NotMapped]
+    public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+
+    public void AddDomainEvent(IDomainEvent domainEvent)
+    {
+        ArgumentNullException.ThrowIfNull(domainEvent);
+        _domainEvents.Add(domainEvent);
+    }
+
+    public void RemoveDomainEvent(IDomainEvent domainEvent)
+    {
+        ArgumentNullException.ThrowIfNull(domainEvent);
+        _domainEvents.Remove(domainEvent);
+    }
+
+    public void ClearDomainEvents()
+    {
+        _domainEvents.Clear();
+    }
 }
 
 

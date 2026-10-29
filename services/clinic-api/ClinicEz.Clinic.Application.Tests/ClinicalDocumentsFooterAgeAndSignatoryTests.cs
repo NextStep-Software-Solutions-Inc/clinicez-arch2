@@ -20,7 +20,7 @@ public class ClinicalDocumentsFooterAgeAndSignatoryTests
 {
     private readonly IClinicDocumentPdfService _pdfService = new ClinicDocumentPdfService();
 
-    private static ClinicSettings CreateSettings(string? footer = null, string paperSize = "Letter") => new()
+    private static FacilitySettings CreateSettings(string? footer = null, string paperSize = "Letter") => new()
     {
         TenantId = "tenant-001",
         ClinicId = Guid.NewGuid(),
@@ -29,7 +29,7 @@ public class ClinicalDocumentsFooterAgeAndSignatoryTests
         PaperSize = paperSize
     };
 
-    private static ClinicPatient CreatePatient(DateOnly dob, string gender = "Female", string name = "Maria Santos") => new()
+    private static Patient CreatePatient(DateOnly dob, string gender = "Female", string name = "Maria Santos") => new()
     {
         Id = Guid.NewGuid(),
         TenantId = "tenant-001",
@@ -39,7 +39,7 @@ public class ClinicalDocumentsFooterAgeAndSignatoryTests
         FirstName = name.Split(' ')[0],
         LastName = name.Split(' ').Length > 1 ? name.Split(' ')[1] : "Patient",
         DateOfBirth = dob,
-        Gender = gender
+        Gender = Enum.TryParse<Gender>(gender, true, out var g) ? g : Gender.Female
     };
 
     private static MedicalCertificate CreateCert(string patientName = "Maria Santos", DateOnly? issueDate = null) => new()

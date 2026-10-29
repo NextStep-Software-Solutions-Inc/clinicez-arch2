@@ -13,13 +13,13 @@ using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests.Features.Patients;
 
-public sealed class GetClinicPatientCountsQueryTests
+public sealed class GetPatientCountsQueryTests
 {
     private readonly IClinicContext _clinicContext;
     private readonly Guid _testClinicId = Guid.NewGuid();
     private const string _testTenantId = "tenant-counts-test";
 
-    public GetClinicPatientCountsQueryTests()
+    public GetPatientCountsQueryTests()
     {
         _clinicContext = Substitute.For<IClinicContext>();
         _clinicContext.ClinicId.Returns(_testClinicId);
@@ -30,11 +30,11 @@ public sealed class GetClinicPatientCountsQueryTests
     public async Task Handle_ReturnsAccurateCounts_ForAllCategories()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new GetClinicPatientCountsQueryHandler(repo);
 
         // 1. Regular Adult
-        var p1 = new ClinicPatient
+        var p1 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -43,13 +43,13 @@ public sealed class GetClinicPatientCountsQueryTests
             FirstName = "Juan",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1995, 5, 10),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170000001",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }
         };
 
         // 2. Student
-        var p2 = new ClinicPatient
+        var p2 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -58,13 +58,13 @@ public sealed class GetClinicPatientCountsQueryTests
             FirstName = "Maria",
             LastName = "Santos",
             DateOfBirth = new DateOnly(2005, 8, 15),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09170000002",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "Student", ["student_id"] = "STU-2026-001" }
         };
 
         // 3. Employee
-        var p3 = new ClinicPatient
+        var p3 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -73,13 +73,13 @@ public sealed class GetClinicPatientCountsQueryTests
             FirstName = "Pedro",
             LastName = "Penduko",
             DateOfBirth = new DateOnly(1988, 3, 20),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170000003",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "Employee", ["employee_id"] = "EMP-9001" }
         };
 
         // 4. Senior Citizen (age >= 60) with Allergies
-        var p4 = new ClinicPatient
+        var p4 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -88,15 +88,15 @@ public sealed class GetClinicPatientCountsQueryTests
             FirstName = "Lola",
             LastName = "Nena",
             DateOfBirth = new DateOnly(1950, 1, 1),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "09170000004",
             SeniorCitizenId = "SC-12345",
-            Allergies = "Penicillin, Aspirin",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }
         };
+        (p4.Allergies ??= new List<PatientAllergy>()).Add(new PatientAllergy { TenantId = _testTenantId, ClinicId = _testClinicId, Allergen = "Penicillin", Status = AllergyStatus.Active });
 
         // 5. PWD with Alert
-        var p5 = new ClinicPatient
+        var p5 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -105,12 +105,12 @@ public sealed class GetClinicPatientCountsQueryTests
             FirstName = "Cardo",
             LastName = "Dalisay",
             DateOfBirth = new DateOnly(1982, 11, 2),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170000005",
             PwdId = "PWD-9999",
-            Alerts = "Fall risk",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }
         };
+        p5.Alerts.Add(new PatientAlert { TenantId = _testTenantId, ClinicId = _testClinicId, Category = PatientAlertCategory.FallRisk, Code = "FALL", Title = "Fall risk", Status = PatientAlertStatus.Active });
 
         context.Patients.AddRange(p1, p2, p3, p4, p5);
         await context.SaveChangesAsync();
@@ -128,10 +128,10 @@ public sealed class GetClinicPatientCountsQueryTests
     public async Task Handle_WithSearchTerm_FiltersCountsAccurately()
     {
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new GetClinicPatientCountsQueryHandler(repo);
 
-        var p1 = new ClinicPatient
+        var p1 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -140,13 +140,13 @@ public sealed class GetClinicPatientCountsQueryTests
             FirstName = "Andres",
             LastName = "Bonifacio",
             DateOfBirth = new DateOnly(1980, 11, 30),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170000010",
-            Allergies = "Dust",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "Employee" }
         };
+        (p1.Allergies ??= new List<PatientAllergy>()).Add(new PatientAllergy { TenantId = _testTenantId, ClinicId = _testClinicId, Allergen = "Dust", Status = AllergyStatus.Active });
 
-        var p2 = new ClinicPatient
+        var p2 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -155,7 +155,7 @@ public sealed class GetClinicPatientCountsQueryTests
             FirstName = "Apolinario",
             LastName = "Mabini",
             DateOfBirth = new DateOnly(1975, 7, 23),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "09170000011",
             PwdId = "PWD-001",
             CustomFields = new Dictionary<string, object?> { ["classification"] = "General" }

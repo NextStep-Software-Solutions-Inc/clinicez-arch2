@@ -41,9 +41,9 @@ public class ClinicInboundHandlerTests
     private static FacilityDirectoryUpdatedHandler DirectoryUpdatedHandler(ApplicationDbContext db) =>
         new(db, NullLogger<FacilityDirectoryUpdatedHandler>.Instance);
 
-    private static ClinicLabOrder SeedLabOrder(ApplicationDbContext db, Guid clinicId, string orderNumber = "LAB-0001")
+    private static LabOrder SeedLabOrder(ApplicationDbContext db, Guid clinicId, string orderNumber = "LAB-0001")
     {
-        var order = new ClinicLabOrder
+        var order = new LabOrder
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
@@ -51,7 +51,7 @@ public class ClinicInboundHandlerTests
             OrderNumber = orderNumber,
             PatientId = Guid.NewGuid(),
             PatientName = "Maria Santos",
-            Items = new List<ClinicLabOrderItem>
+            Items = new List<LabOrderItem>
             {
                 new() { TestName = "CBC", Category = "Hematology" },
                 new() { TestName = "FBS", Category = "Chemistry" }
@@ -109,12 +109,12 @@ public class ClinicInboundHandlerTests
         await FinalizedHandler(db).HandleAsync(
             report, FromLab(InteropTypes.LabResultFinalized, order.Id, report, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var saved = await db.LabOrders.IgnoreQueryFilters().Include(o => o.Items).SingleAsync();
+        var saved = await db.LabOrders.IgnoreQueryFilters().Include(o => o.Items).Include(o => o.Observations).SingleAsync();
         saved.Status.Should().Be(LabOrderStatus.ResultsReceived);
         saved.ExternalLabName.Should().Be("Hi-Precision");
         saved.VerifiedByPathologist.Should().Be("Dr. Reyes");
         saved.PathologistImpression.Should().Be("Unremarkable");
-        saved.ObservationsJson.Should().Contain("HGB");
+        saved.Observations.Should().Contain(o => o.AnalyteCode == "HGB");
         saved.Items.Should().OnlyContain(i => i.Status == LabOrderStatus.ResultsReceived);
     }
 
@@ -220,9 +220,9 @@ public class ClinicInboundHandlerTests
         await PanicHandler(db).HandleAsync(
             alert, FromLab(InteropTypes.LabResultPanic, order.Id, alert, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var saved = await db.LabOrders.IgnoreQueryFilters().SingleAsync();
+        var saved = await db.LabOrders.IgnoreQueryFilters().Include(o => o.Observations).SingleAsync();
         saved.HasCriticalPanicAlert.Should().BeTrue();
-        saved.CriticalFindingsJson.Should().Contain("6.9");
+        saved.Observations.Should().Contain(o => o.IsCriticalPanic && o.ValueText.Contains("6.9"));
         saved.PanicAlertTriggeredAt.Should().Be(alert.TriggeredAt);
     }
 
@@ -400,7 +400,7 @@ public class ClinicInboundHandlerTests
         await FacilityHandler(db).HandleAsync(
             license, License(license, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId), correlationId), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync();
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync();
         settings.ClinicId.Should().Be(clinicId);
         settings.TenantId.Should().Be(TenantId);
         settings.TenantSlug.Should().Be("apex-group");
@@ -431,7 +431,7 @@ public class ClinicInboundHandlerTests
         await FacilityHandler(db).HandleAsync(
             license, License(license, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync();
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync();
         settings.IsWorkspaceEligible.Should().BeTrue();
 
         // Also verify redelivery with updated eligibility updates existing settings
@@ -439,7 +439,7 @@ public class ClinicInboundHandlerTests
         await FacilityHandler(db).HandleAsync(
             updatedLicense, License(updatedLicense, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var updatedSettings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync();
+        var updatedSettings = await db.Settings.IgnoreQueryFilters().SingleAsync();
         updatedSettings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -454,7 +454,7 @@ public class ClinicInboundHandlerTests
         await FacilityHandler(db).HandleAsync(license, context, CancellationToken.None);
         await FacilityHandler(db).HandleAsync(license, context, CancellationToken.None);
 
-        (await db.ClinicSettings.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        (await db.Settings.IgnoreQueryFilters().CountAsync()).Should().Be(1);
     }
 
     [Fact]
@@ -467,7 +467,7 @@ public class ClinicInboundHandlerTests
         await FacilityHandler(db).HandleAsync(
             license, License(license, MessagingTestKit.LabParty(), MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        (await db.ClinicSettings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await db.Settings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await db.InteropOutbox.CountAsync()).Should().Be(0);
     }
 
@@ -483,7 +483,7 @@ public class ClinicInboundHandlerTests
         await FacilityHandler(db).HandleAsync(
             license, License(license, Party.Portal, MessagingTestKit.ClinicParty("another_tenant", clinicId)), CancellationToken.None);
 
-        (await db.ClinicSettings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await db.Settings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await db.InteropOutbox.CountAsync()).Should().Be(0);
     }
 
@@ -497,7 +497,7 @@ public class ClinicInboundHandlerTests
         await FacilityHandler(db).HandleAsync(
             license, License(license, Party.Portal, MessagingTestKit.ClinicParty(TenantId, facilityId)), CancellationToken.None);
 
-        (await db.ClinicSettings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await db.Settings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
     }
 
     // ----- facility.directory.updated -----
@@ -535,7 +535,7 @@ public class ClinicInboundHandlerTests
             DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)),
             CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeTrue();
         settings.ClinicName.Should().Be("Updated Clinic Name");
         settings.FacilitySlug.Should().Be("updated-slug");
@@ -559,7 +559,7 @@ public class ClinicInboundHandlerTests
             DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)),
             CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Portal revoked workspace discovery eligibility");
     }
 
@@ -590,7 +590,7 @@ public class ClinicInboundHandlerTests
             DirectoryUpdate(updateEvt, Party.ForPatient(Guid.NewGuid().ToString()), MessagingTestKit.ClinicParty(TenantId, clinicId)),
             CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse("Non-control-plane sender must be rejected");
         settings.ClinicName.Should().Be("Untouched Clinic");
     }
@@ -616,7 +616,7 @@ public class ClinicInboundHandlerTests
             DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty("different_tenant", clinicId)),
             CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
         settings.ClinicName.Should().Be("Untouched Clinic");
     }
@@ -638,7 +638,7 @@ public class ClinicInboundHandlerTests
             DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)),
             CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         settings.IsWorkspaceEligible.Should().BeFalse();
     }
 
@@ -658,7 +658,7 @@ public class ClinicInboundHandlerTests
         MessagingTestKit.SeedClinic(db, foreignClinicId, "foreign_tenant", "Foreign Clinic");
 
         // Verify standard query without IgnoreQueryFilters() hides the foreign clinic due to active filter
-        var visibleStandard = await db.ClinicSettings.FirstOrDefaultAsync(s => s.ClinicId == foreignClinicId);
+        var visibleStandard = await db.Settings.FirstOrDefaultAsync(s => s.ClinicId == foreignClinicId);
         visibleStandard.Should().BeNull("Global query filter hides foreign clinic settings");
 
         var updateEvt = DirectoryUpdateFor(foreignClinicId, "foreign_tenant", isWorkspaceEligible: true) with
@@ -672,7 +672,7 @@ public class ClinicInboundHandlerTests
             DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty("foreign_tenant", foreignClinicId)),
             CancellationToken.None);
 
-        var updated = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == foreignClinicId);
+        var updated = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == foreignClinicId);
         updated.IsWorkspaceEligible.Should().BeTrue("Handler must bypass ambient query filter to update settings");
         updated.ClinicName.Should().Be("Updated Foreign Clinic");
     }

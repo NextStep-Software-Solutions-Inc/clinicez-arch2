@@ -34,7 +34,7 @@ public class QueueMultiProviderAndClosedLoopTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();

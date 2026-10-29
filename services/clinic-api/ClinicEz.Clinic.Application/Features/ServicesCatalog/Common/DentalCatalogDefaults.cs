@@ -29,11 +29,11 @@ public static class DentalCatalogDefaults
         new("DENT-PULP", "Pediatric Pulpotomy", "Dental", 1500m, "Coronal vital pulp amputation and medicament placement for primary teeth")
     };
 
-    public static List<ClinicServiceItem> CreateDefaults(string? tenantId, Guid clinicId)
+    public static List<ServiceItem> CreateDefaults(string? tenantId, Guid clinicId)
     {
-        return Defaults.Select(d => new ClinicServiceItem
+        return Defaults.Select(d => new ServiceItem
         {
-            TenantId = tenantId,
+            TenantId = tenantId ?? string.Empty,
             ClinicId = clinicId,
             Code = d.Code,
             Name = d.Name,

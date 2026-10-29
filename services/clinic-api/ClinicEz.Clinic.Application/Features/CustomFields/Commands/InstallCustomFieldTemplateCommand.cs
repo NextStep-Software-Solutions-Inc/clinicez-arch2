@@ -16,7 +16,7 @@ namespace ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 
 public sealed record InstallCustomFieldTemplateCommand(
     string TemplateKey,
-    string? EntityType = "ClinicPatient") : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>;
+    string? EntityType = "Patient") : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>;
 
 public sealed class InstallCustomFieldTemplateCommandValidator : AbstractValidator<InstallCustomFieldTemplateCommand>
 {
@@ -29,12 +29,12 @@ public sealed class InstallCustomFieldTemplateCommandValidator : AbstractValidat
 
 public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<InstallCustomFieldTemplateCommand, IReadOnlyList<ClinicCustomFieldDefinitionDto>>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public InstallCustomFieldTemplateCommandHandler(
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -84,7 +84,7 @@ public sealed class InstallCustomFieldTemplateCommandHandler : IRequestHandler<I
             else
             {
                 // Create new field definition
-                var newEntity = new ClinicCustomFieldDefinition
+                var newEntity = new CustomFieldDefinition
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,

@@ -36,9 +36,9 @@ public class PublicQueueDisplayTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -138,9 +138,9 @@ public class PublicQueueDisplayTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -187,9 +187,9 @@ public class PublicQueueDisplayTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-cdo",
@@ -223,7 +223,7 @@ public class PublicQueueDisplayTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var handler = new GetPublicQueueDisplayQueryHandler(queueRepo, settingsRepo, _clinicContext);
 
@@ -250,13 +250,13 @@ public class PublicQueueDisplayTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_PersistsTvDisplayMaskPatientNames()
+    public async Task UpdateFacilitySettings_PersistsTvDisplayMaskPatientNames()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var initialSettings = new ClinicSettings
+        var initialSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -289,9 +289,9 @@ public class PublicQueueDisplayTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -357,9 +357,9 @@ public class PublicQueueDisplayTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = "476a9086-c0eb-4aef-8ec6-49bb1cfd17c6",
@@ -380,12 +380,12 @@ public class PublicQueueDisplayTests
     }
 
     [Fact]
-    public async Task UpdateClinicSettings_PersistsTvDisplayPin()
+    public async Task UpdateFacilitySettings_PersistsTvDisplayPin()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var initialSettings = new ClinicSettings
+        var initialSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,

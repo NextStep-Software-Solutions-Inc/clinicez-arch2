@@ -62,7 +62,7 @@ public sealed class PhilHealthSequenceGeneratorTests
     public async Task AssignPatientJourneyNumbersAsync_AssignsAndPersistsNumbersOnPatientAndEncounter()
     {
         // Arrange
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -72,20 +72,20 @@ public sealed class PhilHealthSequenceGeneratorTests
             LastName = "Dela Cruz",
             ContactNumber = "09171234567",
             PhilHealthNumber = "030263078507",
-            DateOfBirth = new DateOnly(1985, 5, 15)
-        };
-        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
-        {
-            new()
+            DateOfBirth = new DateOnly(1985, 5, 15),
+            YakapEnlistments = new List<PatientYakapEnlistment>
             {
-                ["enlisted_at"] = "2026-01-15",
-                ["valid_until"] = "2026-12-31",
-                ["effective_year"] = 2026,
-                ["status"] = "Active",
-                ["source"] = "ClinicEnlistment",
-                ["case_no"] = null,
-                ["enlistment_no"] = null,
-                ["profiling_trans_no"] = null
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    EffectiveYear = 2026,
+                    Status = YakapEnlistmentStatus.Active,
+                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    EnlistmentDate = new DateOnly(2026, 1, 15),
+                    ValidUntil = new DateOnly(2026, 12, 31)
+                }
             }
         };
         _dbContext.Patients.Add(patient);
@@ -116,23 +116,18 @@ public sealed class PhilHealthSequenceGeneratorTests
         result.ProfilingTransactionNumber.Should().Be("P000921202600001");
         result.SoapTransactionNumber.Should().Be("S000921202600001");
 
-        // Verify persisted on active entry in CustomFields
-        var enlistments = patient.CustomFields["yakap_enlistments"] as List<Dictionary<string, object?>>;
-        enlistments.Should().NotBeNull();
-        enlistments!.Should().HaveCount(1);
-        enlistments[0]["case_no"]!.ToString().Should().Be("C000921202600001");
-        enlistments[0]["enlistment_no"]!.ToString().Should().Be("E000921202600001");
-        enlistments[0]["profiling_trans_no"]!.ToString().Should().Be("P000921202600001");
-        enlistments[0]["enlisted_at"]!.ToString().Should().Be("2026-01-15");
-        enlistments[0]["valid_until"]!.ToString().Should().Be("2026-12-31");
-        enlistments[0]["status"]!.ToString().Should().Be("Active");
+        // Verify persisted on active entry in YakapEnlistments
+        var enlistment = patient.YakapEnlistments.First();
+        enlistment.CaseNo.Should().Be("C000921202600001");
+        enlistment.EnlistmentTransNo.Should().Be("E000921202600001");
+        enlistment.ProfilingTransNo.Should().Be("P000921202600001");
+        enlistment.EnlistmentDate.Should().Be(new DateOnly(2026, 1, 15));
+        enlistment.ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
+        enlistment.Status.Should().Be(YakapEnlistmentStatus.Active);
 
         // Verify persisted on encounter
         encounter.PhilHealthCaseNo.Should().Be("C000921202600001");
-        encounter.HciCaseNo.Should().Be("C000921202600001");
-        encounter.HciTransNo.Should().Be("E000921202600001");
         encounter.PhilHealthSoapTransNo.Should().Be("S000921202600001");
-        encounter.SoapTransNo.Should().Be("S000921202600001");
 
         // Calling again does not overwrite existing numbers (idempotent)
         var result2 = await _generator.AssignPatientJourneyNumbersAsync(
@@ -145,8 +140,8 @@ public sealed class PhilHealthSequenceGeneratorTests
     [Fact]
     public async Task AssignPatientJourneyNumbersAsync_ThrowsInvalidOperationException_WhenEnlistmentsMissing()
     {
-        // Arrange: Patient without yakap_enlistments key
-        var patientWithoutKey = new ClinicPatient
+        // Arrange: Patient without YakapEnlistments
+        var patientWithoutKey = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -159,8 +154,8 @@ public sealed class PhilHealthSequenceGeneratorTests
         };
         _dbContext.Patients.Add(patientWithoutKey);
 
-        // Patient with empty array
-        var patientWithEmptyList = new ClinicPatient
+        // Patient with empty list
+        var patientWithEmptyList = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -169,14 +164,14 @@ public sealed class PhilHealthSequenceGeneratorTests
             FirstName = "Crisostomo",
             LastName = "Ibarra",
             ContactNumber = "09172223344",
-            DateOfBirth = new DateOnly(1988, 6, 19)
+            DateOfBirth = new DateOnly(1988, 6, 19),
+            YakapEnlistments = new List<PatientYakapEnlistment>()
         };
-        patientWithEmptyList.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>();
         _dbContext.Patients.Add(patientWithEmptyList);
 
         await _dbContext.SaveChangesAsync();
 
-        // Act & Assert 1: Missing key
+        // Act & Assert 1: Missing list
         Func<Task> act1 = () => _generator.AssignPatientJourneyNumbersAsync(
             _tenantId, _clinicId, patientWithoutKey.Id, null, "HCI-NCR-00921", "2026");
 
@@ -189,17 +184,13 @@ public sealed class PhilHealthSequenceGeneratorTests
 
         await act2.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*enlistment*");
-
-        // Verify DB unchanged: no auto-creation
-        patientWithoutKey.CustomFields.ContainsKey("yakap_enlistments").Should().BeFalse();
-        ((List<Dictionary<string, object?>>)patientWithEmptyList.CustomFields["yakap_enlistments"]!).Should().BeEmpty();
     }
 
     [Fact]
     public async Task AssignPatientJourneyNumbersAsync_ThrowsInvalidOperationException_WhenEnlistmentExpired()
     {
         // Arrange: Patient with 2025 enlistment that expired on 2025-12-31
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -208,20 +199,23 @@ public sealed class PhilHealthSequenceGeneratorTests
             FirstName = "Elias",
             LastName = "Piloto",
             ContactNumber = "09173334455",
-            DateOfBirth = new DateOnly(1982, 3, 10)
-        };
-        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
-        {
-            new()
+            DateOfBirth = new DateOnly(1982, 3, 10),
+            YakapEnlistments = new List<PatientYakapEnlistment>
             {
-                ["enlisted_at"] = "2025-01-10",
-                ["valid_until"] = "2025-12-31",
-                ["effective_year"] = 2025,
-                ["status"] = "Expired",
-                ["source"] = "ClinicEnlistment",
-                ["case_no"] = "C000921202500042",
-                ["enlistment_no"] = "E000921202500042",
-                ["profiling_trans_no"] = "P000921202500042"
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    EffectiveYear = 2025,
+                    Status = YakapEnlistmentStatus.Expired,
+                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    EnlistmentDate = new DateOnly(2025, 1, 10),
+                    ValidUntil = new DateOnly(2025, 12, 31),
+                    CaseNo = "C000921202500042",
+                    EnlistmentTransNo = "E000921202500042",
+                    ProfilingTransNo = "P000921202500042"
+                }
             }
         };
         _dbContext.Patients.Add(patient);
@@ -248,10 +242,7 @@ public sealed class PhilHealthSequenceGeneratorTests
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*expire*");
 
-        // Verify DB unchanged: array length remains 1, encounter PhilHealthCaseNo remains null
-        var list = patient.CustomFields["yakap_enlistments"] as List<Dictionary<string, object?>>;
-        list.Should().HaveCount(1);
-        list![0]["case_no"]!.ToString().Should().Be("C000921202500042");
+        // Verify DB unchanged: encounter PhilHealthCaseNo remains null
         encounter.PhilHealthCaseNo.Should().BeNull();
     }
 
@@ -259,7 +250,7 @@ public sealed class PhilHealthSequenceGeneratorTests
     public async Task AssignPatientJourneyNumbersAsync_ThrowsInvalidOperationException_WhenEnlistmentTransferred()
     {
         // Arrange: Patient with 2026 enlistment marked Transferred
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -268,20 +259,23 @@ public sealed class PhilHealthSequenceGeneratorTests
             FirstName = "Sisa",
             LastName = "Basilio",
             ContactNumber = "09174445566",
-            DateOfBirth = new DateOnly(1975, 8, 22)
-        };
-        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
-        {
-            new()
+            DateOfBirth = new DateOnly(1975, 8, 22),
+            YakapEnlistments = new List<PatientYakapEnlistment>
             {
-                ["enlisted_at"] = "2026-01-01",
-                ["valid_until"] = "2026-12-31",
-                ["effective_year"] = 2026,
-                ["status"] = "Transferred",
-                ["source"] = "PhilHealthMasterlist",
-                ["case_no"] = "C000921202600099",
-                ["enlistment_no"] = "E000921202600099",
-                ["profiling_trans_no"] = "P000921202600099"
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    EffectiveYear = 2026,
+                    Status = YakapEnlistmentStatus.Transferred,
+                    Source = YakapEnlistmentSource.PhilHealthMasterlist,
+                    EnlistmentDate = new DateOnly(2026, 1, 1),
+                    ValidUntil = new DateOnly(2026, 12, 31),
+                    CaseNo = "C000921202600099",
+                    EnlistmentTransNo = "E000921202600099",
+                    ProfilingTransNo = "P000921202600099"
+                }
             }
         };
         _dbContext.Patients.Add(patient);
@@ -316,7 +310,7 @@ public sealed class PhilHealthSequenceGeneratorTests
     public async Task AssignPatientJourneyNumbersAsync_Succeeds_WhenNewRenewalPeriodAdded()
     {
         // Arrange: Expired 2025 entry alongside explicit 2026 renewal entry
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -325,31 +319,34 @@ public sealed class PhilHealthSequenceGeneratorTests
             FirstName = "Basilio",
             LastName = "Crispin",
             ContactNumber = "09175556677",
-            DateOfBirth = new DateOnly(2000, 12, 25)
-        };
-        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
-        {
-            new()
+            DateOfBirth = new DateOnly(2000, 12, 25),
+            YakapEnlistments = new List<PatientYakapEnlistment>
             {
-                ["enlisted_at"] = "2025-01-10",
-                ["valid_until"] = "2025-12-31",
-                ["effective_year"] = 2025,
-                ["status"] = "Expired",
-                ["source"] = "ClinicEnlistment",
-                ["case_no"] = "C000921202500050",
-                ["enlistment_no"] = "E000921202500050",
-                ["profiling_trans_no"] = "P000921202500050"
-            },
-            new()
-            {
-                ["enlisted_at"] = "2026-01-15",
-                ["valid_until"] = "2026-12-31",
-                ["effective_year"] = 2026,
-                ["status"] = "Active",
-                ["source"] = "ClinicEnlistment",
-                ["case_no"] = null,
-                ["enlistment_no"] = null,
-                ["profiling_trans_no"] = null
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    EffectiveYear = 2025,
+                    Status = YakapEnlistmentStatus.Expired,
+                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    EnlistmentDate = new DateOnly(2025, 1, 10),
+                    ValidUntil = new DateOnly(2025, 12, 31),
+                    CaseNo = "C000921202500050",
+                    EnlistmentTransNo = "E000921202500050",
+                    ProfilingTransNo = "P000921202500050"
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    EffectiveYear = 2026,
+                    Status = YakapEnlistmentStatus.Active,
+                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    EnlistmentDate = new DateOnly(2026, 1, 15),
+                    ValidUntil = new DateOnly(2026, 12, 31)
+                }
             }
         };
         _dbContext.Patients.Add(patient);
@@ -377,21 +374,20 @@ public sealed class PhilHealthSequenceGeneratorTests
         result.CaseNumber.Should().StartWith("C0009212026");
         result.EnlistmentTransactionNumber.Should().StartWith("E0009212026");
 
-        var enlistments = patient.CustomFields["yakap_enlistments"] as List<Dictionary<string, object?>>;
-        enlistments.Should().HaveCount(2);
+        patient.YakapEnlistments.Should().HaveCount(2);
 
         // 2025 entry completely preserved
-        enlistments![0]["effective_year"]!.ToString().Should().Be("2025");
-        enlistments[0]["status"]!.ToString().Should().Be("Expired");
-        enlistments[0]["case_no"]!.ToString().Should().Be("C000921202500050");
-        enlistments[0]["enlistment_no"]!.ToString().Should().Be("E000921202500050");
+        var e2025 = patient.YakapEnlistments.First(e => e.EffectiveYear == 2025);
+        e2025.Status.Should().Be(YakapEnlistmentStatus.Expired);
+        e2025.CaseNo.Should().Be("C000921202500050");
+        e2025.EnlistmentTransNo.Should().Be("E000921202500050");
 
         // 2026 entry updated with newly generated numbers
-        enlistments[1]["effective_year"]!.ToString().Should().Be("2026");
-        enlistments[1]["status"]!.ToString().Should().Be("Active");
-        enlistments[1]["case_no"]!.ToString().Should().Be(result.CaseNumber);
-        enlistments[1]["enlistment_no"]!.ToString().Should().Be(result.EnlistmentTransactionNumber);
-        enlistments[1]["profiling_trans_no"]!.ToString().Should().Be(result.ProfilingTransactionNumber);
+        var e2026 = patient.YakapEnlistments.First(e => e.EffectiveYear == 2026);
+        e2026.Status.Should().Be(YakapEnlistmentStatus.Active);
+        e2026.CaseNo.Should().Be(result.CaseNumber);
+        e2026.EnlistmentTransNo.Should().Be(result.EnlistmentTransactionNumber);
+        e2026.ProfilingTransNo.Should().Be(result.ProfilingTransactionNumber);
 
         encounter.PhilHealthCaseNo.Should().Be(result.CaseNumber);
     }
@@ -400,7 +396,7 @@ public sealed class PhilHealthSequenceGeneratorTests
     public async Task AssignPatientJourneyNumbersAsync_PreservesPastEnlistedAtDate()
     {
         // Arrange: Patient with historical registration date from external eGovPH portal
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -409,20 +405,20 @@ public sealed class PhilHealthSequenceGeneratorTests
             FirstName = "Padre",
             LastName = "Florentino",
             ContactNumber = "09176667788",
-            DateOfBirth = new DateOnly(1960, 4, 12)
-        };
-        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
-        {
-            new()
+            DateOfBirth = new DateOnly(1960, 4, 12),
+            YakapEnlistments = new List<PatientYakapEnlistment>
             {
-                ["enlisted_at"] = "2026-01-03", // Enlisted at start of year via eGovPH
-                ["valid_until"] = "2026-12-31",
-                ["effective_year"] = 2026,
-                ["status"] = "Active",
-                ["source"] = "SelfReported",
-                ["case_no"] = null,
-                ["enlistment_no"] = null,
-                ["profiling_trans_no"] = null
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    EffectiveYear = 2026,
+                    Status = YakapEnlistmentStatus.Active,
+                    Source = YakapEnlistmentSource.SelfReported,
+                    EnlistmentDate = new DateOnly(2026, 1, 3), // Enlisted at start of year via eGovPH
+                    ValidUntil = new DateOnly(2026, 12, 31)
+                }
             }
         };
         _dbContext.Patients.Add(patient);
@@ -449,22 +445,20 @@ public sealed class PhilHealthSequenceGeneratorTests
         // Assert
         result.CaseNumber.Should().StartWith("C0009212026");
 
-        var list = patient.CustomFields["yakap_enlistments"] as List<Dictionary<string, object?>>;
-        list.Should().HaveCount(1);
-        var entry = list![0];
+        var entry = patient.YakapEnlistments.Single();
 
-        // enlisted_at MUST retain its original historical value "2026-01-03"
-        entry["enlisted_at"]!.ToString().Should().Be("2026-01-03");
-        entry["source"]!.ToString().Should().Be("SelfReported");
-        entry["valid_until"]!.ToString().Should().Be("2026-12-31");
-        entry["case_no"]!.ToString().Should().Be(result.CaseNumber);
+        // EnlistmentDate MUST retain its original historical value
+        entry.EnlistmentDate.Should().Be(new DateOnly(2026, 1, 3));
+        entry.Source.Should().Be(YakapEnlistmentSource.SelfReported);
+        entry.ValidUntil.Should().Be(new DateOnly(2026, 12, 31));
+        entry.CaseNo.Should().Be(result.CaseNumber);
     }
 
     [Fact]
     public async Task AssignPatientJourneyNumbersAsync_Succeeds_WithoutEncounter_AllocatesPatientKeysOnly()
     {
         // Arrange
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -473,20 +467,20 @@ public sealed class PhilHealthSequenceGeneratorTests
             FirstName = "Isagani",
             LastName = "Lopez",
             ContactNumber = "09177778899",
-            DateOfBirth = new DateOnly(1995, 2, 14)
-        };
-        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
-        {
-            new()
+            DateOfBirth = new DateOnly(1995, 2, 14),
+            YakapEnlistments = new List<PatientYakapEnlistment>
             {
-                ["enlisted_at"] = "2026-01-10",
-                ["valid_until"] = "2026-12-31",
-                ["effective_year"] = 2026,
-                ["status"] = "Active",
-                ["source"] = "ClinicEnlistment",
-                ["case_no"] = null,
-                ["enlistment_no"] = null,
-                ["profiling_trans_no"] = null
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _tenantId,
+                    ClinicId = _clinicId,
+                    EffectiveYear = 2026,
+                    Status = YakapEnlistmentStatus.Active,
+                    Source = YakapEnlistmentSource.ClinicEnlistment,
+                    EnlistmentDate = new DateOnly(2026, 1, 10),
+                    ValidUntil = new DateOnly(2026, 12, 31)
+                }
             }
         };
         _dbContext.Patients.Add(patient);
@@ -503,51 +497,6 @@ public sealed class PhilHealthSequenceGeneratorTests
         result.ProfilingTransactionNumber.Should().StartWith("P0009212026");
         result.SoapTransactionNumber.Should().BeNull();
 
-        var list = patient.CustomFields["yakap_enlistments"] as List<Dictionary<string, object?>>;
-        list![0]["case_no"]!.ToString().Should().Be(result.CaseNumber);
-    }
-
-    [Fact]
-    public async Task AssignPatientJourneyNumbersAsync_HandlesJsonElementArray_InCustomFields()
-    {
-        // Arrange: CustomFields contains JsonElement array (as deserialized from PostgreSQL JSONB)
-        var patient = new ClinicPatient
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            PatientCode = "PAT-2026-JSONELEM",
-            FirstName = "Simoun",
-            LastName = "Ibarra",
-            ContactNumber = "09178889900",
-            DateOfBirth = new DateOnly(1978, 10, 31)
-        };
-
-        var rawJson = @"[
-            {
-                ""enlisted_at"": ""2026-01-20"",
-                ""valid_until"": ""2026-12-31"",
-                ""effective_year"": 2026,
-                ""status"": ""Active"",
-                ""source"": ""ClinicEnlistment"",
-                ""case_no"": null,
-                ""enlistment_no"": null,
-                ""profiling_trans_no"": null
-            }
-        ]";
-        using var doc = JsonDocument.Parse(rawJson);
-        patient.CustomFields["yakap_enlistments"] = doc.RootElement.Clone();
-        _dbContext.Patients.Add(patient);
-        await _dbContext.SaveChangesAsync();
-
-        // Act
-        var result = await _generator.AssignPatientJourneyNumbersAsync(
-            _tenantId, _clinicId, patient.Id, null, "HCI-NCR-00921", "2026");
-
-        // Assert
-        result.Should().NotBeNull();
-        result.CaseNumber.Should().StartWith("C0009212026");
-        result.EnlistmentTransactionNumber.Should().StartWith("E0009212026");
-        result.ProfilingTransactionNumber.Should().StartWith("P0009212026");
+        patient.YakapEnlistments.Single().CaseNo.Should().Be(result.CaseNumber);
     }
 }

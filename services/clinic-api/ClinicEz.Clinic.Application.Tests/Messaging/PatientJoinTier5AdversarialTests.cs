@@ -78,7 +78,7 @@ public class PatientJoinTier5AdversarialTests
         };
     }
 
-    private static ClinicSettings SeedConfiguredClinic(ApplicationDbContext db, Guid clinicId, string joinCode = "TIER5JOIN")
+    private static FacilitySettings SeedConfiguredClinic(ApplicationDbContext db, Guid clinicId, string joinCode = "TIER5JOIN")
     {
         var clinic = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Adversarial Testing Clinic");
         clinic.FacilitySlug = "main-clinic";
@@ -310,11 +310,10 @@ public class PatientJoinTier5AdversarialTests
         patient.DateOfBirth.Should().Be(leapDob);
 
         // Check PhilHealth dependent profile mapping
-        patient.CustomFields.Should().ContainKey("philhealth_profile");
-        var profile = patient.CustomFields["philhealth_profile"] as PhilHealthPatientProfileDto;
-        profile.Should().NotBeNull();
-        profile!.MemberBirthDate.Should().Be("1980-02-29");
-        profile.MemberType.Should().Be("DD");
+        var membership = await db.PatientPhilHealthMemberships.IgnoreQueryFilters().FirstOrDefaultAsync(m => m.PatientId == patient.Id);
+        membership.Should().NotBeNull();
+        membership!.PrincipalDateOfBirth.Should().Be(new DateOnly(1980, 2, 29));
+        membership.MemberType.Should().Be(PhilHealthMemberType.DD);
     }
 
     [Fact]
@@ -366,7 +365,7 @@ public class PatientJoinTier5AdversarialTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(context);
         var clinic = SeedConfiguredClinic(db, clinicId);
-        var repo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var repo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var handler = new UpdateClinicSettingsCommandHandler(repo, context, uow);
 
         // 1. Pass explicit UTC expiration
@@ -472,7 +471,6 @@ public class PatientJoinTier5AdversarialTests
 
         savedAllergies.Should().HaveCount(3);
         savedAllergies.Select(a => a.Allergen).Should().BeEquivalentTo("Penicillin", "Peanuts", "Pollen");
-        patient.Allergies.Should().Be("Penicillin, Peanuts, Pollen");
     }
 
     [Fact]
@@ -595,10 +593,18 @@ public class PatientJoinTier5AdversarialTests
         await CreateHandler(db).HandleAsync(payload, Delivered(payload, to), CancellationToken.None);
 
         var patient = await db.Patients.IgnoreQueryFilters().FirstAsync(p => p.ClinicId == clinicId);
-        var profile = patient.CustomFields["philhealth_profile"] as PhilHealthPatientProfileDto;
-        profile.Should().NotBeNull();
-        profile!.MemberFirstName.Should().Be(expectedFirst);
-        profile.MemberLastName.Should().Be(expectedLast);
+        var membership = await db.PatientPhilHealthMemberships.IgnoreQueryFilters().FirstOrDefaultAsync(m => m.PatientId == patient.Id);
+        if (expectedFirst == null && expectedLast == null)
+        {
+            membership?.PrincipalFirstName.Should().BeNull();
+            membership?.PrincipalLastName.Should().BeNull();
+        }
+        else
+        {
+            membership.Should().NotBeNull();
+            membership!.PrincipalFirstName.Should().Be(expectedFirst);
+            membership.PrincipalLastName.Should().Be(expectedLast);
+        }
     }
 
     [Theory]
@@ -629,9 +635,10 @@ public class PatientJoinTier5AdversarialTests
         await CreateHandler(db).HandleAsync(payload, Delivered(payload, to), CancellationToken.None);
 
         var patient = await db.Patients.IgnoreQueryFilters().FirstAsync(p => p.ClinicId == clinicId);
-        var profile = patient.CustomFields["philhealth_profile"] as PhilHealthPatientProfileDto;
-        profile.Should().NotBeNull();
-        profile!.DependentRelationship.Should().Be(expectedRel);
+        var membership = await db.PatientPhilHealthMemberships.IgnoreQueryFilters().FirstOrDefaultAsync(m => m.PatientId == patient.Id);
+        membership.Should().NotBeNull();
+        var expectedEnum = expectedRel != null && Enum.TryParse<PhilHealthDependentRelationship>(expectedRel, out var r) ? (PhilHealthDependentRelationship?)r : null;
+        membership!.DependentRelationship.Should().Be(expectedEnum);
     }
 
     [Fact]
@@ -700,7 +707,7 @@ public class PatientJoinTier5AdversarialTests
         await CreateHandler(db).HandleAsync(payload, Delivered(payload, to), CancellationToken.None);
 
         var patient = await db.Patients.IgnoreQueryFilters().FirstAsync(p => p.ClinicId == clinicId);
-        patient.Gender.Should().Be("Other");
+        patient.Gender.Should().Be(Gender.Other);
         patient.ContactNumber.Should().Be("N/A");
         patient.MiddleName.Should().BeNull();
         patient.Suffix.Should().BeNull();
@@ -718,7 +725,7 @@ public class PatientJoinTier5AdversarialTests
         using var db = MessagingTestKit.CreateDbContext();
         var clinicId = Guid.NewGuid();
 
-        var patient1 = new ClinicPatient
+        var patient1 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
@@ -732,7 +739,7 @@ public class PatientJoinTier5AdversarialTests
         db.Patients.Add(patient1);
         await db.SaveChangesAsync();
 
-        var patient2 = new ClinicPatient
+        var patient2 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
@@ -747,7 +754,7 @@ public class PatientJoinTier5AdversarialTests
 
         var act = async () => await db.SaveChangesAsync();
         await act.Should().ThrowAsync<DbUpdateException>()
-            .WithMessage("*23505*IX_ClinicPatients_ClinicId_PatientCode*");
+            .WithMessage("*23505*PatientCode*");
     }
 }
 

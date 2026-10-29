@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
-using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -32,17 +31,17 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
     private static readonly Regex PinRegex = new(@"^\d{2}-\d{9}-\d{1}$", RegexOptions.Compiled);
 
     private readonly IRepository<ConsultationEncounter> _consultationRepository;
-    private readonly IRepository<ClinicPatient> _patientRepository;
+    private readonly IRepository<Patient> _patientRepository;
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<TriageVitals> _vitalsRepository;
+    private readonly IRepository<PatientVitals> _vitalsRepository;
     private readonly IClinicContext _clinicContext;
     private readonly IPhilHealthCatalogLookup? _catalogLookup;
 
     public ValidateConsultationYakapReadinessQueryHandler(
         IRepository<ConsultationEncounter> consultationRepository,
-        IRepository<ClinicPatient> patientRepository,
+        IRepository<Patient> patientRepository,
         IRepository<StaffMember> staffRepository,
-        IRepository<TriageVitals> vitalsRepository,
+        IRepository<PatientVitals> vitalsRepository,
         IClinicContext clinicContext,
         IPhilHealthCatalogLookup? catalogLookup = null)
     {
@@ -59,6 +58,8 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
         var encounter = await _consultationRepository.Query(c => c.Id == request.ConsultationId && c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.PhysicalExams)
+                .ThenInclude(p => p.Findings)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (encounter == null)
@@ -158,12 +159,15 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
 
         // 6. 9-System Physical Examination & General Survey
         bool generalSurveyValid = true;
-        if (string.IsNullOrWhiteSpace(encounter.GeneralSurveyId))
+        var physicalExam = encounter.PhysicalExams.FirstOrDefault();
+        var generalSurveyId = physicalExam?.GenSurveyId;
+        var generalSurveyRemarks = physicalExam?.GeneralSurveyRemarks;
+        if (string.IsNullOrWhiteSpace(generalSurveyId))
         {
             generalSurveyValid = false;
             missingFields.Add("General Survey evaluation is missing.");
         }
-        else if (encounter.GeneralSurveyId == "2" && string.IsNullOrWhiteSpace(encounter.GeneralSurveyRemarks))
+        else if (generalSurveyId == "2" && string.IsNullOrWhiteSpace(generalSurveyRemarks))
         {
             generalSurveyValid = false;
             missingFields.Add("General Survey remarks are mandatory when marked abnormal (code 2).");
@@ -286,7 +290,7 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
             }
 
             if (!vitals.HeartRateBpm.HasValue || vitals.HeartRateBpm <= 0) missingVitalsList.Add("Heart Rate");
-            if (!vitals.RespiratoryRateBreathsPerMin.HasValue && !vitals.RespiratoryRate.HasValue) missingVitalsList.Add("Respiratory Rate");
+            if (!vitals.RespiratoryRateBreathsPerMin.HasValue) missingVitalsList.Add("Respiratory Rate");
             if (!vitals.TemperatureCelsius.HasValue || vitals.TemperatureCelsius <= 0) missingVitalsList.Add("Temperature");
             if (!vitals.WeightKg.HasValue || vitals.WeightKg <= 0) missingVitalsList.Add("Weight");
 
@@ -310,11 +314,13 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
         {
             foreach (var rx in encounter.Prescriptions)
             {
-                bool hasCode = !string.IsNullOrWhiteSpace(rx.PhilHealthDrugCode) && rx.PhilHealthDrugCode.Length == 30;
+                bool hasCode = !string.IsNullOrWhiteSpace(rx.PhilHealthDrugCode) && rx.PhilHealthDrugCode.Length >= 29 && rx.PhilHealthDrugCode.Length <= 30;
                 if (!hasCode && _catalogLookup != null)
                 {
-                    var resolved = new PhilHealthCatalogResolver(_catalogLookup).ResolveDrugCode(rx.GenericName, rx.Dosage);
-                    hasCode = !string.IsNullOrWhiteSpace(resolved) && resolved.Length == 30;
+                    var drugItem = _catalogLookup.FindByDescription("lib_drugs", rx.GenericName)
+                        ?? _catalogLookup.FindByDescription("lib_medicines", rx.GenericName);
+                    var resolved = drugItem?.Code;
+                    hasCode = !string.IsNullOrWhiteSpace(resolved) && resolved.Length >= 29 && resolved.Length <= 30;
                 }
 
                 if (!hasCode)

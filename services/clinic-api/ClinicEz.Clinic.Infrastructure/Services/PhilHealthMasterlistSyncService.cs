@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -53,7 +54,7 @@ public class PhilHealthMasterlistSyncService : IPhilHealthMasterlistSyncService
         }
 
         // 1. Fetch clinic patients with a PhilHealthNumber for this tenant/clinic scope
-        IQueryable<ClinicPatient> query = _dbContext.Patients.IgnoreQueryFilters().Where(p => !p.IsDeleted);
+        IQueryable<Patient> query = _dbContext.Patients.Include(p => p.YakapEnlistments).IgnoreQueryFilters().Where(p => !p.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(tenantId))
         {
@@ -70,7 +71,7 @@ public class PhilHealthMasterlistSyncService : IPhilHealthMasterlistSyncService
             .ToListAsync(ct);
 
         // 2. Build normalized lookup dictionary (keyed by 12-digit normalized PIN)
-        var patientsByPin = new Dictionary<string, List<ClinicPatient>>(StringComparer.Ordinal);
+        var patientsByPin = new Dictionary<string, List<Patient>>(StringComparer.Ordinal);
         foreach (var patient in patients)
         {
             var normPin = NormalizePin(patient.PhilHealthNumber);
@@ -78,7 +79,7 @@ public class PhilHealthMasterlistSyncService : IPhilHealthMasterlistSyncService
             {
                 if (!patientsByPin.TryGetValue(normPin, out var list))
                 {
-                    list = new List<ClinicPatient>();
+                    list = new List<Patient>();
                     patientsByPin[normPin] = list;
                 }
                 list.Add(patient);
@@ -105,7 +106,7 @@ public class PhilHealthMasterlistSyncService : IPhilHealthMasterlistSyncService
             }
 
             // Determine statutory status
-            string status = (item.AssignedStatus == "2" || string.Equals(item.AssignedStatus, YakapEnlistmentStatus.Transferred, StringComparison.OrdinalIgnoreCase))
+            var status = (item.AssignedStatus == "2" || string.Equals(item.AssignedStatus, "Transferred", StringComparison.OrdinalIgnoreCase))
                 ? YakapEnlistmentStatus.Transferred
                 : YakapEnlistmentStatus.Active;
 
@@ -142,15 +143,17 @@ public class PhilHealthMasterlistSyncService : IPhilHealthMasterlistSyncService
                 else
                     transferredCount++;
 
-                var newEnlistment = new YakapEnlistmentEntry
+                var newEnlistment = new PatientYakapEnlistment
                 {
-                    EnlistedAt = enlistedAt,
-                    ValidUntil = validUntil,
+                    ClinicId = patient.ClinicId,
+                    PatientId = patient.Id,
+                    EnlistmentDate = DateOnly.TryParse(enlistedAt, out var parsedEnlistedAt) ? parsedEnlistedAt : new DateOnly(effYear, 1, 1),
+                    ValidUntil = DateOnly.TryParse(validUntil, out var parsedValidUntil) ? parsedValidUntil : new DateOnly(effYear, 12, 31),
                     EffectiveYear = effYear,
                     Status = status,
                     Source = YakapEnlistmentSource.PhilHealthMasterlist,
                     CaseNo = null,
-                    EnlistmentNo = null,
+                    EnlistmentTransNo = null,
                     ProfilingTransNo = null
                 };
 

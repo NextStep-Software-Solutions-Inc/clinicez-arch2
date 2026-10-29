@@ -120,7 +120,12 @@ const authContextMockFactory = () => ({
   useAuth: () => (globalThis as any).__mockAuthContext ?? defaultAuthMock,
   usePermission: (perm: string) => {
     const ctx = (globalThis as any).__mockAuthContext;
-    return ctx?.can ? Boolean(ctx.can(perm)) : true;
+    if (typeof ctx?.can === 'function') return Boolean(ctx.can(perm));
+    const perms: readonly string[] | undefined = ctx?.permissions ?? ctx?.user?.permissions;
+    if (Array.isArray(perms)) {
+      return perms.includes('*') || perms.some((p) => p.toLowerCase() === perm.toLowerCase());
+    }
+    return false;
   },
   AuthProvider: ({ children }: any) => children,
 });

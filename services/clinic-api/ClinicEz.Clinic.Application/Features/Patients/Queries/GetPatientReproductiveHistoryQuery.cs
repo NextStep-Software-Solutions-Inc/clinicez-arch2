@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
-using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
@@ -15,20 +14,14 @@ public sealed record GetPatientReproductiveHistoryQuery(Guid PatientId) : IReque
 public sealed class GetPatientReproductiveHistoryQueryHandler : IRequestHandler<GetPatientReproductiveHistoryQuery, PatientReproductiveHistoryDto?>
 {
     private readonly IRepository<PatientReproductiveHistory> _reproductiveRepo;
-    private readonly ILegacyPatientProfileIngestionService _legacyIngestion;
 
-    public GetPatientReproductiveHistoryQueryHandler(
-        IRepository<PatientReproductiveHistory> reproductiveRepo,
-        ILegacyPatientProfileIngestionService legacyIngestion)
+    public GetPatientReproductiveHistoryQueryHandler(IRepository<PatientReproductiveHistory> reproductiveRepo)
     {
         _reproductiveRepo = reproductiveRepo;
-        _legacyIngestion = legacyIngestion;
     }
 
     public async Task<PatientReproductiveHistoryDto?> Handle(GetPatientReproductiveHistoryQuery request, CancellationToken cancellationToken)
     {
-        await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
-
         var entry = await _reproductiveRepo.Query(r => r.PatientId == request.PatientId)
             .FirstOrDefaultAsync(cancellationToken);
 

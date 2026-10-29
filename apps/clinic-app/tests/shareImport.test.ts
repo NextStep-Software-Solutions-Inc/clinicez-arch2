@@ -1,4 +1,52 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, mock } from 'bun:test';
+import React from 'react';
+
+const createMockComponent = (name: string) => {
+  const Comp = ({ children, placeholder }: any) =>
+    React.createElement('div', { 'data-component': name }, placeholder, children);
+  Comp.displayName = name;
+  return Comp;
+};
+
+mock.module('react-native', () => ({
+  Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFillObject: {} },
+  View: createMockComponent('View'),
+  Text: createMockComponent('Text'),
+  TextInput: createMockComponent('TextInput'),
+  Pressable: createMockComponent('Pressable'),
+  ScrollView: createMockComponent('ScrollView'),
+  ActivityIndicator: createMockComponent('ActivityIndicator'),
+  Modal: createMockComponent('Modal'),
+  Image: createMockComponent('Image'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  Switch: createMockComponent('Switch'),
+  FlatList: createMockComponent('FlatList'),
+  SectionList: createMockComponent('SectionList'),
+  TouchableOpacity: createMockComponent('TouchableOpacity'),
+  TouchableHighlight: createMockComponent('TouchableHighlight'),
+  RefreshControl: createMockComponent('RefreshControl'),
+  Alert: { alert: () => {} },
+  PanResponder: { create: () => ({ panHandlers: {} }) },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
+  NativeModules: {},
+  Touchable: { Mixin: {} },
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
+  useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
+}));
 import {
   buildRedeemRequest,
   decidePoll,

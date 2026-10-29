@@ -6,7 +6,7 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed partial class MedicalCertificate : BaseEntity
+public sealed partial class MedicalCertificate : ClinicScopedEntity
 {
     private static readonly FrozenDictionary<string, string> KnownCanonicalStatuses =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -20,15 +20,13 @@ public sealed partial class MedicalCertificate : BaseEntity
             ["UnfitForWork"] = "UNFIT FOR WORK"
         }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
-
     /// <summary>
     /// Sequential Certificate Number, e.g. MC-20260929-0001
     /// </summary>
     public required string CertificateNumber { get; set; }
 
     public Guid PatientId { get; set; }
+    public Patient? Patient { get; set; }
     public required string PatientName { get; set; }
     public Guid? ConsultationId { get; set; }
 

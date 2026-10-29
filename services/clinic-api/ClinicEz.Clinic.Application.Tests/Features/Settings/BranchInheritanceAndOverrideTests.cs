@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.Commands;
 using ClinicEz.Clinic.Application.Features.Settings.Queries;
-using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
@@ -88,7 +87,7 @@ public class BranchInheritanceAndOverrideTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Branch baseline
         settings.BranchId.Should().Be(branchId);
@@ -136,7 +135,7 @@ public class BranchInheritanceAndOverrideTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         settings.IsBranchPhilHealthAccredited.Should().BeFalse();
         settings.IsPhilHealthConfigured.Should().BeFalse();
@@ -173,7 +172,7 @@ public class BranchInheritanceAndOverrideTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         settings.BranchName.Should().Be("Updated Branch Name");
         settings.BranchPhilHealthAccreditationNumber.Should().Be("PH-BRANCH-UPDATED");
@@ -218,7 +217,7 @@ public class BranchInheritanceAndOverrideTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Stored branch baseline was updated
         settings.BranchId.Should().Be(branchId);
@@ -244,7 +243,7 @@ public class BranchInheritanceAndOverrideTests
         clinicContext.TenantId.Returns(TenantId);
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = new Repository<ClinicSettings>(db, sieve);
+        var repo = new Repository<FacilitySettings>(db, sieve);
 
         var existing = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Clinic Test");
         existing.BranchPhilHealthAccreditationNumber = "BRANCH-BASELINE";
@@ -296,7 +295,7 @@ public class BranchInheritanceAndOverrideTests
             Arg.Any<CancellationToken>());
 
         // Verify in DB
-        var persisted = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var persisted = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         persisted.IsPhilHealthOverridden.Should().BeTrue();
         persisted.AccreditationNumber.Should().Be("OVERRIDE-ACC-123");
     }
@@ -310,7 +309,7 @@ public class BranchInheritanceAndOverrideTests
         clinicContext.TenantId.Returns(TenantId);
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = new Repository<ClinicSettings>(db, sieve);
+        var repo = new Repository<FacilitySettings>(db, sieve);
 
         var existing = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Clinic Test");
         existing.BranchId = Guid.NewGuid();
@@ -340,7 +339,7 @@ public class BranchInheritanceAndOverrideTests
         result.KonsultaEndpoint.Should().Be("/soap/branch-revert");
 
         // Verify in DB
-        var persisted = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var persisted = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         persisted.IsPhilHealthOverridden.Should().BeFalse();
         persisted.AccreditationNumber.Should().Be("BRANCH-ACCREDITATION-REVERT");
     }

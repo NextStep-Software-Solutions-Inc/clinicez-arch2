@@ -11,11 +11,7 @@ import {
   PhilHealthConditionEntry,
   ClinicPatient,
 } from '../services/clinicService';
-import {
-  PHYSICAL_ACTIVITY_OPTIONS,
-  DIETARY_HABIT_OPTIONS,
-  ALCOHOL_FREQUENCY_OPTIONS,
-} from './chart/LifestyleSocialTab';
+import { useEhrOptions } from '../hooks/useEhrOptions';
 import OrganSystemsExamSection, {
   DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
 } from './chart/OrganSystemsExamSection';
@@ -196,23 +192,6 @@ function ImmunizationChips({
   );
 }
 
-/** PhilHealth answer sets: Q5 also allows "not applicable", Q17 is the A-E risk level, the rest are yes/no. */
-const NCD_RISK_LEVELS = ['A', 'B', 'C', 'D', 'E'];
-const ncdAnswerOptions = (code: string): { value: string; label: string }[] => {
-  if (code === 'Q17') return NCD_RISK_LEVELS.map((level) => ({ value: level, label: level }));
-  if (code === 'Q5') {
-    return [
-      { value: 'Y', label: 'Yes' },
-      { value: 'N', label: 'No' },
-      { value: 'X', label: 'Not applicable' },
-    ];
-  }
-  return [
-    { value: 'Y', label: 'Yes' },
-    { value: 'N', label: 'No' },
-  ];
-};
-
 /** Official PhilPEN questionnaire (lib_ncdq Q1-Q24), asked exactly as PhilHealth words it. */
 function NcdQuestionnaire({
   answers,
@@ -221,10 +200,29 @@ function NcdQuestionnaire({
   answers: Record<string, string>;
   onAnswer: (key: string, value: string) => void;
 }) {
+  const { options: riskLevelOptions } = useEhrOptions('cvd_risk_level');
   const { items, loading, error, reload } = usePhilHealthCatalog('lib_ncdq');
   const questions = items
     .filter((item) => /^Q\d+$/.test(item.code))
     .sort((a, b) => Number(a.code.slice(1)) - Number(b.code.slice(1)));
+
+  const getAnswerOptions = (code: string): { value: string; label: string }[] => {
+    if (code === 'Q17') {
+      return riskLevelOptions.map((level) => ({ value: level.code, label: level.label }));
+    }
+    if (code === 'Q5') {
+      return [
+        { value: 'Y', label: 'Yes' },
+        { value: 'N', label: 'No' },
+        { value: 'X', label: 'Not applicable' },
+      ];
+    }
+    return [
+      { value: 'Y', label: 'Yes' },
+      { value: 'N', label: 'No' },
+    ];
+  };
+
   return (
     <>
       <CatalogStatus loading={loading} error={error} onRetry={reload} />
@@ -237,7 +235,7 @@ function NcdQuestionnaire({
               {item.description}
             </ThemedText>
             <View style={styles.chipRow}>
-              {ncdAnswerOptions(item.code).map((option) => (
+              {getAnswerOptions(item.code).map((option) => (
                 <Chip
                   key={option.value}
                   label={option.label}
@@ -259,6 +257,11 @@ export default function PhilHealthProfileModal({
   patient,
   onSaved,
 }: PhilHealthProfileModalProps) {
+  const { options: dynamicRelationships } = useEhrOptions('dependent_relationship');
+  const { options: dynamicActivityOptions } = useEhrOptions('physical_activity');
+  const { options: dynamicDietaryOptions } = useEhrOptions('dietary_intake');
+  const { options: dynamicAlcoholOptions } = useEhrOptions('alcohol_type');
+
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -492,17 +495,12 @@ export default function PhilHealthProfileModal({
                   <View style={styles.fieldCol}>
                     <FieldLabel>Relationship to principal member *</FieldLabel>
                     <View style={styles.chipRow}>
-                      {[
-                        { label: 'Child (C)', value: 'C' },
-                        { label: 'Spouse (S)', value: 'S' },
-                        { label: 'Parent (P)', value: 'P' },
-                        { label: 'Disabled (D)', value: 'D' },
-                      ].map((rel) => (
+                      {dynamicRelationships.map((rel) => (
                         <Chip
-                          key={rel.value}
+                          key={rel.code}
                           label={rel.label}
-                          active={profile.dependentRelationship === rel.value}
-                          onPress={() => setProfile({ ...profile, dependentRelationship: rel.value })}
+                          active={profile.dependentRelationship === rel.code}
+                          onPress={() => setProfile({ ...profile, dependentRelationship: rel.code })}
                         />
                       ))}
                     </View>
@@ -909,12 +907,12 @@ export default function PhilHealthProfileModal({
                       </View>
                       <FieldLabel>Drinking Frequency</FieldLabel>
                       <View style={styles.chipRow}>
-                        {ALCOHOL_FREQUENCY_OPTIONS.map((freq) => (
+                        {dynamicAlcoholOptions.map((freq) => (
                           <Chip
-                            key={freq}
-                            label={freq}
-                            active={profile.alcoholFrequency === freq}
-                            onPress={() => setProfile({ ...profile, alcoholFrequency: freq })}
+                            key={freq.code}
+                            label={freq.label}
+                            active={profile.alcoholFrequency === freq.label || profile.alcoholFrequency === freq.code}
+                            onPress={() => setProfile({ ...profile, alcoholFrequency: freq.label })}
                           />
                         ))}
                       </View>
@@ -991,12 +989,12 @@ export default function PhilHealthProfileModal({
                   </ThemedText>
                   <Helper>Select cardiovascular & metabolic activity level</Helper>
                   <View style={styles.chipRow}>
-                    {PHYSICAL_ACTIVITY_OPTIONS.map((opt) => (
+                    {dynamicActivityOptions.map((opt) => (
                       <Chip
-                        key={opt}
-                        label={opt}
-                        active={profile.physicalActivityFrequency === opt}
-                        onPress={() => setProfile({ ...profile, physicalActivityFrequency: opt })}
+                        key={opt.code}
+                        label={opt.label}
+                        active={profile.physicalActivityFrequency === opt.label || profile.physicalActivityFrequency === opt.code}
+                        onPress={() => setProfile({ ...profile, physicalActivityFrequency: opt.label })}
                       />
                     ))}
                   </View>
@@ -1009,25 +1007,25 @@ export default function PhilHealthProfileModal({
                   </ThemedText>
                   <Helper>Select all applicable dietary profiles (multi-select)</Helper>
                   <View style={styles.chipRow}>
-                    {DIETARY_HABIT_OPTIONS.map((opt) => {
+                    {dynamicDietaryOptions.map((opt) => {
                       const currentHabits = (profile.dietaryHabits || '')
                         .split(',')
                         .map((s) => s.trim())
                         .filter((s) => s.length > 0);
-                      const isSelected = currentHabits.some((h) => h.toLowerCase() === opt.toLowerCase());
+                      const isSelected = currentHabits.some((h) => h.toLowerCase() === opt.label.toLowerCase());
                       return (
                         <Chip
-                          key={opt}
-                          label={opt}
+                          key={opt.code}
+                          label={opt.label}
                           marker
                           tone="success"
                           active={isSelected}
                           onPress={() => {
                             let nextHabits: string[];
                             if (isSelected) {
-                              nextHabits = currentHabits.filter((h) => h.toLowerCase() !== opt.toLowerCase());
+                              nextHabits = currentHabits.filter((h) => h.toLowerCase() !== opt.label.toLowerCase());
                             } else {
-                              nextHabits = [...currentHabits, opt];
+                              nextHabits = [...currentHabits, opt.label];
                             }
                             setProfile({
                               ...profile,

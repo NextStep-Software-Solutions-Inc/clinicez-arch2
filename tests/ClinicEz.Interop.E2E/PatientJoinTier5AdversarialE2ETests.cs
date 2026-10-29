@@ -68,7 +68,7 @@ public class PatientJoinTier5AdversarialE2ETests
 
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";
@@ -111,7 +111,7 @@ public class PatientJoinTier5AdversarialE2ETests
 
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";
@@ -143,7 +143,7 @@ public class PatientJoinTier5AdversarialE2ETests
 
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";
@@ -188,7 +188,7 @@ public class PatientJoinTier5AdversarialE2ETests
 
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";

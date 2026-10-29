@@ -18,7 +18,7 @@ public sealed record CustomFieldOrderItem(Guid Id, int DisplayOrder);
 public sealed record ReorderCustomFieldsCommand(
     IReadOnlyList<CustomFieldOrderItem>? Items = null,
     IReadOnlyList<Guid>? OrderedIds = null,
-    string? EntityType = "ClinicPatient") : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>
+    string? EntityType = "Patient") : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>
 {
     public ReorderCustomFieldsCommand(string entityType, IReadOnlyList<Guid> orderedIds)
         : this(null, orderedIds, entityType)
@@ -57,12 +57,12 @@ public sealed class ReorderCustomFieldsCommandValidator : AbstractValidator<Reor
 
 public sealed class ReorderCustomFieldsCommandHandler : IRequestHandler<ReorderCustomFieldsCommand, IReadOnlyList<ClinicCustomFieldDefinitionDto>>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext? _clinicContext;
 
     public ReorderCustomFieldsCommandHandler(
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         IUnitOfWork unitOfWork,
         IClinicContext? clinicContext = null)
     {
@@ -73,9 +73,11 @@ public sealed class ReorderCustomFieldsCommandHandler : IRequestHandler<ReorderC
 
     public async Task<IReadOnlyList<ClinicCustomFieldDefinitionDto>> Handle(ReorderCustomFieldsCommand request, CancellationToken ct)
     {
-        var entityType = string.IsNullOrWhiteSpace(request.EntityType) ? "ClinicPatient" : request.EntityType.Trim();
+        var entityType = string.IsNullOrWhiteSpace(request.EntityType) ? "Patient" : request.EntityType.Trim();
+        var isPatient = string.Equals(entityType, "Patient", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(entityType, "ClinicPatient", StringComparison.OrdinalIgnoreCase);
         var allFields = await _repo.Query()
-            .Where(f => f.EntityType == entityType && f.IsActive)
+            .Where(f => f.IsActive && (isPatient ? (f.EntityType == "Patient" || f.EntityType == "ClinicPatient") : f.EntityType == entityType))
             .ToListAsync(ct);
 
         var fieldsMap = allFields.ToDictionary(f => f.Id);

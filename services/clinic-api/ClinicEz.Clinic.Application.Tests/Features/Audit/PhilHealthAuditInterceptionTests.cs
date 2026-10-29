@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Audit;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Common.Privacy;
-using ClinicEz.Clinic.Application.Features.Yakap.Commands.VoidYakapTransmittal;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Constants;
@@ -451,67 +450,5 @@ public class PhilHealthAuditInterceptionTests
             msg.Severity == ClinicAuditSeverities.Emergency &&
             msg.Outcome == "Success" &&
             msg.Description.Contains("Patient allergic reaction adverse event")));
-    }
-
-    [Fact]
-    public async Task VoidYakapTransmittal_EnqueuesClaimVoided_WithMandatoryVoidReason()
-    {
-        // Arrange
-        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var transmittalRepo = TestDbHelper.CreateRepository<YakapTransmittal>(context, sieve);
-
-        var transmittalId = Guid.NewGuid();
-        var transmittal = new YakapTransmittal
-        {
-            Id = transmittalId,
-            TenantId = _tenantId,
-            ClinicId = _clinicId,
-            TransmittalNumber = "RHCI09214202600001",
-            ReportTagging = "1",
-            EffectiveYear = "2026",
-            Status = YakapTransmittalStatus.Validated,
-            Items = new List<YakapTransmittalItem>
-            {
-                new YakapTransmittalItem
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = _tenantId,
-                    ClinicId = _clinicId,
-                    YakapTransmittalId = transmittalId,
-                    PatientId = Guid.NewGuid(),
-                    PatientName = "Juan Dela Cruz",
-                    PhilHealthIdentificationNumber = "12-345678901-2",
-                    ItemType = "Enlistment",
-                    ReportStatus = "U"
-                }
-            }
-        };
-
-        await context.YakapTransmittals.AddAsync(transmittal);
-        await context.SaveChangesAsync();
-
-        var handler = new VoidYakapTransmittalCommandHandler(transmittalRepo, uow, _clinicContext, _auditQueue);
-        _auditQueue.TryEnqueue(Arg.Any<AuditLogMessage>()).Returns(true);
-
-        // Act
-        var command = new VoidYakapTransmittalCommand(transmittalId, "Duplicate batch transmittal sent erroneously");
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.Succeeded.Should().BeTrue();
-        result.Data.Should().BeTrue();
-
-        transmittal.Status.Should().Be(YakapTransmittalStatus.Failed);
-        transmittal.Items.First().ReportStatus.Should().Be("D");
-        transmittal.Items.First().DeficiencyRemarks.Should().Contain("Duplicate batch transmittal sent erroneously");
-
-        _auditQueue.Received(1).TryEnqueue(Arg.Is<AuditLogMessage>(msg =>
-            msg.Action == PhilHealthAuditEvents.ClaimVoided &&
-            msg.Category == ClinicAuditCategories.PhilHealth &&
-            msg.Severity == ClinicAuditSeverities.Emergency &&
-            msg.Outcome == "Success" &&
-            msg.TargetEntityId == transmittalId.ToString() &&
-            msg.Description.Contains("Duplicate batch transmittal sent erroneously") &&
-            msg.MetadataJson.Contains("RHCI09214202600001")));
     }
 }

@@ -33,9 +33,9 @@ internal static class MessagingTestKit
         return new ApplicationDbContext(options, config, clinicContext);
     }
 
-    public static ClinicSettings SeedClinic(ApplicationDbContext db, Guid clinicId, string tenantId, string name = "Test Clinic")
+    public static FacilitySettings SeedClinic(ApplicationDbContext db, Guid clinicId, string tenantId, string name = "Test Clinic")
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -44,7 +44,7 @@ internal static class MessagingTestKit
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "test"
         };
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
         db.SaveChanges();
         return settings;
     }

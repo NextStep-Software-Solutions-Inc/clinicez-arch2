@@ -74,7 +74,7 @@ public sealed class BillingSearchProvider : ISearchProvider
                 routeParams: new Dictionary<string, string>
                 {
                     { "invoiceId", inv.Id.ToString() },
-                    { "patientId", inv.PatientId.ToString() }
+                    { "patientId", inv.PatientId?.ToString() ?? string.Empty }
                 }
             );
         }).ToList();

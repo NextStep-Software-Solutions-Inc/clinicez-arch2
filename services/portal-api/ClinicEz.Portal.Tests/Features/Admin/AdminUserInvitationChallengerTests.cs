@@ -138,7 +138,7 @@ public class AdminUserInvitationChallengerTests : IDisposable
 
         // Send UPPERCASE token
         var result = await handler.Handle(
-            new AcceptAdminInvitationCommand(rawToken.ToUpperInvariant(), "user_clerk_case"),
+            new AcceptAdminInvitationCommand(rawToken.ToUpperInvariant(), "user_clerk_case", "case@clinicez.com"),
             CancellationToken.None
         );
 
@@ -169,7 +169,7 @@ public class AdminUserInvitationChallengerTests : IDisposable
         var handler = new AcceptAdminInvitationCommandHandler(_context, UrlProvider, TimeProvider.System);
 
         var result = await handler.Handle(
-            new AcceptAdminInvitationCommand($"   {rawToken}   ", "user_clerk_trim"),
+            new AcceptAdminInvitationCommand($"   {rawToken}   ", "user_clerk_trim", "trim@clinicez.com"),
             CancellationToken.None
         );
 
@@ -202,7 +202,7 @@ public class AdminUserInvitationChallengerTests : IDisposable
 
         var handler = new AcceptAdminInvitationCommandHandler(_context, UrlProvider, TimeProvider.System);
         var result = await handler.Handle(
-            new AcceptAdminInvitationCommand(token, "user_clerk_boundary"),
+            new AcceptAdminInvitationCommand(token, "user_clerk_boundary", "validboundary@clinicez.com"),
             CancellationToken.None
         );
 

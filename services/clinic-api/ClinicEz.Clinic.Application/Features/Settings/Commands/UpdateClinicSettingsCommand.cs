@@ -64,25 +64,29 @@ public sealed record UpdateClinicSettingsCommand(
     string? DateFormat = null,
     string? TimeFormat = null,
     string? TvDisplayPin = null,
-    bool ClearTvDisplayPin = false) : IRequest<ClinicSettingsDto>;
+    bool ClearTvDisplayPin = false,
+    bool? IsKioskIntakeEnabled = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
+    private readonly IRepository<ServiceItem>? _serviceRepo;
+    private readonly ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? _kioskInvalidator;
 
     public UpdateClinicSettingsCommandHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
-        IRepository<ClinicServiceItem>? serviceRepo = null)
+        IRepository<ServiceItem>? serviceRepo = null,
+        ClinicEz.Clinic.Domain.Interfaces.IKioskAccessInvalidator? kioskInvalidator = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _serviceRepo = serviceRepo;
+        _kioskInvalidator = kioskInvalidator;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -92,7 +96,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (settings == null)
         {
-            settings = new ClinicSettings
+            settings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,
@@ -294,6 +298,11 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 : trimmed;
         }
 
+        if (request.IsKioskIntakeEnabled.HasValue)
+        {
+            settings.IsKioskIntakeEnabled = request.IsKioskIntakeEnabled.Value;
+            _kioskInvalidator?.Invalidate(settings.ClinicId);
+        }
 
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
@@ -372,7 +381,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint,
             TenantSlug: settings.TenantSlug,
             FacilitySlug: settings.FacilitySlug,
-            TvDisplayPin: settings.TvDisplayPin);
+            TvDisplayPin: settings.TvDisplayPin,
+            IsKioskIntakeEnabled: settings.IsKioskIntakeEnabled,
+            KioskTokenVersion: settings.KioskTokenVersion);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)
@@ -404,7 +415,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             }
             else
             {
-                var newItem = new ClinicServiceItem
+                var newItem = new ServiceItem
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,

@@ -48,7 +48,7 @@ public sealed class AuditChallengerM4EmpiricalTests
 {
     private readonly IPhiRedactionService _redactionService = new PhiRedactionService();
 
-    private static (ApplicationDbContext Context, Guid ClinicId, string TenantId, IRepository<ClinicAuditEntry> Repo)
+    private static (ApplicationDbContext Context, Guid ClinicId, string TenantId, IRepository<AuditEntry> Repo)
         CreateIsolatedContext(Guid? customClinicId = null, string? customTenantId = null)
     {
         var clinicId = customClinicId ?? Guid.NewGuid();
@@ -71,12 +71,12 @@ public sealed class AuditChallengerM4EmpiricalTests
         clinicContext.TenantId.Returns(tenantId);
 
         var context = new ApplicationDbContext(options, config, clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, null!);
+        var repo = TestDbHelper.CreateRepository<AuditEntry>(context, null!);
 
         return (context, clinicId, tenantId, repo);
     }
 
-    private static (ApplicationDbContext Context, IRepository<ClinicAuditEntry> Repo)
+    private static (ApplicationDbContext Context, IRepository<AuditEntry> Repo)
         CreateContextForExistingDb(string sharedDbName, Guid clinicId, string tenantId)
     {
         var config = new ConfigurationBuilder()
@@ -95,7 +95,7 @@ public sealed class AuditChallengerM4EmpiricalTests
         clinicContext.TenantId.Returns(tenantId);
 
         var context = new ApplicationDbContext(options, config, clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, null!);
+        var repo = TestDbHelper.CreateRepository<AuditEntry>(context, null!);
 
         return (context, repo);
     }
@@ -119,7 +119,7 @@ public sealed class AuditChallengerM4EmpiricalTests
         var baseTime = DateTime.UtcNow.AddHours(-1);
 
         // Seed 10 records into Clinic Alpha
-        var alphaEntries = Enumerable.Range(1, 10).Select(i => new ClinicAuditEntry
+        var alphaEntries = Enumerable.Range(1, 10).Select(i => new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -135,11 +135,11 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Success,
             Description = $"Confidential record #{i} for Clinic Alpha"
         }).ToList();
-        await contextAlpha.ClinicAuditEntries.AddRangeAsync(alphaEntries);
+        await contextAlpha.AuditEntries.AddRangeAsync(alphaEntries);
         await contextAlpha.SaveChangesAsync();
 
         // Seed 8 records into Clinic Beta
-        var betaEntries = Enumerable.Range(1, 8).Select(i => new ClinicAuditEntry
+        var betaEntries = Enumerable.Range(1, 8).Select(i => new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -155,7 +155,7 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Warning,
             Description = $"Void record #{i} for Clinic Beta"
         }).ToList();
-        await contextBeta.ClinicAuditEntries.AddRangeAsync(betaEntries);
+        await contextBeta.AuditEntries.AddRangeAsync(betaEntries);
         await contextBeta.SaveChangesAsync();
 
         // Act & Assert 1: Query handler for Clinic Beta returns strictly 8 items, 0 from Alpha
@@ -167,13 +167,13 @@ public sealed class AuditChallengerM4EmpiricalTests
         resultBeta.Items.Should().NotContain(x => x.ClinicId == clinicAlphaId);
 
         // Act & Assert 2: LINQ Projections and Aggregates under Beta context
-        var betaCount = await contextBeta.ClinicAuditEntries.CountAsync();
+        var betaCount = await contextBeta.AuditEntries.CountAsync();
         betaCount.Should().Be(8);
 
-        var hasAlphaRecord = await contextBeta.ClinicAuditEntries.AnyAsync(e => e.ClinicId == clinicAlphaId);
+        var hasAlphaRecord = await contextBeta.AuditEntries.AnyAsync(e => e.ClinicId == clinicAlphaId);
         hasAlphaRecord.Should().BeFalse();
 
-        var betaIds = await contextBeta.ClinicAuditEntries.Select(e => e.Id).ToListAsync();
+        var betaIds = await contextBeta.AuditEntries.Select(e => e.Id).ToListAsync();
         betaIds.Should().IntersectWith(betaEntries.Select(e => e.Id));
         betaIds.Should().NotIntersectWith(alphaEntries.Select(e => e.Id));
     }
@@ -190,7 +190,7 @@ public sealed class AuditChallengerM4EmpiricalTests
         var (contextAlpha, repoAlpha) = CreateContextForExistingDb(sharedDbName, clinicAlphaId, tenantId);
         var (contextBeta, repoBeta) = CreateContextForExistingDb(sharedDbName, clinicBetaId, tenantId);
 
-        var alphaEntry = new ClinicAuditEntry
+        var alphaEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -206,7 +206,7 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Success,
             Description = "Confidential psychiatric chart access trail"
         };
-        await contextAlpha.ClinicAuditEntries.AddAsync(alphaEntry);
+        await contextAlpha.AuditEntries.AddAsync(alphaEntry);
         await contextAlpha.SaveChangesAsync();
 
         // Act & Assert 1: Attacker in Clinic Beta attempts GetAuditLogDetailQuery with Alpha's entry ID
@@ -239,7 +239,7 @@ public sealed class AuditChallengerM4EmpiricalTests
         var t0 = DateTime.UtcNow.AddMinutes(-50);
 
         // Alpha entry timestamp
-        var alphaEntry = new ClinicAuditEntry
+        var alphaEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -254,11 +254,11 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Success,
             Description = "Alpha confidential"
         };
-        await contextAlpha.ClinicAuditEntries.AddAsync(alphaEntry);
+        await contextAlpha.AuditEntries.AddAsync(alphaEntry);
         await contextAlpha.SaveChangesAsync();
 
         // Beta entries before and after Alpha's timestamp
-        var betaEntry1 = new ClinicAuditEntry
+        var betaEntry1 = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -273,7 +273,7 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Success,
             Description = "Beta Old"
         };
-        var betaEntry2 = new ClinicAuditEntry
+        var betaEntry2 = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -288,7 +288,7 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Success,
             Description = "Beta New"
         };
-        await contextBeta.ClinicAuditEntries.AddRangeAsync(betaEntry1, betaEntry2);
+        await contextBeta.AuditEntries.AddRangeAsync(betaEntry1, betaEntry2);
         await contextBeta.SaveChangesAsync();
 
         // Act: Attacker in Clinic Beta replays the exact ISO-8601 cursor from Clinic Alpha's entry
@@ -324,7 +324,7 @@ public sealed class AuditChallengerM4EmpiricalTests
     {
         var (context, clinicId, tenantId, _) = CreateIsolatedContext();
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -340,7 +340,7 @@ public sealed class AuditChallengerM4EmpiricalTests
             Description = "Official payment collected PHP 500"
         };
 
-        await context.ClinicAuditEntries.AddAsync(entry);
+        await context.AuditEntries.AddAsync(entry);
         await context.SaveChangesAsync();
 
         // Malicious update attempt
@@ -356,7 +356,7 @@ public sealed class AuditChallengerM4EmpiricalTests
     {
         var (context, clinicId, tenantId, _) = CreateIsolatedContext();
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -372,11 +372,11 @@ public sealed class AuditChallengerM4EmpiricalTests
             Description = "Account lockout enforced"
         };
 
-        context.ClinicAuditEntries.Add(entry);
+        context.AuditEntries.Add(entry);
         context.SaveChanges();
 
         // Attempt synchronous deletion
-        context.ClinicAuditEntries.Remove(entry);
+        context.AuditEntries.Remove(entry);
         var actSync = () => context.SaveChanges();
 
         actSync.Should().Throw<InvalidOperationException>()
@@ -388,7 +388,7 @@ public sealed class AuditChallengerM4EmpiricalTests
     {
         var (context, clinicId, tenantId, _) = CreateIsolatedContext();
 
-        var entry = new ClinicAuditEntry
+        var entry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -404,14 +404,14 @@ public sealed class AuditChallengerM4EmpiricalTests
             Description = "Original schedule description"
         };
 
-        await context.ClinicAuditEntries.AddAsync(entry);
+        await context.AuditEntries.AddAsync(entry);
         await context.SaveChangesAsync();
 
         // Detach entry
         context.Entry(entry).State = EntityState.Detached;
 
         // Create untracked clone with same ID and modified description
-        var forgedEntry = new ClinicAuditEntry
+        var forgedEntry = new AuditEntry
         {
             Id = entry.Id,
             TenantId = tenantId,
@@ -439,7 +439,7 @@ public sealed class AuditChallengerM4EmpiricalTests
     {
         var (context, clinicId, tenantId, _) = CreateIsolatedContext();
 
-        var existingEntry = new ClinicAuditEntry
+        var existingEntry = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -454,11 +454,11 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Success,
             Description = "BP 120/80"
         };
-        await context.ClinicAuditEntries.AddAsync(existingEntry);
+        await context.AuditEntries.AddAsync(existingEntry);
         await context.SaveChangesAsync();
 
         // Stage 3 valid new entries
-        var newEntries = Enumerable.Range(1, 3).Select(i => new ClinicAuditEntry
+        var newEntries = Enumerable.Range(1, 3).Select(i => new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -473,7 +473,7 @@ public sealed class AuditChallengerM4EmpiricalTests
             Outcome = ClinicAuditOutcomes.Success,
             Description = $"BP 120/8{i}"
         }).ToList();
-        await context.ClinicAuditEntries.AddRangeAsync(newEntries);
+        await context.AuditEntries.AddRangeAsync(newEntries);
 
         // Sneak a modification into the existing entry
         existingEntry.Description = "Tampered BP 200/120";
@@ -484,7 +484,7 @@ public sealed class AuditChallengerM4EmpiricalTests
             .WithMessage("*append-only (WORM)*");
 
         // Verify none of the new entries were committed
-        var dbCount = await context.ClinicAuditEntries.AsNoTracking().CountAsync();
+        var dbCount = await context.AuditEntries.AsNoTracking().CountAsync();
         dbCount.Should().Be(1);
     }
 

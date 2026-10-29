@@ -63,11 +63,11 @@ public class ClinicPortalProjectionInterceptorTests
     }
 
     [Fact]
-    public async Task AddClinicSettings_Stages_FacilityJoinSettingsUpdated_With_4Char_Discriminator()
+    public async Task AddFacilitySettings_Stages_FacilityJoinSettingsUpdated_With_4Char_Discriminator()
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -78,7 +78,7 @@ public class ClinicPortalProjectionInterceptorTests
             OperatingHours = "8am - 5pm"
         };
 
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
         await db.SaveChangesAsync();
 
         var expectedDisc = _clinicId.ToString("N")[..4].ToUpperInvariant();
@@ -104,14 +104,14 @@ public class ClinicPortalProjectionInterceptorTests
         var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
         var todayManila = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
             ClinicName = "St. Jude Clinic",
             IsJoinEnabled = true
         };
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
 
         var queueItem1 = new QueueItem
         {
@@ -166,13 +166,13 @@ public class ClinicPortalProjectionInterceptorTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
             ClinicName = "St. Jude Clinic"
         };
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
 
         var cert = new MedicalCertificate
         {
@@ -210,13 +210,13 @@ public class ClinicPortalProjectionInterceptorTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
             ClinicName = "St. Jude Clinic"
         };
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
 
         var referral = new ReferralLetter
         {
@@ -256,13 +256,13 @@ public class ClinicPortalProjectionInterceptorTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
             ClinicName = "St. Jude Clinic"
         };
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
 
         var encounter = new ConsultationEncounter
         {
@@ -350,11 +350,11 @@ public class ClinicPortalProjectionInterceptorTests
     }
 
     [Fact]
-    public async Task ClinicLabOrder_Stages_DocumentAttestationPublished()
+    public async Task LabOrder_Stages_DocumentAttestationPublished()
     {
         await using var db = CreateContextWithInterceptor();
 
-        var order = new ClinicLabOrder
+        var order = new LabOrder
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -420,13 +420,13 @@ public class ClinicPortalProjectionInterceptorTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
             ClinicName = "St. Jude Clinic"
         };
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
 
         var token = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var encounter = new ConsultationEncounter
@@ -455,7 +455,7 @@ public class ClinicPortalProjectionInterceptorTests
             Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(),
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<byte[]>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new ClinicRecordAttachment
+            .Returns(new RecordAttachment
             {
                 TenantId = _tenantId,
                 ClinicId = _clinicId,
@@ -514,13 +514,13 @@ public class ClinicPortalProjectionInterceptorTests
     {
         await using var db = CreateContextWithInterceptor();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
             ClinicName = "St. Jude Clinic"
         };
-        db.ClinicSettings.Add(settings);
+        db.Settings.Add(settings);
 
         var validToken = $"{_clinicId:N}.{Guid.NewGuid():N}";
         var wrongToken = $"{_clinicId:N}.{Guid.NewGuid():N}";

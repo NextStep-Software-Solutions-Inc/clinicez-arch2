@@ -32,7 +32,14 @@ public static class ClinicCustomFieldTemplatesCatalog
         if (string.IsNullOrWhiteSpace(entityType))
             return _templates;
 
-        return _templates.Where(t => string.Equals(t.EntityType, entityType.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        var targetType = string.Equals(entityType.Trim(), "ClinicPatient", StringComparison.OrdinalIgnoreCase)
+            ? "Patient"
+            : entityType.Trim();
+
+        return _templates.Where(t =>
+            string.Equals(t.EntityType, targetType, StringComparison.OrdinalIgnoreCase) ||
+            (string.Equals(targetType, "Patient", StringComparison.OrdinalIgnoreCase) && string.Equals(t.EntityType, "ClinicPatient", StringComparison.OrdinalIgnoreCase))
+        ).ToList();
     }
 
     public static CustomFieldTemplateDto? GetTemplate(string key)
@@ -181,7 +188,7 @@ public static class ClinicCustomFieldTemplatesCatalog
             Key: UniversityUstpKey,
             Name: "University / School Clinic",
             Description: "Standard higher education health services template with affiliation branching (Student vs Employee/Faculty), cascading College/Program dropdowns, and student/employee IDs.",
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             FieldCount: fields.Count,
             Fields: fields
         );
@@ -245,7 +252,7 @@ public static class ClinicCustomFieldTemplatesCatalog
             Key: WorkplaceCorporateKey,
             Name: "Workplace / Corporate Health",
             Description: "Corporate occupational health and employee wellness template capturing employment contract status, departmental assignment, employee number, and HMO provider.",
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             FieldCount: fields.Count,
             Fields: fields
         );
@@ -297,7 +304,7 @@ public static class ClinicCustomFieldTemplatesCatalog
             Key: GeneralDemographicsKey,
             Name: "General Clinical Demographics",
             Description: "Extended clinical intake demographics covering cultural/faith beliefs, maternal lineage for identification/validation, and spouse contact conditional on marital status.",
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             FieldCount: fields.Count,
             Fields: fields
         );
@@ -496,7 +503,7 @@ public static class ClinicCustomFieldTemplatesCatalog
             Key: PatientIntakeContactsKey,
             Name: "Patient Intake: Address & Emergency Contacts",
             Description: "Standard patient intake template with Primary and Secondary Addresses, plus Primary and Secondary Emergency Contacts including phone number, relationship, and physical address.",
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             FieldCount: fields.Count,
             Fields: fields
         );
@@ -596,7 +603,7 @@ public static class ClinicCustomFieldTemplatesCatalog
             Key: PatientIntakeAddressKey,
             Name: "Patient Intake: Addresses (Primary & Secondary)",
             Description: "Intake addresses template providing primary and secondary address lines, city/municipality, province, and postal code.",
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             FieldCount: fields.Count,
             Fields: fields
         );
@@ -708,7 +715,7 @@ public static class ClinicCustomFieldTemplatesCatalog
             Key: PatientIntakeEmergencyKey,
             Name: "Patient Intake: Emergency Contacts",
             Description: "Intake emergency contacts template capturing primary and secondary emergency contacts with phone numbers, relationships, and physical addresses.",
-            EntityType: "ClinicPatient",
+            EntityType: "Patient",
             FieldCount: fields.Count,
             Fields: fields
         );

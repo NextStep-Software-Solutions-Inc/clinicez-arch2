@@ -20,13 +20,13 @@ public sealed record ClinicBookingPauseResultDto(
 
 public sealed class ToggleOnlineBookingPauseCommandHandler : IRequestHandler<ToggleOnlineBookingPauseCommand, ClinicBookingPauseResultDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IInteropPublisher _interopPublisher;
 
     public ToggleOnlineBookingPauseCommandHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
         IInteropPublisher interopPublisher)

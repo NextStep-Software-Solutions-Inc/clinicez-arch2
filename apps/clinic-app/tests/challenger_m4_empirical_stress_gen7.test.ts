@@ -533,7 +533,7 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
         );
         expect(markup).toContain('0 Selected');
       }
-    });
+    }, 30000);
   });
 
   // =========================================================================

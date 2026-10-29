@@ -55,15 +55,15 @@ public sealed record PublicStudentSelfEnrollResultDto(
 public sealed class PublicStudentSelfEnrollCommandHandler
     : IRequestHandler<PublicStudentSelfEnrollCommand, PublicStudentSelfEnrollResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<RecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IPatientCodeGenerator _codeGenerator;
 
     public PublicStudentSelfEnrollCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicRecordAttachment> attachmentRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<RecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IPatientCodeGenerator? codeGenerator = null)
@@ -76,7 +76,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork)
     {
         var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
@@ -144,7 +144,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
         if (!string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
             customFields["emergency_contact_relationship"] = request.EmergencyContactRelationship.Trim();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
@@ -154,12 +154,12 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             LastName = request.LastName.Trim(),
             MiddleName = request.MiddleName?.Trim(),
             DateOfBirth = request.DateOfBirth,
-            Gender = string.IsNullOrWhiteSpace(request.Gender) ? "Male" : request.Gender,
+            Gender = Enum.TryParse<Gender>(request.Gender, true, out var g) ? g : Gender.Male,
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
-            BloodType = request.BloodType?.Trim(),
+            BloodType = Enum.TryParse<BloodType>(request.BloodType, true, out var bt) ? bt : null,
             CustomFields = customFields,
-            VerificationStatus = "PendingVerification",
+            VerificationStatus = PatientVerificationStatus.PendingVerification,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "StudentSelfEnrollmentPortal"
         };
@@ -171,7 +171,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
         {
             foreach (var doc in request.Documents)
             {
-                var attachment = new ClinicRecordAttachment
+                var attachment = new RecordAttachment
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,

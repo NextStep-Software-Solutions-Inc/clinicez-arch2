@@ -48,10 +48,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -105,10 +105,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -156,10 +156,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -203,10 +203,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -248,10 +248,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -286,10 +286,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -342,10 +342,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -408,10 +408,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -457,10 +457,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -504,7 +504,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new UpsertDentalToothRecordCommandHandler(toothRepo, patientRepo, uow, _clinicContext);
 
@@ -527,12 +527,12 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var otherClinicId = Guid.NewGuid();
         var patientInOtherClinic = Guid.NewGuid();
 
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientInOtherClinic,
             TenantId = "other-tenant",
@@ -565,11 +565,11 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -726,10 +726,10 @@ public class UpsertDentalToothRecordCommandHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,

@@ -13,12 +13,12 @@ public sealed record MarkAllStaffNotificationsReadCommand() : IRequest<int>;
 
 public sealed class MarkAllStaffNotificationsReadCommandHandler : IRequestHandler<MarkAllStaffNotificationsReadCommand, int>
 {
-    private readonly IRepository<ClinicStaffNotification> _notificationRepo;
+    private readonly IRepository<StaffNotification> _notificationRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
 
     public MarkAllStaffNotificationsReadCommandHandler(
-        IRepository<ClinicStaffNotification> notificationRepo,
+        IRepository<StaffNotification> notificationRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork)
     {

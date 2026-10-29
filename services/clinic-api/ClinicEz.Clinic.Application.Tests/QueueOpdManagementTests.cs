@@ -529,7 +529,7 @@ public class QueueOpdManagementTests
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var identity = Substitute.For<IClinicIdentityProvider>();
         identity.GetAsync(Arg.Any<CancellationToken>()).Returns(new ClinicIdentity(_tenantId, _clinicId, "Apex Clinic"));
         var apptPublisher = Substitute.For<IPatientAppointmentPublisher>();

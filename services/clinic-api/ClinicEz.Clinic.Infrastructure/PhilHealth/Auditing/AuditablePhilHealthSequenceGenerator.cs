@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Audit;
 using ClinicEz.Clinic.Application.Common.Interfaces;
-using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -19,18 +18,18 @@ using Microsoft.Extensions.Logging;
 /// when PhilHealth eKAS patient journey numbers (pHciCaseNo, pHciTransNo, pSoapTransNo)
 /// are allocated (yakap.ekas.created).
 /// </summary>
-public sealed class AuditablePhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
+public sealed class AuditablePhilHealthSequenceGenerator : ClinicEz.Clinic.Domain.Interfaces.IPhilHealthSequenceGenerator
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    private readonly IPhilHealthSequenceGenerator _inner;
+    private readonly ClinicEz.Clinic.Domain.Interfaces.IPhilHealthSequenceGenerator _inner;
     private readonly IAuditLogQueue _auditQueue;
     private readonly IClinicContext _clinicContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuditablePhilHealthSequenceGenerator> _logger;
 
     public AuditablePhilHealthSequenceGenerator(
-        IPhilHealthSequenceGenerator inner,
+        ClinicEz.Clinic.Domain.Interfaces.IPhilHealthSequenceGenerator inner,
         IAuditLogQueue auditQueue,
         IClinicContext clinicContext,
         IHttpContextAccessor httpContextAccessor,

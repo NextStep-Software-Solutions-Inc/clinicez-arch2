@@ -64,6 +64,7 @@ public class GlobalExceptionHandler : IExceptionHandler
             ValidationException          => ((int)HttpStatusCode.BadRequest,            "VALIDATION_ERROR"),
             BadRequestException          => ((int)HttpStatusCode.BadRequest,            "BAD_REQUEST"),
             UnauthorizedException        => ((int)HttpStatusCode.Unauthorized,          "UNAUTHORIZED"),
+            UnauthorizedAccessException  => ((int)HttpStatusCode.Unauthorized,          "UNAUTHORIZED"),
             ForbiddenException           => ((int)HttpStatusCode.Forbidden,             "FORBIDDEN"),
             TooManyRequestsException     => ((int)HttpStatusCode.TooManyRequests,       "TOO_MANY_REQUESTS"),
             ServiceUnavailableException  => ((int)HttpStatusCode.ServiceUnavailable,    "SERVICE_UNAVAILABLE"),

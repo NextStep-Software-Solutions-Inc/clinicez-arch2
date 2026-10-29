@@ -32,7 +32,7 @@ public class GetPatientDentalChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var patientId = Guid.NewGuid();
 
         // Teeth added intentionally out of order
@@ -69,7 +69,7 @@ public class GetPatientDentalChartQueryHandlerTests
         }, CancellationToken.None);
 
         // Dental procedure with tooth tagging
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -85,7 +85,7 @@ public class GetPatientDentalChartQueryHandlerTests
         }, CancellationToken.None);
 
         // General procedure with tooth tagging (e.g. minor surgery)
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -100,7 +100,7 @@ public class GetPatientDentalChartQueryHandlerTests
         }, CancellationToken.None);
 
         // Unrelated non-dental procedure without tooth tagging
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -149,7 +149,7 @@ public class GetPatientDentalChartQueryHandlerTests
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var patientId = Guid.NewGuid();
 
         var handler = new GetPatientDentalChartQueryHandler(toothRepo, procRepo, _clinicContext);
@@ -171,7 +171,7 @@ public class GetPatientDentalChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var patientId = Guid.NewGuid();
         var otherClinicId = Guid.NewGuid();
 
@@ -185,7 +185,7 @@ public class GetPatientDentalChartQueryHandlerTests
             Status = ToothStatus.Decayed
         }, CancellationToken.None);
 
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = "other-tenant",
             ClinicId = otherClinicId,
@@ -216,7 +216,7 @@ public class GetPatientDentalChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var patientId = Guid.NewGuid();
 
         var deletedTooth = new DentalToothRecord
@@ -231,7 +231,7 @@ public class GetPatientDentalChartQueryHandlerTests
         };
         await toothRepo.AddAsync(deletedTooth, CancellationToken.None);
 
-        var deletedProc = new ClinicalProcedure
+        var deletedProc = new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -265,7 +265,7 @@ public class GetPatientDentalChartQueryHandlerTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var patientId = Guid.NewGuid();
 
         // Tooth 16: Condition 1 - Filled on O

@@ -15,7 +15,7 @@ public static class CustomFieldVisibilityRuleNormalizer
     public static async Task<string?> NormalizeAndValidateAsync(
         string? visibilityRuleJson,
         string targetEntityType,
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(visibilityRuleJson))
@@ -77,11 +77,13 @@ public static class CustomFieldVisibilityRuleNormalizer
             return visibilityRuleJson;
         }
 
-        var entityType = string.IsNullOrWhiteSpace(targetEntityType) ? "ClinicPatient" : targetEntityType.Trim();
+        var entityType = string.IsNullOrWhiteSpace(targetEntityType) ? "Patient" : targetEntityType.Trim();
         var normalizedParentKey = fieldKey.Trim().ToLowerInvariant().Replace(" ", "_");
+        var isPatientEntity = string.Equals(entityType, "Patient", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(entityType, "ClinicPatient", StringComparison.OrdinalIgnoreCase);
 
         var parentField = await repo.Query().FirstOrDefaultAsync(f =>
-            f.EntityType == entityType &&
+            (f.EntityType == entityType || (isPatientEntity && (f.EntityType == "Patient" || f.EntityType == "ClinicPatient"))) &&
             f.FieldKey == normalizedParentKey, ct);
 
         if (parentField == null || parentField.DataType != CustomFieldDataType.Boolean)

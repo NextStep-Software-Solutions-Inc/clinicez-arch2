@@ -19,17 +19,17 @@ public record GetPrescriptionSlipQuery(Guid? ConsultationId = null, string? Pres
 public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSlipQuery, PrescriptionSlipDto>
 {
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfiguration? _configuration;
 
     public GetPrescriptionSlipQueryHandler(
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IUnitOfWork unitOfWork,
         IConfiguration? configuration = null)
     {
@@ -113,7 +113,7 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
             patientAge,
             patient?.Gender.ToString() ?? "Unknown",
             patient?.PhilHealthNumber,
-            patient?.Allergies,
+            patient?.Allergies != null && patient.Allergies.Count > 0 ? string.Join(", ", patient.Allergies.Select(a => a.Allergen)) : null,
             encounter.Assessment,
             encounter.Plan,
             encounter.Prescriptions.Select(p => new PrescriptionSlipItemDto(

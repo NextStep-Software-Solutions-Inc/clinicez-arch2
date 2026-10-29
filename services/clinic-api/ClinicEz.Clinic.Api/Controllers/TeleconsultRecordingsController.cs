@@ -140,7 +140,8 @@ public sealed class TeleconsultRecordingsController : ControllerBase
             return BadRequest(ApiResponse<RecordingSegmentDto>.Fail("Missing mandatory X-Encryption-Iv or X-Encryption-Tag headers."));
         }
 
-        var storageKey = $"vault/recordings/{_clinicContext.ClinicId}/{id}/seg_{segmentIndex:D5}.cez";
+        var tenantId = _clinicContext.TenantId ?? "default";
+        var storageKey = $"{tenantId}/{_clinicContext.ClinicId}/{id}/seg_{segmentIndex:D5}.cez";
 
         using var hashingStream = new HashingReadStream(Request.Body);
         await _storage.SaveEncryptedStreamAsync(storageKey, hashingStream, ct);

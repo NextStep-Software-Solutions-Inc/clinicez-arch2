@@ -48,10 +48,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             ClinicId = clinicId,
             TenantId = tenantId,
@@ -132,10 +132,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             ClinicId = clinicId,
             TenantId = tenantId,
@@ -198,10 +198,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             ClinicId = clinicId,
             TenantId = tenantId,
@@ -265,10 +265,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             ClinicId = clinicId,
             TenantId = tenantId,
@@ -331,10 +331,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             ClinicId = clinicId,
             TenantId = tenantId,
@@ -422,10 +422,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (dbB, uowB, sieveB) = TestDbHelper.CreateSharedTestContext(dbName, contextB);
         var staffRepoB = TestDbHelper.CreateRepository<StaffMember>(dbB, sieveB);
-        var roleRepoB = TestDbHelper.CreateRepository<ClinicRole>(dbB, sieveB);
-        var settingsRepoB = TestDbHelper.CreateRepository<ClinicSettings>(dbB, sieveB);
+        var roleRepoB = TestDbHelper.CreateRepository<Role>(dbB, sieveB);
+        var settingsRepoB = TestDbHelper.CreateRepository<FacilitySettings>(dbB, sieveB);
 
-        await settingsRepoB.AddAsync(new ClinicSettings
+        await settingsRepoB.AddAsync(new FacilitySettings
         {
             ClinicId = clinicB,
             TenantId = tenantId,
@@ -472,10 +472,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             ClinicId = clinicId,
             TenantId = tenantId,
@@ -512,7 +512,7 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
         var staffA = new StaffMember
         {
@@ -596,10 +596,10 @@ public class StaffDuplicateEmailValidationTests
 
         var (context, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             ClinicId = clinicId,
             TenantId = tenantId,

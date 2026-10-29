@@ -9,11 +9,8 @@ namespace ClinicEz.Clinic.Domain.Entities;
 /// plaintext token (<c>{facilityId:N}.{random}</c>) is shown once when the grant is minted. A grant expires, can be used
 /// a limited number of times and decides which <see cref="ResultSource"/> an upload gets.
 /// </summary>
-public sealed class UploadGrant : BaseEntity
+public sealed class UploadGrant : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
-
     public Guid LabOrderId { get; set; }
 
     public required byte[] TokenHash { get; set; }

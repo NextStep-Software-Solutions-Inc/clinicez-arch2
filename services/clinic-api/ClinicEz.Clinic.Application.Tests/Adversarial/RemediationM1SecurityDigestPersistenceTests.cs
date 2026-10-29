@@ -33,7 +33,7 @@ public class RemediationM1SecurityDigestPersistenceTests
     private readonly IClinicDocumentPdfService _pdfService = new ClinicDocumentPdfService();
     private readonly IDocumentSecurityService _securityService = new DocumentSecurityService();
 
-    private static ClinicSettings CreateSampleClinicSettings(Guid clinicId, string tenantId = "tenant-test-01") =>
+    private static FacilitySettings CreateSampleFacilitySettings(Guid clinicId, string tenantId = "tenant-test-01") =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -61,14 +61,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
         await uow.SaveChangesAsync(CancellationToken.None);
 
         var handler = Phase3TestKit.MedCert(medCertRepo, uow, clinicContext, db);
@@ -106,14 +106,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
 
         var doctor = new StaffMember
         {
@@ -166,14 +166,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
 
         // Legacy cert without SecurityDigest
         var cert = new MedicalCertificate
@@ -225,14 +225,14 @@ public class RemediationM1SecurityDigestPersistenceTests
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
-        await settingsRepo.AddAsync(CreateSampleClinicSettings(testClinicId, testTenantId), CancellationToken.None);
+        await settingsRepo.AddAsync(CreateSampleFacilitySettings(testClinicId, testTenantId), CancellationToken.None);
 
         // Legacy referral without SecurityDigest
         var referral = new ReferralLetter

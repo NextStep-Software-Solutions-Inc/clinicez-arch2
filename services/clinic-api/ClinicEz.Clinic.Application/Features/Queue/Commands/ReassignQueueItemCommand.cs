@@ -24,14 +24,14 @@ public sealed class ReassignQueueItemCommandHandler : IRequestHandler<ReassignQu
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
     private readonly IRepository<StaffMember>? _staffRepository;
 
     public ReassignQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<Room>? roomRepository = null,
         IRepository<StaffMember>? staffRepository = null)
     {
         _queueRepository = queueRepository;
@@ -44,7 +44,7 @@ public sealed class ReassignQueueItemCommandHandler : IRequestHandler<ReassignQu
     public async Task<QueueItemDto> Handle(ReassignQueueItemCommand request, CancellationToken cancellationToken)
     {
         var item = await _queueRepository.Query(q => q.Id == request.Id && q.ClinicId == _clinicContext.ClinicId)
-            .Include(q => q.TriageVitals)
+            .Include(q => q.PatientVitals)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (item == null)

@@ -157,7 +157,7 @@ public static class ClinicRoleSeeder
         ILogger? logger = null,
         CancellationToken ct = default)
     {
-        var clinicIdentities = await dbContext.ClinicRoles
+        var clinicIdentities = await dbContext.Roles
             .IgnoreQueryFilters()
             .Select(r => new { r.ClinicId, r.TenantId })
             .Distinct()
@@ -165,7 +165,7 @@ public static class ClinicRoleSeeder
 
         if (clinicIdentities.Count == 0)
         {
-            clinicIdentities = await dbContext.ClinicSettings
+            clinicIdentities = await dbContext.Settings
                 .IgnoreQueryFilters()
                 .Select(s => new { s.ClinicId, s.TenantId })
                 .Distinct()
@@ -195,7 +195,7 @@ public static class ClinicRoleSeeder
         CancellationToken ct)
     {
         var templates = GetCanonicalSystemRoleTemplates();
-        var existingSystemRoles = await dbContext.ClinicRoles
+        var existingSystemRoles = await dbContext.Roles
             .IgnoreQueryFilters()
             .Where(r => r.ClinicId == clinicId && r.IsSystem)
             .ToListAsync(ct);
@@ -208,7 +208,7 @@ public static class ClinicRoleSeeder
             if (!existingMap.TryGetValue(template.Name, out var existingRole))
             {
                 // Create missing system role
-                var newRole = new ClinicRole
+                var newRole = new Role
                 {
                     Id = Guid.NewGuid(),
                     TenantId = tenantId,
@@ -221,7 +221,7 @@ public static class ClinicRoleSeeder
                     CreatedBy = "System:Seeder"
                 };
 
-                await dbContext.ClinicRoles.AddAsync(newRole, ct);
+                await dbContext.Roles.AddAsync(newRole, ct);
                 hasChanges = true;
             }
             else

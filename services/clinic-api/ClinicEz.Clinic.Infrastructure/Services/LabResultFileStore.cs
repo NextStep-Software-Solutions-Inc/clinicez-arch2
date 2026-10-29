@@ -17,7 +17,7 @@ public sealed class LabResultFileStore : ILabResultFileStore
         _storage = storage;
     }
 
-    public async Task StoreAsync(ClinicLabResult result, byte[] content, CancellationToken ct)
+    public async Task StoreAsync(LabResult result, byte[] content, CancellationToken ct)
     {
         var encrypted = await _encryption.EncryptAsync(content, result.TenantId, result.ClinicId, ct);
         var storageKey = $"tenants/{result.TenantId}/clinics/{result.ClinicId}/lab-results/{result.Id:N}.cez";
@@ -31,7 +31,7 @@ public sealed class LabResultFileStore : ILabResultFileStore
         result.EncryptedHash = encrypted.EncryptedHash;
     }
 
-    public async Task<byte[]?> ReadAsync(ClinicLabResult result, CancellationToken ct)
+    public async Task<byte[]?> ReadAsync(LabResult result, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(result.StorageKey)
             || result.EncryptionIvBase64 == null

@@ -25,12 +25,12 @@ public record UpdateClinicServiceItemCommand(
 
 public class UpdateClinicServiceItemCommandHandler : IRequestHandler<UpdateClinicServiceItemCommand, ClinicServiceItemDto>
 {
-    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IRepository<ServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public UpdateClinicServiceItemCommandHandler(
-        IRepository<ClinicServiceItem> serviceRepo,
+        IRepository<ServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {

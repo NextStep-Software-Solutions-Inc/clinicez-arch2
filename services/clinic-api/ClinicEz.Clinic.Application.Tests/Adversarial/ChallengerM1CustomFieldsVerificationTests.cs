@@ -46,7 +46,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -64,7 +64,7 @@ public class ChallengerM1CustomFieldsVerificationTests
             new(fD.Id, 5),
             new(fB.Id, 20)
         };
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", items), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", items), CancellationToken.None);
 
         // Assert reorder response
         reordered.Should().HaveCount(4);
@@ -78,7 +78,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         reordered[3].DisplayOrder.Should().Be(100);
 
         // Assert query returns identical deterministic order
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queried.Select(f => f.FieldKey).Should().ContainInOrder("f_d", "f_b", "f_a", "f_c");
     }
 
@@ -87,7 +87,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -105,7 +105,7 @@ public class ChallengerM1CustomFieldsVerificationTests
             new(f1.Id, 10000),
             new(f3.Id, 999999)
         };
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", items), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", items), CancellationToken.None);
 
         // Assert
         reordered.Select(f => f.FieldKey).Should().ContainInOrder("gap_4", "gap_2", "gap_1", "gap_3");
@@ -114,7 +114,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         reordered[2].DisplayOrder.Should().Be(10000);
         reordered[3].DisplayOrder.Should().Be(999999);
 
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queried.Select(f => f.FieldKey).Should().ContainInOrder("gap_4", "gap_2", "gap_1", "gap_3");
     }
 
@@ -123,7 +123,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var validator = new ReorderCustomFieldsCommandValidator();
-        var command = new ReorderCustomFieldsCommand("ClinicPatient", new List<CustomFieldOrderItem>
+        var command = new ReorderCustomFieldsCommand("Patient", new List<CustomFieldOrderItem>
         {
             new(Guid.NewGuid(), -1),
             new(Guid.NewGuid(), -99)
@@ -182,7 +182,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
 
@@ -193,7 +193,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         await createHandler.Handle(new CreateCustomFieldDefinitionCommand("f_b", "Bravo Field", CustomFieldDataType.Text, DisplayOrder: 10), CancellationToken.None);
 
         // Act
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
 
         // Assert - Query must sort by DisplayOrder, then by Label alphabetically
         queried.Should().HaveCount(4);
@@ -208,7 +208,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var reorderHandler = new ReorderCustomFieldsCommandHandler(repo, uow, _clinicContext);
         var queryHandler = new GetClinicCustomFieldsQueryHandler(repo);
@@ -219,7 +219,7 @@ public class ChallengerM1CustomFieldsVerificationTests
 
         // Act - Reorder via orderedIds in reverse: f3, f1, f2
         var orderedIds = new List<Guid> { f3.Id, f1.Id, f2.Id };
-        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("ClinicPatient", orderedIds), CancellationToken.None);
+        var reordered = await reorderHandler.Handle(new ReorderCustomFieldsCommand("Patient", orderedIds), CancellationToken.None);
 
         // Assert
         reordered[0].FieldKey.Should().Be("seq_3");
@@ -229,7 +229,7 @@ public class ChallengerM1CustomFieldsVerificationTests
         reordered[2].FieldKey.Should().Be("seq_2");
         reordered[2].DisplayOrder.Should().Be(3);
 
-        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("ClinicPatient"), CancellationToken.None);
+        var queried = await queryHandler.Handle(new GetClinicCustomFieldsQuery("Patient"), CancellationToken.None);
         queried.Select(f => f.FieldKey).Should().ContainInOrder("seq_3", "seq_1", "seq_2");
     }
 
@@ -238,7 +238,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var validator = new ReorderCustomFieldsCommandValidator();
-        var command = new ReorderCustomFieldsCommand(Items: null, OrderedIds: null, EntityType: "ClinicPatient");
+        var command = new ReorderCustomFieldsCommand(Items: null, OrderedIds: null, EntityType: "Patient");
 
         // Act
         var result = validator.Validate(command);
@@ -257,7 +257,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // Act - Run 1
@@ -294,7 +294,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // Workplace Corporate Template - 4 fields
@@ -320,17 +320,17 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // 1. Clinic already has custom scholarship and dormitory fields
         var customScholarship = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
-            "scholarship_grant", "Scholarship Grant", CustomFieldDataType.Text, "ClinicPatient", "Custom", false, 99
+            "scholarship_grant", "Scholarship Grant", CustomFieldDataType.Text, "Patient", "Custom", false, 99
         ), CancellationToken.None);
 
         var customDorm = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
-            "dormitory_room", "Dormitory Room", CustomFieldDataType.Text, "ClinicPatient", "Custom", false, 100
+            "dormitory_room", "Dormitory Room", CustomFieldDataType.Text, "Patient", "Custom", false, 100
         ), CancellationToken.None);
 
         // 2. Install University preset (8 fields) twice
@@ -349,7 +349,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // 1. Install template once
@@ -383,7 +383,7 @@ public class ChallengerM1CustomFieldsVerificationTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
         var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
 
         // Act - Run 1

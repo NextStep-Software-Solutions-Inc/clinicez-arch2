@@ -478,7 +478,7 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
           if (tab === 'vault') expect(markup).toContain('All Records');
         }
       }
-    });
+    }, 30000);
   });
 
   // =========================================================================

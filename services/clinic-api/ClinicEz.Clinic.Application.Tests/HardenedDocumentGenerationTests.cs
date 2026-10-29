@@ -51,7 +51,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_MedicalCertificate_PDF_With_Security_Seal()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -92,7 +92,7 @@ public class HardenedDocumentGenerationTests
             CreatedBy = "Dr. Allan Ramos"
         };
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = cert.PatientId,
             TenantId = settings.TenantId,
@@ -102,7 +102,7 @@ public class HardenedDocumentGenerationTests
             FirstName = "Maria Clara",
             LastName = "De Los Santos",
             DateOfBirth = new DateOnly(1992, 5, 14),
-            Gender = "Female",
+            Gender = Gender.Female,
             PhilHealthNumber = "PHIC-12-050192831-2"
         };
 
@@ -119,7 +119,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Lab_Requisition_Slip_PDF_With_Dropzone_QR()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -170,7 +170,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Prescription_PDF_Generics_Act_Compliant()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -300,7 +300,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Referral_Letter_PDF_With_Security_Seal()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -351,7 +351,7 @@ public class HardenedDocumentGenerationTests
             S2LicenseNumber = "S2-0987123"
         };
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = referral.PatientId,
             TenantId = settings.TenantId,
@@ -361,7 +361,7 @@ public class HardenedDocumentGenerationTests
             FirstName = "Juanito",
             LastName = "Dela Cruz",
             DateOfBirth = new DateOnly(1980, 8, 20),
-            Gender = "Male",
+            Gender = Gender.Male,
             PhilHealthNumber = "PHIC-18-091238471-1"
         };
 
@@ -378,7 +378,7 @@ public class HardenedDocumentGenerationTests
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_Reception_Placard_PDF()
     {
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -406,7 +406,7 @@ public class HardenedDocumentGenerationTests
         pdfText.Should().Contain("%%EOF");
     }
 
-    private static ClinicSettings CreateReportTestSettings() => new()
+    private static FacilitySettings CreateReportTestSettings() => new()
     {
         TenantId = "tenant-test-01",
         ClinicId = Guid.NewGuid(),
@@ -818,7 +818,7 @@ public class HardenedDocumentGenerationTests
         clinicContext.ClinicId.Returns(Guid.NewGuid());
         clinicContext.TenantId.Returns("tenant-1");
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
         var eodDto = new DailyEodReportDto(
@@ -946,7 +946,7 @@ public class HardenedDocumentGenerationTests
         clinicContext.StaffId.Returns(staffId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
         // Add real staff member to database
@@ -1270,9 +1270,9 @@ public class HardenedDocumentGenerationTests
     // TEST GENERATION & EXTRACTION HELPERS
     // =========================================================================
 
-    private static ClinicSettings CreateBaseSettings(DocumentPaperSize paperSize)
+    private static FacilitySettings CreateBaseSettings(DocumentPaperSize paperSize)
     {
-        return new ClinicSettings
+        return new FacilitySettings
         {
             TenantId = "tenant-001",
             ClinicId = Guid.NewGuid(),
@@ -1287,7 +1287,7 @@ public class HardenedDocumentGenerationTests
         };
     }
 
-    private static MedicalCertificate CreateBaseMedicalCertificate(ClinicSettings settings)
+    private static MedicalCertificate CreateBaseMedicalCertificate(FacilitySettings settings)
     {
         return new MedicalCertificate
         {
@@ -1317,9 +1317,9 @@ public class HardenedDocumentGenerationTests
         };
     }
 
-    private static ClinicPatient CreateBasePatient(ClinicSettings settings)
+    private static Patient CreateBasePatient(FacilitySettings settings)
     {
-        return new ClinicPatient
+        return new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = settings.TenantId,
@@ -1329,12 +1329,12 @@ public class HardenedDocumentGenerationTests
             FirstName = "Maria Clara",
             LastName = "De Los Santos",
             DateOfBirth = new DateOnly(1992, 5, 14),
-            Gender = "Female",
+            Gender = Gender.Female,
             PhilHealthNumber = "PHIC-12-050192831-2"
         };
     }
 
-    private byte[] GenerateMedicalCertificate(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    private byte[] GenerateMedicalCertificate(FacilitySettings settings, SignatureMode mode, byte[]? signatureBytes = null)
     {
         var cert = CreateBaseMedicalCertificate(settings);
         var patient = CreateBasePatient(settings);
@@ -1346,7 +1346,7 @@ public class HardenedDocumentGenerationTests
             signatureBytes);
     }
 
-    private byte[] GeneratePrescription(ClinicSettings settings, SignatureMode mode, bool containsDangerousDrug, byte[]? signatureBytes = null)
+    private byte[] GeneratePrescription(FacilitySettings settings, SignatureMode mode, bool containsDangerousDrug, byte[]? signatureBytes = null)
     {
         var items = new List<PrescriptionSlipItemDto>
         {
@@ -1406,7 +1406,7 @@ public class HardenedDocumentGenerationTests
             signatureBytes);
     }
 
-    private byte[] GenerateLabSlip(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    private byte[] GenerateLabSlip(FacilitySettings settings, SignatureMode mode, byte[]? signatureBytes = null)
     {
         var slipDto = new LabOrderSlipDto(
             OrderId: Guid.NewGuid(),
@@ -1441,7 +1441,7 @@ public class HardenedDocumentGenerationTests
             signatureBytes);
     }
 
-    private byte[] GenerateReferral(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    private byte[] GenerateReferral(FacilitySettings settings, SignatureMode mode, byte[]? signatureBytes = null)
     {
         var referral = new ReferralLetter
         {

@@ -63,7 +63,7 @@ public class ClinicRoleSeederTests
             ClinicPermissions.PatientsRead
         };
 
-        var doctorRole = new ClinicRole
+        var doctorRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -72,7 +72,7 @@ public class ClinicRoleSeederTests
             IsSystem = true,
             Permissions = outdatedDoctorPermissions
         };
-        await context.ClinicRoles.AddAsync(doctorRole);
+        await context.Roles.AddAsync(doctorRole);
         await context.SaveChangesAsync();
 
         // Run multi-clinic startup synchronization
@@ -80,7 +80,7 @@ public class ClinicRoleSeederTests
 
         updatedCount.Should().Be(1);
 
-        var refreshedDoctorRole = await context.ClinicRoles.FirstAsync(r => r.Id == doctorRole.Id);
+        var refreshedDoctorRole = await context.Roles.FirstAsync(r => r.Id == doctorRole.Id);
         refreshedDoctorRole.Permissions.Should().Contain(ClinicPermissions.TriageWrite);
     }
 
@@ -155,7 +155,7 @@ public class ClinicRoleSeederTests
             .Where(p => p != ClinicPermissions.AuditRead && p != ClinicPermissions.AuditExport)
             .ToList();
 
-        var adminRole = new ClinicRole
+        var adminRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -164,7 +164,7 @@ public class ClinicRoleSeederTests
             IsSystem = true,
             Permissions = outdatedPermissions
         };
-        await context.ClinicRoles.AddAsync(adminRole);
+        await context.Roles.AddAsync(adminRole);
         await context.SaveChangesAsync();
 
         // Run multi-clinic startup synchronization
@@ -172,7 +172,7 @@ public class ClinicRoleSeederTests
 
         updatedCount.Should().Be(1);
 
-        var refreshedAdminRole = await context.ClinicRoles.FirstAsync(r => r.Id == adminRole.Id);
+        var refreshedAdminRole = await context.Roles.FirstAsync(r => r.Id == adminRole.Id);
         refreshedAdminRole.Permissions.Should().Contain(ClinicPermissions.AuditRead);
         refreshedAdminRole.Permissions.Should().Contain(ClinicPermissions.AuditExport);
         refreshedAdminRole.Permissions.Should().BeEquivalentTo(ClinicPermissions.All);
@@ -190,7 +190,7 @@ public class ClinicRoleSeederTests
         var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
         // Pre-existing clinic with only Clinic Administrator
-        var adminRole = new ClinicRole
+        var adminRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -199,12 +199,12 @@ public class ClinicRoleSeederTests
             IsSystem = true,
             Permissions = new List<string>(ClinicPermissions.All)
         };
-        await context.ClinicRoles.AddAsync(adminRole);
+        await context.Roles.AddAsync(adminRole);
         await context.SaveChangesAsync();
 
         await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
 
-        var dpoRole = await context.ClinicRoles.FirstOrDefaultAsync(r =>
+        var dpoRole = await context.Roles.FirstOrDefaultAsync(r =>
             r.ClinicId == clinicId && r.Name == ClinicRoleSeeder.DpoRoleName && r.IsSystem);
 
         dpoRole.Should().NotBeNull();
@@ -267,7 +267,7 @@ public class ClinicRoleSeederTests
             ClinicPermissions.ServicesRead
         };
 
-        var doctorRole = new ClinicRole
+        var doctorRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -276,14 +276,14 @@ public class ClinicRoleSeederTests
             IsSystem = true,
             Permissions = legacyDoctorPermissions
         };
-        await context.ClinicRoles.AddAsync(doctorRole);
+        await context.Roles.AddAsync(doctorRole);
         await context.SaveChangesAsync();
 
         var updatedCount = await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
 
         updatedCount.Should().Be(1);
 
-        var refreshedDoctorRole = await context.ClinicRoles.FirstAsync(r => r.Id == doctorRole.Id);
+        var refreshedDoctorRole = await context.Roles.FirstAsync(r => r.Id == doctorRole.Id);
         refreshedDoctorRole.Permissions.Should().Contain(ClinicPermissions.PatientsWrite);
         refreshedDoctorRole.Permissions.Should().Contain(ClinicPermissions.TriageWrite);
     }
@@ -385,7 +385,7 @@ public class ClinicRoleSeederTests
         var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
         var customRoleId = Guid.NewGuid();
-        var customRole = new ClinicRole
+        var customRole = new Role
         {
             Id = customRoleId,
             TenantId = tenantId,
@@ -394,12 +394,12 @@ public class ClinicRoleSeederTests
             IsSystem = false,
             Permissions = new List<string> { ClinicPermissions.ReportsRead }
         };
-        await context.ClinicRoles.AddAsync(customRole);
+        await context.Roles.AddAsync(customRole);
         await context.SaveChangesAsync();
 
         await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
 
-        var refreshedCustomRole = await context.ClinicRoles.FirstAsync(r => r.Id == customRoleId);
+        var refreshedCustomRole = await context.Roles.FirstAsync(r => r.Id == customRoleId);
         refreshedCustomRole.Permissions.Should().Equal(new[] { ClinicPermissions.ReportsRead });
         refreshedCustomRole.IsSystem.Should().BeFalse();
     }
@@ -465,7 +465,7 @@ public class ClinicRoleSeederTests
 
         var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var legacyDoctorRole = new ClinicRole
+        var legacyDoctorRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -475,7 +475,7 @@ public class ClinicRoleSeederTests
             Permissions = new List<string> { ClinicPermissions.ConsultationsRead, ClinicPermissions.ConsultationsWrite }
         };
 
-        var legacyNurseRole = new ClinicRole
+        var legacyNurseRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -485,17 +485,17 @@ public class ClinicRoleSeederTests
             Permissions = new List<string> { ClinicPermissions.TriageRead, ClinicPermissions.TriageWrite }
         };
 
-        await context.ClinicRoles.AddRangeAsync(legacyDoctorRole, legacyNurseRole);
+        await context.Roles.AddRangeAsync(legacyDoctorRole, legacyNurseRole);
         await context.SaveChangesAsync();
 
         var updatedCount = await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
 
         updatedCount.Should().Be(1);
 
-        var refreshedDoctor = await context.ClinicRoles.SingleAsync(r => r.Id == legacyDoctorRole.Id);
+        var refreshedDoctor = await context.Roles.SingleAsync(r => r.Id == legacyDoctorRole.Id);
         refreshedDoctor.Permissions.Should().Contain(ClinicPermissions.StaffRead);
 
-        var refreshedNurse = await context.ClinicRoles.SingleAsync(r => r.Id == legacyNurseRole.Id);
+        var refreshedNurse = await context.Roles.SingleAsync(r => r.Id == legacyNurseRole.Id);
         refreshedNurse.Permissions.Should().Contain(ClinicPermissions.StaffRead);
     }
 }

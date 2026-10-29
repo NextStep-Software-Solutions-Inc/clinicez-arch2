@@ -15,10 +15,11 @@ namespace ClinicEz.Clinic.Infrastructure.Services;
 /// </summary>
 public static class SampleDocumentFixtures
 {
-    public static StaffMember CreateSampleDoctor(ClinicSettings settings, SignatureMode signatureMode) => new()
+    public static StaffMember CreateSampleDoctor(FacilitySettings settings, SignatureMode signatureMode) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = settings.TenantId,
+        ClinicId = settings.ClinicId,
         FirstName = "Allan",
         LastName = "Ramos",
         Title = "Dr.",
@@ -30,22 +31,23 @@ public static class SampleDocumentFixtures
         DefaultSignatureMode = signatureMode
     };
 
-    public static ClinicPatient CreateSamplePatient(ClinicSettings settings) => new()
+    public static Patient CreateSamplePatient(FacilitySettings settings) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = settings.TenantId,
+        ClinicId = settings.ClinicId,
         PatientCode = "PAT-2026-0001",
         ContactNumber = "+63 917 123 4567",
         FirstName = "Maria Clara",
         LastName = "De Los Santos",
         DateOfBirth = new DateOnly(1992, 5, 14),
-        Gender = "Female",
+        Gender = Gender.Female,
         PhilHealthNumber = "12-050192831-2"
     };
 
     public static PrescriptionSlipDto CreateSamplePrescriptionSlip(
-        ClinicSettings settings,
-        ClinicPatient samplePatient,
+        FacilitySettings settings,
+        Patient samplePatient,
         StaffMember sampleDoctor) => new(
         ConsultationId: Guid.NewGuid(),
         PrescriptionNumber: "RX-SAMPLE-0001",
@@ -87,8 +89,8 @@ public static class SampleDocumentFixtures
     );
 
     public static LabOrderSlipDto CreateSampleLabOrderSlip(
-        ClinicSettings settings,
-        ClinicPatient samplePatient,
+        FacilitySettings settings,
+        Patient samplePatient,
         StaffMember sampleDoctor) => new(
         OrderId: Guid.NewGuid(),
         OrderNumber: "ORD-SAMPLE-0001",
@@ -119,8 +121,8 @@ public static class SampleDocumentFixtures
     );
 
     public static ReferralLetter CreateSampleReferralLetter(
-        ClinicSettings settings,
-        ClinicPatient samplePatient,
+        FacilitySettings settings,
+        Patient samplePatient,
         StaffMember sampleDoctor) => new()
     {
         Id = Guid.NewGuid(),
@@ -147,7 +149,7 @@ public static class SampleDocumentFixtures
         CreatedBy = "Dr. Allan Ramos"
     };
 
-    public static DailyEodReportDto CreateSampleDailyEodReport(ClinicSettings settings) => new(
+    public static DailyEodReportDto CreateSampleDailyEodReport(FacilitySettings settings) => new(
         DateTime.UtcNow.Date,
         settings.TenantId,
         settings.ClinicId,
@@ -167,7 +169,7 @@ public static class SampleDocumentFixtures
         4, 6, 22, 1
     );
 
-    public static MorbidityReportDto CreateSampleMorbidityReport(ClinicSettings settings) => new(
+    public static MorbidityReportDto CreateSampleMorbidityReport(FacilitySettings settings) => new(
         DateTime.UtcNow.AddDays(-30),
         DateTime.UtcNow,
         settings.TenantId,
@@ -184,7 +186,7 @@ public static class SampleDocumentFixtures
         }
     );
 
-    public static TaxDiscountAuditReportDto CreateSampleTaxDiscountAuditReport(ClinicSettings settings) => new(
+    public static TaxDiscountAuditReportDto CreateSampleTaxDiscountAuditReport(FacilitySettings settings) => new(
         DateTime.UtcNow.AddDays(-30),
         DateTime.UtcNow,
         settings.TenantId,
@@ -197,7 +199,7 @@ public static class SampleDocumentFixtures
         }
     );
 
-    public static DoctorSharesReportDto CreateSampleDoctorSharesReport(ClinicSettings settings, StaffMember sampleDoctor) => new(
+    public static DoctorSharesReportDto CreateSampleDoctorSharesReport(FacilitySettings settings, StaffMember sampleDoctor) => new(
         DateTime.UtcNow.AddDays(-30),
         DateTime.UtcNow,
         settings.TenantId,
@@ -210,7 +212,7 @@ public static class SampleDocumentFixtures
         }
     );
 
-    public static ClinicAnalyticsDto CreateSampleClinicAnalytics(ClinicSettings settings) => new(
+    public static ClinicAnalyticsDto CreateSampleClinicAnalytics(FacilitySettings settings) => new(
         DateTime.UtcNow.AddDays(-30),
         DateTime.UtcNow,
         settings.TenantId,
@@ -265,8 +267,8 @@ public static class SampleDocumentFixtures
     );
 
     public static MedicalCertificate CreateSampleMedicalCertificate(
-        ClinicSettings settings,
-        ClinicPatient samplePatient,
+        FacilitySettings settings,
+        Patient samplePatient,
         StaffMember sampleDoctor) => new()
     {
         Id = Guid.NewGuid(),

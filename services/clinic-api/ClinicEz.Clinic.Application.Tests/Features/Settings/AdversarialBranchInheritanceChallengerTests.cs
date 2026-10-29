@@ -65,7 +65,7 @@ public class AdversarialBranchInheritanceChallengerTests
     }
 
     [Fact]
-    public async Task StandaloneClinic_ReceivingDirectoryUpdate_MustNotClearExistingClinicSettings()
+    public async Task StandaloneClinic_ReceivingDirectoryUpdate_MustNotClearExistingFacilitySettings()
     {
         using var db = MessagingTestKit.CreateDbContext();
         var clinicId = Guid.NewGuid();
@@ -106,7 +106,7 @@ public class AdversarialBranchInheritanceChallengerTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Directory metadata MUST update
         settings.ClinicName.Should().Be("Renamed Standalone Family Health");
@@ -169,7 +169,7 @@ public class AdversarialBranchInheritanceChallengerTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Stored branch baseline MUST be refreshed
         settings.BranchId.Should().Be(branchId);
@@ -233,7 +233,7 @@ public class AdversarialBranchInheritanceChallengerTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Stored branch baseline updated
         settings.BranchName.Should().Be("Branch HQ Renewed");
@@ -258,7 +258,7 @@ public class AdversarialBranchInheritanceChallengerTests
         clinicContext.TenantId.Returns(TenantId);
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = new Repository<ClinicSettings>(db, sieve);
+        var repo = new Repository<FacilitySettings>(db, sieve);
 
         var existing = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Clinic Under Branch");
         existing.BranchId = Guid.NewGuid();
@@ -290,7 +290,7 @@ public class AdversarialBranchInheritanceChallengerTests
         result.KonsultaEndpoint.Should().Be("/soap/super-branch-endpoint");
 
         // Verify in DB
-        var persisted = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var persisted = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         persisted.IsPhilHealthOverridden.Should().BeFalse();
         persisted.IsPhilHealthConfigured.Should().BeTrue();
         persisted.AccreditationNumber.Should().Be("BRANCH-BASELINE-ACCREDITED");
@@ -305,7 +305,7 @@ public class AdversarialBranchInheritanceChallengerTests
         clinicContext.TenantId.Returns(TenantId);
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = new Repository<ClinicSettings>(db, sieve);
+        var repo = new Repository<FacilitySettings>(db, sieve);
 
         var existing = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Clinic Under Unaccredited Branch");
         existing.BranchId = Guid.NewGuid();
@@ -334,7 +334,7 @@ public class AdversarialBranchInheritanceChallengerTests
         result.PmccNumber.Should().BeNull();
         result.SoftwareCertificateId.Should().BeNull();
 
-        var persisted = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var persisted = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         persisted.IsPhilHealthOverridden.Should().BeFalse();
         persisted.IsPhilHealthConfigured.Should().BeFalse();
         persisted.AccreditationNumber.Should().BeNull();
@@ -349,7 +349,7 @@ public class AdversarialBranchInheritanceChallengerTests
         clinicContext.TenantId.Returns(TenantId);
 
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = new Repository<ClinicSettings>(db, sieve);
+        var repo = new Repository<FacilitySettings>(db, sieve);
 
         var existing = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Standalone Clinic");
         existing.BranchId = null;
@@ -371,7 +371,7 @@ public class AdversarialBranchInheritanceChallengerTests
         result.AccreditationNumber.Should().BeNull();
         result.BranchId.Should().BeNull();
 
-        var persisted = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var persisted = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
         persisted.IsPhilHealthOverridden.Should().BeFalse();
         persisted.IsPhilHealthConfigured.Should().BeFalse();
         persisted.AccreditationNumber.Should().BeNull();
@@ -415,7 +415,7 @@ public class AdversarialBranchInheritanceChallengerTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Branch metadata cleared
         settings.BranchId.Should().BeNull();
@@ -469,7 +469,7 @@ public class AdversarialBranchInheritanceChallengerTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Branch baseline cleared
         settings.BranchId.Should().BeNull();
@@ -514,7 +514,7 @@ public class AdversarialBranchInheritanceChallengerTests
 
         await handler.HandleAsync(evt, context, CancellationToken.None);
 
-        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        var settings = await db.Settings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
 
         // Must NOT have changed
         settings.AccreditationNumber.Should().Be("ORIGINAL-ACC");

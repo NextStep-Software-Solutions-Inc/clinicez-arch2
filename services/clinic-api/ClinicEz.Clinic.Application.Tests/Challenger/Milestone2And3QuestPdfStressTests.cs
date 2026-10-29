@@ -17,7 +17,7 @@ public class Milestone2And3QuestPdfStressTests
     private readonly IDocumentSecurityService _securityService = new DocumentSecurityService();
     private readonly IQrCodeService _qrCodeService = new QrCodeService();
 
-    private static ClinicSettings CreateStandardSettings() => new()
+    private static FacilitySettings CreateStandardSettings() => new()
     {
         TenantId = "tenant-stress-01",
         ClinicId = Guid.NewGuid(),
@@ -148,12 +148,12 @@ public class Milestone2And3QuestPdfStressTests
     }
 
     // =========================================================================
-    // 3. Extreme Boundary: Unconfigured or Sparse ClinicSettings Across All Reports
+    // 3. Extreme Boundary: Unconfigured or Sparse FacilitySettings Across All Reports
     // =========================================================================
     [Fact]
-    public void QuestPdf_Should_Handle_Unconfigured_Sparse_ClinicSettings_Without_Exceptions()
+    public void QuestPdf_Should_Handle_Unconfigured_Sparse_FacilitySettings_Without_Exceptions()
     {
-        var unconfiguredSettings = new ClinicSettings
+        var unconfiguredSettings = new FacilitySettings
         {
             TenantId = "sparse-tenant",
             ClinicId = Guid.NewGuid(),
@@ -211,7 +211,7 @@ public class Milestone2And3QuestPdfStressTests
     [Fact]
     public void QuestPdf_Should_Render_Special_Characters_And_Xml_Entities_Cleanly()
     {
-        var specialSettings = new ClinicSettings
+        var specialSettings = new FacilitySettings
         {
             TenantId = "tenant-special",
             ClinicId = Guid.NewGuid(),
@@ -368,7 +368,7 @@ public class Milestone2And3QuestPdfStressTests
     public void QuestPdf_Should_Generate_Valid_Invoice_And_Soa_Pdfs()
     {
         var settings = CreateStandardSettings();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = settings.TenantId,
@@ -377,7 +377,7 @@ public class Milestone2And3QuestPdfStressTests
             LastName = "Santos",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1955, 3, 15),
-            Gender = "Female",
+            Gender = Gender.Female,
             SeniorCitizenId = "OSCA-987654",
             PwdId = "PWD-123456"
         };

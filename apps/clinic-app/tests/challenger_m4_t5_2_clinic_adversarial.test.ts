@@ -3,7 +3,6 @@ import {
   splitFullName,
   buildPhilHealthProfileData,
   extractPhilHealthProfileData,
-  PHILHEALTH_RELATIONSHIPS,
   type MemberType,
   type PrincipalRelationship,
 } from "../components/patient/memberType";
@@ -111,22 +110,22 @@ describe("Clinic App Adversarial Suite 1: PhilHealth Member Type & Profile Assem
     expect(ddExtracted.principalRelationship).toBe("P");
     expect(ddExtracted.principalDob).toBe("1960-01-01");
 
-    // Legacy nested philhealth_profile format fallback
-    const legacyExtracted = extractPhilHealthProfileData({
-      philhealth_profile: {
+    // 1NF relational patient.philHealthMembership fallback
+    const relationalExtracted = extractPhilHealthProfileData(null, {
+      philHealthMembership: {
         memberType: "DD",
-        memberPin: "01-025000001-0",
-        memberFirstName: "Juana",
-        memberLastName: "Change",
+        principalMemberPin: "01-025000001-0",
+        principalFirstName: "Juana",
+        principalLastName: "Change",
         dependentRelationship: "D",
-        memberBirthDate: "1995-10-10",
+        principalDateOfBirth: "1995-10-10",
       },
     });
-    expect(legacyExtracted.memberType).toBe("DD");
-    expect(legacyExtracted.principalPin).toBe("01-025000001-0");
-    expect(legacyExtracted.principalFullName).toBe("Juana Change");
-    expect(legacyExtracted.principalRelationship).toBe("D");
-    expect(legacyExtracted.principalDob).toBe("1995-10-10");
+    expect(relationalExtracted.memberType).toBe("DD");
+    expect(relationalExtracted.principalPin).toBe("01-025000001-0");
+    expect(relationalExtracted.principalFullName).toBe("Juana Change");
+    expect(relationalExtracted.principalRelationship).toBe("D");
+    expect(relationalExtracted.principalDob).toBe("1995-10-10");
   });
 });
 

@@ -40,7 +40,7 @@ public class ChallengerM1Features6To9Tests
         _clinicContext.TenantId.Returns(_tenantId);
     }
 
-    private (ConsultationEncounter Encounter, StaffMember Doctor, ClinicPatient Patient, TriageVitals Vitals) CreateBaseline(
+    private (ConsultationEncounter Encounter, StaffMember Doctor, Patient Patient, PatientVitals Vitals) CreateBaseline(
         Guid encounterId, Guid doctorId, Guid patientId)
     {
         var doctor = new StaffMember
@@ -56,7 +56,7 @@ public class ChallengerM1Features6To9Tests
             S2LicenseNumber = "S2-998877"
         };
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -82,7 +82,6 @@ public class ChallengerM1Features6To9Tests
             DoctorS2License = "S2-998877",
             PhilHealthAtc = "ATC-KONSULTA-01",
             PhilHealthSignSympCode = "01", // Fever
-            GeneralSurveyId = "1", // Essentially Normal
             Diagnoses = new List<EncounterDiagnosis>
             {
                 new() { Id = Guid.NewGuid(), Icd10Code = "J00", Description = "Acute nasopharyngitis", IsPrimary = true }
@@ -95,8 +94,9 @@ public class ChallengerM1Features6To9Tests
 
         var findings = new NineSystemPhysicalExamFindings();
         encounter.SetPhysicalExamFindings(findings);
+        encounter.PhysicalExams.First().GenSurveyId = "1";
 
-        var vitals = new TriageVitals
+        var vitals = new PatientVitals
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -122,9 +122,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -153,9 +153,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -182,9 +182,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -216,9 +216,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -247,9 +247,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -281,9 +281,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -312,9 +312,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -341,16 +341,16 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
         var patId = Guid.NewGuid();
         var (encounter, doctor, patient, vitals) = CreateBaseline(encId, docId, patId);
 
-        encounter.PhysicalExamFindingsJson = null; // No PE checklist performed
+        encounter.PhysicalExams.Clear(); // No PE checklist performed
 
         await consultRepo.AddAsync(encounter, CancellationToken.None);
         await staffRepo.AddAsync(doctor, CancellationToken.None);
@@ -371,17 +371,17 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
         var patId = Guid.NewGuid();
         var (encounter, doctor, patient, vitals) = CreateBaseline(encId, docId, patId);
 
-        encounter.GeneralSurveyId = "2"; // Abnormal
-        encounter.GeneralSurveyRemarks = null; // Missing mandatory remarks
+        encounter.PhysicalExams.First().GenSurveyId = "2"; // Abnormal
+        encounter.PhysicalExams.First().GeneralSurveyRemarks = null; // Missing mandatory remarks
 
         await consultRepo.AddAsync(encounter, CancellationToken.None);
         await staffRepo.AddAsync(doctor, CancellationToken.None);
@@ -412,9 +412,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -455,9 +455,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -486,9 +486,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -527,9 +527,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var docId = Guid.NewGuid();
@@ -571,9 +571,9 @@ public class ChallengerM1Features6To9Tests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var (encounter, doctor, patient, vitals) = CreateBaseline(encId, Guid.NewGuid(), Guid.NewGuid());
@@ -600,7 +600,7 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
@@ -675,7 +675,7 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var completedItem = new QueueItem
         {
@@ -971,9 +971,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var (encounter, doctor, patient, vitals) = CreateBaseline(encId, Guid.NewGuid(), Guid.NewGuid());
@@ -999,9 +999,9 @@ public class ChallengerM1Features6To9Tests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
 
         var encId = Guid.NewGuid();
         var (encounter, doctor, patient, vitals) = CreateBaseline(encId, Guid.NewGuid(), Guid.NewGuid());

@@ -36,6 +36,8 @@ public sealed class GetConsultationsQueryHandler : IRequestHandler<GetConsultati
         var query = _consultationRepository.Query(c => c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.PhysicalExams)
+                .ThenInclude(p => p.Findings)
             .AsQueryable();
 
         if (request.PatientId.HasValue)
@@ -84,16 +86,16 @@ public sealed class GetConsultationsQueryHandler : IRequestHandler<GetConsultati
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
-            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo,
             encounter.DoctorPhilHealthPan,
             encounter.PhilHealthAtc,
-            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
-            encounter.HciTransNo,
-            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
-            encounter.GeneralSurveyId,
-            encounter.GeneralSurveyRemarks,
-            encounter.PhysicalExamFindingsJson
+            encounter.PhilHealthCaseNo,
+            null,
+            encounter.PhilHealthSoapTransNo,
+            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
+            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
+            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null
         )).ToList();
     }
 }
@@ -118,6 +120,8 @@ public sealed class GetConsultationByIdQueryHandler : IRequestHandler<GetConsult
         var encounter = await _consultationRepository.Query(c => c.Id == request.Id && c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.PhysicalExams)
+                .ThenInclude(p => p.Findings)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (encounter == null)
@@ -152,16 +156,16 @@ public sealed class GetConsultationByIdQueryHandler : IRequestHandler<GetConsult
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
-            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo,
             encounter.DoctorPhilHealthPan,
             encounter.PhilHealthAtc,
-            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
-            encounter.HciTransNo,
-            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
-            encounter.GeneralSurveyId,
-            encounter.GeneralSurveyRemarks,
-            encounter.PhysicalExamFindingsJson,
+            encounter.PhilHealthCaseNo,
+            null,
+            encounter.PhilHealthSoapTransNo,
+            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
+            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
+            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null,
             RxPharmacyStatusDto.From(encounter));
     }
 }

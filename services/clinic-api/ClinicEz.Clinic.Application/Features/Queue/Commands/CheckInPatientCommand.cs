@@ -56,10 +56,10 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IClinicContext _clinicContext;
     private readonly IClinicIdentityProvider _clinicIdentity;
     private readonly IPatientAppointmentPublisher _appointmentPublisher;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
     private readonly IRepository<StaffMember>? _staffRepository;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
-    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -68,10 +68,10 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         IClinicContext clinicContext,
         IClinicIdentityProvider clinicIdentity,
         IPatientAppointmentPublisher appointmentPublisher,
-        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<Room>? roomRepository = null,
         IRepository<StaffMember>? staffRepository = null,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<ClinicSettings>? settingsRepository = null)
+        IRepository<FacilitySettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;

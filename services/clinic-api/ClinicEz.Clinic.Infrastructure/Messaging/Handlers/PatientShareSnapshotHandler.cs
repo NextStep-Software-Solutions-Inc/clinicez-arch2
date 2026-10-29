@@ -119,24 +119,70 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             MergeDemographics(patient, message.Demographics!);
         }
 
-        patient.SyncPatientId = message.PatientId;
-        if (!string.IsNullOrWhiteSpace(message.ClinicEzId))
-        {
-            patient.ClinicEzId = message.ClinicEzId.Trim();
-        }
+        patient.LinkCloudAccount(message.PatientId, message.ClinicEzId);
         patient.ShareGrantId = message.GrantId;
         patient.ShareGrantScopes = message.Scopes;
         patient.ShareGrantExpiresAt = message.ExpiresAtUtc;
         patient.UpdatedAt = now;
 
         var items = message.Items.Where(i => IsGranted(i, message.Scopes)).ToList();
-        MergeList(items, AllergyKind, patient.Allergies, v => patient.Allergies = v);
-        MergeList(items, ConditionKind, patient.ChronicConditions, v => patient.ChronicConditions = v);
+        
+        var existingAllergies = await _dbContext.PatientAllergies
+            .Where(a => a.ClinicId == clinic.ClinicId && a.PatientId == patient.Id)
+            .Select(a => a.Allergen.ToLower())
+            .ToListAsync(ct);
+
+        foreach (var item in items.Where(i => string.Equals(i.Kind, AllergyKind, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(i.Name)))
+        {
+            if (!existingAllergies.Contains(item.Name.Trim().ToLower()))
+            {
+                _dbContext.PatientAllergies.Add(new PatientAllergy
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = clinic.TenantId,
+                    ClinicId = clinic.ClinicId,
+                    PatientId = patient.Id,
+                    Category = AllergyCategory.Other,
+                    Allergen = item.Name.Trim(),
+                    Severity = AllergySeverity.Moderate,
+                    Status = AllergyStatus.Active,
+                    CreatedAt = now,
+                    CreatedBy = "System:PatientShareImport"
+                });
+                existingAllergies.Add(item.Name.Trim().ToLower());
+            }
+        }
+
+        var existingConditions = await _dbContext.PatientMedicalHistories
+            .Where(m => m.ClinicId == clinic.ClinicId && m.PatientId == patient.Id)
+            .Select(m => m.ConditionTitle.ToLower())
+            .ToListAsync(ct);
+
+        foreach (var item in items.Where(i => string.Equals(i.Kind, ConditionKind, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(i.Name)))
+        {
+            if (!existingConditions.Contains(item.Name.Trim().ToLower()))
+            {
+                _dbContext.PatientMedicalHistories.Add(new PatientMedicalHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = clinic.TenantId,
+                    ClinicId = clinic.ClinicId,
+                    PatientId = patient.Id,
+                    Category = MedicalHistoryCategory.MedicalHistory,
+                    VerificationStatus = ConditionVerificationStatus.Confirmed,
+                    ConditionTitle = item.Name.Trim(),
+                    Status = ProblemStatus.Active,
+                    CreatedAt = now,
+                    CreatedBy = "System:PatientShareImport"
+                });
+                existingConditions.Add(item.Name.Trim().ToLower());
+            }
+        }
 
         var kept = items.Where(i => !IsMergedKind(i.Kind)).ToList();
 
         import.Status = ShareImportStatus.Imported;
-        import.ClinicPatientId = patient.Id;
+        import.PatientId = patient.Id;
         import.PatientName = DisplayName(patient);
         import.ClinicEzId = patient.ClinicEzId;
         import.GrantId = message.GrantId;
@@ -163,7 +209,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             import.Id, patient.Id, import.ItemsImported);
     }
 
-    private async Task<ClinicPatient?> FindPatientAsync(Guid clinicId, PatientShareSnapshotPayload message, CancellationToken ct)
+    private async Task<Patient?> FindPatientAsync(Guid clinicId, PatientShareSnapshotPayload message, CancellationToken ct)
     {
         var patients = _dbContext.Patients.IgnoreQueryFilters().Where(p => !p.IsDeleted && p.ClinicId == clinicId);
 
@@ -176,7 +222,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             if (byClinicEzId != null) return byClinicEzId;
         }
 
-        return await patients.FirstOrDefaultAsync(p => p.SyncPatientId == message.PatientId, ct);
+        return await patients.FirstOrDefaultAsync(p => p.CloudPatientId == message.PatientId, ct);
     }
 
     private static bool IsPatientPlane(Party from, PatientShareSnapshotPayload message)
@@ -220,7 +266,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         assign(string.Join(", ", merged));
     }
 
-    private static ClinicPatient NewPatient(string tenantId, Guid clinicId, ShareDemographicsDto demographics, Guid patientPlaneId, DateTime now)
+    private static Patient NewPatient(string tenantId, Guid clinicId, ShareDemographicsDto demographics, Guid patientPlaneId, DateTime now)
     {
         var (first, middle, last, suffix) = ResolveNames(demographics);
 
@@ -231,7 +277,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             customFields["primary_address_line"] = address;
         }
 
-        return new ClinicPatient
+        return new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -252,7 +298,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         };
     }
 
-    private static void MergeDemographics(ClinicPatient patient, ShareDemographicsDto demographics)
+    private static void MergeDemographics(Patient patient, ShareDemographicsDto demographics)
     {
         var hasDiscreteFirst = !string.IsNullOrWhiteSpace(demographics.FirstName);
         var hasDiscreteLast = !string.IsNullOrWhiteSpace(demographics.LastName);
@@ -297,7 +343,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         if (string.IsNullOrWhiteSpace(patient.PhilHealthNumber)) patient.PhilHealthNumber = Clean(demographics.PhilHealthPin);
     }
 
-    private async Task<QueueItem> QueuePatientAsync(ClinicSettings clinic, ClinicPatient patient, ShareImport import, DateTime now, CancellationToken ct)
+    private async Task<QueueItem> QueuePatientAsync(FacilitySettings clinic, Patient patient, ShareImport import, DateTime now, CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(now);
         var lastSequence = await _dbContext.QueueItems
@@ -328,7 +374,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         return queueItem;
     }
 
-    private static string DisplayName(ClinicPatient patient)
+    private static string DisplayName(Patient patient)
     {
         var parts = new[] { patient.FirstName, patient.MiddleName, patient.LastName, patient.Suffix }
             .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -391,11 +437,11 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
     private static DateOnly? ParseDate(string? value) =>
         DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
 
-    private static string NormalizeGender(string? sex) => sex?.Trim().ToLowerInvariant() switch
+    private static Gender NormalizeGender(string? sex) => sex?.Trim().ToLowerInvariant() switch
     {
-        "male" or "m" => "Male",
-        "female" or "f" => "Female",
-        _ => "Other"
+        "male" or "m" => Gender.Male,
+        "female" or "f" => Gender.Female,
+        _ => Gender.Other
     };
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

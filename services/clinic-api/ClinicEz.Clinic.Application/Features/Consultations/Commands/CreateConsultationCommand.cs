@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
-using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -76,7 +75,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<StaffMember>? _staffRepository;
-    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
     private readonly IPhilHealthSequenceGenerator? _sequenceGenerator;
 
     public CreateConsultationCommandHandler(
@@ -85,7 +84,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<StaffMember>? staffRepository = null,
-        IRepository<ClinicSettings>? settingsRepository = null,
+        IRepository<FacilitySettings>? settingsRepository = null,
         IPhilHealthSequenceGenerator? sequenceGenerator = null)
     {
         _consultationRepository = consultationRepository;
@@ -145,12 +144,35 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             encounter.DoctorS2License = doctorS2 ?? encounter.DoctorS2License;
             encounter.DoctorPhilHealthPan = doctorPan ?? encounter.DoctorPhilHealthPan;
             encounter.PhilHealthAtc = request.PhilHealthAtc ?? encounter.PhilHealthAtc;
-            if (request.HciCaseNo != null) { encounter.HciCaseNo = request.HciCaseNo; encounter.PhilHealthCaseNo = request.HciCaseNo; }
-            if (request.HciTransNo != null) encounter.HciTransNo = request.HciTransNo;
-            if (request.SoapTransNo != null) { encounter.SoapTransNo = request.SoapTransNo; encounter.PhilHealthSoapTransNo = request.SoapTransNo; }
-            encounter.GeneralSurveyId = request.GeneralSurveyId ?? encounter.GeneralSurveyId;
-            encounter.GeneralSurveyRemarks = request.GeneralSurveyRemarks ?? encounter.GeneralSurveyRemarks;
-            encounter.PhysicalExamFindingsJson = request.PhysicalExamFindingsJson ?? encounter.PhysicalExamFindingsJson;
+            if (request.HciCaseNo != null) encounter.PhilHealthCaseNo = request.HciCaseNo;
+            if (request.SoapTransNo != null) encounter.PhilHealthSoapTransNo = request.SoapTransNo;
+            if (request.GeneralSurveyId != null || request.GeneralSurveyRemarks != null || !string.IsNullOrWhiteSpace(request.PhysicalExamFindingsJson))
+            {
+                var exam = encounter.PhysicalExams.FirstOrDefault();
+                if (exam == null)
+                {
+                    exam = new PatientPhysicalExam
+                    {
+                        TenantId = encounter.TenantId,
+                        ClinicId = encounter.ClinicId,
+                        PatientId = encounter.PatientId,
+                        ConsultationEncounterId = encounter.Id,
+                        ExamDate = encounter.EncounterDate != default ? encounter.EncounterDate : DateTime.UtcNow
+                    };
+                    encounter.PhysicalExams.Add(exam);
+                }
+                if (request.GeneralSurveyId != null) exam.GenSurveyId = request.GeneralSurveyId;
+                if (request.GeneralSurveyRemarks != null) exam.GeneralSurveyRemarks = request.GeneralSurveyRemarks;
+                if (!string.IsNullOrWhiteSpace(request.PhysicalExamFindingsJson))
+                {
+                    try
+                    {
+                        var pe = System.Text.Json.JsonSerializer.Deserialize<NineSystemPhysicalExamFindings>(request.PhysicalExamFindingsJson);
+                        encounter.SetPhysicalExamFindings(pe);
+                    }
+                    catch { }
+                }
+            }
             encounter.Subjective = request.Subjective ?? string.Empty;
             encounter.Objective = request.Objective ?? string.Empty;
             encounter.Assessment = request.Assessment ?? string.Empty;
@@ -223,12 +245,8 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
                 DoctorS2License = doctorS2,
                 DoctorPhilHealthPan = doctorPan,
                 PhilHealthAtc = request.PhilHealthAtc,
-                HciCaseNo = request.HciCaseNo,
-                HciTransNo = request.HciTransNo,
-                SoapTransNo = request.SoapTransNo,
-                GeneralSurveyId = request.GeneralSurveyId,
-                GeneralSurveyRemarks = request.GeneralSurveyRemarks,
-                PhysicalExamFindingsJson = request.PhysicalExamFindingsJson,
+                PhilHealthCaseNo = request.HciCaseNo,
+                PhilHealthSoapTransNo = request.SoapTransNo,
                 EncounterDate = DateTime.UtcNow,
                 Subjective = request.Subjective ?? string.Empty,
                 Objective = request.Objective ?? string.Empty,
@@ -243,6 +261,30 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = request.DoctorName
             };
+
+            if (request.GeneralSurveyId != null || request.GeneralSurveyRemarks != null || !string.IsNullOrWhiteSpace(request.PhysicalExamFindingsJson))
+            {
+                var exam = new PatientPhysicalExam
+                {
+                    TenantId = encounter.TenantId,
+                    ClinicId = encounter.ClinicId,
+                    PatientId = encounter.PatientId,
+                    ConsultationEncounterId = encounter.Id,
+                    ExamDate = DateTime.UtcNow,
+                    GenSurveyId = request.GeneralSurveyId,
+                    GeneralSurveyRemarks = request.GeneralSurveyRemarks
+                };
+                encounter.PhysicalExams.Add(exam);
+                if (!string.IsNullOrWhiteSpace(request.PhysicalExamFindingsJson))
+                {
+                    try
+                    {
+                        var pe = System.Text.Json.JsonSerializer.Deserialize<NineSystemPhysicalExamFindings>(request.PhysicalExamFindingsJson);
+                        encounter.SetPhysicalExamFindings(pe);
+                    }
+                    catch { }
+                }
+            }
 
             if (request.Diagnoses != null)
             {
@@ -329,10 +371,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
                     year,
                     cancellationToken);
 
-                encounter.HciCaseNo = journey.CaseNumber;
                 encounter.PhilHealthCaseNo = journey.CaseNumber;
-                encounter.HciTransNo = journey.EnlistmentTransactionNumber;
-                encounter.SoapTransNo = journey.SoapTransactionNumber;
                 encounter.PhilHealthSoapTransNo = journey.SoapTransactionNumber;
                 _consultationRepository.Update(encounter);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -370,16 +409,16 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
-            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo,
             encounter.DoctorPhilHealthPan,
             encounter.PhilHealthAtc,
-            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
-            encounter.HciTransNo,
-            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
-            encounter.GeneralSurveyId,
-            encounter.GeneralSurveyRemarks,
-            encounter.PhysicalExamFindingsJson,
+            encounter.PhilHealthCaseNo,
+            null,
+            encounter.PhilHealthSoapTransNo,
+            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
+            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
+            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null,
             RxPharmacyStatusDto.From(encounter));
     }
 }

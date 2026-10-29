@@ -80,7 +80,7 @@ public sealed class ExternalPrescriptionDispensedHandler : IInteropHandler<Exter
 
             var patientIsOwner = await _dbContext.Patients
                 .IgnoreQueryFilters()
-                .AnyAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.Id == encounter.PatientId && p.SyncPatientId == senderPatientId, ct);
+                .AnyAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.Id == encounter.PatientId && p.CloudPatientId == senderPatientId, ct);
             if (!patientIsOwner)
             {
                 Ignore(context, "the prescription was not issued to the sender");

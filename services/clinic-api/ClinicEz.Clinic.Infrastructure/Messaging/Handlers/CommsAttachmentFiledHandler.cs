@@ -8,6 +8,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Handling;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Messaging.Handlers;
@@ -41,11 +42,17 @@ public sealed class CommsAttachmentFiledHandler : IInteropHandler<CommsAttachmen
             "[CommsAttachmentFiledHandler] Ingesting attachment {AttachmentId} ({FileName}, RecordType: {RecordType}) for Patient {PatientId} into Clinic {ClinicId}",
             message.AttachmentId, message.SafeFileName, message.RecordType, message.PatientId, clinic.ClinicId);
 
-        var attachment = new ClinicRecordAttachment
+        var patient = await _db.Patients
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && (p.CloudPatientId == message.PatientId || p.Id == message.PatientId), ct);
+
+        var resolvedPatientId = patient?.Id ?? message.PatientId;
+
+        var attachment = new RecordAttachment
         {
             TenantId = message.TenantId,
             ClinicId = clinic.ClinicId,
-            PatientId = message.PatientId,
+            PatientId = resolvedPatientId,
             ConsultationId = message.ConsultationId,
             RecordType = string.IsNullOrWhiteSpace(message.RecordType) ? "CommunicationAttachment" : message.RecordType,
             Title = message.Title,
@@ -64,7 +71,7 @@ public sealed class CommsAttachmentFiledHandler : IInteropHandler<CommsAttachmen
 
         _db.RecordAttachments.Add(attachment);
 
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             TenantId = message.TenantId,
             ClinicId = clinic.ClinicId,
@@ -74,9 +81,9 @@ public sealed class CommsAttachmentFiledHandler : IInteropHandler<CommsAttachmen
             Action = "comms.attachment.filed",
             ActorName = message.FiledByStaffName,
             ActorRole = "Staff",
-            TargetEntityType = "ClinicRecordAttachment",
+            TargetEntityType = "RecordAttachment",
             TargetEntityId = attachment.Id.ToString(),
-            PatientId = message.PatientId,
+            PatientId = resolvedPatientId,
             Outcome = ClinicAuditOutcomes.Success,
             Description = $"Filed attachment '{message.SafeFileName}' to medical chart from conversation {message.ConversationId}",
             MetadataJson = JsonSerializer.Serialize(new
@@ -90,7 +97,7 @@ public sealed class CommsAttachmentFiledHandler : IInteropHandler<CommsAttachmen
             }, InteropJson.Options)
         };
 
-        _db.ClinicAuditEntries.Add(audit);
+        _db.AuditEntries.Add(audit);
 
         await _db.SaveChangesAsync(ct);
     }

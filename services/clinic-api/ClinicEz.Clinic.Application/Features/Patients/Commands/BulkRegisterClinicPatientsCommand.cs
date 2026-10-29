@@ -54,13 +54,13 @@ public sealed record BulkRegisterClinicPatientsCommand(
 public sealed class BulkRegisterClinicPatientsCommandHandler
     : IRequestHandler<BulkRegisterClinicPatientsCommand, BulkRegisterPatientsResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IPatientCodeGenerator _codeGenerator;
 
     public BulkRegisterClinicPatientsCommandHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IPatientCodeGenerator? codeGenerator = null)
@@ -72,7 +72,7 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork)
     {
         var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
@@ -113,7 +113,7 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
             year,
             ct);
 
-        var createdEntities = new List<ClinicPatient>();
+        var createdEntities = new List<Patient>();
         var resultDtos = new List<ClinicPatientDto>();
 
         for (int i = 0; i < request.Patients.Count; i++)
@@ -146,7 +146,7 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
             if (!string.IsNullOrWhiteSpace(item.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
                 customFields["emergency_contact_relationship"] = item.EmergencyContactRelationship.Trim();
 
-            var patient = new ClinicPatient
+            var patient = new Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,
@@ -157,22 +157,53 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                 MiddleName = item.MiddleName?.Trim(),
                 Suffix = item.Suffix?.Trim(),
                 DateOfBirth = item.DateOfBirth,
-                Gender = string.IsNullOrWhiteSpace(item.Gender) ? "Male" : item.Gender,
-                CivilStatus = item.CivilStatus,
+                Gender = Enum.TryParse<Gender>(item.Gender, true, out var g) ? g : Gender.Male,
+                CivilStatus = Enum.TryParse<CivilStatus>(item.CivilStatus, true, out var cs) ? cs : null,
                 ContactNumber = item.ContactNumber.Trim(),
                 Email = item.Email?.Trim(),
                 PhilHealthNumber = item.PhilHealthNumber?.Trim(),
                 SeniorCitizenId = item.SeniorCitizenId?.Trim(),
                 PwdId = item.PwdId?.Trim(),
-                BloodType = item.BloodType?.Trim(),
-                Allergies = item.Allergies?.Trim(),
-                ChronicConditions = item.ChronicConditions?.Trim(),
-                Alerts = item.Alerts?.Trim(),
+                BloodType = Enum.TryParse<BloodType>(item.BloodType, true, out var bt) ? bt : null,
                 CustomFields = customFields,
-                VerificationStatus = string.IsNullOrWhiteSpace(item.VerificationStatus) ? "PendingVerification" : item.VerificationStatus,
+                VerificationStatus = Enum.TryParse<PatientVerificationStatus>(item.VerificationStatus, true, out var vs) ? vs : PatientVerificationStatus.PendingVerification,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "BulkRegistrarImport"
             };
+
+            if (!string.IsNullOrWhiteSpace(item.Allergies))
+            {
+                (patient.Allergies ??= new List<PatientAllergy>()).Add(new PatientAllergy
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    Allergen = item.Allergies.Trim(),
+                    Category = AllergyCategory.Other,
+                    Severity = AllergySeverity.Moderate,
+                    Status = AllergyStatus.Active,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "BulkRegistrarImport"
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.Alerts))
+            {
+                patient.Alerts.Add(new PatientAlert
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    Title = item.Alerts.Trim(),
+                    Category = PatientAlertCategory.ClinicalSafety,
+                    Severity = PatientAlertSeverity.Warning,
+                    Status = PatientAlertStatus.Active,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "BulkRegistrarImport"
+                });
+            }
 
             await _patientRepo.AddAsync(patient, ct);
             createdEntities.Add(patient);

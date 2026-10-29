@@ -38,7 +38,7 @@ using Xunit;
 
 // Aliases
 using ClinicAppointment = ClinicEz.Clinic.Domain.Entities.Appointment;
-using ClinicPatientEntity = ClinicEz.Clinic.Domain.Entities.ClinicPatient;
+using ClinicPatientEntity = ClinicEz.Clinic.Domain.Entities.Patient;
 using PatientEntity = ClinicEz.Patient.Domain.Entities.Patient;
 using PatientDbContext = ClinicEz.Patient.Infrastructure.Persistence.ApplicationDbContext;
 using ClinicDbContext = ClinicEz.Clinic.Infrastructure.Persistence.ApplicationDbContext;
@@ -712,7 +712,7 @@ public class ChallengerCommsM9SecurityAndTriageTests
         var sp = scope.ServiceProvider;
         var apptRepo = sp.GetRequiredService<IRepository<ClinicAppointment>>();
         var patRepo = sp.GetRequiredService<IRepository<ClinicPatientEntity>>();
-        var auditRepo = sp.GetRequiredService<IRepository<ClinicAuditEntry>>();
+        var auditRepo = sp.GetRequiredService<IRepository<AuditEntry>>();
         var unitOfWork = sp.GetRequiredService<IUnitOfWork>();
         var publisher = sp.GetRequiredService<IInteropPublisher>();
         var context = new FakeClinicContext(clinic.Tenant, clinic.Id, hasSigningAuthority: false);
@@ -871,11 +871,14 @@ public class ChallengerCommsM9SecurityAndTriageTests
             };
 
             // Enlistment for 2025 (Expired relative to encounter in 2026!)
-            patientExpired.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+            patientExpired.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
             {
+                TenantId = clinic.Tenant,
+                ClinicId = clinic.Id,
+                PatientId = patientExpiredId,
                 EffectiveYear = 2025,
-                EnlistedAt = "2025-01-10",
-                ValidUntil = "2025-12-31",
+                EnlistmentDate = new DateOnly(2025, 1, 10),
+                ValidUntil = new DateOnly(2025, 12, 31),
                 Status = YakapEnlistmentStatus.Active
             });
 
@@ -1102,6 +1105,7 @@ public class ChallengerCommsM9SecurityAndTriageTests
         public Guid? BranchId => null;
         public Guid? StaffId => Guid.NewGuid();
         public string? StaffName => "Nurse Jackie";
+        public string? StaffRole => "Nurse";
         public IReadOnlyList<string> Permissions => _hasSigningAuthority ? [ClinicPermissions.ConsultationsSign] : [];
         public bool HasPermission(string permission) => _hasSigningAuthority && permission == ClinicPermissions.ConsultationsSign;
     }

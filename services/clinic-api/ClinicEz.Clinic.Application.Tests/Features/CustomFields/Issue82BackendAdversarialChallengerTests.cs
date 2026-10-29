@@ -29,18 +29,18 @@ public class Issue82BackendAdversarialChallengerTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private async Task<(ClinicEz.Clinic.Infrastructure.Persistence.ApplicationDbContext context, IUnitOfWork uow, IRepository<ClinicCustomFieldDefinition> repo)> CreateContextWithParentsAsync()
+    private async Task<(ClinicEz.Clinic.Infrastructure.Persistence.ApplicationDbContext context, IUnitOfWork uow, IRepository<CustomFieldDefinition> repo)> CreateContextWithParentsAsync()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         // Boolean parent
-        var boolParent = new ClinicCustomFieldDefinition
+        var boolParent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "is_pregnant",
             Label = "Is Pregnant",
             DataType = CustomFieldDataType.Boolean,
@@ -51,12 +51,12 @@ public class Issue82BackendAdversarialChallengerTests
         await repo.AddAsync(boolParent, CancellationToken.None);
 
         // Text parent
-        var textParent = new ClinicCustomFieldDefinition
+        var textParent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "text_parent",
             Label = "Text Parent",
             DataType = CustomFieldDataType.Text,
@@ -67,12 +67,12 @@ public class Issue82BackendAdversarialChallengerTests
         await repo.AddAsync(textParent, CancellationToken.None);
 
         // Number parent
-        var numberParent = new ClinicCustomFieldDefinition
+        var numberParent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "number_parent",
             Label = "Number Parent",
             DataType = CustomFieldDataType.Number,
@@ -83,12 +83,12 @@ public class Issue82BackendAdversarialChallengerTests
         await repo.AddAsync(numberParent, CancellationToken.None);
 
         // Select parent
-        var selectParent = new ClinicCustomFieldDefinition
+        var selectParent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "select_parent",
             Label = "Select Parent",
             DataType = CustomFieldDataType.Select,
@@ -99,12 +99,12 @@ public class Issue82BackendAdversarialChallengerTests
         await repo.AddAsync(selectParent, CancellationToken.None);
 
         // Date parent
-        var dateParent = new ClinicCustomFieldDefinition
+        var dateParent = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "date_parent",
             Label = "Date Parent",
             DataType = CustomFieldDataType.Date,
@@ -131,7 +131,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -148,7 +148,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -165,7 +165,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -191,7 +191,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -208,7 +208,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -219,7 +219,7 @@ public class Issue82BackendAdversarialChallengerTests
 
     [Theory]
     [InlineData("' OR '1'='1")]
-    [InlineData("'; DROP TABLE ClinicCustomFieldDefinitions; --")]
+    [InlineData("'; DROP TABLE CustomFieldDefinitions; --")]
     [InlineData("1; SELECT * FROM users;")]
     [InlineData("UNION SELECT null, null, null--")]
     public async Task ExtremePayloads_SqlInjectionInRuleValue_ShouldThrowValidationException(string sqlInjection)
@@ -229,7 +229,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -246,7 +246,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -264,7 +264,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -280,7 +280,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -297,7 +297,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -321,7 +321,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             invalidJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -342,7 +342,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             nonObjectJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -359,7 +359,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             emptyOrFieldlessObj,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -378,7 +378,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -415,7 +415,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -443,7 +443,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -475,7 +475,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -497,7 +497,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -516,7 +516,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -548,7 +548,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -565,7 +565,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -586,7 +586,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -608,7 +608,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             json,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -634,7 +634,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             rawJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -657,7 +657,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             rawJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -676,7 +676,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var result = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             rawJson,
-            "ClinicPatient",
+            "Patient",
             repo,
             CancellationToken.None);
 
@@ -701,7 +701,7 @@ public class Issue82BackendAdversarialChallengerTests
 
         var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
             "{\"source\":\"custom_field\",\"field\":\"is_pregnant\",\"operator\":\"equals\",\"value\":true}",
-            "ClinicPatient",
+            "Patient",
             repo,
             cts.Token);
 
@@ -719,7 +719,7 @@ public class Issue82BackendAdversarialChallengerTests
             {
                 // Valid true
                 var json = "{\"source\":\"custom_field\",\"field\":\"is_pregnant\",\"operator\":\"EQUALS\",\"value\":\"yes\"}";
-                var res = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "ClinicPatient", repo, CancellationToken.None);
+                var res = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "Patient", repo, CancellationToken.None);
                 using var d = JsonDocument.Parse(res!);
                 d.RootElement.GetProperty("value").GetString().Should().Be("true");
             }
@@ -727,7 +727,7 @@ public class Issue82BackendAdversarialChallengerTests
             {
                 // Valid false
                 var json = "{\"source\":\"custom_field\",\"field\":\"is_pregnant\",\"operator\":\"NOT_EQUALS\",\"value\":\"NO\"}";
-                var res = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "ClinicPatient", repo, CancellationToken.None);
+                var res = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "Patient", repo, CancellationToken.None);
                 using var d = JsonDocument.Parse(res!);
                 d.RootElement.GetProperty("value").GetString().Should().Be("false");
             }
@@ -735,14 +735,14 @@ public class Issue82BackendAdversarialChallengerTests
             {
                 // Non-boolean parent (byte-for-byte)
                 var json = "{\"source\":\"custom_field\",\"field\":\"text_parent\",\"operator\":\"contains\",\"value\":\"ABC\"}";
-                var res = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "ClinicPatient", repo, CancellationToken.None);
+                var res = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "Patient", repo, CancellationToken.None);
                 res.Should().Be(json);
             }
             else
             {
                 // Invalid operator -> throws
                 var json = "{\"source\":\"custom_field\",\"field\":\"is_pregnant\",\"operator\":\"in\",\"value\":[\"true\"]}";
-                var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "ClinicPatient", repo, CancellationToken.None);
+                var act = async () => await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(json, "Patient", repo, CancellationToken.None);
                 await act.Should().ThrowAsync<ValidationException>();
             }
         });
@@ -790,12 +790,12 @@ public class Issue82BackendAdversarialChallengerTests
     public async Task UpdateCommandHandler_WhenRuleHasSqlInjection_ShouldRejectWithValidationException()
     {
         var (context, uow, repo) = await CreateContextWithParentsAsync();
-        var existing = new ClinicCustomFieldDefinition
+        var existing = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "child_update",
             Label = "Child",
             DataType = CustomFieldDataType.Text,
@@ -821,12 +821,12 @@ public class Issue82BackendAdversarialChallengerTests
     public async Task UpdateCommandHandler_WhenStaticRuleProvided_ShouldPreserveRuleExactByteForByte()
     {
         var (context, uow, repo) = await CreateContextWithParentsAsync();
-        var existing = new ClinicCustomFieldDefinition
+        var existing = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "child_static",
             Label = "Child",
             DataType = CustomFieldDataType.Text,

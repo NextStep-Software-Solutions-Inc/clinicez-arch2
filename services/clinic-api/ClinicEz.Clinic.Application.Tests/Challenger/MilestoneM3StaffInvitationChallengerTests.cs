@@ -83,7 +83,7 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var staff = new StaffMember
         {
@@ -118,7 +118,7 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // Staff member belongs to Clinic B
         var staffInClinicB = new StaffMember
@@ -153,7 +153,7 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var expiredToken = "expired-token-11111111111111111111111111111111";
         var staff = new StaffMember
@@ -171,7 +171,7 @@ public class MilestoneM3StaffInvitationChallengerTests
             IsActive = true
         };
         await staffRepo.AddAsync(staff);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = TenantAId,
@@ -216,7 +216,7 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var staff = new StaffMember
         {
@@ -512,7 +512,7 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (db, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        await db.ClinicSettings.AddAsync(new ClinicSettings
+        await db.Settings.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -724,7 +724,7 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (db, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        await db.ClinicSettings.AddAsync(new ClinicSettings
+        await db.Settings.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -786,7 +786,7 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (db, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        await db.ClinicSettings.AddAsync(new ClinicSettings
+        await db.Settings.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -922,11 +922,11 @@ public class MilestoneM3StaffInvitationChallengerTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var licenseToken = CreateLicenseToken(TenantAClinicId, TenantAId);
-        await settingsRepo.AddAsync(new ClinicSettings
+        await settingsRepo.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = TenantAId,

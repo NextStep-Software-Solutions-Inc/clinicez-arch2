@@ -26,7 +26,7 @@ public class LabOrderStatusChangedHandlerTests
     private LabOrderStatusChangedHandler Handler() =>
         new(_db, MessagingTestKit.Recipient(_db), NullLogger<LabOrderStatusChangedHandler>.Instance);
 
-    private ClinicLabOrder SeedOrder(Guid? clinicId = null, Action<ClinicLabOrder>? configure = null)
+    private LabOrder SeedOrder(Guid? clinicId = null, Action<LabOrder>? configure = null)
     {
         MessagingTestKit.SeedClinic(_db, clinicId ?? _clinicId, Tenant);
         var order = Phase3TestKit.NewLabOrder(clinicId ?? _clinicId, Tenant, Guid.NewGuid());
@@ -36,7 +36,7 @@ public class LabOrderStatusChangedHandlerTests
         return order;
     }
 
-    private static LabOrderStatusChangedPayload Payload(ClinicLabOrder order, Party lab, LabOrderStage stage, DateTime? changedAt = null) =>
+    private static LabOrderStatusChangedPayload Payload(LabOrder order, Party lab, LabOrderStage stage, DateTime? changedAt = null) =>
         new()
         {
             RequisitionId = order.Id,
@@ -345,7 +345,7 @@ public class PatientShareSnapshotHandlerTests
 
     private ShareImport SeedImport(bool addToQueue = false, string? complaint = null)
     {
-        if (!_db.ClinicSettings.IgnoreQueryFilters().Any(c => c.ClinicId == _clinicId))
+        if (!_db.Settings.IgnoreQueryFilters().Any(c => c.ClinicId == _clinicId))
         {
             MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         }
@@ -427,15 +427,15 @@ public class PatientShareSnapshotHandlerTests
         saved.ItemsJson.Should().BeNull();
         saved.PatientName.Should().Be("Maria Luisa Santos");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().Include(p => p.Allergies).Include(p => p.MedicalHistories).SingleAsync(p => p.Id == saved.PatientId);
         patient.ClinicId.Should().Be(_clinicId);
-        patient.SyncPatientId.Should().Be(_patientPlaneId);
+        patient.CloudPatientId.Should().Be(_patientPlaneId);
         patient.ClinicEzId.Should().Be("CEZ-1234");
         patient.FirstName.Should().Be("Maria");
         patient.MiddleName.Should().Be("Luisa");
         patient.LastName.Should().Be("Santos");
-        patient.Allergies.Should().Contain("Penicillin");
-        patient.ChronicConditions.Should().BeNullOrEmpty();
+        patient.Allergies.Should().Contain(a => a.Allergen == "Penicillin");
+        patient.MedicalHistories.Should().BeEmpty();
         patient.ShareGrantScopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
     }
 
@@ -476,7 +476,7 @@ public class PatientShareSnapshotHandlerTests
 
         await Deliver(import, Snapshot(SharingScopes.Allergies, withDemographics: false));
 
-        (await Reload(import)).ClinicPatientId.Should().Be(byClinicEzId.Id);
+        (await Reload(import)).PatientId.Should().Be(byClinicEzId.Id);
     }
 
     [Fact]
@@ -491,7 +491,7 @@ public class PatientShareSnapshotHandlerTests
         await Deliver(import, Snapshot(SharingScopes.Allergies, withDemographics: false));
 
         var saved = await Reload(import);
-        saved.ClinicPatientId.Should().Be(bySync.Id);
+        saved.PatientId.Should().Be(bySync.Id);
         (await _db.Patients.IgnoreQueryFilters().SingleAsync()).ClinicEzId.Should().Be("CEZ-1234");
     }
 
@@ -523,7 +523,7 @@ public class PatientShareSnapshotHandlerTests
         saved.QueueNumber.Should().Be("Q-001");
         var queued = await _db.QueueItems.IgnoreQueryFilters().SingleAsync(q => q.Id == saved.QueueItemId);
         queued.ChiefComplaint.Should().Be("Cough");
-        queued.PatientId.Should().Be(saved.ClinicPatientId!.Value);
+        queued.PatientId.Should().Be(saved.PatientId!.Value);
         queued.ClinicId.Should().Be(_clinicId);
     }
 
@@ -647,10 +647,11 @@ public class PatientShareSnapshotHandlerTests
         refreshed.Status.Should().Be(ShareImportStatus.Imported);
         refreshed.IsRefresh.Should().BeTrue();
         refreshed.GrantId.Should().Be(grantId);
-        (await Reload(first)).ClinicPatientId.Should().Be(refreshed.ClinicPatientId);
+        (await Reload(first)).PatientId.Should().Be(refreshed.PatientId);
         var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync();
         patient.ShareGrantId.Should().Be(grantId);
-        patient.Allergies.Should().Be("Penicillin");
+        var allergies = await _db.PatientAllergies.IgnoreQueryFilters().Where(a => a.PatientId == patient.Id).Select(a => a.Allergen).ToListAsync();
+        allergies.Should().Contain("Penicillin");
     }
 
     [Fact]
@@ -680,7 +681,7 @@ public class PatientShareSnapshotHandlerTests
         saved.Status.Should().Be(ShareImportStatus.Imported);
         saved.PatientName.Should().Be("Ely An Dela Maureal Jr.");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Ely An");
         patient.MiddleName.Should().Be("Dela");
         patient.LastName.Should().Be("Maureal");
@@ -716,7 +717,7 @@ public class PatientShareSnapshotHandlerTests
         saved.Status.Should().Be(ShareImportStatus.Imported);
         saved.PatientName.Should().Be("Ely An Maureal");
 
-        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.PatientId);
         patient.FirstName.Should().Be("Ely An");
         patient.LastName.Should().Be("Maureal");
     }
@@ -731,7 +732,7 @@ public class PatientShareSnapshotHandlerTests
         existingPatient.MiddleName = null;
         existingPatient.Suffix = null;
         existingPatient.DateOfBirth = new DateOnly(2000, 1, 1);
-        existingPatient.Gender = "Other";
+        existingPatient.Gender = Gender.Other;
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         _db.Patients.Add(existingPatient);
         await _db.SaveChangesAsync();
@@ -759,7 +760,7 @@ public class PatientShareSnapshotHandlerTests
 
         var saved = await Reload(import);
         saved.Status.Should().Be(ShareImportStatus.Imported);
-        saved.ClinicPatientId.Should().Be(existingPatient.Id);
+        saved.PatientId.Should().Be(existingPatient.Id);
         saved.PatientName.Should().Be("Ely An Dela Maureal Jr.");
 
         var healed = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == existingPatient.Id);
@@ -768,7 +769,7 @@ public class PatientShareSnapshotHandlerTests
         healed.LastName.Should().Be("Maureal");
         healed.Suffix.Should().Be("Jr.");
         healed.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
-        healed.Gender.Should().Be("Male");
+        healed.Gender.Should().Be(Gender.Male);
         healed.ContactNumber.Should().Be("0917-999-8888");
     }
 }

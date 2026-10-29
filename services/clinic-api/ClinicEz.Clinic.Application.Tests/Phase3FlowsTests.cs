@@ -41,7 +41,7 @@ public class LabResultReviewTests
         _clinicContext.TenantId.Returns(Tenant);
     }
 
-    private (ApplicationDbContext Db, IUnitOfWork Uow, Sieve.Services.ISieveProcessor Sieve, StaffMember Doctor, ClinicLabOrder Order, ClinicLabResult Result)
+    private (ApplicationDbContext Db, IUnitOfWork Uow, Sieve.Services.ISieveProcessor Sieve, StaffMember Doctor, LabOrder Order, LabResult Result)
         Seed(ResultSource source = ResultSource.ExternalLab, VerificationState state = VerificationState.Unverified, bool signedInAsDoctor = true)
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -51,7 +51,7 @@ public class LabResultReviewTests
         var order = Phase3TestKit.NewLabOrder(_clinicId, Tenant, patient.Id);
         order.OrderedByDoctorId = doctor.Id;
         order.OrderedByDoctorName = "Dr. Ana Cruz";
-        var result = new ClinicLabResult
+        var result = new LabResult
         {
             Id = Guid.NewGuid(),
             TenantId = Tenant,
@@ -73,8 +73,8 @@ public class LabResultReviewTests
     }
 
     private ReviewLabResultCommandHandler Handler(ApplicationDbContext db, Sieve.Services.ISieveProcessor sieve, IUnitOfWork uow) =>
-        new(TestDbHelper.CreateRepository<ClinicLabResult>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve),
+        new(TestDbHelper.CreateRepository<LabResult>(db, sieve),
+            TestDbHelper.CreateRepository<LabOrder>(db, sieve),
             TestDbHelper.CreateRepository<StaffMember>(db, sieve),
             uow,
             _clinicContext,
@@ -159,7 +159,7 @@ public class LabResultReviewTests
     public async Task An_Unknown_Result_Is_Not_Found_And_A_Foreign_Clinics_Result_Is_Invisible()
     {
         var (db, uow, sieve, _, _, _) = Seed();
-        var foreign = new ClinicLabResult
+        var foreign = new LabResult
         {
             Id = Guid.NewGuid(), TenantId = Tenant, ClinicId = Guid.NewGuid(), LabOrderId = Guid.NewGuid(),
             Source = ResultSource.ExternalLab, Verification = VerificationState.Unverified
@@ -197,18 +197,18 @@ public class LabResultReviewTests
         var (db, uow, sieve, doctor, order, mine) = Seed();
         var otherDoctorOrder = Phase3TestKit.NewLabOrder(_clinicId, Tenant, order.PatientId, "LAB-OTHER");
         otherDoctorOrder.OrderedByDoctorId = Guid.NewGuid();
-        var othersResult = new ClinicLabResult
+        var othersResult = new LabResult
         {
             Id = Guid.NewGuid(), TenantId = Tenant, ClinicId = _clinicId, LabOrderId = otherDoctorOrder.Id,
             Source = ResultSource.PatientUploaded, Verification = VerificationState.Unverified
         };
-        var verified = new ClinicLabResult
+        var verified = new LabResult
         {
             Id = Guid.NewGuid(), TenantId = Tenant, ClinicId = _clinicId, LabOrderId = order.Id,
             Source = ResultSource.ClinicEzLab, Verification = VerificationState.Verified
         };
         var foreignOrder = Phase3TestKit.NewLabOrder(Guid.NewGuid(), Tenant, Guid.NewGuid(), order.OrderNumber);
-        var foreign = new ClinicLabResult
+        var foreign = new LabResult
         {
             Id = Guid.NewGuid(), TenantId = Tenant, ClinicId = foreignOrder.ClinicId, LabOrderId = foreignOrder.Id,
             Source = ResultSource.ExternalLab, Verification = VerificationState.Unverified
@@ -217,7 +217,7 @@ public class LabResultReviewTests
         db.LabResults.AddRange(othersResult, verified, foreign);
         db.SaveChanges();
         var handler = new GetLabResultReviewQueueQueryHandler(
-            TestDbHelper.CreateRepository<ClinicLabResult>(db, sieve), TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve), _clinicContext);
+            TestDbHelper.CreateRepository<LabResult>(db, sieve), TestDbHelper.CreateRepository<LabOrder>(db, sieve), _clinicContext);
 
         var myUnverified = await handler.Handle(new GetLabResultReviewQueueQuery(), CancellationToken.None);
         var allUnverified = await handler.Handle(new GetLabResultReviewQueueQuery(MineOnly: false), CancellationToken.None);
@@ -244,7 +244,7 @@ public class InvoiceBillingRequestTests
         _clinicContext.TenantId.Returns(Tenant);
     }
 
-    private (CreateInvoiceCommandHandler Handler, ApplicationDbContext Db, ClinicPatient Patient) Build(bool provisioned = true)
+    private (CreateInvoiceCommandHandler Handler, ApplicationDbContext Db, Patient Patient) Build(bool provisioned = true)
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var patient = Phase3TestKit.NewPatient(_clinicId, Tenant, Guid.NewGuid());
@@ -253,7 +253,7 @@ public class InvoiceBillingRequestTests
         var identity = provisioned ? Phase3TestKit.Identity(_clinicId, Tenant) : Substitute.For<IClinicIdentityProvider>();
         var handler = new CreateInvoiceCommandHandler(
             TestDbHelper.CreateRepository<Invoice>(db, sieve),
-            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+            TestDbHelper.CreateRepository<Patient>(db, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve),
             uow,
             _clinicContext,
@@ -284,7 +284,7 @@ public class InvoiceBillingRequestTests
         var payload = envelope.GetPayload<BillingInvoiceRequestedPayload>();
         payload.InvoiceRequestId.Should().Be(invoice.Id);
         payload.VisitKey.Should().Be(consultationId.ToString());
-        payload.PatientId.Should().Be(patient.SyncPatientId);
+        payload.PatientId.Should().Be(patient.CloudPatientId);
         payload.TenantId.Should().Be(Tenant);
         payload.FacilityType.Should().Be(FacilityType.Clinic);
         payload.Lines.Sum(l => l.Quantity * l.UnitPrice).Should().Be(1000m);
@@ -487,7 +487,7 @@ public class ExternalPrescriptionDispensedHandlerTests
     private ExternalPrescriptionDispensedHandler Handler() =>
         new(_db, MessagingTestKit.Recipient(_db), NullLogger<ExternalPrescriptionDispensedHandler>.Instance);
 
-    private (ConsultationEncounter Encounter, ClinicPatient Patient) Seed()
+    private (ConsultationEncounter Encounter, Patient Patient) Seed()
     {
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         var patient = Phase3TestKit.NewPatient(_clinicId, Tenant, Guid.NewGuid());
@@ -533,7 +533,7 @@ public class ExternalPrescriptionDispensedHandlerTests
     {
         var (encounter, patient) = Seed();
 
-        await Deliver(encounter.Id, Party.ForPatient(patient.SyncPatientId!.Value.ToString()));
+        await Deliver(encounter.Id, Party.ForPatient(patient.CloudPatientId!.Value.ToString()));
 
         var saved = await Reload(encounter);
         saved.RxDispenseStatus.Should().Be(PrescriptionDispenseStatus.DispensedExternally);
@@ -551,7 +551,7 @@ public class ExternalPrescriptionDispensedHandlerTests
 
         await Deliver(encounter.Id, Party.ForPatient(Guid.NewGuid().ToString()));
         await Deliver(encounter.Id, MessagingTestKit.PharmacyParty());
-        await Deliver(encounter.Id, Party.ForPatient(patient.SyncPatientId!.Value.ToString()), correlation: Guid.NewGuid());
+        await Deliver(encounter.Id, Party.ForPatient(patient.CloudPatientId!.Value.ToString()), correlation: Guid.NewGuid());
 
         (await Reload(encounter)).RxDispenseStatus.Should().Be(PrescriptionDispenseStatus.Issued);
     }
@@ -564,7 +564,7 @@ public class ExternalPrescriptionDispensedHandlerTests
         encounter.RxDispensedPharmacyName = "Partner Pharmacy";
         await _db.SaveChangesAsync();
 
-        await Deliver(encounter.Id, Party.ForPatient(patient.SyncPatientId!.Value.ToString()));
+        await Deliver(encounter.Id, Party.ForPatient(patient.CloudPatientId!.Value.ToString()));
 
         var saved = await Reload(encounter);
         saved.RxDispenseStatus.Should().Be(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
@@ -583,7 +583,7 @@ public class ExternalPrescriptionDispensedHandlerTests
         _db.Consultations.Add(foreign);
         await _db.SaveChangesAsync();
 
-        await Deliver(foreign.Id, Party.ForPatient(patient.SyncPatientId!.Value.ToString()));
+        await Deliver(foreign.Id, Party.ForPatient(patient.CloudPatientId!.Value.ToString()));
 
         (await Reload(foreign)).RxDispenseStatus.Should().Be(PrescriptionDispenseStatus.Issued);
         encounter.Should().NotBeNull();

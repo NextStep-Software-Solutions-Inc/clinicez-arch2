@@ -47,11 +47,11 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -182,11 +182,11 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -239,11 +239,11 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -321,11 +321,11 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -411,7 +411,7 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
         var patientId = Guid.NewGuid();
 
         // Tooth 16: Multi-condition (Filled on O + Decay on MD) -> 2 rows
@@ -509,15 +509,15 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -648,7 +648,7 @@ public class ChallengerM1MultiConditionStressTests
 
         // Clinical Procedures:
         // Proc 1: Category == "Dental" with tooth 16
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -663,7 +663,7 @@ public class ChallengerM1MultiConditionStressTests
         }, CancellationToken.None);
 
         // Proc 2: Category == "General" with tooth 21
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -678,7 +678,7 @@ public class ChallengerM1MultiConditionStressTests
         }, CancellationToken.None);
 
         // Proc 3: Category == "General" without tooth number
-        await procRepo.AddAsync(new ClinicalProcedure
+        await procRepo.AddAsync(new Procedure
         {
             TenantId = _tenantId,
             ClinicId = _clinicId,
@@ -750,11 +750,11 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -814,14 +814,14 @@ public class ChallengerM1MultiConditionStressTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = _tenantId,

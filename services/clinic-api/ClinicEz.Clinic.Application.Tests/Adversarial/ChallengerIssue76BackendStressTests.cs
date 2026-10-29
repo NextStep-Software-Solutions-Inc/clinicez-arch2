@@ -43,16 +43,16 @@ public class ChallengerIssue76BackendStressTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private ClinicCustomFieldDefinition CreateDefinition(
+    private CustomFieldDefinition CreateDefinition(
         string key,
         string label,
         CustomFieldDataType dataType = CustomFieldDataType.Number,
         bool isActive = true,
-        string entityType = "ClinicPatient",
+        string entityType = "Patient",
         Guid? clinicId = null,
         string? tenantId = null)
     {
-        return new ClinicCustomFieldDefinition
+        return new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId ?? _tenantId,
@@ -610,8 +610,8 @@ public class ChallengerIssue76BackendStressTests
     public async Task RegisterPatient_InvalidNumberField_RejectsBeforeDatabaseWrite()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateDefinition("tuition_fee", "Tuition Fee");
         await defRepo.AddAsync(numDef);
@@ -642,13 +642,13 @@ public class ChallengerIssue76BackendStressTests
     public async Task UpdatePatient_InvalidNumberField_RollsBackDatabaseAndThrows()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateDefinition("tuition_fee", "Tuition Fee");
         await defRepo.AddAsync(numDef);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -657,7 +657,7 @@ public class ChallengerIssue76BackendStressTests
             FirstName = "Maria",
             LastName = "Clara",
             DateOfBirth = new DateOnly(1996, 7, 10),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "0917-888-9999",
             CustomFields = new Dictionary<string, object?> { ["tuition_fee"] = 15000 }
         };
@@ -699,8 +699,8 @@ public class ChallengerIssue76BackendStressTests
     public async Task MultiTenantAndClinic_DefinitionIsolation()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var otherClinicId = Guid.NewGuid();
         // Number definition belonging to ANOTHER clinic

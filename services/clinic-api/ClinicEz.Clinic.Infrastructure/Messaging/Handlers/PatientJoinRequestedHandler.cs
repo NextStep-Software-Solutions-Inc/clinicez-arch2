@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
-using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -93,14 +92,14 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
             return;
         }
 
-        // Check idempotency: check by SyncPatientId matching correlation ID or JoinRequestId
+        // Check idempotency: check by CloudPatientId matching correlation ID or JoinRequestId
         var correlationIdStr = context.CorrelationId.ToString();
         var existingPatient = await _dbContext.Patients
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(p =>
                 !p.IsDeleted && p.ClinicId == clinic.ClinicId &&
-                (p.SyncPatientId == context.CorrelationId ||
-                 (message.JoinRequestId.HasValue && (p.Id == message.JoinRequestId.Value || p.SyncPatientId == message.JoinRequestId.Value))),
+                (p.CloudPatientId == context.CorrelationId ||
+                 (message.JoinRequestId.HasValue && (p.Id == message.JoinRequestId.Value || p.CloudPatientId == message.JoinRequestId.Value))),
                 ct);
 
         if (existingPatient != null)
@@ -131,56 +130,64 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
             customFields["primary_address_line"] = message.Address.Trim();
         }
 
-        // Create ClinicPatient in quarantine
-        var clinicPatient = new ClinicPatient
+        // Create Patient in quarantine
+        var clinicPatient = new Patient
         {
             Id = patientId,
             TenantId = clinic.TenantId,
             ClinicId = clinic.ClinicId,
-            SyncPatientId = message.JoinRequestId ?? context.CorrelationId,
+            CloudPatientId = message.JoinRequestId ?? context.CorrelationId,
             PatientCode = patientCode,
             FirstName = message.FirstName.Trim(),
             LastName = message.LastName.Trim(),
             MiddleName = message.MiddleName?.Trim(),
             Suffix = message.Suffix?.Trim(),
             DateOfBirth = message.DateOfBirth,
-            Gender = !string.IsNullOrWhiteSpace(message.Sex) ? message.Sex.Trim() : "Other",
-            CivilStatus = message.CivilStatus?.Trim(),
+            Gender = string.IsNullOrWhiteSpace(message.Sex)
+                ? Gender.Other
+                : (string.Equals(message.Sex.Trim(), "Female", StringComparison.OrdinalIgnoreCase) || string.Equals(message.Sex.Trim(), "F", StringComparison.OrdinalIgnoreCase)
+                    ? Gender.Female
+                    : (string.Equals(message.Sex.Trim(), "Male", StringComparison.OrdinalIgnoreCase) || string.Equals(message.Sex.Trim(), "M", StringComparison.OrdinalIgnoreCase)
+                        ? Gender.Male
+                        : (Enum.TryParse<Gender>(message.Sex.Trim(), true, out var parsedGender) ? parsedGender : Gender.Other))),
+            CivilStatus = Enum.TryParse<CivilStatus>(message.CivilStatus, true, out var cs) ? cs : null,
             ContactNumber = !string.IsNullOrWhiteSpace(message.ContactNumber) ? message.ContactNumber.Trim() : "N/A",
             Email = message.Email?.Trim(),
             PhilHealthNumber = message.PhilHealthPin?.Trim(),
             SeniorCitizenId = message.SeniorCitizenId?.Trim(),
             PwdId = message.PwdId?.Trim(),
-            VerificationStatus = "PendingVerification",
+            VerificationStatus = PatientVerificationStatus.PendingVerification,
             CustomFields = customFields,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "System:PatientJoin"
         };
 
-        // Map PhilHealth Member Type credentials into CustomFields["philhealth_profile"]
+        // Map PhilHealth Member Type credentials into relational PatientPhilHealthMembership
         if (!string.IsNullOrWhiteSpace(message.PhilHealthPin) || string.Equals(message.MemberType, "DD", StringComparison.OrdinalIgnoreCase))
         {
             var isDependent = string.Equals(message.MemberType, "DD", StringComparison.OrdinalIgnoreCase);
             var (principalFirstName, principalLastName) = SplitFullName(message.PrincipalFullName);
 
-            var profile = new PhilHealthPatientProfileDto
+            var membership = new PatientPhilHealthMembership
             {
-                Pin = message.PhilHealthPin?.Trim(),
+                Id = Guid.NewGuid(),
+                TenantId = clinic.TenantId,
+                ClinicId = clinic.ClinicId,
+                PatientId = clinicPatient.Id,
                 MemberPin = isDependent ? message.PrincipalMemberPin?.Trim() : message.PhilHealthPin?.Trim(),
-                MemberType = isDependent ? "DD" : "MM",
-                MemberLastName = isDependent ? principalLastName : clinicPatient.LastName,
-                MemberFirstName = isDependent ? principalFirstName : clinicPatient.FirstName,
-                MemberMiddleName = isDependent ? null : clinicPatient.MiddleName,
-                MemberSuffix = isDependent ? null : clinicPatient.Suffix,
-                MemberBirthDate = isDependent
-                    ? message.PrincipalDateOfBirth?.ToString("yyyy-MM-dd")
-                    : clinicPatient.DateOfBirth.ToString("yyyy-MM-dd"),
-                DependentRelationship = isDependent ? NormalizeRelationship(message.PrincipalRelationship) : null,
-                Atc = "A",
-                IsWalkedIn = "N"
+                MemberType = isDependent ? PhilHealthMemberType.DD : PhilHealthMemberType.MM,
+                PrincipalMemberPin = isDependent ? message.PrincipalMemberPin?.Trim() : null,
+                PrincipalLastName = isDependent ? principalLastName : null,
+                PrincipalFirstName = isDependent ? principalFirstName : null,
+                PrincipalDateOfBirth = isDependent ? message.PrincipalDateOfBirth : null,
+                DependentRelationship = isDependent && Enum.TryParse<PhilHealthDependentRelationship>(NormalizeRelationship(message.PrincipalRelationship), true, out var rel) ? rel : null,
+                DefaultWalkInAtc = "A",
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "System:PatientJoin"
             };
 
-            clinicPatient.CustomFields["philhealth_profile"] = profile;
+            clinicPatient.PhilHealthMembership = membership;
+            await _dbContext.PatientPhilHealthMemberships.AddAsync(membership, ct);
         }
 
         // Persist structured allergies in PatientAllergy
@@ -216,12 +223,7 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
                 };
 
                 await _dbContext.PatientAllergies.AddAsync(allergy, ct);
-                allergyNames.Add(item.Allergen.Trim());
-            }
-
-            if (allergyNames.Count > 0)
-            {
-                clinicPatient.Allergies = string.Join(", ", allergyNames);
+                (clinicPatient.Allergies ??= new List<PatientAllergy>()).Add(allergy);
             }
         }
 
@@ -274,7 +276,7 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
                     : (!string.IsNullOrWhiteSpace(att.ContentType) ? att.ContentType.Trim() : "application/pdf");
                 var recordType = MapRecordType(att.Category ?? att.RecordType);
 
-                var attachment = new ClinicRecordAttachment
+                var attachment = new RecordAttachment
                 {
                     Id = att.Id.HasValue && att.Id.Value != Guid.Empty ? att.Id.Value : Guid.NewGuid(),
                     TenantId = clinic.TenantId,

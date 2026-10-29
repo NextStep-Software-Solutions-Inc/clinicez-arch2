@@ -31,8 +31,8 @@ public record CreateClinicLabOrderCommand(
 
 public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLabOrderCommand, ClinicLabOrderDto>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
@@ -41,11 +41,11 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     private readonly IUploadGrantService _uploadGrants;
     private readonly IClaimSlipService _claims;
     private readonly IPatientDocumentPublisher _documents;
-    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
+    private readonly IRepository<ServiceItem>? _serviceRepo;
 
     public CreateClinicLabOrderCommandHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<Patient> patientRepo,
         IRepository<StaffMember> staffRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
@@ -54,7 +54,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         IUploadGrantService uploadGrants,
         IClaimSlipService claims,
         IPatientDocumentPublisher documents,
-        IRepository<ClinicServiceItem>? serviceRepo = null)
+        IRepository<ServiceItem>? serviceRepo = null)
     {
         _orderRepo = orderRepo;
         _patientRepo = patientRepo;
@@ -136,12 +136,12 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         var dateTag = today.ToString("yyyyMMdd");
         var orderNumber = $"LAB-{dateTag}-{(todayCount + 1):D3}";
 
-        var items = new List<ClinicLabOrderItem>();
+        var items = new List<LabOrderItem>();
         if (request.Items != null && request.Items.Any())
         {
             foreach (var item in request.Items)
             {
-                items.Add(new ClinicLabOrderItem
+                items.Add(new LabOrderItem
                 {
                     TestName = item.TestName.Trim(),
                     Category = string.IsNullOrWhiteSpace(item.Category) ? "Diagnostic" : item.Category.Trim(),
@@ -153,7 +153,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         else
         {
             // Default CBC request if none specified
-            items.Add(new ClinicLabOrderItem
+            items.Add(new LabOrderItem
             {
                 TestName = "Complete Blood Count (CBC) with Platelet",
                 Category = "Hematology",
@@ -162,7 +162,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             });
         }
 
-        var order = new ClinicLabOrder
+        var order = new LabOrder
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
@@ -230,8 +230,8 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     /// </summary>
     private async Task<LabRequisitionIssuedEvent?> BuildRequisitionEventAsync(
         CreateClinicLabOrderCommand request,
-        ClinicLabOrder order,
-        List<ClinicLabOrderItem> items,
+        LabOrder order,
+        List<LabOrderItem> items,
         Guid? targetFacilityId,
         string? targetTenantId,
         MintedUploadGrant upload,
@@ -307,13 +307,13 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             },
             Patient = new RequisitionPatientDto
             {
-                PatientId = patient.SyncPatientId ?? Guid.Empty,
+                PatientId = patient.CloudPatientId ?? Guid.Empty,
                 FullName = request.PatientName.Trim(),
                 PhilHealthPin = patient.PhilHealthNumber,
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,
                 DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
                 Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
-                Gender = patient.Gender,
+                Gender = patient.Gender.ToString(),
                 ContactNumber = patient.ContactNumber
             },
             Icd10Code = request.ClinicalDiagnosis,
@@ -337,8 +337,8 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     /// <param name="results">The order's results, when loaded; null renders as none.</param>
     /// <param name="publicUploadUrl">The one-time upload link, only known at the moment a grant is minted.</param>
     public static ClinicLabOrderDto MapToDto(
-        ClinicLabOrder order,
-        IEnumerable<ClinicLabResult>? results = null,
+        LabOrder order,
+        IEnumerable<LabResult>? results = null,
         string? publicUploadUrl = null) => new(
         order.Id,
         order.TenantId ?? string.Empty,
@@ -358,20 +358,21 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             i.TestName,
             i.Category,
             i.Instructions,
-            i.Status
+            i.Status,
+            i.LoincCode,
+            i.IsPhysicianRecommended,
+            i.PatientComplianceCode,
+            i.DiagnosticFee
         )).ToList(),
         publicUploadUrl,
         order.ExternalLabName,
         order.ExternalReportUrl,
-        order.ExternalReportType,
         order.UploadedBy,
-        order.ObservationsJson,
         order.PathologistImpression,
         order.VerifiedByPathologist,
         order.PathologistPrcLicense,
         order.ReportReleasedAt,
         order.HasCriticalPanicAlert,
-        order.CriticalFindingsJson,
         order.PanicAlertTriggeredAt,
         order.PanicAcknowledgedAt,
         order.PanicAcknowledgedBy,
@@ -382,8 +383,23 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         order.PaymentRequired,
         order.LaboratoryName,
         order.ClaimToken,
-        (results ?? Enumerable.Empty<ClinicLabResult>())
+        (results ?? Enumerable.Empty<LabResult>())
             .Select(r => new ClinicLabResultSummaryDto(r.Id, r.Source, r.Verification))
-            .ToList()
+            .ToList(),
+        order.Observations?.Select(o => new LabObservationDto(
+            o.Id,
+            o.LabOrderId,
+            o.LabOrderItemId,
+            o.LoincCode,
+            o.AnalyteCode,
+            o.AnalyteName,
+            o.ValueText,
+            o.NumericValue,
+            o.Unit,
+            o.ReferenceRangeLow,
+            o.ReferenceRangeHigh,
+            o.AbnormalFlag,
+            o.IsCriticalPanic
+        )).ToList()
     );
 }

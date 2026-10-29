@@ -17,9 +17,12 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
 
     public Task<Patient?> GetByClerkUserIdWithDetailsAsync(string clerkUserId, CancellationToken cancellationToken = default)
         => Context.Patients
+            .Include(p => p.Addresses)
             .Include(p => p.GovernmentIds)
             .Include(p => p.Allergies)
             .Include(p => p.ClinicMemberships)
+            .Include(p => p.ManagedDependents)
+                .ThenInclude(d => d.Addresses)
             .Include(p => p.ManagedDependents)
                 .ThenInclude(d => d.GovernmentIds)
             .Include(p => p.ManagedDependents)

@@ -62,11 +62,11 @@ public sealed class EodReconciliationBackgroundService : BackgroundService
 
     public async Task RunReconciliationCycleAsync(CancellationToken ct = default)
     {
-        List<ClinicSettings> clinics;
+        List<FacilitySettings> clinics;
         using (var initialScope = _services.CreateScope())
         {
             var db = initialScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            clinics = await db.ClinicSettings
+            clinics = await db.Settings
                 .IgnoreQueryFilters()
                 .Where(c => !c.IsDeleted && c.AutoEodEnabled && !string.IsNullOrEmpty(c.EodReconciliationTime))
                 .AsNoTracking()
@@ -94,7 +94,7 @@ public sealed class EodReconciliationBackgroundService : BackgroundService
     }
 
     public static bool ShouldReconcile(
-        ClinicSettings clinic,
+        FacilitySettings clinic,
         string? timeZoneId,
         DateTime utcNow,
         out DateOnly localToday)
@@ -148,7 +148,7 @@ public sealed class EodReconciliationBackgroundService : BackgroundService
 
     private async Task CheckAndReconcileClinicAsync(
         IServiceProvider scopedProvider,
-        ClinicSettings clinic,
+        FacilitySettings clinic,
         IWorkspaceProfileProvider? workspaceProfiles,
         DateTime utcNow,
         CancellationToken ct)

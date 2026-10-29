@@ -1,6 +1,6 @@
 import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
-import { SyncStatus, type SearchResponseDto, type ApiError } from '@shared/safe';
+import { SyncStatus, type SearchResponseDto, type ApiError, type EhrOptionDescriptor } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus =
@@ -336,12 +336,120 @@ export interface PrescriptionItem {
   durationDays?: number;
   refills: number;
   isDangerousDrug: boolean;
-  remarks?: string;
   philHealthDrugCode?: string;
+  remarks?: string;
+}
+
+export type VisitWorkflowMode = 'Regular' | 'YakapAvailment';
+
+export interface PatientAddressDto {
+  id?: string;
+  addressType: 'Permanent' | 'Current' | 'Billing' | string;
+  isSameAsPermanent: boolean;
+  regionPsgc?: string | null;
+  provincePsgc?: string | null;
+  cityMunicipalityPsgc?: string | null;
+  barangayPsgc?: string | null;
+  regionName?: string | null;
+  provinceName?: string | null;
+  cityMunicipalityName?: string | null;
+  barangayName?: string | null;
+  streetAddress: string;
+  zipCode?: string | null;
+}
+
+export interface EncounterReviewOfSystemsItemDto {
+  id?: string;
+  optionCode: string;
+  symptomName?: string;
+  isPertinentPositive?: boolean;
+  painSite?: string | null;
+  othersSpecifyText?: string | null;
+  remarks?: string;
+}
+
+export interface PatientPhysicalExamFindingDto {
+  id?: string;
+  system: string;
+  isNormal: boolean;
+  findingTitle: string;
+  optionCode?: string | null;
+  bodySite?: string | null;
+  laterality?: string | null;
+  remarks?: string | null;
+}
+
+export interface PatientPhysicalExamDto {
+  id?: string;
+  generalSurveyId?: string;
+  generalSurveyRemarks?: string;
+  findings: PatientPhysicalExamFindingDto[];
+}
+
+export interface EncounterObGyneExamDto {
+  id?: string;
+  gravidity?: number | null;
+  parity?: number | null;
+  termBirths?: number | null;
+  pretermBirths?: number | null;
+  abortions?: number | null;
+  livingChildren?: number | null;
+  lmp?: string | null;
+  edd?: string | null;
+  gestationalAgeWeeks?: number | null;
+  fundicHeightCm?: number | null;
+  fetalHeartToneBpm?: number | null;
+  fetalPresentation?: string | null;
+  remarks?: string | null;
+}
+
+export interface EncounterPediatricMilestoneDto {
+  id?: string;
+  milestoneVisitAge?: string | null;
+  grossMotorStatus?: string | null;
+  fineMotorStatus?: string | null;
+  languageStatus?: string | null;
+  cognitiveStatus?: string | null;
+  socialEmotionalStatus?: string | null;
+  dangerSigns?: string[];
+  remarks?: string | null;
+}
+
+export interface EncounterAdolescentAssessmentDto {
+  id?: string;
+  tannerStage?: number | null;
+  smrBreastRating?: string | null;
+  smrGenitalRating?: string | null;
+  smrPubicHairRating?: string | null;
+  menarcheAgeYears?: number | null;
+  isSexuallyActive?: boolean;
+  substanceUseNoted?: boolean;
+  depressionScreenPositive?: boolean;
+  remarks?: string | null;
+}
+
+export interface EncounterHeadsssDomainAssessmentDto {
+  id?: string;
+  domain: string;
+  assessmentText: string;
+  hasRedFlags?: boolean;
+  redFlags?: string[];
+}
+
+export interface PatientBpMonitoringLogDto {
+  id?: string;
+  recordedAt: string;
+  systolic: number;
+  diastolic: number;
+  pulseBpm?: number | null;
+  location?: string | null;
+  arm?: 'Left' | 'Right' | string | null;
+  remarks?: string | null;
 }
 
 export interface ConsultationRecord {
   id: string;
+  visitWorkflowMode?: VisitWorkflowMode;
   tenantId: string;
   clinicId: string;
   queueItemId?: string;
@@ -387,6 +495,13 @@ export interface ConsultationRecord {
   rxDispensedPharmacistPrc?: string;
   rxDispensedReceiptNumber?: string;
   rxDispenseNotes?: string;
+  physicalExams?: PatientPhysicalExamDto[];
+  reviewOfSystemsItems?: EncounterReviewOfSystemsItemDto[];
+  obGyneExam?: EncounterObGyneExamDto | null;
+  pediatricMilestones?: EncounterPediatricMilestoneDto[];
+  adolescentAssessment?: EncounterAdolescentAssessmentDto | null;
+  headsssAssessments?: EncounterHeadsssDomainAssessmentDto[];
+  bpMonitoringLogs?: PatientBpMonitoringLogDto[];
 }
 
 export interface AppointmentItem {
@@ -1677,6 +1792,12 @@ export interface ClinicPatient {
   activeQueueTicket?: string | null;
   activeQueueItemId?: string | null;
   pastMedicalHistories?: MedicalHistoryItemPayload[];
+  addresses?: PatientAddressDto[];
+  regionPsgc?: string | null;
+  provincePsgc?: string | null;
+  cityMunicipalityPsgc?: string | null;
+  barangayPsgc?: string | null;
+  zipCode?: string | null;
 }
 
 export interface DuplicateMatch {
@@ -1754,6 +1875,12 @@ export interface RegisterPatientPayload {
   verificationStatus?: string;
   structuredAllergies?: CreateAllergyPayload[];
   medicalHistories?: MedicalHistoryItemPayload[];
+  addresses?: PatientAddressDto[];
+  regionPsgc?: string | null;
+  provincePsgc?: string | null;
+  cityMunicipalityPsgc?: string | null;
+  barangayPsgc?: string | null;
+  zipCode?: string | null;
   sendToTriage?: boolean;
   priority?: 'Routine' | 'Urgent' | 'Emergency' | 'Normal';
   chiefComplaint?: string;
@@ -2177,6 +2304,14 @@ export interface CreateConsultationRequest {
   generalSurveyId?: string;
   generalSurveyRemarks?: string;
   physicalExamFindingsJson?: string;
+  visitWorkflowMode?: VisitWorkflowMode;
+  physicalExams?: PatientPhysicalExamDto[];
+  reviewOfSystemsItems?: EncounterReviewOfSystemsItemDto[];
+  obGyneExam?: EncounterObGyneExamDto | null;
+  pediatricMilestones?: EncounterPediatricMilestoneDto[];
+  adolescentAssessment?: EncounterAdolescentAssessmentDto | null;
+  headsssAssessments?: EncounterHeadsssDomainAssessmentDto[];
+  bpMonitoringLogs?: PatientBpMonitoringLogDto[];
 }
 
 export interface CreateInvoiceRequest {
@@ -2451,6 +2586,16 @@ export const clinicService = {
 
   async recordExternalDispense(consultationId: string, payload: RecordExternalDispensePayload) {
     return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
+  },
+
+  async getOptionSet(optionSet: string): Promise<EhrOptionDescriptor[]> {
+    try {
+      const res = await clinicApiClient.get<EhrOptionDescriptor[] | { data: EhrOptionDescriptor[] }>(`/options/${encodeURIComponent(optionSet)}`);
+      const data = (res as any)?.data?.data ?? (res as any)?.data ?? res;
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
   },
 
   getPrescriptionSlipPdfUrl(consultationId: string, options?: { wet?: boolean }) {

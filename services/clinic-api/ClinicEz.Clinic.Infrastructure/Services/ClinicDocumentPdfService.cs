@@ -44,8 +44,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateMedicalCertificatePdf(
         MedicalCertificate cert,
-        ClinicSettings settings,
-        ClinicPatient? patient = null,
+        FacilitySettings settings,
+        Patient? patient = null,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -215,7 +215,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateLabRequisitionSlipPdf(
         LabOrderSlipDto slip,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -413,7 +413,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GeneratePrescriptionPdf(
         PrescriptionSlipDto slip,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -589,8 +589,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateReferralLetterPdf(
         ReferralLetter referral,
-        ClinicSettings settings,
-        ClinicPatient? patient = null,
+        FacilitySettings settings,
+        Patient? patient = null,
         StaffMember? doctor = null,
         SignatureMode? signatureMode = null)
     {
@@ -772,7 +772,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     }
 
     public byte[] GenerateReceptionPlacardPdf(
-        ClinicSettings settings,
+        FacilitySettings settings,
         string qrUrl,
         string? joinCode = null,
         string? expiresAtFormatted = null)
@@ -875,9 +875,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateInvoicePdf(
         Invoice invoice,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
-        ClinicPatient? patient = null,
+        Patient? patient = null,
         string? queueNumber = null)
     {
         return BuildBillingDocumentPdf(invoice, settings, doctor, patient, queueNumber, isOfficialReceipt: false);
@@ -886,9 +886,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     public byte[] GenerateOfficialReceiptPdf(
         Invoice invoice,
         PaymentRecord? payment,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
-        ClinicPatient? patient = null,
+        Patient? patient = null,
         string? queueNumber = null)
     {
         return BuildBillingDocumentPdf(invoice, settings, doctor, patient, queueNumber, isOfficialReceipt: true, specificPayment: payment);
@@ -896,9 +896,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     private byte[] BuildBillingDocumentPdf(
         Invoice invoice,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor,
-        ClinicPatient? patient,
+        Patient? patient,
         string? queueNumber,
         bool isOfficialReceipt,
         PaymentRecord? specificPayment = null)
@@ -908,7 +908,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : (int?)null;
         var patientGender = patient?.Gender.ToString();
-        var patientIdStr = patient?.PatientCode ?? (invoice.PatientId != Guid.Empty ? invoice.PatientId.ToString().Substring(0, 8) : "N/A");
+        var patientIdStr = patient?.PatientCode ?? (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty ? invoice.PatientId.Value.ToString("N")[..8] : "N/A");
         var docName = doctor != null
             ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : $"Dr. {doctor.FirstName} {doctor.LastName}")
             : (invoice.LineItems.FirstOrDefault(li => !string.IsNullOrWhiteSpace(li.DoctorName))?.DoctorName ?? "Attending Clinician");
@@ -1270,9 +1270,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     public byte[] GenerateInvoicePreviewPdf(
         InvoicePreviewRequest preview,
-        ClinicSettings settings,
+        FacilitySettings settings,
         StaffMember? doctor = null,
-        ClinicPatient? patient = null)
+        Patient? patient = null)
     {
         var tempInvoice = new Invoice
         {
@@ -1319,7 +1319,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     // STATUTORY & OPERATIONAL REPORT PDF BUILDERS
     // ==========================================
 
-    public byte[] GenerateDailyEodReportPdf(DailyEodReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateDailyEodReportPdf(DailyEodReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1487,7 +1487,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateMorbidityReportPdf(MorbidityReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateMorbidityReportPdf(MorbidityReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1619,7 +1619,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateTaxDiscountAuditReportPdf(TaxDiscountAuditReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateTaxDiscountAuditReportPdf(TaxDiscountAuditReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1761,7 +1761,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateDoctorSharesReportPdf(DoctorSharesReportDto report, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateDoctorSharesReportPdf(DoctorSharesReportDto report, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -1905,7 +1905,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateClinicAnalyticsPdf(ClinicAnalyticsDto analytics, ClinicSettings settings, string? preparedByName = null)
+    public byte[] GenerateClinicAnalyticsPdf(ClinicAnalyticsDto analytics, FacilitySettings settings, string? preparedByName = null)
     {
         var config = MapToReportTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -2264,7 +2264,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     }
 
     private static (string PreparedBy, string PreparedTitle, string ApproverName, string ApproverTitle) ResolveReportSignatories(
-        ClinicSettings settings,
+        FacilitySettings settings,
         string reportKey,
         string defaultPreparedTitle,
         string defaultApproverTitle,
@@ -2362,7 +2362,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     /// then the product default.
     /// Reads the cached workspace profile only (no network), so printing never waits on the portal.
     /// </summary>
-    private string ResolveAccent(ClinicSettings settings)
+    private string ResolveAccent(FacilitySettings settings)
     {
         if (!string.IsNullOrWhiteSpace(settings.LetterheadAccentColorHex))
         {
@@ -2373,7 +2373,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return WorkspaceBrand.ResolveAccent(settings.PrimaryColorHex, workspaceAccent, LegacyDefaultAccent);
     }
 
-    private TenantPrintoutConfig MapToReportTenantConfig(ClinicSettings settings)
+    private TenantPrintoutConfig MapToReportTenantConfig(FacilitySettings settings)
     {
         var config = MapToTenantConfig(settings);
         if (string.IsNullOrWhiteSpace(settings.LetterheadFooter))
@@ -2383,7 +2383,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return config;
     }
 
-    private TenantPrintoutConfig MapToTenantConfig(ClinicSettings settings)
+    private TenantPrintoutConfig MapToTenantConfig(FacilitySettings settings)
     {
         var workspaceProfile = _workspaceProfiles?.TryGetCached(settings.TenantId.ToString());
         return new TenantPrintoutConfig

@@ -45,7 +45,16 @@ import {
   AttachExternalDocumentModal,
   DentalChartTab,
 } from '../../components/chart';
-import type { DentalToothRecord } from '../../services/clinicService';
+import type {
+  DentalToothRecord,
+  VisitWorkflowMode,
+  EncounterReviewOfSystemsItemDto,
+  EncounterObGyneExamDto,
+  EncounterPediatricMilestoneDto,
+  EncounterAdolescentAssessmentDto,
+  EncounterHeadsssDomainAssessmentDto,
+  PatientBpMonitoringLogDto,
+} from '../../services/clinicService';
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { extractPhilHealthProfileData } from '../../components/patient/memberType';
 import { formatLongAge } from '../../utils/age';
@@ -62,6 +71,11 @@ import {
   OrderCatalogItemPayload,
   InlineDentalChartCard,
   DentalToothState,
+  WorkflowModeSelector,
+  ReviewOfSystemsChecklist,
+  SpecificEncounterFormsCard,
+  to1NFFindings,
+  from1NFFindings,
 } from '../../components/consultation';
 import {
   normalizeTeethToMultiRecord,
@@ -612,12 +626,63 @@ export default function ConsultationsScreen() {
   const [newRxDangerous, setNewRxDangerous] = useState(false);
   const [newRxDrugCode, setNewRxDrugCode] = useState<string>('');
 
-  // PhilHealth Yakap Tagging & Statutory Mapping State
+  // Dual-Workflow Mode & PhilHealth Yakap Tagging State
+  const [visitWorkflowMode, setVisitWorkflowMode] = useState<VisitWorkflowMode>('Regular');
   const [isYakapEligible, setIsYakapEligible] = useState<boolean>(false);
   const [philHealthAtc, setPhilHealthAtc] = useState<string>('WALKEDIN');
   const [selectedSymptomCodes, setSelectedSymptomCodes] = useState<string[]>([]);
+  const [rosItems, setRosItems] = useState<EncounterReviewOfSystemsItemDto[]>([]);
   const [symptomOtherDesc, setSymptomOtherDesc] = useState<string>('');
   const [symptomPainSite, setSymptomPainSite] = useState<string>('');
+
+  // PhilHealth YAKAP Specific Encounter Form Cohort States
+  const [obGyneExam, setObGyneExam] = useState<EncounterObGyneExamDto | null>(null);
+  const [pediatricMilestones, setPediatricMilestones] = useState<EncounterPediatricMilestoneDto[]>([]);
+  const [adolescentAssessment, setAdolescentAssessment] = useState<EncounterAdolescentAssessmentDto | null>(null);
+  const [headsssAssessments, setHeadsssAssessments] = useState<EncounterHeadsssDomainAssessmentDto[]>([]);
+  const [bpMonitoringLogs, setBpMonitoringLogs] = useState<PatientBpMonitoringLogDto[]>([]);
+
+  const handleWorkflowModeChange = (mode: VisitWorkflowMode) => {
+    if (isSigned) return;
+    setVisitWorkflowMode(mode);
+    const yakap = mode === 'YakapAvailment';
+    setIsYakapEligible(yakap);
+    if (yakap && (!philHealthAtc.trim() || philHealthAtc === 'ATC-2026-KON01')) {
+      setPhilHealthAtc('WALKEDIN');
+    }
+  };
+
+  const handleRosChange = (items: EncounterReviewOfSystemsItemDto[]) => {
+    if (isSigned) return;
+    setRosItems(items);
+    const newCodes = items.map((i) => i.optionCode);
+    setSelectedSymptomCodes(newCodes);
+
+    // Sync pain site input if present in items
+    const painItem = items.find((i) => i.optionCode.toLowerCase().includes('pain') || (i.symptomName?.toLowerCase() ?? '').includes('pain'));
+    if (painItem?.painSite && painItem.painSite !== symptomPainSite) {
+      setSymptomPainSite(painItem.painSite);
+    }
+    // Sync other complaint input if present in items
+    const otherItem = items.find((i) => i.optionCode.toLowerCase().includes('other') || (i.symptomName?.toLowerCase() ?? '').includes('other'));
+    if (otherItem?.othersSpecifyText && otherItem.othersSpecifyText !== symptomOtherDesc) {
+      setSymptomOtherDesc(otherItem.othersSpecifyText);
+    }
+
+    // Append newly selected symptom names to subjective narrative
+    const newlyAdded = items.filter((item) => !selectedSymptomCodes.includes(item.optionCode));
+    for (const added of newlyAdded) {
+      const name = added.symptomName || added.optionCode;
+      if (name) {
+        if (!subjective.trim()) {
+          setSubjective(`${name}, `);
+        } else if (!subjective.toLowerCase().includes(name.toLowerCase())) {
+          const separator = subjective.endsWith(',') || subjective.endsWith('.') ? ' ' : ', ';
+          setSubjective((prev) => `${prev.trim()}${separator}${name}`);
+        }
+      }
+    }
+  };
 
   // PhilHealth signs and symptoms come from the catalog (cached on the device), never from literals.
   const symptomLibrary = usePhilHealthCatalog('lib_signs_symptoms', isYakapEligible);
@@ -648,8 +713,22 @@ export default function ConsultationsScreen() {
     let updated: string[];
     if (exists) {
       updated = selectedSymptomCodes.filter((c) => c !== symptom.code);
+      setRosItems((prev) => prev.filter((i) => i.optionCode !== symptom.code));
     } else {
       updated = [...selectedSymptomCodes, symptom.code];
+      const isPain = symptom.code.toLowerCase().includes('pain') || symptom.name.toLowerCase().includes('pain');
+      const isOther = symptom.code.toLowerCase().includes('other') || symptom.name.toLowerCase().includes('other');
+      setRosItems((prev) => [
+        ...prev.filter((i) => i.optionCode !== symptom.code),
+        {
+          optionCode: symptom.code,
+          symptomName: symptom.name,
+          isPertinentPositive: true,
+          painSite: isPain ? symptomPainSite || null : null,
+          othersSpecifyText: isOther ? symptomOtherDesc || null : null,
+          remarks: symptom.name,
+        },
+      ]);
       // When selected, automatically seed/append into the free-text subjective narrative.
       if (!subjective.trim()) {
         setSubjective(`${symptom.name}, `);
@@ -1093,19 +1172,47 @@ export default function ConsultationsScreen() {
             })),
           );
         }
-        if (existingEncounter.isYakapEligible != null) {
+        if (existingEncounter.visitWorkflowMode) {
+          setVisitWorkflowMode(existingEncounter.visitWorkflowMode);
+          setIsYakapEligible(existingEncounter.visitWorkflowMode === 'YakapAvailment');
+        } else if (existingEncounter.isYakapEligible != null) {
           setIsYakapEligible(existingEncounter.isYakapEligible);
+          setVisitWorkflowMode(existingEncounter.isYakapEligible ? 'YakapAvailment' : 'Regular');
         }
         if (existingEncounter.philHealthAtc) {
           setPhilHealthAtc(existingEncounter.philHealthAtc);
         }
-        if (existingEncounter.philHealthSignSympCode) {
-          setSelectedSymptomCodes(
-            existingEncounter.philHealthSignSympCode
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean),
+        if (existingEncounter.reviewOfSystemsItems?.length) {
+          setRosItems(existingEncounter.reviewOfSystemsItems);
+          setSelectedSymptomCodes(existingEncounter.reviewOfSystemsItems.map((i) => i.optionCode));
+        } else if (existingEncounter.philHealthSignSympCode) {
+          const codes = existingEncounter.philHealthSignSympCode
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          setSelectedSymptomCodes(codes);
+          setRosItems(
+            codes.map((c) => ({
+              optionCode: c,
+              symptomName: c,
+              isPertinentPositive: true,
+            })),
           );
+        }
+        if (existingEncounter.obGyneExam) {
+          setObGyneExam(existingEncounter.obGyneExam);
+        }
+        if (existingEncounter.pediatricMilestones?.length) {
+          setPediatricMilestones(existingEncounter.pediatricMilestones);
+        }
+        if (existingEncounter.adolescentAssessment) {
+          setAdolescentAssessment(existingEncounter.adolescentAssessment);
+        }
+        if (existingEncounter.headsssAssessments?.length) {
+          setHeadsssAssessments(existingEncounter.headsssAssessments);
+        }
+        if (existingEncounter.bpMonitoringLogs?.length) {
+          setBpMonitoringLogs(existingEncounter.bpMonitoringLogs);
         }
         if (existingEncounter.philHealthOtherComplaint) {
           setSymptomOtherDesc(existingEncounter.philHealthOtherComplaint);
@@ -1113,7 +1220,14 @@ export default function ConsultationsScreen() {
         if (existingEncounter.philHealthPainSite) {
           setSymptomPainSite(existingEncounter.philHealthPainSite);
         }
-        if (existingEncounter.physicalExamFindingsJson) {
+        // Bidirectional Physical Exam Hydration: 1NF relational child rows first, fallback to JSON blob
+        const reconstructed1NF = existingEncounter.physicalExams?.length
+          ? from1NFFindings(existingEncounter.physicalExams)
+          : null;
+
+        if (reconstructed1NF) {
+          setPhysicalExamFindings(reconstructed1NF);
+        } else if (existingEncounter.physicalExamFindingsJson) {
           try {
             const parsedPe = JSON.parse(existingEncounter.physicalExamFindingsJson);
             if (parsedPe && typeof parsedPe === 'object') {
@@ -1330,6 +1444,13 @@ export default function ConsultationsScreen() {
     setLabOrders([]);
     setLabError(null);
     setIsYakapEligible(false);
+    setVisitWorkflowMode('Regular');
+    setRosItems([]);
+    setObGyneExam(null);
+    setPediatricMilestones([]);
+    setAdolescentAssessment(null);
+    setHeadsssAssessments([]);
+    setBpMonitoringLogs([]);
     setPhilHealthAtc('WALKEDIN');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
     setChargeSlipItems([]);
@@ -1354,6 +1475,12 @@ export default function ConsultationsScreen() {
     setOrderedLabs([]);
     setOrderedProcedures([]);
     setSelectedSymptomCodes([]);
+    setRosItems([]);
+    setObGyneExam(null);
+    setPediatricMilestones([]);
+    setAdolescentAssessment(null);
+    setHeadsssAssessments([]);
+    setBpMonitoringLogs([]);
     setSymptomOtherDesc('');
     setSymptomPainSite('');
     setPrescriptionSlip(null);
@@ -2092,7 +2219,11 @@ export default function ConsultationsScreen() {
         plan,
         homeInstructions: homeInstructions.trim() || undefined,
         isYakapEligible,
+        visitWorkflowMode,
         philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
+        reviewOfSystemsItems: rosItems.length
+          ? rosItems
+          : (selectedSymptomCodes.length ? selectedSymptomCodes.map((code) => ({ optionCode: code, symptomName: code, isPertinentPositive: true })) : undefined),
         philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
         philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
         doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
@@ -2100,6 +2231,22 @@ export default function ConsultationsScreen() {
         generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurveyId || (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2')) : undefined,
         generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
         physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
+        physicalExams: isYakapEligible
+          ? [
+              {
+                generalSurveyId:
+                  physicalExamFindings.generalSurveyId ||
+                  (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2'),
+                generalSurveyRemarks: physicalExamFindings.generalSurveyRemarks,
+                findings: to1NFFindings(physicalExamFindings),
+              },
+            ]
+          : undefined,
+        obGyneExam: isYakapEligible && obGyneExam ? obGyneExam : undefined,
+        pediatricMilestones: isYakapEligible && pediatricMilestones.length ? pediatricMilestones : undefined,
+        adolescentAssessment: isYakapEligible && adolescentAssessment ? adolescentAssessment : undefined,
+        headsssAssessments: isYakapEligible && headsssAssessments.length ? headsssAssessments : undefined,
+        bpMonitoringLogs: isYakapEligible && bpMonitoringLogs.length ? bpMonitoringLogs : undefined,
         diagnoses: selectedDiagnoses.map((d) => ({
           icd10Code: d.icd10Code,
           description: d.description,
@@ -2147,7 +2294,11 @@ export default function ConsultationsScreen() {
         plan,
         homeInstructions: homeInstructions.trim() || undefined,
         isYakapEligible,
+        visitWorkflowMode,
         philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
+        reviewOfSystemsItems: rosItems.length
+          ? rosItems
+          : (selectedSymptomCodes.length ? selectedSymptomCodes.map((code) => ({ optionCode: code, symptomName: code, isPertinentPositive: true })) : undefined),
         philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
         philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
         doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
@@ -2155,6 +2306,22 @@ export default function ConsultationsScreen() {
         generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurveyId || (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2')) : undefined,
         generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
         physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
+        physicalExams: isYakapEligible
+          ? [
+              {
+                generalSurveyId:
+                  physicalExamFindings.generalSurveyId ||
+                  (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2'),
+                generalSurveyRemarks: physicalExamFindings.generalSurveyRemarks,
+                findings: to1NFFindings(physicalExamFindings),
+              },
+            ]
+          : undefined,
+        obGyneExam: isYakapEligible && obGyneExam ? obGyneExam : undefined,
+        pediatricMilestones: isYakapEligible && pediatricMilestones.length ? pediatricMilestones : undefined,
+        adolescentAssessment: isYakapEligible && adolescentAssessment ? adolescentAssessment : undefined,
+        headsssAssessments: isYakapEligible && headsssAssessments.length ? headsssAssessments : undefined,
+        bpMonitoringLogs: isYakapEligible && bpMonitoringLogs.length ? bpMonitoringLogs : undefined,
         diagnoses: selectedDiagnoses.map((d) => ({
           icd10Code: d.icd10Code,
           description: d.description,
@@ -3473,6 +3640,15 @@ export default function ConsultationsScreen() {
               </View>
             ) : null}
 
+            {/* Dual-Workflow Mode Selector */}
+            <View style={{ marginBottom: theme.spacing.sm }}>
+              <WorkflowModeSelector
+                mode={visitWorkflowMode}
+                onChange={handleWorkflowModeChange}
+                disabled={isSigned}
+              />
+            </View>
+
             {/* Dual-Mode Consultation Workstation Header */}
             {!isYakapEligible ? (
               /* Standard Clinical Encounter: 100% Free of PhilHealth Bureaucracy */
@@ -3502,10 +3678,7 @@ export default function ConsultationsScreen() {
                           disabled={!philHealthEligibility.canToggle}
                           onPress={() => {
                             if (philHealthEligibility.canToggle) {
-                              setIsYakapEligible(true);
-                              if (!philHealthAtc.trim() || philHealthAtc === 'ATC-2026-KON01') {
-                                setPhilHealthAtc('WALKEDIN');
-                              }
+                              handleWorkflowModeChange('YakapAvailment');
                             }
                           }}
                         />
@@ -3541,7 +3714,7 @@ export default function ConsultationsScreen() {
                           title="Switch to Standard"
                           size="sm"
                           variant="ghost"
-                          onPress={() => setIsYakapEligible(false)}
+                          onPress={() => handleWorkflowModeChange('Regular')}
                         />
                       ) : null}
                     </View>
@@ -3643,12 +3816,28 @@ export default function ConsultationsScreen() {
                         />
                       ))}
                     </View>
+                    <ReviewOfSystemsChecklist
+                      items={rosItems}
+                      onChange={handleRosChange}
+                      disabled={isSigned}
+                      options={symptoms.map((s) => ({ code: s.code, label: s.name }))}
+                      loading={symptomLibrary.loading}
+                    />
                     {painSymptomSelected ? (
                       <Input
                         label="Pain site (required by PhilHealth)"
                         placeholder="e.g. Epigastric area, right shoulder, lumbar spine"
                         value={symptomPainSite}
-                        onChangeText={setSymptomPainSite}
+                        onChangeText={(text) => {
+                          setSymptomPainSite(text);
+                          setRosItems((prev) =>
+                            prev.map((i) =>
+                              i.optionCode.toLowerCase().includes('pain') || (i.symptomName?.toLowerCase() ?? '').includes('pain')
+                                ? { ...i, painSite: text || null }
+                                : i
+                            )
+                          );
+                        }}
                         editable={!isSigned}
                       />
                     ) : null}
@@ -3657,7 +3846,16 @@ export default function ConsultationsScreen() {
                         label="Other complaint (required by PhilHealth)"
                         placeholder="Describe the complaint"
                         value={symptomOtherDesc}
-                        onChangeText={setSymptomOtherDesc}
+                        onChangeText={(text) => {
+                          setSymptomOtherDesc(text);
+                          setRosItems((prev) =>
+                            prev.map((i) =>
+                              i.optionCode.toLowerCase().includes('other') || (i.symptomName?.toLowerCase() ?? '').includes('other')
+                                ? { ...i, othersSpecifyText: text || null }
+                                : i
+                            )
+                          );
+                        }}
                         editable={!isSigned}
                       />
                     ) : null}
@@ -3724,6 +3922,23 @@ export default function ConsultationsScreen() {
                   disabled={isSigned}
                 />
               </View>
+            )}
+
+            {/* PhilHealth YAKAP Specific Encounter Forms (Ob-Gyne, Pediatric, Adolescent, HEADSSS, BP Log) */}
+            {isYakapEligible && (
+              <SpecificEncounterFormsCard
+                obGyneExam={obGyneExam}
+                onObGyneExamChange={setObGyneExam}
+                pediatricMilestones={pediatricMilestones}
+                onPediatricMilestonesChange={setPediatricMilestones}
+                adolescentAssessment={adolescentAssessment}
+                onAdolescentAssessmentChange={setAdolescentAssessment}
+                headsssAssessments={headsssAssessments}
+                onHeadsssAssessmentsChange={setHeadsssAssessments}
+                bpMonitoringLogs={bpMonitoringLogs}
+                onBpMonitoringLogsChange={setBpMonitoringLogs}
+                disabled={isSigned}
+              />
             )}
 
             {/* Inline Dental Chart Card (Adult & Child Odontogram) */}

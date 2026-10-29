@@ -3,11 +3,8 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class TeleconsultRecordingSegment : BaseEntity
+public sealed class TeleconsultRecordingSegment : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
-
     public Guid SessionId { get; set; }
     public TeleconsultRecordingSession? Session { get; set; }
 

@@ -294,7 +294,7 @@ public class MilestoneM5Tier5AdversarialSearchTests
     [Theory]
     // SQL Injection Metacharacters
     [InlineData("' OR '1'='1' --")]
-    [InlineData("'; DROP TABLE \"ClinicPatients\"; --")]
+    [InlineData("'; DROP TABLE \"Patients\"; --")]
     [InlineData("UNION SELECT null, null, null, null, null--")]
     [InlineData("admin'/*")]
     [InlineData("1' AND SLEEP(5)--")]

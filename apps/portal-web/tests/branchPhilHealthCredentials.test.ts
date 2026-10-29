@@ -1,187 +1,182 @@
 import { describe, expect, test } from "bun:test";
-import type { BranchDto, ConfigureBranchPhilHealthPayload, TestBranchPhilHealthPayload } from "../src/services/branch.service";
+import type {
+  BranchDto,
+  ConfigureBranchPhilHealthPayload,
+  TestBranchPhilHealthPayload,
+} from "../src/services/branch.service";
 
-describe("Branch PhilHealth Credentials & Staging Support (Issue #70)", () => {
+describe("Branch PhilHealth PCAPI v2.0 Credentials & Secret Masking", () => {
   // Helper simulating the credential resolution logic implemented in BranchManagementClient.tsx
   function resolveCredentialsPayload(
     branch: Partial<BranchDto> | null,
-    phUsername: string,
-    phPassword: string,
-    useBlankStagingCredentials: boolean,
-    phAccreditation: string = "P10038831",
-    phPmcc: string = "Z15445",
-    phCertId: string = "KON-DUMMYCERTS-Z15445",
-    phEndpoint: string = "https://staging.philhealth.gov.ph/KONSULTA/SOAP",
-    phCipherKey: string = ""
+    phAccreditation: string,
+    phPmcc: string,
+    phCertId: string,
+    phSecretKey: string,
+    phCipherKey: string,
+    phBaseUrl: string
   ) {
     const isConfiguredBranch = Boolean(
       branch?.isPhilHealthAccredited && branch?.philHealthAccreditationNumber
     );
 
-    const resolvedUsername = isConfiguredBranch
-      ? (useBlankStagingCredentials ? "" : (phUsername.trim() || undefined))
-      : (phUsername ? phUsername.trim() : "");
-
-    const resolvedPassword = isConfiguredBranch
-      ? (useBlankStagingCredentials ? "" : (phPassword || undefined))
-      : (phPassword ? phPassword : "");
-
     const testPayload: TestBranchPhilHealthPayload = {
-      accreditationNumber: phAccreditation.trim(),
+      accreditationNumber: phAccreditation.trim() || undefined,
       pmccNumber: phPmcc.trim() || undefined,
       softwareCertificateId: phCertId.trim() || undefined,
-      username: resolvedUsername,
-      password: resolvedPassword,
+      secretKey: phSecretKey.trim() || undefined, // undefined uses saved protected secret
       cipherKey: phCipherKey.trim() || undefined,
-      konsultaEndpoint: phEndpoint.trim() || undefined,
+      baseUrl: phBaseUrl.trim() || undefined,
     };
 
     const configurePayload: ConfigureBranchPhilHealthPayload = {
       accreditationNumber: phAccreditation.trim(),
       pmccNumber: phPmcc.trim() || undefined,
       softwareCertificateId: phCertId.trim() || undefined,
-      username: resolvedUsername,
-      password: resolvedPassword,
-      cipherKey: phCipherKey.trim() || undefined,
-      konsultaEndpoint: phEndpoint.trim() || undefined,
+      secretKey: phSecretKey.trim() || undefined, // undefined preserves existing saved secret
+      cipherKey: phCipherKey.trim() || undefined, // undefined preserves existing saved cipher key
+      baseUrl: phBaseUrl.trim() || undefined,
       isPhilHealthAccredited: true,
     };
 
     return { isConfiguredBranch, testPayload, configurePayload };
   }
 
-  function getPlaceholders(isConfiguredBranch: boolean, useBlankStagingCredentials: boolean) {
+  function getPlaceholders(branch: Partial<BranchDto> | null) {
     return {
-      username: isConfiguredBranch
-        ? (useBlankStagingCredentials ? "Blank credentials for staging" : "Leave blank to keep existing")
-        : "Blank for staging / Enter username",
-      password: isConfiguredBranch
-        ? (useBlankStagingCredentials ? "Blank credentials for staging" : "Leave blank to keep existing")
-        : "Blank for staging / Enter password",
+      secretKey: branch?.hasSecretKey
+        ? "•••••••••••••••• (Leave blank to keep existing)"
+        : "Enter PCAPI Secret Key",
+      cipherKey: branch?.hasCipherKey
+        ? "•••••••••••••••• (Leave blank to keep existing)"
+        : "Enter AES-256-CBC Cipher Key",
     };
   }
 
-  describe("Unconfigured Branch (Initial Setup)", () => {
+  describe("Unconfigured Branch (Initial PCAPI Setup)", () => {
     const unconfiguredBranch: Partial<BranchDto> = {
       id: "branch-new-123",
-      name: "New Staging Branch",
+      name: "New Regional Branch",
       isPhilHealthAccredited: false,
       philHealthAccreditationNumber: undefined,
+      hasSecretKey: false,
+      hasCipherKey: false,
     };
 
-    test("sends literal username: '' and password: '' when left blank (never undefined)", () => {
-      const { isConfiguredBranch, testPayload, configurePayload } = resolveCredentialsPayload(
-        unconfiguredBranch,
-        "", // blank username
-        "", // blank password
-        false
-      );
-
-      expect(isConfiguredBranch).toBe(false);
-
-      // Must be literal empty string "" so JSON.stringify serializes {"username":"","password":""}
-      expect(testPayload.username).toBe("");
-      expect(testPayload.password).toBe("");
-      expect(configurePayload.username).toBe("");
-      expect(configurePayload.password).toBe("");
-
-      // Verifying JSON serialization preserves the keys
-      const json = JSON.stringify(testPayload);
-      expect(json).toContain('"username":""');
-      expect(json).toContain('"password":""');
+    test("renders 'Enter PCAPI Secret Key' and 'Enter AES-256-CBC Cipher Key' placeholders", () => {
+      const placeholders = getPlaceholders(unconfiguredBranch);
+      expect(placeholders.secretKey).toBe("Enter PCAPI Secret Key");
+      expect(placeholders.cipherKey).toBe("Enter AES-256-CBC Cipher Key");
     });
 
-    test("renders context-aware 'Blank for staging' placeholders on unconfigured branch", () => {
-      const placeholders = getPlaceholders(false, false);
-      expect(placeholders.username).toBe("Blank for staging / Enter username");
-      expect(placeholders.password).toBe("Blank for staging / Enter password");
-    });
-
-    test("sends trimmed credentials when user explicitly types them", () => {
+    test("sends trimmed secretKey and cipherKey when explicitly entered", () => {
       const { testPayload, configurePayload } = resolveCredentialsPayload(
         unconfiguredBranch,
-        "  custom_user  ",
-        "custom_pass",
-        false
+        "P10038831",
+        "Z15445",
+        "CERT-YAKAP-2026",
+        "  sk_live_secret_key_12345  ",
+        "  aes_cipher_key_67890  ",
+        "https://pcapi.philhealth.gov.ph"
       );
 
-      expect(testPayload.username).toBe("custom_user");
-      expect(testPayload.password).toBe("custom_pass");
-      expect(configurePayload.username).toBe("custom_user");
-      expect(configurePayload.password).toBe("custom_pass");
+      expect(testPayload.accreditationNumber).toBe("P10038831");
+      expect(testPayload.secretKey).toBe("sk_live_secret_key_12345");
+      expect(testPayload.cipherKey).toBe("aes_cipher_key_67890");
+      expect(testPayload.baseUrl).toBe("https://pcapi.philhealth.gov.ph");
+
+      expect(configurePayload.secretKey).toBe("sk_live_secret_key_12345");
+      expect(configurePayload.cipherKey).toBe("aes_cipher_key_67890");
+      expect(configurePayload.isPhilHealthAccredited).toBe(true);
+    });
+
+    test("supports simulation sandbox endpoints and PKA-SIM credentials", () => {
+      const { testPayload } = resolveCredentialsPayload(
+        unconfiguredBranch,
+        "PKA-SIM-0001",
+        "Z15445",
+        "CERT-SIM",
+        "sim_secret",
+        "",
+        "https://pcapi-sandbox.philhealth.gov.ph"
+      );
+
+      expect(testPayload.accreditationNumber).toBe("PKA-SIM-0001");
+      expect(testPayload.baseUrl).toBe("https://pcapi-sandbox.philhealth.gov.ph");
+      expect(testPayload.cipherKey).toBeUndefined();
     });
   });
 
-  describe("Configured Branch (Editing Existing Credentials)", () => {
+  describe("Configured Branch (Editing & Secret Masking)", () => {
     const configuredBranch: Partial<BranchDto> = {
       id: "branch-existing-456",
-      name: "Accredited Branch",
+      name: "Accredited Main Branch",
       isPhilHealthAccredited: true,
       philHealthAccreditationNumber: "P10038831",
       philHealthPmccNumber: "Z15445",
-      philHealthSoftwareCertificateId: "KON-DUMMYCERTS-Z15445",
+      philHealthSoftwareCertificateId: "CERT-YAKAP-2026",
+      philHealthBaseUrl: "https://pcapi.philhealth.gov.ph",
+      hasSecretKey: true,
+      hasCipherKey: true,
     };
 
-    test("sends undefined when inputs are empty to preserve existing stored secrets", () => {
+    test("renders masked 'Leave blank to keep existing' placeholders when secrets are configured", () => {
+      const placeholders = getPlaceholders(configuredBranch);
+      expect(placeholders.secretKey).toBe("•••••••••••••••• (Leave blank to keep existing)");
+      expect(placeholders.cipherKey).toBe("•••••••••••••••• (Leave blank to keep existing)");
+    });
+
+    test("sends undefined when inputs are left blank to preserve existing protected secrets", () => {
       const { isConfiguredBranch, testPayload, configurePayload } = resolveCredentialsPayload(
         configuredBranch,
-        "",
-        "",
-        false // toggle not checked
+        "P10038831",
+        "Z15445",
+        "CERT-YAKAP-2026",
+        "", // left blank
+        "", // left blank
+        "https://pcapi.philhealth.gov.ph"
       );
 
       expect(isConfiguredBranch).toBe(true);
-      expect(testPayload.username).toBeUndefined();
-      expect(testPayload.password).toBeUndefined();
-      expect(configurePayload.username).toBeUndefined();
-      expect(configurePayload.password).toBeUndefined();
+      expect(testPayload.secretKey).toBeUndefined();
+      expect(testPayload.cipherKey).toBeUndefined();
+      expect(configurePayload.secretKey).toBeUndefined();
+      expect(configurePayload.cipherKey).toBeUndefined();
 
-      // JSON.stringify will drop undefined keys, preserving existing DB values on backend
+      // JSON serialization drops undefined properties so backend does not overwrite
       const json = JSON.stringify(configurePayload);
-      expect(json).not.toContain('"username"');
-      expect(json).not.toContain('"password"');
+      expect(json).not.toContain('"secretKey"');
+      expect(json).not.toContain('"cipherKey"');
+      expect(json).toContain('"accreditationNumber":"P10038831"');
     });
 
-    test("renders 'Leave blank to keep existing' placeholder when not toggled", () => {
-      const placeholders = getPlaceholders(true, false);
-      expect(placeholders.username).toBe("Leave blank to keep existing");
-      expect(placeholders.password).toBe("Leave blank to keep existing");
-    });
-
-    test("sends literal '' when explicitly switching to blank staging credentials", () => {
-      const { testPayload, configurePayload } = resolveCredentialsPayload(
+    test("sends new non-empty secret when rotating credentials", () => {
+      const { configurePayload, testPayload } = resolveCredentialsPayload(
         configuredBranch,
+        "P10038831",
+        "Z15445",
+        "CERT-YAKAP-2026",
+        "new_rotated_secret_999",
         "",
-        "",
-        true // useBlankStagingCredentials toggled to true
+        "https://pcapi.philhealth.gov.ph"
       );
 
-      expect(testPayload.username).toBe("");
-      expect(testPayload.password).toBe("");
-      expect(configurePayload.username).toBe("");
-      expect(configurePayload.password).toBe("");
-
-      const json = JSON.stringify(configurePayload);
-      expect(json).toContain('"username":""');
-      expect(json).toContain('"password":""');
+      expect(configurePayload.secretKey).toBe("new_rotated_secret_999");
+      expect(configurePayload.cipherKey).toBeUndefined();
+      expect(testPayload.secretKey).toBe("new_rotated_secret_999");
+      expect(testPayload.cipherKey).toBeUndefined();
     });
 
-    test("renders 'Blank credentials for staging' placeholder when toggle is active", () => {
-      const placeholders = getPlaceholders(true, true);
-      expect(placeholders.username).toBe("Blank credentials for staging");
-      expect(placeholders.password).toBe("Blank credentials for staging");
-    });
+    test("handles branch with secretKey configured but cipherKey not configured", () => {
+      const partialBranch: Partial<BranchDto> = {
+        ...configuredBranch,
+        hasSecretKey: true,
+        hasCipherKey: false,
+      };
 
-    test("sends new non-empty credentials when user updates them", () => {
-      const { configurePayload } = resolveCredentialsPayload(
-        configuredBranch,
-        "new_admin_user",
-        "new_secret_pwd",
-        false
-      );
-
-      expect(configurePayload.username).toBe("new_admin_user");
-      expect(configurePayload.password).toBe("new_secret_pwd");
+      const placeholders = getPlaceholders(partialBranch);
+      expect(placeholders.secretKey).toBe("•••••••••••••••• (Leave blank to keep existing)");
+      expect(placeholders.cipherKey).toBe("Enter AES-256-CBC Cipher Key");
     });
   });
 });

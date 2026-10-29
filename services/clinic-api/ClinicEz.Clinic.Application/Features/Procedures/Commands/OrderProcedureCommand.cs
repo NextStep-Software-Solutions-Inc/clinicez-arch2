@@ -32,21 +32,21 @@ public record OrderProcedureCommand(
 
 public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureCommand, ClinicalProcedureDto>
 {
-    private readonly IRepository<ClinicalProcedure> _procRepo;
+    private readonly IRepository<Procedure> _procRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<QueueItem>? _queueRepo;
-    private readonly IRepository<ClinicRoom>? _roomRepo;
-    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
+    private readonly IRepository<Room>? _roomRepo;
+    private readonly IRepository<ServiceItem>? _serviceRepo;
     private readonly IRepository<StaffMember>? _staffRepo;
 
     public OrderProcedureCommandHandler(
-        IRepository<ClinicalProcedure> procRepo,
+        IRepository<Procedure> procRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<QueueItem>? queueRepo = null,
-        IRepository<ClinicRoom>? roomRepo = null,
-        IRepository<ClinicServiceItem>? serviceRepo = null,
+        IRepository<Room>? roomRepo = null,
+        IRepository<ServiceItem>? serviceRepo = null,
         IRepository<StaffMember>? staffRepo = null)
     {
         _procRepo = procRepo;
@@ -143,7 +143,7 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
 
         resolvedRoomName ??= "Treatment Room";
 
-        var procedure = new ClinicalProcedure
+        var procedure = new Procedure
         {
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
@@ -186,7 +186,7 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
         return MapToDto(procedure, _clinicContext.TenantId);
     }
 
-    public static ClinicalProcedureDto MapToDto(ClinicalProcedure p, string tenantId) => new(
+    public static ClinicalProcedureDto MapToDto(Procedure p, string tenantId) => new(
         p.Id,
         p.TenantId ?? tenantId,
         p.ClinicId,

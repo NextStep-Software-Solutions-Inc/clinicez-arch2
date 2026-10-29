@@ -51,7 +51,7 @@ public sealed class ResetStaffPasswordCommandHandler : IRequestHandler<ResetStaf
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IFacilityPasswordHasher _passwordHasher;
-    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
     private readonly IClinicStaffInvitationNotifier? _invitationNotifier;
     private readonly IStaffAccessInvalidator? _accessCache;
 
@@ -60,7 +60,7 @@ public sealed class ResetStaffPasswordCommandHandler : IRequestHandler<ResetStaf
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IFacilityPasswordHasher? passwordHasher = null,
-        IRepository<ClinicSettings>? settingsRepository = null,
+        IRepository<FacilitySettings>? settingsRepository = null,
         IClinicStaffInvitationNotifier? invitationNotifier = null,
         IStaffAccessInvalidator? accessCache = null)
     {
@@ -105,7 +105,7 @@ public sealed class ResetStaffPasswordCommandHandler : IRequestHandler<ResetStaf
             staff.UpdatedAt = now;
             staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
-            ClinicSettings? settings = null;
+            FacilitySettings? settings = null;
             if (_settingsRepository != null)
             {
                 settings = await _settingsRepository.Query(s => s.ClinicId == _clinicContext.ClinicId)

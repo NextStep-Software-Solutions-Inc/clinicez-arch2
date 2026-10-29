@@ -81,6 +81,9 @@ public class MessageCoverageTests
         new(InteropTypes.YakapTransmittalRequested, [Portal], [Clinic]),
         new(InteropTypes.YakapTransmittalResponded, [Clinic], [Portal]),
 
+        new(InteropTypes.YakapSubmissionRequested, [Portal], [Clinic]),
+        new(InteropTypes.YakapSubmissionResponded, [Clinic], [Portal]),
+
         new(InteropTypes.BillingInvoiceRequested, [Clinic, Lab, Pharmacy], [Billing]),
         new(InteropTypes.BillingPaymentConfirmed, [Billing], [Clinic, Lab, Pharmacy]),
         new(InteropTypes.BillingInvoicePaid, [Billing], [Portal]),

@@ -26,7 +26,7 @@ public class Tier2_YakapTransmittalDtdBoundaryTests
     {
         var transmittal = new YakapRelationalTransmittalDto(Guid.NewGuid(), "R001", "2026", "H90000001",
             new List<DualModeConsultationDto>(), new List<PatientImmunizationDto>(),
-            new List<PatientProblemDto>(), new List<PatientAllergyDto>(),
+            new List<PatientMedicalHistoryDto>(), new List<PatientAllergyDto>(),
             new List<PhilPenRiskResultDto>(), new List<ExtendedTriageVitalsDto>());
 
         transmittal.Consultations.Should().BeEmpty();

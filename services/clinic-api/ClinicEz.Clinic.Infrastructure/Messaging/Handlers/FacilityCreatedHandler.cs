@@ -68,7 +68,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
         var entitlementVersion = _licenseValidator.Validate(message.LicenseToken, message.ResourceId, message.TenantId).Payload?.EntitlementVersion ?? 0;
 
         // Seed or update ClinicSettings with cryptographically rooted license token
-        var existingSettings = await _dbContext.ClinicSettings
+        var existingSettings = await _dbContext.Settings
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.ClinicId == message.ResourceId && s.TenantId.ToLower() == tenantId, ct);
 
@@ -139,7 +139,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
         }
         else
         {
-            var newSettings = new ClinicSettings
+            var newSettings = new FacilitySettings
             {
                 Id = Guid.NewGuid(),
                 TenantId = message.TenantId,
@@ -180,7 +180,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 newSettings.IsPhilHealthConfigured = false;
             }
 
-            _dbContext.ClinicSettings.Add(newSettings);
+            _dbContext.Settings.Add(newSettings);
         }
 
         // Confirm provisioning to the control plane in the same transaction as the settings change.

@@ -6,16 +6,14 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl } from '../ui';
+import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl, PsgcAddressSelector } from '../ui';
 import { theme } from '../../constants/theme';
-import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
+import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition, type PatientAddressDto } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
 import {
   type MemberType,
   type PrincipalRelationship,
-  PHILHEALTH_RELATIONSHIPS,
-  buildPhilHealthProfileData,
   extractPhilHealthProfileData,
 } from './memberType';
 import { mergePatientCustomFields } from './patientCustomFieldsMerger';
@@ -250,8 +248,47 @@ export function EditPatientModal({
   const [lastName, setLastName] = useState('');
   const [suffix, setSuffix] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
-  const [civilStatus, setCivilStatus] = useState<'Single' | 'Married' | 'Widowed' | 'Separated'>('Single');
+  const [gender, setGender] = useState<string>('Male');
+  const [civilStatus, setCivilStatus] = useState<string>('Single');
+  const [genderOptions, setGenderOptions] = useState<string[]>([]);
+  const [civilStatusOptions, setCivilStatusOptions] = useState<string[]>([]);
+  const [relationshipOptions, setRelationshipOptions] = useState<
+    Array<{ code: string; label: string; description?: string }>
+  >([]);
+  const [emergencyRelationshipOptions, setEmergencyRelationshipOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    clinicService.getOptionSet('sex').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setGenderOptions(opts.map((o) => o.label));
+      }
+    });
+    clinicService.getOptionSet('civil_status').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setCivilStatusOptions(opts.map((o) => o.label));
+      }
+    });
+    clinicService.getOptionSet('guardian_relationship').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setEmergencyRelationshipOptions(opts.map((o) => o.label));
+      }
+    });
+    clinicService.getOptionSet('dependent_relationship').then((opts) => {
+      if (isMounted && opts && opts.length > 0) {
+        setRelationshipOptions(
+          opts.map((o) => ({
+            code: o.philHealthCode || o.code,
+            label: o.label,
+            description: o.label,
+          }))
+        );
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
   const [philHealthNumber, setPhilHealthNumber] = useState('');
@@ -316,6 +353,13 @@ export function EditPatientModal({
   const [tenantCustomFields, setTenantCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+  // Address state (PSGC 10-digit cascading address)
+  const [permanentAddress, setPermanentAddress] = useState<PatientAddressDto>({
+    addressType: 'Permanent',
+    isSameAsPermanent: false,
+    streetAddress: '',
+  });
+
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const clearFieldError = (field: string) => {
@@ -329,13 +373,18 @@ export function EditPatientModal({
 
   const effectiveCustomFields = useMemo(() => {
     const existingKeys = new Set(tenantCustomFields.map((f) => f.fieldKey));
-    const missingBaseline = BASELINE_PATIENT_CUSTOM_FIELDS.filter(
+    const missingBaseline = BASELINE_PATIENT_CUSTOM_FIELDS.map((bf) => {
+      if (bf.fieldKey === 'emergency_contact_relationship' && emergencyRelationshipOptions.length > 0) {
+        return { ...bf, options: emergencyRelationshipOptions };
+      }
+      return bf;
+    }).filter(
       (bf) => !existingKeys.has(bf.fieldKey)
     );
     return [...tenantCustomFields, ...missingBaseline].sort(
       (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
     );
-  }, [tenantCustomFields]);
+  }, [tenantCustomFields, emergencyRelationshipOptions]);
 
   const addressFields = useMemo(() => {
     return effectiveCustomFields.filter((f) => f.category === 'Address');
@@ -388,16 +437,10 @@ export function EditPatientModal({
     setSuffix(patient.suffix || '');
     setDateOfBirth(patient.dateOfBirth || '');
     setGender(
-      patient.gender === 'Female' ? 'Female' : patient.gender === 'Other' ? 'Other' : 'Male'
+      patient.gender || 'Male'
     );
     setCivilStatus(
-      patient.civilStatus === 'Married'
-        ? 'Married'
-        : patient.civilStatus === 'Widowed'
-        ? 'Widowed'
-        : patient.civilStatus === 'Separated'
-        ? 'Separated'
-        : 'Single'
+      patient.civilStatus || 'Single'
     );
     setContactNumber(patient.contactNumber || '');
     setEmail(patient.email || '');
@@ -427,12 +470,29 @@ export function EditPatientModal({
     setAlerts(patient.alerts || '');
 
     const cf = patient.customFields || {};
+    const existingPerm = (patient.addresses && patient.addresses.length > 0)
+      ? patient.addresses.find((a) => a.addressType === 'Permanent') || patient.addresses[0]
+      : null;
+    setPermanentAddress({
+      addressType: 'Permanent',
+      isSameAsPermanent: false,
+      regionPsgc: existingPerm?.regionPsgc ?? patient.regionPsgc ?? null,
+      provincePsgc: existingPerm?.provincePsgc ?? patient.provincePsgc ?? null,
+      cityMunicipalityPsgc: existingPerm?.cityMunicipalityPsgc ?? patient.cityMunicipalityPsgc ?? null,
+      barangayPsgc: existingPerm?.barangayPsgc ?? patient.barangayPsgc ?? null,
+      regionName: existingPerm?.regionName ?? null,
+      provinceName: existingPerm?.provinceName ?? cf['primary_province'] ?? (patient as any).province ?? null,
+      cityMunicipalityName: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (patient as any).city ?? null,
+      barangayName: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (patient as any).barangay ?? null,
+      streetAddress: existingPerm?.streetAddress ?? (patient as any).addressLine ?? cf['primary_address_line'] ?? '',
+      zipCode: existingPerm?.zipCode ?? patient.zipCode ?? null,
+    });
     setCustomFieldValues({
       ...cf,
-      primary_address_line: cf['primary_address_line'] ?? (patient as any).addressLine ?? '',
-      primary_barangay: cf['primary_barangay'] ?? (patient as any).barangay ?? '',
-      primary_city: cf['primary_city'] ?? (patient as any).city ?? '',
-      primary_province: cf['primary_province'] ?? (patient as any).province ?? '',
+      primary_address_line: existingPerm?.streetAddress ?? cf['primary_address_line'] ?? (patient as any).addressLine ?? '',
+      primary_barangay: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (patient as any).barangay ?? '',
+      primary_city: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (patient as any).city ?? '',
+      primary_province: existingPerm?.provinceName ?? cf['primary_province'] ?? (patient as any).province ?? '',
       emergency_contact_name: cf['emergency_contact_name'] ?? (patient as any).emergencyContactName ?? '',
       emergency_contact_phone: cf['emergency_contact_phone'] ?? (patient as any).emergencyContactPhone ?? '',
       emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (patient as any).emergencyContactRelationship ?? '',
@@ -582,6 +642,12 @@ export function EditPatientModal({
       customFields: Object.keys(mergedCustomFields).length > 0 ? mergedCustomFields : undefined,
       verificationStatus: patient.verificationStatus || 'Verified',
       medicalHistories: structuredMedicalHistories,
+      addresses: permanentAddress.regionPsgc || permanentAddress.streetAddress ? [permanentAddress] : undefined,
+      regionPsgc: permanentAddress.regionPsgc || undefined,
+      provincePsgc: permanentAddress.provincePsgc || undefined,
+      cityMunicipalityPsgc: permanentAddress.cityMunicipalityPsgc || undefined,
+      barangayPsgc: permanentAddress.barangayPsgc || undefined,
+      zipCode: permanentAddress.zipCode || undefined,
     };
 
     setSaving(true);
@@ -754,20 +820,23 @@ export function EditPatientModal({
                 Sex / Gender *
               </ThemedText>
               <View style={styles.pillRow}>
-                {(['Male', 'Female', 'Other'] as const).map((item) => (
-                  <Pressable
-                    key={item}
-                    style={[styles.pill, gender === item && styles.pillActive]}
-                    onPress={() => setGender(item)}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={gender === item ? theme.colors.textInverted : theme.colors.textSecondary}
+                {genderOptions.map((item) => {
+                  const isSelected = gender.toLowerCase() === item.toLowerCase();
+                  return (
+                    <Pressable
+                      key={item}
+                      style={[styles.pill, isSelected && styles.pillActive]}
+                      onPress={() => setGender(item)}
                     >
-                      {item}
-                    </ThemedText>
-                  </Pressable>
-                ))}
+                      <ThemedText
+                        variant="smallBold"
+                        color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                      >
+                        {item}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
 
@@ -777,20 +846,23 @@ export function EditPatientModal({
                 Civil Status
               </ThemedText>
               <View style={styles.pillRow}>
-                {(['Single', 'Married', 'Widowed', 'Separated'] as const).map((item) => (
-                  <Pressable
-                    key={item}
-                    style={[styles.pill, civilStatus === item && styles.pillActive]}
-                    onPress={() => setCivilStatus(item)}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={civilStatus === item ? theme.colors.textInverted : theme.colors.textSecondary}
+                {civilStatusOptions.map((item) => {
+                  const isSelected = civilStatus.toLowerCase() === item.toLowerCase();
+                  return (
+                    <Pressable
+                      key={item}
+                      style={[styles.pill, isSelected && styles.pillActive]}
+                      onPress={() => setCivilStatus(item)}
                     >
-                      {item}
-                    </ThemedText>
-                  </Pressable>
-                ))}
+                      <ThemedText
+                        variant="smallBold"
+                        color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                      >
+                        {item}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
 
@@ -826,6 +898,23 @@ export function EditPatientModal({
                   error={fieldErrors.email}
                 />
               </View>
+            </View>
+
+            {/* Cascading PSGC Address Details */}
+            <View style={{ marginBottom: theme.spacing.md }}>
+              <PsgcAddressSelector
+                value={permanentAddress}
+                onChange={(next) => {
+                  setPermanentAddress(next);
+                  setCustomFieldValues((prev) => ({
+                    ...prev,
+                    primary_address_line: next.streetAddress,
+                    primary_barangay: next.barangayName || '',
+                    primary_city: next.cityMunicipalityName || '',
+                    primary_province: next.provinceName || '',
+                  }));
+                }}
+              />
             </View>
 
             {/* Address Details (Dynamic Custom Fields) */}
@@ -923,12 +1012,12 @@ export function EditPatientModal({
                     Relationship to Principal Member *
                   </ThemedText>
                   <View style={styles.relationshipGrid}>
-                    {PHILHEALTH_RELATIONSHIPS.map((rel) => {
+                    {relationshipOptions.map((rel) => {
                       const isSelected = principalRelationship === rel.code;
                       return (
                         <Pressable
                           key={rel.code}
-                          onPress={() => setPrincipalRelationship(rel.code)}
+                          onPress={() => setPrincipalRelationship(rel.code as PrincipalRelationship)}
                           style={[
                             styles.relationshipChip,
                             isSelected && styles.relationshipChip_selected,

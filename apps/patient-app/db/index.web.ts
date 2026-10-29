@@ -158,6 +158,17 @@ function ensureRequiredColumns(rawDb: Database): boolean {
       { name: 'last_sync_error', type: 'text' },
       { name: 'retry_count', type: 'integer', defaultValue: '0' },
     ],
+    patient_addresses: [
+      { name: 'region_psgc', type: 'text' },
+      { name: 'province_psgc', type: 'text' },
+      { name: 'city_municipality_psgc', type: 'text' },
+      { name: 'barangay_psgc', type: 'text' },
+      { name: 'region_name', type: 'text' },
+      { name: 'province_name', type: 'text' },
+      { name: 'city_municipality_name', type: 'text' },
+      { name: 'barangay_name', type: 'text' },
+      { name: 'is_same_as_permanent', type: 'integer', defaultValue: '0' },
+    ],
   };
 
   for (const [table, cols] of Object.entries(tableColumns)) {

@@ -25,8 +25,8 @@ public sealed class BillingController : ControllerBase
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService? _pdfService;
     private readonly IRepository<Invoice>? _invoiceRepo;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
-    private readonly IRepository<ClinicPatient>? _patientRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
+    private readonly IRepository<Patient>? _patientRepo;
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
 
@@ -34,8 +34,8 @@ public sealed class BillingController : ControllerBase
         ISender sender,
         IClinicDocumentPdfService? pdfService = null,
         IRepository<Invoice>? invoiceRepo = null,
-        IRepository<ClinicSettings>? settingsRepo = null,
-        IRepository<ClinicPatient>? patientRepo = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
+        IRepository<Patient>? patientRepo = null,
         IRepository<StaffMember>? staffRepo = null,
         IRepository<QueueItem>? queueRepo = null)
     {
@@ -82,15 +82,15 @@ public sealed class BillingController : ControllerBase
 
         if (invoice == null) return NotFound($"Invoice '{id}' not found.");
 
-        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new ClinicSettings
+        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new FacilitySettings
         {
             TenantId = invoice.TenantId ?? "default",
             ClinicId = invoice.ClinicId,
             ClinicName = "Clinic EZ Partner Medical Clinic"
         };
 
-        var patient = (invoice.PatientId != Guid.Empty && _patientRepo != null)
-            ? await _patientRepo.GetByIdAsync(invoice.PatientId, ct)
+        var patient = (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty && _patientRepo != null)
+            ? await _patientRepo.GetByIdAsync(invoice.PatientId.Value, ct)
             : null;
 
         var doctor = (invoice.AttendingDoctorId.HasValue && _staffRepo != null)
@@ -127,15 +127,15 @@ public sealed class BillingController : ControllerBase
 
         if (invoice == null) return NotFound($"Invoice '{id}' not found.");
 
-        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new ClinicSettings
+        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new FacilitySettings
         {
             TenantId = invoice.TenantId ?? "default",
             ClinicId = invoice.ClinicId,
             ClinicName = "Clinic EZ Partner Medical Clinic"
         };
 
-        var patient = (invoice.PatientId != Guid.Empty && _patientRepo != null)
-            ? await _patientRepo.GetByIdAsync(invoice.PatientId, ct)
+        var patient = (invoice.PatientId.HasValue && invoice.PatientId.Value != Guid.Empty && _patientRepo != null)
+            ? await _patientRepo.GetByIdAsync(invoice.PatientId.Value, ct)
             : null;
 
         var doctor = (invoice.AttendingDoctorId.HasValue && _staffRepo != null)
@@ -174,7 +174,7 @@ public sealed class BillingController : ControllerBase
         if (_pdfService == null)
             return StatusCode(503, "Document generation service is unavailable.");
 
-        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new ClinicSettings
+        var settings = (_settingsRepo != null ? await _settingsRepo.Query().FirstOrDefaultAsync(ct) : null) ?? new FacilitySettings
         {
             TenantId = "default",
             ClinicName = "Clinic EZ Partner Medical Clinic"

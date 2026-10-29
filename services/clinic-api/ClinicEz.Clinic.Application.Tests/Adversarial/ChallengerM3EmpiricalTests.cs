@@ -53,14 +53,14 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         var syncPatientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -70,11 +70,11 @@ public class ChallengerM3EmpiricalTests
             PatientCode = "PAT-ADVERSARIAL-01",
             DateOfBirth = new DateOnly(1980, 11, 30),
             ContactNumber = "0918-123-4567",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         await patientRepo.AddAsync(patient);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -150,14 +150,14 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         var syncPatientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -167,7 +167,7 @@ public class ChallengerM3EmpiricalTests
             PatientCode = "PAT-02",
             DateOfBirth = new DateOnly(1990, 1, 1),
             ContactNumber = "0917-111-2222",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         await patientRepo.AddAsync(patient);
         await context.SaveChangesAsync();
@@ -207,14 +207,14 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         var syncPatientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -224,11 +224,11 @@ public class ChallengerM3EmpiricalTests
             PatientCode = "PAT-03",
             DateOfBirth = new DateOnly(1995, 2, 2),
             ContactNumber = "0917-333-4444",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         await patientRepo.AddAsync(patient);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -276,15 +276,15 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         Guid? parsedSync = syncPatientGuidString != null ? Guid.Parse(syncPatientGuidString) : null;
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -294,7 +294,7 @@ public class ChallengerM3EmpiricalTests
             PatientCode = "PAT-WALKIN",
             DateOfBirth = new DateOnly(1988, 8, 8),
             ContactNumber = "0917-555-5555",
-            SyncPatientId = parsedSync
+            CloudPatientId = parsedSync
         };
         await patientRepo.AddAsync(patient);
         await context.SaveChangesAsync();
@@ -327,16 +327,16 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange: Patient exists under Clinic B with a valid SyncPatientId, but appointment is for Clinic A
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         var differentClinicId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
 
-        var crossTenantPatient = new ClinicPatient
+        var crossTenantPatient = new Patient
         {
             Id = patientId,
             ClinicId = differentClinicId, // Clinic B!
@@ -346,7 +346,7 @@ public class ChallengerM3EmpiricalTests
             PatientCode = "PAT-CROSS",
             DateOfBirth = new DateOnly(1990, 1, 1),
             ContactNumber = "0917-666-6666",
-            SyncPatientId = Guid.NewGuid()
+            CloudPatientId = Guid.NewGuid()
         };
         await patientRepo.AddAsync(crossTenantPatient);
         await context.SaveChangesAsync();
@@ -378,13 +378,13 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -452,9 +452,9 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
@@ -490,9 +490,9 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
@@ -525,13 +525,13 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -682,9 +682,9 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
@@ -707,14 +707,14 @@ public class ChallengerM3EmpiricalTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         var syncPatientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -724,7 +724,7 @@ public class ChallengerM3EmpiricalTests
             PatientCode = "PAT-DUR",
             DateOfBirth = new DateOnly(1990, 1, 1),
             ContactNumber = "0917-777-7777",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         await patientRepo.AddAsync(patient);
         await context.SaveChangesAsync();

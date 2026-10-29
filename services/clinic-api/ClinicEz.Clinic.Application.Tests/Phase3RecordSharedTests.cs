@@ -41,7 +41,7 @@ public class PatientRecordSharedHandlerTests
         return new PatientRecordSharedHandler(_db, MessagingTestKit.Recipient(_db), factory, _encryption, _storage, NullLogger<PatientRecordSharedHandler>.Instance);
     }
 
-    private (ClinicPatient Patient, Guid DraftId) Seed(bool withAppointment = true)
+    private (Patient Patient, Guid DraftId) Seed(bool withAppointment = true)
     {
         MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
         var patient = Phase3TestKit.NewPatient(_clinicId, Tenant, Guid.NewGuid());
@@ -59,10 +59,10 @@ public class PatientRecordSharedHandlerTests
         return (patient, draftId);
     }
 
-    private PatientRecordSharedPayload Payload(ClinicPatient patient, Guid draftId) => new()
+    private PatientRecordSharedPayload Payload(Patient patient, Guid draftId) => new()
     {
         DraftId = draftId,
-        PatientId = patient.SyncPatientId!.Value,
+        PatientId = patient.CloudPatientId!.Value,
         FileId = Guid.NewGuid(),
         FileName = "cbc.pdf",
         MimeType = "application/pdf",
@@ -209,7 +209,7 @@ public class PatientRecordSharedHandlerTests
         var other = Phase3TestKit.NewPatient(_clinicId, Tenant, Guid.NewGuid());
         var payload = Payload(patient, draftId);
         _db.Patients.Add(other);
-        _db.RecordAttachments.Add(new ClinicRecordAttachment
+        _db.RecordAttachments.Add(new RecordAttachment
         {
             Id = payload.FileId, TenantId = Tenant, ClinicId = _clinicId, PatientId = other.Id, Title = "t", FileName = "f", StorageUri = "u"
         });

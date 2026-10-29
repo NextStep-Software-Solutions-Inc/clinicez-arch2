@@ -12,7 +12,7 @@ import {
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
 import { useNavigation, useFocusEffect, type StaticScreenProps } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '@ui';
+import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, PsgcAddressSelector } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
@@ -76,9 +76,8 @@ import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 import {
   type MemberType,
   type PrincipalRelationship,
-  PHILHEALTH_RELATIONSHIPS,
-  buildPhilHealthProfileData,
 } from '../../components/patient/memberType';
+import { useEhrOptions } from '../../hooks/useEhrOptions';
 
 import {
   clinicService,
@@ -95,6 +94,7 @@ import {
   ClinicCustomFieldDefinition,
   DuplicateMatch,
   VisitType,
+  PatientAddressDto,
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { getSetting } from '../../services/runtimeConfig';
@@ -205,6 +205,26 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formDob, setFormDob] = useState('');
   const [formGender, setFormGender] = useState('Male');
   const [formCivilStatus, setFormCivilStatus] = useState('Single');
+  const { options: dynamicSexOptions } = useEhrOptions('sex');
+  const sexOptions = useMemo(() => {
+    return dynamicSexOptions.map((o) => o.label);
+  }, [dynamicSexOptions]);
+
+  const { options: dynamicCivilStatusOptions } = useEhrOptions('civil_status');
+  const civilStatusOptions = useMemo(() => {
+    return dynamicCivilStatusOptions.map((o) => o.label);
+  }, [dynamicCivilStatusOptions]);
+
+  const { options: dynamicRelOptions } = useEhrOptions('dependent_relationship');
+  const principalRelationshipOptions = useMemo(() => {
+    if (dynamicRelOptions.length > 0) {
+      return dynamicRelOptions.map((o) => ({
+        code: (o.philHealthCode || o.code) as PrincipalRelationship,
+        label: o.label,
+      }));
+    }
+    return [];
+  }, [dynamicRelOptions]);
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formPhilHealth, setFormPhilHealth] = useState('');
@@ -230,6 +250,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formTriageDoctorId, setFormTriageDoctorId] = useState<string>('');
   const [formTriageRoomId, setFormTriageRoomId] = useState<string>('');
   const [formPatientCode, setFormPatientCode] = useState('');
+  const [formAddress, setFormAddress] = useState<PatientAddressDto>({
+    addressType: 'Permanent',
+    isSameAsPermanent: false,
+    streetAddress: '',
+  });
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
 
   // Duplicate Patient Warning Modal Safeguard states
@@ -652,10 +677,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
     }
 
-    if (dynamicFieldValues['yakap_enlistments']) {
-      customFields['yakap_enlistments'] = dynamicFieldValues['yakap_enlistments'];
-    }
-
     customFields['member_type'] = formMemberType;
     if (formMemberType === 'DD') {
       customFields['principal_member_pin'] = formPrincipalPin.trim();
@@ -663,19 +684,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       customFields['principal_relationship'] = formPrincipalRelationship;
       if (formPrincipalDob.trim()) customFields['principal_dob'] = formPrincipalDob.trim();
     }
-
-    customFields['philhealth_profile'] = buildPhilHealthProfileData({
-      memberType: formMemberType,
-      patientPin: formPhilHealth,
-      patientFirstName: formFirstName,
-      patientLastName: formLastName,
-      patientMiddleName: formMiddleName,
-      patientDob: formDob,
-      principalPin: formPrincipalPin,
-      principalFullName: formPrincipalFullName,
-      principalRelationship: formPrincipalRelationship,
-      principalDob: formPrincipalDob,
-    });
 
     const allergiesSummary = structuredAllergies.length > 0
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
@@ -703,6 +711,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       verificationStatus: 'Verified',
       structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
       medicalHistories: formMedicalHistories.length > 0 ? formMedicalHistories : undefined,
+      addresses: formAddress.regionPsgc || formAddress.streetAddress ? [formAddress] : undefined,
+      regionPsgc: formAddress.regionPsgc || undefined,
+      provincePsgc: formAddress.provincePsgc || undefined,
+      cityMunicipalityPsgc: formAddress.cityMunicipalityPsgc || undefined,
+      barangayPsgc: formAddress.barangayPsgc || undefined,
+      zipCode: formAddress.zipCode || undefined,
       sendToTriage,
       priority: sendToTriage ? formTriagePriority : 'Routine',
       chiefComplaint: sendToTriage && formChiefComplaint.trim() ? formChiefComplaint.trim() : undefined,
@@ -864,6 +878,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormPrincipalRelationship('C');
     setFormPrincipalDob('');
     setIsPrincipalPinValid(null);
+    setFormAddress({
+      addressType: 'Permanent',
+      isSameAsPermanent: false,
+      streetAddress: '',
+    });
   };
 
   const handleUseExistingProfile = async (patientId: string) => {
@@ -1970,7 +1989,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               <View>
                 <ThemedText style={styles.inputLabel}>Sex / Gender *</ThemedText>
                 <View style={styles.categoryRow}>
-                  {(['Male', 'Female', 'Other'] as const).map((gender) => (
+                  {sexOptions.map((gender) => (
                     <Pressable
                       key={gender}
                       style={[styles.categoryPill, formGender === gender && styles.categoryPillActive]}
@@ -1988,7 +2007,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               <View>
                 <ThemedText style={styles.inputLabel}>Civil Status</ThemedText>
                 <View style={styles.categoryRow}>
-                  {(['Single', 'Married', 'Widowed', 'Separated'] as const).map((status) => (
+                  {civilStatusOptions.map((status) => (
                     <Pressable
                       key={status}
                       style={[styles.categoryPill, formCivilStatus === status && styles.categoryPillActive]}
@@ -2082,7 +2101,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       Relationship to Principal Member *
                     </ThemedText>
                     <View style={styles.relationshipGrid}>
-                      {PHILHEALTH_RELATIONSHIPS.map((rel) => {
+                      {principalRelationshipOptions.map((rel) => {
                         const isSelected = formPrincipalRelationship === rel.code;
                         return (
                           <Pressable
@@ -2151,6 +2170,23 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     onChangeText={setFormPwdId}
                   />
                 </View>
+              </View>
+
+              {/* Permanent Cascading PSGC Address */}
+              <View style={{ marginBottom: theme.spacing.md }}>
+                <PsgcAddressSelector
+                  value={formAddress}
+                  onChange={(next) => {
+                    setFormAddress(next);
+                    setDynamicFieldValues((prev) => ({
+                      ...prev,
+                      primary_address_line: next.streetAddress,
+                      primary_barangay: next.barangayName || '',
+                      primary_city: next.cityMunicipalityName || '',
+                      primary_province: next.provinceName || '',
+                    }));
+                  }}
+                />
               </View>
 
               {/* PhilHealth YAKAP Annual Enlistment Lifecycle Section */}

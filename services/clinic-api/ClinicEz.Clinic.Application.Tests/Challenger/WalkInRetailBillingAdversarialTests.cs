@@ -50,7 +50,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -92,7 +92,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -130,7 +130,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -165,7 +165,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -197,7 +197,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -250,7 +250,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -284,7 +284,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -334,7 +334,7 @@ public class WalkInRetailBillingAdversarialTests
 
         var handler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             uow,
             clinicContext,
@@ -370,11 +370,11 @@ public class WalkInRetailBillingAdversarialTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
         // Configure clinic with centralized CashierCounter mode
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -382,12 +382,12 @@ public class WalkInRetailBillingAdversarialTests
             ClinicName = "Centralized Hospital Outpatient Department",
             CashierMode = "CashierCounter"
         };
-        await context.Set<ClinicSettings>().AddAsync(settings);
+        await context.Set<FacilitySettings>().AddAsync(settings);
         await context.SaveChangesAsync();
 
         var createHandler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             settingsRepo,
             uow,
@@ -445,10 +445,10 @@ public class WalkInRetailBillingAdversarialTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -456,14 +456,14 @@ public class WalkInRetailBillingAdversarialTests
             ClinicName = "Multi-Facility Medical Center",
             CashierMode = "CashierCounter"
         };
-        await context.Set<ClinicSettings>().AddAsync(settings);
+        await context.Set<FacilitySettings>().AddAsync(settings);
         await context.SaveChangesAsync();
 
         var knownPatientId = Guid.NewGuid();
 
         var createHandler = new CreateInvoiceCommandHandler(
             invoiceRepo,
-            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<Patient>(context, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
             settingsRepo,
             uow,
@@ -498,13 +498,13 @@ public class WalkInRetailBillingAdversarialTests
         var (clinicId, tenantId, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var publisher = Substitute.For<IBillingRequestPublisher>();
         publisher.PublishInvoiceRequestedAsync(default!, default!).ReturnsForAnyArgs(true);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -512,9 +512,9 @@ public class WalkInRetailBillingAdversarialTests
             ClinicName = "Centralized Hospital Outpatient Department",
             CashierMode = "CashierCounter"
         };
-        await context.Set<ClinicSettings>().AddAsync(settings);
+        await context.Set<FacilitySettings>().AddAsync(settings);
 
-        var registeredPatient = new ClinicPatient
+        var registeredPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -524,10 +524,10 @@ public class WalkInRetailBillingAdversarialTests
             LastName = "Luna",
             ContactNumber = "09171234567",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Male",
-            SyncPatientId = Guid.NewGuid()
+            Gender = Gender.Male,
+            CloudPatientId = Guid.NewGuid()
         };
-        await context.Set<ClinicPatient>().AddAsync(registeredPatient);
+        await context.Set<Patient>().AddAsync(registeredPatient);
         await context.SaveChangesAsync();
 
         var createHandler = new CreateInvoiceCommandHandler(

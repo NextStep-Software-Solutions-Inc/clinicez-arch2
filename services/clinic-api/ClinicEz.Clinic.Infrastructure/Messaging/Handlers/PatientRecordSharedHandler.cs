@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Common.Security;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Interop;
@@ -77,10 +78,9 @@ public sealed class PatientRecordSharedHandler : IInteropHandler<PatientRecordSh
         Uri? downloadUri = null;
         if (string.IsNullOrWhiteSpace(message.FileBase64))
         {
-            if (!Uri.TryCreate(message.DownloadUrl, UriKind.Absolute, out downloadUri)
-                || (downloadUri.Scheme != Uri.UriSchemeHttps && downloadUri.Scheme != Uri.UriSchemeHttp))
+            if (!SafeDownloadUrlValidator.TryValidateSafeHttpsUrl(message.DownloadUrl, out downloadUri, out var reason))
             {
-                Ignore(context, "the download link is not an http(s) URL");
+                Ignore(context, $"download URL is rejected by SSRF policy: {reason}");
                 return;
             }
         }
@@ -91,7 +91,7 @@ public sealed class PatientRecordSharedHandler : IInteropHandler<PatientRecordSh
 
         var patient = await _dbContext.Patients
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.SyncPatientId == message.PatientId, ct);
+            .FirstOrDefaultAsync(p => !p.IsDeleted && p.ClinicId == clinic.ClinicId && p.CloudPatientId == message.PatientId, ct);
         var bookingExists = patient != null && await _dbContext.Appointments
             .IgnoreQueryFilters()
             .AnyAsync(a => !a.IsDeleted && a.ClinicId == clinic.ClinicId && a.DraftId == message.DraftId && a.PatientId == patient.Id, ct);
@@ -153,7 +153,7 @@ public sealed class PatientRecordSharedHandler : IInteropHandler<PatientRecordSh
         var fileName = string.IsNullOrWhiteSpace(message.FileName) ? "attachment.bin" : message.FileName;
         if (attachment == null)
         {
-            attachment = new ClinicRecordAttachment
+            attachment = new RecordAttachment
             {
                 Id = message.FileId,
                 TenantId = clinic.TenantId,

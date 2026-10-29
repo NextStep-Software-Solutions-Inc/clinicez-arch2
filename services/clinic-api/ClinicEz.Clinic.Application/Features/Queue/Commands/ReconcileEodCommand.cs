@@ -28,7 +28,7 @@ public sealed class ReconcileEodCommandHandler : IRequestHandler<ReconcileEodCom
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
-    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IRepository<FacilitySettings>? _settingsRepository;
 
     public ReconcileEodCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -36,7 +36,7 @@ public sealed class ReconcileEodCommandHandler : IRequestHandler<ReconcileEodCom
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<ClinicSettings>? settingsRepository = null)
+        IRepository<FacilitySettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _auditRepository = auditRepository;

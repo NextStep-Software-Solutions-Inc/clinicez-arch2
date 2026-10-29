@@ -83,7 +83,7 @@ public class PatientJoinE2EChallengerTests
         // Configure facility slug and join code in clinic DB
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";
@@ -115,7 +115,7 @@ public class PatientJoinE2EChallengerTests
             patient.Should().NotBeNull("patient must be ingested into clinic DB after PumpAsync");
             patient!.FirstName.Should().Be("Emilio");
             patient.LastName.Should().Be("Aguinaldo");
-            patient.VerificationStatus.Should().Be("PendingVerification");
+            patient.VerificationStatus.Should().Be(ClinicEz.Clinic.Domain.Enums.PatientVerificationStatus.PendingVerification);
             patient.PatientCode.Should().MatchRegex(@"^PAT-\d{4}-\d{5}$");
 
             var allergies = await db.PatientAllergies.IgnoreQueryFilters().Where(a => a.PatientId == patient.Id).ToListAsync();
@@ -144,7 +144,7 @@ public class PatientJoinE2EChallengerTests
         // Configure EXPIRED join code
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";
@@ -176,7 +176,7 @@ public class PatientJoinE2EChallengerTests
 
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";
@@ -220,13 +220,13 @@ public class PatientJoinE2EChallengerTests
 
         await cell.Clinic.DbAsync(async db =>
         {
-            var settings = await db.ClinicSettings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
+            var settings = await db.Settings.IgnoreQueryFilters().FirstAsync(s => s.ClinicId == fac.Id);
             settings.FacilitySlug = "challenger-clinic";
             settings.IsJoinEnabled = true;
             settings.JoinCode = "JOIN2026";
 
             // Seed soft-deleted patient with PAT-yyyy-00007
-            db.Patients.Add(new ClinicPatient
+            db.Patients.Add(new ClinicEz.Clinic.Domain.Entities.Patient
             {
                 Id = Guid.NewGuid(),
                 TenantId = fac.Tenant,

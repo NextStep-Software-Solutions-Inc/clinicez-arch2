@@ -13,7 +13,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 
 namespace ClinicEz.Shared.Tests.Security;
 
@@ -168,10 +167,10 @@ public class EnvelopeSigningTests
     public async Task The_verifier_is_off_in_development_and_on_elsewhere_and_refuses_unsigned_messages()
     {
         var hub = new KeyOnlyHub();
-        var production = new EnvelopeVerifier(Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Production);
-        var development = new EnvelopeVerifier(Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Development);
-        var forcedOn = new EnvelopeVerifier(Options.Create(new InteropOptions { Transport = "Hub", VerifyInbound = true }), FakeEnvironment.Development);
-        var inProcess = new EnvelopeVerifier(Options.Create(new InteropOptions { Transport = "InProcess" }), FakeEnvironment.Production);
+        var production = new EnvelopeVerifier(global::Microsoft.Extensions.Options.Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Production);
+        var development = new EnvelopeVerifier(global::Microsoft.Extensions.Options.Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Development);
+        var forcedOn = new EnvelopeVerifier(global::Microsoft.Extensions.Options.Options.Create(new InteropOptions { Transport = "Hub", VerifyInbound = true }), FakeEnvironment.Development);
+        var inProcess = new EnvelopeVerifier(global::Microsoft.Extensions.Options.Options.Create(new InteropOptions { Transport = "InProcess" }), FakeEnvironment.Production);
 
         production.Enabled.Should().BeTrue();
         development.Enabled.Should().BeFalse();
@@ -188,7 +187,7 @@ public class EnvelopeSigningTests
         var first = PemKey.GenerateP256Base64();
         var second = PemKey.GenerateP256Base64();
         var hub = new KeyOnlyHub { Key = new HubSignerKey("clinic", "cloud", "clinic", HubClientKind.CloudService, first.PublicKey, false) };
-        var verifier = new EnvelopeVerifier(Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Production);
+        var verifier = new EnvelopeVerifier(global::Microsoft.Extensions.Options.Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Production);
         var signedFirst = new EnvelopeSigner(first.PrivateKey, "clinic").Sign(Envelope());
         var signedSecond = new EnvelopeSigner(second.PrivateKey, "clinic").Sign(Envelope());
 
@@ -202,7 +201,7 @@ public class EnvelopeSigningTests
 
         // Revocation is picked up when the cached copy expires (5 minutes), so a fresh verifier sees it at once.
         hub.Key = hub.Key with { Revoked = true };
-        var fresh = new EnvelopeVerifier(Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Production);
+        var fresh = new EnvelopeVerifier(global::Microsoft.Extensions.Options.Options.Create(new InteropOptions { Transport = "Hub" }), FakeEnvironment.Production);
         (await fresh.VerifyAsync(hub, signedSecond, default)).Should().Contain("revoked");
     }
 
@@ -315,7 +314,7 @@ public class LicenseKeyConfigurationTests
         services.AddSingleton<IHostEnvironment>(FakeEnvironment.Production);
         services.AddSingleton<IConfiguration>(Config(("FacilityLicense:PublicKeyPem", PemKey.GenerateP256Base64().PublicKey)));
         services.AddSingleton<IFacilityLicenseValidator>(sp => new FacilityLicenseValidator(sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<IHostEnvironment>()));
-        services.AddSingleton<IOptions<InteropOptions>>(Options.Create(new InteropOptions { Transport = "Hub", HubUrl = "http://hub", ClientId = "x", ClientSecret = "y" }));
+        services.AddSingleton<global::Microsoft.Extensions.Options.IOptions<InteropOptions>>(global::Microsoft.Extensions.Options.Options.Create(new InteropOptions { Transport = "Hub", HubUrl = "http://hub", ClientId = "x", ClientSecret = "y" }));
         var check = ActivatorUtilities.CreateInstance(services.BuildServiceProvider(), typeof(InteropOptions).Assembly.GetType("ClinicEz.Shared.Interop.InteropStartupCheck")!) as IHostedService;
 
         var start = () => check!.StartAsync(default);

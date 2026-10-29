@@ -24,13 +24,13 @@ public sealed class SettingsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService? _pdfService;
-    private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<FacilitySettings>? _settingsRepo;
     private readonly ISampleDocumentGenerator? _sampleDocGenerator;
 
     public SettingsController(
         ISender sender,
         IClinicDocumentPdfService? pdfService = null,
-        IRepository<ClinicSettings>? settingsRepo = null,
+        IRepository<FacilitySettings>? settingsRepo = null,
         ISampleDocumentGenerator? sampleDocGenerator = null)
     {
         _sender = sender;
@@ -64,7 +64,7 @@ public sealed class SettingsController : ControllerBase
             ? await _settingsRepo.Query().FirstOrDefaultAsync(ct)
             : null;
 
-        settings ??= new ClinicSettings
+        settings ??= new FacilitySettings
         {
             TenantId = "default",
             ClinicName = "Clinic EZ Partner Medical Clinic"
@@ -91,7 +91,7 @@ public sealed class SettingsController : ControllerBase
             ? await _settingsRepo.Query().FirstOrDefaultAsync(ct)
             : null;
 
-        settings ??= new ClinicSettings
+        settings ??= new FacilitySettings
         {
             TenantId = "default",
             ClinicName = "Clinic EZ Partner Medical Clinic",

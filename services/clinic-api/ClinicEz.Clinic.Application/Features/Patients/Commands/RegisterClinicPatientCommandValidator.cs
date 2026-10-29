@@ -34,6 +34,8 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
             RuleFor(x => x.PhilHealthNumber!)
                 .Must(pin => PinRegex.IsMatch(pin.Trim()))
                 .WithMessage("PhilHealth Identification Number must follow the 12-digit format 'XX-XXXXXXXXX-X' per RA 11223.")
+                .Must(pin => !pin.Replace("-", "").Replace(" ", "").Trim().All(c => c == '0'))
+                .WithMessage("PhilHealth Identification Number cannot be all zeros (unassigned placeholder).")
                 .Must(BeValidPhilHealthMod11)
                 .WithMessage("PhilHealth Identification Number check digit is invalid (Mod-11 verification failed).");
         });
@@ -54,7 +56,7 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
         if (string.IsNullOrWhiteSpace(pin)) return false;
 
         var cleaned = pin.Replace("-", "").Replace(" ", "").Trim();
-        if (cleaned.Length != 12 || !cleaned.All(char.IsAsciiDigit)) return false;
+        if (cleaned.Length != 12 || !cleaned.All(char.IsAsciiDigit) || cleaned.All(c => c == '0')) return false;
 
         int sum = 0;
         for (int i = 0; i < 11; i++)

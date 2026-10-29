@@ -79,7 +79,7 @@ public class NonDoctorWorkflowsMilestone2Tests
         var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
 
         // Pre-seed outdated nurse role missing QueueCompleteNonDoctor
-        var nurseRole = new ClinicRole
+        var nurseRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -90,7 +90,7 @@ public class NonDoctorWorkflowsMilestone2Tests
         };
 
         // Pre-seed outdated receptionist role missing QueueCompleteNonDoctor
-        var receptionistRole = new ClinicRole
+        var receptionistRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -101,7 +101,7 @@ public class NonDoctorWorkflowsMilestone2Tests
         };
 
         // Pre-seed outdated cashier role missing QueueComplete, QueueCompleteNonDoctor, and PatientsRead
-        var cashierRole = new ClinicRole
+        var cashierRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -111,7 +111,7 @@ public class NonDoctorWorkflowsMilestone2Tests
             Permissions = new List<string> { ClinicPermissions.BillingRead, ClinicPermissions.BillingWrite }
         };
 
-        await context.ClinicRoles.AddRangeAsync(nurseRole, receptionistRole, cashierRole);
+        await context.Roles.AddRangeAsync(nurseRole, receptionistRole, cashierRole);
         await context.SaveChangesAsync();
 
         // Act: Run startup role sync
@@ -120,13 +120,13 @@ public class NonDoctorWorkflowsMilestone2Tests
         // Assert: 1 clinic had its system roles updated
         updatedCount.Should().Be(1);
 
-        var refreshedNurse = await context.ClinicRoles.FirstAsync(r => r.Id == nurseRole.Id);
+        var refreshedNurse = await context.Roles.FirstAsync(r => r.Id == nurseRole.Id);
         refreshedNurse.Permissions.Should().Contain(ClinicPermissions.QueueCompleteNonDoctor);
 
-        var refreshedReceptionist = await context.ClinicRoles.FirstAsync(r => r.Id == receptionistRole.Id);
+        var refreshedReceptionist = await context.Roles.FirstAsync(r => r.Id == receptionistRole.Id);
         refreshedReceptionist.Permissions.Should().Contain(ClinicPermissions.QueueCompleteNonDoctor);
 
-        var refreshedCashier = await context.ClinicRoles.FirstAsync(r => r.Id == cashierRole.Id);
+        var refreshedCashier = await context.Roles.FirstAsync(r => r.Id == cashierRole.Id);
         refreshedCashier.Permissions.Should().Contain(ClinicPermissions.QueueComplete);
         refreshedCashier.Permissions.Should().Contain(ClinicPermissions.QueueCompleteNonDoctor);
         refreshedCashier.Permissions.Should().Contain(ClinicPermissions.PatientsRead);

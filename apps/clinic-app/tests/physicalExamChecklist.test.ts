@@ -66,6 +66,7 @@ mock.module('../constants/fonts', () => ({
 const {
   DEFAULT_PHYSICAL_EXAM_NORMAL,
 } = await import('../components/consultation/InlinePhysicalExamCard');
+const { extractPhilHealthProfileData } = await import('../components/patient/memberType');
 type PhysicalExamFindings = any;
 type SystemExamStatus = any;
 
@@ -245,12 +246,11 @@ describe('Milestone 3 Physical Exam Checklist Adversarial Tests', () => {
       const pin = (patient.philHealthNumber || patient.pin || '').trim();
       if (!pin) return { canToggle: false, reason: 'Missing PhilHealth PIN' };
 
-      const profile = patient.customFields?.philhealth_profile || {};
-      const memberType = patient.customFields?.member_type || profile.memberType || 'MM';
+      const profile = extractPhilHealthProfileData(patient.customFields, patient);
+      const memberType = profile.memberType;
       if (memberType === 'DD') {
-        const principalName = patient.customFields?.principal_full_name ||
-          (profile.memberFirstName && profile.memberLastName ? `${profile.memberFirstName} ${profile.memberLastName}`.trim() : '');
-        const principalPin = patient.customFields?.principal_member_pin || profile.memberPin || '';
+        const principalName = profile.principalFullName;
+        const principalPin = profile.principalPin;
         if (!principalName?.trim() || !principalPin?.trim()) {
           return { canToggle: false, reason: 'Dependent missing sponsor details' };
         }

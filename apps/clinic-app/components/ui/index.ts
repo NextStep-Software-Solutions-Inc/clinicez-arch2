@@ -84,4 +84,8 @@ export {
   default as DatePickerModal,
   type DatePickerModalProps,
 } from './DatePickerModal';
+export {
+  default as PsgcAddressSelector,
+  type PsgcAddressSelectorProps,
+} from './PsgcAddressSelector';
 

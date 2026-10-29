@@ -34,11 +34,11 @@ public class PatientSearchProviderAdversarialTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
         // Seed Clinic B with sensitive patient data
-        var patientB1 = new ClinicPatient
+        var patientB1 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -55,7 +55,7 @@ public class PatientSearchProviderAdversarialTests
         };
 
         // Seed Clinic A with unrelated patient
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -110,12 +110,12 @@ public class PatientSearchProviderAdversarialTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
         const string sharedClinicEzId = "CE-COLL-8888";
 
-        var patientA = new ClinicPatient
+        var patientA = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -128,7 +128,7 @@ public class PatientSearchProviderAdversarialTests
             DateOfBirth = new DateOnly(1988, 3, 15)
         };
 
-        var patientB = new ClinicPatient
+        var patientB = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-b",
@@ -174,10 +174,10 @@ public class PatientSearchProviderAdversarialTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
-        var deletedPatient = new ClinicPatient
+        var deletedPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -207,11 +207,11 @@ public class PatientSearchProviderAdversarialTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
         // 1. Patient with valid ClinicEzId
-        var patientWithId = new ClinicPatient
+        var patientWithId = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -225,7 +225,7 @@ public class PatientSearchProviderAdversarialTests
         };
 
         // 2. Patient with null ClinicEzId
-        var patientNullId = new ClinicPatient
+        var patientNullId = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -239,7 +239,7 @@ public class PatientSearchProviderAdversarialTests
         };
 
         // 3. Patient with empty string ClinicEzId
-        var patientEmptyId = new ClinicPatient
+        var patientEmptyId = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -253,7 +253,7 @@ public class PatientSearchProviderAdversarialTests
         };
 
         // 4. Patient with whitespace-only ClinicEzId
-        var patientWhitespaceId = new ClinicPatient
+        var patientWhitespaceId = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -295,10 +295,10 @@ public class PatientSearchProviderAdversarialTests
     }
 
     [Fact]
-    public async Task Adversarial_ClinicPatientDto_ClinicEzIdPopulationAndNullPreservation()
+    public async Task Adversarial_PatientDto_ClinicEzIdPopulationAndNullPreservation()
     {
         // 1. Direct MapToDto verification
-        var patientWithEzId = new ClinicPatient
+        var patientWithEzId = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -313,7 +313,7 @@ public class PatientSearchProviderAdversarialTests
         var dtoWithEzId = RegisterClinicPatientCommandHandler.MapToDto(patientWithEzId);
         dtoWithEzId.ClinicEzId.Should().Be("CE-TEST-ABCD");
 
-        var patientWithoutEzId = new ClinicPatient
+        var patientWithoutEzId = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",
@@ -330,7 +330,7 @@ public class PatientSearchProviderAdversarialTests
 
         // 2. Query handler integration verification
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var handler = new GetClinicPatientsQueryHandler(repo);
 
         context.Patients.AddRange(patientWithEzId, patientWithoutEzId);
@@ -349,7 +349,7 @@ public class PatientSearchProviderAdversarialTests
     {
         // Arrange
         var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var provider = new PatientSearchProvider(patientRepo);
 
         // Null query
@@ -365,7 +365,7 @@ public class PatientSearchProviderAdversarialTests
         spaceResult.Should().BeEmpty();
 
         // Limit clamping: seed 60 patients
-        var patients = Enumerable.Range(1, 60).Select(i => new ClinicPatient
+        var patients = Enumerable.Range(1, 60).Select(i => new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-a",

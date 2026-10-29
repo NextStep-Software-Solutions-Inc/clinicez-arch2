@@ -78,6 +78,12 @@ public class Facility : BaseEntity
     public string? ContactNumber { get; set; }
     public string? ContactEmail { get; set; }
 
+    // 10-digit Philippine Standard Geographic Code (PSGC) Hierarchy
+    public string? RegionPsgc { get; set; }
+    public string? ProvincePsgc { get; set; }
+    public string? CityMunicipalityPsgc { get; set; }
+    public string? BarangayPsgc { get; set; }
+
     // Facility letterhead/logo/stamp are owned by each facility's own service (e.g. clinic ClinicSettings),
     // not by the portal. Workspace-level brand defaults live in WorkspaceSettings.
 

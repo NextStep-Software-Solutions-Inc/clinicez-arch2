@@ -67,11 +67,11 @@ public class AdversarialMilestone1StressTests
         clinic2Context.TenantId.Returns("tenant_beta");
 
         var (context1, context2, uow1, sieve) = CreateMultiTenantSharedContext(clinic1Context, clinic2Context);
-        var repo1 = new Repository<ClinicPatient>(context1, sieve);
-        var repo2 = new Repository<ClinicPatient>(context2, sieve);
+        var repo1 = new Repository<Patient>(context1, sieve);
+        var repo2 = new Repository<Patient>(context2, sieve);
 
         // Seed Patient in Clinic 1
-        var clinic1Patient = new ClinicPatient
+        var clinic1Patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_alpha",
@@ -125,9 +125,9 @@ public class AdversarialMilestone1StressTests
         clinicContext.TenantId.Returns("tenant_soft_delete");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var deletedPatient = new ClinicPatient
+        var deletedPatient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_soft_delete",
@@ -170,9 +170,9 @@ public class AdversarialMilestone1StressTests
         clinicContext.TenantId.Returns("tenant_case_perm");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_case_perm",
@@ -213,10 +213,10 @@ public class AdversarialMilestone1StressTests
         clinicContext.TenantId.Returns("tenant_pin_perm");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Patient 1 stored with standard hyphens
-        var patientHyphenated = new ClinicPatient
+        var patientHyphenated = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_pin_perm",
@@ -229,7 +229,7 @@ public class AdversarialMilestone1StressTests
             PhilHealthNumber = "12-345678901-8"
         };
         // Patient 2 stored with raw digits (unhyphenated)
-        var patientRaw = new ClinicPatient
+        var patientRaw = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_pin_perm",
@@ -268,10 +268,10 @@ public class AdversarialMilestone1StressTests
         clinicContext.TenantId.Returns("tenant_disjoint");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Patient 1 matches PIN only
-        var patient1 = new ClinicPatient
+        var patient1 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_disjoint",
@@ -284,7 +284,7 @@ public class AdversarialMilestone1StressTests
             PhilHealthNumber = "12-345678901-8"
         };
         // Patient 2 matches Contact Number only
-        var patient2 = new ClinicPatient
+        var patient2 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_disjoint",
@@ -297,7 +297,7 @@ public class AdversarialMilestone1StressTests
             PhilHealthNumber = "10-000000000-5"
         };
         // Patient 3 matches Name + DOB only
-        var patient3 = new ClinicPatient
+        var patient3 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_disjoint",
@@ -354,9 +354,9 @@ public class AdversarialMilestone1StressTests
         clinicContext.TenantId.Returns("tenant_partial");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant_partial",
@@ -554,7 +554,7 @@ public class AdversarialMilestone1StressTests
         clinicContext.TenantId.Returns("tenant_allergy");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(
@@ -633,7 +633,7 @@ public class AdversarialMilestone1StressTests
         clinicContext.TenantId.Returns("tenant_triage_seq");
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
 
         var handler = new RegisterClinicPatientCommandHandler(
@@ -641,7 +641,7 @@ public class AdversarialMilestone1StressTests
 
         // Act: Register 4 patients in sequence with varying priorities
         var priorities = new[] { "Emergency", "Urgent", "Routine", "UnknownPriorityFallback" };
-        var createdDtos = new List<ClinicPatientDto>();
+        var createdDtos = new List<PatientDto>();
 
         for (int i = 0; i < priorities.Length; i++)
         {
@@ -710,18 +710,18 @@ public class AdversarialMilestone1StressTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var problemRepo = TestDbHelper.CreateRepository<PatientProblem>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var problemRepo = TestDbHelper.CreateRepository<PatientMedicalHistory>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(context, sieve);
-        var attachRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var attachRepo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patientWithNulls = new ClinicPatient
+        var patientWithNulls = new Patient
         {
             Id = patientId,
             TenantId = "tenant_chart_nulls",
@@ -732,7 +732,7 @@ public class AdversarialMilestone1StressTests
             MiddleName = null,
             Suffix = null,
             DateOfBirth = new DateOnly(2000, 1, 1),
-            Gender = "Male",
+            Gender = Gender.Male,
             CivilStatus = null,
             ContactNumber = "09170000000",
             Email = null,
@@ -740,9 +740,6 @@ public class AdversarialMilestone1StressTests
             SeniorCitizenId = null,
             PwdId = null,
             BloodType = null,
-            Allergies = null,
-            ChronicConditions = null,
-            Alerts = null,
             CustomFields = new Dictionary<string, object?>() // Empty custom fields
         };
         await patientRepo.AddAsync(patientWithNulls, CancellationToken.None);
@@ -791,15 +788,15 @@ public class AdversarialMilestone1StressTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var allergyRepo = TestDbHelper.CreateRepository<PatientAllergy>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = "tenant_chart_sort",
@@ -871,14 +868,14 @@ public class AdversarialMilestone1StressTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var patientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = "tenant_malformed",

@@ -569,7 +569,6 @@ describe('Issue #76 Frontend Numeric Custom Field Engine & Validation', () => {
       const existing = {
         member_type: 'DD',
         principal_member_pin: '12-345678901-2',
-        philhealth_profile: { chronic_conditions: ['Hypertension'] },
         primary_address_line: '123 Medical Way',
         emergency_contact_name: 'Dr. Jane Doe',
         gpa: '3.75',
@@ -581,7 +580,6 @@ describe('Issue #76 Frontend Numeric Custom Field Engine & Validation', () => {
       expect('gpa' in merged).toBe(false);
       expect(merged.member_type).toBe('DD');
       expect(merged.principal_member_pin).toBe('12-345678901-2');
-      expect(merged.philhealth_profile).toEqual({ chronic_conditions: ['Hypertension'] });
       expect(merged.primary_address_line).toBe('123 Medical Way');
       expect(merged.emergency_contact_name).toBe('Dr. Jane Doe');
     });
@@ -660,7 +658,6 @@ describe('Issue #76 Frontend Numeric Custom Field Engine & Validation', () => {
         student_id: '2026-0001',
         affiliation: 'Student',
         member_type: 'MM',
-        philhealth_profile: { member_type: 'MM' },
       };
 
       // User clears number_of_dependents (''), switches affiliation to 'Employee' (hiding student_id),
@@ -687,7 +684,6 @@ describe('Issue #76 Frontend Numeric Custom Field Engine & Validation', () => {
       // Active updated values and unrelated metadata remain intact
       expect(putPayload.affiliation).toBe('Employee');
       expect(putPayload.member_type).toBe('MM');
-      expect(putPayload.philhealth_profile).toEqual({ member_type: 'MM' });
     });
   });
 });

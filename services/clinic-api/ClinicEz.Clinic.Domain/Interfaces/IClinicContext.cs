@@ -10,6 +10,7 @@ public interface IClinicContext
     Guid? BranchId { get; }
     Guid? StaffId { get; }
     string? StaffName { get; }
+    string? StaffRole { get; }
     IReadOnlyList<string> Permissions { get; }
     bool HasPermission(string permission);
 }

@@ -53,14 +53,14 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IStaffAccessInvalidator? _accessCache;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public UpdateMyProfileCommandHandler(
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IStaffAccessInvalidator? accessCache = null,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _unitOfWork = unitOfWork;

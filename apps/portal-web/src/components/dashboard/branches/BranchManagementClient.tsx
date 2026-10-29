@@ -167,14 +167,12 @@ export default function BranchManagementClient() {
   const [phAccreditation, setPhAccreditation] = useState("");
   const [phPmcc, setPhPmcc] = useState("");
   const [phCertId, setPhCertId] = useState("");
-  const [phUsername, setPhUsername] = useState("");
-  const [phPassword, setPhPassword] = useState("");
+  const [phSecretKey, setPhSecretKey] = useState("");
   const [phCipherKey, setPhCipherKey] = useState("");
-  const [phEndpoint, setPhEndpoint] = useState("https://staging.philhealth.gov.ph/KONSULTA/SOAP");
+  const [phBaseUrl, setPhBaseUrl] = useState("https://pcapi.philhealth.gov.ph");
   const [savingPh, setSavingPh] = useState(false);
   const [isTestingPh, setIsTestingPh] = useState(false);
   const [testPhResult, setTestPhResult] = useState<TestPhilHealthConnectionResult | null>(null);
-  const [useBlankStagingCredentials, setUseBlankStagingCredentials] = useState(false);
 
   const isConfiguredBranch = Boolean(
     philhealthBranch?.isPhilHealthAccredited && philhealthBranch?.philHealthAccreditationNumber
@@ -334,16 +332,14 @@ export default function BranchManagementClient() {
     setPhAccreditation(branch.philHealthAccreditationNumber || "");
     setPhPmcc(branch.philHealthPmccNumber || "");
     setPhCertId(branch.philHealthSoftwareCertificateId || "");
-    setPhUsername("");
-    setPhPassword("");
-    setPhCipherKey("");
-    setPhEndpoint(branch.philHealthKonsultaEndpoint || "https://staging.philhealth.gov.ph/KONSULTA/SOAP");
-    setUseBlankStagingCredentials(false);
+    setPhSecretKey(""); // Never show existing secret key in plaintext
+    setPhCipherKey(""); // Never show existing cipher key in plaintext
+    setPhBaseUrl(branch.philHealthBaseUrl || branch.philHealthKonsultaEndpoint || "https://pcapi.philhealth.gov.ph");
     setTestPhResult(null);
     setIsTestingPh(false);
   };
 
-  // Test PhilHealth Gateway Connection (before saving)
+  // Test PhilHealth PCAPI Gateway Connection (before or after saving)
   const handleTestPhilHealth = async () => {
     if (!philhealthBranch) return;
     if (!phAccreditation.trim()) {
@@ -354,22 +350,13 @@ export default function BranchManagementClient() {
     setIsTestingPh(true);
     setTestPhResult(null);
     try {
-      const resolvedUsername = isConfiguredBranch
-        ? (useBlankStagingCredentials ? "" : (phUsername.trim() || undefined))
-        : (phUsername ? phUsername.trim() : "");
-
-      const resolvedPassword = isConfiguredBranch
-        ? (useBlankStagingCredentials ? "" : (phPassword || undefined))
-        : (phPassword ? phPassword : "");
-
       const payload: TestBranchPhilHealthPayload = {
         accreditationNumber: phAccreditation.trim(),
         pmccNumber: phPmcc.trim() || undefined,
         softwareCertificateId: phCertId.trim() || undefined,
-        username: resolvedUsername,
-        password: resolvedPassword,
+        secretKey: phSecretKey.trim() || undefined, // undefined uses saved protected secret
         cipherKey: phCipherKey.trim() || undefined,
-        konsultaEndpoint: phEndpoint.trim() || undefined,
+        baseUrl: phBaseUrl.trim() || undefined,
       };
 
       const result = await branchService.testPhilHealthConnection(philhealthBranch.id, payload);
@@ -392,7 +379,7 @@ export default function BranchManagementClient() {
     }
   };
 
-  // Save PhilHealth Credentials
+  // Save PhilHealth PCAPI Credentials
   const handleSavePhilHealth = async () => {
     if (!philhealthBranch) return;
     if (!phAccreditation.trim()) {
@@ -402,26 +389,17 @@ export default function BranchManagementClient() {
 
     setSavingPh(true);
     try {
-      const resolvedUsername = isConfiguredBranch
-        ? (useBlankStagingCredentials ? "" : (phUsername.trim() || undefined))
-        : (phUsername ? phUsername.trim() : "");
-
-      const resolvedPassword = isConfiguredBranch
-        ? (useBlankStagingCredentials ? "" : (phPassword || undefined))
-        : (phPassword ? phPassword : "");
-
       const payload: ConfigureBranchPhilHealthPayload = {
         accreditationNumber: phAccreditation.trim(),
         pmccNumber: phPmcc.trim() || undefined,
         softwareCertificateId: phCertId.trim() || undefined,
-        username: resolvedUsername,
-        password: resolvedPassword,
-        cipherKey: phCipherKey.trim() || undefined,
-        konsultaEndpoint: phEndpoint.trim() || undefined,
-        isPhilHealthAccredited: true
+        secretKey: phSecretKey.trim() || undefined, // undefined preserves existing saved secret!
+        cipherKey: phCipherKey.trim() || undefined, // undefined preserves existing saved cipher key!
+        baseUrl: phBaseUrl.trim() || undefined,
+        isPhilHealthAccredited: true,
       };
       await branchService.configurePhilHealth(philhealthBranch.id, payload);
-      toast.success(`PhilHealth credentials configured for branch "${philhealthBranch.name}".`);
+      toast.success(`PhilHealth PCAPI credentials configured for branch "${philhealthBranch.name}".`);
       setPhilhealthBranch(null);
       await loadData();
     } catch (err: unknown) {
@@ -1257,77 +1235,78 @@ export default function BranchManagementClient() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">SOAP Username</Label>
-                <Input
-                  placeholder={
-                    isConfiguredBranch
-                      ? (useBlankStagingCredentials ? "Blank credentials for staging" : "Leave blank to keep existing")
-                      : "Blank for staging / Enter username"
-                  }
-                  value={phUsername}
-                  onChange={(e) => setPhUsername(e.target.value)}
-                  disabled={useBlankStagingCredentials}
-                  className="h-9 rounded-xl text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">SOAP Password</Label>
-                <Input
-                  type="password"
-                  placeholder={
-                    isConfiguredBranch
-                      ? (useBlankStagingCredentials ? "Blank credentials for staging" : "Leave blank to keep existing")
-                      : "Blank for staging / Enter password"
-                  }
-                  value={phPassword}
-                  onChange={(e) => setPhPassword(e.target.value)}
-                  disabled={useBlankStagingCredentials}
-                  className="h-9 rounded-xl text-xs"
-                />
-              </div>
-            </div>
-
-            {isConfiguredBranch && (
-              <div className="flex items-center space-x-2 pt-0.5">
-                <Checkbox
-                  id="useBlankStaging"
-                  checked={useBlankStagingCredentials}
-                  onCheckedChange={(checked) => {
-                    const isChecked = Boolean(checked);
-                    setUseBlankStagingCredentials(isChecked);
-                    if (isChecked) {
-                      setPhUsername("");
-                      setPhPassword("");
-                    }
-                  }}
-                />
-                <Label htmlFor="useBlankStaging" className="text-[11px] text-muted-foreground font-medium cursor-pointer">
-                  Switch to blank SOAP credentials (&quot;&quot;) for PhilHealth Staging / Sandbox gateway testing
-                </Label>
-              </div>
-            )}
-
+            {/* PCAPI Secret Key */}
             <div className="space-y-1">
-              <Label className="text-xs font-semibold">AES Cipher Key (Data Protection)</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">PCAPI Secret Key (Authentication)</Label>
+                {philhealthBranch?.hasSecretKey ? (
+                  <Badge variant="outline" className="text-primary bg-primary/10 border-primary/20 text-[10px] py-0 px-1.5 font-normal">
+                    Configured (Encrypted at Rest)
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground text-[10px] py-0 px-1.5 font-normal">
+                    Not Set
+                  </Badge>
+                )}
+              </div>
               <Input
                 type="password"
-                placeholder="Leave blank to keep existing"
+                placeholder={
+                  philhealthBranch?.hasSecretKey
+                    ? "•••••••••••••••• (Leave blank to keep existing)"
+                    : "Enter PCAPI Secret Key"
+                }
+                value={phSecretKey}
+                onChange={(e) => setPhSecretKey(e.target.value)}
+                className="h-9 rounded-xl text-xs font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Write-only credential. Encrypted with AES-GCM at rest; never echoed back over the wire.
+              </p>
+            </div>
+
+            {/* AES Cipher Key */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">AES Cipher Key (Data Protection)</Label>
+                {philhealthBranch?.hasCipherKey ? (
+                  <Badge variant="outline" className="text-primary bg-primary/10 border-primary/20 text-[10px] py-0 px-1.5 font-normal">
+                    Configured (Encrypted at Rest)
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground text-[10px] py-0 px-1.5 font-normal">
+                    Not Set
+                  </Badge>
+                )}
+              </div>
+              <Input
+                type="password"
+                placeholder={
+                  philhealthBranch?.hasCipherKey
+                    ? "•••••••••••••••• (Leave blank to keep existing)"
+                    : "Enter AES-256-CBC Cipher Key"
+                }
                 value={phCipherKey}
                 onChange={(e) => setPhCipherKey(e.target.value)}
                 className="h-9 rounded-xl text-xs font-mono"
               />
+              <p className="text-[10px] text-muted-foreground">
+                Required for Annex C encrypted payloads. Leave blank to keep current stored key.
+              </p>
             </div>
 
+            {/* PCAPI Base URL */}
             <div className="space-y-1">
-              <Label className="text-xs font-semibold">Konsulta SOAP Endpoint</Label>
+              <Label className="text-xs font-semibold">PCAPI Base URL</Label>
               <Input
-                value={phEndpoint}
-                onChange={(e) => setPhEndpoint(e.target.value)}
+                placeholder="https://pcapi.philhealth.gov.ph"
+                value={phBaseUrl}
+                onChange={(e) => setPhBaseUrl(e.target.value)}
                 className="h-9 rounded-xl text-xs font-mono"
               />
+              <p className="text-[10px] text-muted-foreground">
+                Default: https://pcapi.philhealth.gov.ph. For sandbox testing, set to simulation endpoint (supports PKA-SIM-... credentials).
+              </p>
             </div>
 
             {/* Diagnostic Gateway Connectivity Test */}
@@ -1339,7 +1318,7 @@ export default function BranchManagementClient() {
                     Gateway Connectivity Test
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-snug">
-                    Verifies credentials &amp; tests <code className="font-mono text-[10px]">getToken</code> against the SOAP gateway before saving.
+                    Verifies credentials &amp; tests <code className="font-mono text-[10px]">/auth/token</code> against the PCAPI gateway before saving.
                   </p>
                 </div>
                 <Button
@@ -1388,6 +1367,11 @@ export default function BranchManagementClient() {
                     {testPhResult.token && (
                       <div className="mt-1 text-[10px] font-mono opacity-80 truncate">
                         Session Token: {testPhResult.token}
+                      </div>
+                    )}
+                    {typeof testPhResult.latencyMs === "number" && (
+                      <div className="mt-0.5 text-[10px] opacity-80">
+                        Response Latency: {testPhResult.latencyMs} ms
                       </div>
                     )}
                   </div>

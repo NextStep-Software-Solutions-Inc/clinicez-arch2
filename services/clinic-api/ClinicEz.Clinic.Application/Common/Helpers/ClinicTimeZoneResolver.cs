@@ -12,7 +12,7 @@ namespace ClinicEz.Clinic.Application.Common.Helpers;
 /// <summary>
 /// Resolves the active clinic/workspace calendar date (<see cref="DateOnly"/>), timezone, date format, and time format.
 /// Priority order:
-/// 1. Clinic facility override (<see cref="ClinicSettings.TimeZoneId"/>, <see cref="ClinicSettings.DateFormat"/>, <see cref="ClinicSettings.TimeFormat"/>)
+/// 1. Clinic facility override (<see cref="FacilitySettings.TimeZoneId"/>, <see cref="FacilitySettings.DateFormat"/>, <see cref="FacilitySettings.TimeFormat"/>)
 /// 2. Tenant workspace setting (<see cref="WorkspaceProfile.TimeZoneId"/>, <see cref="WorkspaceProfile.DateFormat"/>)
 /// 3. System default ("Asia/Manila", "MMM d, yyyy", "12h")
 /// </summary>
@@ -31,7 +31,7 @@ public static class ClinicTimeZoneResolver
         IWorkspaceProfileProvider? workspaceProfiles,
         string? tenantId,
         CancellationToken ct = default,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<FacilitySettings>? settingsRepo = null)
     {
         if (workspaceProfiles is null && settingsRepo is null)
         {
@@ -69,7 +69,7 @@ public static class ClinicTimeZoneResolver
         return DateOnly.FromDateTime(localNow);
     }
 
-    public static string ResolveEffectiveTimeZoneId(ClinicSettings? settings, WorkspaceProfile? workspaceProfile)
+    public static string ResolveEffectiveTimeZoneId(FacilitySettings? settings, WorkspaceProfile? workspaceProfile)
     {
         if (!string.IsNullOrWhiteSpace(settings?.TimeZoneId))
             return settings.TimeZoneId.Trim();
@@ -78,7 +78,7 @@ public static class ClinicTimeZoneResolver
         return DefaultTimeZoneId;
     }
 
-    public static string ResolveEffectiveDateFormat(ClinicSettings? settings, WorkspaceProfile? workspaceProfile)
+    public static string ResolveEffectiveDateFormat(FacilitySettings? settings, WorkspaceProfile? workspaceProfile)
     {
         if (!string.IsNullOrWhiteSpace(settings?.DateFormat))
             return settings.DateFormat.Trim();
@@ -87,7 +87,7 @@ public static class ClinicTimeZoneResolver
         return DefaultDateFormat;
     }
 
-    public static string ResolveEffectiveTimeFormat(ClinicSettings? settings)
+    public static string ResolveEffectiveTimeFormat(FacilitySettings? settings)
     {
         if (!string.IsNullOrWhiteSpace(settings?.TimeFormat))
         {

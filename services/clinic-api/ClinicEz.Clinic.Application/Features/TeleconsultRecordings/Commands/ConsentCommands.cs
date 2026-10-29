@@ -39,21 +39,21 @@ public sealed class ConsentCommandHandler :
     IRequestHandler<SubmitPatientConsentCommand, RecordingSessionDto>,
     IRequestHandler<RevokeRecordingConsentCommand, RecordingSessionDto>
 {
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<TeleconsultRecordingSession> _sessionRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly ILogger<ConsentCommandHandler> _logger;
 
     public ConsentCommandHandler(
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<TeleconsultRecordingSession> sessionRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicAuditEntry> auditRepo,
+        IRepository<AuditEntry> auditRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         ILogger<ConsentCommandHandler> logger)
@@ -129,7 +129,7 @@ public sealed class ConsentCommandHandler :
         await _sessionRepo.AddAsync(session, ct);
 
         // WORM Audit Entry
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
@@ -140,7 +140,7 @@ public sealed class ConsentCommandHandler :
             Action = "teleconsult.recording.consent.requested",
             ActorStaffId = _clinicContext.StaffId,
             ActorName = _clinicContext.StaffName ?? "Attending Doctor",
-            ActorRole = "Doctor",
+            ActorRole = _clinicContext.StaffRole ?? "Doctor",
             TargetEntityType = "TeleconsultRecordingSession",
             TargetEntityId = session.Id.ToString(),
             PatientId = patient.Id,
@@ -180,7 +180,7 @@ public sealed class ConsentCommandHandler :
             session.PatientConsentIpAddress = request.IpAddress;
             session.PatientConsentUserAgent = request.UserAgent;
 
-            var audit = new ClinicAuditEntry
+            var audit = new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = session.TenantId,
@@ -213,7 +213,7 @@ public sealed class ConsentCommandHandler :
             session.PatientConsentIpAddress = request.IpAddress;
             session.PatientConsentUserAgent = request.UserAgent;
 
-            var audit = new ClinicAuditEntry
+            var audit = new AuditEntry
             {
                 Id = Guid.NewGuid(),
                 TenantId = session.TenantId,
@@ -258,7 +258,7 @@ public sealed class ConsentCommandHandler :
         session.RecordingState = "Stopped";
         session.StoppedAtUtc = now;
 
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = session.TenantId,
@@ -269,7 +269,7 @@ public sealed class ConsentCommandHandler :
             Action = "teleconsult.recording.consent.revoked",
             ActorStaffId = _clinicContext.StaffId,
             ActorName = _clinicContext.StaffName ?? session.PatientName,
-            ActorRole = "Participant",
+            ActorRole = _clinicContext.StaffRole ?? "Participant",
             TargetEntityType = "TeleconsultRecordingSession",
             TargetEntityId = session.Id.ToString(),
             PatientId = session.PatientId,

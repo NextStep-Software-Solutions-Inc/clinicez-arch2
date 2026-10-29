@@ -17,15 +17,15 @@ public record GetPublicRxVerificationInfoQuery(string Token) : IRequest<PublicRx
 public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublicRxVerificationInfoQuery, PublicRxVerificationInfoDto>
 {
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<StaffMember> _staffRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
 
     public GetPublicRxVerificationInfoQueryHandler(
         IRepository<ConsultationEncounter> encounterRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<StaffMember> staffRepo,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<FacilitySettings> settingsRepo)
     {
         _encounterRepo = encounterRepo;
         _patientRepo = patientRepo;
@@ -89,7 +89,7 @@ public class GetPublicRxVerificationInfoQueryHandler : IRequestHandler<GetPublic
             patientInitials,
             patientAge,
             patient?.Gender.ToString() ?? "Unknown",
-            patient?.Allergies,
+            patient?.Allergies != null && patient.Allergies.Count > 0 ? string.Join(", ", patient.Allergies.Select(a => a.Allergen)) : null,
             encounter.Assessment,
             encounter.Prescriptions.Select(p => new PrescriptionSlipItemDto(
                 p.Id,

@@ -16,6 +16,7 @@ import m0012 from './0012_flowery_wind_dancer.sql';
 import m0013 from './0013_pascalcase_wire_enums.sql';
 import m0014 from './0014_booking_draft_share_sections.sql';
 import m0015 from './0015_health_records_and_upload_queue.sql';
+import m0016 from './0016_add_psgc_address_columns.sql';
 
   export default {
     journal,
@@ -34,6 +35,7 @@ m0011,
 m0012,
 m0013,
 m0014,
-m0015
+m0015,
+m0016
     }
   }

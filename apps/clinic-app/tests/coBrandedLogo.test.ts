@@ -32,6 +32,17 @@ mock.module('react-native', () => ({
   Image: createMockComponent('Image'),
   AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
 }));
 
 mock.module('react-native-svg', () => ({

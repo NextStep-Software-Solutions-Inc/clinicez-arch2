@@ -403,7 +403,7 @@ public class Tier3_OpdSuiteCrossFeatureTests
     // Pairwise 21: F3.6 (Settings UI) × F3.2 (Settings Persistence)
     // =========================================================================
     [Fact]
-    public void Pairwise_21_UiThresholdSliderChange_PersistsDirectlyToClinicSettings()
+    public void Pairwise_21_UiThresholdSliderChange_PersistsDirectlyToFacilitySettings()
     {
         var original = new ClinicEodSettingsDto(_clinicId, _tenantId, "21:00", true, QueuePushNotificationThreshold: 2);
         int newThresholdFromSlider = 4;

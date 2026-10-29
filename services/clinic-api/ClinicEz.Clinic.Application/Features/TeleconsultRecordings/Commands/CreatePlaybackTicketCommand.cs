@@ -21,7 +21,7 @@ public sealed record CreatePlaybackTicketCommand(Guid SessionId) : IRequest<Play
 public sealed class CreatePlaybackTicketCommandHandler : IRequestHandler<CreatePlaybackTicketCommand, PlaybackTicketDto>
 {
     private readonly IRepository<TeleconsultRecordingSession> _sessionRepo;
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IConfiguration _configuration;
@@ -29,7 +29,7 @@ public sealed class CreatePlaybackTicketCommandHandler : IRequestHandler<CreateP
 
     public CreatePlaybackTicketCommandHandler(
         IRepository<TeleconsultRecordingSession> sessionRepo,
-        IRepository<ClinicAuditEntry> auditRepo,
+        IRepository<AuditEntry> auditRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IConfiguration configuration,
@@ -72,7 +72,7 @@ public sealed class CreatePlaybackTicketCommandHandler : IRequestHandler<CreateP
         var ticket = $"{payload}.{signature}";
 
         // WORM Audit Entry
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = session.TenantId,

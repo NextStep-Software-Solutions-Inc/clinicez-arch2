@@ -18,13 +18,8 @@ import type { FacilityDeploymentMode } from "@/services/tenant.service";
 import { toastApiError } from "@/lib/apiToast";
 import Link from "next/link";
 import { toast } from "sonner";
-import {
-  PHILIPPINE_REGIONS,
-  FACILITY_CLASSIFICATIONS,
-  PhilippineRegion,
-  PhilippineProvince,
-  PhilippineCity,
-} from "@/constants/philippine-addresses";
+import { FACILITY_CLASSIFICATIONS } from "@/constants/facility-classifications";
+import { locationService, type PsgcLocationDto } from "@/services/location.service";
 import { cn } from "@/lib/utils";
 import {
   IconBuildingHospital,
@@ -172,22 +167,19 @@ export default function FacilityOnboardingWizard({
   const [operatingHours, setOperatingHours] = useState("");
 
   // Geolocation & Address
+  const [regions, setRegions] = useState<PsgcLocationDto[]>([]);
   const [selectedRegionCode, setSelectedRegionCode] = useState("");
+  const [selectedRegionName, setSelectedRegionName] = useState("");
+  const [provinceOptions, setProvinceOptions] = useState<PsgcLocationDto[]>([]);
   const [selectedProvinceName, setSelectedProvinceName] = useState("");
+  const [cityOptions, setCityOptions] = useState<PsgcLocationDto[]>([]);
   const [selectedCityName, setSelectedCityName] = useState("");
+  const [barangayOptions, setBarangayOptions] = useState<PsgcLocationDto[]>([]);
   const [selectedBarangay, setSelectedBarangay] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [contactEmail, setContactEmail] = useState("");
-
-  // Address Cascading Lookups
-  const activeRegion: PhilippineRegion | undefined = PHILIPPINE_REGIONS.find((r) => r.code === selectedRegionCode);
-  const provinceOptions: PhilippineProvince[] = activeRegion?.provinces || [];
-  const activeProvince: PhilippineProvince | undefined = provinceOptions.find((p) => p.name === selectedProvinceName);
-  const cityOptions: PhilippineCity[] = activeProvince?.cities || [];
-  const activeCity: PhilippineCity | undefined = cityOptions.find((c) => c.name === selectedCityName);
-  const barangayOptions: string[] = activeCity?.barangays || [];
 
   // Existing facilities for unique name and slug validation
   const [existingFacilities, setExistingFacilities] = useState<Array<{ id: string; name: string; slug?: string }>>([]);
@@ -346,22 +338,46 @@ export default function FacilityOnboardingWizard({
     }
   }, [normalizedFacilityType, classification]);
 
-  // Sync city zip code
+  // Load PSGC regions
   useEffect(() => {
-    if (activeCity?.zipCode && !zipCode) {
-      setZipCode(activeCity.zipCode);
-    }
-  }, [activeCity, zipCode]);
+    let isMounted = true;
+    locationService.getRegions().then((data) => {
+      if (isMounted && data) {
+        setRegions(data);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleRegionChange = (newCode: string) => {
     setSelectedRegionCode(newCode);
+    const reg = regions.find((r) => r.psgcCode === newCode || r.name === newCode);
+    setSelectedRegionName(reg?.name || newCode);
     setSelectedProvinceName("");
     setSelectedCityName("");
     setSelectedBarangay("");
     setZipCode("");
-    const reg = PHILIPPINE_REGIONS.find((r) => r.code === newCode);
-    if (reg && reg.provinces.length === 1) {
-      setSelectedProvinceName(reg.provinces[0].name);
+    setProvinceOptions([]);
+    setCityOptions([]);
+    setBarangayOptions([]);
+
+    if (newCode) {
+      locationService.getProvinces(newCode).then((provs) => {
+        setProvinceOptions(provs);
+        if (provs.length === 1) {
+          setSelectedProvinceName(provs[0].name);
+          locationService.getCities(provs[0].psgcCode, newCode).then((cities) => {
+            setCityOptions(cities);
+          });
+        }
+      });
+      locationService.getCities(undefined, newCode).then((cities) => {
+        if (cities.length > 0) {
+          setCityOptions(cities);
+        }
+      });
     }
   };
 
@@ -370,16 +386,33 @@ export default function FacilityOnboardingWizard({
     setSelectedCityName("");
     setSelectedBarangay("");
     setZipCode("");
+    setCityOptions([]);
+    setBarangayOptions([]);
+
+    if (newProv) {
+      const prov = provinceOptions.find((p) => p.name === newProv);
+      locationService.getCities(prov?.psgcCode, selectedRegionCode).then((cities) => {
+        setCityOptions(cities);
+      });
+    }
   };
 
   const handleCityChange = (newCity: string) => {
     setSelectedCityName(newCity);
     setSelectedBarangay("");
+    setBarangayOptions([]);
+
     const city = cityOptions.find((c) => c.name === newCity);
-    if (city) {
+    if (city?.zipCode) {
       setZipCode(city.zipCode);
     } else {
       setZipCode("");
+    }
+
+    if (city?.psgcCode) {
+      locationService.getBarangays(city.psgcCode).then((brgys) => {
+        setBarangayOptions(brgys);
+      });
     }
   };
 
@@ -525,7 +558,7 @@ export default function FacilityOnboardingWizard({
         philHealthAccreditationNumber: (philHealthAccreditationNumber || selectedBranch?.philHealthAccreditationNumber || "").trim() || undefined,
         taxIdentificationNumber: taxIdentificationNumber.trim() || undefined,
         operatingHours: operatingHours.trim() || undefined,
-        region: selectedRegionCode || selectedBranch?.region || undefined,
+        region: selectedRegionName || selectedRegionCode || selectedBranch?.region || undefined,
         province: selectedProvinceName || selectedBranch?.province || undefined,
         city: selectedCityName || selectedBranch?.city || undefined,
         barangay: selectedBarangay || selectedBranch?.barangay || undefined,
@@ -1112,8 +1145,8 @@ export default function FacilityOnboardingWizard({
                     className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">-- Select Administrative Region --</option>
-                    {PHILIPPINE_REGIONS.map((r) => (
-                      <option key={r.code} value={r.code}>
+                    {regions.map((r) => (
+                      <option key={r.psgcCode} value={r.psgcCode}>
                         {r.name}
                       </option>
                     ))}
@@ -1133,7 +1166,7 @@ export default function FacilityOnboardingWizard({
                   >
                     <option value="">{selectedRegionCode ? "-- Select Province --" : "-- Select Region First --"}</option>
                     {provinceOptions.map((p) => (
-                      <option key={p.name} value={p.name}>
+                      <option key={p.psgcCode} value={p.name}>
                         {p.name}
                       </option>
                     ))}
@@ -1150,12 +1183,12 @@ export default function FacilityOnboardingWizard({
                     id="city-select"
                     value={selectedCityName}
                     onChange={(e) => handleCityChange(e.target.value)}
-                    disabled={!selectedProvinceName}
+                    disabled={!selectedRegionCode}
                     className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                   >
-                    <option value="">{selectedProvinceName ? "-- Select City / Municipality --" : "-- Select Province First --"}</option>
+                    <option value="">{selectedRegionCode ? "-- Select City / Municipality --" : "-- Select Region First --"}</option>
                     {cityOptions.map((c) => (
-                      <option key={c.name} value={c.name}>
+                      <option key={c.psgcCode} value={c.name}>
                         {c.name}
                       </option>
                     ))}
@@ -1175,8 +1208,8 @@ export default function FacilityOnboardingWizard({
                   >
                     <option value="">{selectedCityName ? "-- Select Barangay --" : "-- Select City First --"}</option>
                     {barangayOptions.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
+                      <option key={b.psgcCode} value={b.name}>
+                        {b.name}
                       </option>
                     ))}
                   </select>

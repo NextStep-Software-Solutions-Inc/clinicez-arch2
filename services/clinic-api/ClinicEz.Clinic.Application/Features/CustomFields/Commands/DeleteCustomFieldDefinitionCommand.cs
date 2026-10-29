@@ -13,11 +13,11 @@ public sealed record DeleteCustomFieldDefinitionCommand(Guid Id) : IRequest<bool
 
 public sealed class DeleteCustomFieldDefinitionCommandHandler : IRequestHandler<DeleteCustomFieldDefinitionCommand, bool>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
     private readonly IUnitOfWork _unitOfWork;
 
     public DeleteCustomFieldDefinitionCommandHandler(
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         IUnitOfWork unitOfWork)
     {
         _repo = repo;

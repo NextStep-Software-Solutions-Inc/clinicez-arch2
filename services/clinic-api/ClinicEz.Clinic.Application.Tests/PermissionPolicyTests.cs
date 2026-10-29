@@ -20,7 +20,7 @@ namespace ClinicEz.Clinic.Application.Tests;
 public class PermissionPolicyTests
 {
     [Fact]
-    public async Task CreateClinicRole_Success_ReturnsNewRoleWithPermissions()
+    public async Task CreateRole_Success_ReturnsNewRoleWithPermissions()
     {
         // Arrange
         var clinicId = Guid.NewGuid();
@@ -30,7 +30,7 @@ public class PermissionPolicyTests
         clinicContext.TenantId.Returns(tenantId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
         var handler = new CreateClinicRoleCommandHandler(roleRepo, uow, clinicContext);
         var permissions = new List<string> { ClinicPermissions.QueueRead, ClinicPermissions.QueueCheckIn };
@@ -45,7 +45,7 @@ public class PermissionPolicyTests
         result.Permissions.Should().Contain(ClinicPermissions.QueueCheckIn);
         result.IsSystem.Should().BeFalse();
 
-        var savedRole = await context.ClinicRoles.FirstOrDefaultAsync(r => r.Id == result.Id);
+        var savedRole = await context.Roles.FirstOrDefaultAsync(r => r.Id == result.Id);
         savedRole.Should().NotBeNull();
         savedRole!.Name.Should().Be("Front Desk Level 2");
         savedRole.Permissions.Should().HaveCount(2);
@@ -131,10 +131,10 @@ public class PermissionPolicyTests
         clinicContext.TenantId.Returns(tenantId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var systemRole = new ClinicRole
+        var systemRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -143,7 +143,7 @@ public class PermissionPolicyTests
             IsSystem = true,
             Permissions = new List<string> { ClinicPermissions.ConsultationsRead }
         };
-        await context.ClinicRoles.AddAsync(systemRole);
+        await context.Roles.AddAsync(systemRole);
         await context.SaveChangesAsync();
 
         var handler = new UpdateClinicRoleCommandHandler(roleRepo, staffRepo, uow, clinicContext);
@@ -168,10 +168,10 @@ public class PermissionPolicyTests
         clinicContext.StaffId.Returns(callerStaffId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var customRole = new ClinicRole
+        var customRole = new Role
         {
             Id = customRoleId,
             TenantId = tenantId,
@@ -180,7 +180,7 @@ public class PermissionPolicyTests
             IsSystem = false,
             Permissions = new List<string> { ClinicPermissions.RolesManage, ClinicPermissions.StaffManage }
         };
-        await context.ClinicRoles.AddAsync(customRole);
+        await context.Roles.AddAsync(customRole);
 
         await context.StaffMembers.AddAsync(new StaffMember
         {
@@ -221,10 +221,10 @@ public class PermissionPolicyTests
         clinicContext.StaffId.Returns(callerStaffId); // Caller is NOT assigned to customRoleId
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var customRole = new ClinicRole
+        var customRole = new Role
         {
             Id = customRoleId,
             TenantId = tenantId,
@@ -233,7 +233,7 @@ public class PermissionPolicyTests
             IsSystem = false,
             Permissions = new List<string> { ClinicPermissions.RolesManage, ClinicPermissions.StaffManage, ClinicPermissions.SettingsManage }
         };
-        await context.ClinicRoles.AddAsync(customRole);
+        await context.Roles.AddAsync(customRole);
 
         // Target active staff member is assigned to this custom role
         await context.StaffMembers.AddAsync(new StaffMember
@@ -290,10 +290,10 @@ public class PermissionPolicyTests
         clinicContext.StaffId.Returns(callerStaffId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var systemAdminRole = new ClinicRole
+        var systemAdminRole = new Role
         {
             Id = systemAdminRoleId,
             TenantId = tenantId,
@@ -302,9 +302,9 @@ public class PermissionPolicyTests
             IsSystem = true,
             Permissions = new List<string>(ClinicPermissions.All)
         };
-        await context.ClinicRoles.AddAsync(systemAdminRole);
+        await context.Roles.AddAsync(systemAdminRole);
 
-        var customRole = new ClinicRole
+        var customRole = new Role
         {
             Id = customRoleId,
             TenantId = tenantId,
@@ -313,7 +313,7 @@ public class PermissionPolicyTests
             IsSystem = false,
             Permissions = new List<string> { ClinicPermissions.RolesManage }
         };
-        await context.ClinicRoles.AddAsync(customRole);
+        await context.Roles.AddAsync(customRole);
 
         // Caller is an active Clinic Administrator (holds ClinicPermissions.All)
         await context.StaffMembers.AddAsync(new StaffMember

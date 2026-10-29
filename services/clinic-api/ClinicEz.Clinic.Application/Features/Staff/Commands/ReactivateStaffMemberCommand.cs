@@ -29,19 +29,19 @@ public sealed class ReactivateStaffMemberCommandValidator : AbstractValidator<Re
 public sealed class ReactivateStaffMemberCommandHandler : IRequestHandler<ReactivateStaffMemberCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IRepository<FacilitySettings> _settingsRepository;
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public ReactivateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicSettings> settingsRepository,
+        IRepository<FacilitySettings> settingsRepository,
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;

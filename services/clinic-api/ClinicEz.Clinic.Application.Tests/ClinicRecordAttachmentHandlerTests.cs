@@ -14,7 +14,7 @@ using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests;
 
-public class ClinicRecordAttachmentHandlerTests
+public class RecordAttachmentHandlerTests
 {
     [Fact]
     public async Task UploadAndEncryptRecordAttachment_SavesCiphertextAndCreatesVerifiedRecord()
@@ -29,7 +29,7 @@ public class ClinicRecordAttachmentHandlerTests
         clinicContext.TenantId.Returns(tenantId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var encryptionService = Substitute.For<IClinicEncryptionService>();
         var storageService = Substitute.For<IClinicStorageService>();
@@ -104,7 +104,7 @@ public class ClinicRecordAttachmentHandlerTests
         clinicContext.TenantId.Returns(tenantId);
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var encryptionService = Substitute.For<IClinicEncryptionService>();
         var storageService = Substitute.For<IClinicStorageService>();
@@ -170,7 +170,7 @@ public class ClinicRecordAttachmentHandlerTests
         clinicContext.TenantId.Returns(tenantId);
 
         var (context, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var encryptionService = Substitute.For<IClinicEncryptionService>();
         var storageService = Substitute.For<IClinicStorageService>();
@@ -179,7 +179,7 @@ public class ClinicRecordAttachmentHandlerTests
         var mockCiphertext = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
         var storageKey = $"tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez";
 
-        var attachment = new ClinicRecordAttachment
+        var attachment = new RecordAttachment
         {
             Id = attachmentId,
             TenantId = tenantId,
@@ -235,13 +235,13 @@ public class ClinicRecordAttachmentHandlerTests
         clinicContext.TenantId.Returns("tenant_a");
 
         var (context, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var encryptionService = Substitute.For<IClinicEncryptionService>();
         var storageService = Substitute.For<IClinicStorageService>();
 
         // Attachment belongs to otherClinicId
-        var attachment = new ClinicRecordAttachment
+        var attachment = new RecordAttachment
         {
             Id = attachmentId,
             TenantId = "tenant_b",
@@ -278,12 +278,12 @@ public class ClinicRecordAttachmentHandlerTests
         clinicContext.TenantId.Returns("tenant_test");
 
         var (context, _, sieve) = TestDbHelper.CreateTestContext(clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
 
         var encryptionService = Substitute.For<IClinicEncryptionService>();
         var storageService = Substitute.For<IClinicStorageService>();
 
-        var attachment = new ClinicRecordAttachment
+        var attachment = new RecordAttachment
         {
             Id = attachmentId,
             TenantId = "tenant_test",

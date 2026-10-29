@@ -585,21 +585,19 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
       expect(result.clinical_notes).toBeNull();
       expect(result.framingham_risk_score).toBeNull();
 
-      // Statutory & architectural keys MUST be preserved exactly
-      expect(result.yakap_enlistments).toEqual(enlistments);
+      // Statutory & architectural keys: scalar member_type & principal fields preserved, legacy blobs purged
+      expect(result.yakap_enlistments).toBeUndefined();
       expect(result.member_type).toBe('DD');
       expect(result.principal_member_pin).toBe('12-345678901-2');
       expect(result.principal_full_name).toBe('Dela Cruz, Juan M.');
       expect(result.principal_relationship).toBe('S');
       expect(result.principal_dob).toBe('1975-08-20');
-      expect(result.philhealth_profile).toBeDefined();
-      expect(result.philhealth_profile.memberType).toBe('DD');
-      expect(result.philhealth_profile.memberPin).toBe('12-345678901-2');
+      expect(result.philhealth_profile).toBeUndefined();
       expect(result.interop_sync_version).toBe(5);
       expect(result.fhir_resource_id).toBe('urn:uuid:pt-9988-aabb');
     });
 
-    test('ADV-5.2: Hostile attempt - customFieldValues containing undefined yakap_enlistments does NOT overwrite DB enlistments', () => {
+    test('ADV-5.2: 1NF Architecture - legacy yakap_enlistments is safely purged from customFields', () => {
       const enlistments = [{ year: '2026', status: 'ENROLLED' }];
       const patient: Partial<ClinicPatient> = {
         id: 'patient-enlistment-safe',
@@ -614,12 +612,12 @@ describe('Adversarial Demographic Clearing & Additive Merge Harness (Issue #77)'
         effectiveCustomFields: [textField],
         customFieldValues: {
           clinical_notes: 'New note',
-          // yakap_enlistments is omitted or undefined in customFieldValues
         },
         staticValues: {},
       });
 
-      expect(result.yakap_enlistments).toEqual(enlistments);
+      expect(result.yakap_enlistments).toBeUndefined();
+      expect(result.clinical_notes).toBe('New note');
     });
   });
 

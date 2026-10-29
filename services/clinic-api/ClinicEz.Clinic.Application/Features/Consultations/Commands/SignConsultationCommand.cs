@@ -48,7 +48,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
-    private readonly IRepository<ClinicPatient> _patientRepository;
+    private readonly IRepository<Patient> _patientRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicIdentityProvider _clinicIdentity;
@@ -64,7 +64,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IRepository<StaffMember> staffRepository,
         IRepository<QueueItem> queueRepository,
         IRepository<Appointment> appointmentRepository,
-        IRepository<ClinicPatient> patientRepository,
+        IRepository<Patient> patientRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicIdentityProvider clinicIdentity,
@@ -115,24 +115,21 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         var doctor = await _staffRepository.Query(s => s.Id == encounter.DoctorId && s.ClinicId == _clinicContext.ClinicId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        encounter.DoctorPrcLicense = request.PrcLicenseNumber ?? doctor?.PrcLicenseNumber;
-        encounter.DoctorPtr = request.PtrNumber ?? doctor?.PtrNumber;
-        encounter.DoctorS2License = request.S2LicenseNumber ?? doctor?.S2LicenseNumber;
-        encounter.DoctorPhilHealthPan = request.DoctorPhilHealthPan ?? encounter.DoctorPhilHealthPan ?? doctor?.PhilHealthPan;
-        if (request.PhilHealthAtc != null) encounter.PhilHealthAtc = request.PhilHealthAtc;
+        var prcLicense = request.PrcLicenseNumber ?? doctor?.PrcLicenseNumber;
+        var ptr = request.PtrNumber ?? doctor?.PtrNumber;
+        var s2License = request.S2LicenseNumber ?? doctor?.S2LicenseNumber;
+        var pan = request.DoctorPhilHealthPan ?? encounter.DoctorPhilHealthPan ?? doctor?.PhilHealthPan;
+        var atc = request.PhilHealthAtc ?? encounter.PhilHealthAtc;
 
         // PDEA Dangerous Drugs compliance: S2 license must be present if prescribing dangerous drugs
         var hasDangerousDrugs = encounter.Prescriptions.Any(p => p.IsDangerousDrug);
-        if (hasDangerousDrugs && string.IsNullOrWhiteSpace(encounter.DoctorS2License))
+        if (hasDangerousDrugs && string.IsNullOrWhiteSpace(s2License))
         {
             throw new BadRequestException("Encounter includes PDEA controlled/dangerous drug prescriptions, but Doctor S2 License number is missing.");
         }
 
-        encounter.IsSigned = true;
-        encounter.SignedAt = DateTime.UtcNow;
+        encounter.Sign(prcLicense, ptr, s2License, pan, atc);
         encounter.BranchId ??= _clinicContext.BranchId;
-        encounter.UpdatedAt = DateTime.UtcNow;
-        encounter.UpdatedBy = encounter.DoctorName;
 
         if (encounter.Prescriptions.Any())
         {
@@ -388,15 +385,16 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             },
             Patient = new Interop.PrescriptionPatientDto
             {
-                PatientId = patient.SyncPatientId ?? Guid.Empty,
+                PatientId = patient.CloudPatientId ?? Guid.Empty,
                 FullName = encounter.PatientName,
                 PhilHealthPin = patient.PhilHealthNumber,
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,
                 DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
                 Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
-                Gender = patient.Gender,
-                ContactNumber = patient.ContactNumber,
-                Allergies = patient.Allergies
+                Gender = patient.Gender.ToString(),
+                Allergies = patient.Allergies != null && patient.Allergies.Count > 0
+                    ? string.Join(", ", patient.Allergies.Select(a => a.Allergen))
+                    : "None"
             },
             ClinicalDiagnosis = encounter.Assessment,
             SpecialInstructions = encounter.Plan,
@@ -450,16 +448,16 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
-            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo,
             encounter.DoctorPhilHealthPan,
             encounter.PhilHealthAtc,
-            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
-            encounter.HciTransNo,
-            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
-            encounter.GeneralSurveyId,
-            encounter.GeneralSurveyRemarks,
-            encounter.PhysicalExamFindingsJson,
+            encounter.PhilHealthCaseNo,
+            null,
+            encounter.PhilHealthSoapTransNo,
+            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
+            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
+            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null,
             RxPharmacyStatusDto.From(encounter));
     }
 }

@@ -18,11 +18,11 @@ public sealed record GetStaffNotificationsQuery(
 
 public sealed class GetStaffNotificationsQueryHandler : IRequestHandler<GetStaffNotificationsQuery, StaffNotificationListDto>
 {
-    private readonly IRepository<ClinicStaffNotification> _notificationRepo;
+    private readonly IRepository<StaffNotification> _notificationRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetStaffNotificationsQueryHandler(
-        IRepository<ClinicStaffNotification> notificationRepo,
+        IRepository<StaffNotification> notificationRepo,
         IClinicContext clinicContext)
     {
         _notificationRepo = notificationRepo;

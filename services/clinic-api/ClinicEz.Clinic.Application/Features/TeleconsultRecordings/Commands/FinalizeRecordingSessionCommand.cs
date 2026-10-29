@@ -24,7 +24,7 @@ public sealed class FinalizeRecordingSessionCommandHandler : IRequestHandler<Fin
 {
     private readonly IRepository<TeleconsultRecordingSession> _sessionRepo;
     private readonly IRepository<TeleconsultRecordingSegment> _segmentRepo;
-    private readonly IRepository<ClinicAuditEntry> _auditRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IClinicStorageService _storage;
@@ -33,7 +33,7 @@ public sealed class FinalizeRecordingSessionCommandHandler : IRequestHandler<Fin
     public FinalizeRecordingSessionCommandHandler(
         IRepository<TeleconsultRecordingSession> sessionRepo,
         IRepository<TeleconsultRecordingSegment> segmentRepo,
-        IRepository<ClinicAuditEntry> auditRepo,
+        IRepository<AuditEntry> auditRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicStorageService storage,
@@ -109,13 +109,13 @@ public sealed class FinalizeRecordingSessionCommandHandler : IRequestHandler<Fin
 
         var manifestJson = JsonSerializer.Serialize(manifestObj, InteropJson.Options);
         var manifestBytes = Encoding.UTF8.GetBytes(manifestJson);
-        var manifestKey = $"vault/recordings/{session.ClinicId}/{session.Id}/manifest.cez";
+        var manifestKey = $"{session.TenantId}/{session.ClinicId}/{session.Id}/manifest.cez";
 
         await _storage.SaveEncryptedFileAsync(manifestKey, manifestBytes, ct);
         session.ManifestStorageKey = manifestKey;
 
         // 4. WORM Audit Log
-        var audit = new ClinicAuditEntry
+        var audit = new AuditEntry
         {
             Id = Guid.NewGuid(),
             TenantId = session.TenantId,

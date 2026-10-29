@@ -8,13 +8,10 @@ using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class StaffMember : BaseEntity
+public sealed class StaffMember : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
-
     public Guid? ClinicRoleId { get; set; }
-    public ClinicRole? ClinicRole { get; set; }
+    public Role? ClinicRole { get; set; }
 
     /// <summary>
     /// Backing JSON array of room GUIDs assigned to this Doctor or Nurse (e.g. ["guid-1", "guid-2"]).

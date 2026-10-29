@@ -55,17 +55,13 @@ public sealed class ClerkUserLookup(
 
     private static bool IsVerifiedEmail(Clerk.BackendAPI.Models.Components.EmailAddress emailObj, string? primaryEmailAddressId)
     {
-        if (!string.IsNullOrWhiteSpace(primaryEmailAddressId) &&
-            string.Equals(emailObj.Id, primaryEmailAddressId, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
         var verification = emailObj.Verification;
         if (verification == null)
         {
             return false;
         }
+
+        var sawExplicitStatus = false;
 
         // Speakeasy union wrapper exposes one populated verification strategy object (Otp, Admin, FromOAuth, Ticket, Saml, etc.)
         foreach (var prop in verification.GetType().GetProperties())
@@ -76,14 +72,23 @@ public sealed class ClerkUserLookup(
 
             var statusProp = branch.GetType().GetProperty("Status");
             var statusVal = statusProp?.GetValue(branch)?.ToString();
-            if (!string.IsNullOrWhiteSpace(statusVal) &&
-                statusVal.Contains("verified", StringComparison.OrdinalIgnoreCase) &&
-                !statusVal.Contains("unverified", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(statusVal))
             {
-                return true;
+                sawExplicitStatus = true;
+                if (statusVal.Contains("verified", StringComparison.OrdinalIgnoreCase) &&
+                    !statusVal.Contains("unverified", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
             }
         }
 
-        return false;
+        if (sawExplicitStatus)
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(primaryEmailAddressId) &&
+               string.Equals(emailObj.Id, primaryEmailAddressId, StringComparison.Ordinal);
     }
 }

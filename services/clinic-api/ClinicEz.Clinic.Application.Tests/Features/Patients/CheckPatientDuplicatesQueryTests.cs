@@ -30,9 +30,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -64,9 +64,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -98,9 +98,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -131,9 +131,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -168,9 +168,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -209,7 +209,7 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var handler = new CheckPatientDuplicatesQueryHandler(repo);
 
@@ -229,9 +229,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -268,9 +268,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -306,9 +306,9 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var existing = new ClinicPatient
+        var existing = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -343,10 +343,10 @@ public class CheckPatientDuplicatesQueryTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Candidate 1: Exact PIN match (Score = 1.00)
-        var patient1 = new ClinicPatient
+        var patient1 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -360,7 +360,7 @@ public class CheckPatientDuplicatesQueryTests
         };
 
         // Candidate 2: Fuzzy Name match with matching DOB (Score ~ 0.88)
-        var patient2 = new ClinicPatient
+        var patient2 = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -444,7 +444,7 @@ public class CheckPatientDuplicatesQueryTests
     public async Task Handle_EmptyQueryParameters_ReturnsHasDuplicatesFalseWithoutQuerying()
     {
         // Arrange
-        var repo = Substitute.For<IRepository<ClinicPatient>>();
+        var repo = Substitute.For<IRepository<Patient>>();
         var handler = new CheckPatientDuplicatesQueryHandler(repo);
 
         // Act

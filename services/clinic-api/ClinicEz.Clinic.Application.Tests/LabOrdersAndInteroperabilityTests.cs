@@ -41,8 +41,8 @@ public class LabOrdersAndInteroperabilityTests
     public async Task CreateLabOrder_MintsHashedUploadGrantAndAbsoluteUrl()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
         var handler = NewCreateHandler(db, sieve, unitOfWork, orderRepo, patientRepo);
         var command = new CreateClinicLabOrderCommand(
@@ -75,8 +75,8 @@ public class LabOrdersAndInteroperabilityTests
     public async Task AttachExternalLabResult_StoresEncryptedFileAsUnverifiedResult()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
         var createHandler = NewCreateHandler(db, sieve, unitOfWork, orderRepo, patientRepo);
         var createdOrder = await createHandler.Handle(new CreateClinicLabOrderCommand(
@@ -86,7 +86,7 @@ public class LabOrdersAndInteroperabilityTests
 
         var files = new Phase3TestKit.InMemoryFileStore();
         var attachHandler = new AttachExternalLabResultCommandHandler(
-            orderRepo, TestDbHelper.CreateRepository<ClinicLabResult>(db, sieve), _clinicContext, Phase3TestKit.Intake(db, files));
+            orderRepo, TestDbHelper.CreateRepository<LabResult>(db, sieve), _clinicContext, Phase3TestKit.Intake(db, files));
         var attachCommand = new AttachExternalLabResultCommand(
             OrderId: createdOrder.Id,
             ExternalLabName: "Hi-Precision Diagnostics Inc.",
@@ -110,15 +110,15 @@ public class LabOrdersAndInteroperabilityTests
     }
 
     [Fact]
-    public async Task GetClinicLabOrderSlip_ReturnsCompleteSlipDataWithQrPayload()
+    public async Task GetLabOrderSlip_ReturnsCompleteSlipDataWithQrPayload()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var orderRepo = TestDbHelper.CreateRepository<LabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
 
         var patientId = Guid.NewGuid();
-        await patientRepo.AddAsync(new ClinicPatient
+        await patientRepo.AddAsync(new Patient
         {
             Id = patientId,
             TenantId = "tenant-test",
@@ -128,7 +128,7 @@ public class LabOrdersAndInteroperabilityTests
             LastName = "Santos",
             ContactNumber = "0917-123-4567",
             DateOfBirth = new DateOnly(1984, 3, 12),
-            Gender = "Female",
+            Gender = Gender.Female,
             PhilHealthNumber = "12-050412345-6"
         }, CancellationToken.None);
 
@@ -157,7 +157,7 @@ public class LabOrdersAndInteroperabilityTests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var handler = NewCreateHandler(db, sieve, unitOfWork,
-            TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve), TestDbHelper.CreateRepository<ClinicPatient>(db, sieve));
+            TestDbHelper.CreateRepository<LabOrder>(db, sieve), TestDbHelper.CreateRepository<Patient>(db, sieve));
 
         var order = await handler.Handle(new CreateClinicLabOrderCommand(Guid.NewGuid(), "Maria Santos"), CancellationToken.None);
 
@@ -173,7 +173,7 @@ public class LabOrdersAndInteroperabilityTests
         var (doctorId, patientId) = SeedDoctorAndPatient(db);
         var probe = new MessagingTestKit.SaveProbe();
         var handler = NewCreateHandler(db, sieve, probe.Wrap(db, unitOfWork),
-            TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve), TestDbHelper.CreateRepository<ClinicPatient>(db, sieve));
+            TestDbHelper.CreateRepository<LabOrder>(db, sieve), TestDbHelper.CreateRepository<Patient>(db, sieve));
         var labFacilityId = Guid.NewGuid();
 
         var order = await handler.Handle(new CreateClinicLabOrderCommand(
@@ -214,7 +214,7 @@ public class LabOrdersAndInteroperabilityTests
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var (doctorId, patientId) = SeedDoctorAndPatient(db);
         var handler = NewCreateHandler(db, sieve, unitOfWork,
-            TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve), TestDbHelper.CreateRepository<ClinicPatient>(db, sieve));
+            TestDbHelper.CreateRepository<LabOrder>(db, sieve), TestDbHelper.CreateRepository<Patient>(db, sieve));
 
         var act = () => handler.Handle(new CreateClinicLabOrderCommand(
             PatientId: patientId,
@@ -233,7 +233,7 @@ public class LabOrdersAndInteroperabilityTests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var handler = NewCreateHandler(db, sieve, unitOfWork,
-            TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve), TestDbHelper.CreateRepository<ClinicPatient>(db, sieve));
+            TestDbHelper.CreateRepository<LabOrder>(db, sieve), TestDbHelper.CreateRepository<Patient>(db, sieve));
 
         var act = () => handler.Handle(new CreateClinicLabOrderCommand(
             PatientId: Guid.NewGuid(),
@@ -250,7 +250,7 @@ public class LabOrdersAndInteroperabilityTests
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var (_, patientId) = SeedDoctorAndPatient(db);
         var handler = NewCreateHandler(db, sieve, unitOfWork,
-            TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve), TestDbHelper.CreateRepository<ClinicPatient>(db, sieve));
+            TestDbHelper.CreateRepository<LabOrder>(db, sieve), TestDbHelper.CreateRepository<Patient>(db, sieve));
 
         var act = () => handler.Handle(new CreateClinicLabOrderCommand(
             PatientId: patientId,
@@ -266,8 +266,8 @@ public class LabOrdersAndInteroperabilityTests
         ApplicationDbContext db,
         ISieveProcessor sieve,
         IUnitOfWork unitOfWork,
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<Patient> patientRepo,
         IHubClaimsClient? hub = null)
     {
         return new CreateClinicLabOrderCommandHandler(
@@ -297,7 +297,7 @@ public class LabOrdersAndInteroperabilityTests
             PrcLicenseNumber = "0123456",
             Specialty = "Internal Medicine"
         };
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _testTenantId,
@@ -307,7 +307,7 @@ public class LabOrdersAndInteroperabilityTests
             LastName = "Santos",
             ContactNumber = "0917-123-4567",
             DateOfBirth = new DateOnly(1984, 3, 12),
-            Gender = "Female",
+            Gender = Gender.Female,
             PhilHealthNumber = "12-050412345-6"
         };
         db.StaffMembers.Add(doctor);

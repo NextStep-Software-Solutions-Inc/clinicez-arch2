@@ -96,11 +96,11 @@ public sealed class UpdateCustomFieldDefinitionCommandValidator : AbstractValida
 
 public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<UpdateCustomFieldDefinitionCommand, ClinicCustomFieldDefinitionDto>
 {
-    private readonly IRepository<ClinicCustomFieldDefinition> _repo;
+    private readonly IRepository<CustomFieldDefinition> _repo;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateCustomFieldDefinitionCommandHandler(
-        IRepository<ClinicCustomFieldDefinition> repo,
+        IRepository<CustomFieldDefinition> repo,
         IUnitOfWork unitOfWork)
     {
         _repo = repo;

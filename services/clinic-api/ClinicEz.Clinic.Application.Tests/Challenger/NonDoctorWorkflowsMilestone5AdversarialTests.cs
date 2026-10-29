@@ -87,7 +87,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
 
         // Custom role (IsSystem = false)
         var customRoleId = Guid.NewGuid();
-        var customRole = new ClinicRole
+        var customRole = new Role
         {
             Id = customRoleId,
             TenantId = tenantId,
@@ -102,7 +102,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
 
         // Existing system Nurse role with custom permission attached
         var nurseRoleId = Guid.NewGuid();
-        var existingNurseRole = new ClinicRole
+        var existingNurseRole = new Role
         {
             Id = nurseRoleId,
             TenantId = tenantId,
@@ -115,19 +115,19 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
             CreatedBy = "Admin"
         };
 
-        await context.ClinicRoles.AddRangeAsync(customRole, existingNurseRole);
+        await context.Roles.AddRangeAsync(customRole, existingNurseRole);
         await context.SaveChangesAsync();
 
         // Act 1: First sync
         await ClinicRoleSeeder.SeedDefaultRolesForClinicAsync(context, tenantId, clinicId, CancellationToken.None);
 
         // Assert 1: Custom role completely untouched
-        var loadedCustom = await context.ClinicRoles.FirstAsync(r => r.Id == customRoleId);
+        var loadedCustom = await context.Roles.FirstAsync(r => r.Id == customRoleId);
         loadedCustom.Name.Should().Be("Phlebotomist-Specialist");
         loadedCustom.Permissions.Should().BeEquivalentTo(new[] { "custom:phlebotomy-draw", "custom:centrifuge-run" });
 
         // Assert 2: Nurse has canonical permissions backfilled, while retaining custom permission
-        var loadedNurse = await context.ClinicRoles.FirstAsync(r => r.Id == nurseRoleId);
+        var loadedNurse = await context.Roles.FirstAsync(r => r.Id == nurseRoleId);
         loadedNurse.Permissions.Should().Contain("custom:extra-care-permission");
         loadedNurse.Permissions.Should().Contain(ClinicPermissions.DocumentsRead);
         loadedNurse.Permissions.Should().Contain(ClinicPermissions.RecordsUpload);
@@ -137,7 +137,7 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
         secondRunChanged.Should().Be(0, "Subsequent sync when roles are already up to date should make 0 modifications");
 
         // Verify no duplicate permission entries exist
-        var reloadedNurse = await context.ClinicRoles.FirstAsync(r => r.Id == nurseRoleId);
+        var reloadedNurse = await context.Roles.FirstAsync(r => r.Id == nurseRoleId);
         reloadedNurse.Permissions.GroupBy(p => p, StringComparer.OrdinalIgnoreCase)
             .Any(g => g.Count() > 1)
             .Should().BeFalse("Permissions must contain zero duplicate entries");
@@ -360,9 +360,9 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
         var (clinicId, tenantId, _, clinicContext) = SetupClinicContext();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -661,11 +661,11 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(context, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Add 3 medical certificates with distinct timestamps and SHA-256 digests
         var certOld = new MedicalCertificate
@@ -800,9 +800,9 @@ public class NonDoctorWorkflowsMilestone5AdversarialTests
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(context, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var triageRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var triageRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
 
         var handler = new GetPatientChartQueryHandler(

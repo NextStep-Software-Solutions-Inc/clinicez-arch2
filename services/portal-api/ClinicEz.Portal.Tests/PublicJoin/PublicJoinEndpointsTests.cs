@@ -445,4 +445,70 @@ public class PublicJoinEndpointsTests : IDisposable
         var forbidden = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
     }
+
+    [Theory]
+    [InlineData("133900000", null, null, null)] // 9 digits
+    [InlineData("13390000001", null, null, null)] // 11 digits
+    [InlineData("133900ABCD", null, null, null)] // non-digits
+    [InlineData(null, "12345", null, null)] // invalid province
+    [InlineData(null, null, "not-digits!", null)] // invalid city
+    [InlineData(null, null, null, "123")] // invalid barangay
+    public async Task HandleAsync_WithInvalidPsgcCodes_ReturnsBadRequest(
+        string? regionPsgc, string? provincePsgc, string? cityPsgc, string? barangayPsgc)
+    {
+        var payload = CreateValidPayload("test@example.ph") with
+        {
+            RegionPsgc = regionPsgc,
+            ProvincePsgc = provincePsgc,
+            CityMunicipalityPsgc = cityPsgc,
+            BarangayPsgc = barangayPsgc
+        };
+
+        var result = await PublicJoinEndpoints.HandleAsync(
+            payload,
+            _context,
+            _publisher,
+            _settingsService,
+            _frontendUrlProvider,
+            NullLogger<PublicJoinEndpoints>.Instance,
+            _claimTokenService,
+            configuration: null,
+            hostEnvironment: null,
+            CancellationToken.None);
+
+        var badRequest = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithValid10DigitPsgcCodes_SucceedsAndDispatchesEnvelope()
+    {
+        var payload = CreateValidPayload("psgc-valid@example.ph") with
+        {
+            RegionPsgc = "1300000000",
+            ProvincePsgc = "1339000000",
+            CityMunicipalityPsgc = "1339000000",
+            BarangayPsgc = "1339010001"
+        };
+
+        var result = await PublicJoinEndpoints.HandleAsync(
+            payload,
+            _context,
+            _publisher,
+            _settingsService,
+            _frontendUrlProvider,
+            NullLogger<PublicJoinEndpoints>.Instance,
+            _claimTokenService,
+            configuration: null,
+            hostEnvironment: null,
+            CancellationToken.None);
+
+        var accepted = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        Assert.NotNull(accepted.Value);
+
+        var outboxMessage = _context.InteropOutbox.FirstOrDefault(m => m.Type == InteropTypes.PatientJoinRequested);
+        Assert.NotNull(outboxMessage);
+        Assert.Contains("1300000000", outboxMessage.EnvelopeJson);
+        Assert.Contains("1339010001", outboxMessage.EnvelopeJson);
+    }
 }

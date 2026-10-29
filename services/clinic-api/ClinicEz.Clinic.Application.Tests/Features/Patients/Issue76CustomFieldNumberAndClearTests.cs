@@ -29,26 +29,26 @@ public class Issue76CustomFieldNumberAndClearTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private ClinicCustomFieldDefinition CreateActiveNumberDefinition(string key = "annual_income", string label = "Annual Income") =>
+    private CustomFieldDefinition CreateActiveNumberDefinition(string key = "annual_income", string label = "Annual Income") =>
         new()
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = key,
             Label = label,
             DataType = CustomFieldDataType.Number,
             IsActive = true
         };
 
-    private ClinicCustomFieldDefinition CreateActiveTextDefinition(string key = "notes", string label = "Notes") =>
+    private CustomFieldDefinition CreateActiveTextDefinition(string key = "notes", string label = "Notes") =>
         new()
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = key,
             Label = label,
             DataType = CustomFieldDataType.Text,
@@ -258,19 +258,19 @@ public class Issue76CustomFieldNumberAndClearTests
     [Fact]
     public void CustomFieldValueValidator_Direct_InactiveOrNonPatientDefinition_BypassesValidation()
     {
-        var inactiveDef = new ClinicCustomFieldDefinition
+        var inactiveDef = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "inactive_num",
             Label = "Inactive Number",
             DataType = CustomFieldDataType.Number,
             IsActive = false
         };
 
-        var otherEntityDef = new ClinicCustomFieldDefinition
+        var otherEntityDef = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -288,7 +288,7 @@ public class Issue76CustomFieldNumberAndClearTests
             ["staff_num"] = "!$#%"
         };
 
-        var act = () => CustomFieldValueValidator.ValidateAndNormalize(customFields, new[] { inactiveDef, otherEntityDef }, "ClinicPatient");
+        var act = () => CustomFieldValueValidator.ValidateAndNormalize(customFields, new[] { inactiveDef, otherEntityDef }, "Patient");
 
         act.Should().NotThrow();
         customFields.Should().ContainKey("inactive_num");
@@ -312,8 +312,8 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task RegisterPatient_NumericCustomField_InvalidInputs_ShouldThrowValidationException(string invalidValue)
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateActiveNumberDefinition("annual_income", "Annual Income");
         await defRepo.AddAsync(numDef);
@@ -340,8 +340,8 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task RegisterPatient_NumericCustomField_ValidFormats_ShouldPersistSuccessfully()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateActiveNumberDefinition("annual_income", "Annual Income");
         await defRepo.AddAsync(numDef);
@@ -369,8 +369,8 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task RegisterPatient_ClearedActiveField_ShouldBeOmittedFromPersistedEntity()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateActiveNumberDefinition("annual_income", "Annual Income");
         var textDef = CreateActiveTextDefinition("notes", "Notes");
@@ -403,7 +403,7 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task RegisterPatient_NullCustomFieldRepo_MaintainsBackwardCompatibility()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         // Intentionally instantiate handler without customFieldRepo
         var handler = new RegisterClinicPatientCommandHandler(
@@ -432,13 +432,13 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task UpdatePatient_NumericField_InvalidInput_ShouldThrowValidationException()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateActiveNumberDefinition("student_gpa", "Student GPA");
         await defRepo.AddAsync(numDef);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -447,7 +447,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Juan",
             LastName = "Luna",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "0918-000-0000",
             CustomFields = new Dictionary<string, object?> { ["student_gpa"] = "3.75" }
         };
@@ -484,13 +484,13 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task UpdatePatient_ClearActiveField_ShouldPurgeKeyFromPersistedEntity()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateActiveNumberDefinition("annual_income", "Annual Income");
         await defRepo.AddAsync(numDef);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -499,7 +499,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Marcelo",
             LastName = "Del Pilar",
             DateOfBirth = new DateOnly(1985, 3, 15),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "0919-111-2222",
             CustomFields = new Dictionary<string, object?>
             {
@@ -548,15 +548,15 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task UpdatePatient_ClearActiveField_WhitespaceOrNull_ShouldPurgeKey()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateActiveNumberDefinition("student_gpa", "Student GPA");
         var textDef = CreateActiveTextDefinition("department", "Department");
         await defRepo.AddAsync(numDef);
         await defRepo.AddAsync(textDef);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -565,7 +565,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Melchora",
             LastName = "Aquino",
             DateOfBirth = new DateOnly(1970, 1, 6),
-            Gender = "Female",
+            Gender = Gender.Female,
             ContactNumber = "0920-333-4444",
             CustomFields = new Dictionary<string, object?>
             {
@@ -610,13 +610,13 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task UpdatePatient_ValidNumericUpdate_PersistsSuccessfully()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var numDef = CreateActiveNumberDefinition("student_gpa", "Student GPA");
         await defRepo.AddAsync(numDef);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -625,7 +625,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Gregorio",
             LastName = "Del Pilar",
             DateOfBirth = new DateOnly(1995, 11, 14),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "0921-555-6666",
             CustomFields = new Dictionary<string, object?>
             {
@@ -668,15 +668,15 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task UpdatePatient_InactiveDefinition_BypassesValidationAndRemoval()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
-        var inactiveDef = new ClinicCustomFieldDefinition
+        var inactiveDef = new CustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ClinicId = _clinicId,
-            EntityType = "ClinicPatient",
+            EntityType = "Patient",
             FieldKey = "inactive_number",
             Label = "Inactive Number",
             DataType = CustomFieldDataType.Number,
@@ -684,7 +684,7 @@ public class Issue76CustomFieldNumberAndClearTests
         };
         await defRepo.AddAsync(inactiveDef);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -693,7 +693,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Diego",
             LastName = "Silang",
             DateOfBirth = new DateOnly(1980, 12, 16),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "0922-777-8888",
             CustomFields = new Dictionary<string, object?>()
         };
@@ -736,13 +736,13 @@ public class Issue76CustomFieldNumberAndClearTests
     public async Task UpdatePatient_TcIf006_HttpPutJsonNullTombstone_PurgesNumberOfDependentsAfterChangeTrackerClear()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var defRepo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var defRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
 
         var dependentsDef = CreateActiveNumberDefinition("number_of_dependents", "Number of Dependents");
         await defRepo.AddAsync(dependentsDef);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -751,7 +751,7 @@ public class Issue76CustomFieldNumberAndClearTests
             FirstName = "Josh",
             LastName = "Gram",
             DateOfBirth = new DateOnly(1998, 6, 15),
-            Gender = "Male",
+            Gender = Gender.Male,
             ContactNumber = "0917-000-0001",
             CustomFields = new Dictionary<string, object?>
             {

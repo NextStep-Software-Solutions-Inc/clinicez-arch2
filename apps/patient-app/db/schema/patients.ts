@@ -8,22 +8,16 @@ export const patients = sqliteTable('patients', {
   middleName: text('middle_name'),
   lastName: text('last_name').notNull(),
   suffix: text('suffix'),
-  sex: text('sex', { enum: ['Male', 'Female', 'Other'] }),
+  sex: text('sex'),
   dob: text('dob'), // YYYY-MM-DD
   placeOfBirth: text('place_of_birth'),
-  civilStatus: text('civil_status', {
-    enum: ['Single', 'Married', 'Widowed', 'Separated', 'Divorced'],
-  }),
-  bloodType: text('blood_type', {
-    enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'],
-  }),
+  civilStatus: text('civil_status'),
+  bloodType: text('blood_type'),
   nationality: text('nationality').default('Filipino'),
   ethnicity: text('ethnicity'),
   religion: text('religion'),
   primaryLanguage: text('primary_language'),
-  educationLevel: text('education_level', {
-    enum: ['None', 'Elementary', 'HighSchool', 'Vocational', 'College', 'Graduate', 'PostGraduate'],
-  }),
+  educationLevel: text('education_level'),
   avatarUrl: text('avatar_url'),
   // A3 — Contact Information (flattened onto patient row)
   mobile: text('mobile'),

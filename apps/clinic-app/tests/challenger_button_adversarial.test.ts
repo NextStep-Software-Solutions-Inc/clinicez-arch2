@@ -45,8 +45,35 @@ mock.module('react-native', () => ({
   Text: createMockComponent('Text'),
   ActivityIndicator: createMockComponent('ActivityIndicator'),
   Modal: createMockComponent('Modal'),
+  Image: createMockComponent('Image'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  Switch: createMockComponent('Switch'),
+  FlatList: createMockComponent('FlatList'),
+  SectionList: createMockComponent('SectionList'),
+  TouchableOpacity: createMockComponent('TouchableOpacity'),
+  TouchableHighlight: createMockComponent('TouchableHighlight'),
+  RefreshControl: createMockComponent('RefreshControl'),
+  Alert: { alert: () => {} },
+  PanResponder: { create: () => ({ panHandlers: {} }) },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
+  NativeModules: {},
+  Touchable: { Mixin: {} },
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
 }));
 
 mock.module('react-native-svg', () => ({

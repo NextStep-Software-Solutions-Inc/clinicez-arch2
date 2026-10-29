@@ -3,10 +3,8 @@ using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
-public sealed class DoctorLeave : BaseEntity
+public sealed class DoctorLeave : ClinicScopedEntity
 {
-    public required string TenantId { get; set; }
-    public Guid ClinicId { get; set; }
     public Guid? DoctorId { get; set; } // Null indicates clinic-wide holiday closure
     public required string DoctorName { get; set; }
 

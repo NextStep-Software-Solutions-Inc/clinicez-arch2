@@ -203,14 +203,14 @@ public sealed class AppointmentCommandHandlerNotificationTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var staffNotificationRepo = TestDbHelper.CreateRepository<ClinicStaffNotification>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var staffNotificationRepo = TestDbHelper.CreateRepository<StaffNotification>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
         var logger = NullLogger<AppointmentNotificationDispatcher>.Instance;
 
         var syncPatientId = Guid.NewGuid();
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,
@@ -220,11 +220,11 @@ public sealed class AppointmentCommandHandlerNotificationTests
             PatientCode = "P-999",
             DateOfBirth = new DateOnly(1864, 7, 23),
             ContactNumber = "0917-000-0001",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         await patientRepo.AddAsync(patient);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = _clinicId,

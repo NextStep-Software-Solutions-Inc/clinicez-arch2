@@ -55,7 +55,7 @@ public record InvoiceDto(
     Guid ClinicId,
     string InvoiceNumber,
     DateTime InvoiceDate,
-    Guid PatientId,
+    Guid? PatientId,
     string PatientName,
     Guid? QueueItemId,
     Guid? AppointmentId,

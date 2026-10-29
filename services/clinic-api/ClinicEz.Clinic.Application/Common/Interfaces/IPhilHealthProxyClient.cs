@@ -6,6 +6,28 @@ using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Common.Interfaces;
 
+public sealed record ConfigurePhilHealthCredentialsProxyRequest(
+    System.Guid TenantId,
+    string FacilityName,
+    string AccreditationNumber,
+    string PmccNumber,
+    string SoftwareCertificateId,
+    string Username,
+    string Password,
+    string CipherKey,
+    string? KonsultaEndpoint = null);
+
+public sealed record PhilHealthConfigStatusResponse(
+    System.Guid TenantId,
+    string FacilityName,
+    string AccreditationNumber,
+    string PmccNumber,
+    string SoftwareCertificateId,
+    string KonsultaEndpoint,
+    bool IsConfigured,
+    bool IsActive,
+    System.DateTimeOffset? UpdatedAt);
+
 public interface IPhilHealthProxyClient
 {
     Task<ApiResponse<YakapValidationProxyResponse>> ValidateReportAsync(

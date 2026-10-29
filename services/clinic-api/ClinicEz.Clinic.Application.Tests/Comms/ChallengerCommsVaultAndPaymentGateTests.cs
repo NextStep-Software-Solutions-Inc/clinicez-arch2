@@ -67,8 +67,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -111,8 +111,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange: Patient paid ₱200 of ₱400 at cashier, leaving balance due. PaymentStatus remains Pending.
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -155,8 +155,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange: In-person appointment submitted to teleconsult admission endpoint
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -195,8 +195,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -234,15 +234,15 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
         var scheduledAt = new DateTime(2026, 10, 26, 10, 0, 0, DateTimeKind.Utc);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -255,11 +255,14 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             PhilHealthNumber = "12-123456789-0"
         };
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -305,15 +308,15 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange: Patient enlistment expired on 2025-12-31; appointment is on 2026-10-26.
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
         var scheduledAt = new DateTime(2026, 10, 26, 10, 0, 0, DateTimeKind.Utc);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -326,11 +329,14 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             PhilHealthNumber = "12-999888777-1"
         };
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
             EffectiveYear = 2025,
-            EnlistedAt = "2025-01-01",
-            ValidUntil = "2025-12-31", // EXPIRED!
+            EnlistmentDate = new DateOnly(2025, 1, 1),
+            ValidUntil = new DateOnly(2025, 12, 31), // EXPIRED!
             Status = YakapEnlistmentStatus.Expired
         });
 
@@ -369,15 +375,15 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange: Patient enlistment was transferred to another RHU/hospital facility
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
         var scheduledAt = new DateTime(2026, 10, 26, 10, 0, 0, DateTimeKind.Utc);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -388,11 +394,14 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             ContactNumber = "09177778899"
         };
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
             EffectiveYear = 2026,
-            EnlistedAt = "2026-01-01",
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 1, 1),
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Transferred // TRANSFERRED!
         });
 
@@ -430,15 +439,15 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange: Patient enlistment starts in the future (e.g. appointment 2026-05-01, enlistment begins 2026-06-01)
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
         var scheduledAt = new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -449,11 +458,14 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             ContactNumber = "09172223344"
         };
 
-        patient.AddOrRenewYakapEnlistment(new YakapEnlistmentEntry
+        patient.AddOrRenewYakapEnlistment(new PatientYakapEnlistment
         {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
             EffectiveYear = 2026,
-            EnlistedAt = "2026-06-01", // Enlisted after encounter date
-            ValidUntil = "2026-12-31",
+            EnlistmentDate = new DateOnly(2026, 6, 1), // Enlisted after encounter date
+            ValidUntil = new DateOnly(2026, 12, 31),
             Status = YakapEnlistmentStatus.Active
         });
 
@@ -491,14 +503,14 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange: Patient has empty CustomFields
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
         var patientId = Guid.NewGuid();
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = patientId,
             TenantId = _tenantId,
@@ -555,8 +567,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(unauthorizedContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -601,8 +613,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -648,8 +660,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -691,8 +703,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -742,7 +754,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         appointment.Status.Should().Be(AppointmentStatus.InConsultation);
 
         // Verify WORM audit record in ClinicAuditEntries
-        var audit = await context.ClinicAuditEntries
+        var audit = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.admission.emergency_override");
         audit.Should().NotBeNull();
         audit!.Category.Should().Be(ClinicAuditCategories.Clinical);
@@ -772,8 +784,8 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange: Generate an emergency override audit entry through the actual handler
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var appointmentRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var publisher = Substitute.For<IInteropPublisher>();
 
         var appointmentId = Guid.NewGuid();
@@ -803,21 +815,21 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             ReasonNote: "Suspected stroke triage requiring immediate consultation"
         )), CancellationToken.None);
 
-        var audit = await context.ClinicAuditEntries
+        var audit = await context.AuditEntries
             .FirstAsync(a => a.Action == "teleconsult.admission.emergency_override");
 
         // Act & Assert 1: Tampering / Mutation Attack
         audit.Description = "Tampered emergency description to erase audit trail";
         var mutateAct = () => context.SaveChangesAsync();
         await mutateAct.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
 
         // Act & Assert 2: Deletion Attack
         context.Entry(audit).State = EntityState.Unchanged;
-        context.ClinicAuditEntries.Remove(audit);
+        context.AuditEntries.Remove(audit);
         var deleteAct = () => context.SaveChangesAsync();
         await deleteAct.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
     }
 
     [Fact]
@@ -859,21 +871,21 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         var purgedCount = await sweeper.SweepExpiredRecordingsAsync(CancellationToken.None);
         purgedCount.Should().Be(1);
 
-        var purgeAudit = await context.ClinicAuditEntries
+        var purgeAudit = await context.AuditEntries
             .FirstAsync(a => a.Action == "teleconsult.recording.purged");
 
         // Act & Assert 1: Attacker attempts to mutate purge log
         purgeAudit.Description = "Attacker erased purge details";
         var mutateAct = () => context.SaveChangesAsync();
         await mutateAct.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
 
         // Act & Assert 2: Attacker attempts to delete purge log
         context.Entry(purgeAudit).State = EntityState.Unchanged;
-        context.ClinicAuditEntries.Remove(purgeAudit);
+        context.AuditEntries.Remove(purgeAudit);
         var deleteAct = () => context.SaveChangesAsync();
         await deleteAct.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*ClinicAuditEntry is append-only (WORM)*");
+            .WithMessage("*AuditEntry is append-only (WORM)*");
     }
 
     #endregion
@@ -885,15 +897,15 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var segmentRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSegment>(context, sieve);
         var storage = Substitute.For<IClinicStorageService>();
 
-        context.ClinicSettings.Add(new ClinicSettings
+        context.Settings.Add(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -903,7 +915,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
             TeleconsultRecordingRetentionDays = 60
         });
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -938,7 +950,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         rejectedSession.ConsentStatus.Should().Be("Rejected");
 
         // Assert 2: WORM audit log written
-        var auditEntry = await context.ClinicAuditEntries
+        var auditEntry = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.recording.consent.rejected");
         auditEntry.Should().NotBeNull();
         auditEntry!.Severity.Should().Be(ClinicAuditSeverities.Urgent);
@@ -974,7 +986,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
         var storage = Substitute.For<IClinicStorageService>();
 
         var services = new ServiceCollection();
@@ -1047,7 +1059,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
         session.IsLegalHold.Should().BeFalse();
 
         // Verify hold release audit entry was created
-        var releaseAudit = await context.ClinicAuditEntries
+        var releaseAudit = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.recording.legal_hold.released");
         releaseAudit.Should().NotBeNull();
         releaseAudit!.Outcome.Should().Be(ClinicAuditOutcomes.Success);
@@ -1062,7 +1074,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
 
         await storage.Received(1).DeleteEncryptedFileAsync("vault/case-0012/chunk0.cez", Arg.Any<CancellationToken>());
 
-        var purgeAudit = await context.ClinicAuditEntries
+        var purgeAudit = await context.AuditEntries
             .FirstOrDefaultAsync(a => a.Action == "teleconsult.recording.purged");
         purgeAudit.Should().NotBeNull();
         purgeAudit!.Outcome.Should().Be(ClinicAuditOutcomes.Success);
@@ -1081,7 +1093,7 @@ public sealed class ChallengerCommsVaultAndPaymentGateTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(unauthorizedContext);
         var sessionRepo = TestDbHelper.CreateRepository<TeleconsultRecordingSession>(context, sieve);
-        var auditRepo = TestDbHelper.CreateRepository<ClinicAuditEntry>(context, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(context, sieve);
 
         var sessionId = Guid.NewGuid();
         var session = new TeleconsultRecordingSession

@@ -205,13 +205,13 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
     #region Priority Persistence & Escalation Tests
 
     [Fact]
-    public async Task RecordTriageVitals_EmergencyPriority_PersistsAndUpgradesRoutineToEmergency()
+    public async Task RecordPatientVitals_EmergencyPriority_PersistsAndUpgradesRoutineToEmergency()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
         var queueItem = new QueueItem
@@ -257,13 +257,13 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
     }
 
     [Fact]
-    public async Task RecordTriageVitals_NullPriority_PreservesExistingTicketPriority()
+    public async Task RecordPatientVitals_NullPriority_PreservesExistingTicketPriority()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
         var queueItemId = Guid.NewGuid();
         var queueItem = new QueueItem
@@ -308,7 +308,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
     }
 
     [Fact]
-    public async Task EscalateQueueItemPriority_WithNullTriageVitals_SucceedsWithoutNullReferenceException()
+    public async Task EscalateQueueItemPriority_WithNullPatientVitals_SucceedsWithoutNullReferenceException()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -325,7 +325,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             QueueNumber = "Q-003",
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Waiting,
-            TriageVitals = null // No vitals entity yet
+            PatientVitals = null // No vitals entity yet
         };
         await context.Set<QueueItem>().AddAsync(queueItem);
         await uow.SaveChangesAsync(CancellationToken.None);
@@ -402,9 +402,9 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -493,9 +493,9 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -563,9 +563,9 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var clinicSettings = new ClinicSettings
+        var clinicSettings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,

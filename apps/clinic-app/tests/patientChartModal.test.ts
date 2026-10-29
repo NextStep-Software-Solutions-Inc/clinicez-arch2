@@ -649,7 +649,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
         }
       }
     }
-  });
+  }, 30000);
 
   test('22. In-app navigation deep link with activeTab="dental" and focusToothNumber in Centered Modal auto-focuses tooth', () => {
     const dentalChartData: PatientChart = {

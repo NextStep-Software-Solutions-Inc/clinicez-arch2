@@ -7,7 +7,7 @@ namespace ClinicEz.Clinic.Application.Common.Interfaces;
 
 public interface IRecordAttachmentStorage
 {
-    Task<ClinicRecordAttachment> EncryptAndStoreAsync(
+    Task<RecordAttachment> EncryptAndStoreAsync(
         string tenantId,
         Guid clinicId,
         Guid patientId,

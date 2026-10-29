@@ -48,7 +48,7 @@ describe("Admin Decoupling & Isolation Regression Guard (apps/portal-web)", () =
 
     const navUserContent = fs.readFileSync(navUserFile, "utf-8");
     expect(navUserContent).not.toContain("/admin/settings");
-    expect(navUserContent).toContain('tenant ? `/${tenant}/dashboard/settings` : "/settings"');
+    expect(navUserContent).not.toContain("/admin");
   });
 
   test("R4.7: join.ts contains zero /admin/invitations pattern in isProxyPublicRoute", () => {

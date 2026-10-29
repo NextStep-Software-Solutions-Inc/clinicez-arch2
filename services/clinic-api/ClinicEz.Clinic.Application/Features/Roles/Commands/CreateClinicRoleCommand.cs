@@ -34,12 +34,12 @@ public sealed class CreateClinicRoleCommandValidator : AbstractValidator<CreateC
 
 public sealed class CreateClinicRoleCommandHandler : IRequestHandler<CreateClinicRoleCommand, ClinicRoleDto>
 {
-    private readonly IRepository<ClinicRole> _roleRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CreateClinicRoleCommandHandler(
-        IRepository<ClinicRole> roleRepository,
+        IRepository<Role> roleRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
@@ -60,7 +60,7 @@ public sealed class CreateClinicRoleCommandHandler : IRequestHandler<CreateClini
             throw new ConflictException($"A role named '{request.Name}' already exists in this clinic.");
         }
 
-        var role = new ClinicRole
+        var role = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,

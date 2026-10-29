@@ -3,7 +3,6 @@ import { sanitizeCustomFieldsPayload, type StaticPatientValues } from '../custom
 import {
   type MemberType,
   type PrincipalRelationship,
-  buildPhilHealthProfileData,
 } from './memberType';
 
 const LEGACY_FIELD_MAP: Record<string, string> = {
@@ -78,7 +77,7 @@ export interface MergePatientCustomFieldsInput {
  *      - If previously existed on patient.customFields (or legacy patient property): assign `null`
  *        so backend additive merge clears the DB value.
  *      - Otherwise: `delete` key so untouched optional fields do not pollute payload with nulls.
- * 2. Preserves non-custom system keys: yakap_enlistments, member_type, philhealth_profile, etc.
+ * 2. Preserves non-custom system keys: member_type, principal_member_pin, classification, etc.
  */
 export function mergePatientCustomFields(input: MergePatientCustomFieldsInput): Record<string, any> {
   const {
@@ -106,10 +105,16 @@ export function mergePatientCustomFields(input: MergePatientCustomFieldsInput): 
     dateOfBirth = '',
   } = input;
 
-  // 1. Seed with existing custom fields to preserve untouched system metadata
-  const merged: Record<string, any> = {
-    ...(patient?.customFields || {}),
-  };
+  // 1. Seed with existing custom fields to preserve untouched scalar system metadata (1NF model)
+  const merged: Record<string, any> = {};
+  if (patient?.customFields) {
+    for (const [k, v] of Object.entries(patient.customFields)) {
+      // In pure 1NF, customFields contains only scalar values; complex legacy blobs are omitted
+      if (v === null || typeof v !== 'object') {
+        merged[k] = v;
+      }
+    }
+  }
 
   // 2. Compute sanitized custom fields (visible & non-empty)
   const cleanCustom = effectiveCustomFields.length > 0
@@ -151,14 +156,7 @@ export function mergePatientCustomFields(input: MergePatientCustomFieldsInput): 
     }
   }
 
-  // 4. Preserve / update statutory YAKAP enlistments
-  if (customFieldValues['yakap_enlistments'] !== undefined) {
-    if (customFieldValues['yakap_enlistments']) {
-      merged['yakap_enlistments'] = customFieldValues['yakap_enlistments'];
-    }
-  } else if (patient?.customFields?.['yakap_enlistments']) {
-    merged['yakap_enlistments'] = patient.customFields['yakap_enlistments'];
-  }
+  // 4. Statutory YAKAP enlistments are stored in the pure 1NF PatientYakapEnlistment table, never in CustomFields
 
   // 5. Fallback institutional classification when tenantCustomFields is empty
   if (tenantCustomFieldsCount === 0) {
@@ -230,19 +228,7 @@ export function mergePatientCustomFields(input: MergePatientCustomFieldsInput): 
     }
   }
 
-  // 7. Rebuild philhealth_profile DTO
-  merged['philhealth_profile'] = buildPhilHealthProfileData({
-    memberType,
-    patientPin: philHealthNumber,
-    patientFirstName: firstName,
-    patientLastName: lastName,
-    patientMiddleName: middleName,
-    patientDob: dateOfBirth,
-    principalPin: principalMemberPin,
-    principalFullName,
-    principalRelationship,
-    principalDob,
-  });
+  // 7. PhilHealth membership is stored in pure 1NF PatientPhilHealthMembership, never in legacy customFields JSON
 
   return merged;
 }

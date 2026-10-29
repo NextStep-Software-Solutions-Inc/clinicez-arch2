@@ -56,10 +56,10 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var doctorRole = new ClinicRole
+        var doctorRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -67,9 +67,9 @@ public class StaffCommandsTests
             Name = "Attending Physician / Doctor",
             IsSystem = true
         };
-        await context.ClinicRoles.AddAsync(doctorRole);
+        await context.Roles.AddAsync(doctorRole);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -77,7 +77,7 @@ public class StaffCommandsTests
             ClinicName = "Test Clinic",
             LicenseToken = "mock.valid.token"
         };
-        await context.ClinicSettings.AddAsync(settings);
+        await context.Settings.AddAsync(settings);
         await context.SaveChangesAsync();
 
         var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
@@ -134,8 +134,8 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // Seed 1 active staff member
         await context.StaffMembers.AddAsync(new StaffMember
@@ -149,7 +149,7 @@ public class StaffCommandsTests
             IsActive = true
         });
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -157,7 +157,7 @@ public class StaffCommandsTests
             ClinicName = "Test Clinic",
             LicenseToken = "mock.token"
         };
-        await context.ClinicSettings.AddAsync(settings);
+        await context.Settings.AddAsync(settings);
         await context.SaveChangesAsync();
 
         // License allows max 1 staff
@@ -192,8 +192,8 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
         licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
@@ -221,10 +221,10 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var cashierRole = new ClinicRole
+        var cashierRole = new Role
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -232,9 +232,9 @@ public class StaffCommandsTests
             Name = "Clinic Cashier / Billing Officer",
             IsSystem = true
         };
-        await context.ClinicRoles.AddAsync(cashierRole);
+        await context.Roles.AddAsync(cashierRole);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -242,7 +242,7 @@ public class StaffCommandsTests
             ClinicName = "Test Clinic",
             LicenseToken = "mock.valid.token"
         };
-        await context.ClinicSettings.AddAsync(settings);
+        await context.Settings.AddAsync(settings);
         await context.SaveChangesAsync();
 
         var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
@@ -316,10 +316,10 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -327,7 +327,7 @@ public class StaffCommandsTests
             ClinicName = "Test Clinic",
             LicenseToken = "mock.valid.token"
         };
-        await context.ClinicSettings.AddAsync(settings);
+        await context.Settings.AddAsync(settings);
         await context.SaveChangesAsync();
 
         var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
@@ -450,8 +450,8 @@ public class StaffCommandsTests
         await context.StaffMembers.AddAsync(staff);
         await context.SaveChangesAsync();
 
-        var refreshTokenRepo = TestDbHelper.CreateRepository<ClinicRefreshToken>(context, sieve);
-        var token = new ClinicRefreshToken
+        var refreshTokenRepo = TestDbHelper.CreateRepository<RefreshToken>(context, sieve);
+        var token = new RefreshToken
         {
             Id = Guid.NewGuid(),
             StaffMemberId = staff.Id,
@@ -586,7 +586,7 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var inactiveStaff = new StaffMember
         {
@@ -602,7 +602,7 @@ public class StaffCommandsTests
         };
         await context.StaffMembers.AddAsync(inactiveStaff);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -610,7 +610,7 @@ public class StaffCommandsTests
             ClinicName = "Test Clinic",
             LicenseToken = "mock.valid.token"
         };
-        await context.ClinicSettings.AddAsync(settings);
+        await context.Settings.AddAsync(settings);
         await context.SaveChangesAsync();
 
         var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
@@ -647,7 +647,7 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         // Add 2 active staff
         for (int i = 0; i < 2; i++)
@@ -676,7 +676,7 @@ public class StaffCommandsTests
         };
         await context.StaffMembers.AddAsync(inactiveStaff);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
@@ -684,7 +684,7 @@ public class StaffCommandsTests
             ClinicName = "Test Clinic",
             LicenseToken = "mock.valid.token"
         };
-        await context.ClinicSettings.AddAsync(settings);
+        await context.Settings.AddAsync(settings);
         await context.SaveChangesAsync();
 
         var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
@@ -736,7 +736,7 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
         var cache = Substitute.For<IStaffAccessInvalidator>();
 
         var staff = new StaffMember
@@ -846,7 +846,7 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
         var cache = Substitute.For<IStaffAccessInvalidator>();
 
         var staff = new StaffMember
@@ -888,13 +888,13 @@ public class StaffCommandsTests
     }
 
     [Fact]
-    public async Task UpdateStaffMember_SelfClinicRoleIdChange_ThrowsValidationException()
+    public async Task UpdateStaffMember_SelfRoleIdChange_ThrowsValidationException()
     {
         var clinicId = Guid.NewGuid();
         var tenantId = "tenant_test";
         var selfStaffId = Guid.NewGuid();
-        var currentClinicRoleId = Guid.NewGuid();
-        var downgradedClinicRoleId = Guid.NewGuid();
+        var currentRoleId = Guid.NewGuid();
+        var downgradedRoleId = Guid.NewGuid();
 
         var clinicContext = Substitute.For<IClinicContext>();
         clinicContext.ClinicId.Returns(clinicId);
@@ -903,11 +903,11 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
-        await context.ClinicRoles.AddRangeAsync(
-            new ClinicRole { Id = currentClinicRoleId, TenantId = tenantId, ClinicId = clinicId, Name = "Clinic Administrator", IsSystem = true },
-            new ClinicRole { Id = downgradedClinicRoleId, TenantId = tenantId, ClinicId = clinicId, Name = "Limited Custom Role", IsSystem = false }
+        await context.Roles.AddRangeAsync(
+            new Role { Id = currentRoleId, TenantId = tenantId, ClinicId = clinicId, Name = "Clinic Administrator", IsSystem = true },
+            new Role { Id = downgradedRoleId, TenantId = tenantId, ClinicId = clinicId, Name = "Limited Custom Role", IsSystem = false }
         );
 
         var staff = new StaffMember
@@ -918,7 +918,7 @@ public class StaffCommandsTests
             FirstName = "Self",
             LastName = "Admin",
             Role = StaffRole.Admin,
-            ClinicRoleId = currentClinicRoleId,
+            ClinicRoleId = currentRoleId,
             IsActive = true
         };
         await context.StaffMembers.AddAsync(staff);
@@ -933,7 +933,7 @@ public class StaffCommandsTests
             null,
             null,
             StaffRole.Admin,
-            downgradedClinicRoleId,
+            downgradedRoleId,
             "admin@clinic.com",
             "09170001111",
             null,
@@ -953,7 +953,7 @@ public class StaffCommandsTests
         var clinicId = Guid.NewGuid();
         var tenantId = "tenant_test";
         var selfStaffId = Guid.NewGuid();
-        var adminClinicRoleId = Guid.NewGuid();
+        var adminRoleId = Guid.NewGuid();
 
         var clinicContext = Substitute.For<IClinicContext>();
         clinicContext.ClinicId.Returns(clinicId);
@@ -962,11 +962,11 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
-        await context.ClinicRoles.AddAsync(new ClinicRole
+        await context.Roles.AddAsync(new Role
         {
-            Id = adminClinicRoleId,
+            Id = adminRoleId,
             TenantId = tenantId,
             ClinicId = clinicId,
             Name = "Clinic Administrator",
@@ -981,7 +981,7 @@ public class StaffCommandsTests
             FirstName = "Self",
             LastName = "Admin",
             Role = StaffRole.Admin,
-            ClinicRoleId = adminClinicRoleId,
+            ClinicRoleId = adminRoleId,
             IsActive = true
         };
         await context.StaffMembers.AddAsync(staff);
@@ -996,7 +996,7 @@ public class StaffCommandsTests
             "M.",
             "Dr.",
             StaffRole.Admin,
-            adminClinicRoleId,
+            adminRoleId,
             "admin@clinic.com",
             "09179998888",
             "PRC-777",
@@ -1009,7 +1009,7 @@ public class StaffCommandsTests
         result.FirstName.Should().Be("UpdatedFirst");
         result.LastName.Should().Be("UpdatedLast");
         result.Role.Should().Be(StaffRole.Admin);
-        result.ClinicRoleId.Should().Be(adminClinicRoleId);
+        result.ClinicRoleId.Should().Be(adminRoleId);
     }
 
     [Fact]
@@ -1026,7 +1026,7 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
         await context.StaffMembers.AddAsync(new StaffMember
         {
@@ -1078,7 +1078,7 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
         await context.StaffMembers.AddAsync(new StaffMember
         {
@@ -1174,13 +1174,13 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
 
         // Room 1 created before Room 2 (PostgreSQL / EF default query order is Room 1, Room 2)
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Alpha", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Beta", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Alpha", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Beta", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var doctor = new StaffMember
         {
@@ -1240,13 +1240,13 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
-        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<Room>(context, sieve);
 
-        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Alpha", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
-        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Beta", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
-        await context.ClinicRooms.AddRangeAsync(room1, room2);
+        var room1 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Alpha", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new Room { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Beta", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.Rooms.AddRangeAsync(room1, room2);
 
         var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
         licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
@@ -1257,7 +1257,7 @@ public class StaffCommandsTests
                 Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 10 }
             }));
 
-        await context.ClinicSettings.AddAsync(new ClinicSettings
+        await context.Settings.AddAsync(new FacilitySettings
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -1312,9 +1312,9 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
-        var systemAdminRole = new ClinicRole
+        var systemAdminRole = new Role
         {
             Id = systemAdminRoleId,
             TenantId = tenantId,
@@ -1323,7 +1323,7 @@ public class StaffCommandsTests
             IsSystem = true,
             Permissions = new List<string>(ClinicPermissions.All)
         };
-        var customRole = new ClinicRole
+        var customRole = new Role
         {
             Id = customRoleId,
             TenantId = tenantId,
@@ -1332,7 +1332,7 @@ public class StaffCommandsTests
             IsSystem = false,
             Permissions = new List<string> { ClinicPermissions.AppointmentsRead }
         };
-        await context.ClinicRoles.AddRangeAsync(systemAdminRole, customRole);
+        await context.Roles.AddRangeAsync(systemAdminRole, customRole);
 
         // The only active system admin
         var adminStaff = new StaffMember
@@ -1398,7 +1398,7 @@ public class StaffCommandsTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
 
-        var systemAdminRole = new ClinicRole
+        var systemAdminRole = new Role
         {
             Id = systemAdminRoleId,
             TenantId = tenantId,
@@ -1407,7 +1407,7 @@ public class StaffCommandsTests
             IsSystem = true,
             Permissions = new List<string>(ClinicPermissions.All)
         };
-        await context.ClinicRoles.AddAsync(systemAdminRole);
+        await context.Roles.AddAsync(systemAdminRole);
 
         var adminStaff = new StaffMember
         {
@@ -1458,9 +1458,9 @@ public class StaffCommandsTests
 
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
-        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<Role>(context, sieve);
 
-        var systemAdminRole = new ClinicRole
+        var systemAdminRole = new Role
         {
             Id = systemAdminRoleId,
             TenantId = tenantId,
@@ -1469,7 +1469,7 @@ public class StaffCommandsTests
             IsSystem = true,
             Permissions = new List<string>(ClinicPermissions.All)
         };
-        var customRole = new ClinicRole
+        var customRole = new Role
         {
             Id = customRoleId,
             TenantId = tenantId,
@@ -1478,7 +1478,7 @@ public class StaffCommandsTests
             IsSystem = false,
             Permissions = new List<string> { ClinicPermissions.AppointmentsRead }
         };
-        await context.ClinicRoles.AddRangeAsync(systemAdminRole, customRole);
+        await context.Roles.AddRangeAsync(systemAdminRole, customRole);
 
         // Two active system admins
         var admin1 = new StaffMember

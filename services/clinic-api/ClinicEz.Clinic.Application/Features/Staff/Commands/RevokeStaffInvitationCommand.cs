@@ -26,7 +26,7 @@ public sealed class RevokeStaffInvitationCommandValidator : AbstractValidator<Re
 public sealed class RevokeStaffInvitationCommandHandler : IRequestHandler<RevokeStaffInvitationCommand, bool>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicRefreshToken>? _refreshTokenRepository;
+    private readonly IRepository<RefreshToken>? _refreshTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IStaffAccessInvalidator? _accessCache;
@@ -35,7 +35,7 @@ public sealed class RevokeStaffInvitationCommandHandler : IRequestHandler<Revoke
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<ClinicRefreshToken>? refreshTokenRepository = null,
+        IRepository<RefreshToken>? refreshTokenRepository = null,
         IStaffAccessInvalidator? accessCache = null)
     {
         _staffRepository = staffRepository;

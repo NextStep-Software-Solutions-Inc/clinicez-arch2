@@ -210,8 +210,8 @@ public class MedicalCertificateFitnessStatusVerificationTests
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
         var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
 
         var settings = CreateSettings();
         settings.ClinicId = clinicId;
@@ -260,7 +260,7 @@ public class MedicalCertificateFitnessStatusVerificationTests
     // HELPERS & ISO 32000-1 PER-FONT /ToUnicode CMap PDF TEXT EXTRACTOR
     // =========================================================================
 
-    private static ClinicSettings CreateSettings() => new()
+    private static FacilitySettings CreateSettings() => new()
     {
         TenantId = "tenant-001",
         ClinicId = Guid.NewGuid(),

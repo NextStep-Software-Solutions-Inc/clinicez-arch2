@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Portal.Application.Common;
 using ClinicEz.Portal.Application.Features.Admin.DTOs;
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Interfaces;
@@ -14,13 +15,15 @@ namespace ClinicEz.Portal.Application.Features.Admin.Commands;
 public record AcceptAdminInvitationCommand(
     string Token,
     string ClerkUserId,
-    string? Email = null
+    string? Email = null,
+    IReadOnlyList<string>? VerifiedEmails = null
 ) : IRequest<AdminUserDto>;
 
 public class AcceptAdminInvitationCommandHandler(
     IApplicationDbContext context,
     IFrontendUrlProvider frontendUrlProvider,
-    TimeProvider timeProvider
+    TimeProvider timeProvider,
+    IClerkUserLookup? clerkLookup = null
 ) : IRequestHandler<AcceptAdminInvitationCommand, AdminUserDto>
 {
     public async Task<AdminUserDto> Handle(AcceptAdminInvitationCommand request, CancellationToken cancellationToken)
@@ -73,6 +76,22 @@ public class AcceptAdminInvitationCommandHandler(
         if (user.Status != AdminUserStatus.Invited)
         {
             throw new InvalidOperationException("This invitation is not valid for acceptance.");
+        }
+
+        await InvitationEmailVerifier.EnsureEmailMatchesAsync(
+            user.Email,
+            request.Email,
+            request.VerifiedEmails,
+            request.ClerkUserId,
+            clerkLookup,
+            cancellationToken);
+
+        var alreadyAdmin = await context.AdminUsers.AnyAsync(
+            u => u.ClerkUserId == request.ClerkUserId && u.Id != user.Id && u.Status != AdminUserStatus.Revoked,
+            cancellationToken);
+        if (alreadyAdmin)
+        {
+            throw new InvalidOperationException("This account is already linked to an administrative profile.");
         }
 
         user.ClerkUserId = request.ClerkUserId;

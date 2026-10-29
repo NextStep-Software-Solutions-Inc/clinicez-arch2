@@ -15,11 +15,11 @@ public sealed record GetPatientFamilyHistoryQuery(Guid PatientId) : IRequest<Pat
 
 public sealed class GetPatientFamilyHistoryQueryHandler : IRequestHandler<GetPatientFamilyHistoryQuery, PatientFamilyHistoryResultDto>
 {
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<PatientFamilyHistory> _familyRepo;
 
     public GetPatientFamilyHistoryQueryHandler(
-        IRepository<ClinicPatient> patientRepo,
+        IRepository<Patient> patientRepo,
         IRepository<PatientFamilyHistory> familyRepo)
     {
         _patientRepo = patientRepo;
@@ -47,10 +47,10 @@ public sealed class GetPatientFamilyHistoryQueryHandler : IRequestHandler<GetPat
             e.PhilHealthMdiseaseCode,
             e.Icd10Code,
             e.SpecificDescription,
-            e.Relationship,
+            e.Relationship.ToString(),
             e.ClinicalNotes,
             e.CreatedAt)).ToList();
 
-        return new PatientFamilyHistoryResultDto(dtos, patient.FamilyMedicalHistoryNotes);
+        return new PatientFamilyHistoryResultDto(dtos, null);
     }
 }

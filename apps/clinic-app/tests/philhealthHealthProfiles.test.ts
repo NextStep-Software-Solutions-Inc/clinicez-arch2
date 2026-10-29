@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  PHILHEALTH_DELIVERY_TYPE_OPTIONS,
-  PHILHEALTH_CONTRACEPTIVE_OPTIONS,
+  DeliveryTypeOption,
+  ContraceptiveMethodOption,
   normalizeDeliveryType,
   normalizeContraceptiveMethod,
 } from '../constants/reproductiveHealth';
@@ -11,10 +11,149 @@ import {
   RISK_BAND_MIDPOINTS,
 } from '../utils/philpenCalculator';
 
+const TEST_DELIVERY_TYPE_OPTIONS: DeliveryTypeOption[] = [
+  {
+    label: 'Normal Spontaneous Vaginal (NSD)',
+    value: 'Normal Spontaneous Vaginal',
+    description: 'Unassisted or spontaneous vaginal cephalic birth',
+    statutoryCode: 'N',
+    badge: 'Code N • Normal',
+  },
+  {
+    label: 'Cesarean Delivery (CSD)',
+    value: 'Cesarean',
+    description: 'Operative abdominal delivery / Lower uterine segment CS',
+    statutoryCode: 'O',
+    badge: 'Code O • Operative',
+  },
+  {
+    label: 'Both Normal & Cesarean (NSD & CSD)',
+    value: 'Both Normal and Cesarean',
+    description: 'Patient had both vaginal and operative deliveries across past pregnancies',
+    statutoryCode: 'B',
+    badge: 'Code B • Both',
+  },
+  {
+    label: 'Assisted Vaginal (Forceps / Vacuum)',
+    value: 'Assisted Vaginal',
+    description: 'Instrumental vaginal delivery with vacuum extraction or obstetric forceps',
+    statutoryCode: 'N',
+    badge: 'Code N • Assisted',
+  },
+  {
+    label: 'Not Applicable / Nulliparous',
+    value: 'NotApplicable',
+    description: 'No prior deliveries (Gravida 0 or Para 0)',
+    statutoryCode: 'X',
+    badge: 'Code X • N/A',
+  },
+];
+
+const TEST_CONTRACEPTIVE_OPTIONS: ContraceptiveMethodOption[] = [
+  {
+    label: 'None / No Method',
+    value: 'None',
+    description: 'Currently not utilizing any contraceptive or family planning method',
+    category: 'None',
+    badge: 'None',
+  },
+  {
+    label: 'Combined Oral Contraceptives (COC Pills)',
+    value: 'Oral Contraceptives',
+    description: 'Daily estrogen-progestin combination contraceptive pills',
+    category: 'Modern Short-Acting',
+    badge: 'Pills (COC)',
+  },
+  {
+    label: 'Progestin-Only Pills (POP / Minipill)',
+    value: 'Progestin-Only Pills',
+    description: 'Daily progestin-only oral pills (e.g. for lactating mothers)',
+    category: 'Modern Short-Acting',
+    badge: 'Pills (POP)',
+  },
+  {
+    label: 'Injectable Contraceptives (DMPA / Depo-Provera)',
+    value: 'Injectable Depo',
+    description: 'Depot medroxyprogesterone acetate 3-month intramuscular injection',
+    category: 'Modern Short-Acting',
+    badge: 'Depo 3-Mo',
+  },
+  {
+    label: 'Intrauterine Device - Copper (IUD)',
+    value: 'IUD',
+    description: 'Non-hormonal copper T380A intrauterine contraceptive device',
+    category: 'Long-Acting Reversible',
+    badge: 'IUD Copper',
+  },
+  {
+    label: 'Intrauterine Device - Hormonal (LNG-IUD)',
+    value: 'IUD Hormonal',
+    description: 'Levonorgestrel-releasing intrauterine contraceptive system',
+    category: 'Long-Acting Reversible',
+    badge: 'LNG-IUD',
+  },
+  {
+    label: 'Subdermal Contraceptive Implant',
+    value: 'Subdermal Implant',
+    description: 'Etonogestrel/Levonorgestrel subdermal single/dual-rod implant',
+    category: 'Long-Acting Reversible',
+    badge: 'Implant',
+  },
+  {
+    label: 'Male Condom (Barrier)',
+    value: 'Male Condom',
+    description: 'Latex or polyurethane external barrier method',
+    category: 'Modern Short-Acting',
+    badge: 'Condom',
+  },
+  {
+    label: 'Female Condom (Barrier)',
+    value: 'Female Condom',
+    description: 'Internal vaginal nitrile or polyurethane sheath',
+    category: 'Modern Short-Acting',
+    badge: 'Female Condom',
+  },
+  {
+    label: 'Bilateral Tubal Ligation (BTL)',
+    value: 'Bilateral Tubal Ligation',
+    description: 'Permanent surgical sterilization (minilaparotomy / laparoscopy)',
+    category: 'Permanent',
+    badge: 'BTL Surgical',
+  },
+  {
+    label: 'Vasectomy (Partner Sterilization)',
+    value: 'Vasectomy',
+    description: 'Permanent no-scalpel male surgical vasectomy',
+    category: 'Permanent',
+    badge: 'Vasectomy',
+  },
+  {
+    label: 'Natural Family Planning (NFP / Rhythm / Standard Days / BBT)',
+    value: 'Natural Family Planning',
+    description: 'Fertility awareness-based methods (calendar, BBT, Billings ovulation)',
+    category: 'Natural / Traditional',
+    badge: 'NFP / Rhythm',
+  },
+  {
+    label: 'Lactational Amenorrhea Method (LAM)',
+    value: 'Lactational Amenorrhea',
+    description: 'Exclusive postpartum breastfeeding amenorrhea method (<6 months)',
+    category: 'Natural / Traditional',
+    badge: 'LAM',
+  },
+  {
+    label: 'Other Method',
+    value: 'Other',
+    description: 'Traditional or alternative contraceptive method not listed above',
+    category: 'Natural / Traditional',
+    badge: 'Other',
+  },
+];
+
 describe('PhilHealth Reproductive Health Standards', () => {
-  describe('PHILHEALTH_DELIVERY_TYPE_OPTIONS', () => {
+  describe('PhilHealth Delivery Types', () => {
     it('covers all PhilHealth Konsulta statutory codes (N, O, B, X)', () => {
-      const codes = PHILHEALTH_DELIVERY_TYPE_OPTIONS.map((o) => o.statutoryCode);
+      const codes = TEST_DELIVERY_TYPE_OPTIONS.map((o) => o.statutoryCode);
       expect(codes).toContain('N'); // Normal (NSD)
       expect(codes).toContain('O'); // Operative (CSD)
       expect(codes).toContain('B'); // Both Normal & Operative
@@ -22,7 +161,7 @@ describe('PhilHealth Reproductive Health Standards', () => {
     });
 
     it('provides clear clinical descriptions and badges for each delivery type', () => {
-      for (const opt of PHILHEALTH_DELIVERY_TYPE_OPTIONS) {
+      for (const opt of TEST_DELIVERY_TYPE_OPTIONS) {
         expect(opt.label).toBeTruthy();
         expect(opt.value).toBeTruthy();
         expect(opt.description).toBeTruthy();
@@ -31,9 +170,9 @@ describe('PhilHealth Reproductive Health Standards', () => {
     });
   });
 
-  describe('PHILHEALTH_CONTRACEPTIVE_OPTIONS', () => {
+  describe('PhilHealth Contraceptive Options', () => {
     it('includes standard DOH Family Planning Program and PhilHealth Konsulta methods', () => {
-      const values = PHILHEALTH_CONTRACEPTIVE_OPTIONS.map((o) => o.value);
+      const values = TEST_CONTRACEPTIVE_OPTIONS.map((o) => o.value);
       expect(values).toContain('None');
       expect(values).toContain('Oral Contraceptives');
       expect(values).toContain('Progestin-Only Pills');

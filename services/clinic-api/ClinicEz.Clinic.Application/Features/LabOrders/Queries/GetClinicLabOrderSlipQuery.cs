@@ -51,17 +51,17 @@ public record GetClinicLabOrderSlipQuery(Guid OrderId) : IRequest<LabOrderSlipDt
 
 public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrderSlipQuery, LabOrderSlipDto>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
-    private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<LabOrder> _orderRepo;
+    private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<FacilitySettings> _settingsRepo;
     private readonly IRepository<StaffMember> _staffRepo;
     private readonly IUploadGrantService _uploadGrants;
     private readonly IUnitOfWork _unitOfWork;
 
     public GetClinicLabOrderSlipQueryHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicSettings> settingsRepo,
+        IRepository<LabOrder> orderRepo,
+        IRepository<Patient> patientRepo,
+        IRepository<FacilitySettings> settingsRepo,
         IRepository<StaffMember> staffRepo,
         IUploadGrantService uploadGrants,
         IUnitOfWork unitOfWork)

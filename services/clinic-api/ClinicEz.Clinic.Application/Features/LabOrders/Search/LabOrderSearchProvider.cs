@@ -17,13 +17,13 @@ namespace ClinicEz.Clinic.Application.Features.LabOrders.Search;
 /// </summary>
 public sealed class LabOrderSearchProvider : ISearchProvider
 {
-    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<LabOrder> _labOrderRepo;
 
     public string Category => "LabOrders";
     public int Priority => 50;
     public string? RequiredPermission => ClinicPermissions.LabOrdersRead;
 
-    public LabOrderSearchProvider(IRepository<ClinicLabOrder> labOrderRepo)
+    public LabOrderSearchProvider(IRepository<LabOrder> labOrderRepo)
     {
         _labOrderRepo = labOrderRepo ?? throw new ArgumentNullException(nameof(labOrderRepo));
     }
@@ -82,7 +82,7 @@ public sealed class LabOrderSearchProvider : ISearchProvider
         }).ToList();
     }
 
-    private static (string text, string variant) ResolveBadge(ClinicLabOrder order)
+    private static (string text, string variant) ResolveBadge(LabOrder order)
     {
         if (order.HasCriticalPanicAlert)
             return ("PANIC", SearchBadgeVariant.Emergency);

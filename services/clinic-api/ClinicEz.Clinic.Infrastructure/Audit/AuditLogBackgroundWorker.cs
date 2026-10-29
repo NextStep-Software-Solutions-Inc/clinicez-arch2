@@ -126,7 +126,7 @@ public sealed class AuditLogBackgroundWorker : BackgroundService
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var redactionService = scope.ServiceProvider.GetRequiredService<IPhiRedactionService>();
 
-            var entities = new List<ClinicAuditEntry>(messages.Count);
+            var entities = new List<AuditEntry>(messages.Count);
 
             foreach (var msg in messages)
             {
@@ -138,7 +138,7 @@ public sealed class AuditLogBackgroundWorker : BackgroundService
                     ? redactionService.MaskPhilHealthPin(msg.PatientPin)
                     : msg.PatientPinMasked;
 
-                var entry = new ClinicAuditEntry
+                var entry = new AuditEntry
                 {
                     Id = msg.Id != Guid.Empty ? msg.Id : Guid.NewGuid(),
                     TenantId = msg.TenantId,
@@ -165,7 +165,7 @@ public sealed class AuditLogBackgroundWorker : BackgroundService
                 entities.Add(entry);
             }
 
-            await dbContext.ClinicAuditEntries.AddRangeAsync(entities, cancellationToken);
+            await dbContext.AuditEntries.AddRangeAsync(entities, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             _logger.LogDebug("Persisted {Count} audit log entries successfully.", entities.Count);

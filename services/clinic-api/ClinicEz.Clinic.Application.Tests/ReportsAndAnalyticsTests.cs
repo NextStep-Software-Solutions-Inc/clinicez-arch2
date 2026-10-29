@@ -33,8 +33,8 @@ public class ReportsAndAnalyticsTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
         var todayMidday = DateTime.UtcNow.Date.AddHours(12);
         // Seed sample queue item
@@ -115,9 +115,9 @@ public class ReportsAndAnalyticsTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
 
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -125,8 +125,8 @@ public class ReportsAndAnalyticsTests
             FirstName = "Lourdes",
             LastName = "Velasco",
             DateOfBirth = new DateOnly(1950, 1, 1), // Senior
-            Gender = "Female",
-            CivilStatus = "Married",
+            Gender = Gender.Female,
+            CivilStatus = CivilStatus.Married,
             ContactNumber = "09170001111",
             CustomFields = new Dictionary<string, object?>
             {
@@ -229,7 +229,7 @@ public class ReportsAndAnalyticsTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
 
         var docId = Guid.NewGuid();
         var enc = new ConsultationEncounter
@@ -303,8 +303,8 @@ public class ReportsAndAnalyticsTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
 
         var handler = new GetClinicAnalyticsQueryHandler(
             queueRepo, invoiceRepo, paymentRepo, consultRepo, procRepo, labRepo, _clinicContext);
@@ -337,9 +337,9 @@ public class ReportsAndAnalyticsTests
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
         var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<LabOrder>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
         var handler = new GetDailyEodReportQueryHandler(
             queueRepo, invoiceRepo, paymentRepo, consultRepo, procRepo, labRepo, _clinicContext, settingsRepo);
@@ -374,10 +374,10 @@ public class ReportsAndAnalyticsTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
@@ -421,10 +421,10 @@ public class ReportsAndAnalyticsTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
-        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
-        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<FacilitySettings>(context, sieve);
 
-        var settings = new ClinicSettings
+        var settings = new FacilitySettings
         {
             TenantId = _testTenantId,
             ClinicId = _testClinicId,

@@ -28,8 +28,8 @@ public sealed class SuspendStaffMemberCommandValidator : AbstractValidator<Suspe
 public sealed class SuspendStaffMemberCommandHandler : IRequestHandler<SuspendStaffMemberCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicRefreshToken>? _refreshTokenRepository;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<RefreshToken>? _refreshTokenRepository;
+    private readonly IRepository<Room>? _roomRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IStaffAccessInvalidator? _accessCache;
@@ -38,8 +38,8 @@ public sealed class SuspendStaffMemberCommandHandler : IRequestHandler<SuspendSt
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<ClinicRefreshToken>? refreshTokenRepository = null,
-        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<RefreshToken>? refreshTokenRepository = null,
+        IRepository<Room>? roomRepository = null,
         IStaffAccessInvalidator? accessCache = null)
     {
         _staffRepository = staffRepository;

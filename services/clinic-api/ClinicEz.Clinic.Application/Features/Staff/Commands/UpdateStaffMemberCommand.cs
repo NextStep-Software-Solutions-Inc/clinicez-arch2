@@ -72,20 +72,20 @@ public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<Update
 public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaffMemberCommand, StaffMemberDto>
 {
     private readonly IRepository<StaffMember> _staffRepository;
-    private readonly IRepository<ClinicRole> _roleRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     private readonly IStaffAccessInvalidator? _accessCache;
-    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<Room>? _roomRepository;
 
     public UpdateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
-        IRepository<ClinicRole> roleRepository,
+        IRepository<Role> roleRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IStaffAccessInvalidator? accessCache = null,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<Room>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
@@ -161,7 +161,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         {
             bool willLoseSystemAdmin = !request.IsActive ||
                 request.Role != StaffRole.Admin ||
-                (request.ClinicRoleId.HasValue && (staff.ClinicRole == null || request.ClinicRoleId.Value != staff.ClinicRoleId));
+                (request.ClinicRoleId.HasValue && (staff.ClinicRoleId == null || request.ClinicRoleId.Value != staff.ClinicRoleId));
 
             await GovernanceSafetyChecker.EnsureActiveSystemAdminRemainsAsync(
                 _staffRepository,

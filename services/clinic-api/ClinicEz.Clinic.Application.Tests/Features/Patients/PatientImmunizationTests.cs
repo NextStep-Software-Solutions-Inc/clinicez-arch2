@@ -34,9 +34,9 @@ public class PatientImmunizationTests
         _clinicContext.StaffId.Returns(Guid.NewGuid());
     }
 
-    private ClinicPatient SeedPatient(ApplicationDbContext db, Guid? syncPatientId = null)
+    private Patient SeedPatient(ApplicationDbContext db, Guid? syncPatientId = null)
     {
-        var patient = new ClinicPatient
+        var patient = new Patient
         {
             Id = Guid.NewGuid(),
             TenantId = TenantId,
@@ -44,10 +44,10 @@ public class PatientImmunizationTests
             PatientCode = "PAT-001",
             FirstName = "Juan",
             LastName = "Dela Cruz",
-            Gender = "Male",
+            Gender = Gender.Male,
             DateOfBirth = new DateOnly(2020, 1, 1),
             ContactNumber = "09171234567",
-            SyncPatientId = syncPatientId
+            CloudPatientId = syncPatientId
         };
         db.Patients.Add(patient);
         db.SaveChanges();
@@ -62,7 +62,7 @@ public class PatientImmunizationTests
         var syncId = Guid.NewGuid();
         var patient = SeedPatient(db, syncId);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(db, sieve);
         var publisher = new ImmunizationEventPublisher(
             new InteropPublisher(db), MessagingTestKit.Addresses(db), NullLogger<ImmunizationEventPublisher>.Instance);
@@ -150,7 +150,7 @@ public class PatientImmunizationTests
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var patient = SeedPatient(db);
 
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
         var immRepo = TestDbHelper.CreateRepository<PatientImmunization>(db, sieve);
 
         var handler = new RecordHistoricalImmunizationCommandHandler(patientRepo, immRepo, uow, _clinicContext);

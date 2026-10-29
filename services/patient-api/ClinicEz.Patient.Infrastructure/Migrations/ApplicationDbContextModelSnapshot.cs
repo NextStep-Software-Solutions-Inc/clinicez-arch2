@@ -2865,10 +2865,30 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("barangay");
 
+                    b.Property<string>("BarangayName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("barangay_name");
+
+                    b.Property<string>("BarangayPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("barangay_psgc");
+
                     b.Property<string>("CityMunicipality")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("city_municipality");
+
+                    b.Property<string>("CityMunicipalityName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("city_municipality_name");
+
+                    b.Property<string>("CityMunicipalityPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("city_municipality_psgc");
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")
@@ -2910,6 +2930,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_primary");
 
+                    b.Property<bool>("IsSameAsPermanent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_same_as_permanent");
+
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid")
                         .HasColumnName("patient_id");
@@ -2919,10 +2943,35 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("province");
 
+                    b.Property<string>("ProvinceName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("province_name");
+
+                    b.Property<string>("ProvincePsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("province_psgc");
+
                     b.Property<string>("Region")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("region");
+
+                    b.Property<string>("RegionName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("region_name");
+
+                    b.Property<string>("RegionPsgc")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("region_psgc");
+
+                    b.Property<string>("StreetAddress")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("street_address");
 
                     b.Property<string>("Type")
                         .IsRequired()

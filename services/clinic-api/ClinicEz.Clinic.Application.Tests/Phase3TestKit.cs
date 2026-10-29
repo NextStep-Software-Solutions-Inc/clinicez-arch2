@@ -80,7 +80,7 @@ internal static class Phase3TestKit
 
         public int Count => _files.Count;
 
-        public Task StoreAsync(ClinicLabResult result, byte[] content, CancellationToken ct)
+        public Task StoreAsync(LabResult result, byte[] content, CancellationToken ct)
         {
             _files[result.Id] = content;
             result.StorageKey = $"memory/{result.Id:N}";
@@ -92,11 +92,11 @@ internal static class Phase3TestKit
             return Task.CompletedTask;
         }
 
-        public Task<byte[]?> ReadAsync(ClinicLabResult result, CancellationToken ct) =>
+        public Task<byte[]?> ReadAsync(LabResult result, CancellationToken ct) =>
             Task.FromResult(_files.TryGetValue(result.Id, out var content) ? content : null);
     }
 
-    public static ClinicPatient NewPatient(Guid clinicId, string tenantId, Guid? syncPatientId = null) => new()
+    public static Patient NewPatient(Guid clinicId, string tenantId, Guid? syncPatientId = null) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = tenantId,
@@ -106,8 +106,8 @@ internal static class Phase3TestKit
         LastName = "Santos",
         ContactNumber = "0917-123-4567",
         DateOfBirth = new DateOnly(1984, 3, 12),
-        Gender = "Female",
-        SyncPatientId = syncPatientId
+        Gender = Gender.Female,
+        CloudPatientId = syncPatientId
     };
 
     public static StaffMember NewDoctor(Guid clinicId, string tenantId) => new()
@@ -123,7 +123,7 @@ internal static class Phase3TestKit
         Specialty = "Internal Medicine"
     };
 
-    public static ClinicLabOrder NewLabOrder(Guid clinicId, string tenantId, Guid patientId, string orderNumber = "LAB-20261009-001") => new()
+    public static LabOrder NewLabOrder(Guid clinicId, string tenantId, Guid patientId, string orderNumber = "LAB-20261009-001") => new()
     {
         Id = Guid.NewGuid(),
         TenantId = tenantId,
@@ -131,6 +131,6 @@ internal static class Phase3TestKit
         OrderNumber = orderNumber,
         PatientId = patientId,
         PatientName = "Maria Santos",
-        Items = new List<ClinicLabOrderItem> { new() { TestName = "CBC", Category = "Hematology" } }
+        Items = new List<LabOrderItem> { new() { TestName = "CBC", Category = "Hematology" } }
     };
 }
