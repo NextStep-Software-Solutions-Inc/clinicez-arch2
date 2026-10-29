@@ -18,7 +18,10 @@ import {
   buildPrincipalSponsorFromGuardian,
   extractPhilHealthProfileData,
 } from './memberType';
-import { mergePatientCustomFields } from './patientCustomFieldsMerger';
+import {
+  mergePatientCustomFields,
+  hasPreviousValue,
+} from './patientCustomFieldsMerger';
 import StructuredAllergyIntakeModal, {
   AllergyPillList,
   CreateAllergyRequest,
@@ -478,18 +481,29 @@ export function EditPatientModal({
       (f) => !LEGACY_PRIMARY_ADDRESS_FIELD_KEYS.has(f.fieldKey)
     );
     const existingKeys = new Set(activeTenantFields.map((f) => f.fieldKey));
+
+    const hasAnyAddressData = BASELINE_PATIENT_CUSTOM_FIELDS.some(
+      (bf) => bf.category === 'Address' && hasPreviousValue(patient, bf.fieldKey)
+    );
+    const hasAnyEmergencyData = BASELINE_PATIENT_CUSTOM_FIELDS.some(
+      (bf) => bf.category === 'Emergency Contacts' && hasPreviousValue(patient, bf.fieldKey)
+    );
+
     const missingBaseline = BASELINE_PATIENT_CUSTOM_FIELDS.map((bf) => {
       if (bf.fieldKey === 'emergency_contact_relationship' && emergencyRelationshipOptions.length > 0) {
         return { ...bf, options: emergencyRelationshipOptions };
       }
       return bf;
-    }).filter(
-      (bf) => !existingKeys.has(bf.fieldKey)
-    );
+    }).filter((bf) => {
+      if (existingKeys.has(bf.fieldKey)) return false;
+      if (bf.category === 'Address') return hasAnyAddressData;
+      if (bf.category === 'Emergency Contacts') return hasAnyEmergencyData;
+      return hasPreviousValue(patient, bf.fieldKey);
+    });
     return [...activeTenantFields, ...missingBaseline].sort(
       (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
     );
-  }, [tenantCustomFields, emergencyRelationshipOptions]);
+  }, [tenantCustomFields, emergencyRelationshipOptions, patient]);
 
   const addressFields = useMemo(() => {
     return effectiveCustomFields.filter((f) => f.category === 'Address');

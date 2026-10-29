@@ -882,6 +882,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         const phoneErr = err.getFieldError?.('contactNumber') || err.getFieldError?.('phone');
         if (phoneErr) fieldErrorsMap.contactNumber = phoneErr;
 
+        const emailErr = err.getFieldError?.('email');
+        if (emailErr) fieldErrorsMap.email = emailErr;
+
         const philErr = err.getFieldError?.('philHealthId') || err.getFieldError?.('philHealthPin') || err.getFieldError?.('philHealthNumber');
         if (philErr) {
           fieldErrorsMap.philHealthId = philErr;
@@ -2186,11 +2189,29 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
+                  <Input
+                    label="Email Address"
+                    placeholder="patient@example.com"
+                    value={formEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    onChangeText={(val) => {
+                      setFormEmail(val);
+                      clearFieldError('email');
+                    }}
+                    error={formFieldErrors.email}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={{ flex: 1 }}>
                   <BloodTypeSelect
                     value={formBloodType}
                     onChange={setFormBloodType}
                   />
                 </View>
+                <View style={{ flex: 1 }} />
               </View>
 
               {/* Home Address (Official 1NF PatientAddress Entity) */}

@@ -564,6 +564,9 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
 
     expect(adult30Markup).not.toContain('Senior Citizen ID');
     expect(adult30Markup).toContain('PWD ID');
+    // Secondary Address and Emergency Contact must NOT be asked when not configured in intake fields and empty
+    expect(adult30Markup).not.toContain('Secondary Address');
+    expect(adult30Markup).not.toContain('Emergency Contact');
 
     // 68-year-old senior: Senior Citizen ID MUST be rendered alongside PWD ID
     const senior68Markup = renderToStaticMarkup(
@@ -585,7 +588,10 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
           civilStatus: 'Married',
           contactNumber: '09187654321',
           createdAt: '2026-10-29T00:00:00Z',
-          customFields: {},
+          customFields: {
+            secondary_city: 'Cebu City',
+            emergency_contact_name: 'Maria Dela Cruz',
+          },
           guardians: [],
         } as any,
       })
@@ -593,5 +599,25 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
 
     expect(senior68Markup).toContain('Senior Citizen ID');
     expect(senior68Markup).toContain('PWD ID');
+    // Existing values in customFields preserve Secondary Address and Emergency Contact sections
+    expect(senior68Markup).toContain('Secondary Address');
+    expect(senior68Markup).toContain('Emergency Contact');
+  });
+
+  test('Registration form source code has Email Address input wired to formEmail and backend error mapping', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const screenCode = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+    expect(screenCode).toContain('label="Email Address"');
+    expect(screenCode).toContain('value={formEmail}');
+    expect(screenCode).toContain('onChangeText={(val) => {');
+    expect(screenCode).toContain('setFormEmail(val);');
+    expect(screenCode).toContain("clearFieldError('email');");
+    expect(screenCode).toContain('error={formFieldErrors.email}');
+    expect(screenCode).toContain("const emailErr = err.getFieldError?.('email');");
+    expect(screenCode).toContain('fieldErrorsMap.email = emailErr;');
   });
 });
