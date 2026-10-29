@@ -14,7 +14,6 @@ import { notify, Alert } from '../../utils/feedback';
 import {
   type MemberType,
   type PrincipalRelationship,
-  buildPrincipalSponsorFromGuardian,
   extractPhilHealthProfileData,
 } from './memberType';
 import { mergePatientCustomFields } from './patientCustomFieldsMerger';
@@ -32,7 +31,6 @@ import StructuredMedicalHistoryModal, {
 import ClinicalAlertsSection from './ClinicalAlertsSection';
 import YakapEnlistmentSection from './YakapEnlistmentSection';
 import GuardianSection, {
-  createEmptyGuardianDraft,
   isMinorFromDob,
   normalizeGuardianPayload,
   validateGuardianDraft,
@@ -253,40 +251,17 @@ export interface EditPatientModalProps {
   onSaved: (updatedPatient: ClinicPatient) => void;
 }
 
-function extractInitialGuardianFromPatient(patient?: ClinicPatient | null): PatientGuardianDto | null {
-  const existingGuardian =
-    patient?.guardians && patient.guardians.length > 0
-      ? patient.guardians.find((g) => g.isPrimaryGuardian) || patient.guardians[0]
-      : null;
-  if (!existingGuardian) return null;
-  return {
-    id: existingGuardian.id,
-    firstName: existingGuardian.firstName || '',
-    lastName: existingGuardian.lastName || '',
-    middleName: existingGuardian.middleName || '',
-    suffix: existingGuardian.suffix || '',
-    birthDate: existingGuardian.birthDate || '',
-    sex: existingGuardian.sex || '',
-    contactNumber: existingGuardian.contactNumber || '',
-    relationshipCode: existingGuardian.relationshipCode || '',
-    relationshipOtherSpecify: existingGuardian.relationshipOtherSpecify || '',
-    philHealthPin: existingGuardian.philHealthPin || '',
-    isPrimaryGuardian: existingGuardian.isPrimaryGuardian ?? true,
-    isEmergencyContact: existingGuardian.isEmergencyContact ?? true,
-  };
-}
-
 export function EditPatientModal({
   patient,
   visible,
   onClose,
   onSaved,
 }: EditPatientModalProps) {
-  const [firstName, setFirstName] = useState(patient?.firstName || '');
-  const [middleName, setMiddleName] = useState(patient?.middleName || '');
-  const [lastName, setLastName] = useState(patient?.lastName || '');
-  const [suffix, setSuffix] = useState(patient?.suffix || '');
-  const [dateOfBirth, setDateOfBirth] = useState(patient?.dateOfBirth || '');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [suffix, setSuffix] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [sex, setSex] = useState<string>('Male');
   const [genderIdentity, setGenderIdentity] = useState<string>('');
   const [civilStatus, setCivilStatus] = useState<string>('Single');
@@ -343,17 +318,15 @@ export function EditPatientModal({
   }, []);
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
-  const [philHealthNumber, setPhilHealthNumber] = useState(patient?.philHealthNumber || '');
-  const [memberType, setMemberType] = useState<MemberType>(() =>
-    patient ? extractPhilHealthProfileData(patient.customFields, patient).memberType : 'MM'
-  );
+  const [philHealthNumber, setPhilHealthNumber] = useState('');
+  const [memberType, setMemberType] = useState<MemberType>('MM');
   const [principalMemberPin, setPrincipalMemberPin] = useState('');
   const [principalFullName, setPrincipalFullName] = useState('');
   const [principalRelationship, setPrincipalRelationship] = useState<PrincipalRelationship>('C');
   const [principalDob, setPrincipalDob] = useState('');
   const [isPrincipalPinValid, setIsPrincipalPinValid] = useState<boolean | null>(null);
-  const [seniorCitizenId, setSeniorCitizenId] = useState(patient?.seniorCitizenId || '');
-  const [pwdId, setPwdId] = useState(patient?.pwdId || '');
+  const [seniorCitizenId, setSeniorCitizenId] = useState('');
+  const [pwdId, setPwdId] = useState('');
   const [bloodType, setBloodType] = useState('');
   const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
   const [allergyModalVisible, setAllergyModalVisible] = useState(false);
@@ -413,9 +386,7 @@ export function EditPatientModal({
     isSameAsPermanent: false,
     streetAddress: '',
   });
-  const [guardian, setGuardian] = useState<PatientGuardianDto | null>(() =>
-    extractInitialGuardianFromPatient(patient)
-  );
+  const [guardian, setGuardian] = useState<PatientGuardianDto | null>(null);
   const [guardianErrors, setGuardianErrors] = useState<Record<string, string>>({});
   const [isGuardianPinValid, setIsGuardianPinValid] = useState<boolean | null>(null);
 
@@ -437,34 +408,6 @@ export function EditPatientModal({
       delete next[field];
       return next;
     });
-  };
-
-  const guardianSponsor = useMemo(
-    () => buildPrincipalSponsorFromGuardian(guardian, { patientDob: dateOfBirth, pwdId }),
-    [guardian, dateOfBirth, pwdId]
-  );
-
-  const handleApplyGuardianAsSponsor = () => {
-    if (!guardianSponsor) {
-      if (!guardian) {
-        setGuardian(createEmptyGuardianDraft());
-      }
-      notify.info('Enter Legal Guardian details above, then tap Use Legal Guardian to auto-fill.');
-      return;
-    }
-    if (guardianSponsor.fullName) {
-      setPrincipalFullName(guardianSponsor.fullName);
-      clearFieldError('principalFullName');
-    }
-    setPrincipalRelationship(guardianSponsor.relationship);
-    if (guardianSponsor.formattedPin) {
-      setPrincipalMemberPin(guardianSponsor.formattedPin);
-      clearFieldError('principalMemberPin');
-    }
-    if (guardianSponsor.birthDate) {
-      setPrincipalDob(guardianSponsor.birthDate);
-    }
-    notify.success('Principal member details filled from Legal Guardian.');
   };
 
   const effectiveCustomFields = useMemo(() => {
@@ -589,7 +532,29 @@ export function EditPatientModal({
       streetAddress: existingPerm?.streetAddress ?? (patient as any).addressLine ?? cf['primary_address_line'] ?? '',
       zipCode: existingPerm?.zipCode ?? patient.zipCode ?? null,
     });
-    setGuardian(extractInitialGuardianFromPatient(patient));
+    const existingGuardian =
+      patient.guardians && patient.guardians.length > 0
+        ? patient.guardians.find((g) => g.isPrimaryGuardian) || patient.guardians[0]
+        : null;
+    setGuardian(
+      existingGuardian
+        ? {
+            id: existingGuardian.id,
+            firstName: existingGuardian.firstName || '',
+            lastName: existingGuardian.lastName || '',
+            middleName: existingGuardian.middleName || '',
+            suffix: existingGuardian.suffix || '',
+            birthDate: existingGuardian.birthDate || '',
+            sex: existingGuardian.sex || '',
+            contactNumber: existingGuardian.contactNumber || '',
+            relationshipCode: existingGuardian.relationshipCode || '',
+            relationshipOtherSpecify: existingGuardian.relationshipOtherSpecify || '',
+            philHealthPin: existingGuardian.philHealthPin || '',
+            isPrimaryGuardian: existingGuardian.isPrimaryGuardian ?? true,
+            isEmergencyContact: existingGuardian.isEmergencyContact ?? true,
+          }
+        : null
+    );
     setGuardianErrors({});
     setIsGuardianPinValid(null);
     setCustomFieldValues({
@@ -1144,21 +1109,12 @@ export function EditPatientModal({
             {/* Conditional Principal Sponsor Details Card when DD */}
             {memberType === 'DD' && (
               <View style={styles.sponsorCard}>
-                <View style={styles.sponsorHeaderRow}>
-                  <View style={styles.sponsorHeader}>
-                    <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      Principal Member Details
-                    </ThemedText>
-                    <Badge label="Dependent Coverage" variant="info" size="sm" />
-                  </View>
-                  <Button
-                    title={guardianSponsor ? guardianSponsor.buttonLabel : 'Use Legal Guardian'}
-                    icon="copy"
-                    variant="outline"
-                    size="sm"
-                    onPress={handleApplyGuardianAsSponsor}
-                  />
+                <View style={styles.sponsorHeader}>
+                  <Icon name="shield" size={14} color={theme.colors.primaryDark} />
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                    Principal Member Details
+                  </ThemedText>
+                  <Badge label="Dependent Coverage" variant="info" size="sm" />
                 </View>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   Required when claiming PhilHealth benefits under a principal member.
@@ -1616,18 +1572,10 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
-  sponsorHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
   sponsorHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    gap: 6,
   },
   relationshipGrid: {
     flexDirection: 'row',

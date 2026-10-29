@@ -120,15 +120,9 @@ const {
   validateGuardianDraft,
 } = await import('../components/patient/GuardianSection');
 const {
-  EditPatientModal,
   BASELINE_PATIENT_CUSTOM_FIELDS,
   LEGACY_PRIMARY_ADDRESS_FIELD_KEYS,
 } = await import('../components/patient/EditPatientModal');
-const {
-  canUseGuardianAsSponsor,
-  mapGuardianRelationshipToDependent,
-  buildPrincipalSponsorFromGuardian,
-} = await import('../components/patient/memberType');
 const { computePatientLocation } = await import('../utils/patientLocation');
 
 describe('Legal Guardian Section & Secondary Address Cutover', () => {
@@ -336,141 +330,5 @@ describe('Legal Guardian Section & Secondary Address Cutover', () => {
         },
       })
     ).toBe('Loyola Heights, Quezon City, Metro Manila');
-  });
-
-  test('mapGuardianRelationshipToDependent and buildPrincipalSponsorFromGuardian invert guardian relationship and mask PIN', () => {
-    expect(canUseGuardianAsSponsor(null)).toBe(false);
-    expect(canUseGuardianAsSponsor(createEmptyGuardianDraft())).toBe(false);
-
-    expect(
-      mapGuardianRelationshipToDependent('MOTHER', { patientDob: '2018-06-15' })
-    ).toBe('C');
-    expect(
-      mapGuardianRelationshipToDependent('FATHER', { patientDob: '2016-01-10' })
-    ).toBe('C');
-    expect(
-      mapGuardianRelationshipToDependent('LEGAL_GUARDIAN', { patientDob: '2015-03-01' })
-    ).toBe('C');
-    expect(
-      mapGuardianRelationshipToDependent('SPOUSE', { patientDob: '1992-07-20' })
-    ).toBe('S');
-    expect(
-      mapGuardianRelationshipToDependent('MOTHER', {
-        patientDob: '1999-04-12',
-        pwdId: 'PWD-MNL-2024-001',
-      })
-    ).toBe('D');
-    expect(
-      mapGuardianRelationshipToDependent('NON_RELATIVE_CAREGIVER', {
-        patientDob: '1958-11-05',
-      })
-    ).toBe('P');
-
-    const sponsor = buildPrincipalSponsorFromGuardian(
-      {
-        firstName: 'Maria',
-        middleName: 'Reyes',
-        lastName: 'Santos',
-        suffix: '',
-        birthDate: '1988-02-10',
-        sex: 'Female',
-        contactNumber: '09171234567',
-        relationshipCode: 'MOTHER',
-        philHealthPin: '123456789018',
-        isPrimaryGuardian: true,
-        isEmergencyContact: true,
-      },
-      { patientDob: '2018-06-15' }
-    );
-
-    expect(sponsor).toEqual({
-      fullName: 'Maria Reyes Santos',
-      shortName: 'Maria Santos',
-      firstName: 'Maria',
-      middleName: 'Reyes',
-      lastName: 'Santos',
-      suffix: '',
-      relationship: 'C',
-      rawPin: '123456789018',
-      formattedPin: '12-345678901-8',
-      birthDate: '1988-02-10',
-      buttonLabel: 'Use Guardian (Maria Santos)',
-    });
-  });
-
-  test('EditPatientModal renders quick-fill sponsor button when PhilHealth Member Type is Dependent (DD)', () => {
-    const dependentWithGuardianMarkup = renderToStaticMarkup(
-      React.createElement(EditPatientModal, {
-        visible: true,
-        onClose: () => {},
-        onSaved: () => {},
-        patient: {
-          id: 'pat-minor-1',
-          tenantId: 'tenant-1',
-          clinicId: 'clinic-1',
-          patientCode: 'PAT-001',
-          firstName: 'Lucas',
-          lastName: 'Santos',
-          fullName: 'Lucas Santos',
-          dateOfBirth: '2018-06-15',
-          age: 8,
-          sex: 'Male',
-          civilStatus: 'Single',
-          contactNumber: '09171234567',
-          createdAt: '2026-10-29T00:00:00Z',
-          customFields: {
-            member_type: 'DD',
-          },
-          guardians: [
-            {
-              id: 'guard-1',
-              firstName: 'Maria',
-              lastName: 'Santos',
-              middleName: 'Reyes',
-              birthDate: '1988-02-10',
-              sex: 'Female',
-              contactNumber: '09171234567',
-              relationshipCode: 'MOTHER',
-              philHealthPin: '123456789018',
-              isPrimaryGuardian: true,
-              isEmergencyContact: true,
-            },
-          ],
-        } as any,
-      })
-    );
-
-    expect(dependentWithGuardianMarkup).toContain('Principal Member Details');
-    expect(dependentWithGuardianMarkup).toContain('Use Guardian (Maria Santos)');
-
-    const dependentWithoutGuardianMarkup = renderToStaticMarkup(
-      React.createElement(EditPatientModal, {
-        visible: true,
-        onClose: () => {},
-        onSaved: () => {},
-        patient: {
-          id: 'pat-dep-2',
-          tenantId: 'tenant-1',
-          clinicId: 'clinic-1',
-          patientCode: 'PAT-002',
-          firstName: 'Andrea',
-          lastName: 'Reyes',
-          fullName: 'Andrea Reyes',
-          dateOfBirth: '2002-04-10',
-          age: 24,
-          sex: 'Female',
-          civilStatus: 'Single',
-          contactNumber: '09181112222',
-          createdAt: '2026-10-29T00:00:00Z',
-          customFields: {
-            member_type: 'DD',
-          },
-          guardians: [],
-        } as any,
-      })
-    );
-
-    expect(dependentWithoutGuardianMarkup).toContain('Principal Member Details');
-    expect(dependentWithoutGuardianMarkup).toContain('Use Legal Guardian');
   });
 });

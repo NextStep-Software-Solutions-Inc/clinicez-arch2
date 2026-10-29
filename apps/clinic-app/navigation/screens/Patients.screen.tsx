@@ -62,7 +62,6 @@ import ClinicalAlertsSection from '../../components/patient/ClinicalAlertsSectio
 import YakapEnlistmentSection from '../../components/patient/YakapEnlistmentSection';
 import EditPatientModal, { LEGACY_PRIMARY_ADDRESS_FIELD_KEYS } from '../../components/patient/EditPatientModal';
 import GuardianSection, {
-  createEmptyGuardianDraft,
   isMinorFromDob,
   normalizeGuardianPayload,
   validateGuardianDraft,
@@ -82,7 +81,6 @@ import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 import {
   type MemberType,
   type PrincipalRelationship,
-  buildPrincipalSponsorFromGuardian,
 } from '../../components/patient/memberType';
 import { useEhrOptions } from '../../hooks/useEhrOptions';
 
@@ -285,34 +283,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       delete next[field];
       return next;
     });
-  };
-
-  const formGuardianSponsor = useMemo(
-    () => buildPrincipalSponsorFromGuardian(formGuardian, { patientDob: formDob, pwdId: formPwdId }),
-    [formGuardian, formDob, formPwdId]
-  );
-
-  const handleApplyFormGuardianAsSponsor = () => {
-    if (!formGuardianSponsor) {
-      if (!formGuardian) {
-        setFormGuardian(createEmptyGuardianDraft());
-      }
-      notify.info('Enter Legal Guardian details above, then tap Use Legal Guardian to auto-fill.');
-      return;
-    }
-    if (formGuardianSponsor.fullName) {
-      setFormPrincipalFullName(formGuardianSponsor.fullName);
-      clearFieldError('principalFullName');
-    }
-    setFormPrincipalRelationship(formGuardianSponsor.relationship);
-    if (formGuardianSponsor.formattedPin) {
-      setFormPrincipalPin(formGuardianSponsor.formattedPin);
-      clearFieldError('principalMemberPin');
-    }
-    if (formGuardianSponsor.birthDate) {
-      setFormPrincipalDob(formGuardianSponsor.birthDate);
-    }
-    notify.success('Principal member details filled from Legal Guardian.');
   };
 
   const activeTenantCustomFields = useMemo(
@@ -2188,74 +2158,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </View>
               </View>
 
-              {/* Home Address (Official 1NF PatientAddress Entity) */}
-              <View style={{ marginBottom: theme.spacing.md }}>
-                <PsgcAddressSelector
-                  value={formAddress}
-                  onChange={setFormAddress}
-                />
-              </View>
-
-              {/* Secondary Address (Dynamic Custom Fields) */}
-              {secondaryAddressCustomFields.length > 0 && (
-                <View style={{ marginBottom: theme.spacing.sm }}>
-                  <ThemedText style={styles.inputLabel}>Secondary Address</ThemedText>
-                  <DynamicCustomFieldsRenderer
-                    fields={secondaryAddressCustomFields}
-                    values={dynamicFieldValues}
-                    onChange={(key, val) => {
-                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
-                      setDynamicFieldErrors((prev) => {
-                        const next = { ...prev };
-                        delete next[key];
-                        return next;
-                      });
-                    }}
-                    errors={dynamicFieldErrors}
-                    staticValues={{
-                      sex: formSex,
-                      civilStatus: formCivilStatus,
-                      dateOfBirth: formDob,
-                    }}
-                  />
-                </View>
-              )}
-
-              {/* Legal Guardian (Official 1NF PatientGuardian Entity) */}
-              <GuardianSection
-                guardian={formGuardian}
-                onChange={setFormGuardian}
-                patientDateOfBirth={formDob}
-                errors={formGuardianErrors}
-                onClearError={clearFormGuardianError}
-                onPinValidityChange={setIsGuardianPinValid}
-              />
-
-              {/* Emergency Contact (Dynamic Custom Fields) */}
-              {emergencyCustomFields.length > 0 && (
-                <View style={{ marginBottom: theme.spacing.sm }}>
-                  <ThemedText style={styles.inputLabel}>Emergency Contact</ThemedText>
-                  <DynamicCustomFieldsRenderer
-                    fields={emergencyCustomFields}
-                    values={dynamicFieldValues}
-                    onChange={(key, val) => {
-                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
-                      setDynamicFieldErrors((prev) => {
-                        const next = { ...prev };
-                        delete next[key];
-                        return next;
-                      });
-                    }}
-                    errors={dynamicFieldErrors}
-                    staticValues={{
-                      sex: formSex,
-                      civilStatus: formCivilStatus,
-                      dateOfBirth: formDob,
-                    }}
-                  />
-                </View>
-              )}
-
               {/* Embedded PhilHealth PIN Input with Auto-Mask & Mod-11 Check */}
               <PhilHealthPinInput
                 label="PhilHealth PIN"
@@ -2286,21 +2188,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               {/* Conditional Principal Sponsor Details Card when DD */}
               {formMemberType === 'DD' && (
                 <View style={styles.sponsorCard}>
-                  <View style={styles.sponsorHeaderRow}>
-                    <View style={styles.sponsorHeader}>
-                      <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        Principal Member Details
-                      </ThemedText>
-                      <Badge label="Dependent Coverage" variant="info" size="sm" />
-                    </View>
-                    <Button
-                      title={formGuardianSponsor ? formGuardianSponsor.buttonLabel : 'Use Legal Guardian'}
-                      icon="copy"
-                      variant="outline"
-                      size="sm"
-                      onPress={handleApplyFormGuardianAsSponsor}
-                    />
+                  <View style={styles.sponsorHeader}>
+                    <Icon name="shield" size={14} color={theme.colors.primaryDark} />
+                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                      Principal Member Details
+                    </ThemedText>
+                    <Badge label="Dependent Coverage" variant="info" size="sm" />
                   </View>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
                     Required when claiming PhilHealth benefits under a principal member.
@@ -2392,6 +2285,74 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   />
                 </View>
               </View>
+
+              {/* Home Address (Official 1NF PatientAddress Entity) */}
+              <View style={{ marginBottom: theme.spacing.md }}>
+                <PsgcAddressSelector
+                  value={formAddress}
+                  onChange={setFormAddress}
+                />
+              </View>
+
+              {/* Legal Guardian (Official 1NF PatientGuardian Entity) */}
+              <GuardianSection
+                guardian={formGuardian}
+                onChange={setFormGuardian}
+                patientDateOfBirth={formDob}
+                errors={formGuardianErrors}
+                onClearError={clearFormGuardianError}
+                onPinValidityChange={setIsGuardianPinValid}
+              />
+
+              {/* Secondary Address (Dynamic Custom Fields) */}
+              {secondaryAddressCustomFields.length > 0 && (
+                <View style={{ marginBottom: theme.spacing.sm }}>
+                  <ThemedText style={styles.inputLabel}>Secondary Address</ThemedText>
+                  <DynamicCustomFieldsRenderer
+                    fields={secondaryAddressCustomFields}
+                    values={dynamicFieldValues}
+                    onChange={(key, val) => {
+                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
+                      setDynamicFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                    }}
+                    errors={dynamicFieldErrors}
+                    staticValues={{
+                      sex: formSex,
+                      civilStatus: formCivilStatus,
+                      dateOfBirth: formDob,
+                    }}
+                  />
+                </View>
+              )}
+
+              {/* Emergency Contact (Dynamic Custom Fields) */}
+              {emergencyCustomFields.length > 0 && (
+                <View style={{ marginBottom: theme.spacing.sm }}>
+                  <ThemedText style={styles.inputLabel}>Emergency Contact</ThemedText>
+                  <DynamicCustomFieldsRenderer
+                    fields={emergencyCustomFields}
+                    values={dynamicFieldValues}
+                    onChange={(key, val) => {
+                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
+                      setDynamicFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                    }}
+                    errors={dynamicFieldErrors}
+                    staticValues={{
+                      sex: formSex,
+                      civilStatus: formCivilStatus,
+                      dateOfBirth: formDob,
+                    }}
+                  />
+                </View>
+              )}
 
               {/* PhilHealth YAKAP Annual Enlistment Lifecycle Section */}
               <YakapEnlistmentSection
@@ -4170,18 +4131,10 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
-  sponsorHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
   sponsorHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    gap: 6,
   },
   relationshipGrid: {
     flexDirection: 'row',

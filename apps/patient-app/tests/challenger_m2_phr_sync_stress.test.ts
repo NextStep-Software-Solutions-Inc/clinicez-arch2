@@ -1,4 +1,5 @@
 import { describe, expect, test, mock } from 'bun:test';
+import * as path from 'node:path';
 
 (globalThis as any).__DEV__ = false;
 
@@ -16,6 +17,18 @@ mock.module('react-native', () => ({
   Text: 'Text',
 }));
 
+mock.module('expo-sqlite', () => ({
+  openDatabaseSync: () => ({}),
+}));
+
+mock.module('expo-constants', () => ({
+  default: { expoConfig: { extra: {} } },
+}));
+
+mock.module('drizzle-orm/expo-sqlite', () => ({
+  drizzle: () => ({}),
+}));
+
 // Mutable reference for active test SQLite DB
 let activeTestDb: any = null;
 
@@ -26,21 +39,18 @@ const dbProxy = new Proxy({}, {
   },
 });
 
-mock.module('../db/index', () => ({
+const dbIndexMock = () => ({
   originalDb: dbProxy,
   db: dbProxy,
   registerSyncTrigger: () => {},
   flushDatabaseSnapshot: async () => {},
+  clearWebDatabaseSnapshot: async () => {},
   ensureDatabaseReady: async () => {},
-}));
+});
 
-mock.module('@db/index', () => ({
-  originalDb: dbProxy,
-  db: dbProxy,
-  registerSyncTrigger: () => {},
-  flushDatabaseSnapshot: async () => {},
-  ensureDatabaseReady: async () => {},
-}));
+mock.module('../db/index', dbIndexMock);
+mock.module(path.resolve(import.meta.dir, '../db/index.ts'), dbIndexMock);
+mock.module('@db/index', dbIndexMock);
 
 mock.module('@react-native-community/netinfo', () => ({
   default: {
@@ -74,7 +84,7 @@ mock.module('expo-crypto', () => ({
 const { Database } = await import('bun:sqlite');
 const { drizzle } = await import('drizzle-orm/bun-sqlite');
 const { eq, inArray } = await import('drizzle-orm');
-import * as schema from '../db/schema/index';
+const schema = await import('../db/schema/index');
 const {
   translateLocalToSyncPayload,
   createDbWithInterceptor,

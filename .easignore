@@ -62,5 +62,6 @@ Thumbs.db
 
 # ── Lockfile & Workspace Inclusions (MANDATORY) ───────────────────
 !bun.lock
+!bunfig.toml
 !packages/
 !apps/

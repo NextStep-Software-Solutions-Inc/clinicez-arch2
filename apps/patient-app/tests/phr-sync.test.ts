@@ -1,4 +1,5 @@
 import { describe, expect, test, mock } from 'bun:test';
+import * as path from 'node:path';
 
 (globalThis as any).__DEV__ = false;
 
@@ -16,21 +17,30 @@ mock.module('react-native', () => ({
   Text: 'Text',
 }));
 
-mock.module('../db/index', () => ({
-  originalDb: {},
-  db: {},
-  registerSyncTrigger: () => {},
-  flushDatabaseSnapshot: async () => {},
-  ensureDatabaseReady: async () => {},
+mock.module('expo-sqlite', () => ({
+  openDatabaseSync: () => ({}),
 }));
 
-mock.module('@db/index', () => ({
+mock.module('expo-constants', () => ({
+  default: { expoConfig: { extra: {} } },
+}));
+
+mock.module('drizzle-orm/expo-sqlite', () => ({
+  drizzle: () => ({}),
+}));
+
+const dbIndexMock = () => ({
   originalDb: {},
   db: {},
   registerSyncTrigger: () => {},
   flushDatabaseSnapshot: async () => {},
+  clearWebDatabaseSnapshot: async () => {},
   ensureDatabaseReady: async () => {},
-}));
+});
+
+mock.module('../db/index', dbIndexMock);
+mock.module(path.resolve(import.meta.dir, '../db/index.ts'), dbIndexMock);
+mock.module('@db/index', dbIndexMock);
 
 mock.module('@react-native-community/netinfo', () => ({
   default: {
