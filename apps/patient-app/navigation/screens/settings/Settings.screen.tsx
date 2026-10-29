@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import { useUser } from '@clerk/expo';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAppearance } from '../../../contexts/AppearanceContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
-import ThemedText from '@ui/ThemedText';
 import PinModal from '@ui/PinModal';
 import ProfileCard from '../../../components/ProfileCard';
 import { dialog } from '@utils/dialog';
@@ -21,20 +19,13 @@ const THEME_LABELS: Record<string, string> = {
 
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
-  const { colors, spacing, radii } = useAppTheme();
+  const { colors, spacing } = useAppTheme();
   const { user, isLoaded: isUserLoaded } = useUser();
   const { logout, hasPIN } = useAuth();
   const { themePreference } = useAppearance();
   const [changePwdPinVisible, setChangePwdPinVisible] = useState(false);
 
   const isPasswordEnabled = isUserLoaded ? user?.passwordEnabled !== false : true;
-
-  const isProduction =
-    Constants.expoConfig?.extra?.isProduction ?? (__DEV__ ? false : true);
-  const appVariant =
-    Constants.expoConfig?.extra?.appVariant ?? (__DEV__ ? 'development' : 'production');
-  const appBranch = Constants.expoConfig?.extra?.appBranch;
-  const channel = Constants.expoConfig?.extra?.channel ?? 'production';
 
   // OTA updates (native only)
   const { isChecking, isDownloading, isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
@@ -82,41 +73,6 @@ export default function SettingsScreen() {
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={[styles.container, { padding: spacing.lg }]}
     >
-      {!isProduction && (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            alignSelf: 'flex-start',
-            backgroundColor: colors.purpleBg,
-            borderColor: colors.purple,
-            borderWidth: 1,
-            borderRadius: radii.full,
-            paddingHorizontal: spacing.sm,
-            paddingVertical: spacing.xs,
-            marginBottom: spacing.md,
-            gap: spacing.xs,
-          }}
-        >
-          <View
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: radii.full,
-              backgroundColor: colors.purple,
-            }}
-          />
-          <ThemedText
-            variant="caption"
-            color="purpleText"
-            style={{
-              fontWeight: '600',
-            }}
-          >
-            {appBranch ? `[${appBranch}] • ${channel}` : `${String(appVariant).toUpperCase()} • ${channel}`}
-          </ThemedText>
-        </View>
-      )}
       <ProfileCard />
 
       {/* Account */}

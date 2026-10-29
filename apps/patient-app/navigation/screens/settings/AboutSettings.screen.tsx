@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, Linking } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
+import * as Clipboard from 'expo-clipboard';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import { dialog } from '@utils/dialog';
@@ -69,10 +70,18 @@ export default function AboutSettingsScreen() {
         <SettingsRow
           title="Package / Bundle ID"
           right={{ type: 'value', label: String(BUNDLE_ID) }}
+          onPress={async () => {
+            await Clipboard.setStringAsync(String(BUNDLE_ID));
+            dialog.alert('Copied', `Package / Bundle ID copied to clipboard:\n\n${BUNDLE_ID}`);
+          }}
         />
         <SettingsRow
           title="Database"
           right={{ type: 'value', label: String(DB_NAME) }}
+          onPress={async () => {
+            await Clipboard.setStringAsync(String(DB_NAME));
+            dialog.alert('Copied', `Database name copied to clipboard:\n\n${DB_NAME}`);
+          }}
         />
       </SettingsSection>
 

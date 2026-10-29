@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Pressable, StyleSheet, Switch, ActivityIndicator, ColorValue } from 'react-native';
 import { AppIcon } from './Icon';
 import ThemedText from './ThemedText';
@@ -9,7 +9,12 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 export type SettingsRowRight =
   | { type: 'chevron' }
   | { type: 'switch'; value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean }
-  | { type: 'value'; label: string }
+  | {
+      type: 'value';
+      label: string;
+      numberOfLines?: number;
+      ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
+    }
   | { type: 'loading' }
   | { type: 'none' };
 
@@ -64,12 +69,23 @@ export function SettingsRow({
           </ThemedText>
         ) : null}
       </View>
-      <View style={styles.rightSlot}>
+      <View
+        style={[
+          styles.rightSlot,
+          right.type === 'value' && styles.rightSlotValue,
+        ]}
+      >
         {right.type === 'chevron' && (
           <AppIcon name="forward" size={sizes.iconSm} color="textMuted" />
         )}
         {right.type === 'value' && (
-          <ThemedText variant="body" color="textSecondary">
+          <ThemedText
+            variant="body"
+            color="textSecondary"
+            numberOfLines={right.numberOfLines ?? 1}
+            ellipsizeMode={right.ellipsizeMode ?? 'middle'}
+            style={styles.valueText}
+          >
             {right.label}
           </ThemedText>
         )}
@@ -196,7 +212,7 @@ const styles = StyleSheet.create({
   },
   labelContainer: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 12,
   },
   labelNoIcon: {},
   subtitle: {
@@ -212,6 +228,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
     minWidth: 24,
+  },
+  rightSlotValue: {
+    flexShrink: 1,
+    maxWidth: '58%',
+  },
+  valueText: {
+    textAlign: 'right',
   },
   pressed: {
     opacity: 0.7,
