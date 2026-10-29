@@ -167,7 +167,8 @@ export function getPortalBaseUrl(): string {
   const baseDomain = getSetting('EXPO_PUBLIC_BASE_DOMAIN');
   if (baseDomain) {
     const cleanBase = baseDomain.replace(/^\.+/, '').replace(/\/+$/, '');
-    return cleanBase.startsWith('portal.') ? `https://${cleanBase}` : `https://portal.${cleanBase}`;
+    const portalHost = cleanBase.startsWith('portal.') ? cleanBase : `portal.${cleanBase}`;
+    return `https://${portalHost}`;
   }
 
   if (typeof window !== 'undefined' && window.location?.hostname) {
