@@ -22,6 +22,7 @@ import FilterChipBar from '../../../components/ui/FilterChipBar';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePrivacy } from '../../../contexts/PrivacyContext';
+import { useContentInsets } from '../../../hooks/useContentInsets';
 import {
   communicationsService,
   type PatientConversationDto,
@@ -40,6 +41,7 @@ export default function MessagesInboxScreen() {
   const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const { getToken, internalPatientId } = useAuth();
+  const { bottom: tabBarBottom } = useContentInsets();
   const {
     privacyBlurEnabled,
     togglePrivacyBlur,
@@ -298,42 +300,47 @@ export default function MessagesInboxScreen() {
   return (
     <Screen
       width="form"
+      safeAreaTop
+      bottomInset={tabBarBottom}
       refreshing={isRefreshing}
       onRefresh={onRefresh}
       contentContainerStyle={{ gap: spacing.md }}
     >
       {/* Top Header Bar with Privacy Blur toggle & New Inquiry */}
-      <View style={styles.headerBar}>
-        <View style={styles.headerLeft}>
-          <ThemedText variant="h2">Messages</ThemedText>
-          <ThemedText variant="small" color="textMuted">
-            Unified inbox across clinics, pharmacies, & labs
+      <View style={styles.headerSection}>
+        <View style={styles.headerTopRow}>
+          <ThemedText variant="h2" style={styles.headerTitle}>
+            Messages
           </ThemedText>
+
+          <View style={[styles.headerActions, { gap: spacing.xs }]}>
+            <IconButton
+              icon={privacyBlurEnabled ? 'eyeOff' : 'eye'}
+              accessibilityLabel={
+                privacyBlurEnabled ? 'Disable Privacy Blur' : 'Enable Privacy Blur'
+              }
+              hitSize={40}
+              tone={privacyBlurEnabled ? 'filled' : 'plain'}
+              onPress={togglePrivacyBlur}
+            />
+
+            <Button
+              label="New Inquiry"
+              variant="primary"
+              size="sm"
+              icon="plus"
+              onPress={() =>
+                navigation.navigate('Main', {
+                  screen: 'NewMessageInquiryScreen',
+                })
+              }
+            />
+          </View>
         </View>
 
-        <View style={[styles.headerActions, { gap: spacing.sm }]}>
-          <IconButton
-            icon={privacyBlurEnabled ? 'eyeOff' : 'eye'}
-            accessibilityLabel={
-              privacyBlurEnabled ? 'Disable Privacy Blur' : 'Enable Privacy Blur'
-            }
-            hitSize={44}
-            tone={privacyBlurEnabled ? 'filled' : 'plain'}
-            onPress={togglePrivacyBlur}
-          />
-
-          <Button
-            label="New Inquiry"
-            variant="primary"
-            size="md"
-            icon="plus"
-            onPress={() =>
-              navigation.navigate('Main', {
-                screen: 'NewMessageInquiryScreen',
-              })
-            }
-          />
-        </View>
+        <ThemedText variant="small" color="textMuted" style={styles.headerSubtitle}>
+          Unified inbox across clinics, pharmacies, & labs
+        </ThemedText>
       </View>
 
       {/* Dependent Filter Chips */}
@@ -349,6 +356,8 @@ export default function MessagesInboxScreen() {
             }))}
             selectedKey={selectedDependentId ?? 'all'}
             onSelect={(id) => setSelectedDependentId(id === 'all' ? null : id)}
+            style={{ marginHorizontal: -spacing.lg }}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
           />
         </View>
       )}
@@ -363,6 +372,8 @@ export default function MessagesInboxScreen() {
         ]}
         selectedKey={facilityFilter}
         onSelect={(id) => setFacilityFilter(id as FacilityFilter)}
+        style={{ marginHorizontal: -spacing.lg }}
+        contentContainerStyle={{ paddingHorizontal: spacing.lg }}
       />
 
       {/* Content List */}
@@ -402,16 +413,21 @@ export default function MessagesInboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerBar: {
+  headerSection: {
+    gap: 4,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
   },
-  headerLeft: {
-    flex: 1,
-    minWidth: 200,
+  headerTitle: {
+    flexShrink: 1,
+  },
+  headerSubtitle: {
+    marginTop: 2,
   },
   headerActions: {
     flexDirection: 'row',
@@ -433,6 +449,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     flex: 1,
+    flexShrink: 1,
     marginRight: 8,
   },
   facilityName: {
@@ -441,9 +458,12 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   subjectText: {
     flex: 1,
+    flexShrink: 1,
   },
   bottomRow: {
     flexDirection: 'row',

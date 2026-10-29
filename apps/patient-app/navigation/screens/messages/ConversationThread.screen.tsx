@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
@@ -64,6 +65,7 @@ function mapPatientMessageToThreadMessage(msg: PatientMessageDto): ThreadMessage
 
 export default function ConversationThreadScreen({ route }: Props) {
   const { colors, spacing } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { getToken, internalPatientId, userId } = useAuth();
   const {
@@ -229,7 +231,8 @@ export default function ConversationThreadScreen({ route }: Props) {
             backgroundColor: colors.surface,
             borderBottomColor: colors.border,
             paddingHorizontal: spacing.md,
-            paddingVertical: spacing.sm,
+            paddingTop: Math.max(insets.top, spacing.sm),
+            paddingBottom: spacing.sm,
           },
         ]}
       >

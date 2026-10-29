@@ -270,5 +270,26 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
       expect(content).toContain('TeleconsultWaitingRoomScreen');
       expect(content).toContain('Enter Teleconsult Waiting Room');
     });
+
+    it('verifies mobile safe area and small-screen responsiveness invariants on MessagesInbox', () => {
+      const inboxPath = path.resolve(
+        import.meta.dir,
+        '../navigation/screens/messages/MessagesInbox.screen.tsx',
+      );
+      const content = fs.readFileSync(inboxPath, 'utf8');
+
+      // Top safe area & bottom tab inset to prevent status bar and bottom nav clipping
+      expect(content).toContain('safeAreaTop');
+      expect(content).toContain('useContentInsets');
+      expect(content).toContain('bottomInset={tabBarBottom}');
+
+      // Clean responsive header with dedicated top row (title + actions) and subtitle below
+      expect(content).toContain('styles.headerTopRow');
+      expect(content).toContain('styles.headerSection');
+      expect(content).toContain('styles.headerSubtitle');
+
+      // Edge-to-edge chip bar margins for fluid horizontal scrolling on mobile
+      expect(content).toContain('marginHorizontal: -spacing.lg');
+    });
   });
 });
