@@ -5,10 +5,6 @@
   "engines": {
     "node": "24.x"
   },
-  "overrides": {
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
-  },
   "dependencies": {
     "@callstack/liquid-glass": "^0.8.0",
     "@clerk/expo": "^3.3.0",
@@ -58,8 +54,8 @@
     "expo-updates": "~56.0.17",
     "expo-web-browser": "~56.0.5",
     "lucide-react-native": "^1.52.0",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-hook-form": "^7.77.0",
     "react-native": "0.85.3",
     "react-native-blob-util": "^0.24.9",
