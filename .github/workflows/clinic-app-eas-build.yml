@@ -12,7 +12,9 @@ on:
         default: 'staging'
         type: choice
         options:
+          - development-standalone
           - development
+          - development-device
           - preview
           - staging
           - production
@@ -72,6 +74,8 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Build with EAS
+        env:
+          APP_VARIANT: ${{ inputs.profile == 'development-device' && 'development' || inputs.profile }}
         run: |
           eas build \
             --profile ${{ inputs.profile }} \

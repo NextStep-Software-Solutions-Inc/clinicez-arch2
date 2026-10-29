@@ -1,4 +1,4 @@
-name: Development OTA Update
+name: Development Build & OTA Update
 
 defaults:
   tools:
@@ -24,6 +24,52 @@ jobs:
           bun run --cwd apps/patient-app typecheck
           bun run --cwd apps/patient-app lint:tokens
           bun run --cwd apps/patient-app test
+
+  fingerprint:
+    name: Calculate Native Fingerprints (Standalone Development)
+    needs: [quality_gate]
+    type: fingerprint
+    environment: development
+    env:
+      APP_VARIANT: development-standalone
+      APP_BRANCH: development
+
+  get_android_build:
+    name: Check Existing Standalone Android APK
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: android
+      profile: development-standalone
+      fingerprint_hash: ${{ needs.fingerprint.outputs.android_fingerprint_hash }}
+
+  get_ios_build:
+    name: Check Existing Standalone iOS Simulator Build
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: ios
+      profile: development-standalone
+      simulator: true
+      fingerprint_hash: ${{ needs.fingerprint.outputs.ios_fingerprint_hash }}
+
+  build_android:
+    name: Build Standalone Android APK (Native Changed)
+    needs: [get_android_build]
+    if: ${{ !needs.get_android_build.outputs.build_id }}
+    type: build
+    params:
+      platform: android
+      profile: development-standalone
+
+  build_ios:
+    name: Build Standalone iOS Simulator (Native Changed)
+    needs: [get_ios_build]
+    if: ${{ !needs.get_ios_build.outputs.build_id }}
+    type: build
+    params:
+      platform: ios
+      profile: development-standalone
 
   update:
     name: Publish Development Branch OTA

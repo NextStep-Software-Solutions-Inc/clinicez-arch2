@@ -2,4 +2,5 @@
 linker = "hoisted"
 
 [test]
+isolate = true
 preload = ["./tests/setup-preload.ts"]

@@ -15,19 +15,46 @@ const ALLOW_CLEARTEXT_LAN = (process.env.ALLOW_CLEARTEXT_LAN ?? 'true') !== 'fal
 
 const appNames: Record<string, string> = {
   development: 'Clinic EZ Clinic Dev',
+  'development-standalone': '[development] Clinic EZ Clinic',
   preview: 'Clinic EZ Clinic Preview',
   staging: 'Clinic EZ Clinic Staging',
   production: 'Clinic EZ Clinic',
 };
 
-const idSuffix: Record<string, string> = {
+const iosIdSuffix: Record<string, string> = {
   development: '.dev',
+  'development-standalone': '.br-development',
   preview: '.preview',
   staging: '.staging',
   production: '',
 };
 
-const BUNDLE_ID = `com.nextstepsoftware.clinicez.clinic${idSuffix[APP_VARIANT] ?? ''}`;
+const androidIdSuffix: Record<string, string> = {
+  development: '.dev',
+  'development-standalone': '.br_development',
+  preview: '.preview',
+  staging: '.staging',
+  production: '',
+};
+
+const urlSchemes: Record<string, string> = {
+  development: 'clinicez-clinic-dev',
+  'development-standalone': 'clinicez-clinic-br-development',
+  preview: 'clinicez-clinic-preview',
+  staging: 'clinicez-clinic-staging',
+  production: 'clinicez-clinic',
+};
+
+const channelNames: Record<string, string> = {
+  development: 'development',
+  'development-standalone': 'br-development',
+  preview: 'preview',
+  staging: 'staging',
+  production: 'production',
+};
+
+const IOS_BUNDLE_ID = `com.nextstepsoftware.clinicez.clinic${iosIdSuffix[APP_VARIANT] ?? ''}`;
+const ANDROID_PACKAGE = `com.nextstepsoftware.clinicez.clinic${androidIdSuffix[APP_VARIANT] ?? ''}`;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -39,16 +66,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: 'default',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
-  scheme: 'clinicez-clinic',
+  scheme: urlSchemes[APP_VARIANT] ?? 'clinicez-clinic',
   runtimeVersion: { policy: 'appVersion' },
   updates: {
     fallbackToCacheTimeout: 0,
     enabled: true,
     url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+    requestHeaders: {
+      'expo-channel-name': channelNames[APP_VARIANT] ?? 'production',
+    },
   },
   ios: {
     supportsTablet: true,
-    bundleIdentifier: BUNDLE_ID,
+    bundleIdentifier: IOS_BUNDLE_ID,
     infoPlist: {
       NSFaceIDUsageDescription: 'Clinic EZ uses Face ID to unlock this device when the clinic server is unreachable.',
       ITSAppUsesNonExemptEncryption: false,
@@ -58,7 +88,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   android: {
-    package: BUNDLE_ID,
+    package: ANDROID_PACKAGE,
     adaptiveIcon: {
       backgroundImage: './assets/android-icon-background.png',
       foregroundImage: './assets/android-icon-foreground.png',

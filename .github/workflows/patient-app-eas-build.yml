@@ -16,6 +16,7 @@ on:
         default: 'staging'
         type: choice
         options:
+          - development-standalone
           - development
           - development-device
           - preview

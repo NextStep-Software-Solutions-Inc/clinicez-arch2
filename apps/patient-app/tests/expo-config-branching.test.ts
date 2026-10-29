@@ -147,6 +147,41 @@ describe('R4: Expo Config Deterministic Branching & Side-by-Side Coexistence', (
         'Clinic EZ_patient_br_feat_offline_sync.db'
       );
     });
+
+    it('development-standalone produces a non-dev-client standalone build on br-development that coexists side-by-side with dev-client', () => {
+      const devStandalone = evaluateConfigWithEnv({
+        APP_VARIANT: 'development-standalone',
+        APP_BRANCH: 'development',
+      });
+      const devClient = evaluateConfigWithEnv({
+        APP_VARIANT: 'development',
+        APP_BRANCH: 'development',
+      });
+
+      expect(devStandalone.name).toBe('[development] Clinic EZ');
+      expect(devStandalone.ios?.bundleIdentifier).toBe(
+        'com.nextstepsoftware.clinicez.patient.br-development'
+      );
+      expect(devStandalone.android?.package).toBe(
+        'com.nextstepsoftware.clinicez.patient.br_development'
+      );
+      expect(devStandalone.scheme).toBe('clinicez-patient-br-development');
+      expect((devStandalone.updates?.requestHeaders as any)?.['expo-channel-name']).toBe(
+        'br-development'
+      );
+      expect(devStandalone.extra?.sqliteDbName).toBe(
+        'Clinic EZ_patient_br_development.db'
+      );
+
+      // Must never collide with manual dev-client on the same device
+      expect(devStandalone.ios?.bundleIdentifier).not.toBe(devClient.ios?.bundleIdentifier);
+      expect(devStandalone.android?.package).not.toBe(devClient.android?.package);
+      expect(devStandalone.scheme).not.toBe(devClient.scheme);
+      expect((devStandalone.updates?.requestHeaders as any)?.['expo-channel-name']).not.toBe(
+        (devClient.updates?.requestHeaders as any)?.['expo-channel-name']
+      );
+      expect(devStandalone.extra?.sqliteDbName).not.toBe(devClient.extra?.sqliteDbName);
+    });
   });
 
   describe('Suite 2: Regex & Segment Grammar Conformance', () => {

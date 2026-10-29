@@ -12,6 +12,19 @@
       "environment": "development",
       "channel": "development",
       "android": { "buildType": "apk" },
+      "ios": { "buildConfiguration": "Debug", "simulator": true }
+    },
+    "development-device": {
+      "extends": "development",
+      "ios": { "buildConfiguration": "Debug", "simulator": false }
+    },
+    "development-standalone": {
+      "node": "24.22.1",
+      "env": { "APP_VARIANT": "development-standalone" },
+      "distribution": "internal",
+      "environment": "development",
+      "channel": "br-development",
+      "android": { "buildType": "apk" },
       "ios": { "simulator": true }
     },
     "preview": {

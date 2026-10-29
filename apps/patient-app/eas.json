@@ -28,6 +28,22 @@
         "simulator": false
       }
     },
+    "development-standalone": {
+      "node": "24.22.1",
+      "distribution": "internal",
+      "environment": "development",
+      "channel": "br-development",
+      "env": {
+        "APP_VARIANT": "development-standalone",
+        "APP_BRANCH": "development"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
     "preview": {
       "node": "24.22.1",
       "distribution": "internal",
