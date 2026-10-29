@@ -8,8 +8,7 @@ export function ensureApiPrefix(url?: string | null, prefix: string = '/api/v1')
 }
 
 export const apiBaseUrl = ensureApiPrefix(
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PORTAL_API_URL) ||
-    'http://localhost:5000/api/v1'
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PORTAL_API_URL) || '/api/v1'
 );
 
 export const apiClient = axios.create({

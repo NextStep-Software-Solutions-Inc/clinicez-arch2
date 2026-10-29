@@ -3,8 +3,10 @@ import { IconAlertTriangle, IconTerminal } from '@tabler/icons-react';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
 
 export function ClerkConfigDiagnosticScreen() {
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001';
-  const apiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PORTAL_API_URL) || 'http://localhost:5000/api/v1';
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '(runtime origin)';
+  const apiBase =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_PORTAL_API_URL) ||
+    '/api/v1 (VITE_PORTAL_API_URL unset)';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6 text-text">

@@ -136,7 +136,7 @@ function UsersPage() {
 
     setInviting(true);
     try {
-      const res = await adminService.createUser({
+      const res = await adminService.inviteUser({
         fullName: inviteFullName.trim(),
         email: inviteEmail.trim().toLowerCase(),
         roleId: inviteRoleId,
@@ -234,7 +234,9 @@ function UsersPage() {
 
     setResetting(true);
     try {
-      const res = await adminService.resetPassword(resetModalUser.id, resetMode);
+      const res = await adminService.resetUserPassword(resetModalUser.id, {
+        deliveryMode: resetMode === 'temporary' ? 'password' : resetMode,
+      });
       setResetResult(res);
       toast.success(`Password reset executed via ${resetMode} workflow.`);
     } catch (err: any) {
@@ -244,23 +246,27 @@ function UsersPage() {
     }
   };
 
+  const resolveRoleName = (u: AdminUserDto): string =>
+    u.role?.name || roles.find((r) => r.id === u.roleId)?.name || '';
+
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const q = search.trim().toLowerCase();
+      const resolvedRole = resolveRoleName(u);
       const matchesSearch =
         !q ||
         u.fullName.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
-        (u.roleName && u.roleName.toLowerCase().includes(q));
+        (resolvedRole && resolvedRole.toLowerCase().includes(q));
 
       const matchesRole =
         roleFilter === 'ALL' ||
         (u.roleId && u.roleId === roleFilter) ||
-        (u.roleName && u.roleName.toLowerCase() === roleFilter.toLowerCase());
+        (resolvedRole && resolvedRole.toLowerCase() === roleFilter.toLowerCase());
 
       return matchesSearch && matchesRole;
     });
-  }, [users, search, roleFilter]);
+  }, [users, roles, search, roleFilter]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -444,7 +450,7 @@ function UsersPage() {
 
                       <td className="px-5 py-4">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-muted border border-border text-text">
-                          {admin.roleName || 'Platform Administrator'}
+                          {resolveRoleName(admin) || '—'}
                         </span>
                       </td>
 
@@ -467,7 +473,7 @@ function UsersPage() {
                       <td className="px-5 py-4 text-text-muted font-mono text-[11px]">
                         {admin.createdAt
                           ? new Date(admin.createdAt).toLocaleDateString()
-                          : 'Recent'}
+                          : '—'}
                       </td>
 
                       <td className="px-5 py-4 text-right">
@@ -756,8 +762,11 @@ function UsersPage() {
                       <span>Password Reset Completed</span>
                     </div>
                     <p className="text-[11px] opacity-90">
-                      Reset mode: <span className="font-semibold uppercase">{resetResult.mode}</span>
+                      Reset mode: <span className="font-semibold uppercase">{resetMode}</span>
                     </p>
+                    {resetResult.message && (
+                      <p className="text-[11px] opacity-90">{resetResult.message}</p>
+                    )}
                   </div>
 
                   {resetResult.resetUrl && (

@@ -6,7 +6,6 @@ import {
   AdminRoleDto,
   PermissionDefinitionDto,
 } from '@/services/admin.service';
-import { DEFAULT_PERMISSION_DEFINITIONS } from '@/constants/permissions';
 import { toast } from 'sonner';
 import {
   IconShieldCheck,
@@ -19,7 +18,6 @@ import {
   IconLock,
   IconLoader,
   IconX,
-  IconCheck,
 } from '@tabler/icons-react';
 
 function isSuperAdminRole(name: string): boolean {
@@ -29,9 +27,7 @@ function isSuperAdminRole(name: string): boolean {
 
 function RolesPage() {
   const [roles, setRoles] = useState<AdminRoleDto[]>([]);
-  const [permissions, setPermissions] = useState<PermissionDefinitionDto[]>(
-    DEFAULT_PERMISSION_DEFINITIONS as any
-  );
+  const [permissions, setPermissions] = useState<PermissionDefinitionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -54,12 +50,10 @@ function RolesPage() {
       setError(null);
       const [r, p] = await Promise.all([
         adminService.getRoles(),
-        adminService.getPermissions().catch(() => DEFAULT_PERMISSION_DEFINITIONS as any),
+        adminService.getPermissions(),
       ]);
       setRoles(r);
-      if (p && p.length > 0) {
-        setPermissions(p);
-      }
+      setPermissions(p || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load roles and RBAC definitions.');
     } finally {
@@ -106,7 +100,7 @@ function RolesPage() {
 
     setSaving(true);
     try {
-      const payload: Partial<AdminRoleDto> = {
+      const payload: Omit<AdminRoleDto, 'id' | 'createdAt'> = {
         name: name.trim(),
         description: description.trim(),
         permissions: selectedPermissions,
@@ -296,7 +290,7 @@ function RolesPage() {
                   </div>
 
                   <p className="text-xs text-text-muted leading-relaxed line-clamp-2">
-                    {role.description || 'Administrative platform access permissions profile.'}
+                    {role.description || 'No description provided.'}
                   </p>
                 </div>
 
@@ -414,7 +408,7 @@ function RolesPage() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setSelectedPermissions(permissions.map((p) => p.name))}
+                        onClick={() => setSelectedPermissions(permissions.map((p) => p.token))}
                         className="text-[11px] text-primary hover:underline font-medium cursor-pointer"
                       >
                         Select All
@@ -430,35 +424,49 @@ function RolesPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    {permissions.map((perm) => {
-                      const isSelected = selectedPermissions.includes(perm.name);
+                  {permissions.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-surface-muted border border-dashed border-border text-center text-text-muted">
+                      No permission definitions returned by the platform API.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {permissions.map((perm) => {
+                        const isSelected = selectedPermissions.includes(perm.token);
 
-                      return (
-                        <label
-                          key={perm.name}
-                          className={`flex items-start gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'border-primary bg-primary-subtle/30 text-text'
-                              : 'border-border bg-surface-muted/50 hover:bg-surface-muted text-text-secondary'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleTogglePermission(perm.name)}
-                            className="mt-0.5 rounded text-primary focus:ring-primary h-4 w-4"
-                          />
-                          <div className="space-y-0.5">
-                            <div className="font-mono font-semibold text-xs text-text">{perm.name}</div>
-                            <div className="text-[11px] text-text-muted leading-relaxed">
-                              {perm.description}
+                        return (
+                          <label
+                            key={perm.token}
+                            className={`flex items-start gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'border-primary bg-primary-subtle/30 text-text'
+                                : 'border-border bg-surface-muted/50 hover:bg-surface-muted text-text-secondary'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleTogglePermission(perm.token)}
+                              className="mt-0.5 rounded text-primary focus:ring-primary h-4 w-4"
+                            />
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-xs text-text">{perm.label || perm.token}</span>
+                                <span className="font-mono text-[10px] text-text-muted">({perm.token})</span>
+                                {perm.category && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface border border-border text-text-muted">
+                                    {perm.category}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-text-muted leading-relaxed">
+                                {perm.description}
+                              </div>
                             </div>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 

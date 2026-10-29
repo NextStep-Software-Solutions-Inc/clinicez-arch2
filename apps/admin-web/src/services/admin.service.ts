@@ -239,12 +239,25 @@ export interface RecordManualPaymentPayload {
 
 export interface RecordManualPaymentResult {
   success: boolean;
+  invoiceId?: string;
   invoiceNumber: string;
   receiptNumber: string;
   status: string;
   subscriptionExpiresAt: string;
   entitlementVersion: number;
   facilitiesLicensed: number;
+}
+
+export interface AdminPasswordResetResult {
+  userId: string;
+  fullName: string;
+  email: string;
+  role: string;
+  temporaryPassword: string;
+  message: string;
+  resetToken?: string | null;
+  resetUrl?: string | null;
+  emailSent?: boolean;
 }
 
 export interface AdminNewsletterSubscriberDto {
@@ -272,8 +285,8 @@ export const adminService = {
       ...t,
       name: t.name || (t as any).clinicName || '',
       clinicName: t.name || (t as any).clinicName || '',
-      tenantType: t.tenantType || (t as any).facilityType || 'Workplace',
-      facilityType: t.tenantType || (t as any).facilityType || 'Workplace',
+      tenantType: t.tenantType || (t as any).facilityType || '',
+      facilityType: t.tenantType || (t as any).facilityType || '',
       facilitiesCount: t.facilitiesCount ?? (t as any).clinicalBranchesCount ?? 0,
       clinicalBranchesCount: t.facilitiesCount ?? (t as any).clinicalBranchesCount ?? 0,
       archivedAt: t.archivedAt ?? null,
@@ -314,8 +327,8 @@ export const adminService = {
       ...l,
       name: l.name || (l as any).clinicName || '',
       clinicName: l.name || (l as any).clinicName || '',
-      tenantType: l.tenantType || (l as any).facilityType || 'Workplace',
-      facilityType: l.tenantType || (l as any).facilityType || 'Workplace',
+      tenantType: l.tenantType || (l as any).facilityType || '',
+      facilityType: l.tenantType || (l as any).facilityType || '',
     }));
   },
 
@@ -596,17 +609,7 @@ export const adminService = {
       generateResetLink?: boolean;
       deliveryMode?: 'email' | 'link' | 'password';
     }
-  ): Promise<{
-    userId: string;
-    fullName: string;
-    email: string;
-    role: string;
-    temporaryPassword: string;
-    message: string;
-    resetToken?: string | null;
-    resetUrl?: string | null;
-    emailSent?: boolean;
-  }> => {
+  ): Promise<AdminPasswordResetResult> => {
     const sendResetEmail = options?.sendResetEmail ?? options?.deliveryMode === 'email';
     const generateResetLink = options?.generateResetLink ?? options?.deliveryMode === 'link';
     const res = await apiClient.post(`/admin/users/${id}/reset-password`, {

@@ -3,6 +3,7 @@ import { createRoute } from '@tanstack/react-router';
 import { Route as authRoute } from './_auth';
 import { adminService, AdminBlogDto } from '@/services/admin.service';
 import { getPublicSiteUrl } from '@/lib/urls';
+import { useUser } from '@clerk/clerk-react';
 import { toast } from 'sonner';
 import {
   IconArticle,
@@ -74,11 +75,19 @@ function BlogPage() {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [author, setAuthor] = useState('');
-  const [category, setCategory] = useState('Clinical Governance');
-  const [status, setStatus] = useState<'Draft' | 'Published'>('Published');
+  const [category, setCategory] = useState('');
+  const [status, setStatus] = useState<'Draft' | 'Published'>('Draft');
   const [bannerUrl, setBannerUrl] = useState('');
   const [summary, setSummary] = useState('');
   const [content, setContent] = useState('');
+
+  let signedInAuthorName = '';
+  try {
+    const { user } = useUser();
+    signedInAuthorName = user?.fullName || '';
+  } catch {
+    // outside Clerk provider in headless tests
+  }
 
   // Delete state
   const [blogToDelete, setBlogToDelete] = useState<AdminBlogDto | null>(null);
@@ -105,12 +114,12 @@ function BlogPage() {
     setEditingBlog(null);
     setTitle('');
     setSlug('');
-    setAuthor('Clinic EZ Editorial Team');
-    setCategory('Clinical Governance');
-    setStatus('Published');
+    setAuthor(signedInAuthorName);
+    setCategory('');
+    setStatus('Draft');
     setBannerUrl('');
     setSummary('');
-    setContent('# New Practice Advisory\n\nEnter the full statutory guidance and clinical documentation here...\n\n- Key Point 1\n- Key Point 2');
+    setContent('');
     setActiveTab('write');
     setDialogOpen(true);
   };
@@ -138,11 +147,11 @@ function BlogPage() {
 
     setSubmitting(true);
     try {
-      const payload: Partial<AdminBlogDto> = {
+      const payload: Omit<AdminBlogDto, 'id' | 'createdAt'> = {
         title: title.trim(),
         slug: slug.trim().toLowerCase(),
         author: author.trim(),
-        category,
+        category: category.trim(),
         status,
         bannerUrl: bannerUrl.trim() || undefined,
         summary: summary.trim(),
@@ -154,7 +163,7 @@ function BlogPage() {
         toast.success(`Article '${title}' updated.`);
       } else {
         await adminService.createBlog(payload);
-        toast.success(`Article '${title}' published.`);
+        toast.success(`Article '${title}' created.`);
       }
       setDialogOpen(false);
       await loadBlogs();
@@ -485,7 +494,7 @@ function BlogPage() {
                       type="text"
                       value={author}
                       onChange={(e) => setAuthor(e.target.value)}
-                      placeholder="Clinic EZ Editorial Team"
+                      placeholder="Author full name"
                       className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
                     />
                   </div>
@@ -496,7 +505,7 @@ function BlogPage() {
                       type="text"
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      placeholder="Clinical Governance"
+                      placeholder="Article category"
                       className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
                     />
                   </div>

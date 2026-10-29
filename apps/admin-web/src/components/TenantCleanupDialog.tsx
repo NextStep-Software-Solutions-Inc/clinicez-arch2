@@ -100,7 +100,7 @@ export function TenantCleanupDialog({
     }
     setSubmitting(true);
     try {
-      await adminService.purgeTenant(tenantId);
+      await adminService.purgeTenant(tenantId, confirmSlug.trim());
       toast.success(`Workspace '${tenantSlug}' has been permanently purged.`);
       onSuccess();
       onClose();
@@ -238,7 +238,12 @@ export function TenantCleanupDialog({
                 </div>
 
                 <div className="text-[11px] text-text-muted flex items-center justify-between pt-1">
-                  <span>Inactivity Period: {preview.inactivityDays} days</span>
+                  <span>
+                    Workspace Age:{' '}
+                    {preview.createdAt
+                      ? `${Math.max(0, Math.floor((Date.now() - new Date(preview.createdAt).getTime()) / 86_400_000))} days`
+                      : '—'}
+                  </span>
                   <span>
                     Purge Eligible:{' '}
                     {preview.isEligibleForPurge ? (
@@ -248,6 +253,20 @@ export function TenantCleanupDialog({
                     )}
                   </span>
                 </div>
+
+                {preview.orphanReason && (
+                  <div className="text-[11px] text-amber-600 dark:text-amber-400 pt-1">
+                    Orphan Classification: {preview.orphanReason}
+                  </div>
+                )}
+
+                {preview.ineligibilityReasons && preview.ineligibilityReasons.length > 0 && (
+                  <ul className="text-[11px] text-text-secondary list-disc pl-4 space-y-0.5 pt-1">
+                    {preview.ineligibilityReasons.map((reason, idx) => (
+                      <li key={idx}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {/* Action Description & Forms */}

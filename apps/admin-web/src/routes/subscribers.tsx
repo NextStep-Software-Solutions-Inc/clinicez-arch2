@@ -222,17 +222,27 @@ function SubscribersPage() {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-text-secondary">
-                      <span className="capitalize">{sub.source || 'Website Footer'}</span>
+                      <span className="capitalize">{sub.source || '—'}</span>
                     </td>
                     <td className="px-5 py-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                        {sub.status || 'Active'}
-                      </span>
+                      {sub.status ? (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                            sub.status === 'Active'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                              : 'bg-surface-muted text-text-muted border-border'
+                          }`}
+                        >
+                          {sub.status}
+                        </span>
+                      ) : (
+                        <span className="text-text-muted">—</span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-right text-text-muted font-mono text-[11px]">
                       {sub.subscribedAt
                         ? new Date(sub.subscribedAt).toLocaleDateString()
-                        : 'Recent'}
+                        : '—'}
                     </td>
                   </tr>
                 ))

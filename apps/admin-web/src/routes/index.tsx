@@ -20,7 +20,7 @@ import {
 
 export interface ActivityEvent {
   id: string;
-  type: 'tenant.created' | 'payment.recorded' | 'lead.converted' | 'system.notice';
+  type: 'tenant.created' | 'payment.recorded' | 'lead.converted' | 'blog.published' | 'system.notice';
   title: string;
   detail: string;
   timestamp: string;
@@ -50,40 +50,58 @@ function OverviewDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const res = await adminService.getAnalytics();
+      const [res, tenantsRes, leadsRes, blogsRes] = await Promise.all([
+        adminService.getAnalytics(),
+        adminService.getTenants().catch(() => []),
+        adminService.getLeads().catch(() => []),
+        adminService.getBlogs().catch(() => []),
+      ]);
       setData(res);
 
-      // Synthesize operational activity feed from telemetry & platform events
-      const now = new Date();
-      const syntheticEvents: ActivityEvent[] = [];
-      if (res.totalTenants > 0) {
-        syntheticEvents.push({
-          id: 'evt-1',
-          type: 'tenant.created',
-          title: 'Recent Clinic Workspace Registered',
-          detail: 'New multi-branch medical facility completed onboarding',
-          timestamp: new Date(now.getTime() - 25 * 60 * 1000).toISOString(),
-        });
+      const events: ActivityEvent[] = [];
+      const seenTenantIds = new Set<string>();
+
+      for (const t of tenantsRes) {
+        seenTenantIds.add(t.id);
+        if (t.createdAt) {
+          const isActive = (t.subscriptionStatus || '').toUpperCase() === 'ACTIVE';
+          events.push({
+            id: `tenant-${t.id}`,
+            type: isActive ? 'tenant.created' : 'lead.converted',
+            title: `${t.clinicName || t.name} Registered`,
+            detail: `Workspace (${t.tenantSlug}) • Status: ${t.subscriptionStatus || '—'}`,
+            timestamp: t.createdAt,
+          });
+        }
       }
-      if (res.activeSubscribers > 0) {
-        syntheticEvents.push({
-          id: 'evt-2',
-          type: 'payment.recorded',
-          title: 'Subscription Payment Processed',
-          detail: 'Commercial plan renewal confirmed via official payment',
-          timestamp: new Date(now.getTime() - 75 * 60 * 1000).toISOString(),
-        });
+
+      for (const l of leadsRes) {
+        if (!seenTenantIds.has(l.id) && l.createdAt) {
+          events.push({
+            id: `lead-${l.id}`,
+            type: 'lead.converted',
+            title: `Lead Registered: ${l.clinicName || l.name}`,
+            detail: `Workspace (${l.tenantSlug}) • Status: ${l.subscriptionStatus || '—'}`,
+            timestamp: l.createdAt,
+          });
+        }
       }
-      if (res.leadsCount > 0) {
-        syntheticEvents.push({
-          id: 'evt-3',
-          type: 'lead.converted',
-          title: 'Prospective Clinic Lead Ingestion',
-          detail: 'New organization initiated platform verification trial',
-          timestamp: new Date(now.getTime() - 140 * 60 * 1000).toISOString(),
-        });
+
+      for (const b of blogsRes) {
+        const ts = b.publishedAt || b.createdAt;
+        if (ts) {
+          events.push({
+            id: `blog-${b.id}`,
+            type: 'blog.published',
+            title: `Article ${b.status}: ${b.title}`,
+            detail: `${b.author ? `By ${b.author}` : 'Editorial'}${b.category ? ` • ${b.category}` : ''}`,
+            timestamp: ts,
+          });
+        }
       }
-      setActivityEvents(syntheticEvents);
+
+      events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setActivityEvents(events.slice(0, 8));
     } catch (err: any) {
       setError(err?.message || 'Failed to load platform analytics telemetry.');
     } finally {
@@ -360,7 +378,14 @@ function OverviewDashboard() {
                   </div>
                   <div className="text-[10px] text-text-muted font-mono shrink-0 flex items-center gap-1">
                     <IconClock className="h-3 w-3" />
-                    <span>{new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>
+                      {new Date(evt.timestamp).toLocaleString([], {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
                   </div>
                 </div>
               ))

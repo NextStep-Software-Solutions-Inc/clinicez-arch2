@@ -4,12 +4,14 @@ import { Route as rootRoute } from './__root';
 import { SignIn } from '@clerk/clerk-react';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { ClinicEzLogo } from '@/components/ClinicEzLogo';
+import { getIdleTimeoutMinutes } from '@/lib/idleGuard';
 
 function SignInPage() {
   const searchParams = new URLSearchParams(
     typeof window !== 'undefined' ? window.location.search : ''
   );
   const reason = searchParams.get('reason');
+  const idleMinutes = getIdleTimeoutMinutes();
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-text">
@@ -34,7 +36,7 @@ function SignInPage() {
         {reason === 'session_expired' && (
           <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2.5">
             <IconAlertCircle className="h-4 w-4 shrink-0" />
-            <span>Your administrative session has expired due to 15 minutes of inactivity. Please sign in again.</span>
+            <span>Your administrative session has expired due to {idleMinutes} minutes of inactivity. Please sign in again.</span>
           </div>
         )}
 

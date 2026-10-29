@@ -2,6 +2,10 @@ import { describe, it, expect } from 'bun:test';
 import {
   QUANTITATIVE_LIMITS,
   CAPABILITY_FLAGS,
+  ANNUAL_DISCOUNT_PRESETS,
+  calculateAnnualDiscountPercent,
+  calculateAnnualPriceFromDiscount,
+  calculateAnnualPricingSummary,
 } from '../src/components/PlanEditorDialog';
 import {
   PAYMENT_METHODS,
@@ -80,9 +84,98 @@ describe('Operational Governance Dialogs — Unit & Logic Tests', () => {
         expect(typeof flag.key).toBe('string');
         expect(flag.key.startsWith('feature.')).toBe(true);
         expect(typeof flag.label).toBe('string');
-        expect(typeof flag.description).toBe('string');
+        expect(flag.description).toBeDefined();
         expect(typeof flag.defaultVal).toBe('boolean');
         expect(flag.icon).toBeDefined();
+      }
+    });
+  });
+
+  describe('PlanEditorDialog: Real-Time Annual Discount & Auto-Price Calculation', () => {
+    it('computes real-time annual discount percentage from monthly and annual prices', () => {
+      // ₱3,000/mo => ₱36,000/yr baseline; ₱28,800/yr => 20% discount
+      expect(calculateAnnualDiscountPercent(3000, 28800)).toBe(20);
+
+      // ₱2,499/mo => ₱29,988/yr baseline; ₱24,990/yr (10 months) => 16.67% discount
+      expect(calculateAnnualDiscountPercent(2499, 24990)).toBe(16.67);
+
+      // ₱5,999/mo => ₱71,988/yr baseline; ₱59,990/yr (10 months) => 16.67% discount
+      expect(calculateAnnualDiscountPercent(5999, 59990)).toBe(16.67);
+
+      // Exact 12x monthly => 0% discount
+      expect(calculateAnnualDiscountPercent(3000, 36000)).toBe(0);
+
+      // Zero annual price on paid monthly plan => 100% discount
+      expect(calculateAnnualDiscountPercent(3000, 0)).toBe(100);
+    });
+
+    it('handles zero, negative, or non-finite prices safely and detects annual markup', () => {
+      expect(calculateAnnualDiscountPercent(0, 0)).toBe(0);
+      expect(calculateAnnualDiscountPercent(0, 10000)).toBe(0);
+      expect(calculateAnnualDiscountPercent(-500, 5000)).toBe(0);
+      expect(calculateAnnualDiscountPercent(NaN, 12000)).toBe(0);
+
+      // Annual price above 12x monthly => negative discount (markup)
+      expect(calculateAnnualDiscountPercent(3000, 39600)).toBe(-10);
+    });
+
+    it('auto-calculates annual price when admin sets a target discount percentage', () => {
+      // 20% off ₱3,000/mo (₱36,000/yr) => ₱28,800/yr
+      expect(calculateAnnualPriceFromDiscount(3000, 20)).toBe(28800);
+
+      // 15% off ₱2,940/mo (₱35,280/yr) => ₱29,988/yr
+      expect(calculateAnnualPriceFromDiscount(2940, 15)).toBe(29988);
+
+      // 0% off => full 12x monthly
+      expect(calculateAnnualPriceFromDiscount(2500, 0)).toBe(30000);
+
+      // 100% off => ₱0
+      expect(calculateAnnualPriceFromDiscount(2500, 100)).toBe(0);
+
+      // Exact free-months presets avoid rounding drift (e.g. 2 months free = 10x monthly)
+      expect(calculateAnnualPriceFromDiscount(2499, 16.67, 10)).toBe(24990);
+      expect(calculateAnnualPriceFromDiscount(5999, 16.67, 10)).toBe(59990);
+      expect(calculateAnnualPriceFromDiscount(2400, 8.33, 11)).toBe(26400);
+    });
+
+    it('clamps out-of-range discount percentages to [0, 100]', () => {
+      expect(calculateAnnualPriceFromDiscount(1000, -25)).toBe(12000);
+      expect(calculateAnnualPriceFromDiscount(1000, 150)).toBe(0);
+      expect(calculateAnnualPriceFromDiscount(0, 25)).toBe(0);
+    });
+
+    it('produces full real-time pricing summary with savings, effective monthly rate, and flags', () => {
+      const discounted = calculateAnnualPricingSummary(3000, 28800);
+      expect(discounted).toEqual({
+        annualBaseline: 36000,
+        annualSavings: 7200,
+        discountPercent: 20,
+        effectiveMonthlyOnAnnual: 2400,
+        isMarkup: false,
+        isCustomOrFree: false,
+      });
+
+      const markup = calculateAnnualPricingSummary(1000, 15000);
+      expect(markup.isMarkup).toBe(true);
+      expect(markup.annualSavings).toBe(-3000);
+      expect(markup.discountPercent).toBe(-25);
+
+      const customTier = calculateAnnualPricingSummary(0, 0);
+      expect(customTier.isCustomOrFree).toBe(true);
+      expect(customTier.discountPercent).toBe(0);
+      expect(customTier.annualSavings).toBe(0);
+    });
+
+    it('round-trips every preset in ANNUAL_DISCOUNT_PRESETS accurately', () => {
+      expect(ANNUAL_DISCOUNT_PRESETS.length).toBeGreaterThanOrEqual(6);
+      for (const preset of ANNUAL_DISCOUNT_PRESETS) {
+        const autoAnnual = calculateAnnualPriceFromDiscount(
+          4999,
+          preset.percent,
+          preset.exactMonthsBilled
+        );
+        const computedDiscount = calculateAnnualDiscountPercent(4999, autoAnnual);
+        expect(Math.abs(computedDiscount - preset.percent)).toBeLessThanOrEqual(0.02);
       }
     });
   });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createRoute, Link } from '@tanstack/react-router';
 import { Route as authRoute } from '../_auth';
-import { adminService, AdminTenantDto } from '@/services/admin.service';
+import { adminService, AdminTenantDto, BillingPlan } from '@/services/admin.service';
 import { getTenantWorkspaceUrl } from '@/lib/urls';
 import { TenantCleanupDialog } from '@/components/TenantCleanupDialog';
 import { toast } from 'sonner';
@@ -22,6 +22,7 @@ import {
 
 function TenantsPage() {
   const [tenants, setTenants] = useState<AdminTenantDto[]>([]);
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -36,8 +37,12 @@ function TenantsPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await adminService.getTenants();
+      const [data, fetchedPlans] = await Promise.all([
+        adminService.getTenants(),
+        adminService.getPlans().catch(() => []),
+      ]);
       setTenants(data);
+      setPlans([...fetchedPlans].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)));
     } catch (err: any) {
       setError(err?.message || 'Failed to load tenant clinics registry.');
     } finally {
@@ -51,17 +56,21 @@ function TenantsPage() {
 
   const handleToggleSubscription = async (tenant: AdminTenantDto) => {
     const isCurrentlyActive = tenant.subscriptionStatus.toUpperCase() === 'ACTIVE';
-    const nextStatus = isCurrentlyActive ? 'Archived' : 'Active';
 
     setTogglingId(tenant.id);
     try {
-      await adminService.toggleSubscription(tenant.id, nextStatus);
+      const updated = await adminService.toggleSubscription(tenant.id);
+      const nextStatus = updated?.subscriptionStatus || (isCurrentlyActive ? 'TRIALING' : 'ACTIVE');
       toast.success(
         `Subscription for '${tenant.clinicName}' transitioned to ${nextStatus}.`
       );
       setTenants((prev) =>
         prev.map((t) =>
-          t.id === tenant.id ? { ...t, subscriptionStatus: nextStatus } : t
+          t.id === tenant.id
+            ? updated
+              ? { ...t, ...updated }
+              : { ...t, subscriptionStatus: nextStatus }
+            : t
         )
       );
     } catch (err: any) {
@@ -171,9 +180,11 @@ function TenantsPage() {
             className="px-3 py-2 text-xs rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
           >
             <option value="ALL">All Plans</option>
-            <option value="Starter">Starter</option>
-            <option value="Premium">Premium</option>
-            <option value="Ultimate">Ultimate</option>
+            {plans.map((p) => (
+              <option key={p.slug} value={p.slug}>
+                {p.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -247,6 +258,11 @@ function TenantsPage() {
                 /* Active Table State */
                 filteredTenants.map((tenant) => {
                   const isActive = tenant.subscriptionStatus.toUpperCase() === 'ACTIVE';
+                  const matchedPlan = plans.find(
+                    (p) =>
+                      p.slug.toLowerCase() === (tenant.subscriptionPlanId || '').toLowerCase() ||
+                      p.id === tenant.subscriptionPlanId
+                  );
 
                   return (
                     <tr
@@ -298,7 +314,7 @@ function TenantsPage() {
                           {tenant.subscriptionStatus}
                         </span>
                         <div className="text-[11px] text-text-muted mt-0.5 capitalize">
-                          {tenant.subscriptionPlanId || 'Standard Plan'}
+                          {matchedPlan?.name || tenant.subscriptionPlanId || '—'}
                         </div>
                       </td>
                       <td className="px-5 py-4 text-text-secondary">
@@ -374,6 +390,7 @@ function TenantsPage() {
           tenantId={cleanupTenant.id}
           tenantSlug={cleanupTenant.tenantSlug}
           clinicName={cleanupTenant.clinicName}
+          archivedAt={cleanupTenant.archivedAt}
         />
       )}
     </div>

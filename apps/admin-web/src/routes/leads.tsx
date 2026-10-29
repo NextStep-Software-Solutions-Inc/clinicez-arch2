@@ -196,17 +196,17 @@ function LeadsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-text-secondary">
-                      <span className="capitalize">{lead.facilityType}</span>
+                      <span className="capitalize">{lead.facilityType || '—'}</span>
                     </td>
                     <td className="px-5 py-4">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                        {lead.status || 'Trial In-Flight'}
+                        {lead.subscriptionStatus || '—'}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-right text-text-muted font-mono text-[11px]">
-                      {lead.registeredAt
-                        ? new Date(lead.registeredAt).toLocaleDateString()
-                        : 'Recent'}
+                      {lead.createdAt
+                        ? new Date(lead.createdAt).toLocaleDateString()
+                        : '—'}
                     </td>
                   </tr>
                 ))

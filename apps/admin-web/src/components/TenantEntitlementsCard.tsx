@@ -97,6 +97,10 @@ export function TenantEntitlementsCard({
   );
 
   const getBaselineLimit = (key: string): number => {
+    if (data?.baselineLimits && key in data.baselineLimits) {
+      const val = data.baselineLimits[key];
+      return val === null ? -1 : val;
+    }
     if (currentPlan?.limits && key in currentPlan.limits) {
       return currentPlan.limits[key];
     }
@@ -105,8 +109,11 @@ export function TenantEntitlementsCard({
   };
 
   const getBaselineFeature = (key: string): boolean => {
-    if (currentPlan?.featuresConfig && key in currentPlan.featuresConfig) {
-      return Boolean(currentPlan.featuresConfig[key]);
+    if (Array.isArray(data?.baselineFeatures) && data.baselineFeatures.length > 0) {
+      return data.baselineFeatures.includes(key);
+    }
+    if (Array.isArray(currentPlan?.enabledFeatures)) {
+      return currentPlan.enabledFeatures.includes(key);
     }
     const meta = CAPABILITY_FLAGS.find((f) => f.key === key);
     return meta ? meta.defaultVal : false;
@@ -171,7 +178,7 @@ export function TenantEntitlementsCard({
             </div>
             <p className="text-[11px] text-text-muted mt-0.5">
               Custom resource ceilings and capability flags for {tenantSlug} (Base Plan:{' '}
-              <span className="font-semibold text-text">{data?.planName || 'Standard'}</span>)
+              <span className="font-semibold text-text">{data?.planName || data?.planSlug || 'Unassigned'}</span>)
             </p>
           </div>
         </div>

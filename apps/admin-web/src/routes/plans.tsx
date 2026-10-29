@@ -2,7 +2,10 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { createRoute } from '@tanstack/react-router';
 import { Route as authRoute } from './_auth';
 import { adminService, BillingPlan } from '@/services/admin.service';
-import { PlanEditorDialog } from '@/components/PlanEditorDialog';
+import {
+  PlanEditorDialog,
+  calculateAnnualDiscountPercent,
+} from '@/components/PlanEditorDialog';
 import { toast } from 'sonner';
 import {
   IconCash,
@@ -216,12 +219,18 @@ function PlansPage() {
         /* Active Cards Grid */
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {filteredPlans.map((p) => {
-            const hasFeatures = p.features && p.features.length > 0;
+            const displayFeatures =
+              p.features && p.features.length > 0 ? p.features : p.enabledFeatures || [];
+            const hasFeatures = displayFeatures.length > 0;
+            const discountPct = calculateAnnualDiscountPercent(
+              p.monthlyPrice ?? 0,
+              p.annualPrice ?? 0
+            );
             return (
               <div
                 key={p.id}
                 className={`p-6 rounded-2xl bg-surface border flex flex-col justify-between space-y-5 transition-all hover:shadow-md ${
-                  p.isHighlighted
+                  p.highlighted
                     ? 'border-primary ring-1 ring-primary/30'
                     : 'border-border'
                 }`}
@@ -230,7 +239,7 @@ function PlansPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-base text-text">{p.name}</h3>
-                      {p.isHighlighted && (
+                      {p.highlighted && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary-subtle text-primary border border-primary/20">
                           Popular
                         </span>
@@ -242,7 +251,7 @@ function PlansPage() {
                   </div>
 
                   <p className="text-xs text-text-muted leading-relaxed line-clamp-2">
-                    {p.description || 'Enterprise healthcare clinic subscription tier.'}
+                    {p.description || 'No description provided.'}
                   </p>
 
                   <div className="pt-2">
@@ -250,8 +259,13 @@ function PlansPage() {
                       ₱{(p.monthlyPrice ?? 0).toLocaleString()}
                     </span>
                     <span className="text-xs text-text-muted"> / month</span>
-                    <div className="text-[11px] text-text-muted mt-0.5">
-                      Annual: ₱{(p.annualPrice ?? 0).toLocaleString()} / yr
+                    <div className="text-[11px] text-text-muted mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>Annual: ₱{(p.annualPrice ?? 0).toLocaleString()} / yr</span>
+                      {discountPct > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          Save {discountPct}%
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -264,15 +278,15 @@ function PlansPage() {
 
                   {hasFeatures ? (
                     <ul className="space-y-1.5 text-text-secondary">
-                      {p.features.slice(0, 5).map((f, i) => (
+                      {displayFeatures.slice(0, 5).map((f, i) => (
                         <li key={i} className="flex items-center gap-2">
                           <IconCheck className="h-3.5 w-3.5 text-primary shrink-0" />
                           <span className="truncate">{f}</span>
                         </li>
                       ))}
-                      {p.features.length > 5 && (
+                      {displayFeatures.length > 5 && (
                         <li className="text-[11px] text-text-muted font-medium pl-5.5">
-                          + {p.features.length - 5} more capabilities
+                          + {displayFeatures.length - 5} more capabilities
                         </li>
                       )}
                     </ul>

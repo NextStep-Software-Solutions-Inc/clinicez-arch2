@@ -34,9 +34,11 @@ function TenantDetailPage() {
   const [isCleanupOpen, setIsCleanupOpen] = useState(false);
 
   // Usage override form state
-  const [branchesVal, setBranchesVal] = useState(1);
-  const [staffVal, setStaffVal] = useState(5);
-  const [patientsVal, setPatientsVal] = useState(100);
+  const [branchesVal, setBranchesVal] = useState(0);
+  const [staffVal, setStaffVal] = useState(0);
+  const [patientsVal, setPatientsVal] = useState(0);
+  const [apiUsedVal, setApiUsedVal] = useState(0);
+  const [apiLimitVal, setApiLimitVal] = useState(0);
   const [savingUsage, setSavingUsage] = useState(false);
 
   const loadData = async () => {
@@ -49,9 +51,11 @@ function TenantDetailPage() {
         return;
       }
       setTenant(t);
-      setBranchesVal(t.facilitiesCount ?? 1);
-      setStaffVal(t.staffAccountsCount ?? 5);
-      setPatientsVal(t.activePatientRecordsCount ?? 100);
+      setBranchesVal(t.facilitiesCount ?? 0);
+      setStaffVal(t.staffAccountsCount ?? 0);
+      setPatientsVal(t.activePatientRecordsCount ?? 0);
+      setApiUsedVal(t.monthlyApiQuotaUsed ?? 0);
+      setApiLimitVal(t.monthlyApiQuotaLimit ?? 0);
     } catch (err: any) {
       setError(err?.message || 'Failed to load tenant workstation.');
     } finally {
@@ -73,6 +77,8 @@ function TenantDetailPage() {
         facilitiesCount: branchesVal,
         staffAccountsCount: staffVal,
         activePatientRecordsCount: patientsVal,
+        monthlyApiQuotaUsed: apiUsedVal,
+        monthlyApiQuotaLimit: apiLimitVal,
       });
       toast.success('Workspace usage telemetry updated.');
       await loadData();
@@ -240,7 +246,7 @@ function TenantDetailPage() {
               </p>
             </div>
             <span className="text-[10px] font-mono font-semibold px-2.5 py-1 rounded-full bg-surface-muted text-text-secondary">
-              Plan ID: {tenant.subscriptionPlanId || 'Standard'}
+              Plan ID: {tenant.subscriptionPlanId || '—'}
             </span>
           </div>
 
@@ -248,7 +254,7 @@ function TenantDetailPage() {
             <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1">
               <span className="text-text-muted">Subscription Tier:</span>
               <p className="font-semibold text-text text-sm capitalize">
-                {tenant.subscriptionPlanId || 'Standard Plan'}
+                {tenant.subscriptionPlanId || '—'}
               </p>
             </div>
             <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1">
@@ -286,7 +292,7 @@ function TenantDetailPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1">
               <span className="text-text-muted">Clinical Branches:</span>
               <p className="font-bold text-lg text-text">{tenant.facilitiesCount}</p>
@@ -299,19 +305,26 @@ function TenantDetailPage() {
               <span className="text-text-muted">Active Patient Records:</span>
               <p className="font-bold text-lg text-text">{tenant.activePatientRecordsCount}</p>
             </div>
+            <div className="p-4 rounded-xl bg-surface-muted border border-border space-y-1">
+              <span className="text-text-muted">Monthly API Quota:</span>
+              <p className="font-bold text-lg text-text">
+                {tenant.monthlyApiQuotaUsed ?? 0} /{' '}
+                {tenant.monthlyApiQuotaLimit === -1 ? '∞' : (tenant.monthlyApiQuotaLimit ?? 0)}
+              </p>
+            </div>
           </div>
 
           {/* Telemetry Override Form */}
           <form onSubmit={handleSaveUsage} className="p-5 rounded-xl bg-surface-muted border border-border space-y-4">
             <h3 className="font-semibold text-text text-xs">In-Place Resource Telemetry Calibration</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="space-y-1.5">
                 <label className="font-medium text-text text-xs">Facility Branches</label>
                 <input
                   type="number"
                   value={branchesVal}
                   onChange={(e) => setBranchesVal(Number(e.target.value))}
-                  min={1}
+                  min={0}
                   className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-text font-mono text-xs focus:outline-hidden"
                 />
               </div>
@@ -321,7 +334,7 @@ function TenantDetailPage() {
                   type="number"
                   value={staffVal}
                   onChange={(e) => setStaffVal(Number(e.target.value))}
-                  min={1}
+                  min={0}
                   className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-text font-mono text-xs focus:outline-hidden"
                 />
               </div>
@@ -332,6 +345,26 @@ function TenantDetailPage() {
                   value={patientsVal}
                   onChange={(e) => setPatientsVal(Number(e.target.value))}
                   min={0}
+                  className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-text font-mono text-xs focus:outline-hidden"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="font-medium text-text text-xs">Monthly API Used</label>
+                <input
+                  type="number"
+                  value={apiUsedVal}
+                  onChange={(e) => setApiUsedVal(Number(e.target.value))}
+                  min={0}
+                  className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-text font-mono text-xs focus:outline-hidden"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="font-medium text-text text-xs">Monthly API Limit</label>
+                <input
+                  type="number"
+                  value={apiLimitVal}
+                  onChange={(e) => setApiLimitVal(Number(e.target.value))}
+                  min={-1}
                   className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-text font-mono text-xs focus:outline-hidden"
                 />
               </div>
@@ -374,6 +407,7 @@ function TenantDetailPage() {
           tenantId={tenant.id}
           tenantSlug={tenant.tenantSlug}
           clinicName={tenant.clinicName}
+          archivedAt={tenant.archivedAt}
         />
       )}
     </div>

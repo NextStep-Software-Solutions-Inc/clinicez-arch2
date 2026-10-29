@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { adminService, BillingPlan } from '@/services/admin.service';
+import {
+  adminService,
+  BillingPlan,
+  CreateBillingPlanPayload,
+  UpdateBillingPlanPayload,
+} from '@/services/admin.service';
 import { toast } from 'sonner';
 import {
   IconLoader,
-  IconCheck,
   IconX,
   IconStack,
-  IconInfinity,
   IconBuildingHospital,
   IconFlask,
   IconPill,
@@ -24,12 +27,9 @@ import {
   IconServer,
   IconChartBar,
   IconFileText,
-  IconCash,
-  IconCreditCard,
   IconArrowLeft,
   IconArrowRight,
-  IconAlertCircle,
-  IconSparkles,
+  IconPercentage,
 } from '@tabler/icons-react';
 
 export interface PlanEditorDialogProps {
@@ -56,7 +56,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Clinics / Outpatient Centers',
     category: 'Facilities & Hierarchy',
     description: 'Primary care clinic facilities permitted under this plan',
-    defaultVal: 1,
+    defaultVal: 0,
     icon: IconBuildingHospital,
   },
   {
@@ -80,7 +80,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Health Organizations',
     category: 'Facilities & Hierarchy',
     description: 'Parent corporate networks or hospital health systems',
-    defaultVal: 1,
+    defaultVal: 0,
     icon: IconBuilding,
   },
   {
@@ -88,7 +88,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Branch Locations',
     category: 'Facilities & Hierarchy',
     description: 'Maximum satellite branches or clinic extensions',
-    defaultVal: 1,
+    defaultVal: 0,
     icon: IconBuildingHospital,
   },
   {
@@ -96,7 +96,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Workspace Member Seats',
     category: 'Staff & Infrastructure',
     description: 'Total user accounts permitted within the organization',
-    defaultVal: 5,
+    defaultVal: 0,
     icon: IconUsers,
   },
   {
@@ -104,7 +104,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Clinical Staff Accounts',
     category: 'Staff & Infrastructure',
     description: 'Doctor, nurse, and medical allied practitioner logins',
-    defaultVal: 5,
+    defaultVal: 0,
     icon: IconAddressBook,
   },
   {
@@ -112,7 +112,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Cloud Document Storage (GB)',
     category: 'Staff & Infrastructure',
     description: 'Encrypted storage for lab results, scanned films, and notes',
-    defaultVal: 10,
+    defaultVal: 0,
     unit: 'GB',
     icon: IconServer,
   },
@@ -121,7 +121,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Active POS / Cashier Terminals',
     category: 'Staff & Infrastructure',
     description: 'Concurrent billing and cash register client terminals',
-    defaultVal: 2,
+    defaultVal: 0,
     icon: IconDeviceDesktop,
   },
   {
@@ -145,7 +145,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Monthly Consultations',
     category: 'Clinical Encounters & API',
     description: 'Clinical encounters and doctor appointments per month',
-    defaultVal: 500,
+    defaultVal: 0,
     icon: IconStethoscope,
   },
   {
@@ -153,7 +153,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Monthly API Quota',
     category: 'Clinical Encounters & API',
     description: 'Outbound REST and HL7 FHIR transactional requests',
-    defaultVal: 10000,
+    defaultVal: 0,
     icon: IconWebhook,
   },
   {
@@ -161,7 +161,7 @@ export const QUANTITATIVE_LIMITS: LimitMetadata[] = [
     label: 'Active Patient Records',
     category: 'Clinical Encounters & API',
     description: 'Total patient longitudinal medical charts in registry',
-    defaultVal: 1000,
+    defaultVal: 0,
     icon: IconAddressBook,
   },
 ];
@@ -193,7 +193,7 @@ export const CAPABILITY_FLAGS: CapabilityFlagMetadata[] = [
     key: 'feature.electronic_prescriptions',
     label: 'FDA/PRC-Signed Electronic Prescriptions',
     description: 'Digitally signed prescriptions with QR verification tokens',
-    defaultVal: true,
+    defaultVal: false,
     icon: IconFileText,
   },
   {
@@ -247,6 +247,94 @@ export const CAPABILITY_FLAGS: CapabilityFlagMetadata[] = [
   },
 ];
 
+export interface AnnualPricingSummary {
+  annualBaseline: number;
+  annualSavings: number;
+  discountPercent: number;
+  effectiveMonthlyOnAnnual: number;
+  isMarkup: boolean;
+  isCustomOrFree: boolean;
+}
+
+export interface AnnualDiscountPreset {
+  label: string;
+  percent: number;
+  exactMonthsBilled?: number;
+}
+
+export const ANNUAL_DISCOUNT_PRESETS: ReadonlyArray<AnnualDiscountPreset> = [
+  { label: '0%', percent: 0, exactMonthsBilled: 12 },
+  { label: '1 Mo Free (8.33%)', percent: 8.33, exactMonthsBilled: 11 },
+  { label: '10%', percent: 10 },
+  { label: '15%', percent: 15 },
+  { label: '2 Mos Free (16.67%)', percent: 16.67, exactMonthsBilled: 10 },
+  { label: '20%', percent: 20 },
+  { label: '25%', percent: 25 },
+];
+
+export function calculateAnnualDiscountPercent(
+  monthlyPrice: number,
+  annualPrice: number
+): number {
+  if (
+    !Number.isFinite(monthlyPrice) ||
+    !Number.isFinite(annualPrice) ||
+    monthlyPrice <= 0
+  ) {
+    return 0;
+  }
+  const baseline = monthlyPrice * 12;
+  const safeAnnual = Math.max(0, annualPrice);
+  const raw = ((baseline - safeAnnual) / baseline) * 100;
+  return Math.round(raw * 100) / 100;
+}
+
+export function calculateAnnualPriceFromDiscount(
+  monthlyPrice: number,
+  discountPercent: number,
+  exactMonthsBilled?: number
+): number {
+  if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0) {
+    return 0;
+  }
+  if (
+    typeof exactMonthsBilled === 'number' &&
+    Number.isFinite(exactMonthsBilled) &&
+    exactMonthsBilled >= 0 &&
+    exactMonthsBilled <= 12
+  ) {
+    return Math.round(monthlyPrice * exactMonthsBilled * 100) / 100;
+  }
+  const safeDiscount = Number.isFinite(discountPercent)
+    ? Math.min(100, Math.max(0, discountPercent))
+    : 0;
+  const baseline = monthlyPrice * 12;
+  const computed = baseline * (1 - safeDiscount / 100);
+  return Math.round(computed * 100) / 100;
+}
+
+export function calculateAnnualPricingSummary(
+  monthlyPrice: number,
+  annualPrice: number
+): AnnualPricingSummary {
+  const safeMonthly = Number.isFinite(monthlyPrice) ? Math.max(0, monthlyPrice) : 0;
+  const safeAnnual = Number.isFinite(annualPrice) ? Math.max(0, annualPrice) : 0;
+  const annualBaseline = Math.round(safeMonthly * 12 * 100) / 100;
+  const annualSavings = Math.round((annualBaseline - safeAnnual) * 100) / 100;
+  const discountPercent = calculateAnnualDiscountPercent(safeMonthly, safeAnnual);
+  const effectiveMonthlyOnAnnual =
+    safeAnnual > 0 ? Math.round((safeAnnual / 12) * 100) / 100 : 0;
+
+  return {
+    annualBaseline,
+    annualSavings,
+    discountPercent,
+    effectiveMonthlyOnAnnual,
+    isMarkup: safeMonthly > 0 && safeAnnual > annualBaseline,
+    isCustomOrFree: safeMonthly === 0 && safeAnnual === 0,
+  };
+}
+
 export function PlanEditorDialog({
   isOpen,
   onClose,
@@ -262,6 +350,7 @@ export function PlanEditorDialog({
   const [slug, setSlug] = useState('');
   const [rank, setRank] = useState(1);
   const [description, setDescription] = useState('');
+  const [marketingFeaturesText, setMarketingFeaturesText] = useState('');
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [slugChecking, setSlugChecking] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
@@ -269,8 +358,10 @@ export function PlanEditorDialog({
   // Step 2: Commercials & Pricing
   const [monthlyPrice, setMonthlyPrice] = useState(0);
   const [annualPrice, setAnnualPrice] = useState(0);
-  const [requiresCheckout, setRequiresCheckout] = useState(true);
-  const [isVatInclusive, setIsVatInclusive] = useState(true);
+  const [discountInput, setDiscountInput] = useState('0');
+  const [autoSyncAnnual, setAutoSyncAnnual] = useState(true);
+  const [exactMonthsPreset, setExactMonthsPreset] = useState<number | undefined>(12);
+  const [requiresCheckout, setRequiresCheckout] = useState(false);
 
   // Step 3: Quantitative Limits
   const [limits, setLimits] = useState<Record<string, number>>({});
@@ -285,17 +376,24 @@ export function PlanEditorDialog({
 
     setStep(1);
     if (plan) {
+      const initMonthly = plan.monthlyPrice ?? 0;
+      const initAnnual = plan.annualPrice ?? 0;
+      const initDiscount = calculateAnnualDiscountPercent(initMonthly, initAnnual);
+
       setName(plan.name || '');
       setSlug(plan.slug || '');
       setRank(plan.rank ?? 1);
       setDescription(plan.description || '');
-      setIsHighlighted(Boolean(plan.isHighlighted));
-      setMonthlyPrice(plan.monthlyPrice ?? 0);
-      setAnnualPrice(plan.annualPrice ?? 0);
-      setRequiresCheckout(plan.requiresCheckout !== false);
-      setIsVatInclusive(plan.isVatInclusive !== false);
+      setMarketingFeaturesText((plan.features || []).join('\n'));
+      setIsHighlighted(Boolean(plan.highlighted));
+      setMonthlyPrice(initMonthly);
+      setAnnualPrice(initAnnual);
+      setDiscountInput(String(Math.max(0, initDiscount)));
+      setAutoSyncAnnual(false);
+      setExactMonthsPreset(undefined);
+      setRequiresCheckout(Boolean(plan.requiresCheckout));
 
-      // Populate limits
+      // Populate limits from persisted plan record
       const initialLimits: Record<string, number> = {};
       QUANTITATIVE_LIMITS.forEach((l) => {
         initialLimits[l.key] =
@@ -303,28 +401,29 @@ export function PlanEditorDialog({
       });
       setLimits(initialLimits);
 
-      // Populate flags
+      // Populate capability flags from persisted enabledFeatures
+      const enabledSet = new Set(plan.enabledFeatures || []);
       const initialFlags: Record<string, boolean> = {};
       CAPABILITY_FLAGS.forEach((f) => {
-        initialFlags[f.key] =
-          plan.featuresConfig && f.key in plan.featuresConfig
-            ? Boolean(plan.featuresConfig[f.key])
-            : f.defaultVal;
+        initialFlags[f.key] = enabledSet.has(f.key);
       });
       setFlags(initialFlags);
       setSlugAvailable(true);
     } else {
-      // New plan defaults
-      const nextRank = existingPlans.length > 0 ? Math.max(...existingPlans.map((p) => p.rank ?? 1)) + 1 : 1;
+      const nextRank =
+        existingPlans.length > 0 ? Math.max(...existingPlans.map((p) => p.rank ?? 0)) + 1 : 1;
       setName('');
       setSlug('');
       setRank(nextRank);
       setDescription('');
+      setMarketingFeaturesText('');
       setIsHighlighted(false);
-      setMonthlyPrice(2999);
-      setAnnualPrice(29990);
-      setRequiresCheckout(true);
-      setIsVatInclusive(true);
+      setMonthlyPrice(0);
+      setAnnualPrice(0);
+      setDiscountInput('0');
+      setAutoSyncAnnual(true);
+      setExactMonthsPreset(12);
+      setRequiresCheckout(false);
 
       const initialLimits: Record<string, number> = {};
       QUANTITATIVE_LIMITS.forEach((l) => {
@@ -341,6 +440,78 @@ export function PlanEditorDialog({
     }
   }, [isOpen, plan, existingPlans]);
 
+  const pricingSummary = calculateAnnualPricingSummary(monthlyPrice, annualPrice);
+
+  const handleMonthlyPriceChange = (rawValue: string) => {
+    const parsed = rawValue === '' ? 0 : Number(rawValue);
+    const nextMonthly = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    setMonthlyPrice(nextMonthly);
+
+    if (autoSyncAnnual) {
+      const pct = parseFloat(discountInput);
+      const safePct = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
+      setAnnualPrice(
+        calculateAnnualPriceFromDiscount(nextMonthly, safePct, exactMonthsPreset)
+      );
+    } else {
+      const liveDiscount = calculateAnnualDiscountPercent(nextMonthly, annualPrice);
+      setDiscountInput(String(Math.max(0, liveDiscount)));
+    }
+  };
+
+  const handleDiscountInputChange = (rawValue: string) => {
+    setExactMonthsPreset(undefined);
+    setAutoSyncAnnual(true);
+
+    if (rawValue === '') {
+      setDiscountInput('');
+      setAnnualPrice(calculateAnnualPriceFromDiscount(monthlyPrice, 0));
+      return;
+    }
+
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return;
+
+    const clamped = Math.min(100, Math.max(0, parsed));
+    setDiscountInput(parsed !== clamped ? String(clamped) : rawValue);
+    setAnnualPrice(calculateAnnualPriceFromDiscount(monthlyPrice, clamped));
+  };
+
+  const handleApplyDiscountPreset = (preset: AnnualDiscountPreset) => {
+    setAutoSyncAnnual(true);
+    setExactMonthsPreset(preset.exactMonthsBilled);
+    setDiscountInput(String(preset.percent));
+    setAnnualPrice(
+      calculateAnnualPriceFromDiscount(
+        monthlyPrice,
+        preset.percent,
+        preset.exactMonthsBilled
+      )
+    );
+  };
+
+  const handleAnnualPriceChange = (rawValue: string) => {
+    const parsed = rawValue === '' ? 0 : Number(rawValue);
+    const nextAnnual = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    setAnnualPrice(nextAnnual);
+    setAutoSyncAnnual(false);
+    setExactMonthsPreset(undefined);
+    const liveDiscount = calculateAnnualDiscountPercent(monthlyPrice, nextAnnual);
+    setDiscountInput(String(Math.max(0, liveDiscount)));
+  };
+
+  const handleToggleAutoSync = () => {
+    const nextAuto = !autoSyncAnnual;
+    setAutoSyncAnnual(nextAuto);
+    if (nextAuto) {
+      const pct = parseFloat(discountInput);
+      const safePct = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
+      setAnnualPrice(
+        calculateAnnualPriceFromDiscount(monthlyPrice, safePct, exactMonthsPreset)
+      );
+    }
+  };
+
   const handleSlugBlur = async () => {
     const cleanSlug = slug.trim().toLowerCase();
     if (!cleanSlug || (isEditing && plan?.slug === cleanSlug)) {
@@ -349,10 +520,11 @@ export function PlanEditorDialog({
     }
     setSlugChecking(true);
     try {
-      const res = await adminService.checkPlanSlug(cleanSlug);
+      const excludePlanId = isEditing ? plan?.planId || plan?.id : undefined;
+      const res = await adminService.checkPlanSlug(cleanSlug, excludePlanId);
       setSlugAvailable(res.available);
     } catch {
-      setSlugAvailable(true);
+      setSlugAvailable(null);
     } finally {
       setSlugChecking(false);
     }
@@ -391,7 +563,13 @@ export function PlanEditorDialog({
         sanitizedLimits[k] = v < -1 ? 0 : v;
       });
 
-      const payload: Partial<BillingPlan> = {
+      const enabledFeatures = Object.keys(flags).filter((k) => flags[k]);
+      const marketingBullets = marketingFeaturesText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      const payload: CreateBillingPlanPayload & UpdateBillingPlanPayload = {
         name: name.trim(),
         slug: slug.trim().toLowerCase(),
         rank,
@@ -400,14 +578,13 @@ export function PlanEditorDialog({
         monthlyPrice,
         annualPrice,
         requiresCheckout,
-        isVatInclusive,
         limits: sanitizedLimits,
-        featuresConfig: flags,
-        features: Object.keys(flags).filter((k) => flags[k]),
+        enabledFeatures,
+        features: marketingBullets,
       };
 
       if (isEditing && plan) {
-        await adminService.updatePlan(plan.id, payload);
+        await adminService.updatePlan(plan.planId || plan.id, payload);
         toast.success(`Commercial plan '${name}' updated successfully.`);
       } else {
         await adminService.createPlan(payload);
@@ -445,7 +622,7 @@ export function PlanEditorDialog({
               </h2>
               <p className="text-xs text-text-muted mt-0.5">
                 Step {step} of 4: {step === 1 && 'Basic Identity'}
-                {step === 2 && 'Pricing & BIR VAT'}
+                {step === 2 && 'Commercial Pricing'}
                 {step === 3 && '14 Quantitative Limits'}
                 {step === 4 && '10 Capability Feature Flags'}
               </p>
@@ -576,54 +753,239 @@ export function PlanEditorDialog({
                   className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
                 />
               </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-text">Marketing Feature Highlights (One per line)</label>
+                <textarea
+                  value={marketingFeaturesText}
+                  onChange={(e) => setMarketingFeaturesText(e.target.value)}
+                  placeholder="Enter public-facing plan feature bullets, one per line..."
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text focus:outline-hidden"
+                />
+              </div>
             </div>
           )}
 
           {/* STEP 2: Pricing & Commercials */}
           {step === 2 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Monthly Price */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Monthly Price (PHP ₱)</label>
-                  <input
-                    type="number"
-                    value={monthlyPrice}
-                    onChange={(e) => setMonthlyPrice(Number(e.target.value))}
-                    min={0}
-                    step={100}
-                    className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono focus:outline-hidden"
-                  />
+                  <label htmlFor="plan-monthly-price" className="font-semibold text-text block">
+                    Monthly Price (PHP)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-mono">
+                      ₱
+                    </span>
+                    <input
+                      id="plan-monthly-price"
+                      type="number"
+                      value={monthlyPrice}
+                      onChange={(e) => handleMonthlyPriceChange(e.target.value)}
+                      min={0}
+                      step="any"
+                      className="w-full pl-7 pr-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono focus:outline-hidden focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="text-[10px] text-text-muted font-mono">
+                    12× baseline: ₱{pricingSummary.annualBaseline.toLocaleString()}/yr
+                  </div>
                 </div>
 
+                {/* Annual Discount Percentage */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-text">Annual Price (PHP ₱)</label>
-                  <input
-                    type="number"
-                    value={annualPrice}
-                    onChange={(e) => setAnnualPrice(Number(e.target.value))}
-                    min={0}
-                    step={500}
-                    className="w-full px-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono focus:outline-hidden"
-                  />
+                  <div className="flex items-center justify-between gap-1">
+                    <label htmlFor="plan-annual-discount" className="font-semibold text-text">
+                      Annual Discount
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleToggleAutoSync}
+                      title="Toggle automatic annual price calculation from discount percentage"
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer ${
+                        autoSyncAnnual
+                          ? 'bg-primary-subtle text-primary border border-primary/20'
+                          : 'bg-surface-muted text-text-muted border border-border hover:text-text'
+                      }`}
+                    >
+                      {autoSyncAnnual ? 'Auto-set ON' : 'Manual'}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="plan-annual-discount"
+                      type="number"
+                      value={discountInput}
+                      onChange={(e) => handleDiscountInputChange(e.target.value)}
+                      onBlur={() => {
+                        if (discountInput.trim() === '') {
+                          setDiscountInput('0');
+                        }
+                      }}
+                      min={0}
+                      max={100}
+                      step="any"
+                      placeholder="0"
+                      className="w-full pl-3 pr-8 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono focus:outline-hidden focus:ring-1 focus:ring-primary"
+                    />
+                    <IconPercentage className="h-3.5 w-3.5 text-text-muted absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                  <div className="text-[10px] text-text-muted">
+                    {autoSyncAnnual
+                      ? 'Auto-updates Annual Price in real time'
+                      : 'Reflects live discount vs 12× monthly'}
+                  </div>
+                </div>
+
+                {/* Annual Price */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-1">
+                    <label htmlFor="plan-annual-price" className="font-semibold text-text">
+                      Annual Price (PHP)
+                    </label>
+                    {autoSyncAnnual && (
+                      <span className="text-[10px] font-mono text-primary font-semibold">
+                        Auto
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-mono">
+                      ₱
+                    </span>
+                    <input
+                      id="plan-annual-price"
+                      type="number"
+                      value={annualPrice}
+                      onChange={(e) => handleAnnualPriceChange(e.target.value)}
+                      min={0}
+                      step="any"
+                      className="w-full pl-7 pr-3 py-2 rounded-xl bg-surface-muted border border-border text-text font-mono focus:outline-hidden focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="text-[10px] text-text-muted font-mono">
+                    Effective: ₱{pricingSummary.effectiveMonthlyOnAnnual.toLocaleString()}/mo
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2">
-                <label className="flex items-center justify-between p-3 rounded-xl bg-surface-muted border border-border cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-text">12% BIR Value Added Tax (VAT) Inclusive</div>
-                    <div className="text-[11px] text-text-muted mt-0.5">
-                      Prices configured above already include statutory Philippine VAT breakdown.
+              {/* Quick Discount Percentage Presets */}
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-semibold text-text-secondary">
+                  Quick Annual Discount Presets (click to auto-set Annual Price)
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ANNUAL_DISCOUNT_PRESETS.map((preset) => {
+                    const isSelected =
+                      !pricingSummary.isMarkup &&
+                      monthlyPrice > 0 &&
+                      Math.abs(pricingSummary.discountPercent - preset.percent) <= 0.02;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => handleApplyDiscountPreset(preset)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-white border-primary'
+                            : 'bg-surface-muted text-text-secondary border-border hover:text-text hover:border-primary/40'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Real-Time Annual Discount & Savings Preview Card */}
+              <div
+                className={`p-3.5 rounded-xl border space-y-2.5 ${
+                  pricingSummary.isMarkup
+                    ? 'bg-amber-500/10 border-amber-500/30'
+                    : pricingSummary.discountPercent > 0
+                    ? 'bg-primary-subtle/60 border-primary/20'
+                    : 'bg-surface-muted border-border'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-semibold text-text">
+                    Real-Time Annual Pricing Preview
+                  </span>
+                  {pricingSummary.isCustomOrFree ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface border border-border text-text-muted">
+                      Custom / Zero-Cost Tier
+                    </span>
+                  ) : pricingSummary.isMarkup ? (
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                        +{Math.abs(pricingSummary.discountPercent)}% Above 12× Monthly
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyDiscountPreset(ANNUAL_DISCOUNT_PRESETS[0])}
+                        className="text-[10px] font-semibold text-primary underline cursor-pointer"
+                      >
+                        Match 12× Monthly
+                      </button>
+                    </div>
+                  ) : pricingSummary.discountPercent > 0 ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                      Save {pricingSummary.discountPercent}% Annually
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface border border-border text-text-muted">
+                      0% Annual Discount
+                    </span>
+                  )}
+                </div>
+
+                {!pricingSummary.isCustomOrFree && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/70 text-[11px]">
+                    <div>
+                      <div className="text-text-muted">12× Monthly</div>
+                      <div className="font-mono font-semibold text-text">
+                        ₱{pricingSummary.annualBaseline.toLocaleString()}/yr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-text-muted">Annual Billed</div>
+                      <div className="font-mono font-semibold text-text">
+                        ₱{annualPrice.toLocaleString()}/yr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-text-muted">Effective Monthly</div>
+                      <div className="font-mono font-semibold text-text">
+                        ₱{pricingSummary.effectiveMonthlyOnAnnual.toLocaleString()}/mo
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-text-muted">
+                        {pricingSummary.isMarkup ? 'Annual Markup' : 'Annual Savings'}
+                      </div>
+                      <div
+                        className={`font-mono font-bold ${
+                          pricingSummary.isMarkup
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : pricingSummary.annualSavings > 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-text-secondary'
+                        }`}
+                      >
+                        {pricingSummary.isMarkup
+                          ? `+₱${Math.abs(pricingSummary.annualSavings).toLocaleString()}/yr`
+                          : `₱${pricingSummary.annualSavings.toLocaleString()}/yr`}
+                      </div>
                     </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={isVatInclusive}
-                    onChange={(e) => setIsVatInclusive(e.target.checked)}
-                    className="rounded text-primary focus:ring-primary h-4 w-4"
-                  />
-                </label>
+                )}
+              </div>
 
+              <div className="space-y-2 pt-1">
                 <label className="flex items-center justify-between p-3 rounded-xl bg-surface-muted border border-border cursor-pointer">
                   <div>
                     <div className="font-semibold text-text">Requires Commercial Checkout</div>

@@ -39,13 +39,21 @@ export const PAYMENT_METHODS = [
   { value: "Promotional", label: "Promotional / Commercial Sponsorship (Zero Cost)", icon: IconSparkles },
 ];
 
-export function calculateBirVat(amount: number, isVatInclusive: boolean = true) {
+export function calculateBirVat(
+  amount: number,
+  isVatInclusive: boolean = true,
+  vatRatePercent: number = 12
+) {
+  const rate = Math.max(0, vatRatePercent) / 100;
+  if (rate === 0) {
+    return { netAmount: amount, vatAmount: 0, grossAmount: amount };
+  }
   if (isVatInclusive) {
-    const netAmount = Math.round((amount / 1.12) * 100) / 100;
+    const netAmount = Math.round((amount / (1 + rate)) * 100) / 100;
     const vatAmount = Math.round((amount - netAmount) * 100) / 100;
     return { netAmount, vatAmount, grossAmount: amount };
   } else {
-    const vatAmount = Math.round(amount * 0.12 * 100) / 100;
+    const vatAmount = Math.round(amount * rate * 100) / 100;
     const grossAmount = Math.round((amount + vatAmount) * 100) / 100;
     return { netAmount: amount, vatAmount, grossAmount };
   }
@@ -62,6 +70,8 @@ export function RecordPaymentDialog({
 }: RecordPaymentDialogProps) {
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
+  const [vatRatePercent, setVatRatePercent] = useState<number>(0);
+  const [isTaxExempt, setIsTaxExempt] = useState<boolean>(false);
 
   // Form State
   const [planSlug, setPlanSlug] = useState('');
@@ -75,12 +85,30 @@ export function RecordPaymentDialog({
   const [submitting, setSubmitting] = useState(false);
   const [successResult, setSuccessResult] = useState<RecordManualPaymentResult | null>(null);
 
-  const updateInitialAmount = (planList: BillingPlan[], slug: string, annual: boolean) => {
+  const resolvePlanAmount = (planList: BillingPlan[], slug: string, annual: boolean): number => {
     const p = planList.find((x) => x.slug === slug);
-    if (!p) return;
-    const mPrice = typeof p.monthlyPrice === 'number' ? p.monthlyPrice : 0;
-    const aPrice = typeof p.annualPrice === 'number' ? p.annualPrice : 0;
-    setAmount(annual ? aPrice : mPrice);
+    if (!p) return 0;
+    const mPrice =
+      typeof p.monthlyPrice === 'number'
+        ? p.monthlyPrice
+        : typeof p.priceMonthly === 'number'
+        ? p.priceMonthly
+        : parseFloat(String(p.priceMonthly || 0)) || 0;
+    const aPrice =
+      typeof p.annualPrice === 'number'
+        ? p.annualPrice
+        : typeof p.priceAnnually === 'number'
+        ? p.priceAnnually
+        : parseFloat(String(p.priceAnnually || 0)) || 0;
+    return annual ? aPrice : mPrice;
+  };
+
+  const updateInitialAmount = (planList: BillingPlan[], slug: string, annual: boolean, method: string = paymentMethod) => {
+    if (method === 'Promotional') {
+      setAmount(0);
+      return;
+    }
+    setAmount(resolvePlanAmount(planList, slug, annual));
   };
 
   useEffect(() => {
@@ -89,12 +117,24 @@ export function RecordPaymentDialog({
     setSuccessResult(null);
     setPaymentDate(new Date().toISOString().split('T')[0]);
 
-    const fetchPlans = async () => {
+    const fetchPlansAndSettings = async () => {
       try {
         setLoadingPlans(true);
-        const fetched = await adminService.getPlans();
-        const sorted = [...fetched].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+        const [fetchedPlans, fetchedSettings] = await Promise.all([
+          adminService.getPlans(),
+          adminService.getSettings().catch(() => []),
+        ]);
+
+        const sorted = [...fetchedPlans].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
         setPlans(sorted);
+
+        const exemptSetting = fetchedSettings.find((s) => s.key === 'Billing:BirTaxExempt');
+        const rateSetting = fetchedSettings.find((s) => s.key === 'Billing:BirTaxPercentage');
+        const exempt = exemptSetting?.value?.toLowerCase() === 'true';
+        const parsedRate = rateSetting ? parseFloat(rateSetting.value) : 0;
+
+        setIsTaxExempt(exempt);
+        setVatRatePercent(exempt ? 0 : Number.isFinite(parsedRate) ? parsedRate : 0);
 
         const initialSlug =
           currentPlanSlug && sorted.some((p) => p.slug === currentPlanSlug)
@@ -102,25 +142,25 @@ export function RecordPaymentDialog({
             : sorted[0]?.slug || '';
 
         setPlanSlug(initialSlug);
-        updateInitialAmount(sorted, initialSlug, isAnnual);
-      } catch (err: any) {
+        updateInitialAmount(sorted, initialSlug, isAnnual, paymentMethod);
+      } catch {
         toast.error('Failed to load subscription plans');
       } finally {
         setLoadingPlans(false);
       }
     };
 
-    fetchPlans();
+    fetchPlansAndSettings();
   }, [isOpen, currentPlanSlug]);
 
   const handlePlanChange = (slug: string) => {
     setPlanSlug(slug);
-    updateInitialAmount(plans, slug, isAnnual);
+    updateInitialAmount(plans, slug, isAnnual, paymentMethod);
   };
 
   const handleCycleChange = (annual: boolean) => {
     setIsAnnual(annual);
-    updateInitialAmount(plans, planSlug, annual);
+    updateInitialAmount(plans, planSlug, annual, paymentMethod);
   };
 
   const handlePaymentMethodChange = (method: string) => {
@@ -131,16 +171,12 @@ export function RecordPaymentDialog({
         setTransactionReference(`PROMO-${tenantSlug.toUpperCase().slice(0, 8)}`);
       }
     } else if (amount === 0) {
-      const p = plans.find((x) => x.slug === planSlug);
-      if (p) {
-        const mPrice = typeof p.monthlyPrice === 'number' ? p.monthlyPrice : (typeof p.priceMonthly === 'number' ? p.priceMonthly : parseFloat(String(p.priceMonthly || 0)) || 0);
-        const aPrice = typeof p.annualPrice === 'number' ? p.annualPrice : (typeof p.priceAnnually === 'number' ? p.priceAnnually : parseFloat(String(p.priceAnnually || 0)) || 0);
-        setAmount(isAnnual ? aPrice : mPrice);
-      }
+      setAmount(resolvePlanAmount(plans, planSlug, isAnnual));
     }
   };
 
-  const vatBreakdown = calculateBirVat(amount, true);
+  const effectiveVatRate = isTaxExempt ? 0 : vatRatePercent;
+  const vatBreakdown = calculateBirVat(amount, true, effectiveVatRate);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,7 +262,7 @@ export function RecordPaymentDialog({
                 <div>
                   <div className="font-bold">Transaction Confirmed & License Issued</div>
                   <div className="text-[11px] opacity-90">
-                    Official BIR VAT invoice #{successResult.invoiceNumber} generated.
+                    Invoice #{successResult.invoiceNumber} • Receipt #{successResult.receiptNumber} generated.
                   </div>
                 </div>
               </div>
@@ -237,24 +273,34 @@ export function RecordPaymentDialog({
                   <span className="text-primary font-mono">{successResult.invoiceNumber}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-text-muted font-sans">Official Receipt:</span>
+                  <span className="text-text">{successResult.receiptNumber}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-text-muted font-sans">Payment Method:</span>
-                  <span className="text-text font-sans font-medium">{successResult.paymentMethod}</span>
+                  <span className="text-text font-sans font-medium">{paymentMethod}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-text-muted font-sans">Transaction Reference:</span>
-                  <span className="text-text">{successResult.transactionReference}</span>
+                  <span className="text-text">{transactionReference || '—'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-text-muted font-sans">VAT Net (12% Excl.):</span>
+                  <span className="text-text-muted font-sans">
+                    {isTaxExempt || effectiveVatRate === 0
+                      ? 'Net Amount (Tax Exempt):'
+                      : `VAT Net (${effectiveVatRate}% Excl.):`}
+                  </span>
                   <span className="text-text">₱{vatBreakdown.netAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-text-muted font-sans">VAT Amount (12%):</span>
+                  <span className="text-text-muted font-sans">
+                    {isTaxExempt || effectiveVatRate === 0 ? 'VAT Amount (0%):' : `VAT Amount (${effectiveVatRate}%):`}
+                  </span>
                   <span className="text-text">₱{vatBreakdown.vatAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-border font-bold text-xs text-text">
                   <span className="font-sans">Total Gross Paid:</span>
-                  <span className="text-primary">₱{successResult.amount.toLocaleString()}</span>
+                  <span className="text-primary">₱{amount.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -263,7 +309,7 @@ export function RecordPaymentDialog({
                   type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(
-                      `Invoice: ${successResult.invoiceNumber}\nReference: ${successResult.transactionReference}\nGross: ₱${successResult.amount}`
+                      `Invoice: ${successResult.invoiceNumber}\nReceipt: ${successResult.receiptNumber}\nReference: ${transactionReference || '—'}\nGross: ₱${amount}`
                     );
                     toast.success('Receipt details copied to clipboard');
                   }}
@@ -392,18 +438,24 @@ export function RecordPaymentDialog({
                 </div>
               </div>
 
-              {/* 12% BIR VAT Breakdown */}
+              {/* BIR VAT Breakdown (driven by live System Settings) */}
               <div className="p-3.5 rounded-xl bg-surface-muted border border-border text-[11px] space-y-1.5">
                 <div className="font-semibold text-text flex items-center justify-between pb-1 border-b border-border">
-                  <span>BIR 12% Value Added Tax Calculation</span>
-                  <span className="text-text-muted">VAT-Inclusive</span>
+                  <span>
+                    {isTaxExempt || effectiveVatRate === 0
+                      ? 'BIR Tax Calculation (Tax Exempt)'
+                      : `BIR ${effectiveVatRate}% Value Added Tax Calculation`}
+                  </span>
+                  <span className="text-text-muted">
+                    {isTaxExempt || effectiveVatRate === 0 ? 'Exempt (0%)' : 'VAT-Inclusive'}
+                  </span>
                 </div>
                 <div className="flex justify-between text-text-secondary">
                   <span>Net Amount:</span>
                   <span className="font-mono text-text">₱{vatBreakdown.netAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-text-secondary">
-                  <span>12% VAT:</span>
+                  <span>{isTaxExempt || effectiveVatRate === 0 ? 'VAT (0%):' : `${effectiveVatRate}% VAT:`}</span>
                   <span className="font-mono text-text">₱{vatBreakdown.vatAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between font-bold text-text pt-1 border-t border-border">
