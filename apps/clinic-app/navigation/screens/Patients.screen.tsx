@@ -1983,7 +1983,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <ValidatedDateInput
-                    label="Date of Birth (YYYY-MM-DD)"
+                    label="Date of Birth"
                     required
                     value={formDob}
                     onChangeText={(val) => {
@@ -2105,7 +2105,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
               {/* Embedded PhilHealth PIN Input with Auto-Mask & Mod-11 Check */}
               <PhilHealthPinInput
-                label="PhilHealth PIN (RA 11223)"
+                label="PhilHealth PIN"
                 value={formPhilHealth}
                 onChangeText={(val) => {
                   setFormPhilHealth(val);
@@ -2122,8 +2122,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 <ThemedText style={styles.inputLabel}>PhilHealth Member Type *</ThemedText>
                 <SegmentedControl
                   options={[
-                    { value: 'MM', label: 'Member (MM)' },
-                    { value: 'DD', label: 'Dependent (DD)' },
+                    { value: 'MM', label: 'Member' },
+                    { value: 'DD', label: 'Dependent' },
                   ]}
                   value={formMemberType}
                   onChange={(val) => setFormMemberType(val as MemberType)}
@@ -2136,12 +2136,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   <View style={styles.sponsorHeader}>
                     <Icon name="shield" size={14} color={theme.colors.primaryDark} />
                     <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      Principal Sponsor Details
+                      Principal Member Details
                     </ThemedText>
-                    <Badge label="Required for Konsulta" variant="info" size="sm" />
+                    <Badge label="Dependent Coverage" variant="info" size="sm" />
                   </View>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Required for PhilHealth Konsulta dependent registration and statutory encounter claims.
+                    Required when claiming PhilHealth benefits under a principal member.
                   </ThemedText>
 
                   <Input
@@ -2188,7 +2188,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   <View style={styles.formRow}>
                     <View style={{ flex: 1 }}>
                       <PhilHealthPinInput
-                        label="Principal Member PIN (RA 11223)"
+                        label="Principal Member PIN"
                         value={formPrincipalPin}
                         onChangeText={setFormPrincipalPin}
                         onValidityChange={setIsPrincipalPinValid}
@@ -2210,7 +2210,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>Senior Citizen ID (RA 9994)</ThemedText>
+                  <ThemedText style={styles.inputLabel}>Senior Citizen ID</ThemedText>
                   <TextInput
                     style={styles.textInput}
                     placeholder="SC-SP-2020-001"
@@ -2220,7 +2220,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>PWD ID (RA 10754)</ThemedText>
+                  <ThemedText style={styles.inputLabel}>PWD ID</ThemedText>
                   <TextInput
                     style={styles.textInput}
                     placeholder="PWD-BIN-2022-001"
@@ -2257,7 +2257,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               {/* Institutional & Custom Metadata Section */}
               {tenantCustomFields.length > 0 && (
                 <View style={{ marginBottom: theme.spacing.sm }}>
-                  <ThemedText style={styles.inputLabel}>Institutional & Additional Details</ThemedText>
+                  <ThemedText style={styles.inputLabel}>Additional Details</ThemedText>
                   <DynamicCustomFieldsRenderer
                     fields={tenantCustomFields}
                     values={dynamicFieldValues}
@@ -2285,7 +2285,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   <View style={styles.allergySectionTitleRow}>
                     <Icon name="emergency" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
                     <ThemedText style={styles.inputLabel}>
-                      Known Allergies & Anaphylaxis Alerts
+                      Known Allergies
                     </ThemedText>
                   </View>
                   <Button
@@ -2366,7 +2366,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
                 {formMedicalHistories.length === 0 && (
                   <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
-                    No chronic conditions selected (Patient has no known chronic illnesses).
+                    No chronic conditions recorded.
                   </ThemedText>
                 )}
               </View>

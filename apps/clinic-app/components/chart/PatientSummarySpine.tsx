@@ -645,14 +645,14 @@ export default function PatientSummarySpine({
         {/* Senior / PWD */}
         {isSenior ? (
           <Badge
-            label={seniorId ? `Senior (${seniorId})` : 'Senior (RA 9994)'}
+            label={seniorId ? `Senior (${seniorId})` : 'Senior Citizen'}
             variant="info"
             size="sm"
           />
         ) : null}
         {isPwd ? (
           <Badge
-            label={pwdId ? `PWD (${pwdId})` : 'PWD (RA 10754)'}
+            label={pwdId ? `PWD (${pwdId})` : 'PWD'}
             variant="info"
             size="sm"
             icon="accessibility"

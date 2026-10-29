@@ -905,7 +905,7 @@ export default function JoinClient({
                 <Shield className="w-4 h-4" />
               </span>
               <h2 className="text-base font-bold text-foreground">
-                2. PhilHealth & Statutory Welfare (RA 11223)
+                2. PhilHealth & Discount IDs
               </h2>
             </div>
 
@@ -951,7 +951,7 @@ export default function JoinClient({
                 </label>
                 {patientPinValidation?.isComplete && patientPinValidation.isValid && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                    <ShieldCheck className="w-3 h-3 text-primary" /> Mod-11 Verified
+                    <ShieldCheck className="w-3 h-3 text-primary" /> Verified
                   </span>
                 )}
               </div>
@@ -987,7 +987,7 @@ export default function JoinClient({
                 </div>
 
                 <p className="text-xs text-muted-foreground">
-                  PhilHealth statutory regulations require primary contributing sponsor credentials for dependent consultation claims.
+                  Enter the primary PhilHealth member details for dependent coverage.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

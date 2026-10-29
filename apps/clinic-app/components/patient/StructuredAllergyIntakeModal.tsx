@@ -101,7 +101,7 @@ export const AllergyPillList: React.FC<AllergyPillListProps> = ({
     return (
       <View style={styles.emptyPillContainer}>
         <ThemedText variant="caption" color={theme.colors.textMuted}>
-          No known allergies documented (Patient has NKDA status).
+          No known allergies recorded.
         </ThemedText>
       </View>
     );

@@ -244,7 +244,7 @@ export default function PsgcAddressPicker({
     <div className={`space-y-3.5 ${className}`}>
       <div className="flex items-center gap-2 text-xs font-bold text-foreground">
         <IconMapPin className="w-4 h-4 text-primary shrink-0" />
-        <span>Philippine Standard Geographic Address (10-Digit PSGC)</span>
+        <span>Address</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">

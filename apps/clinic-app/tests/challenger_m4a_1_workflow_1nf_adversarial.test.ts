@@ -893,7 +893,7 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
       );
 
       // Verify NCR notice is rendered
-      expect(html).toContain('National Capital Region (NCR) has no provinces. Cascaded directly to Cities/Municipalities.');
+      expect(html).toContain('Metro Manila (NCR) has no provinces');
       // Verify Province select is NOT rendered (bypassed)
       expect(html).not.toContain('Select Province');
 
@@ -969,7 +969,7 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
       );
 
       // Verify NCR notice is now gone
-      expect(html).not.toContain('National Capital Region (NCR) has no provinces');
+      expect(html).not.toContain('Metro Manila (NCR) has no provinces');
       // Province select is present
       expect(html).toContain('Select Province');
     });

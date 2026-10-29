@@ -18,7 +18,7 @@ export interface PsgcAddressSelectorProps {
 export default function PsgcAddressSelector({
   value,
   onChange,
-  label = 'Philippine Standard Geographic Code (PSGC) Address',
+  label = 'Home Address',
   disabled = false,
   showSameAsPermanent = false,
 }: PsgcAddressSelectorProps) {
@@ -197,7 +197,7 @@ export default function PsgcAddressSelector({
           ) : (
             <View style={[styles.ncrNotice, { backgroundColor: theme.colors.surfaceMuted, borderRadius: theme.radii.md, padding: theme.spacing.sm }]}>
               <ThemedText variant="small" color={theme.colors.textSecondary}>
-                National Capital Region (NCR) has no provinces. Cascaded directly to Cities/Municipalities.
+                Metro Manila (NCR) has no provinces — select your city or municipality below.
               </ThemedText>
             </View>
           )}

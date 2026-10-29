@@ -811,7 +811,7 @@ export function EditPatientModal({
             <View style={styles.formRow}>
               <View style={styles.formCol}>
                 <ValidatedDateInput
-                  label="Date of Birth (YYYY-MM-DD)"
+                  label="Date of Birth"
                   required
                   placeholder="YYYY-MM-DD"
                   value={dateOfBirth}
@@ -1009,13 +1009,13 @@ export function EditPatientModal({
               </>
             )}
 
-            {/* Statutory Identifiers */}
+            {/* Government IDs & Coverage */}
             <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Statutory Identifiers
+              Government IDs & Coverage
             </ThemedText>
 
             <PhilHealthPinInput
-              label="PhilHealth PIN (RA 11223)"
+              label="PhilHealth PIN"
               value={philHealthNumber}
               onChangeText={(val) => {
                 setPhilHealthNumber(val);
@@ -1034,8 +1034,8 @@ export function EditPatientModal({
               </ThemedText>
               <SegmentedControl
                 options={[
-                  { value: 'MM', label: 'Member (MM)' },
-                  { value: 'DD', label: 'Dependent (DD)' },
+                  { value: 'MM', label: 'Member' },
+                  { value: 'DD', label: 'Dependent' },
                 ]}
                 value={memberType}
                 onChange={(val) => setMemberType(val as MemberType)}
@@ -1048,12 +1048,12 @@ export function EditPatientModal({
                 <View style={styles.sponsorHeader}>
                   <Icon name="shield" size={14} color={theme.colors.primaryDark} />
                   <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                    Principal Sponsor Details
+                    Principal Member Details
                   </ThemedText>
-                  <Badge label="Required for Konsulta" variant="info" size="sm" />
+                  <Badge label="Dependent Coverage" variant="info" size="sm" />
                 </View>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  Required for PhilHealth Konsulta dependent registration and statutory encounter claims.
+                  Required when claiming PhilHealth benefits under a principal member.
                 </ThemedText>
 
                 <Input
@@ -1100,7 +1100,7 @@ export function EditPatientModal({
                 <View style={styles.formRow}>
                   <View style={styles.formCol}>
                     <PhilHealthPinInput
-                      label="Principal Member PIN (RA 11223)"
+                      label="Principal Member PIN"
                       value={principalMemberPin}
                       onChangeText={setPrincipalMemberPin}
                       onValidityChange={setIsPrincipalPinValid}
@@ -1123,7 +1123,7 @@ export function EditPatientModal({
             <View style={styles.formRow}>
               <View style={styles.formCol}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Senior Citizen ID (RA 9994)
+                  Senior Citizen ID
                 </ThemedText>
                 <TextInput
                   style={styles.textInput}
@@ -1135,7 +1135,7 @@ export function EditPatientModal({
               </View>
               <View style={styles.formCol}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  PWD ID (RA 10754)
+                  PWD ID
                 </ThemedText>
                 <TextInput
                   style={styles.textInput}
@@ -1153,11 +1153,11 @@ export function EditPatientModal({
               onCustomFieldsChange={(next) => setCustomFieldValues(next)}
             />
 
-            {/* Institutional & Additional Details */}
+            {/* Additional Details */}
             {additionalCustomFields.length > 0 && (
               <>
                 <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-                  Institutional & Additional Details
+                  Additional Details
                 </ThemedText>
                 <DynamicCustomFieldsRenderer
                   fields={additionalCustomFields}
@@ -1180,7 +1180,7 @@ export function EditPatientModal({
                 <View style={styles.allergySectionTitleRow}>
                   <Icon name="emergency" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Known Allergies & Anaphylaxis Alerts
+                    Known Allergies
                   </ThemedText>
                 </View>
                 <Button
@@ -1261,7 +1261,7 @@ export function EditPatientModal({
 
               {structuredMedicalHistories.length === 0 && (
                 <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
-                  No chronic conditions selected (Patient has no known chronic illnesses).
+                  No chronic conditions recorded.
                 </ThemedText>
               )}
             </View>

@@ -280,6 +280,25 @@ public sealed class OptionsAndPsgcAdversarialTests
         ncrList.Should().HaveCount(4);
         ncrList.All(p => p.Level == "Province").Should().BeTrue();
 
+        // 2b. Region X (Northern Mindanao, 1000000000) -> 5 provinces
+        var resultRegionX = await controller.GetProvinces(regionPsgc: "1000000000");
+        var regionXList = resultRegionX.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
+
+        regionXList.Should().HaveCount(5);
+        regionXList.Select(p => p.Name).Should().Contain(["Bukidnon", "Camiguin", "Lanao del Norte", "Misamis Occidental", "Misamis Oriental"]);
+
+        // 2c. Every single Philippine region cascades to >= 1 province/district
+        var allRegionsResult = await controller.GetRegions();
+        var allRegions = allRegionsResult.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
+        foreach (var reg in allRegions)
+        {
+            var regProvs = (await controller.GetProvinces(reg.PsgcCode)).Should().BeOfType<OkObjectResult>().Subject
+                .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
+            regProvs.Should().NotBeEmpty($"Region {reg.Name} ({reg.PsgcCode}) must have provinces/districts");
+        }
+
         // 3. Non-existent region -> empty collection (200 OK, never 500)
         var resultEmpty = await controller.GetProvinces(regionPsgc: "9999999999");
         var emptyList = resultEmpty.Should().BeOfType<OkObjectResult>().Subject
@@ -292,21 +311,27 @@ public sealed class OptionsAndPsgcAdversarialTests
     {
         var (controller, _, _, _) = CreateTestHarness();
 
-        // 1. Province filter: Cavite (0421000000) -> Bacoor, Dasmariñas, Imus
+        // 1. Province filter: Cavite (0421000000) -> all 23 cities/municipalities including Bacoor, Dasmariñas, Imus
         var resultCavite = await controller.GetCities(provincePsgc: "0421000000", regionPsgc: null);
         var caviteCities = resultCavite.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
 
-        caviteCities.Should().HaveCount(3);
+        caviteCities.Should().HaveCount(23);
         caviteCities.Select(c => c.Name).Should().Contain(["City of Bacoor", "City of Dasmariñas", "City of Imus"]);
 
-        // 2. Direct Region filter: NCR (1300000000) -> Manila, QC, Makati, Pasig, Taguig
+        // 2. Direct Region filter: NCR (1300000000) -> all 17 NCR cities/municipalities
         var resultNcr = await controller.GetCities(provincePsgc: null, regionPsgc: "1300000000");
         var ncrCities = resultNcr.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
 
-        ncrCities.Should().HaveCount(5);
+        ncrCities.Should().HaveCount(17);
         ncrCities.Select(c => c.Name).Should().Contain(["City of Manila", "Quezon City", "City of Makati", "City of Pasig", "City of Taguig"]);
+
+        // 2b. Region X Misamis Oriental (1043000000) -> includes City of Cagayan de Oro (1043050000)
+        var resultMisOr = await controller.GetCities(provincePsgc: "1043000000", regionPsgc: null);
+        var misOrCities = resultMisOr.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
+        misOrCities.Should().Contain(c => c.PsgcCode == "1043050000" && c.Name.Contains("Cagayan de Oro", StringComparison.OrdinalIgnoreCase));
 
         // 3. Non-existent province -> empty collection (200 OK, never 500)
         var resultEmpty = await controller.GetCities(provincePsgc: "9999999999", regionPsgc: null);
@@ -320,29 +345,30 @@ public sealed class OptionsAndPsgcAdversarialTests
     {
         var (controller, _, _, _) = CreateTestHarness();
 
-        // 1. City of Manila (1339010000) -> 5 barangays
+        // 1. City of Manila (1339010000) -> 897 barangays across all Manila districts
         var resultManila = await controller.GetBarangays(cityMunicipalityPsgc: "1339010000");
         var manilaBarangays = resultManila.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
 
-        manilaBarangays.Should().HaveCount(5);
-        manilaBarangays.Select(b => b.Name).Should().Contain(["Barangay 1", "Ermita", "Malate", "Paco", "Santa Ana"]);
+        manilaBarangays.Should().HaveCount(897);
+        manilaBarangays.Should().Contain(b => b.Name.Contains("Ermita", StringComparison.OrdinalIgnoreCase));
+        manilaBarangays.Should().Contain(b => b.Name.Contains("Malate", StringComparison.OrdinalIgnoreCase));
 
-        // 2. City of Makati (1376010000) -> 4 barangays
-        var resultMakati = await controller.GetBarangays(cityMunicipalityPsgc: "1376010000");
+        // 2. City of Makati (1376020000) -> 33 barangays
+        var resultMakati = await controller.GetBarangays(cityMunicipalityPsgc: "1376020000");
         var makatiBarangays = resultMakati.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
 
-        makatiBarangays.Should().HaveCount(4);
+        makatiBarangays.Should().HaveCount(33);
         makatiBarangays.Select(b => b.Name).Should().Contain(["Bel-Air", "Poblacion", "San Antonio", "Urdaneta"]);
 
-        // 3. Cebu City (0722170000) -> 5 barangays
+        // 3. Cebu City (0722170000) -> 80 barangays
         var resultCebu = await controller.GetBarangays(cityMunicipalityPsgc: "0722170000");
         var cebuBarangays = resultCebu.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<ApiResponse<IReadOnlyList<PsgcLocationDto>>>().Subject.Data!;
 
-        cebuBarangays.Should().HaveCount(5);
-        cebuBarangays.Select(b => b.Name).Should().Contain(["Apas", "Banilad", "Guadalupe", "Lahug", "Mabolo"]);
+        cebuBarangays.Should().HaveCount(80);
+        cebuBarangays.Select(b => b.Name).Should().Contain(["Apas", "Banilad", "Guadalupe", "Mabolo"]);
 
         // 4. Missing / empty parameter -> 400 Bad Request, never 500
         var resultMissing = await controller.GetBarangays(cityMunicipalityPsgc: "");

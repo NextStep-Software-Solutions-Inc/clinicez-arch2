@@ -72,7 +72,7 @@ public sealed class LocationsEndpointsTests : IAsyncLifetime
     [Fact]
     public async Task GetBarangays_WithValidCityMunicipalityPsgc_ReturnsBarangays()
     {
-        var response = await _host.Client.GetAsync("/api/v1/locations/psgc/barangays?cityMunicipalityPsgc=1376010000");
+        var response = await _host.Client.GetAsync("/api/v1/locations/psgc/barangays?cityMunicipalityPsgc=1376020000");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var envelope = await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<PsgcLocationDto>>>();

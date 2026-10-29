@@ -1129,7 +1129,7 @@ export default function FacilityOnboardingWizard({
               <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-3">
                 <IconMapPin className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-blue-900 dark:text-blue-300 leading-relaxed">
-                  Philippine Standard Geographic Code (PSGC) compliant location mapping.
+                  Select the region, province, city/municipality, and barangay of this facility.
                 </div>
               </div>
 

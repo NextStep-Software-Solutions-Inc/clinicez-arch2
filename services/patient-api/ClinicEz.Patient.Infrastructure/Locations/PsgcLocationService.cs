@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Patient.Application.Common.Interfaces;
+using ClinicEz.Shared.Locations;
 
 namespace ClinicEz.Patient.Infrastructure.Locations;
 
@@ -11,49 +12,25 @@ public sealed class PsgcLocationService : IPsgcLocationService
 {
     public Task<IReadOnlyList<PsgcLocationDto>> GetRegionsAsync(CancellationToken ct = default)
     {
-        var regions = PsgcLocationReferenceData.AllLocations
-            .Where(l => l.Level == "Region")
-            .OrderBy(l => l.PsgcCode)
+        var regions = PsgcReferenceCatalog.GetRegions()
+            .Select(PsgcLocationReferenceData.ToDto)
             .ToList();
-
         return Task.FromResult<IReadOnlyList<PsgcLocationDto>>(regions);
     }
 
     public Task<IReadOnlyList<PsgcLocationDto>> GetProvincesAsync(string? regionPsgc = null, CancellationToken ct = default)
     {
-        var query = PsgcLocationReferenceData.AllLocations
-            .Where(l => l.Level == "Province");
-
-        if (!string.IsNullOrWhiteSpace(regionPsgc))
-        {
-            query = query.Where(l => l.RegionPsgc == regionPsgc || l.ParentPsgcCode == regionPsgc);
-        }
-
-        var provinces = query
-            .OrderBy(l => l.Name)
+        var provinces = PsgcReferenceCatalog.GetProvinces(regionPsgc)
+            .Select(PsgcLocationReferenceData.ToDto)
             .ToList();
-
         return Task.FromResult<IReadOnlyList<PsgcLocationDto>>(provinces);
     }
 
     public Task<IReadOnlyList<PsgcLocationDto>> GetCitiesMunicipalitiesAsync(string? provincePsgc = null, string? regionPsgc = null, CancellationToken ct = default)
     {
-        var query = PsgcLocationReferenceData.AllLocations
-            .Where(l => l.Level == "CityMunicipality");
-
-        if (!string.IsNullOrWhiteSpace(provincePsgc))
-        {
-            query = query.Where(l => l.ProvincePsgc == provincePsgc || l.ParentPsgcCode == provincePsgc);
-        }
-        else if (!string.IsNullOrWhiteSpace(regionPsgc))
-        {
-            query = query.Where(l => l.RegionPsgc == regionPsgc);
-        }
-
-        var cities = query
-            .OrderBy(l => l.Name)
+        var cities = PsgcReferenceCatalog.GetCitiesMunicipalities(provincePsgc, regionPsgc)
+            .Select(PsgcLocationReferenceData.ToDto)
             .ToList();
-
         return Task.FromResult<IReadOnlyList<PsgcLocationDto>>(cities);
     }
 
@@ -64,12 +41,9 @@ public sealed class PsgcLocationService : IPsgcLocationService
             throw new ArgumentException("City / Municipality PSGC code is required.", nameof(cityMunicipalityPsgc));
         }
 
-        var barangays = PsgcLocationReferenceData.AllLocations
-            .Where(l => l.Level == "Barangay" &&
-                        (l.CityMunicipalityPsgc == cityMunicipalityPsgc || l.ParentPsgcCode == cityMunicipalityPsgc))
-            .OrderBy(l => l.Name)
+        var barangays = PsgcReferenceCatalog.GetBarangays(cityMunicipalityPsgc)
+            .Select(PsgcLocationReferenceData.ToDto)
             .ToList();
-
         return Task.FromResult<IReadOnlyList<PsgcLocationDto>>(barangays);
     }
 
@@ -80,15 +54,9 @@ public sealed class PsgcLocationService : IPsgcLocationService
             return Task.FromResult<IReadOnlyList<PsgcLocationDto>>([]);
         }
 
-        var term = query.Trim();
-        var results = PsgcLocationReferenceData.AllLocations
-            .Where(l => l.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                        l.PsgcCode.StartsWith(term, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(l => l.Level)
-            .ThenBy(l => l.Name)
-            .Take(Math.Clamp(limit, 1, 200))
+        var results = PsgcReferenceCatalog.Search(query, limit)
+            .Select(PsgcLocationReferenceData.ToDto)
             .ToList();
-
         return Task.FromResult<IReadOnlyList<PsgcLocationDto>>(results);
     }
 }

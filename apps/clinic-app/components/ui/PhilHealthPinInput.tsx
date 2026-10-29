@@ -114,7 +114,7 @@ export default function PhilHealthPinInput({
   onChangeText,
   onValidationChange,
   onValidityChange,
-  label = 'PhilHealth PIN (RA 11223)',
+  label = 'PhilHealth PIN',
   placeholder = 'XX-XXXXXXXXX-X',
   helperText,
   required = false,
@@ -246,7 +246,7 @@ export default function PhilHealthPinInput({
         <View style={styles.feedbackRow}>
           <IconSlot value="checkCircle" size={theme.fontSizes.xs} color={theme.colors.success} />
           <ThemedText variant="captionBold" color={theme.colors.successText}>
-            Valid PhilHealth PIN (Mod-11 Verified)
+            Valid PhilHealth PIN
           </ThemedText>
         </View>
       ) : helperText ? (

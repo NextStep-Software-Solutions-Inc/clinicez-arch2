@@ -171,7 +171,7 @@ export default function Select({
             <View style={styles.searchWrapper}>
               <Icon name="search" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
               <TextInput
-                placeholder="Search standard options..."
+                placeholder="Search..."
                 placeholderTextColor={theme.colors.textLight}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -189,10 +189,10 @@ export default function Select({
           {isEnteringCustom ? (
             <View style={styles.customContainer}>
               <ThemedText variant="bodyBold" color={theme.colors.text}>
-                Enter Custom Specification:
+                Specify Other
               </ThemedText>
               <TextInput
-                placeholder="Type specific method or clinical details..."
+                placeholder="Enter details..."
                 placeholderTextColor={theme.colors.textLight}
                 value={customValue}
                 onChangeText={setCustomValue}
@@ -205,7 +205,7 @@ export default function Select({
                   onPress={() => setIsEnteringCustom(false)}
                 >
                   <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                    Back to List
+                    Back
                   </ThemedText>
                 </Pressable>
                 <Pressable
@@ -213,7 +213,7 @@ export default function Select({
                   onPress={handleApplyCustom}
                 >
                   <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
-                    Confirm Custom Option
+                    Save
                   </ThemedText>
                 </Pressable>
               </View>
@@ -223,7 +223,7 @@ export default function Select({
               {filteredOptions.length === 0 ? (
                 <View style={styles.emptyWrap}>
                   <ThemedText variant="body" color={theme.colors.textMuted}>
-                    No matching standard options found.
+                    {options.length === 0 ? 'No options available.' : 'No matches found.'}
                   </ThemedText>
                 </View>
               ) : (

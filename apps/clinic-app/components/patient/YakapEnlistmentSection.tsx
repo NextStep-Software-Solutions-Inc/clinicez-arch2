@@ -88,7 +88,7 @@ export function YakapEnlistmentSection({
         <View style={styles.headerTitleGroup}>
           <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
           <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-            PhilHealth Konsulta (YAKAP) Annual Enlistment
+            PhilHealth YAKAP Enlistment
           </ThemedText>
         </View>
         <Badge
@@ -136,12 +136,12 @@ export function YakapEnlistmentSection({
             color={theme.colors.textSecondary}
             style={styles.controlNoHeader}
           >
-            Allocated Journey Control Numbers (Read-Only)
+            PhilHealth Reference Numbers
           </ThemedText>
           <View style={styles.controlNumbersWrap}>
             <View style={styles.controlNoBox}>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Case Number (pHciCaseNo)
+                Case Number
               </ThemedText>
               <ThemedText
                 variant="captionBold"
@@ -152,7 +152,7 @@ export function YakapEnlistmentSection({
             </View>
             <View style={styles.controlNoBox}>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Enlistment Trans No (pHciTransNo)
+                Enlistment Number
               </ThemedText>
               <ThemedText
                 variant="captionBold"
@@ -163,7 +163,7 @@ export function YakapEnlistmentSection({
             </View>
             <View style={styles.controlNoBox}>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Profiling Trans No (pHciTransNo)
+                Health Check Number
               </ThemedText>
               <ThemedText
                 variant="captionBold"
@@ -179,10 +179,10 @@ export function YakapEnlistmentSection({
           <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
           <View style={{ flex: 1, gap: 2 }}>
             <ThemedText variant="captionBold" color={theme.colors.warningText}>
-              No Active YAKAP Enlistment Covering Current Date
+              Not enlisted for the current year
             </ThemedText>
             <ThemedText variant="caption" color={theme.colors.textSecondary}>
-              Statutory policy requires an explicit annual enlistment record prior to assigning journey numbers.
+              Add an enlistment record if this patient will use PhilHealth YAKAP benefits.
             </ThemedText>
           </View>
         </View>
@@ -192,7 +192,7 @@ export function YakapEnlistmentSection({
       {!readOnly && (
         <View style={styles.actionsRow}>
           <Button
-            title="Record Annual Renewal"
+            title={activeEnlistment ? 'Renew for Next Year' : 'Add Enlistment'}
             variant="outline"
             size="sm"
             icon="refresh"
@@ -232,8 +232,8 @@ export function YakapEnlistmentSection({
       <Modal
         visible={renewalModalVisible}
         onClose={() => setRenewalModalVisible(false)}
-        title="Record PhilHealth YAKAP Annual Renewal"
-        subtitle="Record a statutory renewal for a new benefit year. Prior years will be preserved for audit compliance."
+        title="PhilHealth YAKAP Enlistment"
+        subtitle="Add an enlistment record for the selected benefit year. Previous years remain in history."
         maxWidth={480}
       >
         <View style={styles.modalContent}>
