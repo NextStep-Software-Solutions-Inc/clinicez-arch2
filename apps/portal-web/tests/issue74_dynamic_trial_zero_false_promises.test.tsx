@@ -183,7 +183,7 @@ describe("Issue #74: Dynamic Free-Trial Duration & Zero False Promises", () => {
     });
   });
 
-  describe("Tier 4: Pricing Page Direct Public Config & Admin Settings Invalidation", () => {
+  describe("Tier 4: Pricing Page Direct Public Config", () => {
     test("T4.1: PricingClient uses usePublicConfig for defaultBillingCadence (never unauthenticated payment-config)", () => {
       const pricingPath = path.join(
         SRC_DIR,
@@ -197,16 +197,6 @@ describe("Issue #74: Dynamic Free-Trial Duration & Zero False Promises", () => {
 
       expect(content).not.toContain("usePaymentConfig");
       expect(content).toContain("usePublicConfig");
-    });
-
-    test("T4.2: Admin Settings handleSave invalidates both /billing/public-config and /billing/payment-config SWR caches", () => {
-      const settingsPath = path.join(SRC_DIR, "app", "admin", "settings", "page.tsx");
-      const content = fs.readFileSync(settingsPath, "utf-8");
-
-      expect(content).toContain('"/billing/public-config"');
-      expect(content).toContain('"/billing/payment-config"');
-      expect(content).toMatch(/mutate\s*\(\s*["']\/billing\/public-config["']\s*\)/);
-      expect(content).toMatch(/mutate\s*\(\s*["']\/billing\/payment-config["']\s*\)/);
     });
   });
 });

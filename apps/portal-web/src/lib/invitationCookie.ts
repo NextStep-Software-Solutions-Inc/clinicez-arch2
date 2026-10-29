@@ -1,7 +1,7 @@
 export const PENDING_INVITATION_COOKIE_NAME = "clinicez_pending_invitation";
 
 export interface PendingInvitationCookiePayload {
-  type: "workspace" | "admin";
+  type: "workspace";
   token: string;
 }
 
@@ -30,12 +30,12 @@ export function parsePendingInvitation(raw: string | undefined | null): PendingI
     if (
       parsed &&
       typeof parsed === "object" &&
-      (parsed.type === "workspace" || parsed.type === "admin") &&
+      parsed.type === "workspace" &&
       typeof parsed.token === "string" &&
       parsed.token.trim().length > 0
     ) {
       return {
-        type: parsed.type,
+        type: "workspace",
         token: parsed.token.trim(),
       };
     }

@@ -29,8 +29,9 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `PATIENT_ENCRYPTION_KEY` | yes | patient-api | Base64 of 32 random bytes for payload encryption (`Encryption__Base64Key`). Must decode to exactly 32 bytes (the deploy checks this; `openssl rand -base64 32` or `scripts/generate-secrets`). Required for any non-Development deployment (the compose file and the deploy fail without it); ignored in Development. Never change it once data exists. Secret. |
 | `PORTAL_BASE_URL` | yes | clinic-api | Public base URL of the portal web app; lab orders link to `{PORTAL_BASE_URL}/upload/lab/{token}` (`Clinic__PortalBaseUrl`). Variable or secret. |
 | `HUB_PUBLIC_URL` | yes | portal-api | Public base URL of the cloud hub, handed to on-premise sites with their credentials (`Hub__PublicUrl`). Variable or secret. |
-| `SMTP_USER` / `SMTP_PASSWORD` | no | portal-api | Mail server credentials (secrets, e.g. Resend API key). Non-secret mail configuration (Host, Port, Security, FromEmail, FromName, ReplyTo, ContactInbox) is managed dynamically in Platform Settings (`/admin/settings`). |
-| `FRONTEND_BASE_URL` | no | portal-api | Web portal base URL, used for billing redirects when a request carries no `Origin` / `Referer` (`FrontendBaseUrl`). Variable. |
+| `SMTP_USER` / `SMTP_PASSWORD` | no | portal-api | Mail server credentials (secrets, e.g. Resend API key). Non-secret mail configuration (Host, Port, Security, FromEmail, FromName, ReplyTo, ContactInbox) is managed dynamically in Platform Settings (`admin.<BASE_DOMAIN>/settings`). |
+| `FRONTEND_BASE_URL` | no | portal-api | Web portal base URL, used for billing redirects and workspace links when a request carries no `Origin` / `Referer` (`FrontendBaseUrl`). Variable. |
+| `ADMIN_BASE_URL` | no | portal-api | Standalone Admin Panel base URL (`AdminBaseUrl`, defaults to `https://admin.<BASE_DOMAIN>`), used for platform admin invitation emails, copyable invite links (`/invitations/{token}`), and admin password-reset links (`/reset-password/{token}`). Variable or secret. |
 | `CLERK_AUTHORITY` | yes | portal-api | Clerk issuer URL tokens are validated against (`Clerk__Authority`). Variable or secret `PORTAL_CLERK_AUTHORITY`; the dev workflow falls back to the Clerk development instance. |
 | `PATIENT_CLERK_AUTHORITY` / `PATIENT_CLERK_AUDIENCE` | authority: yes | patient-api | Clerk issuer and audience patient tokens are validated against (`Clerk__Authority` / `Clerk__Audience`). The authority has no built-in default: the compose file and the deploy fail without it. Secret or variable. |
 | `HUB_CLOUD_CELL_ID` | no | portal-api | Cell hosting every shared-cloud facility (`Hub__CloudCellId`, default `cloud`). Must equal the cloud hub's `Hub__CloudCellId`. Variable. |
@@ -131,7 +132,22 @@ e.g. `portal-api:8080`.
 
 ## 2. Vercel (UIs)
 
-`EXPO_PUBLIC_*` / `NEXT_PUBLIC_*` values are inlined at build time. Redeploy after changing them.
+`EXPO_PUBLIC_*` / `NEXT_PUBLIC_*` / `VITE_*` values are inlined at build time. Redeploy after changing them.
+
+### `apps/admin-web` (`admin.<BASE_DOMAIN>`)
+
+GitHub Actions Vercel deployment workflows (`deploy-admin-web-dev.yml` / `deploy-admin-web-prod.yml`) read `VERCEL_ORG_ID`, `VERCEL_TOKEN`, and `VERCEL_PROJECT_ID_ADMIN_WEB` (with fallback to `VERCEL_PROJECT_ID`). Set Vercel Project **Root Directory** to `apps/admin-web`.
+
+| Variable | Purpose |
+|---|---|
+| `VITE_PORTAL_API_URL` | Portal API base URL (`https://portal-api.<base domain>/api/v1`). |
+| `VITE_BASE_DOMAIN` | Platform base domain (`<base domain>`) used to construct external tenant workspace (`https://<slug>.<base domain>`) and public blog links. |
+| `VITE_PORTAL_WEB_URL` | Optional explicit Tenant Portal / Public Web origin override (e.g. `https://portal.<base domain>` or `http://localhost:3000`). |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk frontend publishable key (`pk_test_*` / `pk_live_*`). No Clerk secret key is required by the static SPA. |
+| `VITE_ADMIN_IDLE_TIMEOUT_MINUTES` | Cross-tab inactivity auto-logout timeout in minutes (default `15`, with 60s countdown modal). |
+| `VITE_ADMIN_REQUIRE_MFA` | Enforce Clerk 2FA / TOTP enrollment before accessing governance routes (`false` in dev, `true` recommended in prod). |
+
+See `apps/admin-web/.env.example`.
 
 ### `apps/clinic-app`
 

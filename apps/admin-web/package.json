@@ -1,0 +1,36 @@
+{
+  "name": "@clinicez/admin-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3001",
+    "build": "vite build",
+    "lint": "bun scripts/check-tokens.mjs --strict",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.24.0",
+    "@clinicez/design-tokens": "workspace:*",
+    "@tabler/icons-react": "^3.34.1",
+    "@tanstack/react-router": "^1.114.0",
+    "axios": "^1.18.1",
+    "clsx": "^2.1.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "recharts": "2.15.4",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~6.0.3",
+    "vite": "^6.2.0"
+  }
+}

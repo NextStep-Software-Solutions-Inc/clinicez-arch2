@@ -64,7 +64,7 @@ public sealed class ResetAdminUserPasswordCommandHandler(
             user.InvitationExpiresAt = now.AddDays(7);
             user.UpdatedAt = now;
 
-            var baseUrl = (frontendUrlProvider.GetBaseUrl() ?? string.Empty).TrimEnd('/');
+            var baseUrl = (frontendUrlProvider.GetAdminBaseUrl() ?? frontendUrlProvider.GetBaseUrl() ?? string.Empty).TrimEnd('/');
             var resetUrl = $"{baseUrl}/reset-password/{resetToken}";
 
             if (request.SendResetEmail)

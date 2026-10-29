@@ -18,10 +18,10 @@ public sealed class AdminInvitationNotifier(
 {
     public void RequestInvitation(AdminUser user, string roleName, string? inviterName = null)
     {
-        var baseUrl = frontendUrl.GetBaseUrl();
+        var baseUrl = frontendUrl.GetAdminBaseUrl() ?? frontendUrl.GetBaseUrl();
         if (baseUrl is null)
         {
-            logger.LogWarning("Admin invitation email for {AdminUserId} skipped: the frontend address is unknown (set FrontendBaseUrl).", user.Id);
+            logger.LogWarning("Admin invitation email for {AdminUserId} skipped: the frontend address is unknown (set AdminBaseUrl or FrontendBaseUrl).", user.Id);
             return;
         }
 
@@ -29,7 +29,7 @@ public sealed class AdminInvitationNotifier(
         {
             ["inviteeName"] = user.FullName,
             ["role"] = roleName,
-            ["inviteUrl"] = $"{baseUrl}/admin/invitations/{user.InvitationToken}"
+            ["inviteUrl"] = $"{baseUrl.TrimEnd('/')}/invitations/{user.InvitationToken}"
         };
         if (!string.IsNullOrWhiteSpace(inviterName)) model["inviterName"] = inviterName;
 

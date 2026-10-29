@@ -43,7 +43,7 @@ public class AcceptAdminInvitationCommandHandler(
             ?? throw new KeyNotFoundException("Invitation not found.");
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var baseUrl = frontendUrlProvider.GetBaseUrl();
+        var baseUrl = frontendUrlProvider.GetAdminBaseUrl() ?? frontendUrlProvider.GetBaseUrl();
 
         if (user.Status == AdminUserStatus.Revoked)
         {

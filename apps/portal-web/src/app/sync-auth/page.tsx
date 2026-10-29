@@ -21,11 +21,7 @@ export default async function SyncAuthPage() {
     const pendingInvite = parsePendingInvitation(pendingCookieRaw);
 
     if (pendingInvite) {
-        if (pendingInvite.type === 'admin') {
-            redirect(`/admin/invitations/${encodeURIComponent(pendingInvite.token)}`);
-        } else {
-            redirect(`/invitations/${encodeURIComponent(pendingInvite.token)}`);
-        }
+        redirect(`/invitations/${encodeURIComponent(pendingInvite.token)}`);
     }
 
     const [token, tokenErr] = await safeAwait(getToken());
@@ -48,10 +44,10 @@ export default async function SyncAuthPage() {
         console.error("[sync-auth] Error checking pending self-invitation", pendingSelfErr);
     } else if (pendingSelfInvite && pendingSelfInvite.token) {
         if (
-            pendingSelfInvite.invitationType?.toLowerCase() === 'admin' ||
-            pendingSelfInvite.redirectUrl?.startsWith('/admin/invitations/')
+            pendingSelfInvite.redirectUrl &&
+            (pendingSelfInvite.redirectUrl.startsWith('http://') || pendingSelfInvite.redirectUrl.startsWith('https://'))
         ) {
-            redirect(`/admin/invitations/${encodeURIComponent(pendingSelfInvite.token)}`);
+            redirect(pendingSelfInvite.redirectUrl);
         } else {
             redirect(`/invitations/${encodeURIComponent(pendingSelfInvite.token)}`);
         }

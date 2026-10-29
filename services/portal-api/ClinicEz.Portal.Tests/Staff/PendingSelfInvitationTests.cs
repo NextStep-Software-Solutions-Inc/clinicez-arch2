@@ -116,7 +116,7 @@ public class PendingSelfInvitationTests : IDisposable
         Assert.Equal("Platform Administration", result.WorkspaceName);
         Assert.Equal("Platform Admin", result.Role);
         Assert.Equal("superadmin@clinicez.ph", result.Email);
-        Assert.Equal($"/admin/invitations/{token}", result.RedirectUrl);
+        Assert.Equal($"/invitations/{token}", result.RedirectUrl);
     }
 
     [Fact]

@@ -99,13 +99,16 @@ describe("SyncAuthPage 4-Priority Post-Authentication Gateway Routing", () => {
       expect(dest).toBe("/invitations/tok_workspace_alpha");
     });
 
-    test("P1.2: Routes to /admin/invitations/[token] when admin invitation cookie is present", async () => {
+    test("P1.2: Ignores legacy admin invitation cookie and falls through", async () => {
       mockCookieValues[PENDING_INVITATION_COOKIE_NAME] = encodeURIComponent(
         JSON.stringify({ type: "admin", token: "tok_admin_beta" })
       );
 
+      tenantService.getTenantByOwner = mock(async () => null) as any;
+      staffService.getPendingSelfInvitation = mock(async () => null) as any;
+
       const dest = await runSyncAuth();
-      expect(dest).toBe("/admin/invitations/tok_admin_beta");
+      expect(dest).toBe("/tenants/register");
     });
 
     test("P1.3: Active invitation cookie strictly overrides existing owned workspace (R2.1)", async () => {
@@ -159,7 +162,7 @@ describe("SyncAuthPage 4-Priority Post-Authentication Gateway Routing", () => {
       expect(dest).toBe("/invitations/csprng_verified_ws_token");
     });
 
-    test("P3.2: Routes to admin invitation when user has pending platform admin invite", async () => {
+    test("P3.2: Routes to external admin invitation URL when user has pending platform admin invite", async () => {
       tenantService.getTenantByOwner = mock(async () => null) as any;
 
       staffService.getPendingSelfInvitation = mock(async () => ({
@@ -169,11 +172,11 @@ describe("SyncAuthPage 4-Priority Post-Authentication Gateway Routing", () => {
         workspaceName: "Platform Administration",
         role: "Platform Admin",
         email: "admin.super@clinicez.ph",
-        redirectUrl: "/admin/invitations/csprng_admin_token_999",
+        redirectUrl: "https://admin.clinicez.com/invitations/csprng_admin_token_999",
       })) as any;
 
       const dest = await runSyncAuth();
-      expect(dest).toBe("/admin/invitations/csprng_admin_token_999");
+      expect(dest).toBe("https://admin.clinicez.com/invitations/csprng_admin_token_999");
     });
 
     test("P3.3: Recovers cleanly and evaluates pending self-invite if tenant lookup throws error", async () => {

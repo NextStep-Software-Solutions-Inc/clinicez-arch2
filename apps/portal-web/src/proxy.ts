@@ -5,8 +5,7 @@ import { APP_SUBDOMAINS } from '@/config/site';
 
 const isProtectedRoute = createRouteMatcher([
     '/:tenant/dashboard(.*)',
-    '/sync-auth(.*)',
-    '/admin(.*)'
+    '/sync-auth(.*)'
 ]);
 
 // Canonical public unauthenticated routes (no tenant resolution, no Clerk auth gate)
@@ -16,7 +15,6 @@ export const PUBLIC_ROUTE_PATTERNS = [
     '/teleconsult(.*)',
     '/verify(.*)',
     '/upload(.*)',
-    '/admin/invitations(.*)',
     '/invitations(.*)',
     '/reset-password(.*)',
 ];

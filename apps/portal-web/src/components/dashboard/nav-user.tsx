@@ -102,7 +102,7 @@ export function NavUser({
                 <IconCreditCard />
                 Subscription Plans
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { router.push(tenant ? `/${tenant}/dashboard/settings` : "/admin/settings"); }}>
+              <DropdownMenuItem onSelect={() => { router.push(tenant ? `/${tenant}/dashboard/settings` : "/settings"); }}>
                 <IconNotification />
                 Notifications
               </DropdownMenuItem>

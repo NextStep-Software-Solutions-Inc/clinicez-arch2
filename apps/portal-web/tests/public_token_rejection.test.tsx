@@ -35,7 +35,6 @@ import RxUploadClient from "../src/app/upload/rx/[token]/RxUploadClient";
 import ClaimPage from "../src/app/claim/page";
 import TeleconsultTokenPage from "../src/app/teleconsult/join/[token]/page";
 import InvitationAcceptClient from "../src/app/invitations/[token]/InvitationAcceptClient";
-import AdminInvitationAcceptClient from "../src/app/admin/invitations/[token]/AdminInvitationAcceptClient";
 import PasswordResetClient from "../src/app/reset-password/[token]/PasswordResetClient";
 import { joinService } from "../src/services/join.service";
 
@@ -325,19 +324,6 @@ describe("Public Route Token & Kind Strict Validation", () => {
     });
   });
 
-  describe("AdminInvitationAcceptClient (/admin/invitations/[token]) Strict Token Validation", () => {
-    test("rejects clinical document tokens without initiating network request", () => {
-      const htmlMc = renderToString(<AdminInvitationAcceptClient token="mc-2026-0001" />);
-      expect(htmlMc).toContain("token for a clinical document, not an administrative invitation");
-
-      const labToken = "01938561726374829102938475610293.uL7jZ_3xR_yT9aBcDeFgHi";
-      const htmlLab = renderToString(<AdminInvitationAcceptClient token={labToken} />);
-      expect(htmlLab).toContain("token for a clinical document, not an administrative invitation");
-
-      const htmlEmpty = renderToString(<AdminInvitationAcceptClient token="" />);
-      expect(htmlEmpty).toContain("Admin invitation token is missing or invalid.");
-    });
-  });
 
   describe("PasswordResetClient (/reset-password/[token]) Strict Token Validation", () => {
     test("rejects clinical document tokens and non-pwdreset tokens immediately", () => {

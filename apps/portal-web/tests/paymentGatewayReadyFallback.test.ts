@@ -5,23 +5,10 @@ import * as path from "path"
 describe("Payment Gateway Ready Toggle & Proactive Offline Fallback", () => {
   const plansTabContentPath = path.resolve(__dirname, "../src/app/[tenant]/dashboard/billing/components/PlansTabContent.tsx")
   const billingSetupDialogPath = path.resolve(__dirname, "../src/app/[tenant]/dashboard/billing/components/BillingSetupDialog.tsx")
-  const adminSettingsPagePath = path.resolve(__dirname, "../src/app/admin/settings/page.tsx")
   const billingServicePath = path.resolve(__dirname, "../src/services/billing.service.ts")
-
   test("PGR.1: BillingPaymentConfig interface declares isOnlinePaymentReady boolean property", () => {
     const file = fs.readFileSync(billingServicePath, "utf-8")
     expect(file).toContain("isOnlinePaymentReady?: boolean")
-  })
-
-  test("PGR.2: Super Admin Platform Settings includes Payment Gateway Ready switch toggle", () => {
-    const file = fs.readFileSync(adminSettingsPagePath, "utf-8")
-    expect(file).toContain("Payment Gateway Ready (Live Online Checkout)")
-    expect(file).toContain(
-      "Toggle whether tenants can checkout via Xendit credit card / e-wallet. When disabled, tenants are guided to manual bank transfers and GCash offline payment."
-    )
-    expect(file).toContain('handleChange("Billing:IsOnlinePaymentReady"')
-    expect(file).toContain('role="switch"')
-    expect(file).toContain('"Billing:IsOnlinePaymentReady": "false"')
   })
 
   test("PGR.3: PlansTabContent renders proactive alert banner when isOnlinePaymentReady is false", () => {

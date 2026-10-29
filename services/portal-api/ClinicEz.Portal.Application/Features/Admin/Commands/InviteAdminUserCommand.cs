@@ -126,7 +126,7 @@ public class InviteAdminUserCommandHandler(
             invitationNotifier.RequestInvitation(user, role.Name, request.CreatedBy);
         }
 
-        var baseUrl = frontendUrlProvider.GetBaseUrl();
+        var baseUrl = frontendUrlProvider.GetAdminBaseUrl() ?? frontendUrlProvider.GetBaseUrl();
         return AdminUserMapping.ToDto(user, timeProvider, baseUrl);
     }
 }

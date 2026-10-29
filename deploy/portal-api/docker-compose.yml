@@ -57,6 +57,7 @@ services:
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
       # Public base URL of the cloud hub, handed to on-premise sites with their credentials (Hub:PublicUrl).
       - Hub__PublicUrl=${HUB_PUBLIC_URL:?HUB_PUBLIC_URL must be set}
       # Cell hosting every shared-cloud facility. Must equal the cloud hub's Hub__CloudCellId.
@@ -67,6 +68,7 @@ services:
       - Smtp__Password=${SMTP_PASSWORD:-}
       # Web portal base URL (billing redirects when the request carries no Origin/Referer).
       - FrontendBaseUrl=${FRONTEND_BASE_URL:-}
+      - AdminBaseUrl=${ADMIN_BASE_URL:-}
       # Patient API the portal calls (provisioning, workspace-level reads).
       - Services__PatientApiUrl=${SERVICES_PATIENT_API_URL:-http://patient-api:8080}
       # Workspaces one user may own.

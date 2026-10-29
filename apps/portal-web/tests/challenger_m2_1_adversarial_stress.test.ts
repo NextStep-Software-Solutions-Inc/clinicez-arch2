@@ -11,7 +11,6 @@ import {
 import SyncAuthPage from "../src/app/sync-auth/page";
 import { tenantService } from "../src/services/tenant.service";
 import { staffService, InvitationDetailsDto } from "../src/services/staff.service";
-import { adminService, AdminInvitationDetailsDto } from "../src/services/admin.service";
 
 // =========================================================================
 // SUITE 1: Adversarial Cookie Parsing & Serialization Stress
@@ -97,14 +96,14 @@ describe("Adversarial Stress Test: invitationCookie.ts", () => {
 
     test("safely serializes and preserves whitespace trimming", () => {
       const serialized = serializePendingInvitation({
-        type: "admin",
-        token: "  trimmed_admin_token  ",
+        type: "workspace",
+        token: "  trimmed_workspace_token  ",
       });
-      expect(serialized).toBe('{"type":"admin","token":"trimmed_admin_token"}');
+      expect(serialized).toBe('{"type":"workspace","token":"trimmed_workspace_token"}');
       const roundtripped = parsePendingInvitation(serialized);
       expect(roundtripped).toEqual({
-        type: "admin",
-        token: "trimmed_admin_token",
+        type: "workspace",
+        token: "trimmed_workspace_token",
       });
     });
 
@@ -467,7 +466,7 @@ describe("Adversarial Stress Test: sync-auth Gateway Priority Routing", () => {
       token: "admin_token_007",
       role: "PlatformAdministrator",
       email: "superadmin@clinicez.com",
-      redirectUrl: "/admin/invitations/admin_token_007",
+      redirectUrl: "https://admin.clinicez.com/invitations/admin_token_007",
     }));
 
     try {
@@ -476,7 +475,7 @@ describe("Adversarial Stress Test: sync-auth Gateway Priority Routing", () => {
       // redirected
     }
 
-    expect(redirectedUrl).toBe("/admin/invitations/admin_token_007");
+    expect(redirectedUrl).toBe("https://admin.clinicez.com/invitations/admin_token_007");
   });
 
   test("Resilience: Backend 500 error in Priority 2 does not throw unhandled exception and falls through", async () => {
