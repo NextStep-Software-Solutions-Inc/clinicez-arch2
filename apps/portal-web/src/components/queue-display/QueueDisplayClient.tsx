@@ -228,10 +228,18 @@ export default function QueueDisplayClient({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key >= "0" && e.key <= "9") {
-        setPinEntry((prev) => (prev.length < 8 ? prev + e.key : prev));
+        setPinEntry((prev) => {
+          if (prev.length >= 6) return prev;
+          const next = prev + e.key;
+          if (next.length === 6) {
+            void handleUnlock(next);
+          }
+          return next;
+        });
         setPinError(null);
       } else if (e.key === "Backspace") {
         setPinEntry((prev) => prev.slice(0, -1));
+        setPinError(null);
       } else if (e.key === "Enter") {
         if (pinEntry.length > 0) {
           void handleUnlock(pinEntry);
@@ -519,7 +527,7 @@ export default function QueueDisplayClient({
               TV Queue Board Locked
             </h2>
             <p className="text-sm text-center mb-6 leading-relaxed" style={{ color: darkColors.textMuted }}>
-              This waiting area display board is protected. Enter the TV passcode configured in Clinic Settings to view live queue tickets.
+              This waiting area display board is protected. Enter the 6-digit TV passcode configured in Clinic Settings to view live queue tickets.
             </p>
 
             {/* Masked PIN Dots Indicator */}
@@ -563,10 +571,15 @@ export default function QueueDisplayClient({
                   key={digit}
                   type="button"
                   onClick={() => {
-                    if (pinEntry.length < 8) {
-                      setPinEntry((prev) => prev + digit);
-                      setPinError(null);
-                    }
+                    setPinEntry((prev) => {
+                      if (prev.length >= 6) return prev;
+                      const next = prev + digit;
+                      if (next.length === 6) {
+                        void handleUnlock(next);
+                      }
+                      return next;
+                    });
+                    setPinError(null);
                   }}
                   className="h-14 rounded-2xl border text-xl font-bold font-mono flex items-center justify-center transition-all duration-100 hover:opacity-90 active:scale-95 cursor-pointer shadow-sm"
                   style={{
@@ -596,10 +609,15 @@ export default function QueueDisplayClient({
               <button
                 type="button"
                 onClick={() => {
-                  if (pinEntry.length < 8) {
-                    setPinEntry((prev) => prev + "0");
-                    setPinError(null);
-                  }
+                  setPinEntry((prev) => {
+                    if (prev.length >= 6) return prev;
+                    const next = prev + "0";
+                    if (next.length === 6) {
+                      void handleUnlock(next);
+                    }
+                    return next;
+                  });
+                  setPinError(null);
                 }}
                 className="h-14 rounded-2xl border text-xl font-bold font-mono flex items-center justify-center transition-all duration-100 hover:opacity-90 active:scale-95 cursor-pointer shadow-sm"
                 style={{

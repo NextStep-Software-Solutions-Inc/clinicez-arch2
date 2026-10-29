@@ -209,10 +209,18 @@ export default function PublicQueueDisplayScreen() {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key >= '0' && e.key <= '9') {
-        setPinEntry((prev) => (prev.length < 8 ? prev + e.key : prev));
+        setPinEntry((prev) => {
+          if (prev.length >= 6) return prev;
+          const next = prev + e.key;
+          if (next.length === 6) {
+            void handleUnlock(next);
+          }
+          return next;
+        });
         setPinError(null);
       } else if (e.key === 'Backspace') {
         setPinEntry((prev) => prev.slice(0, -1));
+        setPinError(null);
       } else if (e.key === 'Enter') {
         if (pinEntry.length > 0) {
           void handleUnlock(pinEntry);
@@ -443,7 +451,7 @@ export default function PublicQueueDisplayScreen() {
             </View>
             <Text style={styles.lockTitle}>TV Display Board Locked</Text>
             <Text style={styles.lockSubtitle}>
-              This waiting area queue board is protected. Enter the TV passcode configured in Clinic Settings to view live queue tickets.
+              This waiting area queue board is protected. Enter the 6-digit TV passcode configured in Clinic Settings to view live queue tickets.
             </Text>
 
             {/* PIN Dots */}
@@ -478,10 +486,15 @@ export default function PublicQueueDisplayScreen() {
                   key={digit}
                   style={styles.keypadBtn}
                   onPress={() => {
-                    if (pinEntry.length < 8) {
-                      setPinEntry((prev) => prev + digit);
-                      setPinError(null);
-                    }
+                    setPinEntry((prev) => {
+                      if (prev.length >= 6) return prev;
+                      const next = prev + digit;
+                      if (next.length === 6) {
+                        void handleUnlock(next);
+                      }
+                      return next;
+                    });
+                    setPinError(null);
                   }}
                 >
                   <Text style={styles.keypadDigit}>{digit}</Text>
@@ -499,10 +512,15 @@ export default function PublicQueueDisplayScreen() {
               <TouchableOpacity
                 style={styles.keypadBtn}
                 onPress={() => {
-                  if (pinEntry.length < 8) {
-                    setPinEntry((prev) => prev + '0');
-                    setPinError(null);
-                  }
+                  setPinEntry((prev) => {
+                    if (prev.length >= 6) return prev;
+                    const next = prev + '0';
+                    if (next.length === 6) {
+                      void handleUnlock(next);
+                    }
+                    return next;
+                  });
+                  setPinError(null);
                 }}
               >
                 <Text style={styles.keypadDigit}>0</Text>
