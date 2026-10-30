@@ -69,7 +69,7 @@ export const linking: LinkingOptions<RootParamList> = {
             screens: {
               HomeScreen: 'home',
               AppointmentsScreen: 'appointments',
-              FilesScreen: {
+              RecordsScreen: {
                 screens: {
                   FilesBrowserScreen: 'records',
                   FilesUploadScreen: 'records/upload',

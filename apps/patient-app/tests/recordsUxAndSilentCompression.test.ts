@@ -253,6 +253,42 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
       tabKey: 'FilesScreen',
       title: 'Preview',
     });
+
+    const recordsNavState: any = {
+      index: 0,
+      routes: [
+        {
+          key: 'bottom-tabs',
+          name: 'BottomTabs',
+          state: {
+            index: 2,
+            routes: [
+              { key: 'tab-home', name: 'HomeScreen' },
+              { key: 'tab-appts', name: 'AppointmentsScreen' },
+              {
+                key: 'tab-records',
+                name: 'RecordsScreen',
+                state: {
+                  index: 1,
+                  routes: [
+                    { key: 'records-root', name: 'FilesBrowserScreen' },
+                    { key: 'records-viewer', name: 'FileViewerScreen' },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    expect(resolveFocusedScreenName(recordsNavState)).toBe('FileViewerScreen');
+    expect(resolveWebHeaderState(recordsNavState)).toEqual({
+      isRootTab: false,
+      isNestedTabPush: true,
+      tabKey: 'RecordsScreen',
+      title: 'Preview',
+    });
   });
 });
 

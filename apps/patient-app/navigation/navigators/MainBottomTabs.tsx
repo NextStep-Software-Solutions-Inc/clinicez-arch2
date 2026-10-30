@@ -53,7 +53,7 @@ const MainBottomTabs = createBottomTabNavigator({
         tabBarIcon: getTabIcon('chat', 'bubble.left.and.bubble.right.fill', 'chat'),
       },
     }),
-    FilesScreen: createBottomTabScreen({
+    RecordsScreen: createBottomTabScreen({
       screen: FilesStack,
       options: {
         title: 'Records',

@@ -10,6 +10,7 @@ const TAB_ICONS: Record<string, IconName> = {
   HomeScreen: 'home',
   AppointmentsScreen: 'appointments',
   MessagesScreen: 'chat',
+  RecordsScreen: 'files',
   FilesScreen: 'files',
   ProfileScreen: 'profile',
 };

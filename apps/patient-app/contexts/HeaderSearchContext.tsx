@@ -84,7 +84,7 @@ export function HeaderSearchProvider({ children }: { children: React.ReactNode }
 
 /**
  * Registers a screen's search popup trigger under its bottom-tab key
- * (`AppointmentsScreen` or `FilesScreen`) so `WebAppFrame` / `WebPageHeader`
+ * (`AppointmentsScreen`, `RecordsScreen`, or `FilesScreen`) so `WebAppFrame` / `WebPageHeader`
  * can render a Search icon button in the compact top bar without cross-tab collisions.
  */
 export function useRegisterHeaderSearch(

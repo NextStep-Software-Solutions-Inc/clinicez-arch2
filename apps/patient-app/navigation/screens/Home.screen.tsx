@@ -274,7 +274,7 @@ export default function HomeScreen() {
             subtitle="Prescriptions, lab requests, results, and care summaries"
             icon="document"
             tone="info"
-            onPress={() => navigation.navigate('FilesScreen')}
+            onPress={() => navigation.navigate('RecordsScreen')}
             divider
           />
           <ListRow

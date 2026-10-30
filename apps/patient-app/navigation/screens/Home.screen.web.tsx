@@ -232,7 +232,7 @@ export default function HomeScreenWeb() {
           onPress={() =>
             navigation.navigate('Main', {
               screen: 'BottomTabs',
-              params: { screen: 'FilesScreen', params: { screen: 'FilesBrowserScreen' } },
+              params: { screen: 'RecordsScreen', params: { screen: 'FilesBrowserScreen' } },
             })
           }
         />
@@ -354,7 +354,7 @@ export default function HomeScreenWeb() {
                 subtitle="Prescriptions, lab requests, results, and care summaries"
                 icon="document"
                 tone="info"
-                onPress={() => navigation.navigate('FilesScreen')}
+                onPress={() => navigation.navigate('RecordsScreen')}
                 divider
               />
               <ListRow

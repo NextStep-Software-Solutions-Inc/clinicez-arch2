@@ -169,7 +169,7 @@ export default function AttachFilesScreen({ route }: Props) {
     navigation.navigate('Main', {
       screen: 'BottomTabs',
       params: {
-        screen: 'FilesScreen',
+        screen: 'RecordsScreen',
         params: { screen: 'FilesUploadScreen' },
       },
     });

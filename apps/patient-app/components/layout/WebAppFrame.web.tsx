@@ -33,9 +33,9 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
   const activeSearch = useHeaderSearchEntry(headerInfo.isRootTab ? headerInfo.tabKey : undefined);
 
   const onBack = () => {
-    if (headerInfo.isNestedTabPush && headerInfo.tabKey === 'FilesScreen') {
+    if (headerInfo.isNestedTabPush && (headerInfo.tabKey === 'RecordsScreen' || headerInfo.tabKey === 'FilesScreen')) {
       navigation.navigate('BottomTabs', {
-        screen: 'FilesScreen',
+        screen: headerInfo.tabKey,
         params: { screen: 'FilesBrowserScreen' },
       });
       return;

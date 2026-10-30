@@ -26,6 +26,7 @@ function getFocusedRouteNameFromRoute(route: {
 export type WebSectionKey =
   | 'HomeScreen'
   | 'AppointmentsScreen'
+  | 'RecordsScreen'
   | 'FilesScreen'
   | 'MessagesInboxScreen'
   | 'ProfileScreen'
@@ -43,7 +44,7 @@ export interface WebNavItem {
 export const WEB_PRIMARY_NAV: WebNavItem[] = [
   { key: 'HomeScreen', label: 'Home', icon: 'home', shortcut: 'H' },
   { key: 'AppointmentsScreen', label: 'Appointments', icon: 'appointments', shortcut: 'A' },
-  { key: 'FilesScreen', label: 'Records', icon: 'files', shortcut: 'F' },
+  { key: 'RecordsScreen', label: 'Records', icon: 'files', shortcut: 'R' },
   { key: 'MessagesInboxScreen', label: 'Messages', icon: 'chat', shortcut: 'M' },
   { key: 'ProfileScreen', label: 'My Profile', icon: 'profile', shortcut: 'P' },
 ];
@@ -85,6 +86,7 @@ const NESTED_TAB_PUSH_TITLES: Record<string, string> = {
 const ROOT_TAB_HEADERS: Record<string, { title: string; subtitle: string }> = {
   HomeScreen: { title: 'Clinic EZ', subtitle: 'Patient Portal' },
   AppointmentsScreen: { title: 'My Appointments', subtitle: 'Patient Portal' },
+  RecordsScreen: { title: 'Health Records', subtitle: 'Patient Portal' },
   FilesScreen: { title: 'Health Records', subtitle: 'Patient Portal' },
   MessagesInboxScreen: { title: 'Messages', subtitle: 'Patient Portal' },
   ProfileScreen: { title: 'My Profile', subtitle: 'Patient Portal' },
@@ -115,8 +117,8 @@ export function resolveWebHeaderState(
   if (route.name === 'BottomTabs') {
     const rawTab = getFocusedRouteNameFromRoute(route as any) ?? 'HomeScreen';
     const tabKey: WebSectionKey = (
-      ['HomeScreen', 'AppointmentsScreen', 'FilesScreen', 'ProfileScreen'] as const
-    ).includes(rawTab as 'HomeScreen')
+      ['HomeScreen', 'AppointmentsScreen', 'RecordsScreen', 'FilesScreen', 'ProfileScreen'] as const
+    ).includes(rawTab as any)
       ? (rawTab as WebSectionKey)
       : 'HomeScreen';
 
@@ -179,8 +181,8 @@ export function resolveActiveSection(state: NavigationState<ParamListBase>): Web
 
   if (route.name === 'BottomTabs') {
     const tab = getFocusedRouteNameFromRoute(route as any) ?? 'HomeScreen';
-    return (['HomeScreen', 'AppointmentsScreen', 'FilesScreen', 'ProfileScreen'] as const).includes(
-      tab as 'HomeScreen',
+    return (['HomeScreen', 'AppointmentsScreen', 'RecordsScreen', 'FilesScreen', 'ProfileScreen'] as const).includes(
+      tab as any,
     )
       ? (tab as WebSectionKey)
       : 'HomeScreen';
@@ -214,8 +216,9 @@ export function navigateToSection(
     case 'MessagesInboxScreen':
       navigation.navigate(key);
       return;
+    case 'RecordsScreen':
     case 'FilesScreen':
-      navigation.navigate('BottomTabs', { screen: 'FilesScreen', params: { screen: 'FilesBrowserScreen' } });
+      navigation.navigate('BottomTabs', { screen: key, params: { screen: 'FilesBrowserScreen' } });
       return;
     default:
       navigation.navigate('BottomTabs', { screen: key });

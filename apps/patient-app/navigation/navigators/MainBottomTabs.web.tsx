@@ -32,7 +32,7 @@ const MainBottomTabsWeb = createBottomTabNavigator({
         title: 'Messages',
       },
     }),
-    FilesScreen: createBottomTabScreen({
+    RecordsScreen: createBottomTabScreen({
       screen: FilesStack,
       options: {
         title: 'Records',
