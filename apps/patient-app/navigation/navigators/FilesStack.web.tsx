@@ -14,7 +14,7 @@ const FilesStackWeb = createNativeStackNavigator({
       screen: RecordsScreen,
       options: {
         headerShown: false,
-        title: 'Health Records & Documents',
+        title: 'Records',
       },
     }),
     FilesUploadScreen: createNativeStackScreen({

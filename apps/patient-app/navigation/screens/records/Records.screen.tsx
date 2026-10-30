@@ -239,7 +239,7 @@ export default function RecordsScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Top Segmented Control Switch: Clinic Documents vs My Uploads */}
-      <View style={[styles.segmentContainer, { paddingHorizontal: spacing.md, paddingTop: spacing.md }]}>
+      <View style={[styles.segmentContainer, { paddingHorizontal: spacing.lg, paddingTop: spacing.md }]}>
         <SegmentedControl
           options={['Clinic Documents', 'My Uploads']}
           selectedIndex={segmentIndex}
@@ -252,7 +252,7 @@ export default function RecordsScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { gap: spacing.md, padding: spacing.md, paddingBottom: contentInsets.bottom + 80 },
+            { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, paddingBottom: contentInsets.bottom + 80 },
           ]}
           refreshControl={
             <RefreshControl
@@ -394,7 +394,7 @@ export default function RecordsScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { gap: spacing.md, padding: spacing.md, paddingBottom: contentInsets.bottom + 80 },
+            { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, paddingBottom: contentInsets.bottom + 80 },
           ]}
           refreshControl={
             <RefreshControl

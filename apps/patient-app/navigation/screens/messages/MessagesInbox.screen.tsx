@@ -346,11 +346,6 @@ export default function MessagesInboxScreen() {
         </Pressable>
       }
     >
-      {/* Subtitle / Context description */}
-      <ThemedText variant="small" color="textMuted" style={styles.headerSubtitle}>
-        Unified inbox across clinics, pharmacies, & labs
-      </ThemedText>
-
       {/* Dependent Filter Chips */}
       {dependentOptions.length > 2 && (
         <View style={{ gap: spacing.xs }}>
@@ -411,9 +406,6 @@ export default function MessagesInboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerSubtitle: {
-    marginTop: 2,
-  },
   fab: {
     position: 'absolute',
     flexDirection: 'row',

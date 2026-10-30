@@ -350,11 +350,11 @@ export default function HomeScreenWeb() {
                 divider
               />
               <ListRow
-                title="Documents"
-                subtitle="Lab requests, prescriptions, results and certificates"
+                title="Records"
+                subtitle="Prescriptions, lab requests, results, and care summaries"
                 icon="document"
                 tone="info"
-                onPress={() => navigation.navigate('Main', { screen: 'DocumentsScreen' })}
+                onPress={() => navigation.navigate('MainBottomTabs', { screen: 'FilesScreen' })}
                 divider
               />
               <ListRow

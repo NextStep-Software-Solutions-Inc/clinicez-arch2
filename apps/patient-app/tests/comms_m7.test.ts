@@ -285,8 +285,7 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
       expect(content).toContain('useContentInsets');
       expect(content).toContain('bottomInset={tabBarBottom}');
 
-      // Clean subtitle and Floating Action Button (FAB)
-      expect(content).toContain('styles.headerSubtitle');
+      // Floating Action Button (FAB)
       expect(content).toContain('styles.fab');
       expect(content).toContain('New Inquiry');
 

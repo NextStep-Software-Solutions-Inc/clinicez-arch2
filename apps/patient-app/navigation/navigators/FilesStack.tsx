@@ -17,7 +17,7 @@ const FilesStack = createNativeStackNavigator({
     FilesBrowserScreen: createNativeStackScreen({
       screen: RecordsScreen,
       options: {
-        title: 'Health Records & Documents',
+        title: 'Records',
         headerLargeTitleEnabled: true,
         headerRight: () => <BottomTabsHeaderRight />,
       },
