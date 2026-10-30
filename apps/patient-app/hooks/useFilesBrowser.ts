@@ -1,7 +1,11 @@
 import useSWR from 'swr';
 import { useCallback } from 'react';
 import { useAuth as useClerkAuth } from '@clerk/expo';
-import { listFolderContents, refreshDocumentTypes } from '../services/files/filesService';
+import {
+  listFolderContents,
+  refreshDocumentTypes,
+  syncPendingFiles,
+} from '../services/files/filesService';
 
 export function useFilesBrowser(patientId: string, folderId: string | null = null, query: string = '') {
   const { getToken } = useClerkAuth();
@@ -14,9 +18,9 @@ export function useFilesBrowser(patientId: string, folderId: string | null = nul
       refreshDocumentTypes(patientId, getToken).catch(console.log);
       
       // Silently sync down remote files (and push local queue) without blocking the UI
-      import('../services/files/filesService').then(({ syncPendingFiles }) => {
-        syncPendingFiles(patientId, getToken).catch(console.log);
-      });
+      syncPendingFiles(patientId, getToken)
+        .then(() => mutate())
+        .catch(console.log);
 
       // Instantly load from local SQLite
       return listFolderContents(patientId, folderId, query, getToken);
@@ -31,11 +35,9 @@ export function useFilesBrowser(patientId: string, folderId: string | null = nul
     const mutatePromise = mutate();
     
     // Force retry failed files on manual pull-to-refresh (don't block the UI)
-    import('../services/files/filesService').then(({ syncPendingFiles }) => {
-      syncPendingFiles(patientId, getToken, true)
-        .then(() => mutate()) // Mutate again after network sync completes
-        .catch(console.log);
-    });
+    syncPendingFiles(patientId, getToken, true)
+      .then(() => mutate()) // Mutate again after network sync completes
+      .catch(console.log);
 
     return mutatePromise;
   }, [mutate, patientId, getToken]);

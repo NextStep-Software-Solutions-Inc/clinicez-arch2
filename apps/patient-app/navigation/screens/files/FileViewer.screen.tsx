@@ -81,6 +81,15 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   }, [navigation, viewerHeaderTitle, viewerHeaderSubtitle]);
 
   useEffect(() => {
+    // Hide bottom tab bar while viewing an upload to provide immersive edge-to-edge view
+    const parent = navigation.getParent();
+    parent?.setOptions?.({ tabBarStyle: { display: 'none' } });
+    return () => {
+      parent?.setOptions?.({ tabBarStyle: undefined });
+    };
+  }, [navigation]);
+
+  useEffect(() => {
     let mounted = true;
     Promise.all([
       preparePreviewFile(patientId, fileId, getToken),
@@ -189,74 +198,74 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
         )}
       </View>
 
+      {/* Restyled Bottom Action Bar */}
       <View
         style={[
-          styles.floatingToolbarWrap,
-          { paddingBottom: Math.max(insets.bottom, contentInsets.bottom) + spacing.md },
+          styles.bottomActionBar,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.borderLight,
+            paddingBottom: Math.max(insets.bottom, spacing.md),
+            paddingTop: spacing.sm,
+            paddingHorizontal: spacing.md,
+          },
         ]}
       >
-        <View
-          style={[
-            styles.floatingToolbar,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderWidth: sizes.borderWidth,
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.lg,
-              paddingVertical: spacing.sm,
-            },
-            shadows.lg,
-          ]}
+        <Pressable
+          onPress={() => setIsFullScreen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Full Screen"
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
         >
-          <Pressable
-            onPress={() => setIsFullScreen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Full Screen"
-            style={styles.toolbarBtn}
-          >
-            <AppIcon name="externalLink" color="text" size={sizes.iconMd} />
-            <ThemedText variant="captionBold" color="text">
-              Full Screen
-            </ThemedText>
-          </Pressable>
+          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
+            <AppIcon name="fullscreen" color="text" size={sizes.iconMd} />
+          </View>
+          <ThemedText variant="captionBold" color="text">
+            Full Screen
+          </ThemedText>
+        </Pressable>
 
-          <Pressable
-            onPress={handleShare}
-            accessibilityRole="button"
-            accessibilityLabel="Share"
-            style={styles.toolbarBtn}
-          >
+        <Pressable
+          onPress={handleShare}
+          accessibilityRole="button"
+          accessibilityLabel="Share"
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
             <AppIcon name="share" color="text" size={sizes.iconMd} />
-            <ThemedText variant="captionBold" color="text">
-              Share
-            </ThemedText>
-          </Pressable>
+          </View>
+          <ThemedText variant="captionBold" color="text">
+            Share
+          </ThemedText>
+        </Pressable>
 
-          <Pressable
-            onPress={() => setRenameModalOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Rename"
-            style={styles.toolbarBtn}
-          >
+        <Pressable
+          onPress={() => setRenameModalOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Rename"
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
             <AppIcon name="edit" color="text" size={sizes.iconMd} />
-            <ThemedText variant="captionBold" color="text">
-              Rename
-            </ThemedText>
-          </Pressable>
+          </View>
+          <ThemedText variant="captionBold" color="text">
+            Rename
+          </ThemedText>
+        </Pressable>
 
-          <Pressable
-            onPress={handleDelete}
-            accessibilityRole="button"
-            accessibilityLabel="Delete"
-            style={styles.toolbarBtn}
-          >
+        <Pressable
+          onPress={handleDelete}
+          accessibilityRole="button"
+          accessibilityLabel="Delete"
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: colors.emergencyBg, borderRadius: radii.md }]}>
             <AppIcon name="trash" color="emergency" size={sizes.iconMd} />
-            <ThemedText variant="captionBold" color="emergency">
-              Delete
-            </ThemedText>
-          </Pressable>
-        </View>
+          </View>
+          <ThemedText variant="captionBold" color="emergency">
+            Delete
+          </ThemedText>
+        </Pressable>
       </View>
 
       <Modal
@@ -316,28 +325,28 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: '100%',
   },
-  floatingToolbarWrap: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    pointerEvents: 'box-none',
-  },
-  floatingToolbar: {
+  bottomActionBar: {
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     width: '100%',
-    maxWidth: 420,
   },
-  toolbarBtn: {
+  actionBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    minWidth: 52,
+    gap: 4,
+    minWidth: 64,
+    paddingVertical: 4,
+  },
+  actionBtnPressed: {
+    opacity: 0.7,
+  },
+  actionIconBox: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   center: {
     flex: 1,

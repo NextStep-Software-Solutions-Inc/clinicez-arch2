@@ -230,10 +230,7 @@ export async function syncPendingFiles(
   synced += drainRes.drained;
   failed += drainRes.failed;
 
-  if (synced > 0 || failed > 0) {
-    mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
-  }
-
   await getFileConfig(patientId, getToken);
+  mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
   return { synced, failed, skipped: false };
 }

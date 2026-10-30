@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { desc, eq } from 'drizzle-orm';
 import { format, parseISO } from 'date-fns';
@@ -48,6 +48,14 @@ import {
 } from '../../../services/records/categories';
 import { deleteItem, preparePreviewFile, renameFile, listFolderContents } from '../../../services/files';
 import RenameModal from '../../../components/ui/RenameModal';
+import {
+  getPersistedRecordsSegment,
+  setPersistedRecordsSegment,
+  getPersistedClinicFilter,
+  setPersistedClinicFilter,
+  getPersistedUploadCategory,
+  setPersistedUploadCategory,
+} from '../../../services/records/recordsTabStore';
 import { dialog } from '../../../utils/dialog';
 
 type ClinicFilterId = 'all' | 'visits' | 'prescriptions' | 'results' | 'labRequests' | 'certificates';
@@ -121,10 +129,12 @@ export default function RecordsScreen() {
   const { getToken } = useClerkAuth();
 
   // Top-level segment: 0 = Clinic Documents, 1 = My Uploads
-  const [segmentIndex, setSegmentIndex] = useState<0 | 1>(0);
+  const [segmentIndex, setSegmentIndex] = useState<0 | 1>(() => getPersistedRecordsSegment());
 
   // Clinic Documents state
-  const [clinicFilter, setClinicFilter] = useState<ClinicFilterId>('all');
+  const [clinicFilter, setClinicFilter] = useState<ClinicFilterId>(
+    () => (getPersistedClinicFilter() as ClinicFilterId) || 'all'
+  );
   const [consultationList, setConsultationList] = useState<Consultation[]>([]);
   const [latestVitals, setLatestVitals] = useState<VitalSign | null>(null);
   const [prescriptionList, setPrescriptionList] = useState<InboxPrescription[]>([]);
@@ -135,10 +145,39 @@ export default function RecordsScreen() {
   const [isRefreshingClinic, setIsRefreshingClinic] = useState(false);
 
   // My Uploads state
-  const [activeUploadCategory, setActiveUploadCategory] = useState<CategoryFilterId>('all');
+  const [activeUploadCategory, setActiveUploadCategory] = useState<CategoryFilterId>(
+    () => (getPersistedUploadCategory() as CategoryFilterId) || 'all'
+  );
   const [renameTarget, setRenameTarget] = useState<{ id: string; initialName: string } | null>(null);
   const { contents, isLoading: isLoadingUploads, isRefreshing: isRefreshingUploads, refresh: refreshUploads, mutate } =
     useFilesBrowser(patientId, null, '');
+
+  const handleSegmentChange = useCallback((idx: 0 | 1) => {
+    setSegmentIndex(idx);
+    setPersistedRecordsSegment(idx);
+    if (idx === 1) {
+      refreshUploads();
+    }
+  }, [refreshUploads]);
+
+  const handleClinicFilterChange = useCallback((filter: ClinicFilterId) => {
+    setClinicFilter(filter);
+    setPersistedClinicFilter(filter);
+  }, []);
+
+  const handleUploadCategoryChange = useCallback((cat: CategoryFilterId) => {
+    setActiveUploadCategory(cat);
+    setPersistedUploadCategory(cat);
+  }, []);
+
+  // Re-sync and revalidate active tab on focus (e.g. returning back from viewer or upload screen)
+  useFocusEffect(
+    useCallback(() => {
+      if (segmentIndex === 1) {
+        refreshUploads();
+      }
+    }, [segmentIndex, refreshUploads])
+  );
 
   const loadClinicDocuments = useCallback(async () => {
     if (!patientId) return;
@@ -243,7 +282,7 @@ export default function RecordsScreen() {
         <SegmentedControl
           options={['Clinic Documents', 'My Uploads']}
           selectedIndex={segmentIndex}
-          onChange={(idx) => setSegmentIndex(idx)}
+          onChange={handleSegmentChange}
         />
       </View>
 
@@ -266,7 +305,7 @@ export default function RecordsScreen() {
           <FilterChipBar<ClinicFilterId>
             items={CLINIC_FILTERS}
             selectedKey={clinicFilter}
-            onSelect={setClinicFilter}
+            onSelect={handleClinicFilterChange}
           />
 
           {isLoadingClinic ? (
@@ -407,7 +446,7 @@ export default function RecordsScreen() {
           {/* Category Filter Pills */}
           <CategoryPillBar
             selectedCategory={activeUploadCategory}
-            onSelectCategory={setActiveUploadCategory}
+            onSelectCategory={handleUploadCategoryChange}
             counts={categoryCounts}
           />
 
@@ -456,7 +495,7 @@ export default function RecordsScreen() {
       {/* Floating Action Button (FAB) */}
       <Pressable
         onPress={() => {
-          if (segmentIndex !== 1) setSegmentIndex(1);
+          if (segmentIndex !== 1) handleSegmentChange(1);
           navigation.navigate('FilesUploadScreen');
         }}
         style={({ pressed }) => [

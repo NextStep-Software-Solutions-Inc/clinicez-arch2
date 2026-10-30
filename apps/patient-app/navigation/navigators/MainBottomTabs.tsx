@@ -1,5 +1,5 @@
 import { createBottomTabNavigator, createBottomTabScreen } from '@react-navigation/bottom-tabs';
-import { Platform } from 'react-native';
+import { ColorValue, Platform } from 'react-native';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
 import { AppIcon } from '../../components/ui/Icon';
 
@@ -9,16 +9,10 @@ import MessagesStack from './MessagesStack';
 import FilesStack from './FilesStack';
 import ProfileStack from './ProfileStack';
 
-const getTabIcon = (androidName: string, iosName: string, webName: string) => {
-  if (Platform.OS === 'web') {
-    return ({ color, size }: { color: string; size: number }) => (
-      <AppIcon name={webName} color={color} size={size} />
-    );
-  }
-  return Platform.select({
-    android: { type: 'materialSymbol', name: androidName },
-    ios: { type: 'sfSymbol', name: iosName },
-  }) as any;
+const getTabIcon = (iconName: string) => {
+  return ({ color, size }: { color: ColorValue; size: number }) => (
+    <AppIcon name={iconName} color={color} size={size} />
+  );
 };
 
 const MainBottomTabs = createBottomTabNavigator({
@@ -36,35 +30,35 @@ const MainBottomTabs = createBottomTabNavigator({
       screen: HomeStack,
       options: {
         title: 'Home',
-        tabBarIcon: getTabIcon('home', 'house.fill', 'home'),
+        tabBarIcon: getTabIcon('home'),
       },
     }),
     AppointmentsScreen: createBottomTabScreen({
       screen: AppointmentsStack,
       options: {
         title: 'My Appointments',
-        tabBarIcon: getTabIcon('heart_check', 'heart.fill', 'heart_check'),
+        tabBarIcon: getTabIcon('appointments'),
       },
     }),
     MessagesScreen: createBottomTabScreen({
       screen: MessagesStack,
       options: {
         title: 'Messages',
-        tabBarIcon: getTabIcon('chat', 'bubble.left.and.bubble.right.fill', 'chat'),
+        tabBarIcon: getTabIcon('chat'),
       },
     }),
     RecordsScreen: createBottomTabScreen({
       screen: FilesStack,
       options: {
         title: 'Records',
-        tabBarIcon: getTabIcon('files', 'doc.fill', 'files'),
+        tabBarIcon: getTabIcon('files'),
       },
     }),
     ProfileScreen: createBottomTabScreen({
       screen: ProfileStack,
       options: {
         title: 'My Profile',
-        tabBarIcon: getTabIcon('person', 'person.fill', 'person'),
+        tabBarIcon: getTabIcon('profile'),
       },
     }),
   },
