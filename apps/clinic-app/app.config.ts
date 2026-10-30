@@ -199,6 +199,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ios: {
       supportsTablet: true,
       bundleIdentifier: iosBundleId,
+      buildNumber: '2',
       infoPlist: {
         NSFaceIDUsageDescription: 'Clinic EZ uses Face ID to unlock this device when the clinic server is unreachable.',
         ITSAppUsesNonExemptEncryption: false,
@@ -209,6 +210,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     android: {
       package: androidPackage,
+      versionCode: 2,
       adaptiveIcon: {
         backgroundImage: './assets/android-icon-background.png',
         foregroundImage: './assets/android-icon-foreground.png',

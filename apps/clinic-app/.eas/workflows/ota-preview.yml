@@ -9,6 +9,12 @@ on:
   push:
     branches:
       - '**'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Force clean standalone native build even if fingerprint matches"
+        type: boolean
+        default: false
 
 jobs:
   quality_gate:
@@ -64,7 +70,7 @@ jobs:
   build_android:
     name: Build Standalone Android APK (Native Changed)
     needs: [get_android_build]
-    if: ${{ !needs.get_android_build.outputs.build_id }}
+    if: ${{ !needs.get_android_build.outputs.build_id || inputs.force_build || contains(github.event.head_commit.message, '[build]') || contains(github.event.head_commit.message, '[rebuild]') }}
     type: build
     params:
       platform: android
@@ -75,7 +81,7 @@ jobs:
   build_ios:
     name: Build Standalone iOS Simulator (Native Changed)
     needs: [get_ios_build]
-    if: ${{ !needs.get_ios_build.outputs.build_id }}
+    if: ${{ !needs.get_ios_build.outputs.build_id || inputs.force_build || contains(github.event.head_commit.message, '[build]') || contains(github.event.head_commit.message, '[rebuild]') }}
     type: build
     params:
       platform: ios

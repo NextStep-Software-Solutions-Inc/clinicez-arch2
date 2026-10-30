@@ -245,11 +245,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ios: {
       supportsTablet: true,
       bundleIdentifier: iosBundleId,
+      buildNumber: '2',
       infoPlist: {
         NSFaceIDUsageDescription: 'Clinic EZ uses Face ID to unlock your account securely.',
       },
     },
     android: {
+      versionCode: 2,
       adaptiveIcon: {
         backgroundColor: adaptiveIconBg,
         foregroundImage: './assets/android-icon-foreground.png',
