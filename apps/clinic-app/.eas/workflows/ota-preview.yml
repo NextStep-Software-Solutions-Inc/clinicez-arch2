@@ -9,6 +9,13 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - 'apps/clinic-app/**'
+      - 'packages/design-tokens/**'
+      - 'packages/shared-ts/**'
+      - 'packages/comms-sdk/**'
+      - 'bun.lock'
+      - 'package.json'
   workflow_dispatch:
     inputs:
       force_build:
