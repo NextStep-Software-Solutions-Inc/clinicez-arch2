@@ -35,13 +35,19 @@ describe('Privacy & Communications Settings Suite', () => {
     expect(resolveActiveSection(state)).toBe('SettingsScreen');
   });
 
-  it('PrivacySettingsScreen uses unified SettingsSection and SettingsRow without duplicate header', () => {
+  it('PrivacySettingsScreen uses unified SettingsSection and SettingsRow without duplicate header or statutory jargon', () => {
     const src = fs.readFileSync(privacyScreenPath, 'utf8');
     expect(src).toContain('SettingsSection');
     expect(src).toContain('SettingsRow');
-    expect(src).toContain('Privacy Blur Mode');
-    expect(src).toContain('Show Hidden Conversations');
-    expect(src).toContain('DATA PRIVACY ACT OF 2012 (RA 10173)');
+    expect(src).toContain('Privacy Blur');
+    expect(src).toContain('Show Hidden Messages');
+    expect(src).toContain('YOUR PRIVACY IS PROTECTED');
+    // Free of statutory references and jargon
+    expect(src).not.toContain('DATA PRIVACY ACT');
+    expect(src).not.toContain('RA 10173');
+    expect(src).not.toContain('statutory');
+    expect(src).not.toContain('shoulder surfing');
+    expect(src).not.toContain('audit trails');
     // No duplicate inline back button or duplicate title
     expect(src).not.toContain('hitSize={44}');
     expect(src).not.toContain('accessibilityLabel="Back to Settings"');

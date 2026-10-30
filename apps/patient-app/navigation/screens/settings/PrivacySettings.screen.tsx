@@ -20,14 +20,14 @@ export default function PrivacySettingsScreen() {
 
   const handleClearHiddenCopies = async () => {
     const ok = await dialog.confirm({
-      title: 'Restore Hidden Copies',
-      message: 'Do you want to restore all hidden conversation copies to your active inbox view?',
+      title: 'Restore Hidden Messages',
+      message: 'Bring back all hidden conversations to your inbox?',
       confirmLabel: 'Restore',
     });
     if (ok) {
       await clearAllHiddenConversations();
       setShowHiddenConversations(false);
-      dialog.alert('Restored', 'Hidden conversation copies are now visible in your inbox.');
+      dialog.alert('Restored', 'Your hidden conversations are back in your inbox.');
     }
   };
 
@@ -41,14 +41,14 @@ export default function PrivacySettingsScreen() {
         width: '100%',
       }}
     >
-      {/* Message Privacy */}
+      {/* Screen Privacy */}
       <SettingsSection
-        title="Message Privacy"
-        footer="Privacy blur obscures message previews, thread content, and attachments until tapped or held. Prevents shoulder surfing in public places."
+        title="Screen Privacy"
+        footer="Keeps messages hidden on your screen until you tap them, so people nearby cannot read them."
       >
         <SettingsRow
-          title="Privacy Blur Mode"
-          subtitle="Blur message previews & media until tapped"
+          title="Privacy Blur"
+          subtitle="Tap or hold to reveal messages"
           icon={{ android: 'visibility_off', ios: 'eye.slash.fill' }}
           iconColor={colors.primary}
           right={{
@@ -59,18 +59,18 @@ export default function PrivacySettingsScreen() {
         />
       </SettingsSection>
 
-      {/* Conversation Copies */}
+      {/* Hidden Messages */}
       <SettingsSection
-        title="Conversation Copies"
+        title="Hidden Messages"
         footer={
           hiddenConversationIds.size > 0
-            ? `You currently have ${hiddenConversationIds.size} hidden conversation copy(ies). Using "Hide My Copy" removes the conversation from your active inbox view on this device.`
-            : 'Using "Hide My Copy" removes the conversation from your active inbox view on this device without deleting official facility records.'
+            ? `You have ${hiddenConversationIds.size} hidden conversation${hiddenConversationIds.size > 1 ? 's' : ''}. Hiding a message only removes it from this phone — your clinic still has their copy on file.`
+            : 'Hiding a conversation only removes it from this phone. Your clinic still has their copy on file.'
         }
       >
         <SettingsRow
-          title="Show Hidden Conversations"
-          subtitle="Display conversations hidden via 'Hide My Copy'"
+          title="Show Hidden Messages"
+          subtitle="Display messages you previously hid"
           icon={{ android: 'visibility', ios: 'eye.fill' }}
           iconColor={colors.primary}
           right={{
@@ -81,8 +81,8 @@ export default function PrivacySettingsScreen() {
         />
         {hiddenConversationIds.size > 0 && (
           <SettingsRow
-            title="Restore All Hidden Conversations"
-            subtitle={`Restore ${hiddenConversationIds.size} hidden conversation copy(ies) to inbox`}
+            title="Restore Hidden Messages"
+            subtitle={`Bring back ${hiddenConversationIds.size} hidden conversation${hiddenConversationIds.size > 1 ? 's' : ''}`}
             icon={{ android: 'unarchive', ios: 'arrow.uturn.backward.circle.fill' }}
             iconColor={colors.purple}
             right={{ type: 'none' }}
@@ -91,7 +91,7 @@ export default function PrivacySettingsScreen() {
         )}
       </SettingsSection>
 
-      {/* Statutory Data Privacy Notice */}
+      {/* Privacy Protection */}
       <View
         style={[
           styles.noticeCard,
@@ -107,11 +107,11 @@ export default function PrivacySettingsScreen() {
         <View style={styles.noticeHeader}>
           <AppIcon android="shield" ios="checkmark.shield.fill" size={18} color="primary" />
           <ThemedText variant="captionBold" color="primaryText">
-            DATA PRIVACY ACT OF 2012 (RA 10173)
+            YOUR PRIVACY IS PROTECTED
           </ThemedText>
         </View>
         <ThemedText variant="small" color="textSecondary" style={{ lineHeight: 20 }}>
-          ClinicEZ complies with statutory data privacy requirements. Your patient communication copies are end-to-end secured. Using &ldquo;Hide My Copy&rdquo; only removes your local view and does not alter the healthcare facility&apos;s official medical records or audit trails.
+          Your health information and conversations are always private and protected. When you hide a conversation, it is only removed from this device — your doctor and healthcare team still keep their official copy for your care.
         </ThemedText>
       </View>
     </ScrollView>

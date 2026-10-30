@@ -111,7 +111,7 @@ export default function SettingsScreenWeb() {
         />
         <SettingsRow
           title="Privacy & Communications"
-          subtitle="Privacy blur & hidden conversation copies"
+          subtitle="Privacy blur & hidden messages"
           icon={{ android: 'visibility', ios: 'eye.fill' }}
           iconColor={colors.primary}
           right={{ type: 'chevron' }}
