@@ -11,6 +11,7 @@ import Screen from '../../components/layout/Screen';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
@@ -69,7 +70,11 @@ export default function NotificationScreenWeb() {
   const patientId = usePatientId();
   const { unreadCount, refreshNotifications } = useNotificationContext();
 
-  const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+  const [activeFilter, setActiveFilter] = usePersistedTab<NotificationFilter>({
+    key: 'notifications.filter',
+    defaultValue: 'all',
+    queryParam: 'filter',
+  });
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);

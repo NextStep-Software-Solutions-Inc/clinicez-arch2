@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import {
   listFolderContents,
@@ -9,20 +9,13 @@ import {
 
 export function useFilesBrowser(patientId: string, folderId: string | null = null, query: string = '') {
   const { getToken } = useClerkAuth();
+  const hasSyncedRef = useRef(false);
+  const isRefreshingRef = useRef(false);
 
   const { data, error, mutate, isValidating } = useSWR(
     ['files-browser', patientId, folderId, query],
     async () => {
-      // Fire-and-forget network sync so it doesn't block the instant SQLite read.
-      // This enforces the offline-first architecture.
-      refreshDocumentTypes(patientId, getToken).catch(console.log);
-      
-      // Silently sync down remote files (and push local queue) without blocking the UI
-      syncPendingFiles(patientId, getToken)
-        .then(() => mutate())
-        .catch(console.log);
-
-      // Instantly load from local SQLite
+      // Instantly load from local SQLite (pure read, no infinite mutate loops)
       return listFolderContents(patientId, folderId, query, getToken);
     },
     {
@@ -30,14 +23,37 @@ export function useFilesBrowser(patientId: string, folderId: string | null = nul
     }
   );
 
+  // Background network sync once on mount per patient
+  useEffect(() => {
+    if (!patientId || hasSyncedRef.current) return;
+    hasSyncedRef.current = true;
+    refreshDocumentTypes(patientId, getToken).catch(console.log);
+    syncPendingFiles(patientId, getToken)
+      .then((res) => {
+        if (res && res.synced > 0) {
+          mutate();
+        }
+      })
+      .catch(console.log);
+  }, [patientId, getToken, mutate]);
+
   const refresh = useCallback(async () => {
     // Optimistically update the UI by reading the latest SQLite state immediately
     const mutatePromise = mutate();
-    
-    // Force retry failed files on manual pull-to-refresh (don't block the UI)
-    syncPendingFiles(patientId, getToken, true)
-      .then(() => mutate()) // Mutate again after network sync completes
-      .catch(console.log);
+
+    if (!isRefreshingRef.current) {
+      isRefreshingRef.current = true;
+      syncPendingFiles(patientId, getToken, true)
+        .then((res) => {
+          if (res && res.synced > 0) {
+            mutate();
+          }
+        })
+        .catch(console.log)
+        .finally(() => {
+          isRefreshingRef.current = false;
+        });
+    }
 
     return mutatePromise;
   }, [mutate, patientId, getToken]);

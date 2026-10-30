@@ -15,6 +15,7 @@ import { AppIcon, type IconName } from '../../components/ui/Icon';
 import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
@@ -310,7 +311,11 @@ export default function NotificationScreen() {
   const { unreadCount, refreshNotifications, permissionStatus, requestPermissions } =
     useNotificationContext();
 
-  const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+  const [activeFilter, setActiveFilter] = usePersistedTab<NotificationFilter>({
+    key: 'notifications.filter',
+    defaultValue: 'all',
+    queryParam: 'filter',
+  });
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);

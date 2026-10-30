@@ -16,6 +16,7 @@ import { SectionHeader } from '../../components/ui/Primitives';
 import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
 import { ActiveSearchBanner, SearchModal } from '../../components/ui/SearchModal';
 import OfflineBanner from '../../components/appointments/OfflineBanner';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useRegisterHeaderSearch } from '../../contexts/HeaderSearchContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
@@ -84,7 +85,11 @@ export default function AppointmentsScreenWeb() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<TabKey>('upcoming');
+  const [selectedTab, setSelectedTab] = usePersistedTab<TabKey>({
+    key: 'appointments.tab',
+    defaultValue: 'upcoming',
+    queryParam: 'tab',
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);

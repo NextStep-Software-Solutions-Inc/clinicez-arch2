@@ -15,6 +15,7 @@ import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
 import AppointmentCard from '../../components/appointments/AppointmentCard';
 import SegmentedControl from '../../components/appointments/SegmentedControl';
 import OfflineBanner from '../../components/appointments/OfflineBanner';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useContentInsets } from '../../hooks/useContentInsets';
 import { usePatientId } from '../../hooks/usePatientId';
@@ -158,7 +159,13 @@ export default function AppointmentsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [segment, setSegment] = useState<Segment>(0);
+  const [segment, setSegment] = usePersistedTab<Segment>({
+    key: 'appointments.segment',
+    defaultValue: 0,
+    queryParam: 'tab',
+    serialize: (s) => (s === 1 ? 'past' : 'upcoming'),
+    deserialize: (raw) => (raw === 'past' || raw === '1' ? 1 : 0),
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);

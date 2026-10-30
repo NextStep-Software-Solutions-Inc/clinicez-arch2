@@ -23,6 +23,7 @@ import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePrivacy } from '../../../contexts/PrivacyContext';
 import { useContentInsets } from '../../../hooks/useContentInsets';
+import { usePersistedTab } from '../../../hooks/usePersistedTab';
 import {
   communicationsService,
   type PatientConversationDto,
@@ -66,7 +67,11 @@ export default function MessagesInboxScreen() {
   const [grants, setGrants] = useState<PatientEligibilityGrantDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [facilityFilter, setFacilityFilter] = useState<FacilityFilter>('All');
+  const [facilityFilter, setFacilityFilter] = usePersistedTab<FacilityFilter>({
+    key: 'messages.facility_filter',
+    defaultValue: 'All',
+    queryParam: 'facility',
+  });
   const [selectedDependentId, setSelectedDependentId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
