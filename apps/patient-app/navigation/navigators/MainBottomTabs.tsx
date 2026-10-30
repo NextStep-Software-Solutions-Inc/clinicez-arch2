@@ -26,7 +26,8 @@ const MainBottomTabs = createBottomTabNavigator({
   screenOptions: ({ theme }) => ({
     animation: 'shift',
     tabBarActiveTintColor: theme.colors.primary,
-    tabBarActiveIndicatorColor: `26`,
+    tabBarActiveIndicatorColor:
+      typeof theme.colors.primary === 'string' ? `${theme.colors.primary}26` : undefined,
     tabBarStyle: {
       backgroundColor: isLiquidGlassSupported ? 'transparent' : undefined,
     },

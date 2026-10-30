@@ -132,12 +132,15 @@ function LockOverlay({ backgroundColor }: { backgroundColor: ColorValue }) {
   );
 }
 
+function OTAUpdater() {
+  useOTAUpdate();
+  return null;
+}
+
 function AppWithTheme() {
   const theme = useAppTheme();
   const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout, getToken, internalPatientId } = useAuth();
   const { user } = useUser();
-
-  useOTAUpdate();
 
   const selectedTheme = useMemo(() => buildNavigationTheme(theme), [theme]);
 
@@ -220,6 +223,7 @@ export default function App() {
             <AppThemeProvider>
               <OnboardingProvider>
                 <AuthProvider>
+                  <OTAUpdater />
                   <ErrorBoundary>
                     <AppWithTheme />
                   </ErrorBoundary>
