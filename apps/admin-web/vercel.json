@@ -1,4 +1,6 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "git diff --quiet ${CACHED_COMMIT_REF:-HEAD^} ${VERCEL_GIT_COMMIT_SHA:-HEAD} -- . ../../packages/design-tokens",
   "headers": [
     {
       "source": "/(.*)",
