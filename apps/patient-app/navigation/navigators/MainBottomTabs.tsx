@@ -5,9 +5,9 @@ import { AppIcon } from '../../components/ui/Icon';
 
 import HomeStack from './HomeStack';
 import AppointmentsStack from './AppointmentsStack';
+import MessagesStack from './MessagesStack';
 import FilesStack from './FilesStack';
 import ProfileStack from './ProfileStack';
-import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
 
 const getTabIcon = (androidName: string, iosName: string, webName: string) => {
   if (Platform.OS === 'web') {
@@ -47,7 +47,7 @@ const MainBottomTabs = createBottomTabNavigator({
       },
     }),
     MessagesScreen: createBottomTabScreen({
-      screen: MessagesInboxScreen,
+      screen: MessagesStack,
       options: {
         title: 'Messages',
         tabBarIcon: getTabIcon('chat', 'bubble.left.and.bubble.right.fill', 'chat'),

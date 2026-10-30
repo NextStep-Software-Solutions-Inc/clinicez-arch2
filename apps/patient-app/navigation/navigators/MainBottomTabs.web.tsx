@@ -4,9 +4,9 @@ import WebNavBar from '../../components/ui/WebNavBar.web';
 
 import HomeStack from './HomeStack';
 import AppointmentsStack from './AppointmentsStack';
+import MessagesStack from './MessagesStack';
 import FilesStack from './FilesStack';
 import ProfileStack from './ProfileStack';
-import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
 
 const MainBottomTabsWeb = createBottomTabNavigator({
   tabBar: (props) => <WebNavBar {...props} />,
@@ -27,7 +27,7 @@ const MainBottomTabsWeb = createBottomTabNavigator({
       },
     }),
     MessagesScreen: createBottomTabScreen({
-      screen: MessagesInboxScreen,
+      screen: MessagesStack,
       options: {
         title: 'Messages',
       },

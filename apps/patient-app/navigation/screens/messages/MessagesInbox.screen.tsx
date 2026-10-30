@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Platform,
@@ -12,13 +12,13 @@ import { format, parseISO } from 'date-fns';
 import Screen from '../../../components/layout/Screen';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
-import Button from '../../../components/ui/Button';
 import { AppIcon } from '../../../components/ui/Icon';
 import IconButton from '../../../components/ui/IconButton';
 import ThemedText from '../../../components/ui/ThemedText';
 import EmptyState from '../../../components/ui/EmptyState';
 import { SkeletonCard } from '../../../components/ui/Skeleton';
 import FilterChipBar from '../../../components/ui/FilterChipBar';
+import BottomTabsHeaderRight from '../../../components/BottomTabsHeaderRight';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePrivacy } from '../../../contexts/PrivacyContext';
@@ -38,10 +38,11 @@ interface DependentOption {
 }
 
 export default function MessagesInboxScreen() {
-  const { colors, spacing, radii } = useAppTheme();
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const navigation = useNavigation<any>();
   const { getToken, internalPatientId } = useAuth();
-  const { bottom: tabBarBottom } = useContentInsets();
+  const contentInsets = useContentInsets();
+  const tabBarBottom = contentInsets.bottom;
   const {
     privacyBlurEnabled,
     togglePrivacyBlur,
@@ -49,6 +50,17 @@ export default function MessagesInboxScreen() {
     hiddenConversationIds,
     hideConversation,
   } = usePrivacy();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <BottomTabsHeaderRight
+          onTogglePrivacy={togglePrivacyBlur}
+          isPrivacyActive={privacyBlurEnabled}
+        />
+      ),
+    });
+  }, [navigation, togglePrivacyBlur, privacyBlurEnabled]);
 
   const [conversations, setConversations] = useState<PatientConversationDto[]>([]);
   const [grants, setGrants] = useState<PatientEligibilityGrantDto[]>([]);
@@ -300,48 +312,44 @@ export default function MessagesInboxScreen() {
   return (
     <Screen
       width="form"
-      safeAreaTop
       bottomInset={tabBarBottom}
       refreshing={isRefreshing}
       onRefresh={onRefresh}
       contentContainerStyle={{ gap: spacing.md }}
-    >
-      {/* Top Header Bar with Privacy Blur toggle & New Inquiry */}
-      <View style={styles.headerSection}>
-        <View style={styles.headerTopRow}>
-          <ThemedText variant="h2" style={styles.headerTitle}>
-            Messages
+      footer={
+        <Pressable
+          onPress={() =>
+            navigation.navigate('Main', {
+              screen: 'NewMessageInquiryScreen',
+            })
+          }
+          style={({ pressed }) => [
+            styles.fab,
+            {
+              backgroundColor: colors.primary,
+              borderRadius: radii.full,
+              bottom: contentInsets.bottom + spacing.lg,
+              right: spacing.xl,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+              opacity: pressed ? 0.88 : 1,
+            },
+            shadows.md,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Start a new message inquiry"
+        >
+          <AppIcon name="plus" size={sizes.iconMd} color="onPrimary" />
+          <ThemedText variant="bodyBold" color="onPrimary">
+            New Inquiry
           </ThemedText>
-
-          <View style={[styles.headerActions, { gap: spacing.xs }]}>
-            <IconButton
-              icon={privacyBlurEnabled ? 'eyeOff' : 'eye'}
-              accessibilityLabel={
-                privacyBlurEnabled ? 'Disable Privacy Blur' : 'Enable Privacy Blur'
-              }
-              hitSize={40}
-              tone={privacyBlurEnabled ? 'filled' : 'plain'}
-              onPress={togglePrivacyBlur}
-            />
-
-            <Button
-              label="New Inquiry"
-              variant="primary"
-              size="sm"
-              icon="plus"
-              onPress={() =>
-                navigation.navigate('Main', {
-                  screen: 'NewMessageInquiryScreen',
-                })
-              }
-            />
-          </View>
-        </View>
-
-        <ThemedText variant="small" color="textMuted" style={styles.headerSubtitle}>
-          Unified inbox across clinics, pharmacies, & labs
-        </ThemedText>
-      </View>
+        </Pressable>
+      }
+    >
+      {/* Subtitle / Context description */}
+      <ThemedText variant="small" color="textMuted" style={styles.headerSubtitle}>
+        Unified inbox across clinics, pharmacies, & labs
+      </ThemedText>
 
       {/* Dependent Filter Chips */}
       {dependentOptions.length > 2 && (
@@ -392,12 +400,6 @@ export default function MessagesInboxScreen() {
               ? `No messages with ${facilityFilter.toLowerCase()} found.`
               : 'You have no messages yet. You can submit an inquiry or question to your connected healthcare facilities.'
           }
-          actionLabel="Ask a Facility"
-          onActionPress={() =>
-            navigation.navigate('Main', {
-              screen: 'NewMessageInquiryScreen',
-            })
-          }
         />
       ) : (
         <FlatList
@@ -413,25 +415,14 @@ export default function MessagesInboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerSection: {
-    gap: 4,
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  headerTitle: {
-    flexShrink: 1,
-  },
   headerSubtitle: {
     marginTop: 2,
   },
-  headerActions: {
+  fab: {
+    position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
   card: {
     borderWidth: 1,

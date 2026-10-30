@@ -9,11 +9,17 @@ import { useAppTheme } from '../contexts/ThemeContext';
 export interface BottomTabsHeaderRightProps {
   onOpenSearch?: () => void;
   hasActiveSearch?: boolean;
+  onTogglePrivacy?: () => void;
+  isPrivacyActive?: boolean;
+  extraLeft?: React.ReactNode;
 }
 
 export default function BottomTabsHeaderRight({
   onOpenSearch,
   hasActiveSearch,
+  onTogglePrivacy,
+  isPrivacyActive,
+  extraLeft,
 }: BottomTabsHeaderRightProps = {}) {
   const navigation = useNavigation<any>();
   const { colors, radii, sizes } = useAppTheme();
@@ -21,6 +27,25 @@ export default function BottomTabsHeaderRight({
 
   return (
     <View style={styles.container}>
+      {extraLeft}
+
+      {onTogglePrivacy ? (
+        <Pressable
+          onPress={onTogglePrivacy}
+          style={({ pressed, hovered }: any) => [
+            styles.iconBtn,
+            (pressed || hovered) && { opacity: 0.7 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={isPrivacyActive ? 'Disable Privacy Blur' : 'Enable Privacy Blur'}
+        >
+          <AppIcon
+            name={isPrivacyActive ? 'eyeOff' : 'eye'}
+            size={sizes.iconLg}
+            color={isPrivacyActive ? 'primary' : 'text'}
+          />
+        </Pressable>
+      ) : null}
       {onOpenSearch ? (
         <Pressable
           onPress={onOpenSearch}

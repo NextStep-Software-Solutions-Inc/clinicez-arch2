@@ -46,9 +46,11 @@ export function FilterChipBar<T extends string = string>({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      nestedScrollEnabled={true}
+      overScrollMode="never"
       accessibilityRole="tablist"
       style={[styles.scroll, style]}
-      contentContainerStyle={[styles.row, { gap: spacing.sm }, contentContainerStyle]}
+      contentContainerStyle={[styles.row, { gap: spacing.sm, paddingVertical: 2 }, contentContainerStyle]}
     >
       {items.map((item) => {
         const isActive = item.key === selectedKey;

@@ -454,16 +454,12 @@ export default function AppointmentsScreen() {
               actionLabel={
                 hasActiveSearch
                   ? 'Clear Search'
-                  : segment === 0
-                    ? 'Book an Appointment'
-                    : undefined
+                  : undefined
               }
               onActionPress={
                 hasActiveSearch
                   ? () => setSearchQuery('')
-                  : segment === 0
-                    ? handleBookNew
-                    : undefined
+                  : undefined
               }
             />
           </View>
