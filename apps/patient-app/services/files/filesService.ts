@@ -14,6 +14,7 @@ import {
   extensionFromName,
   findBestFileType,
   formatBytes,
+  generateUuid,
   getFileById,
   getFileConfig,
   getPreviewKind,
@@ -91,7 +92,7 @@ export async function importFiles(input: ImportFilesInput): Promise<string[]> {
     let savedLocalPath = source.uri;
     try {
       const plaintext = await source.bytes();
-      const localFile = new File(storageDir, `${crypto.randomUUID()}.${extension || 'bin'}`);
+      const localFile = new File(storageDir, `${generateUuid()}.${extension || 'bin'}`);
       localFile.write(plaintext);
       savedLocalPath = localFile.uri;
     } catch {

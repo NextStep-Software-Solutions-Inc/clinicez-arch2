@@ -30,11 +30,11 @@ import {
 import { dialog } from '../../../utils/dialog';
 
 const CATEGORIES: { id: MessageCategory; label: string; icon: string }[] = [
-  { id: 'Medical', label: 'Medical Inquiry', icon: 'stethoscope' },
-  { id: 'PrescriptionRefill', label: 'Prescription Refill', icon: 'pill' },
-  { id: 'LabInquiry', label: 'Laboratory Inquiry', icon: 'lab' },
+  { id: 'Medical', label: 'Medical', icon: 'stethoscope' },
+  { id: 'PrescriptionRefill', label: 'Prescriptions', icon: 'pill' },
+  { id: 'LabInquiry', label: 'Lab Inquiry', icon: 'lab' },
   { id: 'Billing', label: 'Billing / HMO', icon: 'document' },
-  { id: 'General', label: 'General Question', icon: 'chat' },
+  { id: 'General', label: 'General', icon: 'chat' },
 ];
 
 export default function NewMessageInquiryScreen() {
@@ -229,148 +229,170 @@ export default function NewMessageInquiryScreen() {
   };
 
   return (
-    <Screen width="form" contentContainerStyle={{ gap: spacing.lg }}>
-      {/* Title */}
-      <View style={{ gap: spacing.xs }}>
-        <ThemedText variant="h2">New Message / Inquiry</ThemedText>
-        <ThemedText variant="small" color="textMuted">
-          Direct message with healthcare provider or facility
-        </ThemedText>
-      </View>
-
+    <Screen width="form" contentContainerStyle={{ gap: spacing.md }}>
       {/* Step 1: Mandatory Emergency Screening Gate */}
-      <Card
-        padding="lg"
-        style={[
-          styles.gateCard,
-          {
-            borderColor: emergencyBlocked ? colors.emergencyBorder : colors.warningBorder,
-            backgroundColor: emergencyBlocked ? colors.emergencyBg : colors.warningBg,
-          },
-        ]}
-      >
-        <View style={styles.gateHeader}>
-          <AppIcon
-            name={emergencyBlocked ? 'alert' : 'warning'}
-            size={24}
-            color={emergencyBlocked ? 'emergency' : 'warning'}
-          />
-          <View style={styles.flex}>
-            <ThemedText variant="bodyBold" color={emergencyBlocked ? 'emergencyText' : 'warningText'}>
-              MANDATORY EMERGENCY SCREENING
-            </ThemedText>
-            <ThemedText variant="small" color={emergencyBlocked ? 'emergencyText' : 'warningText'}>
-              Are you or the patient experiencing severe chest pain, shortness of breath, sudden numbness, or life-threatening symptoms?
-            </ThemedText>
+      {emergencyAcknowledged === false ? (
+        <Pressable
+          onPress={() => setEmergencyAcknowledged(null)}
+          style={[
+            styles.gateCardConfirmed,
+            {
+              backgroundColor: colors.surfaceSubtle,
+              borderColor: colors.border,
+              borderRadius: radii.md,
+              padding: spacing.md,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Emergency screening completed: Not an emergency. Tap to change."
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
+            <AppIcon name="checkCircle" size={20} color="primary" />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="smallBold" color="text">
+                Non-Emergency Confirmed
+              </ThemedText>
+              <ThemedText variant="caption" color="textMuted">
+                Screened for severe chest pain, shortness of breath, & life-threatening symptoms
+              </ThemedText>
+            </View>
           </View>
-        </View>
+          <ThemedText variant="captionBold" color="primary">
+            Change
+          </ThemedText>
+        </Pressable>
+      ) : (
+        <Card
+          padding="lg"
+          style={[
+            styles.gateCard,
+            {
+              borderColor: emergencyBlocked ? colors.emergencyBorder : colors.warningBorder,
+              backgroundColor: emergencyBlocked ? colors.emergencyBg : colors.warningBg,
+            },
+          ]}
+        >
+          <View style={styles.gateHeader}>
+            <AppIcon
+              name={emergencyBlocked ? 'alert' : 'warning'}
+              size={24}
+              color={emergencyBlocked ? 'emergency' : 'warning'}
+            />
+            <View style={styles.flex}>
+              <ThemedText variant="bodyBold" color={emergencyBlocked ? 'emergencyText' : 'warningText'}>
+                MANDATORY EMERGENCY SCREENING
+              </ThemedText>
+              <ThemedText variant="small" color={emergencyBlocked ? 'emergencyText' : 'warningText'}>
+                Are you or the patient experiencing severe chest pain, shortness of breath, sudden numbness, or life-threatening symptoms?
+              </ThemedText>
+            </View>
+          </View>
 
-        {emergencyBlocked ? (
-          <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
-            <ThemedText variant="smallBold" color="emergencyText">
-              If this is a medical emergency, do not submit this message. Please call 911 or go to the nearest emergency department immediately.
-            </ThemedText>
-            <Button
-              label="Call 911 Emergency Now"
-              variant="danger"
-              size="lg"
-              icon="phone"
-              onPress={handleCallEmergency}
-            />
-            <Button
-              label="Retract Emergency Answer"
-              variant="outline"
-              size="sm"
-              onPress={() => setEmergencyBlocked(false)}
-            />
-          </View>
-        ) : (
-          <View style={[styles.gateButtonGroup, { gap: spacing.sm }]}>
-            <Button
-              label="Yes, I need emergency care"
-              variant="outline"
-              size="md"
-              style={styles.flex}
-              onPress={() => handleEmergencyAnswer(true)}
-            />
-            <Button
-              label="No, this is not an emergency"
-              variant={emergencyAcknowledged === false ? 'primary' : 'outline'}
-              size="md"
-              style={styles.flex}
-              onPress={() => handleEmergencyAnswer(false)}
-            />
-          </View>
-        )}
-      </Card>
+          {emergencyBlocked ? (
+            <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+              <ThemedText variant="smallBold" color="emergencyText">
+                If this is a medical emergency, do not submit this message. Please call 911 or go to the nearest emergency department immediately.
+              </ThemedText>
+              <Button
+                label="Call 911 Emergency Now"
+                variant="danger"
+                size="lg"
+                icon="phone"
+                onPress={handleCallEmergency}
+              />
+              <Button
+                label="Retract Emergency Answer"
+                variant="outline"
+                size="sm"
+                onPress={() => setEmergencyBlocked(false)}
+              />
+            </View>
+          ) : (
+            <View style={[styles.gateButtonGroup, { gap: spacing.sm }]}>
+              <Button
+                label="No, this is not an emergency"
+                variant="primary"
+                size="md"
+                onPress={() => handleEmergencyAnswer(false)}
+              />
+              <Button
+                label="Yes, I need emergency care"
+                variant="outline"
+                size="md"
+                onPress={() => handleEmergencyAnswer(true)}
+              />
+            </View>
+          )}
+        </Card>
+      )}
 
       {/* When not emergency blocked, show form */}
       {!emergencyBlocked && (
-        <>
-          {/* Step 2: Target Patient (Dependent Proxying) */}
-          {dependentOptions.length > 1 && (
-            <Card padding="md" style={{ gap: spacing.xs }}>
-              <ThemedText variant="captionBold" color="textMuted">
-                SENDING AS / ACTING FOR
-              </ThemedText>
-              <FilterChipBar
-                items={dependentOptions.map((opt) => ({
-                  key: opt.id ?? 'self',
-                  label: opt.label,
-                }))}
-                selectedKey={selectedDependentId ?? 'self'}
-                onSelect={(id) => setSelectedDependentId(id === 'self' ? null : id)}
-              />
-            </Card>
-          )}
-
-          {/* Step 3: Facility Selection */}
-          <Card padding="md" style={{ gap: spacing.sm }}>
-            <ThemedText variant="captionBold" color="textMuted">
-              SELECT DESTINATION FACILITY
-            </ThemedText>
-
-            {isLoadingGrants ? (
-              <ThemedText variant="small" color="textMuted">
-                Loading connected healthcare facilities...
-              </ThemedText>
-            ) : grants.length === 0 ? (
+        <View style={{ gap: spacing.md }}>
+          {/* Step 2: Routing (Proxying + Destination Facility + Category) */}
+          <Card padding="md" style={{ gap: spacing.md }}>
+            {dependentOptions.length > 1 && (
               <View style={{ gap: spacing.xs }}>
-                <ThemedText variant="small" color="textSecondary">
-                  Connected Primary Clinic
+                <ThemedText variant="captionBold" color="textMuted">
+                  SENDING AS / ACTING FOR
                 </ThemedText>
-                <ThemedText variant="caption" color="textMuted">
-                  Your inquiry will be routed to your enrolled primary care provider.
-                </ThemedText>
+                <FilterChipBar
+                  items={dependentOptions.map((opt) => ({
+                    key: opt.id ?? 'self',
+                    label: opt.label,
+                  }))}
+                  selectedKey={selectedDependentId ?? 'self'}
+                  onSelect={(id) => setSelectedDependentId(id === 'self' ? null : id)}
+                />
               </View>
-            ) : (
-              <FilterChipBar
-                items={grants.map((g) => ({
-                  key: g.grantId,
-                  label: `${g.facilityName} (${g.facilityType})`,
-                }))}
-                selectedKey={selectedGrantId ?? grants[0]?.grantId ?? ''}
-                onSelect={(id) => setSelectedGrantId(id)}
-              />
             )}
+
+            <View style={{ gap: spacing.xs }}>
+              <ThemedText variant="captionBold" color="textMuted">
+                DESTINATION FACILITY
+              </ThemedText>
+
+              {isLoadingGrants ? (
+                <ThemedText variant="small" color="textMuted">
+                  Loading connected healthcare facilities...
+                </ThemedText>
+              ) : grants.length === 0 ? (
+                <View style={{ gap: 2 }}>
+                  <ThemedText variant="bodyBold" color="text">
+                    Connected Primary Clinic
+                  </ThemedText>
+                  <ThemedText variant="caption" color="textMuted">
+                    Your inquiry will be routed to your enrolled primary care provider.
+                  </ThemedText>
+                </View>
+              ) : (
+                <FilterChipBar
+                  items={grants.map((g) => ({
+                    key: g.grantId,
+                    label: `${g.facilityName} (${g.facilityType})`,
+                  }))}
+                  selectedKey={selectedGrantId ?? grants[0]?.grantId ?? ''}
+                  onSelect={(id) => setSelectedGrantId(id)}
+                />
+              )}
+            </View>
+
+            <View style={{ gap: spacing.xs }}>
+              <ThemedText variant="captionBold" color="textMuted">
+                INQUIRY CATEGORY
+              </ThemedText>
+              <FilterChipBar
+                items={CATEGORIES.map((c) => ({
+                  key: c.id,
+                  label: c.label,
+                }))}
+                selectedKey={category}
+                onSelect={(id) => setCategory(id as MessageCategory)}
+              />
+            </View>
           </Card>
 
-          {/* Step 4: Category Selection */}
-          <Card padding="md" style={{ gap: spacing.sm }}>
-            <ThemedText variant="captionBold" color="textMuted">
-              INQUIRY CATEGORY
-            </ThemedText>
-            <FilterChipBar
-              items={CATEGORIES.map((c) => ({
-                key: c.id,
-                label: c.label,
-              }))}
-              selectedKey={category}
-              onSelect={(id) => setCategory(id as MessageCategory)}
-            />
-          </Card>
-
-          {/* Step 5: Subject & Message Body */}
+          {/* Step 3: Subject & Message Body */}
           <Card padding="md" style={{ gap: spacing.md }}>
             <Input
               label="Subject / Topic (Optional)"
@@ -450,7 +472,7 @@ export default function NewMessageInquiryScreen() {
             disabled={isSubmitting || emergencyAcknowledged !== false || !messageText.trim()}
             onPress={handleSubmit}
           />
-        </>
+        </View>
       )}
     </Screen>
   );
@@ -469,8 +491,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   gateButtonGroup: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     marginTop: 12,
+  },
+  gateCardConfirmed: {
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   charCountRow: {
     alignItems: 'flex-end',

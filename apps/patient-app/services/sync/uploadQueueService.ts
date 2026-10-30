@@ -132,6 +132,22 @@ export async function checkIsOnline(): Promise<boolean> {
   }
 }
 
+function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-crypto').randomUUID();
+  } catch {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+}
+
 /**
  * Enqueues a new record upload for offline-first 0ms preview and deferred sync.
  */
@@ -140,8 +156,8 @@ export async function enqueueOfflineRecordUpload(
   getToken?: GetToken,
   options?: { isOnline?: () => Promise<boolean>; db?: any }
 ): Promise<string> {
-  const recordId = crypto.randomUUID();
-  const queueId = crypto.randomUUID();
+  const recordId = generateUuid();
+  const queueId = generateUuid();
   const now = new Date();
   const extension = params.fileName.split('.').pop() ?? 'bin';
   const blobKey = `${params.patientId}/records/${recordId}.${extension}`;

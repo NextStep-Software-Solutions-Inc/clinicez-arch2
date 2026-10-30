@@ -32,7 +32,7 @@ function resolveDb(dbOverride?: any) {
   return require('@db/index').db;
 }
 
-function generateUuid(): string {
+export function generateUuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }

@@ -13,6 +13,7 @@
  * - Active communication eligibility grants retrieval
  */
 
+import { randomUUID } from 'expo-crypto';
 import { api, ApiError } from '../api/apiClient';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk';
 
@@ -222,7 +223,7 @@ export const communicationsService = {
   ): Promise<PatientMessageDto> {
     const payload: SubmitMessageRequest = {
       contentText,
-      clientMessageId: clientMessageId ?? crypto.randomUUID(),
+      clientMessageId: clientMessageId ?? randomUUID(),
       attachments,
     };
     return api.post<PatientMessageDto>(

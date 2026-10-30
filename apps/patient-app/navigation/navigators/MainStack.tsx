@@ -97,6 +97,12 @@ const MainStack = createNativeStackNavigator({
         headerShown: false,
       },
     }),
+    MainBottomTabs: createNativeStackScreen({
+      screen: MainBottomTabs,
+      options: {
+        headerShown: false,
+      },
+    }),
     SettingsScreen: createNativeStackScreen({
       screen: SettingsScreen,
       options: { title: 'Settings', headerLargeTitleEnabled: true },

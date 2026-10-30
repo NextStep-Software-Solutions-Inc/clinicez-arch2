@@ -157,6 +157,10 @@ const screens: Record<string, any> = {
     screen: MainBottomTabs,
     options: { headerShown: false },
   }),
+  MainBottomTabs: createNativeStackScreen({
+    screen: MainBottomTabs,
+    options: { headerShown: false },
+  }),
 };
 
 for (const [name, component, title] of SCREENS) {

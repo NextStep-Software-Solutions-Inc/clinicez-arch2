@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { randomUUID } from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
@@ -106,7 +107,7 @@ export default function ConversationThreadScreen({ route }: Props) {
         throw new Error('Patients cannot author internal clinical notes.');
       }
 
-      const clientMessageId = crypto.randomUUID();
+      const clientMessageId = randomUUID();
       const optimisticMsg: ThreadMessage = {
         id: clientMessageId,
         seq: Date.now(),
