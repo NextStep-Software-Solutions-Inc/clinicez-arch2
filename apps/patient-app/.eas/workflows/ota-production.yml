@@ -30,5 +30,7 @@ jobs:
     needs: [quality_gate]
     type: update
     environment: production
+    env:
+      APP_VARIANT: production
     params:
       channel: production

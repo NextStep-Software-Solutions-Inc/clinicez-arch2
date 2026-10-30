@@ -66,8 +66,8 @@ describe('R4: Expo Config Deterministic Branching & Side-by-Side Coexistence', (
       // 1. Production
       const prod = evaluateConfigWithEnv({ APP_VARIANT: 'production' });
 
-      // 2. Main (Staging)
-      const stg = evaluateConfigWithEnv({ APP_BRANCH: 'main' });
+      // 2. Explicit Staging
+      const stg = evaluateConfigWithEnv({ APP_VARIANT: 'staging' });
 
       // 3. Dev client on feature branch
       const dev = evaluateConfigWithEnv({
@@ -111,7 +111,7 @@ describe('R4: Expo Config Deterministic Branching & Side-by-Side Coexistence', (
       expect((prod.updates?.requestHeaders as any)?.['expo-channel-name']).toBe('production');
       expect(prod.extra?.sqliteDbName).toBe('Clinic EZ_patient.db');
 
-      // Specific assertions for Environment 2: Main / Staging
+      // Specific assertions for Environment 2: Explicit Staging
       expect(stg.ios?.bundleIdentifier).toBe(
         'com.nextstepsoftware.clinicez.patient.staging'
       );
@@ -181,6 +181,17 @@ describe('R4: Expo Config Deterministic Branching & Side-by-Side Coexistence', (
         (devClient.updates?.requestHeaders as any)?.['expo-channel-name']
       );
       expect(devStandalone.extra?.sqliteDbName).not.toBe(devClient.extra?.sqliteDbName);
+    });
+
+    it('main branch is treated as a standard branch (not hardcoded staging), receiving its own isolated updates and build configuration', () => {
+      const main = evaluateConfigWithEnv({ APP_BRANCH: 'main' });
+      expect(main.name).toBe('[main] Clinic EZ');
+      expect(main.ios?.bundleIdentifier).toBe('com.nextstepsoftware.clinicez.patient.br-main');
+      expect(main.android?.package).toBe('com.nextstepsoftware.clinicez.patient.br_main');
+      expect(main.scheme).toBe('clinicez-patient-br-main');
+      expect((main.updates?.requestHeaders as any)?.['expo-channel-name']).toBe('br-main');
+      expect(main.extra?.sqliteDbName).toBe('Clinic EZ_patient_br_main.db');
+      expect(main.extra?.isProduction).toBe(false);
     });
   });
 
@@ -362,21 +373,24 @@ describe('R4: Expo Config Deterministic Branching & Side-by-Side Coexistence', (
   describe('Suite 7: Database Isolation, Workflows & EAS Safety Invariants', () => {
     it('allocates isolated SQLite database filenames across environments', () => {
       const prod = evaluateConfigWithEnv({ APP_VARIANT: 'production' });
-      const stg = evaluateConfigWithEnv({ APP_BRANCH: 'main' });
+      const stg = evaluateConfigWithEnv({ APP_VARIANT: 'staging' });
       const dev = evaluateConfigWithEnv({ APP_VARIANT: 'development' });
       const branch = evaluateConfigWithEnv({ APP_BRANCH: 'feat/Offline_Sync' });
+      const main = evaluateConfigWithEnv({ APP_BRANCH: 'main' });
 
       const dbProd = prod.extra?.sqliteDbName;
       const dbStg = stg.extra?.sqliteDbName;
       const dbDev = dev.extra?.sqliteDbName;
       const dbBranch = branch.extra?.sqliteDbName;
+      const dbMain = main.extra?.sqliteDbName;
 
       expect(dbProd).toBe('Clinic EZ_patient.db');
       expect(dbStg).toBe('Clinic EZ_patient_staging.db');
       expect(dbDev).toBe('Clinic EZ_patient_dev.db');
       expect(dbBranch).toBe('Clinic EZ_patient_br_feat_offline_sync.db');
+      expect(dbMain).toBe('Clinic EZ_patient_br_main.db');
 
-      expect(new Set([dbProd, dbStg, dbDev, dbBranch]).size).toBe(4);
+      expect(new Set([dbProd, dbStg, dbDev, dbBranch, dbMain]).size).toBe(5);
     });
 
     it('exports channel, branch, and variant in extra config for in-app display', () => {

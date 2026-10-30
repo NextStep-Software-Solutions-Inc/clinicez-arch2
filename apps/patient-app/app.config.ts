@@ -1,5 +1,6 @@
 // token-guard:ignore-file (native Expo build configuration colours)
 import type { ExpoConfig, ConfigContext } from 'expo/config';
+import * as child_process from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -54,7 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       : '')
   ).trim();
 
-  const rawBranch = (
+  let rawBranch = (
     process.env.APP_BRANCH ??
     process.env.EAS_BUILD_GIT_COMMIT_REF ??
     process.env.GIT_BRANCH ??
@@ -63,9 +64,45 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       : '')
   ).trim();
 
+  // If neither branch nor variant env var is set, resolve active branch from git repository
+  if (!rawBranch && !process.env.APP_VARIANT) {
+    try {
+      const gitBranch = child_process
+        .execSync('git branch --show-current', {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        })
+        .trim();
+      if (gitBranch && gitBranch !== 'HEAD') {
+        rawBranch = gitBranch;
+      } else {
+        const nameRev = child_process
+          .execSync('git name-rev --name-only HEAD', {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+          })
+          .trim();
+        const cleaned = nameRev
+          .replace(/^remotes\/origin\//, '')
+          .replace(/^tags\//, '')
+          .split('~')[0]
+          .split('^')[0];
+        if (cleaned && cleaned !== 'undefined') {
+          rawBranch = cleaned;
+        }
+      }
+    } catch {
+      // Git unavailable
+    }
+  }
+
   const rawVariant = (
     process.env.APP_VARIANT ??
-    (rawTag.startsWith('patient-app-v') ? 'production' : rawBranch ? '' : 'production')
+    (rawTag.startsWith('patient-app-v')
+      ? 'production'
+      : rawBranch
+      ? ''
+      : 'production')
   )
     .trim()
     .toLowerCase();
@@ -79,9 +116,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   const isStaging =
     !isProduction &&
-    (rawBranch === 'main' ||
-      rawBranch === 'refs/heads/main' ||
-      (rawVariant === 'staging' && !rawBranch));
+    rawVariant === 'staging';
 
   const isDevClient =
     !isProduction &&

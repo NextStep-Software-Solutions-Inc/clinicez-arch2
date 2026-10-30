@@ -21,6 +21,8 @@ export interface OTAUpdateInfo {
   downloadAndReload: () => Promise<void>;
 }
 
+let attemptedUpdateId: string | null = null;
+
 export function useOTAUpdate(): OTAUpdateInfo {
   const [isChecking, setIsChecking] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -44,10 +46,10 @@ export function useOTAUpdate(): OTAUpdateInfo {
       : (Constants.expoConfig?.version ?? '1.0.0');
   const updateId = Updates.updateId ?? null;
 
-  const downloadAndReload = useCallback(async () => {
+  const downloadAndReload = useCallback(async (targetCandidateId?: string) => {
     if (!Updates.isEnabled || Platform.OS === 'web') return;
     setIsDownloading(true);
-    const [, fetchError] = await safeAwait(Updates.fetchUpdateAsync());
+    const [fetchResult, fetchError] = await safeAwait(Updates.fetchUpdateAsync());
     setIsDownloading(false);
 
     if (fetchError) {
@@ -61,8 +63,15 @@ export function useOTAUpdate(): OTAUpdateInfo {
       return;
     }
 
+    if (fetchResult && !fetchResult.isNew) {
+      console.log('[useOTAUpdate] Downloaded update is not newer than current bundle.');
+      return;
+    }
+
     setIsDownloaded(true);
     setError(null);
+
+    const updateToActivate = fetchResult?.manifest?.id ?? targetCandidateId;
 
     dialog.alert(
       'Update Ready',
@@ -83,8 +92,15 @@ export function useOTAUpdate(): OTAUpdateInfo {
         },
         {
           text: 'Restart',
-          onPress: () => {
-            void Updates.reloadAsync();
+          onPress: async () => {
+            if (updateToActivate) {
+              attemptedUpdateId = updateToActivate;
+            }
+            try {
+              await Updates.reloadAsync();
+            } catch (reloadErr) {
+              console.warn('[useOTAUpdate] reloadAsync failed:', reloadErr);
+            }
           },
         },
       ]
@@ -93,6 +109,15 @@ export function useOTAUpdate(): OTAUpdateInfo {
 
   const checkForUpdate = useCallback(async () => {
     if (!Updates.isEnabled || __DEV__ || Platform.OS === 'web') return;
+
+    if (Updates.isEmergencyLaunch) {
+      console.warn(
+        '[useOTAUpdate] Emergency fallback launch detected. Suppressing auto-update to prevent restart loop:',
+        Updates.emergencyLaunchReason
+      );
+      return;
+    }
+
     setIsChecking(true);
     const [update, checkError] = await safeAwait(Updates.checkForUpdateAsync());
     setIsChecking(false);
@@ -106,9 +131,22 @@ export function useOTAUpdate(): OTAUpdateInfo {
     }
 
     if (update?.isAvailable) {
+      const candidateId = update.manifest?.id;
+      if (candidateId && candidateId === Updates.updateId) {
+        setIsAvailable(false);
+        return;
+      }
+      if (candidateId && candidateId === attemptedUpdateId) {
+        console.warn(
+          `[useOTAUpdate] Update ${candidateId} was already attempted and did not take effect. Skipping repeated prompt.`
+        );
+        setIsAvailable(false);
+        return;
+      }
+
       setIsAvailable(true);
       setError(null);
-      await downloadAndReload();
+      await downloadAndReload(candidateId);
     } else {
       setIsAvailable(false);
     }

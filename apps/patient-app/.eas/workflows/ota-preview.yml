@@ -1,4 +1,4 @@
-name: Preview OTA Update
+name: Branch Build & OTA Update
 
 defaults:
   tools:
@@ -9,8 +9,6 @@ on:
   push:
     branches:
       - '**'
-      - '!main'
-      - '!development'
 
 jobs:
   quality_gate:
@@ -36,10 +34,61 @@ jobs:
     outputs:
       channel: ${{ steps.resolve_channel.outputs.channel }}
 
+  fingerprint:
+    name: Calculate Native Fingerprints
+    needs: [quality_gate]
+    type: fingerprint
+    environment: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
+
+  get_android_build:
+    name: Check Existing Standalone Android APK
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: android
+      profile: preview
+      fingerprint_hash: ${{ needs.fingerprint.outputs.android_fingerprint_hash }}
+
+  get_ios_build:
+    name: Check Existing Standalone iOS Simulator Build
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: ios
+      profile: preview
+      simulator: true
+      fingerprint_hash: ${{ needs.fingerprint.outputs.ios_fingerprint_hash }}
+
+  build_android:
+    name: Build Standalone Android APK (Native Changed)
+    needs: [get_android_build]
+    if: ${{ !needs.get_android_build.outputs.build_id }}
+    type: build
+    params:
+      platform: android
+      profile: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
+
+  build_ios:
+    name: Build Standalone iOS Simulator (Native Changed)
+    needs: [get_ios_build]
+    if: ${{ !needs.get_ios_build.outputs.build_id }}
+    type: build
+    params:
+      platform: ios
+      profile: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
+
   update:
     name: Publish Branch OTA Update
     needs: [quality_gate]
     type: update
     environment: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
     params:
       channel: ${{ needs.quality_gate.outputs.channel }}
