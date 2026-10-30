@@ -10,6 +10,7 @@ import Animated, {
 import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 const ACTION_W = 130; // total width of the revealed action panel
 
@@ -31,6 +32,7 @@ export default function ProfileListItemCard({
   deleteMessage = 'Are you sure you want to delete this entry?',
 }: ProfileListItemCardProps) {
   const { colors, radii, sizes } = useAppTheme();
+  const { isWorkstation } = useBreakpoint();
   const translateX = useSharedValue(0);
   const startX = useSharedValue(0);
 
@@ -69,6 +71,14 @@ export default function ProfileListItemCard({
   const handleEdit = () => {
     close();
     onEdit();
+  };
+
+  const handleCardPress = () => {
+    if (translateX.value !== 0) {
+      close();
+      return;
+    }
+    handleEdit();
   };
 
   return (
@@ -122,7 +132,12 @@ export default function ProfileListItemCard({
             },
           ]}
         >
-          <View style={styles.content}>
+          <Pressable
+            onPress={handleCardPress}
+            style={styles.content}
+            accessibilityRole="button"
+            accessibilityLabel={`${title}${subtitle ? `, ${subtitle}` : ''}`}
+          >
             <View style={styles.text}>
               <ThemedText variant="bodyBold" numberOfLines={1}>
                 {title}
@@ -150,35 +165,37 @@ export default function ProfileListItemCard({
             )}
 
             {/* Desktop / Pointer-accessible inline actions (>=44px touch target) */}
-            <View style={styles.desktopActions}>
-              <Pressable
-                onPress={handleEdit}
-                accessibilityRole="button"
-                accessibilityLabel="Edit entry"
-                style={({ pressed, hovered }: any) => [
-                  styles.desktopActionBtn,
-                  { borderRadius: radii.md },
-                  hovered && { backgroundColor: colors.primarySubtle },
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                <AppIcon name="edit" size={sizes.iconSm} color="primary" />
-              </Pressable>
-              <Pressable
-                onPress={handleDelete}
-                accessibilityRole="button"
-                accessibilityLabel="Delete entry"
-                style={({ pressed, hovered }: any) => [
-                  styles.desktopActionBtn,
-                  { borderRadius: radii.md },
-                  hovered && { backgroundColor: colors.emergencyBg },
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                <AppIcon name="trash" size={sizes.iconSm} color="emergency" />
-              </Pressable>
-            </View>
-          </View>
+            {isWorkstation && (
+              <View style={styles.desktopActions}>
+                <Pressable
+                  onPress={handleEdit}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit entry"
+                  style={({ pressed, hovered }: any) => [
+                    styles.desktopActionBtn,
+                    { borderRadius: radii.md },
+                    hovered && { backgroundColor: colors.primarySubtle },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <AppIcon name="edit" size={sizes.iconSm} color="primary" />
+                </Pressable>
+                <Pressable
+                  onPress={handleDelete}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete entry"
+                  style={({ pressed, hovered }: any) => [
+                    styles.desktopActionBtn,
+                    { borderRadius: radii.md },
+                    hovered && { backgroundColor: colors.emergencyBg },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <AppIcon name="trash" size={sizes.iconSm} color="emergency" />
+                </Pressable>
+              </View>
+            )}
+          </Pressable>
         </Animated.View>
       </GestureDetector>
     </View>
