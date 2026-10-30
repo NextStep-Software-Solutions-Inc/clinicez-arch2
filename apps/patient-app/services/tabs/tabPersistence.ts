@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { storage } from '../../utils/storage';
 
 export interface TabPersistenceConfig<T> {
@@ -26,7 +27,7 @@ const registeredConfigs = new Map<string, TabPersistenceConfig<any>>();
 // Subscribers for multi-instance or popstate synchronization
 const subscribers = new Map<string, Set<(val: any) => void>>();
 
-const isWeb = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+const isWeb = Platform.OS === 'web' && typeof window !== 'undefined';
 
 function defaultSerialize<T>(val: T): string {
   if (typeof val === 'string') return val;
