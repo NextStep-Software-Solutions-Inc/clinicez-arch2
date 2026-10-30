@@ -8,10 +8,6 @@
     "apps/*",
     "packages/*"
   ],
-  "overrides": {
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
-  },
   "scripts": {
     "lint:portal": "bun --cwd apps/portal-web lint",
     "test:portal": "bun test apps/portal-web/tests",
