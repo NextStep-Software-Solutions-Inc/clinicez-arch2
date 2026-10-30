@@ -363,6 +363,9 @@ export default function ProfileScreen() {
           right={{ type: 'chevron' }}
           onPress={() => navigation.navigate('Main', { screen: 'MaleReproductiveScreen' })}
         />
+      </SettingsSection>
+
+      <SettingsSection title="Specialized Care">
         <SettingsRow
           title="Dental & Vision"
           icon={{ android: 'visibility', ios: 'eye.fill' }}
@@ -384,4 +387,4 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: {},
-});
+});

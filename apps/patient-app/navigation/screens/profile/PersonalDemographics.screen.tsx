@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db, flushDatabaseSnapshot } from '@db/index';
 import { patients } from '@db/schema/patients';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
@@ -25,6 +25,7 @@ import {
   type PatientSummary,
 } from 'services/api/patientApi';
 import { upsertPatientSummary } from '@db/hydrate';
+import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 import { useEhrOptions } from 'hooks/useEhrOptions';
@@ -251,6 +252,12 @@ export default function PersonalDemographicsScreen() {
 
       // 2. Save to local SQLite
       const now = new Date();
+      if (user?.id) {
+        await db
+          .delete(patients)
+          .where(and(eq(patients.clerkUserId, user.id), ne(patients.id, patientId)));
+      }
+
       await db.insert(patients).values({
         id: patientId,
         clerkUserId: user?.id || patientId,
@@ -302,6 +309,7 @@ export default function PersonalDemographicsScreen() {
         if (serverDemo) {
           await upsertPatientSummary({
             ...serverDemo,
+            id: patientId,
             firstName: payload.firstName,
             middleName: payload.middleName,
             lastName: payload.lastName,
@@ -318,6 +326,10 @@ export default function PersonalDemographicsScreen() {
             educationLevel: payload.educationLevel,
           }, user?.id);
         }
+
+        await flushAndSyncProfile(patientId, getToken).catch((syncErr) =>
+          console.warn('[PersonalDemographics] Background sync after save failed:', syncErr)
+        );
 
         reset(data);
         DeviceEventEmitter.emit('profile-synced');

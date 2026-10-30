@@ -11,7 +11,7 @@
  */
 
 import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index';
-import { eq, or } from 'drizzle-orm';
+import { and, eq, ne, or } from 'drizzle-orm';
 import {
   patients,
   patientGovernmentIds,
@@ -70,15 +70,38 @@ export async function upsertPatientSummary(
 ): Promise<void> {
   await ensureDatabaseReady();
   const ts = now();
+
+  let effectiveClerkId = clerkUserId;
+  if (!effectiveClerkId) {
+    try {
+      const existing = await originalDb.query.patients.findFirst({
+        where: eq(patients.id, summary.id),
+      });
+      if (existing?.clerkUserId) {
+        effectiveClerkId = existing.clerkUserId;
+      }
+    } catch {
+      // Ignore query failure if table is empty or being initialized
+    }
+  }
+
+  if (effectiveClerkId) {
+    // Delete any stale/duplicate row for this clerk user that has a different id
+    await originalDb
+      .delete(patients)
+      .where(and(eq(patients.clerkUserId, effectiveClerkId), ne(patients.id, summary.id)));
+  }
+
   const row: typeof patients.$inferInsert = {
     id: summary.id,
-    ...(clerkUserId ? { clerkUserId } : {}),
+    ...(effectiveClerkId ? { clerkUserId: effectiveClerkId } : {}),
     firstName: summary.firstName,
     middleName: summary.middleName ?? null,
     lastName: summary.lastName,
     suffix: summary.suffix ?? null,
     sex: (summary.sex as any) ?? null,
     dob: summary.dateOfBirth ?? null,
+    placeOfBirth: summary.placeOfBirth ?? null,
     bloodType: (fromBackendBloodType(summary.bloodType) as any) ?? null,
     civilStatus: (summary.civilStatus as any) ?? null,
     nationality: summary.nationality ?? null,
@@ -342,6 +365,9 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   const providerTypeMap: Record<string, string> = {
     PrimaryCare: 'primary_care',
     Specialist: 'specialist_1',
+    primary_care: 'primary_care',
+    specialist_1: 'specialist_1',
+    specialist_2: 'specialist_2',
   };
   await reconcileListEntity(
     patientHealthcareProviders,

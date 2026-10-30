@@ -28,6 +28,7 @@ export type WebSectionKey =
   | 'AppointmentsScreen'
   | 'RecordsScreen'
   | 'FilesScreen'
+  | 'MessagesScreen'
   | 'MessagesInboxScreen'
   | 'ProfileScreen'
   | 'NotificationScreen'
@@ -88,6 +89,7 @@ const ROOT_TAB_HEADERS: Record<string, { title: string; subtitle: string }> = {
   AppointmentsScreen: { title: 'My Appointments', subtitle: 'Patient Portal' },
   RecordsScreen: { title: 'Health Records', subtitle: 'Patient Portal' },
   FilesScreen: { title: 'Health Records', subtitle: 'Patient Portal' },
+  MessagesScreen: { title: 'Messages', subtitle: 'Patient Portal' },
   MessagesInboxScreen: { title: 'Messages', subtitle: 'Patient Portal' },
   ProfileScreen: { title: 'My Profile', subtitle: 'Patient Portal' },
 };
@@ -117,7 +119,7 @@ export function resolveWebHeaderState(
   if (route.name === 'BottomTabs') {
     const rawTab = getFocusedRouteNameFromRoute(route as any) ?? 'HomeScreen';
     const tabKey: WebSectionKey = (
-      ['HomeScreen', 'AppointmentsScreen', 'RecordsScreen', 'FilesScreen', 'ProfileScreen'] as const
+      ['HomeScreen', 'AppointmentsScreen', 'RecordsScreen', 'FilesScreen', 'MessagesScreen', 'MessagesInboxScreen', 'ProfileScreen'] as const
     ).includes(rawTab as any)
       ? (rawTab as WebSectionKey)
       : 'HomeScreen';
@@ -181,6 +183,9 @@ export function resolveActiveSection(state: NavigationState<ParamListBase>): Web
 
   if (route.name === 'BottomTabs') {
     const tab = getFocusedRouteNameFromRoute(route as any) ?? 'HomeScreen';
+    if (tab === 'MessagesScreen' || tab === 'MessagesInboxScreen') {
+      return 'MessagesInboxScreen';
+    }
     return (['HomeScreen', 'AppointmentsScreen', 'RecordsScreen', 'FilesScreen', 'ProfileScreen'] as const).includes(
       tab as any,
     )
