@@ -364,8 +364,6 @@ export default function MessagesInboxScreen() {
             }))}
             selectedKey={selectedDependentId ?? 'all'}
             onSelect={(id) => setSelectedDependentId(id === 'all' ? null : id)}
-            style={{ marginHorizontal: -spacing.lg }}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
           />
         </View>
       )}
@@ -380,8 +378,6 @@ export default function MessagesInboxScreen() {
         ]}
         selectedKey={facilityFilter}
         onSelect={(id) => setFacilityFilter(id as FacilityFilter)}
-        style={{ marginHorizontal: -spacing.lg }}
-        contentContainerStyle={{ paddingHorizontal: spacing.lg }}
       />
 
       {/* Content List */}

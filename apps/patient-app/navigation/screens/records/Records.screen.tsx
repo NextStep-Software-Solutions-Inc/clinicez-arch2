@@ -24,6 +24,7 @@ import { CategoryPillBar } from '../../../components/records/CategoryPillBar';
 import { RecordSkeletonList } from '../../../components/records/RecordSkeletonList';
 import { FileRow } from '../../../components/files/FileRow';
 import { useAppTheme } from '../../../contexts/ThemeContext';
+import { useContentInsets } from '../../../hooks/useContentInsets';
 import { usePatientId } from '../../../hooks/usePatientId';
 import { useFilesBrowser } from '../../../hooks/useFilesBrowser';
 import { db } from '../../../db/index';
@@ -113,7 +114,8 @@ function DocumentRow({ icon, title, subtitle, caption, chips, onPress }: Documen
 }
 
 export default function RecordsScreen() {
-  const { colors, spacing, radii } = useAppTheme();
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
+  const contentInsets = useContentInsets();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
@@ -248,7 +250,10 @@ export default function RecordsScreen() {
       {segmentIndex === 0 ? (
         // ─── SEGMENT 0: CLINIC DOCUMENTS (Provider Issued) ─────────────────
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { gap: spacing.md, padding: spacing.md }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { gap: spacing.md, padding: spacing.md, paddingBottom: contentInsets.bottom + 80 },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshingClinic}
@@ -387,7 +392,10 @@ export default function RecordsScreen() {
       ) : (
         // ─── SEGMENT 1: MY UPLOADS (Patient Uploaded Outside Files) ────────
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { gap: spacing.md, padding: spacing.md }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { gap: spacing.md, padding: spacing.md, paddingBottom: contentInsets.bottom + 80 },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshingUploads}
@@ -396,25 +404,6 @@ export default function RecordsScreen() {
             />
           }
         >
-          {/* Action Row: Upload Record CTA */}
-          <View style={styles.uploadHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="bodyBold" style={{ color: colors.text }}>
-                My Uploads
-              </ThemedText>
-              <ThemedText variant="caption" color="textSecondary">
-                Personal files and external medical documents uploaded by you.
-              </ThemedText>
-            </View>
-            <Button
-              label="Upload File"
-              variant="primary"
-              size="sm"
-              icon="upload"
-              onPress={() => navigation.navigate('FilesUploadScreen')}
-            />
-          </View>
-
           {/* Category Filter Pills */}
           <CategoryPillBar
             selectedCategory={activeUploadCategory}
@@ -429,8 +418,6 @@ export default function RecordsScreen() {
               icon="upload"
               title="No Uploaded Records"
               message="Upload your lab results, prescriptions, vaccination cards, or government IDs to keep your personal records handy."
-              actionLabel="Upload Record"
-              onActionPress={() => navigation.navigate('FilesUploadScreen')}
             />
           ) : (
             <View style={{ gap: spacing.sm }}>
@@ -465,6 +452,34 @@ export default function RecordsScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Floating Action Button (FAB) */}
+      <Pressable
+        onPress={() => {
+          if (segmentIndex !== 1) setSegmentIndex(1);
+          navigation.navigate('FilesUploadScreen');
+        }}
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            backgroundColor: colors.primary,
+            borderRadius: radii.full,
+            bottom: contentInsets.bottom + spacing.lg,
+            right: spacing.xl,
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.md,
+            opacity: pressed ? 0.88 : 1,
+          },
+          shadows.md,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Upload medical file or document"
+      >
+        <AppIcon name="plus" size={sizes.iconMd} color="onPrimary" />
+        <ThemedText variant="bodyBold" color="onPrimary">
+          Upload
+        </ThemedText>
+      </Pressable>
 
       {/* Rename Modal */}
       {renameTarget && (
@@ -508,10 +523,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
   },
-  uploadHeaderRow: {
+  fab: {
+    position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    gap: 6,
   },
 });

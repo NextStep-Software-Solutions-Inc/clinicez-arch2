@@ -32,9 +32,6 @@ export const CategoryPillBar: React.FC<CategoryPillBarProps> = ({
       items={items}
       selectedKey={selectedCategory}
       onSelect={onSelectCategory}
-      contentContainerStyle={{
-        paddingHorizontal: Platform.OS === 'web' ? 0 : spacing.lg,
-      }}
     />
   );
 };

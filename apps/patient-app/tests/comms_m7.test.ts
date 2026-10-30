@@ -290,8 +290,9 @@ describe('Milestone M7: Patient Comms & Teleconsultation', () => {
       expect(content).toContain('styles.fab');
       expect(content).toContain('New Inquiry');
 
-      // Edge-to-edge chip bar margins for fluid horizontal scrolling on mobile
-      expect(content).toContain('marginHorizontal: -spacing.lg');
+      // Filter chips uniform with other screens (FilterChipBar with facility filter)
+      expect(content).toContain('FilterChipBar');
+      expect(content).toContain('All Facilities');
     });
   });
 });

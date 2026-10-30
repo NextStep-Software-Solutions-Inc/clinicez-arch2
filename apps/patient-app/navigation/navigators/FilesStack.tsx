@@ -5,6 +5,7 @@ import RecordsScreen from '../screens/records/Records.screen';
 import FilesUploadScreen from '../screens/files/FilesUpload.screen';
 import FileViewerScreen from '../screens/files/FileViewer.screen';
 import ExternalOpenConsentScreen from '../screens/files/ExternalOpenConsent.screen';
+import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
 
 const FilesStack = createNativeStackNavigator({
   screenOptions: {
@@ -15,7 +16,11 @@ const FilesStack = createNativeStackNavigator({
   screens: {
     FilesBrowserScreen: createNativeStackScreen({
       screen: RecordsScreen,
-      options: { title: 'Health Records & Documents', headerLargeTitleEnabled: true },
+      options: {
+        title: 'Health Records & Documents',
+        headerLargeTitleEnabled: true,
+        headerRight: () => <BottomTabsHeaderRight />,
+      },
     }),
     FilesUploadScreen: createNativeStackScreen({
       screen: FilesUploadScreen,
