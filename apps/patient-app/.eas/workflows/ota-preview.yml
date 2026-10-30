@@ -58,7 +58,7 @@ jobs:
     params:
       platform: ios
       profile: preview
-      simulator: true
+      distribution: simulator
       fingerprint_hash: ${{ needs.fingerprint.outputs.ios_fingerprint_hash }}
 
   build_android:

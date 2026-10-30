@@ -1,4 +1,4 @@
-name: Production OTA Update
+name: Production Release Build & OTA Update
 
 defaults:
   tools:
@@ -24,6 +24,34 @@ jobs:
           bun run --cwd apps/patient-app typecheck
           bun run --cwd apps/patient-app lint:tokens
           bun run --cwd apps/patient-app test
+
+  fingerprint:
+    name: Calculate Native Fingerprints (Production)
+    needs: [quality_gate]
+    type: fingerprint
+    environment: production
+    env:
+      APP_VARIANT: production
+
+  get_android_build:
+    name: Check Existing Production Android Build
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: android
+      profile: production
+      fingerprint_hash: ${{ needs.fingerprint.outputs.android_fingerprint_hash }}
+
+  build_android:
+    name: Build Production Android (Native Changed)
+    needs: [get_android_build]
+    if: ${{ !needs.get_android_build.outputs.build_id }}
+    type: build
+    params:
+      platform: android
+      profile: production
+    env:
+      APP_VARIANT: production
 
   update:
     name: Publish Production
