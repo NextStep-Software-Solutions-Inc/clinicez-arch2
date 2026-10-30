@@ -3,11 +3,8 @@ import type { IBlobStorage } from './blobStorage';
 export * from './blobStorage';
 
 function resolveBlobStorage(): IBlobStorage {
-  // If running in Bun test, web, or non-native environment, fall back to webBlobStorage
-  if (
-    typeof window !== 'undefined' ||
-    (typeof process !== 'undefined' && Boolean((process as { versions?: { bun?: string } }).versions?.bun))
-  ) {
+  // If running in Bun test environment, use webBlobStorage
+  if (typeof process !== 'undefined' && Boolean((process as { versions?: { bun?: string } }).versions?.bun)) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('./blobStorage.web').webBlobStorage;
   }

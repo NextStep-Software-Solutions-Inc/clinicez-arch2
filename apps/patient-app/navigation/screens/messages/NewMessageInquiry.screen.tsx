@@ -294,31 +294,44 @@ export default function NewMessageInquiryScreen() {
                 If this is a medical emergency, do not submit this message. Please call 911 or go to the nearest emergency department immediately.
               </ThemedText>
               <Button
-                label="Call 911 Emergency Now"
+                label="Call 911"
+                accessibilityLabel="Call 911 Emergency Now"
                 variant="danger"
                 size="lg"
                 icon="phone"
+                fullWidth
                 onPress={handleCallEmergency}
               />
               <Button
-                label="Retract Emergency Answer"
+                label="Change Answer"
+                accessibilityLabel="Retract Emergency Answer"
                 variant="outline"
-                size="sm"
-                onPress={() => setEmergencyBlocked(false)}
+                size="md"
+                fullWidth
+                onPress={() => {
+                  setEmergencyBlocked(false);
+                  setEmergencyAcknowledged(null);
+                }}
               />
             </View>
           ) : (
             <View style={[styles.gateButtonGroup, { gap: spacing.sm }]}>
               <Button
-                label="No, this is not an emergency"
+                label="No Emergency"
+                accessibilityLabel="No, this is not an emergency"
                 variant="primary"
                 size="md"
+                fullWidth
+                style={styles.flex}
                 onPress={() => handleEmergencyAnswer(false)}
               />
               <Button
-                label="Yes, I need emergency care"
+                label="Emergency"
+                accessibilityLabel="Yes, I need emergency care"
                 variant="outline"
                 size="md"
+                fullWidth
+                style={styles.flex}
                 onPress={() => handleEmergencyAnswer(true)}
               />
             </View>
@@ -343,6 +356,7 @@ export default function NewMessageInquiryScreen() {
                   }))}
                   selectedKey={selectedDependentId ?? 'self'}
                   onSelect={(id) => setSelectedDependentId(id === 'self' ? null : id)}
+                  contentContainerStyle={{ paddingRight: spacing.sm }}
                 />
               </View>
             )}
@@ -373,6 +387,7 @@ export default function NewMessageInquiryScreen() {
                   }))}
                   selectedKey={selectedGrantId ?? grants[0]?.grantId ?? ''}
                   onSelect={(id) => setSelectedGrantId(id)}
+                  contentContainerStyle={{ paddingRight: spacing.sm }}
                 />
               )}
             </View>
@@ -388,6 +403,7 @@ export default function NewMessageInquiryScreen() {
                 }))}
                 selectedKey={category}
                 onSelect={(id) => setCategory(id as MessageCategory)}
+                contentContainerStyle={{ paddingRight: spacing.sm }}
               />
             </View>
           </Card>
@@ -454,21 +470,26 @@ export default function NewMessageInquiryScreen() {
 
             {/* Attachment Button */}
             <Button
-              label={isUploadingFile ? 'Scanning & Encrypting...' : 'Attach Document or Image (Max 15MB)'}
+              label={isUploadingFile ? 'Uploading...' : 'Attach File'}
               variant="outline"
-              size="sm"
+              size="md"
               icon="upload"
+              fullWidth
               disabled={isUploadingFile}
               onPress={handlePickDocument}
             />
+            <ThemedText variant="caption" color="textMuted" style={{ textAlign: 'center' }}>
+              Supported: JPG, PNG, PDF (up to 15 MB)
+            </ThemedText>
           </Card>
 
           {/* Submit Action */}
           <Button
-            label={isSubmitting ? 'Submitting to Triage...' : 'Send Inquiry to Facility'}
+            label={isSubmitting ? 'Sending...' : 'Send Message'}
             variant="primary"
             size="lg"
             icon="check"
+            fullWidth
             disabled={isSubmitting || emergencyAcknowledged !== false || !messageText.trim()}
             onPress={handleSubmit}
           />
@@ -491,7 +512,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   gateButtonGroup: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     marginTop: 12,
   },
   gateCardConfirmed: {

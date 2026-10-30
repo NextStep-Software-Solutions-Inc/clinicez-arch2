@@ -10,7 +10,6 @@ export interface UploadFile {
 const URL_SCHEME_PATTERN = /^(blob:|data:|https?:|file:)/i;
 
 function isWebEnvironment(): boolean {
-  if (typeof window !== 'undefined') return true;
   if (typeof process !== 'undefined' && Boolean((process as { versions?: { bun?: string } }).versions?.bun)) {
     return true;
   }
@@ -18,7 +17,7 @@ function isWebEnvironment(): boolean {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('react-native').Platform?.OS === 'web';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -63,5 +62,12 @@ export async function appendFilePart(form: FormData, field: string, file: Upload
     form.append(field, prepared.blob, prepared.fileName);
     return;
   }
-  form.append(field, { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);
+  let nativeUri = file.uri;
+  if (!nativeUri.startsWith('file:') && !nativeUri.startsWith('content:')) {
+    const resolved = await blobStorage.getBlobUri(file.uri);
+    if (resolved) {
+      nativeUri = resolved;
+    }
+  }
+  form.append(field, { uri: nativeUri, name: file.name, type: file.mimeType } as unknown as Blob);
 }
