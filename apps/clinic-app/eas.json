@@ -10,7 +10,6 @@
       "distribution": "internal",
       "developmentClient": true,
       "environment": "development",
-      "channel": "development",
       "android": { "buildType": "apk" },
       "ios": { "buildConfiguration": "Debug", "simulator": true }
     },
@@ -18,30 +17,18 @@
       "extends": "development",
       "ios": { "buildConfiguration": "Debug", "simulator": false }
     },
-    "development-standalone": {
+    "preview": {
       "node": "24.22.1",
-      "env": { "APP_VARIANT": "development-standalone" },
       "distribution": "internal",
-      "environment": "development",
-      "channel": "br-development",
+      "environment": "preview",
       "android": { "buildType": "apk" },
       "ios": { "simulator": true }
     },
-    "preview": {
-      "node": "24.22.1",
-      "env": { "APP_VARIANT": "preview" },
-      "distribution": "internal",
-      "environment": "preview",
-      "channel": "preview",
-      "android": { "buildType": "apk" }
+    "development-standalone": {
+      "extends": "preview"
     },
     "staging": {
-      "node": "24.22.1",
-      "env": { "APP_VARIANT": "staging" },
-      "distribution": "internal",
-      "environment": "preview",
-      "channel": "staging",
-      "android": { "buildType": "apk" }
+      "extends": "preview"
     },
     "production": {
       "node": "24.22.1",

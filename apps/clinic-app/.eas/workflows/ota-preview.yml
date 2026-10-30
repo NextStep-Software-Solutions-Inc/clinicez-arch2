@@ -1,17 +1,94 @@
-name: Preview OTA Update
+name: Branch Build & OTA Update
+
+defaults:
+  tools:
+    node: "24.22.1"
+    bun: "1.3.14"
 
 on:
   push:
     branches:
       - '**'
-      - '!main'
-      - '!development'
 
 jobs:
+  quality_gate:
+    name: Typecheck, Token Lint & Host Gate
+    runs_on: linux-medium
+    steps:
+      - uses: eas/checkout
+      - name: Install Monorepo Dependencies & Run Quality Gates
+        run: |
+          REPO_ROOT=$(git rev-parse --show-toplevel)
+          cd "$REPO_ROOT"
+          bun install --frozen-lockfile
+          bun run --cwd apps/clinic-app typecheck
+          bun run --cwd apps/clinic-app lint:tokens
+          bun run --cwd apps/clinic-app lint:hosts
+      - id: resolve_channel
+        name: Resolve Sanitized Per-Branch Channel
+        run: |
+          REPO_ROOT=$(git rev-parse --show-toplevel)
+          cd "$REPO_ROOT"
+          CHANNEL=$(APP_BRANCH="${{ github.ref_name || 'branch' }}" bun -e "import getConfig from './apps/clinic-app/app.config.ts'; const cfg = getConfig({ projectRoot: 'apps/clinic-app', staticConfig: {} }); console.log(cfg.updates?.requestHeaders?.['expo-channel-name'] ?? 'br-branch');")
+          set-output channel "$CHANNEL"
+    outputs:
+      channel: ${{ steps.resolve_channel.outputs.channel }}
+
+  fingerprint:
+    name: Calculate Native Fingerprints
+    needs: [quality_gate]
+    type: fingerprint
+    environment: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
+
+  get_android_build:
+    name: Check Existing Standalone Android APK
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: android
+      profile: preview
+      fingerprint_hash: ${{ needs.fingerprint.outputs.android_fingerprint_hash }}
+
+  get_ios_build:
+    name: Check Existing Standalone iOS Simulator Build
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: ios
+      profile: preview
+      distribution: simulator
+      fingerprint_hash: ${{ needs.fingerprint.outputs.ios_fingerprint_hash }}
+
+  build_android:
+    name: Build Standalone Android APK (Native Changed)
+    needs: [get_android_build]
+    if: ${{ !needs.get_android_build.outputs.build_id }}
+    type: build
+    params:
+      platform: android
+      profile: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
+
+  build_ios:
+    name: Build Standalone iOS Simulator (Native Changed)
+    needs: [get_ios_build]
+    if: ${{ !needs.get_ios_build.outputs.build_id }}
+    type: build
+    params:
+      platform: ios
+      profile: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
+
   update:
-    name: Publish Preview
+    name: Publish Branch OTA Update
+    needs: [quality_gate]
     type: update
     environment: preview
+    env:
+      APP_BRANCH: ${{ github.ref_name }}
     params:
-      # branch: ${{ github.ref_name || 'preview' }}
-      branch: preview
+      channel: ${{ needs.quality_gate.outputs.channel }}
