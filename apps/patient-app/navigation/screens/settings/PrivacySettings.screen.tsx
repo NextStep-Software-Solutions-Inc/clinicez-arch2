@@ -1,25 +1,21 @@
 import React from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import Screen from '../../../components/layout/Screen';
-import Card from '../../../components/ui/Card';
-import Button from '../../../components/ui/Button';
-import { AppIcon } from '../../../components/ui/Icon';
-import IconButton from '../../../components/ui/IconButton';
-import ThemedText from '../../../components/ui/ThemedText';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
+import { AppIcon } from '@ui/Icon';
+import ThemedText from '@ui/ThemedText';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { usePrivacy } from '../../../contexts/PrivacyContext';
 import { dialog } from '../../../utils/dialog';
 
 export default function PrivacySettingsScreen() {
-  const { colors, spacing, radii } = useAppTheme();
-  const navigation = useNavigation<any>();
+  const { colors, spacing, radii, sizes } = useAppTheme();
   const {
     privacyBlurEnabled,
     setPrivacyBlurEnabled,
     showHiddenConversations,
     setShowHiddenConversations,
     hiddenConversationIds,
+    clearAllHiddenConversations,
   } = usePrivacy();
 
   const handleClearHiddenCopies = async () => {
@@ -29,138 +25,106 @@ export default function PrivacySettingsScreen() {
       confirmLabel: 'Restore',
     });
     if (ok) {
+      await clearAllHiddenConversations();
       setShowHiddenConversations(false);
       dialog.alert('Restored', 'Hidden conversation copies are now visible in your inbox.');
     }
   };
 
   return (
-    <Screen width="form" contentContainerStyle={{ gap: spacing.lg }}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <IconButton
-          icon="back"
-          accessibilityLabel="Back to Settings"
-          hitSize={44}
-          onPress={() => navigation.goBack()}
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{
+        padding: spacing.lg,
+        maxWidth: sizes.formMaxWidth,
+        alignSelf: 'center',
+        width: '100%',
+      }}
+    >
+      {/* Message Privacy */}
+      <SettingsSection
+        title="Message Privacy"
+        footer="Privacy blur obscures message previews, thread content, and attachments until tapped or held. Prevents shoulder surfing in public places."
+      >
+        <SettingsRow
+          title="Privacy Blur Mode"
+          subtitle="Blur message previews & media until tapped"
+          icon={{ android: 'visibility_off', ios: 'eye.slash.fill' }}
+          iconColor={colors.primary}
+          right={{
+            type: 'switch',
+            value: privacyBlurEnabled,
+            onValueChange: setPrivacyBlurEnabled,
+          }}
         />
-        <View style={styles.headerText}>
-          <ThemedText variant="h2">Privacy & Communications</ThemedText>
-          <ThemedText variant="small" color="textMuted">
-            Manage message privacy, blur mode, and local copies
-          </ThemedText>
-        </View>
-      </View>
+      </SettingsSection>
 
-      {/* Setting 1: Privacy Blur Mode */}
-      <Card padding="lg" style={{ gap: spacing.md }}>
-        <View style={styles.settingItem}>
-          <View style={styles.settingTextGroup}>
-            <View style={styles.iconTitleRow}>
-              <AppIcon name="eye" size={20} color="primary" />
-              <ThemedText variant="bodyBold">Privacy Blur Mode</ThemedText>
-            </View>
-            <ThemedText variant="small" color="textSecondary">
-              Blurs message previews, thread content, and attachments until tapped or held. Prevents shoulder surfing in public places.
-            </ThemedText>
-          </View>
-          <Switch
-            value={privacyBlurEnabled}
-            onValueChange={setPrivacyBlurEnabled}
-            trackColor={{ false: colors.border, true: colors.primary }}
-          />
-        </View>
-      </Card>
-
-      {/* Setting 2: Show Hidden Conversations */}
-      <Card padding="lg" style={{ gap: spacing.md }}>
-        <View style={styles.settingItem}>
-          <View style={styles.settingTextGroup}>
-            <View style={styles.iconTitleRow}>
-              <AppIcon name="eyeOff" size={20} color="primary" />
-              <ThemedText variant="bodyBold">Show Hidden Conversations</ThemedText>
-            </View>
-            <ThemedText variant="small" color="textSecondary">
-              Display conversations you previously hid via "Hide My Copy" in your inbox.
-            </ThemedText>
-          </View>
-          <Switch
-            value={showHiddenConversations}
-            onValueChange={setShowHiddenConversations}
-            trackColor={{ false: colors.border, true: colors.primary }}
-          />
-        </View>
-
+      {/* Conversation Copies */}
+      <SettingsSection
+        title="Conversation Copies"
+        footer={
+          hiddenConversationIds.size > 0
+            ? `You currently have ${hiddenConversationIds.size} hidden conversation copy(ies). Using "Hide My Copy" removes the conversation from your active inbox view on this device.`
+            : 'Using "Hide My Copy" removes the conversation from your active inbox view on this device without deleting official facility records.'
+        }
+      >
+        <SettingsRow
+          title="Show Hidden Conversations"
+          subtitle="Display conversations hidden via 'Hide My Copy'"
+          icon={{ android: 'visibility', ios: 'eye.fill' }}
+          iconColor={colors.primary}
+          right={{
+            type: 'switch',
+            value: showHiddenConversations,
+            onValueChange: setShowHiddenConversations,
+          }}
+        />
         {hiddenConversationIds.size > 0 && (
-          <View style={[styles.subAction, { borderTopColor: colors.border, paddingTop: spacing.md }]}>
-            <ThemedText variant="caption" color="textMuted">
-              You currently have {hiddenConversationIds.size} hidden conversation copy(ies).
-            </ThemedText>
-            <Button
-              label="Restore All Hidden Conversations"
-              variant="outline"
-              size="sm"
-              onPress={handleClearHiddenCopies}
-            />
-          </View>
+          <SettingsRow
+            title="Restore All Hidden Conversations"
+            subtitle={`Restore ${hiddenConversationIds.size} hidden conversation copy(ies) to inbox`}
+            icon={{ android: 'unarchive', ios: 'arrow.uturn.backward.circle.fill' }}
+            iconColor={colors.purple}
+            right={{ type: 'none' }}
+            onPress={handleClearHiddenCopies}
+          />
         )}
-      </Card>
+      </SettingsSection>
 
-      {/* Legal & Regulatory Notice */}
-      <Card
-        padding="lg"
+      {/* Statutory Data Privacy Notice */}
+      <View
         style={[
           styles.noticeCard,
           {
             backgroundColor: colors.surfaceSubtle,
-            borderColor: colors.border,
+            borderColor: colors.borderLight,
+            borderRadius: radii.md,
+            padding: spacing.lg,
             gap: spacing.sm,
           },
         ]}
       >
-        <View style={styles.iconTitleRow}>
-          <AppIcon name="shield" size={20} color="primary" />
-          <ThemedText variant="smallBold" color="primaryText">
+        <View style={styles.noticeHeader}>
+          <AppIcon android="shield" ios="checkmark.shield.fill" size={18} color="primary" />
+          <ThemedText variant="captionBold" color="primaryText">
             DATA PRIVACY ACT OF 2012 (RA 10173)
           </ThemedText>
         </View>
-        <ThemedText variant="small" color="textSecondary">
-          ClinicEZ complies with statutory data privacy requirements. Your patient communication copies are end-to-end secured. Using "Hide My Copy" only removes your local view and does not alter the healthcare facility's official medical records or audit trails.
+        <ThemedText variant="small" color="textSecondary" style={{ lineHeight: 20 }}>
+          ClinicEZ complies with statutory data privacy requirements. Your patient communication copies are end-to-end secured. Using &ldquo;Hide My Copy&rdquo; only removes your local view and does not alter the healthcare facility&apos;s official medical records or audit trails.
         </ThemedText>
-      </Card>
-    </Screen>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerText: {
-    flex: 1,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 16,
-  },
-  settingTextGroup: {
-    flex: 1,
-    gap: 4,
-  },
-  iconTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  subAction: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
   noticeCard: {
     borderWidth: 1,
+  },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });

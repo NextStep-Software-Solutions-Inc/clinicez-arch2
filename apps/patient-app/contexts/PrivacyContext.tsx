@@ -18,6 +18,7 @@ interface PrivacyContextType {
   hiddenConversationIds: Set<string>;
   hideConversation: (conversationId: string, getToken: () => Promise<string | null>) => Promise<boolean>;
   unhideConversation: (conversationId: string) => Promise<boolean>;
+  clearAllHiddenConversations: () => Promise<boolean>;
 }
 
 const PrivacyContext = createContext<PrivacyContextType | null>(null);
@@ -151,6 +152,12 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return true;
   }, []);
 
+  const clearAllHiddenConversations = useCallback(async (): Promise<boolean> => {
+    setHiddenConversationIds(new Set());
+    await saveStoredHiddenIds(new Set());
+    return true;
+  }, []);
+
   return (
     <PrivacyContext.Provider
       value={{
@@ -163,6 +170,7 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         hiddenConversationIds,
         hideConversation,
         unhideConversation,
+        clearAllHiddenConversations,
       }}
     >
       {children}
