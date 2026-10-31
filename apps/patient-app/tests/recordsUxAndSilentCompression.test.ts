@@ -290,6 +290,28 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
       title: 'Preview',
     });
   });
+
+  test('FileViewer uses sleek floating pill toolbar without chunky square icon boxes, and WebNavBar hides on viewer screen', () => {
+    const viewerWeb = readApp('navigation/screens/files/FileViewer.screen.web.tsx');
+    const viewerNative = readApp('navigation/screens/files/FileViewer.screen.tsx');
+    const webNavBar = readApp('components/ui/WebNavBar.web.tsx');
+
+    // No chunky square card boxes or web bottom action bar
+    expect(viewerWeb.includes('actionIconBox')).toBe(false);
+    expect(viewerNative.includes('actionIconBox')).toBe(false);
+    expect(viewerWeb.includes('bottomActionBar')).toBe(false);
+    expect(viewerNative.includes('bottomActionBar')).toBe(false);
+
+    // Both use sleek floating pill toolbar
+    expect(viewerWeb.includes('floatingToolbarWrap')).toBe(true);
+    expect(viewerWeb.includes('floatingToolbar')).toBe(true);
+    expect(viewerNative.includes('floatingToolbarWrap')).toBe(true);
+    expect(viewerNative.includes('floatingToolbar')).toBe(true);
+
+    // WebNavBar checks tabBarStyle display: none and hides when viewing a file
+    expect(webNavBar.includes("tabBarStyle?.display === 'none'")).toBe(true);
+    expect(webNavBar.includes("activeSubRoute?.name === 'FileViewerScreen'")).toBe(true);
+  });
 });
 
 describe('5. Silent 80% File Compression Before Uploading', () => {

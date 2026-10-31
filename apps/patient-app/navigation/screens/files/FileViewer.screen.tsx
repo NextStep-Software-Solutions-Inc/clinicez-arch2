@@ -198,74 +198,75 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
         )}
       </View>
 
-      {/* Restyled Bottom Action Bar */}
+      {/* Floating Action Toolbar */}
       <View
         style={[
-          styles.bottomActionBar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.borderLight,
-            paddingBottom: Math.max(insets.bottom, spacing.md),
-            paddingTop: spacing.sm,
-            paddingHorizontal: spacing.md,
-          },
+          styles.floatingToolbarWrap,
+          { paddingBottom: Math.max(insets.bottom, contentInsets.bottom) + spacing.md },
         ]}
       >
-        <Pressable
-          onPress={() => setIsFullScreen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Full Screen"
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+        <View
+          style={[
+            styles.floatingToolbar,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: sizes.borderWidth,
+              borderRadius: radii.full,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.sm,
+            },
+            shadows.lg,
+          ]}
         >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={() => setIsFullScreen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Full Screen"
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name="fullscreen" color="text" size={sizes.iconMd} />
-          </View>
-          <ThemedText variant="captionBold" color="text">
-            Full Screen
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="text">
+              Full Screen
+            </ThemedText>
+          </Pressable>
 
-        <Pressable
-          onPress={handleShare}
-          accessibilityRole="button"
-          accessibilityLabel="Share"
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-        >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel="Share"
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name="share" color="text" size={sizes.iconMd} />
-          </View>
-          <ThemedText variant="captionBold" color="text">
-            Share
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="text">
+              Share
+            </ThemedText>
+          </Pressable>
 
-        <Pressable
-          onPress={() => setRenameModalOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Rename"
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-        >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={() => setRenameModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Rename"
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name="edit" color="text" size={sizes.iconMd} />
-          </View>
-          <ThemedText variant="captionBold" color="text">
-            Rename
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="text">
+              Rename
+            </ThemedText>
+          </Pressable>
 
-        <Pressable
-          onPress={handleDelete}
-          accessibilityRole="button"
-          accessibilityLabel="Delete"
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-        >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.emergencyBg, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={handleDelete}
+            accessibilityRole="button"
+            accessibilityLabel="Delete"
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name="trash" color="emergency" size={sizes.iconMd} />
-          </View>
-          <ThemedText variant="captionBold" color="emergency">
-            Delete
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="emergency">
+              Delete
+            </ThemedText>
+          </Pressable>
+        </View>
       </View>
 
       <Modal
@@ -325,28 +326,32 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: '100%',
   },
-  bottomActionBar: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+  floatingToolbarWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    pointerEvents: 'box-none',
+  },
+  floatingToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     width: '100%',
+    maxWidth: 420,
   },
-  actionBtn: {
+  toolbarBtn: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minWidth: 64,
-    paddingVertical: 4,
+    minWidth: 54,
+    minHeight: 44,
   },
-  actionBtnPressed: {
-    opacity: 0.7,
-  },
-  actionIconBox: {
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
+  toolbarBtnPressed: {
+    opacity: 0.6,
   },
   center: {
     flex: 1,

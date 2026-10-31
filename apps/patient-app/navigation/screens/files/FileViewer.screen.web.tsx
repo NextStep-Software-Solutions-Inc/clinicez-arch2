@@ -290,74 +290,75 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
         )}
       </View>
 
-      {/* Restyled Bottom Action Bar */}
+      {/* Floating Action Toolbar */}
       <View
         style={[
-          styles.bottomActionBar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.borderLight,
-            paddingBottom: Math.max(contentInsets.bottom, spacing.md),
-            paddingTop: spacing.sm,
-            paddingHorizontal: spacing.md,
-          },
+          styles.floatingToolbarWrap,
+          { paddingBottom: Math.max(contentInsets.bottom, spacing.md) + spacing.xs },
         ]}
       >
-        <Pressable
-          onPress={() => setIsFullScreen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Full Screen"
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+        <View
+          style={[
+            styles.floatingToolbar,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: sizes.borderWidth,
+              borderRadius: radii.full,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.sm,
+            },
+            shadows.lg,
+          ]}
         >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={() => setIsFullScreen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Full Screen"
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name="fullscreen" size={sizes.iconMd} color="text" />
-          </View>
-          <ThemedText variant="captionBold" color="text">
-            Full Screen
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="text">
+              Full Screen
+            </ThemedText>
+          </Pressable>
 
-        <Pressable
-          onPress={isShareSupported ? handleShare : handleDownload}
-          accessibilityRole="button"
-          accessibilityLabel={isShareSupported ? 'Share' : 'Download'}
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-        >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={isShareSupported ? handleShare : handleDownload}
+            accessibilityRole="button"
+            accessibilityLabel={isShareSupported ? 'Share' : 'Download'}
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name={isShareSupported ? 'share' : 'download'} size={sizes.iconMd} color="text" />
-          </View>
-          <ThemedText variant="captionBold" color="text">
-            {isShareSupported ? 'Share' : 'Download'}
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="text">
+              {isShareSupported ? 'Share' : 'Download'}
+            </ThemedText>
+          </Pressable>
 
-        <Pressable
-          onPress={() => setRenameModalOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Rename"
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-        >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={() => setRenameModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Rename"
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name="edit" size={sizes.iconMd} color="text" />
-          </View>
-          <ThemedText variant="captionBold" color="text">
-            Rename
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="text">
+              Rename
+            </ThemedText>
+          </Pressable>
 
-        <Pressable
-          onPress={handleDelete}
-          accessibilityRole="button"
-          accessibilityLabel="Delete"
-          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-        >
-          <View style={[styles.actionIconBox, { backgroundColor: colors.emergencyBg, borderRadius: radii.md }]}>
+          <Pressable
+            onPress={handleDelete}
+            accessibilityRole="button"
+            accessibilityLabel="Delete"
+            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+          >
             <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
-          </View>
-          <ThemedText variant="captionBold" color="emergency">
-            Delete
-          </ThemedText>
-        </Pressable>
+            <ThemedText variant="captionBold" color="emergency">
+              Delete
+            </ThemedText>
+          </Pressable>
+        </View>
       </View>
 
       {/* Full Screen Modal */}
@@ -441,7 +442,9 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 88,
   },
   center: {
     flex: 1,
@@ -459,27 +462,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bottomActionBar: {
+  floatingToolbarWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    pointerEvents: 'box-none',
+  },
+  floatingToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    borderTopWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'space-between',
     width: '100%',
+    maxWidth: 420,
   },
-  actionBtn: {
+  toolbarBtn: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minWidth: 64,
+    minWidth: 54,
+    minHeight: 44,
   },
-  actionBtnPressed: {
-    opacity: 0.7,
-  },
-  actionIconBox: {
-    width: 44,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
+  toolbarBtnPressed: {
+    opacity: 0.6,
   },
   closeOverlayBtnWrap: {
     position: 'absolute',
