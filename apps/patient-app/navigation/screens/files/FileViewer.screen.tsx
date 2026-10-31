@@ -1,5 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, BackHandler, Modal, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  BackHandler,
+  Modal,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { mutate } from 'swr';
 import ZoomableImage from '../../../components/ui/ZoomableImage';
@@ -8,21 +15,32 @@ import { useAuth as useAppAuth } from 'contexts/AuthContext';
 import * as Sharing from 'expo-sharing';
 import Pdf from 'react-native-pdf';
 import ThemedText from '@ui/ThemedText';
+import Card from '@ui/Card';
+import Button from '@ui/Button';
 import { AppIcon } from '@ui/Icon';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { usePatientId } from 'hooks/usePatientId';
 import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { cleanupPreviewCache, preparePreviewFile, getFileById, deleteItem, renameFile } from '../../../services/files';
+import {
+  cleanupPreviewCache,
+  preparePreviewFile,
+  getFileById,
+  deleteItem,
+  renameFile,
+} from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
 import { formatRecordCategoryLabel } from '../../../services/files/documentTypeMapping';
 import {
   formatRecordFileName,
   formatRecordSubtitle,
   formatViewerHeaderTitle,
+  formatRecordTimestamp,
 } from '../../../services/files/recordPresentation';
+import { formatBytes } from '../../../services/files/filesShared';
 import type { FilesScreenProps } from './navigationTypes';
-import RenameModal from '../../../components/ui/RenameModal';
+import FileViewerHeader from '../../../components/files/FileViewerHeader';
+import FileDetailsModal from '../../../components/files/FileDetailsModal';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 
@@ -32,6 +50,9 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const patientId = usePatientId();
   const { runWithAutoLockPaused } = useAppAuth();
   const { getToken } = useClerkAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const { fileId } = route.params;
   const insets = useSafeAreaInsets();
   const { documentTypes } = useDocumentTypes(patientId);
@@ -39,9 +60,14 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
   const [fileMetadata, setFileMetadata] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
+  const mountedRef = useRef(true);
+
+  // Single clean back handler across header button and Android hardware back
   const handleGoBack = useCallback(() => {
     if (navigation.canGoBack()) {
       navigation.goBack();
@@ -59,6 +85,15 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     return () => sub.remove();
   }, [handleGoBack]);
 
+  // Hide bottom tab bar while viewing file to allow immersive full screen
+  useEffect(() => {
+    const parent = navigation.getParent();
+    parent?.setOptions?.({ tabBarStyle: { display: 'none' } });
+    return () => {
+      parent?.setOptions?.({ tabBarStyle: undefined });
+    };
+  }, [navigation]);
+
   const categoryLabel = useMemo(
     () =>
       formatRecordCategoryLabel(fileMetadata?.documentTypeId, documentTypes) ??
@@ -69,7 +104,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   );
 
   const viewerHeaderTitle = useMemo(() => {
-    if (!fileMetadata && !preview) return undefined;
+    if (!fileMetadata && !preview) return 'Preview';
     return formatViewerHeaderTitle(fileMetadata ?? preview, categoryLabel);
   }, [fileMetadata, preview, categoryLabel]);
 
@@ -77,62 +112,49 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     return formatRecordSubtitle(fileMetadata) || undefined;
   }, [fileMetadata]);
 
-  useEffect(() => {
-    // Hide bottom tab bar while viewing file to allow full-screen focus
-    const parent = navigation.getParent();
-    parent?.setOptions?.({ tabBarStyle: { display: 'none' } });
-    return () => {
-      parent?.setOptions?.({ tabBarStyle: undefined });
-    };
-  }, [navigation]);
-
-  useEffect(() => {
-    navigation.setOptions({
-      title: viewerHeaderTitle ?? 'Preview',
-      headerTitle: () => (
-        <View style={styles.nativeHeaderTitleWrap}>
-          <ThemedText variant="bodyBold" numberOfLines={1}>
-            {viewerHeaderTitle ?? 'Preview'}
-          </ThemedText>
-          {viewerHeaderSubtitle ? (
-            <ThemedText variant="caption" color="textMuted" numberOfLines={1}>
-              {viewerHeaderSubtitle}
-            </ThemedText>
-          ) : null}
-        </View>
-      ),
-    });
-  }, [navigation, viewerHeaderTitle, viewerHeaderSubtitle]);
-
-  useEffect(() => {
-    let mounted = true;
+  const loadFile = useCallback(() => {
+    setIsRetrying(true);
+    setError(null);
     Promise.all([
-      preparePreviewFile(patientId, fileId, getToken),
+      preparePreviewFile(patientId, fileId, getTokenRef.current),
       getFileById(patientId, fileId),
     ])
       .then(([previewRes, fileRes]) => {
-        if (!mounted) return;
+        if (!mountedRef.current) return;
         setPreview(previewRes);
         setFileMetadata(fileRes);
       })
       .catch((err) => {
-        if (mounted) setError(err instanceof Error ? err.message : 'Unable to open this preview.');
+        if (!mountedRef.current) return;
+        setError(err instanceof Error ? err.message : 'Unable to open file preview.');
+      })
+      .finally(() => {
+        if (mountedRef.current) {
+          setIsRetrying(false);
+        }
       });
+  }, [fileId, patientId]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    loadFile();
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       cleanupPreviewCache(patientId, fileId).catch(() => {});
     };
-  }, [fileId, patientId, getToken]);
+  }, [fileId, loadFile, patientId]);
 
   const handleShare = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
     try {
       const available = await Sharing.isAvailableAsync().catch(() => false);
       if (!available) {
         dialog.alert('No app available', 'This device cannot share files with other apps.');
         return;
       }
-      const freshPreview = await preparePreviewFile(patientId, fileId, getToken);
+      const freshPreview = await preparePreviewFile(patientId, fileId, getTokenRef.current);
       await runWithAutoLockPaused(() =>
         Sharing.shareAsync(freshPreview.uri, {
           mimeType: freshPreview.mimeType,
@@ -141,7 +163,14 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
       );
     } catch (err) {
       dialog.alert('Could not share file', err instanceof Error ? err.message : 'Unable to share this file.');
+    } finally {
+      setIsSharing(false);
     }
+  };
+
+  const handleDownload = async () => {
+    // On native mobile, Sharing.shareAsync with mimeType provides the OS "Save to Files" / "Download" action
+    await handleShare();
   };
 
   const handleDelete = async () => {
@@ -154,7 +183,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     if (!confirmed) return;
 
     try {
-      await deleteItem(patientId, fileId, getToken);
+      await deleteItem(patientId, fileId, getTokenRef.current);
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       navigation.goBack();
     } catch (err) {
@@ -165,37 +194,53 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const handleRename = async (newName: string) => {
     await renameFile(patientId, fileId, newName);
     const updated = await getFileById(patientId, fileId);
-    setRenameModalOpen(false);
     setFileMetadata((prev: any) => updated ?? { ...prev, name: newName });
+    mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
   };
 
-  if (error) {
-    return (
-      <View style={[styles.center, { backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md }]}>
-        <AppIcon name="alert" size={sizes.iconXl} color="emergency" />
-        <ThemedText variant="h3">Preview not available</ThemedText>
-        <ThemedText variant="body" color="textMuted" style={styles.textCenter}>
-          {error}
-        </ThemedText>
-      </View>
-    );
-  }
-
-  if (!preview) {
-    return (
-      <View style={[styles.center, { backgroundColor: colors.background, gap: spacing.md }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <ThemedText variant="body" color="textMuted">
-          Preparing preview...
-        </ThemedText>
-      </View>
-    );
-  }
-
   return (
-    <View style={[styles.viewer, { backgroundColor: colors.background }]}>
-      <View style={styles.previewSurface}>
-        {preview.previewKind === 'image' ? (
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      {/* 1. Unified Clinical Header Bar */}
+      <FileViewerHeader
+        title={viewerHeaderTitle}
+        subtitle={viewerHeaderSubtitle}
+        categoryLabel={categoryLabel}
+        onBack={handleGoBack}
+        onShare={handleShare}
+      />
+
+      {/* 2. Main Content Canvas */}
+      <View style={styles.canvas}>
+        {error ? (
+          <View style={[styles.center, { padding: spacing.xl, gap: spacing.md }]}>
+            <View
+              style={[
+                styles.errorIconWrap,
+                { backgroundColor: colors.emergencyBg, borderRadius: radii.full },
+              ]}
+            >
+              <AppIcon name="alert" size={sizes.iconLg} color="emergency" />
+            </View>
+            <ThemedText variant="h3">Preview unavailable</ThemedText>
+            <ThemedText variant="body" color="textMuted" style={styles.textCenter}>
+              {error}
+            </ThemedText>
+            <Button
+              label="Try again"
+              variant="outline"
+              loading={isRetrying}
+              onPress={loadFile}
+              style={{ marginTop: spacing.sm }}
+            />
+          </View>
+        ) : !preview ? (
+          <View style={[styles.center, { gap: spacing.md }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <ThemedText variant="body" color="textMuted">
+              Opening file preview...
+            </ThemedText>
+          </View>
+        ) : preview.previewKind === 'image' ? (
           <ZoomableImage uri={preview.uri} />
         ) : preview.previewKind === 'pdf' ? (
           <Pdf
@@ -204,164 +249,203 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
             trustAllCerts={false}
           />
         ) : (
-          <View style={[styles.center, { padding: spacing.xl, gap: spacing.md }]}>
-            <AppIcon name="document" size={sizes.avatarLg} color="textMuted" />
-            <ThemedText variant="h3">Preview not available</ThemedText>
-            <ThemedText variant="body" color="textMuted" style={styles.textCenter}>
-              This file type cannot be previewed directly within the app. You can share it to open it in another app.
-            </ThemedText>
+          <View style={[styles.center, { padding: spacing.xl }]}>
+            <Card
+              padding="lg"
+              elevation="md"
+              style={[styles.downloadCard, { gap: spacing.lg, maxWidth: sizes.dialogWidth }]}
+            >
+              <View
+                style={[
+                  styles.unsupportedIconBox,
+                  { backgroundColor: colors.primaryLight, borderRadius: radii.xl },
+                ]}
+              >
+                <AppIcon name="document" size={sizes.avatarLg - 16} color="primary" />
+              </View>
+
+              <View style={[styles.center, { gap: spacing.xs }]}>
+                <ThemedText variant="h3" style={styles.textCenter} numberOfLines={2}>
+                  {formatRecordFileName(fileMetadata ?? preview)}
+                </ThemedText>
+                <ThemedText variant="small" color="textMuted">
+                  {preview.mimeType || 'Document'}
+                </ThemedText>
+              </View>
+
+              <ThemedText variant="body" color="textSecondary" style={styles.textCenter}>
+                This file cannot be previewed directly. Export or share it to open in an external application.
+              </ThemedText>
+
+              <Button
+                label="Share or Open File"
+                icon="share"
+                variant="primary"
+                fullWidth
+                onPress={handleShare}
+              />
+            </Card>
           </View>
         )}
       </View>
 
-      {/* Docked Native Bottom Action Toolbar */}
-      <View
-        style={[
-          styles.bottomToolbar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.borderLight,
-            paddingBottom: Math.max(insets.bottom, spacing.xs),
-            paddingTop: spacing.xs,
-          },
-        ]}
-      >
-        <View style={styles.bottomToolbarInner}>
-          <Pressable
-            onPress={() => setIsFullScreen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Full Screen"
-            hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+      {/* 3. New Floating Clinical Action Pill */}
+      {preview ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.floatingPillWrap,
+            { paddingBottom: Math.max(insets.bottom, spacing.md) },
+          ]}
+        >
+          <View
+            style={[
+              styles.floatingPill,
+              shadows.lg,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.full,
+              },
+            ]}
           >
-            <AppIcon name="fullscreen" color="text" size={sizes.iconLg - 2} />
-            <ThemedText variant="captionBold" color="text">
-              Full Screen
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            onPress={handleShare}
-            accessibilityRole="button"
-            accessibilityLabel="Share"
-            hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-          >
-            <AppIcon name="share" color="text" size={sizes.iconLg - 2} />
-            <ThemedText variant="captionBold" color="text">
-              Share
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setRenameModalOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Rename"
-            hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-          >
-            <AppIcon name="edit" color="text" size={sizes.iconLg - 2} />
-            <ThemedText variant="captionBold" color="text">
-              Rename
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            onPress={handleDelete}
-            accessibilityRole="button"
-            accessibilityLabel="Delete"
-            hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-          >
-            <AppIcon name="trash" color="emergency" size={sizes.iconLg - 2} />
-            <ThemedText variant="captionBold" color="emergency">
-              Delete
-            </ThemedText>
-          </Pressable>
-        </View>
-      </View>
-
-      <Modal
-        visible={isFullScreen}
-        transparent={false}
-        onRequestClose={() => setIsFullScreen(false)}
-        animationType="fade"
-      >
-        <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.overlay }]}>
-          <View style={[styles.closeOverlayBtnWrap, { top: Math.max(insets.top, spacing.lg) + spacing.md, right: spacing.lg }]}>
+            {/* Share Action */}
             <Pressable
-              onPress={() => setIsFullScreen(false)}
+              onPress={handleShare}
               accessibilityRole="button"
-              accessibilityLabel="Close full screen"
-              style={[
-                styles.closeOverlayBtn,
-                {
-                  borderRadius: radii.full,
-                  backgroundColor: colors.surfaceSubtle,
-                  padding: spacing.sm,
-                },
-              ]}
+              accessibilityLabel="Share file"
+              hitSlop={8}
+              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
             >
-              <AppIcon name="close" color="text" size={sizes.iconLg} />
+              <AppIcon name="share" size={sizes.iconMd} color="text" />
+              <ThemedText variant="captionBold" color="text">
+                Share
+              </ThemedText>
+            </Pressable>
+
+            {/* Save / Export Action */}
+            <Pressable
+              onPress={handleDownload}
+              accessibilityRole="button"
+              accessibilityLabel="Save file to device"
+              hitSlop={8}
+              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+            >
+              <AppIcon name="download" size={sizes.iconMd} color="text" />
+              <ThemedText variant="captionBold" color="text">
+                Save
+              </ThemedText>
+            </Pressable>
+
+            {/* Details & Rename Action */}
+            <Pressable
+              onPress={() => setDetailsModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="File details and rename"
+              hitSlop={8}
+              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+            >
+              <AppIcon name="info" size={sizes.iconMd} color="text" />
+              <ThemedText variant="captionBold" color="text">
+                Details
+              </ThemedText>
+            </Pressable>
+
+            {/* Delete Action */}
+            <Pressable
+              onPress={handleDelete}
+              accessibilityRole="button"
+              accessibilityLabel="Delete file"
+              hitSlop={8}
+              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+            >
+              <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
+              <ThemedText variant="captionBold" color="emergency">
+                Delete
+              </ThemedText>
             </Pressable>
           </View>
-          {preview.previewKind === 'image' ? (
-            <ZoomableImage uri={preview.uri} />
-          ) : preview.previewKind === 'pdf' ? (
-            <Pdf
-              source={{ uri: preview.uri }}
-              style={[styles.pdf, { backgroundColor: colors.overlay }]}
-              trustAllCerts={false}
-            />
-          ) : null}
-        </GestureHandlerRootView>
-      </Modal>
+        </View>
+      ) : null}
 
-      {renameModalOpen && (fileMetadata || preview) ? (
-        <RenameModal
-          visible={renameModalOpen}
-          initialName={formatRecordFileName(fileMetadata ?? preview)}
-          onClose={() => setRenameModalOpen(false)}
-          onSave={handleRename}
+      {/* 4. Details & Rename Sheet Modal */}
+      {fileMetadata || preview ? (
+        <FileDetailsModal
+          visible={detailsModalOpen}
+          onClose={() => setDetailsModalOpen(false)}
+          fileName={formatRecordFileName(fileMetadata ?? preview)}
+          category={categoryLabel}
+          mimeType={preview?.mimeType || fileMetadata?.mimeType}
+          sizeFormatted={fileMetadata?.sizeBytes ? formatBytes(fileMetadata.sizeBytes) : null}
+          uploadedAtFormatted={
+            fileMetadata?.createdAt
+              ? formatRecordTimestamp(fileMetadata.createdAt)
+              : fileMetadata?.documentDate
+                ? formatRecordTimestamp(fileMetadata.documentDate)
+                : null
+          }
+          onRename={handleRename}
         />
+      ) : null}
+
+      {/* 5. Full Screen Overlay Modal */}
+      {preview ? (
+        <Modal
+          visible={isFullScreen}
+          transparent={false}
+          onRequestClose={() => setIsFullScreen(false)}
+          animationType="fade"
+        >
+          <GestureHandlerRootView style={[styles.fullScreenOverlay, { backgroundColor: colors.overlay }]}>
+            <View
+              style={[
+                styles.closeOverlayWrap,
+                { top: Math.max(insets.top, spacing.lg) + spacing.sm, right: spacing.lg },
+              ]}
+            >
+              <Pressable
+                onPress={() => setIsFullScreen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close full screen"
+                style={[
+                  styles.closeOverlayBtn,
+                  {
+                    borderRadius: radii.full,
+                    backgroundColor: colors.surfaceSubtle,
+                    padding: spacing.sm,
+                  },
+                ]}
+              >
+                <AppIcon name="close" size={sizes.iconLg} color="text" />
+              </Pressable>
+            </View>
+            {preview.previewKind === 'image' ? (
+              <ZoomableImage uri={preview.uri} />
+            ) : preview.previewKind === 'pdf' ? (
+              <Pdf
+                source={{ uri: preview.uri }}
+                style={[styles.pdf, { backgroundColor: colors.overlay }]}
+                trustAllCerts={false}
+              />
+            ) : null}
+          </GestureHandlerRootView>
+        </Modal>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  viewer: { flex: 1 },
-  previewSurface: { flex: 1 },
-  pdf: { flex: 1, width: '100%' },
-  nativeHeaderTitleWrap: {
-    minWidth: 0,
-    maxWidth: '100%',
+  screen: {
+    flex: 1,
   },
-  bottomToolbar: {
+  canvas: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  pdf: {
+    flex: 1,
     width: '100%',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    zIndex: 10,
-    elevation: 4,
-  },
-  bottomToolbarInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-  },
-  actionBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    minWidth: 64,
-    minHeight: 48,
-    paddingVertical: 4,
-  },
-  actionBtnPressed: {
-    opacity: 0.5,
   },
   center: {
     flex: 1,
@@ -371,7 +455,58 @@ const styles = StyleSheet.create({
   textCenter: {
     textAlign: 'center',
   },
-  closeOverlayBtnWrap: {
+  errorIconWrap: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  downloadCard: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  unsupportedIconBox: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingPillWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    zIndex: 30,
+  },
+  floatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    width: '100%',
+    maxWidth: 380,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  pillBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minWidth: 64,
+    minHeight: 48,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  pillBtnPressed: {
+    opacity: 0.6,
+  },
+  fullScreenOverlay: {
+    flex: 1,
+  },
+  closeOverlayWrap: {
     position: 'absolute',
     zIndex: 100,
   },

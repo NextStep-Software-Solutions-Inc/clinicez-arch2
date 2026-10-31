@@ -1,4 +1,5 @@
 import { createBottomTabNavigator, createBottomTabScreen } from '@react-navigation/bottom-tabs';
+import { MaterialSymbol } from '@react-navigation/native';
 import { ColorValue, Platform } from 'react-native';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
@@ -57,6 +58,60 @@ const TAB_DEFINITIONS = {
 
 type TabScreenKey = keyof typeof TAB_DEFINITIONS;
 
+let isMaterialSymbolSupported: boolean | null = null;
+let isRoundedVariantSupported: boolean | null = null;
+
+/**
+ * Safely probes native Android host for MaterialSymbols fonts bundled in the APK assets.
+ *
+ * - If host APK has MaterialSymbolsRounded font bundled -> uses rounded variant.
+ * - If host APK only has default Outlined font (e.g. existing installed APK before rebuild)
+ *   -> gracefully falls back to default without throwing "No MaterialSymbols font found for variant: Rounded".
+ * - If host APK has no MaterialSymbols fonts -> falls back to crisp Lucide icon.
+ */
+const checkAndroidSymbolSupport = (): { supported: boolean; rounded: boolean } => {
+  if (Platform.OS !== 'android') return { supported: false, rounded: false };
+  if (isMaterialSymbolSupported !== null && isRoundedVariantSupported !== null) {
+    return {
+      supported: isMaterialSymbolSupported,
+      rounded: isRoundedVariantSupported,
+    };
+  }
+
+  // 1. Probe if Rounded variant is available in host APK assets
+  try {
+    if (typeof MaterialSymbol?.getImageSource === 'function') {
+      MaterialSymbol.getImageSource({
+        name: 'home',
+        variant: 'rounded',
+        size: 24,
+      });
+      isRoundedVariantSupported = true;
+      isMaterialSymbolSupported = true;
+      return { supported: true, rounded: true };
+    }
+  } catch {
+    isRoundedVariantSupported = false;
+  }
+
+  // 2. Probe if base (Outlined) variant is available in host APK assets
+  try {
+    if (typeof MaterialSymbol?.getImageSource === 'function') {
+      MaterialSymbol.getImageSource({
+        name: 'home',
+        size: 24,
+      });
+      isMaterialSymbolSupported = true;
+      return { supported: true, rounded: false };
+    }
+  } catch {
+    isMaterialSymbolSupported = false;
+  }
+
+  isMaterialSymbolSupported = false;
+  return { supported: false, rounded: false };
+};
+
 const resolveTabIcon = (tab: TabDefinition) => {
   if (Platform.OS === 'ios') {
     return {
@@ -66,11 +121,14 @@ const resolveTabIcon = (tab: TabDefinition) => {
   }
 
   if (Platform.OS === 'android') {
-    return {
-      type: 'materialSymbol' as const,
-      name: tab.androidSymbol,
-      variant: 'rounded' as const,
-    };
+    const { supported, rounded } = checkAndroidSymbolSupport();
+    if (supported) {
+      return {
+        type: 'materialSymbol' as const,
+        name: tab.androidSymbol,
+        ...(rounded ? { variant: 'rounded' as const } : {}),
+      };
+    }
   }
 
   return ({ color, size }: { color: ColorValue; size: number }) => (

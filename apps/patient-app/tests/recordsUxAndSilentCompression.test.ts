@@ -291,29 +291,30 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     });
   });
 
-  test('FileViewer uses restyled docked bottom toolbar without chunky square icon boxes or floating pill, and WebNavBar hides on viewer screen', () => {
+  test('FileViewer uses restyled clinical floating action pill without chunky square icon boxes, and WebNavBar hides on viewer screen', () => {
     const viewerWeb = readApp('navigation/screens/files/FileViewer.screen.web.tsx');
     const viewerNative = readApp('navigation/screens/files/FileViewer.screen.tsx');
     const webNavBar = readApp('components/ui/WebNavBar.web.tsx');
 
-    // No chunky square card boxes, no old floating pill wrap
+    // No chunky square card boxes
     expect(viewerWeb.includes('actionIconBox')).toBe(false);
     expect(viewerNative.includes('actionIconBox')).toBe(false);
-    expect(viewerWeb.includes('floatingToolbarWrap')).toBe(false);
-    expect(viewerNative.includes('floatingToolbarWrap')).toBe(false);
 
-    // Both use restyled docked edge-to-edge native bottom toolbar with compact padding
-    expect(viewerWeb.includes('bottomToolbar')).toBe(true);
-    expect(viewerWeb.includes('bottomToolbarInner')).toBe(true);
-    expect(viewerWeb.includes('paddingBottom: Math.max(insets.bottom, spacing.xs)')).toBe(true);
-    expect(viewerNative.includes('bottomToolbar')).toBe(true);
-    expect(viewerNative.includes('bottomToolbarInner')).toBe(true);
-    expect(viewerNative.includes('paddingBottom: Math.max(insets.bottom, spacing.xs)')).toBe(true);
+    // Both use the new floating clinical action pill with new icon set
+    expect(viewerWeb.includes('floatingPill')).toBe(true);
+    expect(viewerWeb.includes('floatingPillWrap')).toBe(true);
+    expect(viewerNative.includes('floatingPill')).toBe(true);
+    expect(viewerNative.includes('floatingPillWrap')).toBe(true);
 
-    // Native FileViewer uses explicit BackHandler and hides bottom tabs cleanly without duplicate headerLeft
+    // Native FileViewer uses unified FileViewerHeader, explicit BackHandler, and hides bottom tabs cleanly
+    expect(viewerNative.includes('FileViewerHeader')).toBe(true);
     expect(viewerNative.includes("BackHandler.addEventListener('hardwareBackPress'")).toBe(true);
     expect(viewerNative.includes('headerLeft')).toBe(false);
     expect(viewerNative.includes("tabBarStyle: { display: 'none' }")).toBe(true);
+
+    // Both native and web wire the new FileDetailsModal
+    expect(viewerNative.includes('FileDetailsModal')).toBe(true);
+    expect(viewerWeb.includes('FileDetailsModal')).toBe(true);
 
     // Web FileViewer uses Web Share API Level 2 file sharing and safe fresh preview download
     expect(viewerWeb.includes('navigator.canShare({ files: [file] })')).toBe(true);
@@ -427,5 +428,38 @@ describe('5. Silent 80% File Compression Before Uploading', () => {
 
     expect(/compressing|compressed/i.test(stripImports(webUpload))).toBe(false);
     expect(/compressing|compressed/i.test(stripImports(nativeUpload))).toBe(false);
+  });
+});
+
+describe('6. Redesigned File Viewer & Safe Android Bottom Tabs Resilience', () => {
+  test('MainBottomTabs.tsx safely probes Android MaterialSymbols to avoid host exception crash', () => {
+    const tabsSource = readApp('navigation/navigators/MainBottomTabs.tsx');
+    expect(tabsSource.includes('checkAndroidSymbolSupport')).toBe(true);
+    expect(tabsSource.includes('variant: \'rounded\'')).toBe(true);
+    expect(tabsSource.includes('MaterialSymbol.getImageSource')).toBe(true);
+    // Must wrap variant: rounded in try/catch to protect older APKs without rounded fonts
+    expect(tabsSource.includes('try {')).toBe(true);
+    expect(tabsSource.includes('catch {')).toBe(true);
+  });
+
+  test('FilesStack.tsx disables native headers for FileViewer to prevent duplicate back buttons', () => {
+    const filesStackSource = readApp('navigation/navigators/FilesStack.tsx');
+    expect(filesStackSource.includes('FileViewerScreen: createNativeStackScreen({')).toBe(true);
+    expect(filesStackSource.includes('headerShown: false')).toBe(true);
+  });
+
+  test('FileViewer.screen.tsx renders FileViewerHeader and floating clinical action pill', () => {
+    const nativeViewerSource = readApp('navigation/screens/files/FileViewer.screen.tsx');
+    expect(nativeViewerSource.includes('<FileViewerHeader')).toBe(true);
+    expect(nativeViewerSource.includes('styles.floatingPill')).toBe(true);
+    expect(nativeViewerSource.includes('BackHandler.addEventListener')).toBe(true);
+    expect(nativeViewerSource.includes('FileDetailsModal')).toBe(true);
+  });
+
+  test('FileViewer.screen.web.tsx provides floating pill and Web Share fallback', () => {
+    const webViewerSource = readApp('navigation/screens/files/FileViewer.screen.web.tsx');
+    expect(webViewerSource.includes('styles.floatingPill')).toBe(true);
+    expect(webViewerSource.includes('navigator.share')).toBe(true);
+    expect(webViewerSource.includes('FileDetailsModal')).toBe(true);
   });
 });

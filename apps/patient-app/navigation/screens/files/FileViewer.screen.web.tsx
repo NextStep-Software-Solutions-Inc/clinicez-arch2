@@ -11,16 +11,24 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRegisterWebHeaderOverride } from '../../../contexts/HeaderSearchContext';
-import { preparePreviewFile, revokePreviewUri, getFileById, deleteItem, renameFile } from '../../../services/files';
+import {
+  preparePreviewFile,
+  revokePreviewUri,
+  getFileById,
+  deleteItem,
+  renameFile,
+} from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
 import { formatRecordCategoryLabel } from '../../../services/files/documentTypeMapping';
 import {
   formatRecordFileName,
   formatRecordSubtitle,
   formatViewerHeaderTitle,
+  formatRecordTimestamp,
 } from '../../../services/files/recordPresentation';
+import { formatBytes } from '../../../services/files/filesShared';
 import type { FilesScreenProps } from './navigationTypes';
-import RenameModal from '../../../components/ui/RenameModal';
+import FileDetailsModal from '../../../components/files/FileDetailsModal';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 
@@ -38,7 +46,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
   const [fileMetadata, setFileMetadata] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
 
@@ -194,7 +202,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
     if (!confirmed) return;
 
     try {
-      await deleteItem(patientId, fileId, getToken);
+      await deleteItem(patientId, fileId, getTokenRef.current);
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       navigation.goBack();
     } catch (err) {
@@ -205,8 +213,8 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   const handleRename = async (newName: string) => {
     await renameFile(patientId, fileId, newName);
     const updated = await getFileById(patientId, fileId);
-    setRenameModalOpen(false);
     setFileMetadata((prev: any) => updated ?? { ...prev, name: newName });
+    mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
   };
 
   if (error) {
@@ -235,10 +243,9 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
     );
   }
 
-  const isShareSupported = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
-
   return (
     <View style={[styles.viewer, { backgroundColor: colors.background }]}>
+      {/* 1. Preview Surface */}
       <View style={styles.previewSurface}>
         {preview.previewKind === 'image' ? (
           <View style={styles.mediaContainer}>
@@ -313,66 +320,76 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
         )}
       </View>
 
-      {/* Docked Native Bottom Action Toolbar */}
+      {/* 2. Floating Clinical Action Pill */}
       <View
+        pointerEvents="box-none"
         style={[
-          styles.bottomToolbar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.borderLight,
-            paddingBottom: Math.max(insets.bottom, spacing.xs),
-            paddingTop: spacing.xs,
-          },
+          styles.floatingPillWrap,
+          { paddingBottom: Math.max(insets.bottom, spacing.md) },
         ]}
       >
-        <View style={styles.bottomToolbarInner}>
+        <View
+          style={[
+            styles.floatingPill,
+            shadows.lg,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderLight,
+              borderRadius: radii.full,
+            },
+          ]}
+        >
+          {/* Share Action */}
           <Pressable
-            onPress={() => setIsFullScreen(true)}
+            onPress={handleShare}
             accessibilityRole="button"
-            accessibilityLabel="Full Screen"
+            accessibilityLabel="Share file"
             hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
           >
-            <AppIcon name="fullscreen" size={sizes.iconLg - 2} color="text" />
+            <AppIcon name="share" size={sizes.iconMd} color="text" />
             <ThemedText variant="captionBold" color="text">
-              Full Screen
+              Share
             </ThemedText>
           </Pressable>
 
+          {/* Download Action */}
           <Pressable
-            onPress={isShareSupported ? handleShare : handleDownload}
+            onPress={handleDownload}
             accessibilityRole="button"
-            accessibilityLabel={isShareSupported ? 'Share' : 'Download'}
+            accessibilityLabel="Download file"
             hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
           >
-            <AppIcon name={isShareSupported ? 'share' : 'download'} size={sizes.iconLg - 2} color="text" />
+            <AppIcon name="download" size={sizes.iconMd} color="text" />
             <ThemedText variant="captionBold" color="text">
-              {isShareSupported ? 'Share' : 'Download'}
+              Save
             </ThemedText>
           </Pressable>
 
+          {/* Details Action */}
           <Pressable
-            onPress={() => setRenameModalOpen(true)}
+            onPress={() => setDetailsModalOpen(true)}
             accessibilityRole="button"
-            accessibilityLabel="Rename"
+            accessibilityLabel="File details and rename"
             hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
           >
-            <AppIcon name="edit" size={sizes.iconLg - 2} color="text" />
+            <AppIcon name="info" size={sizes.iconMd} color="text" />
             <ThemedText variant="captionBold" color="text">
-              Rename
+              Details
             </ThemedText>
           </Pressable>
 
+          {/* Delete Action */}
           <Pressable
             onPress={handleDelete}
             accessibilityRole="button"
-            accessibilityLabel="Delete"
+            accessibilityLabel="Delete file"
             hitSlop={8}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
           >
-            <AppIcon name="trash" size={sizes.iconLg - 2} color="emergency" />
+            <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
             <ThemedText variant="captionBold" color="emergency">
               Delete
             </ThemedText>
@@ -380,7 +397,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
         </View>
       </View>
 
-      {/* Full Screen Modal */}
+      {/* 3. Full Screen Modal */}
       <Modal
         visible={isFullScreen}
         transparent={false}
@@ -432,12 +449,23 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
         </View>
       </Modal>
 
-      {renameModalOpen && (fileMetadata || preview) ? (
-        <RenameModal
-          visible={renameModalOpen}
-          initialName={formatRecordFileName(fileMetadata ?? preview)}
-          onClose={() => setRenameModalOpen(false)}
-          onSave={handleRename}
+      {/* 4. Details & Rename Sheet Modal */}
+      {fileMetadata || preview ? (
+        <FileDetailsModal
+          visible={detailsModalOpen}
+          onClose={() => setDetailsModalOpen(false)}
+          fileName={formatRecordFileName(fileMetadata ?? preview)}
+          category={categoryLabel}
+          mimeType={preview?.mimeType || fileMetadata?.mimeType}
+          sizeFormatted={fileMetadata?.sizeBytes ? formatBytes(fileMetadata.sizeBytes) : null}
+          uploadedAtFormatted={
+            fileMetadata?.createdAt
+              ? formatRecordTimestamp(fileMetadata.createdAt)
+              : fileMetadata?.documentDate
+                ? formatRecordTimestamp(fileMetadata.documentDate)
+                : null
+          }
+          onRename={handleRename}
         />
       ) : null}
     </View>
@@ -479,29 +507,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bottomToolbar: {
-    width: '100%',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    zIndex: 10,
+  floatingPillWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    zIndex: 30,
   },
-  bottomToolbarInner: {
+  floatingPill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
+    maxWidth: 380,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  actionBtn: {
+  pillBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: 4,
     minWidth: 64,
     minHeight: 48,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
-  actionBtnPressed: {
-    opacity: 0.5,
+  pillBtnPressed: {
+    opacity: 0.6,
   },
   closeOverlayBtnWrap: {
     position: 'absolute',

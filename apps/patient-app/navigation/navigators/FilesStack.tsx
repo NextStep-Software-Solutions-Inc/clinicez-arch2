@@ -28,11 +28,7 @@ const FilesStack = createNativeStackNavigator({
     }),
     FileViewerScreen: createNativeStackScreen({
       screen: FileViewerScreen,
-      options: {
-        title: 'Preview',
-        headerLargeTitleEnabled: false,
-        presentation: 'fullScreenModal',
-      },
+      options: { title: 'Preview', headerShown: false },
     }),
     ExternalOpenConsentScreen: createNativeStackScreen({
       screen: ExternalOpenConsentScreen,
