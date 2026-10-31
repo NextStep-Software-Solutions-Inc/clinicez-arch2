@@ -38,24 +38,23 @@ export function useFilesBrowser(patientId: string, folderId: string | null = nul
   }, [patientId, getToken, mutate]);
 
   const refresh = useCallback(async () => {
-    // Optimistically update the UI by reading the latest SQLite state immediately
-    const mutatePromise = mutate();
+    // 1. Immediately revalidate local SQLite state for 0ms visual responsiveness
+    await mutate();
 
+    // 2. Perform network sync: pull remote changes from other devices, drain upload queue
     if (!isRefreshingRef.current) {
       isRefreshingRef.current = true;
-      syncPendingFiles(patientId, getToken, true)
-        .then((res) => {
-          if (res && res.synced > 0) {
-            mutate();
-          }
-        })
-        .catch(console.log)
-        .finally(() => {
-          isRefreshingRef.current = false;
-        });
+      try {
+        await syncPendingFiles(patientId, getToken, true);
+      } catch (e) {
+        console.warn('[useFilesBrowser] Background sync error:', e);
+      } finally {
+        isRefreshingRef.current = false;
+      }
     }
 
-    return mutatePromise;
+    // 3. Re-read SQLite after remote sync has reconciled to display new/deleted files
+    return mutate();
   }, [mutate, patientId, getToken]);
 
   return {

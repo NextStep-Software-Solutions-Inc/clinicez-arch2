@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { mutate } from 'swr';
 import ThemedText from '@ui/ThemedText';
 import Card from '@ui/Card';
 import Button from '@ui/Button';
@@ -173,6 +174,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
 
     try {
       await deleteItem(patientId, fileId, getToken);
+      mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       navigation.goBack();
     } catch (err) {
       dialog.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
@@ -290,34 +292,26 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
         )}
       </View>
 
-      {/* Floating Action Toolbar */}
+      {/* Docked Native Bottom Action Toolbar */}
       <View
         style={[
-          styles.floatingToolbarWrap,
-          { paddingBottom: Math.max(contentInsets.bottom, spacing.md) + spacing.xs },
+          styles.bottomToolbar,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.borderLight,
+            paddingBottom: Math.max(contentInsets.bottom, spacing.md),
+            paddingTop: spacing.xs,
+          },
         ]}
       >
-        <View
-          style={[
-            styles.floatingToolbar,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderWidth: sizes.borderWidth,
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.lg,
-              paddingVertical: spacing.sm,
-            },
-            shadows.lg,
-          ]}
-        >
+        <View style={styles.bottomToolbarInner}>
           <Pressable
             onPress={() => setIsFullScreen(true)}
             accessibilityRole="button"
             accessibilityLabel="Full Screen"
-            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
-            <AppIcon name="fullscreen" size={sizes.iconMd} color="text" />
+            <AppIcon name="fullscreen" size={sizes.iconLg - 2} color="text" />
             <ThemedText variant="captionBold" color="text">
               Full Screen
             </ThemedText>
@@ -327,9 +321,9 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             onPress={isShareSupported ? handleShare : handleDownload}
             accessibilityRole="button"
             accessibilityLabel={isShareSupported ? 'Share' : 'Download'}
-            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
-            <AppIcon name={isShareSupported ? 'share' : 'download'} size={sizes.iconMd} color="text" />
+            <AppIcon name={isShareSupported ? 'share' : 'download'} size={sizes.iconLg - 2} color="text" />
             <ThemedText variant="captionBold" color="text">
               {isShareSupported ? 'Share' : 'Download'}
             </ThemedText>
@@ -339,9 +333,9 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             onPress={() => setRenameModalOpen(true)}
             accessibilityRole="button"
             accessibilityLabel="Rename"
-            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
-            <AppIcon name="edit" size={sizes.iconMd} color="text" />
+            <AppIcon name="edit" size={sizes.iconLg - 2} color="text" />
             <ThemedText variant="captionBold" color="text">
               Rename
             </ThemedText>
@@ -351,9 +345,9 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             onPress={handleDelete}
             accessibilityRole="button"
             accessibilityLabel="Delete"
-            style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]}
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
-            <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
+            <AppIcon name="trash" size={sizes.iconLg - 2} color="emergency" />
             <ThemedText variant="captionBold" color="emergency">
               Delete
             </ThemedText>
@@ -442,9 +436,7 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 88,
+    padding: 16,
   },
   center: {
     flex: 1,
@@ -462,31 +454,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  floatingToolbarWrap: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    pointerEvents: 'box-none',
+  bottomToolbar: {
+    width: '100%',
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  floatingToolbar: {
+  bottomToolbarInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 480,
+    alignSelf: 'center',
   },
-  toolbarBtn: {
+  actionBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    minWidth: 54,
+    gap: 3,
+    minWidth: 64,
     minHeight: 44,
+    paddingVertical: 4,
   },
-  toolbarBtnPressed: {
-    opacity: 0.6,
+  actionBtnPressed: {
+    opacity: 0.5,
   },
   closeOverlayBtnWrap: {
     position: 'absolute',

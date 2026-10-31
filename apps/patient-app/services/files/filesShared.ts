@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, notInArray, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from 'drizzle-orm';
 import { mutate } from 'swr';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import type { FileMetadata } from '@db/schema/filesMetadata';
@@ -620,6 +620,33 @@ export async function pullRemoteChanges(
         }
       } catch (err) {
         console.warn(`Failed to downstream sync file ${remoteFile.id}`, err);
+      }
+    }
+
+    // Reconcile server deletions: if a file was previously synced to the server,
+    // but the server no longer returns it, remove it locally so other devices stay in sync.
+    const remoteServerIds = new Set(records.map((r) => r.id));
+    const localSynced = await targetDb
+      .select({ id: filesMetadata.id, serverId: filesMetadata.serverId })
+      .from(filesMetadata)
+      .where(
+        and(
+          eq(filesMetadata.patientId, patientId),
+          isNotNull(filesMetadata.serverId),
+          isNull(filesMetadata.deletedAt),
+          eq(filesMetadata.syncStatus, 'synced'),
+        )
+      );
+
+    for (const localRec of localSynced) {
+      if (localRec.serverId && !remoteServerIds.has(localRec.serverId)) {
+        await targetDb
+          .delete(filesMetadata)
+          .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, localRec.id)));
+        try {
+          await _cleanupPreview(localRec.id);
+        } catch {}
+        synced++;
       }
     }
 

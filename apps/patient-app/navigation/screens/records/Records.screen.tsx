@@ -51,6 +51,8 @@ import RenameModal from '../../../components/ui/RenameModal';
 import { usePersistedTab } from '../../../hooks/usePersistedTab';
 import { RECORDS_SEGMENT_CONFIG } from '../../../services/records/recordsTabStore';
 import { dialog } from '../../../utils/dialog';
+import * as Sharing from 'expo-sharing';
+import { useAuth as useAppAuth } from '../../../contexts/AuthContext';
 
 type ClinicFilterId = 'all' | 'visits' | 'prescriptions' | 'results' | 'labRequests' | 'certificates';
 
@@ -121,6 +123,7 @@ export default function RecordsScreen() {
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
+  const { runWithAutoLockPaused } = useAppAuth();
 
   // Top-level segment: 0 = Clinic Documents, 1 = My Uploads
   const [segmentIndex, setSegmentIndex] = usePersistedTab(RECORDS_SEGMENT_CONFIG);
@@ -153,9 +156,56 @@ export default function RecordsScreen() {
   const refreshUploadsRef = useRef(refreshUploads);
   refreshUploadsRef.current = refreshUploads;
 
+  const handleShareFile = useCallback(
+    async (fileId: string, fileName?: string) => {
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+          const preview = await preparePreviewFile(patientId, fileId, getToken);
+          try {
+            await navigator.share({
+              title: fileName || preview.name,
+              url: preview.uri,
+            });
+          } catch (err: any) {
+            if (err?.name !== 'AbortError') {
+              if (typeof document !== 'undefined') {
+                const link = document.createElement('a');
+                link.href = preview.uri;
+                link.download = fileName || preview.name;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }
+            }
+          }
+          return;
+        }
+
+        const available = await Sharing.isAvailableAsync().catch(() => false);
+        if (!available) {
+          dialog.alert('No app available', 'This device cannot share files with other apps.');
+          return;
+        }
+        const preview = await preparePreviewFile(patientId, fileId, getToken);
+        await runWithAutoLockPaused(() =>
+          Sharing.shareAsync(preview.uri, {
+            mimeType: preview.mimeType,
+            dialogTitle: fileName || preview.name,
+          })
+        );
+      } catch (err) {
+        dialog.alert('Could not share file', err instanceof Error ? err.message : 'Unable to share this file.');
+      }
+    },
+    [patientId, getToken, runWithAutoLockPaused]
+  );
+
   const handleSegmentChange = useCallback(
     (idx: 0 | 1) => {
       setSegmentIndex(idx);
+      if (idx === 1) {
+        void refreshUploadsRef.current();
+      }
     },
     [setSegmentIndex]
   );
@@ -462,7 +512,7 @@ export default function RecordsScreen() {
                     })
                   }
                   onRename={() => setRenameTarget({ id: file.id, initialName: file.name })}
-                  onShare={() => navigation.navigate('Main', { screen: 'ShareRecordsScreen' })}
+                  onShare={() => handleShareFile(file.id, file.name)}
                   onDelete={async () => {
                     const confirmed = await dialog.confirm({
                       title: 'Delete Record',
@@ -471,8 +521,8 @@ export default function RecordsScreen() {
                       destructive: true,
                     });
                     if (confirmed) {
-                      await deleteItem(patientId, file.id);
-                      refreshUploads();
+                      await deleteItem(patientId, file.id, getToken);
+                      await refreshUploads();
                     }
                   }}
                 />

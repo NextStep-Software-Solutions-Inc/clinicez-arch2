@@ -291,26 +291,37 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     });
   });
 
-  test('FileViewer uses sleek floating pill toolbar without chunky square icon boxes, and WebNavBar hides on viewer screen', () => {
+  test('FileViewer uses restyled docked bottom toolbar without chunky square icon boxes or floating pill, and WebNavBar hides on viewer screen', () => {
     const viewerWeb = readApp('navigation/screens/files/FileViewer.screen.web.tsx');
     const viewerNative = readApp('navigation/screens/files/FileViewer.screen.tsx');
     const webNavBar = readApp('components/ui/WebNavBar.web.tsx');
 
-    // No chunky square card boxes or web bottom action bar
+    // No chunky square card boxes, no old floating pill wrap
     expect(viewerWeb.includes('actionIconBox')).toBe(false);
     expect(viewerNative.includes('actionIconBox')).toBe(false);
-    expect(viewerWeb.includes('bottomActionBar')).toBe(false);
-    expect(viewerNative.includes('bottomActionBar')).toBe(false);
+    expect(viewerWeb.includes('floatingToolbarWrap')).toBe(false);
+    expect(viewerNative.includes('floatingToolbarWrap')).toBe(false);
 
-    // Both use sleek floating pill toolbar
-    expect(viewerWeb.includes('floatingToolbarWrap')).toBe(true);
-    expect(viewerWeb.includes('floatingToolbar')).toBe(true);
-    expect(viewerNative.includes('floatingToolbarWrap')).toBe(true);
-    expect(viewerNative.includes('floatingToolbar')).toBe(true);
+    // Both use restyled docked edge-to-edge native bottom toolbar
+    expect(viewerWeb.includes('bottomToolbar')).toBe(true);
+    expect(viewerWeb.includes('bottomToolbarInner')).toBe(true);
+    expect(viewerNative.includes('bottomToolbar')).toBe(true);
+    expect(viewerNative.includes('bottomToolbarInner')).toBe(true);
 
     // WebNavBar checks tabBarStyle display: none and hides when viewing a file
     expect(webNavBar.includes("tabBarStyle?.display === 'none'")).toBe(true);
     expect(webNavBar.includes("activeSubRoute?.name === 'FileViewerScreen'")).toBe(true);
+  });
+
+  test('RecordsScreen file row share button shares the file instead of navigating to ShareRecordsScreen, and passes getToken on delete', () => {
+    const recordsScreen = readApp('navigation/screens/records/Records.screen.tsx');
+
+    // Share button shares the file directly
+    expect(recordsScreen.includes("navigation.navigate('Main', { screen: 'ShareRecordsScreen' })")).toBe(false);
+    expect(recordsScreen.includes('handleShareFile(file.id, file.name)')).toBe(true);
+
+    // Delete passes getToken to deleteItem
+    expect(recordsScreen.includes('deleteItem(patientId, file.id, getToken)')).toBe(true);
   });
 });
 
