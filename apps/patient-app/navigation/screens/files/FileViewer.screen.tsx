@@ -78,19 +78,17 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   }, [fileMetadata]);
 
   useEffect(() => {
+    // Hide bottom tab bar while viewing file to allow full-screen focus
+    const parent = navigation.getParent();
+    parent?.setOptions?.({ tabBarStyle: { display: 'none' } });
+    return () => {
+      parent?.setOptions?.({ tabBarStyle: undefined });
+    };
+  }, [navigation]);
+
+  useEffect(() => {
     navigation.setOptions({
       title: viewerHeaderTitle ?? 'Preview',
-      headerLeft: () => (
-        <Pressable
-          onPress={handleGoBack}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          style={{ paddingRight: spacing.md, paddingVertical: spacing.xs, justifyContent: 'center' }}
-        >
-          <AppIcon name="back" size={sizes.iconLg} color="text" />
-        </Pressable>
-      ),
       headerTitle: () => (
         <View style={styles.nativeHeaderTitleWrap}>
           <ThemedText variant="bodyBold" numberOfLines={1}>
@@ -104,7 +102,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
         </View>
       ),
     });
-  }, [navigation, viewerHeaderTitle, viewerHeaderSubtitle, handleGoBack, spacing.md, spacing.xs, sizes.iconLg]);
+  }, [navigation, viewerHeaderTitle, viewerHeaderSubtitle]);
 
   useEffect(() => {
     let mounted = true;

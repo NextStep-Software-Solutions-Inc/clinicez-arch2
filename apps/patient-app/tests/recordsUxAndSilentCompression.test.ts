@@ -310,11 +310,10 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     expect(viewerNative.includes('bottomToolbarInner')).toBe(true);
     expect(viewerNative.includes('paddingBottom: Math.max(insets.bottom, spacing.xs)')).toBe(true);
 
-    // Native FileViewer uses explicit BackHandler and headerLeft back button, and presentation fullScreenModal
+    // Native FileViewer uses explicit BackHandler and hides bottom tabs cleanly without duplicate headerLeft
     expect(viewerNative.includes("BackHandler.addEventListener('hardwareBackPress'")).toBe(true);
-    expect(viewerNative.includes('headerLeft')).toBe(true);
-    const filesStack = readApp('navigation/navigators/FilesStack.tsx');
-    expect(filesStack.includes("presentation: 'fullScreenModal'")).toBe(true);
+    expect(viewerNative.includes('headerLeft')).toBe(false);
+    expect(viewerNative.includes("tabBarStyle: { display: 'none' }")).toBe(true);
 
     // Web FileViewer uses Web Share API Level 2 file sharing and safe fresh preview download
     expect(viewerWeb.includes('navigator.canShare({ files: [file] })')).toBe(true);

@@ -82,9 +82,16 @@ const createScreen = (key: TabScreenKey) => {
   const tab = TAB_DEFINITIONS[key];
   return createBottomTabScreen({
     screen: tab.screen,
-    options: {
-      title: tab.title,
-      tabBarIcon: resolveTabIcon(tab),
+    options: ({ route }) => {
+      const state = (route as any).state as { index?: number; routes?: Array<{ name: string }> } | undefined;
+      const activeIdx = state?.index ?? (state?.routes ? state.routes.length - 1 : 0);
+      const childRoute = state?.routes?.[activeIdx]?.name;
+      const isViewer = childRoute === 'FileViewerScreen';
+      return {
+        title: tab.title,
+        tabBarIcon: resolveTabIcon(tab),
+        tabBarStyle: isViewer ? { display: 'none' } : undefined,
+      };
     },
   });
 };
