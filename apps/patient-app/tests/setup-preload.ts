@@ -87,3 +87,24 @@ mock.module('expo-crypto', () => ({
   CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   randomUUID: () => globalThis.crypto.randomUUID(),
 }));
+
+const __defaultSecureStore = new Map<string, string>();
+(globalThis as any).__secureStoreMap = __defaultSecureStore;
+
+mock.module('expo-secure-store', () => ({
+  getItemAsync: async (key: string) => {
+    const store: any = (globalThis as any).__customSecureStore || __defaultSecureStore;
+    if (typeof store.get === 'function') return store.get(key) ?? null;
+    return store[key] ?? null;
+  },
+  setItemAsync: async (key: string, val: string) => {
+    const store: any = (globalThis as any).__customSecureStore || __defaultSecureStore;
+    if (typeof store.set === 'function') store.set(key, String(val));
+    else store[key] = String(val);
+  },
+  deleteItemAsync: async (key: string) => {
+    const store: any = (globalThis as any).__customSecureStore || __defaultSecureStore;
+    if (typeof store.delete === 'function') store.delete(key);
+    else delete store[key];
+  },
+}));

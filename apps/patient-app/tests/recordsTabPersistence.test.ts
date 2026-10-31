@@ -5,12 +5,6 @@ mock.module('react-native', () => ({
   DeviceEventEmitter: { emit: () => {}, addListener: () => ({ remove: () => {} }) },
 }));
 
-mock.module('expo-secure-store', () => ({
-  getItemAsync: async () => null,
-  setItemAsync: async () => {},
-  deleteItemAsync: async () => {},
-}));
-
 const {
   getPersistedRecordsSegment,
   setPersistedRecordsSegment,

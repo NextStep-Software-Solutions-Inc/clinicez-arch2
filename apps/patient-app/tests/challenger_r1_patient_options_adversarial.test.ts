@@ -8,6 +8,7 @@ process.env.EXPO_PUBLIC_API_URL = 'https://patient-api.test/api/v1';
 
 // ── Native Module Mocks ────────────────────────────────────────────────────────
 const inMemoryStore = new Map<string, string>();
+(globalThis as any).__customSecureStore = inMemoryStore;
 
 mock.module('expo-secure-store', () => ({
   getItemAsync: mock(async (key: string) => inMemoryStore.get(key) ?? null),

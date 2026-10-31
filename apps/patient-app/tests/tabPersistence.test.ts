@@ -5,14 +5,6 @@ mock.module('react-native', () => ({
   DeviceEventEmitter: { emit: () => {}, addListener: () => ({ remove: () => {} }) },
 }));
 
-mock.module('../utils/storage', () => ({
-  storage: {
-    getItemAsync: async () => null,
-    setItemAsync: async () => {},
-    deleteItemAsync: async () => {},
-  },
-}));
-
 const {
   getPersistedTab,
   setPersistedTab,
