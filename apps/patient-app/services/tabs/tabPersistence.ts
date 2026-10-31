@@ -19,13 +19,19 @@ export type TabPersistenceOptions<T> = TabPersistenceConfig<T>;
 const STORAGE_PREFIX = 'clinicez_tab_';
 
 // Synchronous in-memory store for instant zero-flicker reads & stack navigation retention
-const memoryStore = new Map<string, any>();
+const memoryStore = new Map<string, unknown>();
 
 // Registered configurations for popstate / URL synchronization
-const registeredConfigs = new Map<string, TabPersistenceConfig<any>>();
+interface RegisteredConfig {
+  queryParam?: string;
+  defaultValue: unknown;
+  deserialize?: (raw: string) => unknown;
+}
+const registeredConfigs = new Map<string, RegisteredConfig>();
 
 // Subscribers for multi-instance or popstate synchronization
-const subscribers = new Map<string, Set<(val: any) => void>>();
+type TabSubscriber = (val: unknown) => void;
+const subscribers = new Map<string, Set<TabSubscriber>>();
 
 const isWeb = Platform.OS === 'web' && typeof window !== 'undefined';
 
@@ -167,13 +173,14 @@ export function subscribePersistedTab<T>(key: string, callback: (val: T) => void
   if (!subscribers.has(key)) {
     subscribers.set(key, new Set());
   }
-  subscribers.get(key)!.add(callback);
+  const handler = callback as TabSubscriber;
+  subscribers.get(key)!.add(handler);
   return () => {
-    subscribers.get(key)?.delete(callback);
+    subscribers.get(key)?.delete(handler);
   };
 }
 
-function notifySubscribers<T>(key: string, value: T): void {
+function notifySubscribers(key: string, value: unknown): void {
   const set = subscribers.get(key);
   if (set) {
     set.forEach((cb) => {

@@ -48,21 +48,31 @@ import { communicationsService } from 'services/comms/communicationsService';
 const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
 
 if (Platform.OS !== 'web') {
+  interface BackgroundNotificationPayload {
+    notification?: {
+      request?: {
+        content?: {
+          data?: Record<string, unknown>;
+        };
+      };
+    };
+  }
+
   TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
     if (error) {
       console.error('[BackgroundNotification] Task error:', error);
       return;
     }
     
-    const payload = data as any;
-    const raw = payload.notification?.request?.content;
+    const payload = data as BackgroundNotificationPayload | undefined;
+    const raw = payload?.notification?.request?.content;
     if (!raw) return;
     
-    const rawData = raw.data as Record<string, any>;
+    const rawData = raw.data;
     
     // If a silent push contains title/body inside the data payload (significant change),
     // we wake up and display it as a local follow-up notification.
-    if (rawData?.title && rawData?.body) {
+    if (typeof rawData?.title === 'string' && typeof rawData?.body === 'string') {
       await scheduleLocalNotification(
         rawData.title,
         rawData.body,

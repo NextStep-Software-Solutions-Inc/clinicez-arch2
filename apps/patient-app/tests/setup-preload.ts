@@ -88,23 +88,38 @@ mock.module('expo-crypto', () => ({
   randomUUID: () => globalThis.crypto.randomUUID(),
 }));
 
+export interface MockSecureStore {
+  get?(key: string): string | undefined | null;
+  set?(key: string, val: string): void;
+  delete?(key: string): void | boolean;
+  [key: string]: unknown;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __secureStoreMap: Map<string, string> | undefined;
+  // eslint-disable-next-line no-var
+  var __customSecureStore: MockSecureStore | undefined;
+}
+
 const __defaultSecureStore = new Map<string, string>();
-(globalThis as any).__secureStoreMap = __defaultSecureStore;
+globalThis.__secureStoreMap = __defaultSecureStore;
 
 mock.module('expo-secure-store', () => ({
   getItemAsync: async (key: string) => {
-    const store: any = (globalThis as any).__customSecureStore || __defaultSecureStore;
+    const store = globalThis.__customSecureStore || __defaultSecureStore;
     if (typeof store.get === 'function') return store.get(key) ?? null;
-    return store[key] ?? null;
+    const val = (store as Record<string, unknown>)[key];
+    return typeof val === 'string' ? val : null;
   },
   setItemAsync: async (key: string, val: string) => {
-    const store: any = (globalThis as any).__customSecureStore || __defaultSecureStore;
+    const store = globalThis.__customSecureStore || __defaultSecureStore;
     if (typeof store.set === 'function') store.set(key, String(val));
-    else store[key] = String(val);
+    else (store as Record<string, unknown>)[key] = String(val);
   },
   deleteItemAsync: async (key: string) => {
-    const store: any = (globalThis as any).__customSecureStore || __defaultSecureStore;
+    const store = globalThis.__customSecureStore || __defaultSecureStore;
     if (typeof store.delete === 'function') store.delete(key);
-    else delete store[key];
+    else delete (store as Record<string, unknown>)[key];
   },
 }));

@@ -1,6 +1,6 @@
 import { createBottomTabNavigator, createBottomTabScreen } from '@react-navigation/bottom-tabs';
 import { ColorValue } from 'react-native';
-import { AppIcon } from '../../components/ui/Icon';
+import { AppIcon, type IconName } from '../../components/ui/Icon';
 
 import HomeStack from './HomeStack';
 import AppointmentsStack from './AppointmentsStack';
@@ -8,7 +8,7 @@ import MessagesStack from './MessagesStack';
 import FilesStack from './FilesStack';
 import ProfileStack from './ProfileStack';
 
-const getTabIcon = (iconName: string) => {
+const getTabIcon = (iconName: IconName) => {
   return ({ color, size }: { color: ColorValue; size: number }) => (
     <AppIcon name={iconName} color={color} size={size} />
   );
