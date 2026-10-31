@@ -333,7 +333,7 @@ export default function MessagesInboxScreen() {
             {
               backgroundColor: colors.primary,
               borderRadius: radii.full,
-              bottom: spacing.lg,
+              bottom: contentInsets.fabBottom + spacing.lg,
               right: spacing.lg,
               paddingHorizontal: spacing.lg,
               paddingVertical: spacing.md,

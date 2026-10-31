@@ -313,7 +313,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
 
       {/* Floating Action Button */}
       <View
-        style={[styles.fabWrap, { right: spacing.lg, bottom: spacing.lg }]}
+        style={[styles.fabWrap, { right: spacing.lg, bottom: contentInsets.fabBottom + spacing.lg }]}
         pointerEvents="box-none"
       >
         <Pressable

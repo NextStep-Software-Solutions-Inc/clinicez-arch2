@@ -12,5 +12,7 @@ export function useContentInsets() {
   return {
     tabBarHeight,
     bottom: tabBarHeight + spacing['2xl'],
+    /** On web, the screen container is flex-bounded above WebNavBar, so the FAB needs 0 tab offset. */
+    fabBottom: 0,
   };
 }
