@@ -454,12 +454,34 @@ describe('6. Redesigned File Viewer & Safe Android Bottom Tabs Resilience', () =
     expect(nativeViewerSource.includes('styles.floatingPill')).toBe(true);
     expect(nativeViewerSource.includes('BackHandler.addEventListener')).toBe(true);
     expect(nativeViewerSource.includes('FileDetailsModal')).toBe(true);
+
+    // Floating pill has Full Screen, Save, Details, Delete (Share is moved to header right)
+    expect(nativeViewerSource.includes('Full Screen')).toBe(true);
+    expect(nativeViewerSource.includes('name="fullscreen"')).toBe(true);
+    expect(nativeViewerSource.includes('Save')).toBe(true);
+    expect(nativeViewerSource.includes('Details')).toBe(true);
+    expect(nativeViewerSource.includes('Delete')).toBe(true);
+    expect(nativeViewerSource.includes('pointerEvents="auto"')).toBe(true);
+    expect(nativeViewerSource.includes('elevation: 25')).toBe(true);
   });
 
-  test('FileViewer.screen.web.tsx provides floating pill and Web Share fallback', () => {
+  test('FileViewer.screen.web.tsx provides floating pill with Full Screen option and clean header title', () => {
     const webViewerSource = readApp('navigation/screens/files/FileViewer.screen.web.tsx');
     expect(webViewerSource.includes('styles.floatingPill')).toBe(true);
-    expect(webViewerSource.includes('navigator.share')).toBe(true);
     expect(webViewerSource.includes('FileDetailsModal')).toBe(true);
+    expect(webViewerSource.includes('Full Screen')).toBe(true);
+    expect(webViewerSource.includes('name="fullscreen"')).toBe(true);
+    expect(webViewerSource.includes('Save')).toBe(true);
+    expect(webViewerSource.includes('Details')).toBe(true);
+    expect(webViewerSource.includes('Delete')).toBe(true);
+  });
+
+  test('formatViewerHeaderTitle omits category suffix when requested to avoid duplicating category chip', () => {
+    expect(
+      formatViewerHeaderTitle({ name: 'Report.pdf' }, null)
+    ).toBe('Report.pdf');
+    expect(
+      formatViewerHeaderTitle({ name: 'Report.pdf' }, 'Lab Result', { includeCategory: false })
+    ).toBe('Report.pdf');
   });
 });

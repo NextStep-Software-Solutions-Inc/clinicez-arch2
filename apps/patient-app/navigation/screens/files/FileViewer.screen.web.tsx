@@ -65,8 +65,8 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
 
   const viewerHeaderTitle = useMemo(() => {
     if (!fileMetadata && !preview) return undefined;
-    return formatViewerHeaderTitle(fileMetadata ?? preview, categoryLabel);
-  }, [fileMetadata, preview, categoryLabel]);
+    return formatViewerHeaderTitle(fileMetadata ?? preview, null, { maxFileNameChars: 24 });
+  }, [fileMetadata, preview]);
 
   const viewerHeaderSubtitle = useMemo(() => {
     return formatRecordSubtitle(fileMetadata) || undefined;
@@ -339,21 +339,21 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             },
           ]}
         >
-          {/* Share Action */}
+          {/* Full Screen Action */}
           <Pressable
-            onPress={handleShare}
+            onPress={() => setIsFullScreen(true)}
             accessibilityRole="button"
-            accessibilityLabel="Share file"
+            accessibilityLabel="Full screen preview"
             hitSlop={8}
             style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
           >
-            <AppIcon name="share" size={sizes.iconMd} color="text" />
+            <AppIcon name="fullscreen" size={sizes.iconMd} color="text" />
             <ThemedText variant="captionBold" color="text">
-              Share
+              Full Screen
             </ThemedText>
           </Pressable>
 
-          {/* Download Action */}
+          {/* Download / Save Action */}
           <Pressable
             onPress={handleDownload}
             accessibilityRole="button"

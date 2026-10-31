@@ -7,7 +7,10 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  GestureHandlerRootView,
+  TouchableOpacity as RNGHTouchableOpacity,
+} from 'react-native-gesture-handler';
 import { mutate } from 'swr';
 import ZoomableImage from '../../../components/ui/ZoomableImage';
 import { useNavigation } from '@react-navigation/native';
@@ -105,8 +108,8 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
 
   const viewerHeaderTitle = useMemo(() => {
     if (!fileMetadata && !preview) return 'Preview';
-    return formatViewerHeaderTitle(fileMetadata ?? preview, categoryLabel);
-  }, [fileMetadata, preview, categoryLabel]);
+    return formatViewerHeaderTitle(fileMetadata ?? preview, null, { maxFileNameChars: 24 });
+  }, [fileMetadata, preview]);
 
   const viewerHeaderSubtitle = useMemo(() => {
     return formatRecordSubtitle(fileMetadata) || undefined;
@@ -299,6 +302,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
           ]}
         >
           <View
+            pointerEvents="auto"
             style={[
               styles.floatingPill,
               shadows.lg,
@@ -309,61 +313,65 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
               },
             ]}
           >
-            {/* Share Action */}
-            <Pressable
-              onPress={handleShare}
+            {/* Full Screen Action */}
+            <RNGHTouchableOpacity
+              onPress={() => setIsFullScreen(true)}
               accessibilityRole="button"
-              accessibilityLabel="Share file"
+              accessibilityLabel="Full screen preview"
               hitSlop={8}
-              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+              activeOpacity={0.7}
+              style={styles.pillBtn}
             >
-              <AppIcon name="share" size={sizes.iconMd} color="text" />
+              <AppIcon name="fullscreen" size={sizes.iconMd} color="text" />
               <ThemedText variant="captionBold" color="text">
-                Share
+                Full Screen
               </ThemedText>
-            </Pressable>
+            </RNGHTouchableOpacity>
 
             {/* Save / Export Action */}
-            <Pressable
+            <RNGHTouchableOpacity
               onPress={handleDownload}
               accessibilityRole="button"
               accessibilityLabel="Save file to device"
               hitSlop={8}
-              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+              activeOpacity={0.7}
+              style={styles.pillBtn}
             >
               <AppIcon name="download" size={sizes.iconMd} color="text" />
               <ThemedText variant="captionBold" color="text">
                 Save
               </ThemedText>
-            </Pressable>
+            </RNGHTouchableOpacity>
 
             {/* Details & Rename Action */}
-            <Pressable
+            <RNGHTouchableOpacity
               onPress={() => setDetailsModalOpen(true)}
               accessibilityRole="button"
               accessibilityLabel="File details and rename"
               hitSlop={8}
-              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+              activeOpacity={0.7}
+              style={styles.pillBtn}
             >
               <AppIcon name="info" size={sizes.iconMd} color="text" />
               <ThemedText variant="captionBold" color="text">
                 Details
               </ThemedText>
-            </Pressable>
+            </RNGHTouchableOpacity>
 
             {/* Delete Action */}
-            <Pressable
+            <RNGHTouchableOpacity
               onPress={handleDelete}
               accessibilityRole="button"
               accessibilityLabel="Delete file"
               hitSlop={8}
-              style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+              activeOpacity={0.7}
+              style={styles.pillBtn}
             >
               <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
               <ThemedText variant="captionBold" color="emergency">
                 Delete
               </ThemedText>
-            </Pressable>
+            </RNGHTouchableOpacity>
           </View>
         </View>
       ) : null}
@@ -479,7 +487,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    zIndex: 30,
+    zIndex: 100,
+    elevation: 20,
   },
   floatingPill: {
     flexDirection: 'row',
@@ -490,6 +499,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 101,
+    elevation: 25,
   },
   pillBtn: {
     alignItems: 'center',

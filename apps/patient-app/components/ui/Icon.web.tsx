@@ -83,6 +83,7 @@ import {
   Star,
   Tag,
   Monitor,
+  Maximize2,
   Circle,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -137,6 +138,7 @@ const WEB_ICONS: Record<IconName, LucideIcon> = {
   archive: Archive,
   camera: Camera,
   scan: ScanLine,
+  fullscreen: Maximize2,
   info: Info,
   warning: AlertTriangle,
   alert: AlertCircle,

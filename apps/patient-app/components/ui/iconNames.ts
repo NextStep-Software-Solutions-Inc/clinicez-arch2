@@ -43,6 +43,7 @@ export const iconNames = [
   'archive',
   'camera',
   'scan',
+  'fullscreen',
   // Status
   'info',
   'warning',

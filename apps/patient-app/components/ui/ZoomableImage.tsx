@@ -40,6 +40,7 @@ export default function ZoomableImage({ uri, onSingleTap }: ZoomableImageProps) 
     });
 
   const panGesture = Gesture.Pan()
+    .minDistance(10)
     .onUpdate((e) => {
       if (scale.value > 1) {
         translateX.value = savedTranslateX.value + e.translationX;
@@ -71,11 +72,14 @@ export default function ZoomableImage({ uri, onSingleTap }: ZoomableImageProps) 
 
   const singleTapGesture = Gesture.Tap()
     .numberOfTaps(1)
+    .enabled(Boolean(onSingleTap))
     .onEnd(() => {
       if (onSingleTap) runOnJS(onSingleTap)();
     });
 
-  const tapGestures = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
+  const tapGestures = onSingleTap
+    ? Gesture.Exclusive(doubleTapGesture, singleTapGesture)
+    : doubleTapGesture;
 
   const composed = Gesture.Simultaneous(
     pinchGesture,

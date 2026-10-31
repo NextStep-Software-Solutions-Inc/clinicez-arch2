@@ -144,6 +144,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   archive: Archive,
   camera: Camera,
   scan: ScanLine,
+  fullscreen: Maximize2,
   info: Info,
   warning: AlertTriangle,
   alert: AlertCircle,

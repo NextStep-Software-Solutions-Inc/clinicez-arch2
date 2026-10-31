@@ -36,6 +36,7 @@ export const NATIVE_ICONS: Record<IconName, { android: string; ios: string }> = 
   archive: { android: 'archive', ios: 'archivebox' },
   camera: { android: 'photo_camera', ios: 'camera.fill' },
   scan: { android: 'qr_code_scanner', ios: 'qrcode.viewfinder' },
+  fullscreen: { android: 'fullscreen', ios: 'arrow.up.left.and.arrow.down.right' },
   info: { android: 'info', ios: 'info.circle.fill' },
   warning: { android: 'warning', ios: 'exclamationmark.triangle.fill' },
   alert: { android: 'error', ios: 'exclamationmark.circle.fill' },

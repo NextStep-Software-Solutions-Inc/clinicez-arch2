@@ -142,15 +142,20 @@ export function formatCategoryTitleCase(label: string | null | undefined): strin
 
 /**
  * Formats the FileViewer top navigation header title as:
- * `Filename.png (Medical Certificate)`
+ * `Filename.png` (or `Filename.png (Medical Certificate)` if category is explicitly requested).
  */
 export function formatViewerHeaderTitle(
   record: RecordNameFields | null | undefined,
   categoryLabel?: string | null,
-  options?: { maxFileNameChars?: number }
+  options?: { maxFileNameChars?: number; includeCategory?: boolean }
 ): string {
   const fullFileName = formatRecordFileName(record);
   const displayFileName = compactFileNameMiddle(fullFileName, options?.maxFileNameChars ?? 22);
+
+  if (options?.includeCategory === false || !categoryLabel) {
+    return displayFileName;
+  }
+
   const cleanCategory = formatCategoryTitleCase(categoryLabel);
 
   if (!cleanCategory) {
