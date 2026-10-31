@@ -351,12 +351,20 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             accessibilityRole="button"
             accessibilityLabel="Full screen preview"
             hitSlop={8}
-            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+            style={(s) => {
+              const hovered = (s as { hovered?: boolean }).hovered;
+              const pressed = s.pressed;
+              return [
+                styles.pillBtn,
+                {
+                  borderRadius: radii.full,
+                  backgroundColor: hovered ? colors.surfaceSubtle : colors.transparent,
+                },
+                pressed && styles.pillBtnPressed,
+              ];
+            }}
           >
             <AppIcon name="fullscreen" size={sizes.iconMd} color="text" />
-            <ThemedText variant="captionBold" color="text">
-              Full Screen
-            </ThemedText>
           </Pressable>
 
           {/* Download / Save Action */}
@@ -365,12 +373,20 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             accessibilityRole="button"
             accessibilityLabel="Download file"
             hitSlop={8}
-            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+            style={(s) => {
+              const hovered = (s as { hovered?: boolean }).hovered;
+              const pressed = s.pressed;
+              return [
+                styles.pillBtn,
+                {
+                  borderRadius: radii.full,
+                  backgroundColor: hovered ? colors.surfaceSubtle : colors.transparent,
+                },
+                pressed && styles.pillBtnPressed,
+              ];
+            }}
           >
             <AppIcon name="download" size={sizes.iconMd} color="text" />
-            <ThemedText variant="captionBold" color="text">
-              Save
-            </ThemedText>
           </Pressable>
 
           {/* Details Action */}
@@ -379,12 +395,20 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             accessibilityRole="button"
             accessibilityLabel="File details and rename"
             hitSlop={8}
-            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+            style={(s) => {
+              const hovered = (s as { hovered?: boolean }).hovered;
+              const pressed = s.pressed;
+              return [
+                styles.pillBtn,
+                {
+                  borderRadius: radii.full,
+                  backgroundColor: hovered ? colors.surfaceSubtle : colors.transparent,
+                },
+                pressed && styles.pillBtnPressed,
+              ];
+            }}
           >
             <AppIcon name="info" size={sizes.iconMd} color="text" />
-            <ThemedText variant="captionBold" color="text">
-              Details
-            </ThemedText>
           </Pressable>
 
           {/* Delete Action */}
@@ -393,12 +417,20 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             accessibilityRole="button"
             accessibilityLabel="Delete file"
             hitSlop={8}
-            style={({ pressed }) => [styles.pillBtn, pressed && styles.pillBtnPressed]}
+            style={(s) => {
+              const hovered = (s as { hovered?: boolean }).hovered;
+              const pressed = s.pressed;
+              return [
+                styles.pillBtn,
+                {
+                  borderRadius: radii.full,
+                  backgroundColor: hovered ? colors.emergencyBg : colors.transparent,
+                },
+                pressed && styles.pillBtnPressed,
+              ];
+            }}
           >
             <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
-            <ThemedText variant="captionBold" color="emergency">
-              Delete
-            </ThemedText>
           </Pressable>
         </View>
       </View>
@@ -526,21 +558,17 @@ const styles = StyleSheet.create({
   floatingPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    width: '100%',
-    maxWidth: 380,
+    justifyContent: 'center',
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
   },
   pillBtn: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    minWidth: 64,
-    minHeight: 48,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
   },
   pillBtnPressed: {
     opacity: 0.6,

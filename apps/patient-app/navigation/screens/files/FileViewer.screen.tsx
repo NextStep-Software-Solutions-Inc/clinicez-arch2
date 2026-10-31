@@ -320,12 +320,9 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
               accessibilityLabel="Full screen preview"
               hitSlop={8}
               activeOpacity={0.7}
-              style={styles.pillBtn}
+              style={[styles.pillBtn, { borderRadius: radii.full }]}
             >
               <AppIcon name="fullscreen" size={sizes.iconMd} color="text" />
-              <ThemedText variant="captionBold" color="text">
-                Full Screen
-              </ThemedText>
             </RNGHTouchableOpacity>
 
             {/* Save / Export Action */}
@@ -335,12 +332,9 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
               accessibilityLabel="Save file to device"
               hitSlop={8}
               activeOpacity={0.7}
-              style={styles.pillBtn}
+              style={[styles.pillBtn, { borderRadius: radii.full }]}
             >
               <AppIcon name="download" size={sizes.iconMd} color="text" />
-              <ThemedText variant="captionBold" color="text">
-                Save
-              </ThemedText>
             </RNGHTouchableOpacity>
 
             {/* Details & Rename Action */}
@@ -350,12 +344,9 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
               accessibilityLabel="File details and rename"
               hitSlop={8}
               activeOpacity={0.7}
-              style={styles.pillBtn}
+              style={[styles.pillBtn, { borderRadius: radii.full }]}
             >
               <AppIcon name="info" size={sizes.iconMd} color="text" />
-              <ThemedText variant="captionBold" color="text">
-                Details
-              </ThemedText>
             </RNGHTouchableOpacity>
 
             {/* Delete Action */}
@@ -365,12 +356,9 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
               accessibilityLabel="Delete file"
               hitSlop={8}
               activeOpacity={0.7}
-              style={styles.pillBtn}
+              style={[styles.pillBtn, { borderRadius: radii.full }]}
             >
               <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
-              <ThemedText variant="captionBold" color="emergency">
-                Delete
-              </ThemedText>
             </RNGHTouchableOpacity>
           </View>
         </View>
@@ -493,23 +481,19 @@ const styles = StyleSheet.create({
   floatingPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    width: '100%',
-    maxWidth: 380,
+    justifyContent: 'center',
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
     zIndex: 101,
     elevation: 25,
   },
   pillBtn: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    minWidth: 64,
-    minHeight: 48,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
   },
   pillBtnPressed: {
     opacity: 0.6,
