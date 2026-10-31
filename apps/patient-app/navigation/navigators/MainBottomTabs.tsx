@@ -32,7 +32,6 @@ const getTabIcon = ({ android, ios, web }: TabIconDefinition) => {
   return {
     type: 'materialSymbol' as const,
     name: android,
-    variant: 'rounded' as const,
   };
 };
 
