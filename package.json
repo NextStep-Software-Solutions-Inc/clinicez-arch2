@@ -47,5 +47,19 @@
   },
   "devDependencies": {
     "typescript": "~6.0.3"
+  },
+  "react-navigation": {
+    "material-symbols": {
+      "fonts": [
+        {
+          "variant": "outlined",
+          "weights": [400]
+        },
+        {
+          "variant": "rounded",
+          "weights": [400]
+        }
+      ]
+    }
   }
 }

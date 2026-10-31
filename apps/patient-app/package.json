@@ -95,5 +95,19 @@
     "lint:tokens": "bun scripts/check-tokens.mjs",
     "test": "bun test --preload ./tests/setup-preload.ts tests"
   },
+  "react-navigation": {
+    "material-symbols": {
+      "fonts": [
+        {
+          "variant": "outlined",
+          "weights": [400]
+        },
+        {
+          "variant": "rounded",
+          "weights": [400]
+        }
+      ]
+    }
+  },
   "private": true
 }
