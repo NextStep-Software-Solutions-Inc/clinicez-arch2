@@ -161,9 +161,26 @@ export default function RecordsScreen() {
       try {
         if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
           const preview = await preparePreviewFile(patientId, fileId, getToken);
+          const resolvedName = fileName || preview.name;
           try {
+            if (typeof fetch === 'function' && typeof File !== 'undefined' && typeof navigator.canShare === 'function') {
+              try {
+                const res = await fetch(preview.uri);
+                const blob = await res.blob();
+                const file = new File([blob], resolvedName, { type: preview.mimeType || blob.type || 'application/octet-stream' });
+                if (navigator.canShare({ files: [file] })) {
+                  await navigator.share({
+                    files: [file],
+                    title: resolvedName,
+                  });
+                  return;
+                }
+              } catch {
+                // fall through to url or download
+              }
+            }
             await navigator.share({
-              title: fileName || preview.name,
+              title: resolvedName,
               url: preview.uri,
             });
           } catch (err: any) {
@@ -171,7 +188,7 @@ export default function RecordsScreen() {
               if (typeof document !== 'undefined') {
                 const link = document.createElement('a');
                 link.href = preview.uri;
-                link.download = fileName || preview.name;
+                link.download = resolvedName;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -607,5 +624,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    zIndex: 50,
   },
 });

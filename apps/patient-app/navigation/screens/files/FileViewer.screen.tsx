@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, BackHandler, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { mutate } from 'swr';
 import ZoomableImage from '../../../components/ui/ZoomableImage';
@@ -13,7 +13,6 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import { usePatientId } from 'hooks/usePatientId';
 import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useContentInsets } from '../../../hooks/useContentInsets';
 import { cleanupPreviewCache, preparePreviewFile, getFileById, deleteItem, renameFile } from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
 import { formatRecordCategoryLabel } from '../../../services/files/documentTypeMapping';
@@ -29,13 +28,12 @@ import { useAppTheme } from '../../../contexts/ThemeContext';
 
 export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewerScreen'>) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
-  const navigation = useNavigation<any>('FileViewerScreen');
+  const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { runWithAutoLockPaused } = useAppAuth();
   const { getToken } = useClerkAuth();
   const { fileId } = route.params;
   const insets = useSafeAreaInsets();
-  const contentInsets = useContentInsets();
   const { documentTypes } = useDocumentTypes(patientId);
 
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
@@ -43,6 +41,23 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const [error, setError] = useState<string | null>(null);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+
+  const handleGoBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('FilesBrowserScreen');
+    }
+  }, [navigation]);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      handleGoBack();
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [handleGoBack]);
 
   const categoryLabel = useMemo(
     () =>
@@ -63,13 +78,23 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   }, [fileMetadata]);
 
   useEffect(() => {
-    if (!viewerHeaderTitle) return;
     navigation.setOptions({
-      title: viewerHeaderTitle,
+      title: viewerHeaderTitle ?? 'Preview',
+      headerLeft: () => (
+        <Pressable
+          onPress={handleGoBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          style={{ paddingRight: spacing.md, paddingVertical: spacing.xs, justifyContent: 'center' }}
+        >
+          <AppIcon name="back" size={sizes.iconLg} color="text" />
+        </Pressable>
+      ),
       headerTitle: () => (
         <View style={styles.nativeHeaderTitleWrap}>
           <ThemedText variant="bodyBold" numberOfLines={1}>
-            {viewerHeaderTitle}
+            {viewerHeaderTitle ?? 'Preview'}
           </ThemedText>
           {viewerHeaderSubtitle ? (
             <ThemedText variant="caption" color="textMuted" numberOfLines={1}>
@@ -79,16 +104,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
         </View>
       ),
     });
-  }, [navigation, viewerHeaderTitle, viewerHeaderSubtitle]);
-
-  useEffect(() => {
-    // Hide bottom tab bar while viewing an upload to provide immersive edge-to-edge view
-    const parent = navigation.getParent();
-    parent?.setOptions?.({ tabBarStyle: { display: 'none' } });
-    return () => {
-      parent?.setOptions?.({ tabBarStyle: undefined });
-    };
-  }, [navigation]);
+  }, [navigation, viewerHeaderTitle, viewerHeaderSubtitle, handleGoBack, spacing.md, spacing.xs, sizes.iconLg]);
 
   useEffect(() => {
     let mounted = true;
@@ -112,17 +128,17 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   }, [fileId, patientId, getToken]);
 
   const handleShare = async () => {
-    if (!preview) return;
     try {
-      const available = await Sharing.isAvailableAsync();
+      const available = await Sharing.isAvailableAsync().catch(() => false);
       if (!available) {
         dialog.alert('No app available', 'This device cannot share files with other apps.');
         return;
       }
+      const freshPreview = await preparePreviewFile(patientId, fileId, getToken);
       await runWithAutoLockPaused(() =>
-        Sharing.shareAsync(preview.uri, {
-          mimeType: preview.mimeType,
-          dialogTitle: formatRecordFileName(fileMetadata ?? preview),
+        Sharing.shareAsync(freshPreview.uri, {
+          mimeType: freshPreview.mimeType,
+          dialogTitle: formatRecordFileName(fileMetadata ?? freshPreview),
         })
       );
     } catch (err) {
@@ -207,7 +223,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
           {
             backgroundColor: colors.surface,
             borderTopColor: colors.borderLight,
-            paddingBottom: Math.max(insets.bottom, spacing.md),
+            paddingBottom: Math.max(insets.bottom, spacing.xs),
             paddingTop: spacing.xs,
           },
         ]}
@@ -217,6 +233,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
             onPress={() => setIsFullScreen(true)}
             accessibilityRole="button"
             accessibilityLabel="Full Screen"
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name="fullscreen" color="text" size={sizes.iconLg - 2} />
@@ -229,6 +246,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
             onPress={handleShare}
             accessibilityRole="button"
             accessibilityLabel="Share"
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name="share" color="text" size={sizes.iconLg - 2} />
@@ -241,6 +259,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
             onPress={() => setRenameModalOpen(true)}
             accessibilityRole="button"
             accessibilityLabel="Rename"
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name="edit" color="text" size={sizes.iconLg - 2} />
@@ -253,6 +272,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
             onPress={handleDelete}
             accessibilityRole="button"
             accessibilityLabel="Delete"
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name="trash" color="emergency" size={sizes.iconLg - 2} />
@@ -323,6 +343,8 @@ const styles = StyleSheet.create({
   bottomToolbar: {
     width: '100%',
     borderTopWidth: StyleSheet.hairlineWidth,
+    zIndex: 10,
+    elevation: 4,
   },
   bottomToolbarInner: {
     flexDirection: 'row',
@@ -337,7 +359,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
     minWidth: 64,
-    minHeight: 44,
+    minHeight: 48,
     paddingVertical: 4,
   },
   actionBtnPressed: {

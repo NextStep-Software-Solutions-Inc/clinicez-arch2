@@ -302,11 +302,23 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     expect(viewerWeb.includes('floatingToolbarWrap')).toBe(false);
     expect(viewerNative.includes('floatingToolbarWrap')).toBe(false);
 
-    // Both use restyled docked edge-to-edge native bottom toolbar
+    // Both use restyled docked edge-to-edge native bottom toolbar with compact padding
     expect(viewerWeb.includes('bottomToolbar')).toBe(true);
     expect(viewerWeb.includes('bottomToolbarInner')).toBe(true);
+    expect(viewerWeb.includes('paddingBottom: Math.max(insets.bottom, spacing.xs)')).toBe(true);
     expect(viewerNative.includes('bottomToolbar')).toBe(true);
     expect(viewerNative.includes('bottomToolbarInner')).toBe(true);
+    expect(viewerNative.includes('paddingBottom: Math.max(insets.bottom, spacing.xs)')).toBe(true);
+
+    // Native FileViewer uses explicit BackHandler and headerLeft back button, and presentation fullScreenModal
+    expect(viewerNative.includes("BackHandler.addEventListener('hardwareBackPress'")).toBe(true);
+    expect(viewerNative.includes('headerLeft')).toBe(true);
+    const filesStack = readApp('navigation/navigators/FilesStack.tsx');
+    expect(filesStack.includes("presentation: 'fullScreenModal'")).toBe(true);
+
+    // Web FileViewer uses Web Share API Level 2 file sharing and safe fresh preview download
+    expect(viewerWeb.includes('navigator.canShare({ files: [file] })')).toBe(true);
+    expect(viewerWeb.includes('handleDownload')).toBe(true);
 
     // WebNavBar checks tabBarStyle display: none and hides when viewing a file
     expect(webNavBar.includes("tabBarStyle?.display === 'none'")).toBe(true);

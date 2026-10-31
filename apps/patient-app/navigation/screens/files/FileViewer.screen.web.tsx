@@ -9,7 +9,7 @@ import { AppIcon } from '@ui/Icon';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { usePatientId } from 'hooks/usePatientId';
 import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
-import { useContentInsets } from '../../../hooks/useContentInsets';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRegisterWebHeaderOverride } from '../../../contexts/HeaderSearchContext';
 import { preparePreviewFile, revokePreviewUri, getFileById, deleteItem, renameFile } from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
@@ -29,8 +29,10 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const { fileId } = route.params;
-  const contentInsets = useContentInsets();
+  const insets = useSafeAreaInsets();
   const { documentTypes } = useDocumentTypes(patientId);
 
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
@@ -70,24 +72,12 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
     }
   }, [navigation, viewerHeaderTitle]);
 
-  useEffect(() => {
-    // Hide bottom tab bar while viewing file to allow full immersion
-    navigation.getParent()?.setOptions({
-      tabBarStyle: { display: 'none' },
-    });
-    return () => {
-      navigation.getParent()?.setOptions({
-        tabBarStyle: undefined,
-      });
-    };
-  }, [navigation]);
-
   const loadFile = useCallback(() => {
     const reqId = ++requestIdRef.current;
     setIsRetrying(true);
     setError(null);
     Promise.all([
-      preparePreviewFile(patientId, fileId, getToken),
+      preparePreviewFile(patientId, fileId, getTokenRef.current),
       getFileById(patientId, fileId),
     ])
       .then(([previewRes, fileRes]) => {
@@ -111,7 +101,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
           setIsRetrying(false);
         }
       });
-  }, [fileId, getToken, patientId]);
+  }, [fileId, patientId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -127,41 +117,72 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
     };
   }, [fileId, loadFile]);
 
-  const handleDownload = () => {
-    if (!preview) return;
+  const handleDownload = useCallback(async () => {
     try {
+      const fresh = await preparePreviewFile(patientId, fileId, getTokenRef.current);
+      const fileName = formatRecordFileName(fileMetadata ?? fresh);
       if (typeof document !== 'undefined') {
+        const res = await fetch(fresh.uri);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = preview.uri;
-        link.download = formatRecordFileName(fileMetadata ?? preview);
+        link.href = objectUrl;
+        link.download = fileName;
+        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(objectUrl);
+        }, 1000);
       } else {
-        window.open(preview.uri, '_blank');
+        window.open(fresh.uri, '_blank');
       }
     } catch (err) {
       dialog.alert('Download failed', err instanceof Error ? err.message : 'Unable to download file.');
     }
-  };
+  }, [fileId, fileMetadata, patientId]);
 
-  const handleShare = async () => {
-    if (!preview) return;
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        await navigator.share({
-          title: formatRecordFileName(fileMetadata ?? preview),
-          url: preview.uri,
-        });
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
-          handleDownload();
+  const handleShare = useCallback(async () => {
+    try {
+      const fresh = await preparePreviewFile(patientId, fileId, getTokenRef.current);
+      const fileName = formatRecordFileName(fileMetadata ?? fresh);
+
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          if (typeof fetch === 'function' && typeof File !== 'undefined' && typeof navigator.canShare === 'function') {
+            try {
+              const res = await fetch(fresh.uri);
+              const blob = await res.blob();
+              const file = new File([blob], fileName, { type: fresh.mimeType || blob.type || 'application/octet-stream' });
+              if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                  title: fileName,
+                  files: [file],
+                });
+                return;
+              }
+            } catch {
+              // Fall back to url sharing
+            }
+          }
+
+          await navigator.share({
+            title: fileName,
+            url: fresh.uri,
+          });
+        } catch (err: any) {
+          if (err?.name !== 'AbortError') {
+            await handleDownload();
+          }
         }
+      } else {
+        await handleDownload();
       }
-    } else {
-      handleDownload();
+    } catch (err) {
+      dialog.alert('Could not share file', err instanceof Error ? err.message : 'Unable to share this file.');
     }
-  };
+  }, [fileId, fileMetadata, handleDownload, patientId]);
 
   const handleDelete = async () => {
     const confirmed = await dialog.confirm({
@@ -299,7 +320,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
           {
             backgroundColor: colors.surface,
             borderTopColor: colors.borderLight,
-            paddingBottom: Math.max(contentInsets.bottom, spacing.md),
+            paddingBottom: Math.max(insets.bottom, spacing.xs),
             paddingTop: spacing.xs,
           },
         ]}
@@ -309,6 +330,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             onPress={() => setIsFullScreen(true)}
             accessibilityRole="button"
             accessibilityLabel="Full Screen"
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name="fullscreen" size={sizes.iconLg - 2} color="text" />
@@ -321,6 +343,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             onPress={isShareSupported ? handleShare : handleDownload}
             accessibilityRole="button"
             accessibilityLabel={isShareSupported ? 'Share' : 'Download'}
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name={isShareSupported ? 'share' : 'download'} size={sizes.iconLg - 2} color="text" />
@@ -333,6 +356,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             onPress={() => setRenameModalOpen(true)}
             accessibilityRole="button"
             accessibilityLabel="Rename"
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name="edit" size={sizes.iconLg - 2} color="text" />
@@ -345,6 +369,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             onPress={handleDelete}
             accessibilityRole="button"
             accessibilityLabel="Delete"
+            hitSlop={8}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           >
             <AppIcon name="trash" size={sizes.iconLg - 2} color="emergency" />
@@ -457,6 +482,7 @@ const styles = StyleSheet.create({
   bottomToolbar: {
     width: '100%',
     borderTopWidth: StyleSheet.hairlineWidth,
+    zIndex: 10,
   },
   bottomToolbarInner: {
     flexDirection: 'row',
@@ -471,7 +497,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
     minWidth: 64,
-    minHeight: 44,
+    minHeight: 48,
     paddingVertical: 4,
   },
   actionBtnPressed: {
