@@ -7,7 +7,6 @@ import { FileBrowserFile } from '../../services/files';
 import {
   formatRecordFileName,
   formatRecordSubtitle,
-  getProvenanceIndicatorMeta,
 } from '../../services/files/recordPresentation';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import type { ColorToken } from '../../constants/theme';
@@ -87,11 +86,6 @@ export function FileRow({
   const meta = fileMeta(item);
   const displayFileName = formatRecordFileName(item);
   const recordSubtitle = formatRecordSubtitle(item);
-  const provenanceMeta = getProvenanceIndicatorMeta({
-    provenance: (item as any).provenance,
-    clinicId: item.clinicId,
-    facilityName: item.facilityName,
-  });
 
   const hasExportAction = Boolean(onShare || onDownload);
   const preferShareLabel = Boolean(
@@ -232,25 +226,13 @@ export function FileRow({
               />
             </View>
 
-            {/* Timestamp + file size subtitle + icon-only provenance indicator */}
+            {/* Timestamp + file size subtitle */}
             <View style={[styles.subtitleRow, { gap: spacing.xs }]}>
               {recordSubtitle ? (
                 <ThemedText variant="small" color="textMuted" numberOfLines={1} style={styles.subtitleText}>
                   {recordSubtitle}
                 </ThemedText>
               ) : null}
-              <View
-                accessible
-                accessibilityRole="image"
-                accessibilityLabel={provenanceMeta.accessibilityLabel}
-                style={styles.provenanceIconWrap}
-              >
-                <AppIcon
-                  name={provenanceMeta.icon}
-                  color={provenanceMeta.colorToken}
-                  size={sizes.iconSm}
-                />
-              </View>
             </View>
 
             {item.syncStatus === 'failed' && (item.syncError || item.lastSyncError) ? (
@@ -319,11 +301,6 @@ const styles = StyleSheet.create({
   },
   subtitleText: {
     flexShrink: 1,
-  },
-  provenanceIconWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
   swipeWrap: {
     flexDirection: 'row',

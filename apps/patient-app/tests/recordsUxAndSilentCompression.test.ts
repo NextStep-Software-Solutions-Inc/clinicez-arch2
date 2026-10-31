@@ -195,6 +195,9 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     expect(fileRowNative.includes('formatRecordFileName')).toBe(true);
     expect(fileRowWeb.includes('formatRecordSubtitle')).toBe(true);
     expect(fileRowNative.includes('formatRecordSubtitle')).toBe(true);
+    // Redundant uploaded indicator icon is removed since My Uploads tab already identifies uploaded files
+    expect(fileRowWeb.includes('provenanceIconWrap')).toBe(false);
+    expect(fileRowNative.includes('provenanceIconWrap')).toBe(false);
 
     const filesScreenWeb = readApp('navigation/screens/files/Files.screen.web.tsx');
     expect(filesScreenWeb.includes('formatRecordSubtitle')).toBe(true);

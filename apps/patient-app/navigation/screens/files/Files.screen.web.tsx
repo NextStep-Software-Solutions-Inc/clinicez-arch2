@@ -30,7 +30,6 @@ import {
 import {
   formatRecordFileName,
   formatRecordSubtitle,
-  getProvenanceIndicatorMeta,
 } from '../../../services/files/recordPresentation';
 import { resetAndRetryFailedUploads } from '../../../services/sync/uploadQueueService';
 import type { FilesScreenProps } from './navigationTypes';
@@ -517,11 +516,6 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                           const meta = getFileMeta(file);
                           const displayFileName = formatRecordFileName(file);
                           const subtitleStr = formatRecordSubtitle(file);
-                          const provenanceMeta = getProvenanceIndicatorMeta({
-                            provenance: (file as any).provenance,
-                            clinicId: file.clinicId,
-                            facilityName: file.facilityName,
-                          });
 
                           return (
                             <Pressable
@@ -594,13 +588,6 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                                 <ThemedText variant="caption" color="textMuted" numberOfLines={1} style={{ flexShrink: 1 }}>
                                   {subtitleStr}
                                 </ThemedText>
-                                <View accessible accessibilityLabel={provenanceMeta.accessibilityLabel}>
-                                  <AppIcon
-                                    name={provenanceMeta.icon}
-                                    color={provenanceMeta.colorToken}
-                                    size={sizes.iconSm}
-                                  />
-                                </View>
                               </View>
                             </Pressable>
                           );
