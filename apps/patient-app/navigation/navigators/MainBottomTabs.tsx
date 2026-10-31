@@ -9,31 +9,84 @@ import MessagesStack from './MessagesStack';
 import FilesStack from './FilesStack';
 import ProfileStack from './ProfileStack';
 
-interface TabIconDefinition {
-  android: 'home' | 'favorite' | 'chat_bubble' | 'description' | 'person';
-  ios: 'house.fill' | 'heart.fill' | 'bubble.left.and.bubble.right.fill' | 'doc.fill' | 'person.fill';
-  web: IconName;
+interface TabDefinition {
+  title: string;
+  screen: Parameters<typeof createBottomTabScreen>[0]['screen'];
+  androidSymbol: 'home' | 'favorite' | 'chat_bubble' | 'description' | 'person';
+  iosSymbol: 'house.fill' | 'heart.fill' | 'bubble.left.and.bubble.right.fill' | 'doc.fill' | 'person.fill';
+  webIcon: IconName;
 }
 
-const getTabIcon = ({ android, ios, web }: TabIconDefinition) => {
-  if (Platform.OS === 'web') {
-    return ({ color, size }: { color: ColorValue; size: number }) => (
-      <AppIcon name={web} color={color} size={size} />
-    );
-  }
+const TAB_DEFINITIONS = {
+  HomeScreen: {
+    title: 'Home',
+    screen: HomeStack,
+    androidSymbol: 'home',
+    iosSymbol: 'house.fill',
+    webIcon: 'home',
+  },
+  AppointmentsScreen: {
+    title: 'My Appointments',
+    screen: AppointmentsStack,
+    androidSymbol: 'favorite',
+    iosSymbol: 'heart.fill',
+    webIcon: 'appointments',
+  },
+  MessagesScreen: {
+    title: 'Messages',
+    screen: MessagesStack,
+    androidSymbol: 'chat_bubble',
+    iosSymbol: 'bubble.left.and.bubble.right.fill',
+    webIcon: 'chat',
+  },
+  RecordsScreen: {
+    title: 'Records',
+    screen: FilesStack,
+    androidSymbol: 'description',
+    iosSymbol: 'doc.fill',
+    webIcon: 'files',
+  },
+  ProfileScreen: {
+    title: 'My Profile',
+    screen: ProfileStack,
+    androidSymbol: 'person',
+    iosSymbol: 'person.fill',
+    webIcon: 'profile',
+  },
+} as const satisfies Record<string, TabDefinition>;
 
+type TabScreenKey = keyof typeof TAB_DEFINITIONS;
+
+const resolveTabIcon = (tab: TabDefinition) => {
   if (Platform.OS === 'ios') {
     return {
       type: 'sfSymbol' as const,
-      name: ios,
+      name: tab.iosSymbol,
     };
   }
 
-  return {
-    type: 'materialSymbol' as const,
-    name: android,
-    variant: 'rounded' as const,
-  };
+  if (Platform.OS === 'android') {
+    return {
+      type: 'materialSymbol' as const,
+      name: tab.androidSymbol,
+      variant: 'rounded' as const,
+    };
+  }
+
+  return ({ color, size }: { color: ColorValue; size: number }) => (
+    <AppIcon name={tab.webIcon} color={color} size={size} />
+  );
+};
+
+const createScreen = (key: TabScreenKey) => {
+  const tab = TAB_DEFINITIONS[key];
+  return createBottomTabScreen({
+    screen: tab.screen,
+    options: {
+      title: tab.title,
+      tabBarIcon: resolveTabIcon(tab),
+    },
+  });
 };
 
 const MainBottomTabs = createBottomTabNavigator({
@@ -51,61 +104,11 @@ const MainBottomTabs = createBottomTabNavigator({
     },
   }),
   screens: {
-    HomeScreen: createBottomTabScreen({
-      screen: HomeStack,
-      options: {
-        title: 'Home',
-        tabBarIcon: getTabIcon({
-          android: 'home',
-          ios: 'house.fill',
-          web: 'home',
-        }),
-      },
-    }),
-    AppointmentsScreen: createBottomTabScreen({
-      screen: AppointmentsStack,
-      options: {
-        title: 'My Appointments',
-        tabBarIcon: getTabIcon({
-          android: 'favorite',
-          ios: 'heart.fill',
-          web: 'appointments',
-        }),
-      },
-    }),
-    MessagesScreen: createBottomTabScreen({
-      screen: MessagesStack,
-      options: {
-        title: 'Messages',
-        tabBarIcon: getTabIcon({
-          android: 'chat_bubble',
-          ios: 'bubble.left.and.bubble.right.fill',
-          web: 'chat',
-        }),
-      },
-    }),
-    RecordsScreen: createBottomTabScreen({
-      screen: FilesStack,
-      options: {
-        title: 'Records',
-        tabBarIcon: getTabIcon({
-          android: 'description',
-          ios: 'doc.fill',
-          web: 'files',
-        }),
-      },
-    }),
-    ProfileScreen: createBottomTabScreen({
-      screen: ProfileStack,
-      options: {
-        title: 'My Profile',
-        tabBarIcon: getTabIcon({
-          android: 'person',
-          ios: 'person.fill',
-          web: 'profile',
-        }),
-      },
-    }),
+    HomeScreen: createScreen('HomeScreen'),
+    AppointmentsScreen: createScreen('AppointmentsScreen'),
+    MessagesScreen: createScreen('MessagesScreen'),
+    RecordsScreen: createScreen('RecordsScreen'),
+    ProfileScreen: createScreen('ProfileScreen'),
   },
 });
 
