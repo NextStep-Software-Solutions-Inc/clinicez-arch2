@@ -494,8 +494,8 @@ export default function AppointmentsScreen() {
           {
             backgroundColor: colors.primary,
             borderRadius: radii.full,
-            bottom: contentInsets.bottom + spacing.lg,
-            right: spacing.xl,
+            bottom: spacing.lg,
+            right: spacing.lg,
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.md,
             opacity: pressed ? 0.88 : 1,
@@ -561,5 +561,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    zIndex: 50,
   },
 });

@@ -560,8 +560,8 @@ export default function RecordsScreen() {
           {
             backgroundColor: colors.primary,
             borderRadius: radii.full,
-            bottom: contentInsets.bottom + spacing.lg,
-            right: spacing.xl,
+            bottom: spacing.lg,
+            right: spacing.lg,
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.md,
             opacity: pressed ? 0.88 : 1,

@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     gap: 4,
-    marginRight: 16,
+    marginRight: -6,
     alignItems: 'center',
   },
   iconBtn: {
