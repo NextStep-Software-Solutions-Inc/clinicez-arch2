@@ -487,4 +487,37 @@ describe('6. Redesigned File Viewer & Safe Android Bottom Tabs Resilience', () =
       formatViewerHeaderTitle({ name: 'Report.pdf' }, 'Lab Result', { includeCategory: false })
     ).toBe('Report.pdf');
   });
+
+  test('Modern Share Icon & Pencil-Only Rename button without "Rename" label', () => {
+    const iconNative = readApp('components/ui/Icon.tsx');
+    const iconWeb = readApp('components/ui/Icon.web.tsx');
+    expect(iconNative.includes('share: Share,')).toBe(true);
+    expect(iconNative.includes('share: Share2')).toBe(false);
+    expect(iconWeb.includes('share: Share,')).toBe(true);
+    expect(iconWeb.includes('share: Share2')).toBe(false);
+
+    const modalSource = readApp('components/files/FileDetailsModal.tsx');
+    expect(modalSource.includes('name="edit"')).toBe(true);
+    expect(modalSource.includes('>Rename<')).toBe(false);
+    expect(modalSource.includes('Rename\n')).toBe(false);
+  });
+
+  test('Web header displays document type badge chip and modern share button', () => {
+    const webHeaderSource = readApp('components/layout/WebPageHeader.web.tsx');
+    expect(webHeaderSource.includes('categoryBadge')).toBe(true);
+    expect(webHeaderSource.includes('categoryLabel')).toBe(true);
+    expect(webHeaderSource.includes('onShare')).toBe(true);
+    expect(webHeaderSource.includes('name="share"')).toBe(true);
+
+    const frameSource = readApp('components/layout/WebAppFrame.web.tsx');
+    expect(frameSource.includes('categoryLabel={headerOverride?.categoryLabel}')).toBe(true);
+    expect(frameSource.includes('onShare={headerOverride?.onShare}')).toBe(true);
+
+    const webViewerSource = readApp('navigation/screens/files/FileViewer.screen.web.tsx');
+    expect(
+      webViewerSource.includes(
+        "useRegisterWebHeaderOverride(\n    'FileViewerScreen',\n    viewerHeaderTitle,\n    viewerHeaderSubtitle,\n    categoryLabel,\n    handleShare\n  )"
+      )
+    ).toBe(true);
+  });
 });

@@ -50,6 +50,8 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
         <WebPageHeader
           title={headerOverride?.title || headerInfo.title}
           subtitle={headerOverride?.subtitle ?? headerInfo.subtitle}
+          categoryLabel={headerOverride?.categoryLabel}
+          onShare={headerOverride?.onShare}
           onBack={onBack}
         />
       ) : showCompactTabHeader ? (

@@ -9,6 +9,8 @@ import { useNotificationContext } from '../../contexts/NotificationContext';
 interface WebPageHeaderProps {
   title?: string;
   subtitle?: string;
+  categoryLabel?: string | null;
+  onShare?: () => void;
   onBack?: () => void;
   showBrand?: boolean;
   showAccountActions?: boolean;
@@ -28,6 +30,8 @@ interface WebPageHeaderProps {
 export default function WebPageHeader({
   title,
   subtitle,
+  categoryLabel,
+  onShare,
   onBack,
   showBrand,
   showAccountActions,
@@ -83,15 +87,59 @@ export default function WebPageHeader({
       ) : null}
 
       <View style={styles.titleWrap}>
-        <ThemedText variant={subtitle ? (onBack ? 'bodyBold' : 'h3') : 'title'} numberOfLines={1}>
-          {title ?? ''}
-        </ThemedText>
+        <View style={styles.titleRow}>
+          <ThemedText
+            variant={subtitle ? (onBack ? 'bodyBold' : 'h3') : 'title'}
+            numberOfLines={1}
+            style={styles.titleText}
+          >
+            {title ?? ''}
+          </ThemedText>
+          {categoryLabel ? (
+            <View
+              style={[
+                styles.categoryBadge,
+                {
+                  backgroundColor: colors.surfaceSubtle,
+                  borderRadius: radii.sm,
+                  borderColor: colors.borderLight,
+                },
+              ]}
+            >
+              <ThemedText variant="caption" color="textMuted" numberOfLines={1}>
+                {categoryLabel}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
         {subtitle ? (
           <ThemedText variant="caption" color="textMuted" numberOfLines={1}>
             {subtitle}
           </ThemedText>
         ) : null}
       </View>
+
+      {onShare ? (
+        <Pressable
+          onPress={onShare}
+          accessibilityRole="button"
+          accessibilityLabel="Share file"
+          style={(s) => {
+            const hovered = (s as { hovered?: boolean }).hovered;
+            return [
+              styles.shareBtn,
+              {
+                width: sizes.controlMd,
+                height: sizes.controlMd,
+                borderRadius: radii.full,
+                backgroundColor: hovered ? colors.primaryLight : colors.surfaceSubtle,
+              },
+            ];
+          }}
+        >
+          <AppIcon name="share" size={sizes.iconMd} color="primary" />
+        </Pressable>
+      ) : null}
 
       {showAccountActions ? (
         <View style={[styles.actionsRow, { gap: spacing.xs }]}>
@@ -205,6 +253,15 @@ const styles = StyleSheet.create({
   root: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1 },
   back: { alignItems: 'center', justifyContent: 'center' },
   titleWrap: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  titleText: { flexShrink: 1 },
+  categoryBadge: {
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    flexShrink: 0,
+  },
+  shareBtn: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   actionsRow: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: {
     borderWidth: 1,

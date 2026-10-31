@@ -8,6 +8,8 @@ export interface HeaderSearchEntry {
 export interface WebHeaderOverride {
   title?: string;
   subtitle?: string;
+  categoryLabel?: string | null;
+  onShare?: () => void;
 }
 
 interface HeaderSearchContextValue {
@@ -127,15 +129,17 @@ export function useHeaderSearchEntry(tabKey?: string): HeaderSearchEntry | undef
 export function useRegisterWebHeaderOverride(
   routeName: string,
   title?: string,
-  subtitle?: string
+  subtitle?: string,
+  categoryLabel?: string | null,
+  onShare?: () => void
 ) {
   const ctx = useContext(HeaderSearchContext);
 
   useEffect(() => {
     if (!ctx) return;
-    if (!title && !subtitle) return;
-    ctx.registerHeaderOverride(routeName, { title, subtitle });
-  }, [ctx, routeName, title, subtitle]);
+    if (!title && !subtitle && !categoryLabel && !onShare) return;
+    ctx.registerHeaderOverride(routeName, { title, subtitle, categoryLabel, onShare });
+  }, [ctx, routeName, title, subtitle, categoryLabel, onShare]);
 
   useEffect(() => {
     if (!ctx) return;

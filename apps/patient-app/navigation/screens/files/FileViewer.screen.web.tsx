@@ -72,8 +72,6 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
     return formatRecordSubtitle(fileMetadata) || undefined;
   }, [fileMetadata]);
 
-  useRegisterWebHeaderOverride('FileViewerScreen', viewerHeaderTitle, viewerHeaderSubtitle);
-
   useEffect(() => {
     if (viewerHeaderTitle) {
       navigation.setOptions({ title: viewerHeaderTitle });
@@ -191,6 +189,14 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
       dialog.alert('Could not share file', err instanceof Error ? err.message : 'Unable to share this file.');
     }
   }, [fileId, fileMetadata, handleDownload, patientId]);
+
+  useRegisterWebHeaderOverride(
+    'FileViewerScreen',
+    viewerHeaderTitle,
+    viewerHeaderSubtitle,
+    categoryLabel,
+    handleShare
+  );
 
   const handleDelete = async () => {
     const confirmed = await dialog.confirm({

@@ -170,15 +170,19 @@ export default function FileDetailsModal({
                     {onRename ? (
                       <Pressable
                         onPress={() => setIsEditing(true)}
-                        hitSlop={8}
+                        hitSlop={12}
                         accessibilityRole="button"
                         accessibilityLabel="Rename file"
-                        style={({ pressed }) => [styles.renameAction, pressed && styles.btnPressed]}
+                        style={({ pressed }) => [
+                          styles.renameAction,
+                          {
+                            backgroundColor: colors.surfaceSubtle,
+                            borderRadius: radii.full,
+                          },
+                          pressed && styles.btnPressed,
+                        ]}
                       >
-                        <AppIcon name="edit" size={sizes.iconSm} color="primary" />
-                        <ThemedText variant="captionBold" color="primary">
-                          Rename
-                        </ThemedText>
+                        <AppIcon name="edit" size={sizes.iconMd} color="primary" />
                       </Pressable>
                     ) : null}
                   </View>
@@ -286,11 +290,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   renameAction: {
-    flexDirection: 'row',
+    width: 36,
+    height: 36,
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   input: {
     borderWidth: 1,
