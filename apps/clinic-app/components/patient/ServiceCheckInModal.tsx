@@ -25,7 +25,9 @@ import {
   type PatientQueueItem,
 } from '../../services/clinicService';
 import { useStaff } from '../../context/StaffContext';
+import { useClinic } from '../../context/ClinicContext';
 import { notify } from '../../utils/feedback';
+import { printThermalQueueTicket } from '../../utils/printHelper';
 import {
   getPatientInitials,
   hasKnownAllergies,
@@ -185,6 +187,8 @@ export default function ServiceCheckInModal({
   onSuccess,
   onNavigateToDashboard,
 }: ServiceCheckInModalProps) {
+  const { facilityName, letterhead } = useClinic();
+
   // Priority series evaluation
   const isSeniorOrPwd = useMemo(() => isSeniorOrPwdEligible(patient), [patient]);
 
@@ -233,6 +237,24 @@ export default function ServiceCheckInModal({
     setIssuedTicket(null);
     onClose();
   }, [onClose]);
+
+  const handlePrintTicket = useCallback(() => {
+    if (!issuedTicket || !patient) return;
+    const now = new Date();
+    const issuedAt = `${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} • ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+    printThermalQueueTicket(
+      {
+        queueNumber: issuedTicket.queueNumber,
+        patientName: issuedTicket.patientName,
+        patientCode: patient.patientCode,
+        demographics: formatPatientDemographicsLine(patient),
+        serviceType: issuedTicket.serviceType,
+        priorityLabel: isPrioritySeries ? 'Senior & PWD Priority' : 'Regular Queue Series',
+        issuedAt,
+      },
+      letterhead?.header ? letterhead : { header: facilityName || 'CLINIC EZ HEALTHCARE' }
+    );
+  }, [issuedTicket, patient, isPrioritySeries, letterhead, facilityName]);
 
   // Submission handler
   const handleConfirm = async (overridePayload?: ServiceCheckInPayload, allowDuplicate = false) => {
@@ -408,6 +430,15 @@ export default function ServiceCheckInModal({
               onPress={handleCloseAll}
               style={styles.postQueueButton}
               testID="post-queue-done-button"
+            />
+            <Button
+              variant="outline"
+              size="lg"
+              icon="print"
+              iconOnly={true}
+              accessibilityLabel="Print thermal queue ticket"
+              onPress={handlePrintTicket}
+              testID="post-queue-print-button"
             />
             {onNavigateToDashboard ? (
               <Button

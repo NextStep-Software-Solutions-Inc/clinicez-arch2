@@ -1116,5 +1116,57 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).not.toContain('Regular Queue Series (');
     expect(markup).not.toContain('Senior &amp; PWD Priority (');
   });
+
+  test('27. buildThermalQueueTicketHtml generates compliant POS 80mm roll HTML with prominent queue number', async () => {
+    const { buildThermalQueueTicketHtml } = await import('../utils/receiptHtml');
+    const html = buildThermalQueueTicketHtml(
+      {
+        queueNumber: 'Q-002',
+        patientName: 'Agcaoili, Banahaw V.',
+        serviceType: 'Doctor Consultation',
+        patientCode: 'PAT-2026-00454',
+        demographics: '56 yrs, 2 mos, 1 wk, 6 days • Male • Married • Blood type ABPositive',
+        priorityLabel: 'Regular Queue Series',
+        issuedAt: 'Nov 1, 2026 • 6:30 PM',
+      },
+      {
+        header: 'METRO MANILA WELLNESS CLINIC',
+        subHeader: 'Outpatient Clinical Department',
+        address: '45 J.P. Laurel Ave, Manila',
+      }
+    );
+
+    // Thermal roll standard styles
+    expect(html).toContain('@page');
+    expect(html).toContain('size: 80mm auto');
+    expect(html).toContain('width: 72mm');
+    expect(html).toContain('QUEUE TICKET');
+
+    // Content verification
+    expect(html).toContain('METRO MANILA WELLNESS CLINIC');
+    expect(html).toContain('45 J.P. Laurel Ave, Manila');
+    expect(html).toContain('Q-002');
+    expect(html).toContain('Agcaoili, Banahaw V.');
+    expect(html).toContain('PAT-2026-00454');
+    expect(html).toContain('Doctor Consultation');
+    expect(html).toContain('Regular Queue Series');
+    expect(html).toContain('Nov 1, 2026 • 6:30 PM');
+    expect(html).toContain('Please wait for your number to be called.');
+  });
+
+  test('28. ServiceCheckInModal includes an icon-only thermal paper print button on post-queue dialog', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const componentCode = readFileSync(join(__dirname, '../components/patient/ServiceCheckInModal.tsx'), 'utf-8');
+
+    // Verifies printThermalQueueTicket is imported
+    expect(componentCode).toContain('printThermalQueueTicket');
+
+    // Verifies the icon-only print button in postQueueActions
+    expect(componentCode).toContain('testID="post-queue-print-button"');
+    expect(componentCode).toContain('icon="print"');
+    expect(componentCode).toContain('iconOnly={true}');
+    expect(componentCode).toContain('accessibilityLabel="Print thermal queue ticket"');
+  });
 });
 

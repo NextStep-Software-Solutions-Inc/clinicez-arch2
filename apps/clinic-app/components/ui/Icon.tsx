@@ -143,6 +143,7 @@ export const ICONS = {
   copy: Copy,
   trash: Trash2,
   print: Printer,
+  printer: Printer,
   download: Download,
   upload: Upload,
   refresh: RefreshCw,

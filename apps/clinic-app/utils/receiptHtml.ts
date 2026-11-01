@@ -48,6 +48,18 @@ export interface ReceiptData {
   notes?: string;
 }
 
+export interface ThermalQueueTicketData {
+  queueNumber: string;
+  patientName: string;
+  serviceType: string;
+  patientCode?: string;
+  demographics?: string;
+  priorityLabel?: string;
+  issuedAt?: string;
+  roomOrStation?: string;
+  notes?: string;
+}
+
 export interface InvoicePdfData {
   invoiceNumber: string;
   invoiceDate: string;
@@ -309,6 +321,173 @@ export function buildThermalReceiptHtml(
           <div>THIS SERVES AS AN OFFICIAL RECEIPT</div>
           <div>Issued under BIR Revenue Regulations</div>
           <div>Thank you for trusting ClinicEZ!</div>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+/**
+ * Thermal Paper Queue Slip (POS 58mm / 80mm Roll Printer Format).
+ * Formatted for standard POS thermal roll printers with clean monospace layout,
+ * dashed dividers, prominent ticket number, patient demographics, and instructions.
+ */
+export function buildThermalQueueTicketHtml(
+  data: ThermalQueueTicketData,
+  letterhead?: PrintLetterhead
+): string {
+  const clinicName = letterhead?.header || 'CLINIC EZ HEALTHCARE';
+  const subHeader = letterhead?.subHeader || '';
+  const address = letterhead?.address || '';
+  const contact = letterhead?.contact || '';
+  const issuedAt = data.issuedAt || new Date().toLocaleString('en-PH');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Queue Ticket #${escapeHtml(data.queueNumber)}</title>
+        <style>
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            width: 72mm;
+            margin: 0 auto;
+            padding: ${theme.spacing.sm}px ${theme.spacing.xs}px;
+            font-size: ${theme.fontSizes.xs}px;
+            color: ${theme.colors.text};
+            line-height: 1.35;
+            background: ${theme.colors.surface};
+          }
+          .text-center { text-align: center; }
+          .text-right { text-align: right; }
+          .bold { font-weight: bold; }
+          .divider {
+            border-top: 1px dashed ${theme.colors.textMuted};
+            margin: ${theme.spacing.xs}px 0;
+          }
+          .double-divider {
+            border-top: 1px dashed ${theme.colors.textMuted};
+            border-bottom: 1px dashed ${theme.colors.textMuted};
+            height: 3px;
+            margin: ${theme.spacing.xs}px 0;
+          }
+          .header-title {
+            font-size: ${theme.fontSizes.sm}px;
+            font-weight: bold;
+            margin-bottom: 2px;
+          }
+          .header-meta {
+            font-size: ${theme.fontSizes.xs}px;
+            color: ${theme.colors.textSecondary};
+          }
+          .doc-type {
+            font-size: ${theme.fontSizes.sm}px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            margin: ${theme.spacing.xs}px 0;
+          }
+          .ticket-box {
+            border: 2px dashed ${theme.colors.text};
+            padding: ${theme.spacing.sm}px;
+            margin: ${theme.spacing.sm}px 0;
+            text-align: center;
+          }
+          .ticket-num {
+            font-size: ${theme.fontSizes['4xl']}px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            line-height: 1.1;
+          }
+          .ticket-sub {
+            font-size: ${theme.fontSizes.xs}px;
+            font-weight: bold;
+            margin-top: 4px;
+            text-transform: uppercase;
+          }
+          .thermal-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+          }
+          .thermal-label {
+            font-weight: 600;
+            color: ${theme.colors.textSecondary};
+          }
+          .thermal-val {
+            font-weight: bold;
+            text-align: right;
+            word-break: break-word;
+            max-width: 65%;
+          }
+          .footer-note {
+            text-align: center;
+            font-size: ${theme.fontSizes.xs}px;
+            color: ${theme.colors.textSecondary};
+            margin-top: ${theme.spacing.sm}px;
+            line-height: 1.3;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="text-center">
+          <div class="header-title">${escapeHtml(clinicName)}</div>
+          ${subHeader ? `<div class="header-meta">${escapeHtml(subHeader)}</div>` : ''}
+          ${address ? `<div class="header-meta">${escapeHtml(address)}</div>` : ''}
+          ${contact ? `<div class="header-meta">${escapeHtml(contact)}</div>` : ''}
+          <div class="double-divider"></div>
+          <div class="doc-type">QUEUE TICKET</div>
+        </div>
+
+        <div class="ticket-box">
+          <div class="ticket-num">${escapeHtml(data.queueNumber)}</div>
+          ${data.priorityLabel ? `<div class="ticket-sub">${escapeHtml(data.priorityLabel)}</div>` : ''}
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="thermal-row">
+          <span class="thermal-label">PATIENT:</span>
+          <span class="thermal-val">${escapeHtml(data.patientName)}</span>
+        </div>
+        ${data.patientCode ? `
+        <div class="thermal-row">
+          <span class="thermal-label">PATIENT ID:</span>
+          <span class="thermal-val">${escapeHtml(data.patientCode)}</span>
+        </div>` : ''}
+        ${data.demographics ? `
+        <div class="thermal-row">
+          <span class="thermal-label">DEMO:</span>
+          <span class="thermal-val">${escapeHtml(data.demographics)}</span>
+        </div>` : ''}
+        <div class="thermal-row">
+          <span class="thermal-label">SERVICE:</span>
+          <span class="thermal-val">${escapeHtml(data.serviceType)}</span>
+        </div>
+        ${data.roomOrStation ? `
+        <div class="thermal-row">
+          <span class="thermal-label">STATION:</span>
+          <span class="thermal-val">${escapeHtml(data.roomOrStation)}</span>
+        </div>` : ''}
+        <div class="thermal-row">
+          <span class="thermal-label">DATE &amp; TIME:</span>
+          <span class="thermal-val">${escapeHtml(issuedAt)}</span>
+        </div>
+
+        <div class="double-divider"></div>
+
+        <div class="footer-note">
+          <div>Please wait for your number to be called.</div>
+          <div>Present this ticket at the workstation.</div>
+          <div style="margin-top: 4px; font-weight: bold;">Thank you!</div>
         </div>
       </body>
     </html>
