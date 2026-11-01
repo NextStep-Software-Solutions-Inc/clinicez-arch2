@@ -57,5 +57,16 @@ public sealed record ClinicPatientDto(
     Guid? SyncPatientId = null,
     string? GenderIdentity = null,
     List<PatientAddressDto>? Addresses = null,
-    List<PatientGuardianDto>? Guardians = null
+    List<PatientGuardianDto>? Guardians = null,
+    List<PatientActiveQueueTicketDto>? ActiveQueueTickets = null
 );
+
+public sealed record PatientActiveQueueTicketDto(
+    Guid Id,
+    string QueueNumber,
+    string Status,
+    string VisitType,
+    string? ChiefComplaint,
+    Guid? DoctorId,
+    string? DoctorName,
+    DateTime CheckInTime);

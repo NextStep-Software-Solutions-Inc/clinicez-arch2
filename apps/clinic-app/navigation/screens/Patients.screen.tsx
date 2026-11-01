@@ -79,6 +79,7 @@ import ServiceCheckInModal, {
   type ServiceCheckInPayload,
 } from '../../components/patient/ServiceCheckInModal';
 import ConsultationTypeModal from '../../components/patient/ConsultationTypeModal';
+import QueueTicketPickerModal from '../../components/patient/QueueTicketPickerModal';
 import { RecordVitalsModal } from '../../components/consultation';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
@@ -519,6 +520,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     visible: boolean;
     error?: any;
     patientName?: string;
+  } | null>(null);
+  const [ticketPickerState, setTicketPickerState] = useState<{
+    visible: boolean;
+    patient: ClinicPatient;
+    tickets: PatientQueueItem[];
+    serviceTitle: string;
+    onSelect: (ticket: PatientQueueItem) => void;
+    onCreateNew?: () => void;
   } | null>(null);
 
   const activeDoctors = useMemo(
@@ -1623,8 +1632,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       visitType: VisitType;
       chiefComplaint: string;
       seriesPrefix?: string;
-    }
-  ): Promise<{ queueItem: PatientQueueItem; isExisting: boolean } | null> => {
+    },
+    forceNew: boolean = false
+  ): Promise<{ queueItem: PatientQueueItem; isExisting: boolean; multipleOptions?: PatientQueueItem[] } | null> => {
     try {
       const todayStr = getManilaTodayStr();
       const [queueRes] = await clinicService.getQueue({ date: todayStr });
@@ -1634,8 +1644,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           !['Completed', 'Cancelled', 'NoShow', 'DischargedNonDoctor'].includes(item.status)
       );
 
-      if (activeItems.length > 0) {
-        return { queueItem: activeItems[0], isExisting: true };
+      // Check matching active items for this specific service visitType
+      const matchingItems = activeItems.filter(
+        (item) =>
+          item.visitType === service.visitType ||
+          (service.visitType === 'Consultation' && item.status === 'InConsultation')
+      );
+
+      if (!forceNew && matchingItems.length >= 2) {
+        return { queueItem: matchingItems[0], isExisting: true, multipleOptions: matchingItems };
+      }
+
+      if (!forceNew && matchingItems.length === 1) {
+        return { queueItem: matchingItems[0], isExisting: true };
       }
 
       const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
@@ -1671,30 +1692,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const handleStartConsultationAction = async (
+  const startConsultationWithQueueItem = async (
     patient: ClinicPatient,
-    forcedProgram?: 'regular' | 'yakap'
+    queueItem: PatientQueueItem,
+    isExisting: boolean
   ) => {
-    if (hasPhilHealthAccreditation && !forcedProgram) {
-      setConsultationChoicePatient(patient);
-      return;
-    }
-    setConsultationChoicePatient(null);
-
-    const isYakap = forcedProgram === 'yakap';
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
-    const visitType: VisitType = 'Consultation';
-    const chiefComplaint = isYakap ? 'PhilHealth Yakap Consultation' : 'General Consultation';
-
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType,
-      chiefComplaint,
-      seriesPrefix,
-    });
-    if (!encounter) return;
-
-    const { queueItem, isExisting } = encounter;
     const currentDoctorId = currentStaff?.role === 'Doctor' ? currentStaff.id : undefined;
     const currentDoctorName = currentStaff?.role === 'Doctor' ? currentName : undefined;
     const currentRoom = currentStaff?.assignedRoomName || (rooms.length > 0 ? rooms[0].name : undefined);
@@ -1757,6 +1759,57 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     notify.success(`Consultation started (${queueItem.queueNumber})`);
   };
 
+  const handleStartConsultationAction = async (
+    patient: ClinicPatient,
+    forcedProgram?: 'regular' | 'yakap'
+  ) => {
+    if (hasPhilHealthAccreditation && !forcedProgram) {
+      setConsultationChoicePatient(patient);
+      return;
+    }
+    setConsultationChoicePatient(null);
+
+    const isYakap = forcedProgram === 'yakap';
+    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
+    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
+    const visitType: VisitType = 'Consultation';
+    const chiefComplaint = isYakap ? 'PhilHealth Yakap Consultation' : 'General Consultation';
+
+    const encounter = await ensureEncounterQueueItem(patient, {
+      visitType,
+      chiefComplaint,
+      seriesPrefix,
+    });
+    if (!encounter) return;
+
+    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
+      setTicketPickerState({
+        visible: true,
+        patient,
+        tickets: encounter.multipleOptions,
+        serviceTitle: 'Doctor Consultation',
+        onSelect: (chosenTicket) => {
+          setTicketPickerState(null);
+          startConsultationWithQueueItem(patient, chosenTicket, true);
+        },
+        onCreateNew: async () => {
+          setTicketPickerState(null);
+          const newEncounter = await ensureEncounterQueueItem(
+            patient,
+            { visitType, chiefComplaint, seriesPrefix },
+            true
+          );
+          if (newEncounter) {
+            startConsultationWithQueueItem(patient, newEncounter.queueItem, false);
+          }
+        },
+      });
+      return;
+    }
+
+    await startConsultationWithQueueItem(patient, encounter.queueItem, encounter.isExisting);
+  };
+
   const handleStartProfilingAction = async (patient: ClinicPatient) => {
     const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
     const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
@@ -1777,6 +1830,36 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       seriesPrefix,
     });
     if (!encounter) return;
+
+    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
+      setTicketPickerState({
+        visible: true,
+        patient,
+        tickets: encounter.multipleOptions,
+        serviceTitle: 'Vitals Check',
+        onSelect: (chosenTicket) => {
+          setTicketPickerState(null);
+          setVitalsPatient(patient);
+          setVitalsQueueItemId(chosenTicket.id);
+          setVitalsModalVisible(true);
+        },
+        onCreateNew: async () => {
+          setTicketPickerState(null);
+          const newEncounter = await ensureEncounterQueueItem(
+            patient,
+            { visitType: 'VitalsCheckOnly', chiefComplaint: 'Vitals Check', seriesPrefix },
+            true
+          );
+          if (newEncounter) {
+            setVitalsPatient(patient);
+            setVitalsQueueItemId(newEncounter.queueItem.id);
+            setVitalsModalVisible(true);
+          }
+        },
+      });
+      return;
+    }
+
     setVitalsPatient(patient);
     setVitalsQueueItemId(encounter.queueItem.id);
     setVitalsModalVisible(true);
@@ -1790,6 +1873,35 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       chiefComplaint: 'Clinical Procedure',
       seriesPrefix,
     });
+    if (!encounter) return;
+
+    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
+      setTicketPickerState({
+        visible: true,
+        patient,
+        tickets: encounter.multipleOptions,
+        serviceTitle: 'Clinical Procedure',
+        onSelect: (chosenTicket) => {
+          setTicketPickerState(null);
+          notify.success(`Procedure encounter selected (${chosenTicket.queueNumber})`);
+          handleOpenChart(patient, 'procedures');
+        },
+        onCreateNew: async () => {
+          setTicketPickerState(null);
+          const newEncounter = await ensureEncounterQueueItem(
+            patient,
+            { visitType: 'StandaloneProcedure', chiefComplaint: 'Clinical Procedure', seriesPrefix },
+            true
+          );
+          if (newEncounter?.queueItem?.queueNumber) {
+            notify.success(`Procedure encounter logged (${newEncounter.queueItem.queueNumber})`);
+          }
+          handleOpenChart(patient, 'procedures');
+        },
+      });
+      return;
+    }
+
     if (encounter?.queueItem?.queueNumber) {
       notify.success(`Procedure encounter logged (${encounter.queueItem.queueNumber})`);
     }
@@ -1804,6 +1916,35 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       chiefComplaint: 'Administrative & Clearance',
       seriesPrefix,
     });
+    if (!encounter) return;
+
+    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
+      setTicketPickerState({
+        visible: true,
+        patient,
+        tickets: encounter.multipleOptions,
+        serviceTitle: 'Administrative Document',
+        onSelect: (chosenTicket) => {
+          setTicketPickerState(null);
+          notify.success(`Administrative encounter selected (${chosenTicket.queueNumber})`);
+          handleOpenChart(patient, 'documents');
+        },
+        onCreateNew: async () => {
+          setTicketPickerState(null);
+          const newEncounter = await ensureEncounterQueueItem(
+            patient,
+            { visitType: 'AdministrativeDocument', chiefComplaint: 'Administrative & Clearance', seriesPrefix },
+            true
+          );
+          if (newEncounter?.queueItem?.queueNumber) {
+            notify.success(`Administrative encounter logged (${newEncounter.queueItem.queueNumber})`);
+          }
+          handleOpenChart(patient, 'documents');
+        },
+      });
+      return;
+    }
+
     if (encounter?.queueItem?.queueNumber) {
       notify.success(`Administrative encounter logged (${encounter.queueItem.queueNumber})`);
     }
@@ -3439,6 +3580,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
         error={conflictModal?.error}
         patientName={conflictModal?.patientName}
+      />
+
+      {/* Active Queue Ticket Picker Modal (when ≥2 active tickets exist) */}
+      <QueueTicketPickerModal
+        visible={!!ticketPickerState?.visible}
+        patient={ticketPickerState?.patient || null}
+        tickets={ticketPickerState?.tickets || []}
+        serviceTitle={ticketPickerState?.serviceTitle}
+        onSelectTicket={(t) => ticketPickerState?.onSelect(t as PatientQueueItem)}
+        onCreateNewTicket={ticketPickerState?.onCreateNew}
+        onClose={() => setTicketPickerState(null)}
       />
 
       {/* In-Place Schedule Visit Modal */}

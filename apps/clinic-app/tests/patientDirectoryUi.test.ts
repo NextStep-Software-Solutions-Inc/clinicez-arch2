@@ -136,6 +136,7 @@ const {
 } = await import('../components/patient/PatientDirectoryCard');
 
 const { default: ScheduleVisitModal } = await import('../components/patient/ScheduleVisitModal');
+const { default: QueueTicketPickerModal } = await import('../components/patient/QueueTicketPickerModal');
 const {
   default: ServiceCheckInModal,
   isSeniorOrPwdEligible,
@@ -1326,6 +1327,128 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
     expect(screenCode).toContain('handleConfirmServiceCheckIn = async (payload: ServiceCheckInPayload)');
     expect(screenCode).toContain('...payload');
+  });
+
+  test('36. PatientDirectoryCard displays multi-ticket indicator on badge and CTA when multiple tickets active', () => {
+    const multiTicketPatient: ClinicPatient = {
+      ...basePatient,
+      activeQueueTicket: 'Q-001',
+      activeQueueTickets: [
+        { queueNumber: 'Q-001', status: 'Waiting', visitType: 'Consultation' },
+        { queueNumber: 'Q-004', status: 'Waiting', visitType: 'Consultation' },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: multiTicketPatient,
+        mode: 'card',
+        onOpenChart: () => {},
+        onQueuePatient: () => {},
+        onScheduleVisit: () => {},
+      })
+    );
+
+    // Multi-ticket queue badge indicator (+1)
+    expect(markup).toContain('In Queue • Q-001 (+1)');
+
+    // Multi-ticket primary action button indicator (+1)
+    expect(markup).toContain('Queued (Q-001 +1)');
+  });
+
+  test('37. ServiceCheckInModal renders all active tickets when duplicate queue conflict detected', () => {
+    const conflictPatient: ClinicPatient = {
+      ...basePatient,
+      activeQueueTicket: 'Q-001',
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ServiceCheckInModal, {
+        visible: true,
+        patient: conflictPatient,
+        onClose: () => {},
+        onSuccess: () => {},
+        initialConflictWarning: {
+          queueNumber: 'Q-001',
+          status: 'Waiting',
+          patientName: conflictPatient.fullName,
+          chiefComplaint: 'Follow-up visit',
+          activeTickets: [
+            { queueNumber: 'Q-001', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Follow-up visit' },
+            { queueNumber: 'Q-004', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Fever and cough' },
+          ],
+          payload: {
+            patientId: conflictPatient.id,
+            visitType: 'Consultation',
+            serviceType: 'Doctor Consultation',
+            priority: 'Normal',
+            chiefComplaint: 'Follow-up visit',
+            seriesPrefix: 'Q',
+          },
+        },
+      })
+    );
+
+    expect(markup).toContain('Patient Already in Queue');
+    expect(markup).toContain('2 Active Queue Tickets Found');
+    expect(markup).toContain('conflict-tickets-list');
+    expect(markup).toContain('Ticket Q-001');
+    expect(markup).toContain('Ticket Q-004');
+    expect(markup).toContain('Fever and cough');
+    expect(markup).toContain('Continue queueing');
+    expect(markup).toContain('Go back');
+  });
+
+  test('38. QueueTicketPickerModal renders patient banner, active ticket list, and action buttons', () => {
+    let selectedTicket: any = null;
+    let newTicketClicked = false;
+    let closed = false;
+
+    const tickets = [
+      { id: 'item-1', queueNumber: 'Q-001', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Cough and colds' },
+      { id: 'item-2', queueNumber: 'Q-004', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Hypertension follow-up' },
+    ];
+
+    const markup = renderToStaticMarkup(
+      React.createElement(QueueTicketPickerModal, {
+        visible: true,
+        patient: basePatient,
+        tickets,
+        serviceTitle: 'Doctor Consultation',
+        onSelectTicket: (t: any) => { selectedTicket = t; },
+        onCreateNewTicket: () => { newTicketClicked = true; },
+        onClose: () => { closed = true; },
+      })
+    );
+
+    expect(markup).toContain('Select Queue Ticket');
+    expect(markup).toContain('has 2 active tickets');
+    expect(markup).toContain('ACTIVE TICKETS AVAILABLE (2)');
+    expect(markup).toContain('Ticket Q-001');
+    expect(markup).toContain('Ticket Q-004');
+    expect(markup).toContain('Cough and colds');
+    expect(markup).toContain('Hypertension follow-up');
+    expect(markup).toContain('Issue new ticket instead');
+    expect(markup).toContain('Cancel');
+  });
+
+  test('39. Patients.screen.tsx integrates QueueTicketPickerModal for encounter selection when ≥2 tickets active', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // Component import and modal state
+    expect(code).toContain('import QueueTicketPickerModal');
+    expect(code).toContain('ticketPickerState');
+    expect(code).toContain('<QueueTicketPickerModal');
+
+    // Matching items filtering logic
+    expect(code).toContain('matchingItems.length >= 2');
+    expect(code).toContain('multipleOptions: matchingItems');
+
+    // Action handlers using picker for ≥2 tickets
+    expect(code).toContain('startConsultationWithQueueItem');
+    expect(code).toContain('setTicketPickerState');
   });
 });
 

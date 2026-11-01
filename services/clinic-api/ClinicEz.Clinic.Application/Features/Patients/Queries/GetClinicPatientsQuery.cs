@@ -362,7 +362,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             })
             .ToListAsync(ct);
 
-        Dictionary<Guid, (string QueueNumber, Guid Id, Guid? DoctorId)>? activeTicketMap = null;
+        Dictionary<Guid, List<PatientActiveQueueTicketDto>>? activeTicketGroupMap = null;
         var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
         var localToday = request.QueueDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
@@ -377,12 +377,35 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                             q.Status != QueueStatus.Cancelled &&
                             q.Status != QueueStatus.NoShow &&
                             q.Status != QueueStatus.DischargedNonDoctor)
-                .Select(q => new { q.PatientId, q.QueueNumber, q.Id, q.DoctorId })
+                .OrderBy(q => q.CheckInTime)
+                .Select(q => new
+                {
+                    q.PatientId,
+                    q.QueueNumber,
+                    q.Id,
+                    q.DoctorId,
+                    q.DoctorName,
+                    q.Status,
+                    q.VisitType,
+                    q.ChiefComplaint,
+                    q.CheckInTime
+                })
                 .ToListAsync(ct);
 
-            activeTicketMap = activeTickets
+            activeTicketGroupMap = activeTickets
                 .GroupBy(t => t.PatientId)
-                .ToDictionary(g => g.Key, g => (g.First().QueueNumber, g.First().Id, g.First().DoctorId));
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(t => new PatientActiveQueueTicketDto(
+                        t.Id,
+                        t.QueueNumber,
+                        t.Status.ToString(),
+                        t.VisitType.ToString(),
+                        t.ChiefComplaint,
+                        t.DoctorId,
+                        t.DoctorName,
+                        t.CheckInTime
+                    )).ToList());
         }
 
         var today = localToday;
@@ -395,16 +418,17 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix}" : "";
             var fullName = $"{p.LastName}, {p.FirstName}{middleInitial}{suffix}";
 
-            var hasActiveTicket = activeTicketMap != null && activeTicketMap.ContainsKey(p.Id);
-            var activeTicket = hasActiveTicket ? activeTicketMap![p.Id] : (QueueNumber: (string?)null, Id: (Guid?)null, DoctorId: (Guid?)null);
+            var hasActiveTicket = activeTicketGroupMap != null && activeTicketGroupMap.ContainsKey(p.Id);
+            var activeTicketsList = hasActiveTicket ? activeTicketGroupMap![p.Id] : null;
+            var primaryTicket = activeTicketsList?.FirstOrDefault();
             var customFields = p.CustomFields != null
                 ? new Dictionary<string, object?>(p.CustomFields)
                 : new Dictionary<string, object?>();
 
-            if (hasActiveTicket && activeTicket.DoctorId.HasValue)
+            if (hasActiveTicket && primaryTicket != null && primaryTicket.DoctorId.HasValue)
             {
-                customFields["activeQueueDoctorId"] = activeTicket.DoctorId.Value.ToString();
-                customFields["doctorId"] = activeTicket.DoctorId.Value.ToString();
+                customFields["activeQueueDoctorId"] = primaryTicket.DoctorId.Value.ToString();
+                customFields["doctorId"] = primaryTicket.DoctorId.Value.ToString();
             }
 
             return new ClinicPatientDto(
@@ -430,8 +454,8 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.CreatedAt,
                 customFields.Count > 0 ? customFields : null,
                 p.VerificationStatus.ToString(),
-                ActiveQueueTicket: hasActiveTicket ? activeTicket.QueueNumber : null,
-                ActiveQueueItemId: hasActiveTicket ? activeTicket.Id : null,
+                ActiveQueueTicket: hasActiveTicket ? primaryTicket?.QueueNumber : null,
+                ActiveQueueItemId: hasActiveTicket ? primaryTicket?.Id : null,
                 PastMedicalHistories: null,
                 ClinicEzId: p.ClinicEzId,
                 LandlineNumber: p.LandlineNumber,
@@ -451,7 +475,8 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 SyncPatientId: p.CloudPatientId,
                 GenderIdentity: p.GenderIdentity,
                 Addresses: p.Addresses.Count > 0 ? p.Addresses : null,
-                Guardians: p.Guardians.Count > 0 ? p.Guardians : null);
+                Guardians: p.Guardians.Count > 0 ? p.Guardians : null,
+                ActiveQueueTickets: activeTicketsList);
         }).ToList().AsReadOnly();
     }
 }

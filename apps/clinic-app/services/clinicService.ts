@@ -1777,6 +1777,17 @@ export interface PatientDirectoryCounts {
 }
 
 
+export interface PatientActiveQueueTicket {
+  id: string;
+  queueNumber: string;
+  status: QueueStatus | string;
+  visitType: VisitType | string;
+  chiefComplaint?: string | null;
+  doctorId?: string | null;
+  doctorName?: string | null;
+  checkInTime?: string;
+}
+
 export interface ClinicPatient {
   id: string;
   tenantId: string;
@@ -1817,6 +1828,7 @@ export interface ClinicPatient {
   createdAt: string;
   activeQueueTicket?: string | null;
   activeQueueItemId?: string | null;
+  activeQueueTickets?: PatientActiveQueueTicket[] | null;
   pastMedicalHistories?: MedicalHistoryItemPayload[];
   addresses?: PatientAddressDto[];
   guardians?: PatientGuardianDto[];

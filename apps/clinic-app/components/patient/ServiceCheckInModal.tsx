@@ -63,6 +63,18 @@ export interface ServiceCheckInModalProps {
   onConfirm?: (payload: ServiceCheckInPayload) => Promise<PatientQueueItem | null | void> | PatientQueueItem | null | void;
   onSuccess?: (ticketNumber?: string) => void;
   onNavigateToDashboard?: () => void;
+  initialConflictWarning?: {
+    queueNumber: string;
+    status: string;
+    patientName: string;
+    payload: ServiceCheckInPayload;
+    activeTickets?: Array<{
+      queueNumber: string;
+      status: string;
+      visitType?: string;
+      chiefComplaint?: string;
+    }>;
+  } | null;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -182,10 +194,13 @@ export default function ServiceCheckInModal({
   visible,
   patient,
   initialService = 'Doctor Consultation',
+  activeDoctors,
+  activeRooms,
   onClose,
   onConfirm,
   onSuccess,
   onNavigateToDashboard,
+  initialConflictWarning,
 }: ServiceCheckInModalProps) {
   const { facilityName, letterhead } = useClinic();
 
@@ -207,7 +222,13 @@ export default function ServiceCheckInModal({
     status: string;
     patientName: string;
     payload: ServiceCheckInPayload;
-  } | null>(null);
+    activeTickets?: Array<{
+      queueNumber: string;
+      status: string;
+      visitType?: string;
+      chiefComplaint?: string;
+    }>;
+  } | null>(initialConflictWarning ?? null);
 
   // Issued Ticket Confirmation State (Post-Queue Dialog)
   const [issuedTicket, setIssuedTicket] = useState<{
@@ -275,12 +296,29 @@ export default function ServiceCheckInModal({
     };
 
     // If patient already has an active queue ticket and staff has not confirmed duplicate override, warn staff immediately
-    if (!allowDuplicate && patient.activeQueueTicket) {
+    if (!allowDuplicate && (patient.activeQueueTicket || (patient.activeQueueTickets && patient.activeQueueTickets.length > 0))) {
+      const tickets = patient.activeQueueTickets && patient.activeQueueTickets.length > 0
+        ? patient.activeQueueTickets.map((t) => ({
+            queueNumber: t.queueNumber,
+            status: String(t.status),
+            visitType: String(t.visitType || 'Clinical'),
+            chiefComplaint: t.chiefComplaint || undefined,
+          }))
+        : [
+            {
+              queueNumber: patient.activeQueueTicket || 'Existing Ticket',
+              status: (patient as any).activeQueueStatus || (patient as any).verificationStatus || 'In queue',
+              visitType: serviceConfig.label,
+              chiefComplaint: undefined,
+            },
+          ];
+
       setConflictWarning({
-        queueNumber: patient.activeQueueTicket,
-        status: (patient as any).activeQueueStatus || (patient as any).verificationStatus || 'In queue',
+        queueNumber: tickets[0].queueNumber,
+        status: tickets[0].status,
         patientName: patient.fullName,
         payload,
+        activeTickets: tickets,
       });
       return;
     }
@@ -335,11 +373,21 @@ export default function ServiceCheckInModal({
         const ticketNumber = match ? match[1] : (conflictErr.activeQueueTicket || conflictErr.queueNumber || patient.activeQueueTicket || 'Existing Ticket');
         const queueStatus = match ? match[2] : 'Waiting';
 
+        const tickets = patient.activeQueueTickets && patient.activeQueueTickets.length > 0
+          ? patient.activeQueueTickets.map((t) => ({
+              queueNumber: t.queueNumber,
+              status: String(t.status),
+              visitType: String(t.visitType || 'Clinical'),
+              chiefComplaint: t.chiefComplaint || undefined,
+            }))
+          : undefined;
+
         setConflictWarning({
           queueNumber: ticketNumber,
           status: queueStatus,
           patientName: patient.fullName,
           payload,
+          activeTickets: tickets,
         });
         return;
       }
@@ -366,11 +414,21 @@ export default function ServiceCheckInModal({
         const ticketNumber = match ? match[1] : (e.activeQueueTicket || e.queueNumber || patient.activeQueueTicket || 'Existing Ticket');
         const queueStatus = match ? match[2] : 'Waiting';
 
+        const tickets = patient.activeQueueTickets && patient.activeQueueTickets.length > 0
+          ? patient.activeQueueTickets.map((t) => ({
+              queueNumber: t.queueNumber,
+              status: String(t.status),
+              visitType: String(t.visitType || 'Clinical'),
+              chiefComplaint: t.chiefComplaint || undefined,
+            }))
+          : undefined;
+
         setConflictWarning({
           queueNumber: ticketNumber,
           status: queueStatus,
           patientName: patient.fullName,
           payload,
+          activeTickets: tickets,
         });
       } else {
         notify.error(e?.message || 'Check-in failed. Please try again.');
@@ -481,16 +539,40 @@ export default function ServiceCheckInModal({
               </View>
               <View style={styles.conflictTextWrap}>
                 <ThemedText variant="bodyBold" color={theme.colors.warningText}>
-                  Active Queue Ticket Found
+                  {conflictWarning.activeTickets && conflictWarning.activeTickets.length > 1
+                    ? `${conflictWarning.activeTickets.length} Active Queue Tickets Found`
+                    : 'Active Queue Ticket Found'}
                 </ThemedText>
                 <ThemedText variant="small" color={theme.colors.text}>
                   {conflictWarning.patientName} is already checked in for today:
                 </ThemedText>
-                <View style={styles.conflictTicketPill}>
-                  <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                    Ticket {conflictWarning.queueNumber} • {conflictWarning.status}
-                  </ThemedText>
-                </View>
+                {conflictWarning.activeTickets && conflictWarning.activeTickets.length > 1 ? (
+                  <View style={styles.conflictTicketsList} testID="conflict-tickets-list">
+                    {conflictWarning.activeTickets.map((t, idx) => (
+                      <View key={t.queueNumber + '-' + idx} style={styles.conflictTicketCard}>
+                        <View style={styles.conflictTicketHeader}>
+                          <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                            Ticket {t.queueNumber}
+                          </ThemedText>
+                          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                            {t.visitType} • {t.status}
+                          </ThemedText>
+                        </View>
+                        {t.chiefComplaint ? (
+                          <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
+                            {t.chiefComplaint}
+                          </ThemedText>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.conflictTicketPill}>
+                    <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                      Ticket {conflictWarning.queueNumber} • {conflictWarning.status}
+                    </ThemedText>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -957,6 +1039,26 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     alignSelf: 'flex-start',
     marginTop: 4,
+  },
+  conflictTicketsList: {
+    gap: 6,
+    marginTop: 4,
+    width: '100%',
+  },
+  conflictTicketCard: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: 2,
+  },
+  conflictTicketHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   conflictPrompt: {
     lineHeight: 20,

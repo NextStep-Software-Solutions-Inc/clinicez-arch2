@@ -367,6 +367,14 @@ function PatientDirectoryCard({
   const hasAllergies = hasKnownAllergies(patient.allergies);
   const isStatAllergy = hasStatAllergy(patient.allergies);
   const isQueued = Boolean(patient.activeQueueTicket);
+  const activeTicketCount = patient.activeQueueTickets?.length ?? (isQueued ? 1 : 0);
+  const isMultiTicket = activeTicketCount > 1;
+  const queueBadgeLabel = isMultiTicket
+    ? `In Queue • ${patient.activeQueueTicket} (+${activeTicketCount - 1})`
+    : `In Queue • ${patient.activeQueueTicket}`;
+  const queuedButtonLabel = isMultiTicket
+    ? `Queued (${patient.activeQueueTicket} +${activeTicketCount - 1})`
+    : `Queued (${patient.activeQueueTicket})`;
 
   const handleScheduleVisit = onScheduleVisit || onBookAppointment;
   const handleQueuePatient = onQueuePatient || onAddToQueue;
@@ -413,7 +421,7 @@ function PatientDirectoryCard({
                   <Badge label={patient.clinicEzId} variant="primary" size="sm" />
                 ) : null}
                 {isQueued ? (
-                  <Badge label={`In Queue • ${patient.activeQueueTicket}`} variant="routine" size="sm" icon="ticket" />
+                  <Badge label={queueBadgeLabel} variant="routine" size="sm" icon="ticket" />
                 ) : null}
                 {patient.verificationStatus === 'PendingVerification' ? (
                   <Badge label="Pending" variant="warning" size="sm" icon="hourglass" />
@@ -540,7 +548,7 @@ function PatientDirectoryCard({
           ) : null}
           {handleQueuePatient ? (
             <Button
-              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Queue Patient'}
+              title={isQueued ? queuedButtonLabel : 'Queue Patient'}
               variant="primary"
               size="sm"
               icon={isQueued ? 'checkCircle' : 'plus'}
@@ -592,7 +600,7 @@ function PatientDirectoryCard({
                 <Badge label={patient.clinicEzId} variant="primary" />
               ) : null}
               {isQueued ? (
-                <Badge label={`In Queue • ${patient.activeQueueTicket}`} variant="routine" icon="ticket" />
+                <Badge label={queueBadgeLabel} variant="routine" icon="ticket" />
               ) : null}
               {patient.verificationStatus === 'PendingVerification' && (
                 <Badge label="Pending verification" variant="warning" icon="hourglass" />
@@ -725,7 +733,7 @@ function PatientDirectoryCard({
           ) : null}
           {handleQueuePatient ? (
             <Button
-              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Queue Patient'}
+              title={isQueued ? queuedButtonLabel : 'Queue Patient'}
               variant="primary"
               size="sm"
               icon={isQueued ? 'checkCircle' : 'plus'}
