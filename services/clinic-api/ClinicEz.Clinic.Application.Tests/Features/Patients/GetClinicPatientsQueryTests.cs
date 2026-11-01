@@ -349,5 +349,86 @@ public class GetClinicPatientsQueryTests
 
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task ActiveQueueTicket_ScopesToTargetDate_AndExpiresYesterdayTickets()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var handler = new GetClinicPatientsQueryHandler(repo, queueRepo);
+
+        var today = new DateOnly(2026, 11, 2);
+        var yesterday = new DateOnly(2026, 11, 1);
+
+        // Patient 1: Had an open ticket yesterday that was never completed
+        var p1 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-YESTERDAY",
+            FirstName = "Bea",
+            LastName = "Abellana",
+            DateOfBirth = new DateOnly(1985, 11, 14),
+            Sex = BiologicalSex.Female,
+            ContactNumber = "09194319725"
+        };
+        var q1 = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            QueueNumber = "Q-001",
+            SequenceNumber = 1,
+            QueueDate = yesterday,
+            PatientId = p1.Id,
+            PatientName = "Abellana, Bea M.",
+            Status = QueueStatus.Waiting
+        };
+
+        // Patient 2: Has an active ticket today
+        var p2 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-TODAY",
+            FirstName = "Banahaw",
+            LastName = "Agcaoili",
+            DateOfBirth = new DateOnly(1970, 8, 20),
+            Sex = BiologicalSex.Male,
+            ContactNumber = "09499312749"
+        };
+        var q2 = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            QueueNumber = "Q-005",
+            SequenceNumber = 5,
+            QueueDate = today,
+            PatientId = p2.Id,
+            PatientName = "Agcaoili, Banahaw V.",
+            Status = QueueStatus.Waiting
+        };
+
+        context.Patients.AddRange(p1, p2);
+        context.QueueItems.AddRange(q1, q2);
+        await context.SaveChangesAsync();
+
+        // Act: Query for today (2026-11-02)
+        var result = await handler.Handle(new GetClinicPatientsQuery(QueueDate: today), CancellationToken.None);
+
+        // Assert
+        var patient1Result = result.FirstOrDefault(x => x.Id == p1.Id);
+        var patient2Result = result.FirstOrDefault(x => x.Id == p2.Id);
+
+        patient1Result.Should().NotBeNull();
+        patient1Result!.ActiveQueueTicket.Should().BeNull("yesterday's unserved ticket must not bleed into today's queue");
+
+        patient2Result.Should().NotBeNull();
+        patient2Result!.ActiveQueueTicket.Should().Be("Q-005", "today's ticket is active");
+    }
 }
 

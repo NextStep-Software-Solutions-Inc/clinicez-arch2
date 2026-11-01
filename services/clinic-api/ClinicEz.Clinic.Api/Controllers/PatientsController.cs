@@ -35,11 +35,12 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] int pageSize = 50,
         [FromQuery] Guid? staffId = null,
         [FromQuery] Guid? doctorId = null,
+        [FromQuery] DateOnly? queueDate = null,
         CancellationToken ct = default)
     {
         var result = await _sender.Send(new GetClinicPatientsQuery(
             search, hasAlerts, verificationStatus, filterMode, page, pageSize,
-            StaffId: staffId, DoctorId: doctorId), ct);
+            StaffId: staffId, DoctorId: doctorId, QueueDate: queueDate), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
 

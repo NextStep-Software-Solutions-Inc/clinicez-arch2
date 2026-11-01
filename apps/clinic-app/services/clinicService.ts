@@ -3283,7 +3283,8 @@ export const clinicService = {
     pageSize: number = 50,
     filterMode?: string,
     staffId?: string,
-    doctorId?: string
+    doctorId?: string,
+    queueDate?: string
   ) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
@@ -3293,6 +3294,7 @@ export const clinicService = {
     if (doctorId) params.append('doctorId', doctorId);
     params.append('page', String(page));
     params.append('pageSize', String(pageSize));
+    params.append('queueDate', queueDate || getManilaTodayStr());
     const qs = params.toString();
     return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
   },

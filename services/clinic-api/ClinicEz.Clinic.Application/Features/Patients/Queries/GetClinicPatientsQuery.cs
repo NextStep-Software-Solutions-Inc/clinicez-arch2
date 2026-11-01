@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
@@ -31,7 +32,8 @@ public sealed record GetClinicPatientsQuery(
     Guid? AfterId = null,
     Guid? StaffId = null,
     Guid? DoctorId = null,
-    IReadOnlyList<Guid>? RoomIds = null) : IRequest<IReadOnlyList<ClinicPatientDto>>
+    IReadOnlyList<Guid>? RoomIds = null,
+    DateOnly? QueueDate = null) : IRequest<IReadOnlyList<ClinicPatientDto>>
 {
     public string? EffectiveCursorLastName => CursorLastName ?? AfterLastName;
     public string? EffectiveCursorFirstName => CursorFirstName ?? AfterFirstName;
@@ -104,12 +106,18 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
         var relatedPatientIds = new List<Guid>();
         if (effectiveStaffId.HasValue)
         {
+            var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
+            var localToday = request.QueueDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
             var staffId = effectiveStaffId.Value;
             var queuePatientIds = _queueRepo != null
                 ? await _queueRepo.Query()
                     .AsNoTracking()
                     .Where(q => (q.DoctorId == staffId || (request.RoomIds != null && q.RoomId.HasValue && request.RoomIds.Contains(q.RoomId.Value))) &&
-                                q.Status != QueueStatus.Completed && q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow)
+                                (q.QueueDate == localToday || (request.QueueDate == null && q.QueueDate == DateOnly.FromDateTime(DateTime.UtcNow))) &&
+                                q.Status != QueueStatus.Completed &&
+                                q.Status != QueueStatus.Cancelled &&
+                                q.Status != QueueStatus.NoShow &&
+                                q.Status != QueueStatus.DischargedNonDoctor)
                     .Select(q => q.PatientId)
                     .Distinct()
                     .ToListAsync(ct)
@@ -355,13 +363,20 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             .ToListAsync(ct);
 
         Dictionary<Guid, (string QueueNumber, Guid Id, Guid? DoctorId)>? activeTicketMap = null;
+        var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
+        var localToday = request.QueueDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+
         if (queueRepo != null && projected.Count > 0)
         {
             var pIds = projected.Select(p => p.Id).ToList();
             var activeTickets = await queueRepo.Query()
                 .AsNoTracking()
                 .Where(q => pIds.Contains(q.PatientId) &&
-                            q.Status != QueueStatus.Completed && q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow)
+                            q.QueueDate == localToday &&
+                            q.Status != QueueStatus.Completed &&
+                            q.Status != QueueStatus.Cancelled &&
+                            q.Status != QueueStatus.NoShow &&
+                            q.Status != QueueStatus.DischargedNonDoctor)
                 .Select(q => new { q.PatientId, q.QueueNumber, q.Id, q.DoctorId })
                 .ToListAsync(ct);
 
@@ -370,7 +385,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 .ToDictionary(g => g.Key, g => (g.First().QueueNumber, g.First().Id, g.First().DoctorId));
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = localToday;
         return projected.Select(p =>
         {
             var age = today.Year - p.DateOfBirth.Year;
