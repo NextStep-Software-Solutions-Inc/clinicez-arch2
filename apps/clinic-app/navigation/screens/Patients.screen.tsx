@@ -3411,7 +3411,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         activeRooms={activeRooms}
         onClose={() => setServiceModalPatient(null)}
         onConfirm={handleConfirmServiceCheckIn}
-        onSuccess={() => fetchPatients()}
+        onSuccess={(ticketNumber) => {
+          if (serviceModalPatient && ticketNumber) {
+            setPatients((prev) =>
+              (prev || []).map((p) =>
+                p.id === serviceModalPatient.id
+                  ? { ...p, activeQueueTicket: ticketNumber }
+                  : p
+              )
+            );
+          }
+          fetchPatients();
+        }}
         onNavigateToDashboard={() => {
           setServiceModalPatient(null);
           navigation.navigate('Dashboard');

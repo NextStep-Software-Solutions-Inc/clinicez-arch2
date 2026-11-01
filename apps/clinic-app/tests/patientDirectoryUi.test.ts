@@ -1311,5 +1311,21 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(code).not.toContain("visitType: 'ClinicalProcedure'");
     expect(code).not.toContain("visitType: 'Administrative'");
   });
+
+  test('35. ServiceCheckInModal forces allowDuplicateActive=true on conflict confirmation', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const modalCode = readFileSync(join(__dirname, '../components/patient/ServiceCheckInModal.tsx'), 'utf-8');
+
+    // Verifies that basePayload from overridePayload preserves allowDuplicate parameter
+    expect(modalCode).toContain('const basePayload = overridePayload ||');
+    expect(modalCode).toContain('allowDuplicateActive: allowDuplicate');
+    expect(modalCode).toContain('handleConfirm(conflictWarning.payload, true)');
+
+    // Ensure Patients.screen.tsx forwards allowDuplicateActive in handleConfirmServiceCheckIn
+    const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+    expect(screenCode).toContain('handleConfirmServiceCheckIn = async (payload: ServiceCheckInPayload)');
+    expect(screenCode).toContain('...payload');
+  });
 });
 

@@ -261,13 +261,16 @@ export default function ServiceCheckInModal({
     if (!patient || submitting) return;
 
     const serviceConfig = CLINICAL_SERVICES.find((s) => s.type === selectedService)!;
-    const payload: ServiceCheckInPayload = overridePayload || {
+    const basePayload = overridePayload || {
       patientId: patient.id,
       patientName: patient.fullName,
-      priority: 'Routine',
+      priority: 'Routine' as QueuePriority,
       visitType: serviceConfig.visitType,
       chiefComplaint: serviceConfig.label,
       seriesPrefix: currentPrefix,
+    };
+    const payload: ServiceCheckInPayload = {
+      ...basePayload,
       allowDuplicateActive: allowDuplicate,
     };
 
