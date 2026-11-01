@@ -1168,5 +1168,18 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(componentCode).toContain('iconOnly={true}');
     expect(componentCode).toContain('accessibilityLabel="Print thermal queue ticket"');
   });
+
+  test('29. ScheduleVisitModal uses ValidatedDateInput with calendar picker icon and boundary validation', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const componentCode = readFileSync(join(__dirname, '../components/patient/ScheduleVisitModal.tsx'), 'utf-8');
+
+    // Verifies ValidatedDateInput is imported and used
+    expect(componentCode).toContain('ValidatedDateInput');
+    expect(componentCode).toContain('<ValidatedDateInput');
+    expect(componentCode).toContain('label="Scheduled Date (YYYY-MM-DD)"');
+    expect(componentCode).toContain('boundaryMode="futureOrToday"');
+    expect(componentCode).toContain('testID="schedule-visit-date-input"');
+  });
 });
 

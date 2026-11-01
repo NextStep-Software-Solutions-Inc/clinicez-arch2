@@ -265,7 +265,7 @@ export default function ValidatedDateInput({
   );
 
   const isCalendarPressable = Boolean(
-    onCalendarPress || (!disableCalendarPicker && isInteractive && leftIcon === 'calendar')
+    onCalendarPress || (!disableCalendarPicker && isInteractive && (leftIcon === 'calendar' || rightIcon === 'calendar'))
   );
 
   const handleCalendarPress = () => {
@@ -401,7 +401,13 @@ export default function ValidatedDateInput({
         ) : null}
 
         {rightIcon ? (
-          <Pressable onPress={onRightIconPress} style={styles.rightIconBtn} hitSlop={theme.spacing.sm}>
+          <Pressable
+            onPress={onRightIconPress || (rightIcon === 'calendar' ? handleCalendarPress : undefined)}
+            style={styles.rightIconBtn}
+            hitSlop={theme.spacing.sm}
+            accessibilityRole={rightIcon === 'calendar' && !onRightIconPress ? 'button' : undefined}
+            accessibilityLabel={rightIcon === 'calendar' && !onRightIconPress ? 'Open calendar picker' : undefined}
+          >
             <IconSlot value={rightIcon} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
           </Pressable>
         ) : null}

@@ -16,6 +16,7 @@ import {
   Modal,
   Card,
   Input,
+  ValidatedDateInput,
 } from '../ui';
 import { theme } from '../../constants/theme';
 import {
@@ -717,7 +718,7 @@ export default function ScheduleVisitModal({
                 </View>
 
                 <View style={styles.dateInputWrapper}>
-                  <Input
+                  <ValidatedDateInput
                     label="Scheduled Date (YYYY-MM-DD)"
                     placeholder="YYYY-MM-DD"
                     value={selectedDate}
@@ -725,6 +726,8 @@ export default function ScheduleVisitModal({
                       setSelectedDate(val);
                       setSelectedSlotTime('');
                     }}
+                    boundaryMode="futureOrToday"
+                    testID="schedule-visit-date-input"
                   />
                 </View>
               </View>
