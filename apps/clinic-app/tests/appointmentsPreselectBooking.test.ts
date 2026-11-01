@@ -235,10 +235,10 @@ describe('Book Appointment from Patient List & Post-Booking Success Dialog', () 
       onEditDemographics: () => {},
       onOpenPhilHealth: () => {},
       onOpenChart: () => {},
-      onBookAppointment: handleBookFromPatientList,
+      onScheduleVisit: handleBookFromPatientList,
     });
 
-    const bookMenuItem = items.find((item) => item.id === 'book-appointment');
+    const bookMenuItem = items.find((item) => item.id === 'schedule-visit');
     expect(bookMenuItem).toBeDefined();
     bookMenuItem!.onPress();
 
@@ -251,7 +251,7 @@ describe('Book Appointment from Patient List & Post-Booking Success Dialog', () 
       },
     });
 
-    // Also verify Card mode renders Book appointment button
+    // Also verify Card mode renders Schedule visit button
     const cardMarkup = renderToStaticMarkup(
       React.createElement(PatientDirectoryCard, {
         patient: samplePatient,
@@ -259,11 +259,11 @@ describe('Book Appointment from Patient List & Post-Booking Success Dialog', () 
         onOpenChart: () => {},
         onEditDemographics: () => {},
         onOpenPhilHealth: () => {},
-        onBookAppointment: handleBookFromPatientList,
+        onScheduleVisit: handleBookFromPatientList,
         onAddToQueue: () => {},
       })
     );
-    expect(cardMarkup).toContain('Book appointment');
+    expect(cardMarkup).toContain('Schedule visit');
   });
 
   test('3. AppointmentsScreen automatically opens Book appointment dialog with preselected patient when route.params contains patientId and patientName', () => {

@@ -33,9 +33,13 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] string? filterMode,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] Guid? staffId = null,
+        [FromQuery] Guid? doctorId = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicPatientsQuery(search, hasAlerts, verificationStatus, filterMode, page, pageSize), ct);
+        var result = await _sender.Send(new GetClinicPatientsQuery(
+            search, hasAlerts, verificationStatus, filterMode, page, pageSize,
+            StaffId: staffId, DoctorId: doctorId), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
 
@@ -43,11 +47,14 @@ public sealed class PatientsController : ControllerBase
     [HasPermission(ClinicPermissions.PatientsRead)]
     public async Task<ActionResult<ApiResponse<PatientDirectoryCountsDto>>> GetPatientCounts(
         [FromQuery] string? search,
+        [FromQuery] Guid? staffId = null,
+        [FromQuery] Guid? doctorId = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicPatientCountsQuery(search), ct);
+        var result = await _sender.Send(new GetClinicPatientCountsQuery(search, staffId, doctorId), ct);
         return Ok(ApiResponse<PatientDirectoryCountsDto>.Success(result));
     }
+
 
     [HttpGet("check-duplicates")]
     [HasPermission(ClinicPermissions.PatientsRead)]

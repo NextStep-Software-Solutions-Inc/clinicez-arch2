@@ -1,136 +1,176 @@
-# Project: Clinic Administrator Account Recovery Mechanism
+# Project: Clinic Patient List and Dashboard UI/UX Enhancements & Backend Queue/Filter Support
 
 ## Architecture
-ClinicEZ is a multi-tenant clinical workstation and EHR system. This project introduces a first-class, cryptographically verified Clinic Administrator Account Recovery mechanism across:
-- **Backend API (`services/clinic-api`)**: Anonymous, rate-limited endpoint `POST /api/v1/auth/recover-admin` validating facility license tokens via `IFacilityLicenseValidator`, resetting passwords and lockouts for administrators, incrementing `TokenVersion`, revoking refresh tokens across the LAN, and invalidating `StaffAccessCache`.
-- **Workstation Frontend (`apps/clinic-app`)**: React Native / Expo web application adhering to the ClinicEZ design system (Teal `#0D6963`). Features `AdminRecoveryScreen.tsx` with client-side defensive validation, toggle navigation in `LoginScreen.tsx`, session management in `authSession.ts`, and context state transitions in `AuthContext.tsx`.
-- **Operational CLI Tooling (`scripts/`)**: Symmetric Bash (`reset-admin-credentials.sh`) and PowerShell (`reset-admin-credentials.ps1`) scripts for VPS administrators and developers to safely clear lockouts or generate cryptographically secure one-time invitation links without writing raw SQL.
-- **Verification Suite**: Full automated test coverage in .NET (`ClinicAuthServiceTests.cs`) and Bun (`adminRecovery.test.ts`), plus adversarial verification and forensic integrity audits.
+
+ClinicEZ is an outpatient clinic electronic health record and clinical workstation system. This project enhances the Clinic Patient Directory (`apps/clinic-app/navigation/screens/Patients.screen.tsx`), Patient Directory Card/Table components (`apps/clinic-app/components/patient/PatientDirectoryCard.tsx`), live Queue Dashboard (`apps/clinic-app/navigation/screens/Dashboard.screen.tsx`), and the backend CQRS query/command endpoints (`services/clinic-api`).
+
+The system strictly adheres to:
+1. **ClinicEZ Design Tokens (`@clinicez/design-tokens`)**: Teal `#0D6963` brand palette, semantic badge variants, design token scales, zero raw emojis/pictographs in JSX strings.
+2. **Everyday Clinic Language (Zero Jargon)**: Plain clinic terminology without statutory numbers ("RA 9994", "RA 7277") or database/technical jargon.
+3. **Clinical Domain Boundaries**: Clinic care (SOAP notes, vitals, procedures, clearances) stays in `clinic-app` / `clinic-api`; diagnostic specimen collection stays in `laboratory-app`; pharmacy claims stay in `pharmacy-app`; cashier settlement stays in `cashier-app`.
+4. **No Backward Compatibility Constraints**: Clean removal of legacy or obsolete artifacts.
 
 ```
-                    ┌───────────────────────────────┐
-                    │ Workstation UI: clinic-app    │
-                    │  - LoginScreen (Toggle)       │
-                    │  - AdminRecoveryScreen        │
-                    │  - authSession.recoverAdmin   │
-                    └───────────────┬───────────────┘
-                                    │ POST /api/v1/auth/recover-admin
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Workstation Frontend                            │
+│                                                                        │
+│  Patients.screen.tsx                                                   │
+│   ├── Segmented Toolbar: ALL | MY_PATIENTS | STUDENTS | EMPLOYEES ...  │
+│   ├── PatientDirectoryCard.tsx (Card & Compact Table modes)            │
+│   │    ├── "Schedule visit" ──► ScheduleVisitModal.tsx                │
+│   │    │                          ├── Dynamic Doctor Shift Slots       │
+│   │    │                          └── 4-Button Post-Setup Dialog       │
+│   │    ├── "Queue Patient"  ──► ServiceCheckInModal.tsx               │
+│   │    └── ActionMenu (⋮)   ──► 4 Direct Service Intents               │
+│   │                                 ├── Doctor Consultation (Q / SQ)   │
+│   │                                 ├── Vitals Check Only (V / SV)     │
+│   │                                 ├── Clinical Procedure (P / SP)    │
+│   │                                 └── Administrative (A / SA)        │
+│   │                                 └── Auto Senior/PWD Priority       │
+│   └── Dashboard.screen.tsx                                             │
+│        ├── Removed: TV Board & Force EOD buttons                       │
+│        ├── Formatted Semantic Service Badges                           │
+│        └── 4 Semantic Clusters: Care | Flow | Exceptions | Emergency   │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ HTTP / JSON API
                                     ▼
-                    ┌───────────────────────────────┐
-                    │ Backend API: clinic-api       │
-                    │  - AuthController             │
-                    │  - ClinicAuthService          │
-                    │  - IFacilityLicenseValidator  │
-                    │  - StaffAccessCache (MemCache)│
-                    └───────────────┬───────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │ PostgreSQL 17 Database        │
-                    │  - StaffMembers               │
-                    │  - RefreshTokens (Revoked)    │
-                    │  - Settings / LicenseToken    │
-                    └───────────────────────────────┘
-                                    ▲
-                                    │ Operational Break-Glass
-                    ┌───────────────┴───────────────┐
-                    │ Scripts: reset-admin-...sh/ps1│
-                    │  - List / ClearLockout / Link │
-                    └───────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                       Backend API: clinic-api                          │
+│                                                                        │
+│  Queries:                                                              │
+│   ├── GetClinicPatientsQuery: supports filterMode == "MY_PATIENTS"     │
+│   └── GetClinicPatientCountsQuery: computes MyPatients count           │
+│  Commands:                                                             │
+│   └── CheckInPatientCommand: supports SeriesPrefix for prefix-specific │
+│       sequential queue numbers (Q-001, SQ-001, V-001, etc.)            │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## Feature Inventory
+
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | API Controller Endpoint | Expose `POST /api/v1/auth/recover-admin` with `[AllowAnonymous]` in `AuthController.cs` with HTTP 400/409/429 status mapping | M1 | Survey Backend |
-| 2 | License Mismatch Mapping | Align `ClinicAuthService.RecoverAdminAsync` to return `AuthFailure.InvalidRequest` on facility mismatch (HTTP 400) | M1 | Survey Backend |
-| 3 | Backend Recovery Unit Tests | 8 comprehensive tests in `ClinicAuthServiceTests.cs` (valid recovery, tampered/foreign license, non-admin rejection, weak password, session revocation) | M1 | Survey Backend |
-| 4 | Auth Session Client Method | Add `AdminRecoveryInput` and `recoverAdmin` in `services/authSession.ts` saving tokens to secure storage | M2 | Survey Frontend |
-| 5 | Auth Context Integration | Expose `recoverAdmin` in `AuthContext.tsx` and transition `AuthState` to `'signedIn'` on success | M2 | Survey Frontend |
-| 6 | Admin Recovery UI Component | Create `components/auth/AdminRecoveryScreen.tsx` with Teal `#0D6963` tokens, defensive validation, and clear error banners | M2 | Survey Frontend |
-| 7 | Login Screen Entry Point | Add accessible toggle link ("Are you the clinic admin? Recover account") in `components/auth/LoginScreen.tsx` | M2 | Survey Frontend |
-| 8 | Frontend Automated Tests | Bun test suite in `apps/clinic-app/tests/adminRecovery.test.ts` covering password validation, API payload, context transitions, and screen toggles | M2 | Survey Frontend |
-| 9 | Operational Bash Tool | Create `scripts/reset-admin-credentials.sh` with `--list`, `--clear-lockout`, and `--generate-invite` supporting Docker & host PostgreSQL | M3 | Survey Ops |
-| 10 | Operational PowerShell Tool | Create `scripts/reset-admin-credentials.ps1` with symmetric parameters and secure token generation | M3 | Survey Ops |
-| 11 | Full Verification & Hardening | Run complete test suite, Challenger verification, and Forensic Integrity Audit | M4 | Survey Ops |
+| 1 | 'My patients' Toolbar Tab | Add 'My patients' tab as 2nd tab in `Patients.screen.tsx` (`ALL`, `MY_PATIENTS`, `STUDENTS`, `EMPLOYEES`, `ALERTS`, `SENIOR_PWD`) | M1 | Survey |
+| 2 | Doctor Patient Ownership Filter | Filter patients assigned to or seen by current doctor (`assigned_doctor_id`, `doctor_id`, or active queue item doctor) | M1 | Survey |
+| 3 | Nurse Patient Ownership Filter | Filter patients whose vitals were recorded by this nurse or assigned to nurse's rooms (`assignedRoomIds`) | M1 | Survey |
+| 4 | Backend Query `MY_PATIENTS` Filter | Support `filterMode == "MY_PATIENTS"` and optional `StaffId`/`DoctorId` in `GetClinicPatientsQuery.cs` | M1 | Survey |
+| 5 | Reactive MyPatients Count | Update `GetClinicPatientCountsQuery.cs` and `PatientDirectoryCountsDto.cs` to return `MyPatients` count | M1 | Survey |
+| 6 | Relabel "Schedule visit" Button | Relabel button from "Book appointment" to "Schedule visit" on card, compact table, and ActionMenu | M2 | Survey |
+| 7 | In-Place `ScheduleVisitModal.tsx` | Implement in-place scheduling modal pre-selecting patient with identity banner, doctor picker, dates, and times | M2 | Survey |
+| 8 | Dynamic Doctor Shift Slots | Dynamically load attending doctor available shift slots via `clinicService.getDoctorAvailableSlots(doctorId, date)` | M2 | Survey |
+| 9 | Post-Appointment Setup Dialog | Display 4 distinct action buttons: "Notify patient (SMS / App)", "Set new", "Close", and "Open appointment screen" | M2 | Survey |
+| 10 | Relabel "Queue Patient" Button | Relabel primary check-in CTA button on card and compact table from "Add to queue" to "Queue Patient" | M3 | Survey |
+| 11 | ActionMenu Direct Service Intents | Add direct one-click actions under "Services & Queue" in ActionMenu: Doctor Consultation, Vitals Check, Clinical Procedure, Administrative & Clearance | M3 | Survey |
+| 12 | Dedicated `ServiceCheckInModal.tsx` | Implement dedicated check-in modal with specialized views for each of the 4 clinical services | M3 | Survey |
+| 13 | Prefix Ticket Series System | Generate Regular series (`Q`, `V`, `P`, `A`) vs Senior & PWD Priority series (`SQ`, `SV`, `SP`, `SA`) tickets | M3 | Survey |
+| 14 | Senior/PWD Priority Auto-Selection | Automatically default ticket series to Priority (`SQ`, `SV`, `SP`, `SA`) if patient age >= 60 or has Senior/PWD ID | M3 | Survey |
+| 15 | Backend `SeriesPrefix` Support | Extend `CheckInPatientCommand.cs` to accept `SeriesPrefix` and compute prefix-isolated monotonic sequences (`$"{{SeriesPrefix}}-{{nextSequence:D3}}"`) | M3 | Survey |
+| 16 | Domain Boundary Enforcement | Strictly maintain clinic care vs lab analyzer draws (`laboratory-app`) and pharmacy claim redemption (`pharmacy-app`) | M3 | Survey |
+| 17 | Dashboard Toolbar Cleanup | Remove "Open TV Board" and "Force EOD / Close Day" buttons from live queue toolbar in `Dashboard.screen.tsx` | M4 | Survey |
+| 18 | 4 Semantic Clusters for Actions | Group queue item action buttons into 4 clusters: Care & Encounter, Flow & Completion, Exceptions, Emergency: Divert to ER | M4 | Survey |
+| 19 | Formatted Service Badges | Map raw enum strings (`VitalsCheckOnly`, `StandaloneProcedure`, `AdministrativeDocument`, `Consultation`) to styled semantic badges | M4 | Survey |
+| 20 | Zero Jargon Clinical UI Copy | Enforce everyday clinic language across all components, labels, and dialogs; remove all statutory and legalistic references | M1-M4 | Survey |
+
+---
 
 ## Milestones
+
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Backend Admin Recovery API & Tests | `services/clinic-api/` controller, status mapping, and 8 unit tests in `ClinicAuthServiceTests.cs` | none | DONE |
-| M2 | Frontend Workstation Recovery Screen & Tests | `apps/clinic-app/` service, context, `AdminRecoveryScreen.tsx`, `LoginScreen.tsx`, and Bun unit tests | M1 | DONE |
-| M3 | Operational Recovery CLI Tooling | `scripts/reset-admin-credentials.sh` and `scripts/reset-admin-credentials.ps1` | none | DONE |
-| M4 | Final Integration, Verification & Forensic Audit | End-to-end verification, adversarial challenge tests, and forensic integrity audit | M1, M2, M3 | DONE |
+| E2E | E2E Testing Track | Requirement-driven test suite (Tiers 1-4), TEST_INFRA.md, TEST_READY.md | none | DONE |
+| M1 | "My patients" Filter Tab & Server-side Filtering | R1: `Patients.screen.tsx`, `clinicService.ts`, `GetClinicPatientsQuery.cs`, `GetClinicPatientCountsQuery.cs`, `PatientDirectoryCountsDto.cs`, `PatientsController.cs` | none | DONE |
+| M2 | "Schedule visit" Modal & Post-Appointment Actions | R2: `PatientDirectoryCard.tsx`, `ScheduleVisitModal.tsx`, dynamic shift slot loading, 4-button post-appointment dialog | M1 | DONE |
+| M3 | Multi-Service Queueing, Ticket Series & Intents | R3: "Queue Patient" label, ActionMenu intents, `ServiceCheckInModal.tsx`, Regular/Priority series (`Q`/`SQ`, `V`/`SV`, `P`/`SP`, `A`/`SA`), `CheckInPatientCommand.cs` | M1 | DONE |
+| M4 | Dashboard Cleanup, Semantic Clusters & Badges | R4: `Dashboard.screen.tsx` toolbar cleanup, 4 semantic action clusters, formatted badges | M3 | DONE |
+| M5 | Final Milestone: 100% E2E Pass & Adversarial Hardening | Run full frontend & backend test suites, execute adversarial tests, forensic integrity audit | M1, M2, M3, M4, E2E | DONE |
+
+
+
+
+---
 
 ## Interface Contracts
 
-### Backend API Contract (`clinic-api`)
-- **Route**: `POST /api/v1/auth/recover-admin`
-- **Request Body (`RecoverAdminRequest`)**:
+### 1. `GetClinicPatientsQuery` & `GetClinicPatientCountsQuery` ↔ `Patients.screen.tsx`
+- Query parameters on `GET /api/v1/patients`:
+  - `searchTerm?: string`
+  - `hasAlerts?: boolean`
+  - `verificationStatus?: string`
+  - `filterMode?: string` (`'ALL' | 'MY_PATIENTS' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES'`)
+  - `staffId?: Guid` (ID of the logged-in staff member)
+  - `doctorId?: Guid` (ID of the doctor if logged-in staff is a Doctor)
+  - `pageNumber: int`
+  - `pageSize: int`
+- Query parameters on `GET /api/v1/patients/counts`:
+  - `searchTerm?: string`
+  - `staffId?: Guid`
+  - `doctorId?: Guid`
+- Response from `GET /api/v1/patients/counts`:
   ```json
   {
-    "workspace": "facility-slug-optional",
-    "licenseToken": "base64-encoded-ecdsa-signed-token",
-    "email": "admin@clinic.ph",
-    "newPassword": "NewStrongPassword123!",
-    "deviceLabel": "workstation-1"
-  }
-  ```
-- **Responses**:
-  - `200 OK`: `ApiResponse<AuthTokensDto>` with `AccessToken`, `RefreshToken`, expiry dates, and `AuthUserDto`.
-  - `400 Bad Request`: Validation failure (weak password, empty fields, non-admin email, tampered/mismatched license key).
-  - `404 Not Found`: No staff member found matching email in facility, or workspace not found.
-  - `429 Too Many Requests`: Triggered by rate limiter (30 requests/minute).
-
-### Frontend Contract (`clinic-app`)
-- **Input Type (`AdminRecoveryInput`)**:
-  ```typescript
-  export interface AdminRecoveryInput {
-    licenseToken: string;
-    email?: string;
-    newPassword: string;
-    workspace?: string;
-  }
-  ```
-- **Service Method (`authSession.ts`)**:
-  `export async function recoverAdmin(input: AdminRecoveryInput): Promise<AuthResult<AuthUser>>`
-- **Context Method (`AuthContext.tsx`)**:
-  `recoverAdmin: (input: AdminRecoveryInput) => Promise<string | null>`
-- **Component Props (`AdminRecoveryScreen.tsx`)**:
-  ```typescript
-  export interface AdminRecoveryScreenProps {
-    onBackToLogin: () => void;
-    onSuccess?: () => void;
-    initialEmail?: string;
+    "all": 120,
+    "myPatients": 18,
+    "students": 45,
+    "employees": 32,
+    "alerts": 12,
+    "seniorPwd": 24
   }
   ```
 
-### CLI Tooling Contract (`scripts/`)
-- **Parameters**:
-  - `--action <list|clear-lockout|generate-invite>` (default: `generate-invite`)
-  - `--email <admin-email>` (optional if only 1 admin exists)
-  - `--app-url <url>` (default: `http://localhost:8081` or production host)
-  - `--use-docker` / `--container <name>` (default: `postgres`)
-  - `--db <name>` (auto-resolves `CLINICEZ-CLINIC_DB` / `CLINICEZ_CLINIC_DB`)
-- **Outputs**:
-  - Action `list`: Formatted table of admin accounts with status and lockout flags.
-  - Action `clear-lockout`: Resets `FailedLoginCount` and `LockoutEnd`, increments `TokenVersion`, outputs success confirmation.
-  - Action `generate-invite`: Generates 64-char hex token, sets 7-day expiration, updates `Status = Invited`, clears lockout, increments `TokenVersion`, revokes active refresh tokens, and outputs one-time URL.
+### 2. `CheckInPatientCommand` ↔ `ServiceCheckInModal.tsx`
+- Request payload for `POST /api/v1/queue/check-in`:
+  ```json
+  {
+    "patientId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "patientName": "Juan Dela Cruz",
+    "seriesPrefix": "SQ",
+    "priority": "Routine",
+    "visitType": "Consultation",
+    "doctorId": "11111111-2222-3333-4444-555555555555",
+    "doctorName": "Dr. Maria Santos",
+    "roomId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "roomOrStation": "Room 101 - Consultation",
+    "chiefComplaint": "Persistent cough for 3 days"
+  }
+  ```
+- Output: `QueueItemDto` with `queueNumber: "SQ-001"`.
 
-## Code Layout & Ownership
-- **Milestone 1**:
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/AuthController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Auth/ClinicAuthService.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicAuthServiceTests.cs`
-- **Milestone 2**:
-  - `apps/clinic-app/services/authSession.ts`
-  - `apps/clinic-app/context/AuthContext.tsx`
-  - `apps/clinic-app/components/auth/AdminRecoveryScreen.tsx`
-  - `apps/clinic-app/components/auth/LoginScreen.tsx`
-  - `apps/clinic-app/tests/adminRecovery.test.ts`
-- **Milestone 3**:
-  - `scripts/reset-admin-credentials.sh`
-  - `scripts/reset-admin-credentials.ps1`
-- **Milestone 4**:
-  - Full suite verification across all targets
-  - Adversarial & Forensic audit evidence records
+### 3. Dynamic Doctor Slots: `clinicService.getDoctorAvailableSlots` ↔ `ScheduleVisitModal.tsx`
+- `GET /api/v1/doctors/{doctorId}/schedules/availability?date=YYYY-MM-DD`
+- Response:
+  ```json
+  {
+    "doctorId": "11111111-2222-3333-4444-555555555555",
+    "doctorName": "Dr. Maria Santos",
+    "date": "2026-11-01",
+    "isOnDuty": true,
+    "availableSlots": [
+      { "time": "09:00", "available": true },
+      { "time": "09:30", "available": true },
+      { "time": "10:00", "available": false, "reason": "Booked" }
+    ]
+  }
+  ```
+
+---
+
+## Code Layout
+
+- Frontend:
+  - `apps/clinic-app/navigation/screens/Patients.screen.tsx`: Tab toolbar, filter logic, modal mounting.
+  - `apps/clinic-app/components/patient/PatientDirectoryCard.tsx`: Relabeled buttons, ActionMenu direct intents.
+  - `apps/clinic-app/components/patient/ScheduleVisitModal.tsx`: [NEW] In-place modal with dynamic doctor slots & 4-button post-appointment view.
+  - `apps/clinic-app/components/patient/ServiceCheckInModal.tsx`: [NEW] Multi-service modal with 4 service views & Regular/Priority series.
+  - `apps/clinic-app/navigation/screens/Dashboard.screen.tsx`: Toolbar cleanup, semantic button clusters, formatted badges.
+  - `apps/clinic-app/services/clinicService.ts`: Query param extensions, DTO updates.
+  - `apps/clinic-app/tests/`: Automated tests.
+- Backend:
+  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetClinicPatientsQuery.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetClinicPatientCountsQuery.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/DTOs/PatientDirectoryCountsDto.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Queue/Commands/CheckInPatientCommand.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/PatientsController.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/QueueController.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/`: Automated unit & integration tests.

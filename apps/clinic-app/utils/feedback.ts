@@ -113,6 +113,8 @@ export const notify = {
     showToast('error', message, options ?? 10000),
   info: (message: string, options?: number | ToastOptions) =>
     showToast('info', message, options),
+  warning: (message: string, options?: number | ToastOptions) =>
+    showToast('info', message, options),
 };
 
 export const Alert = {

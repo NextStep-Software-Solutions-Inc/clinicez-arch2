@@ -5,4 +5,5 @@ public sealed record PatientDirectoryCountsDto(
     int Students,
     int Employees,
     int Alerts,
-    int SeniorPwd);
+    int SeniorPwd,
+    int MyPatients = 0);

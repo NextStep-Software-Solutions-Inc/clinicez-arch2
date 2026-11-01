@@ -591,6 +591,9 @@ export interface AvailableSlotItem {
   existingAppointmentId?: string;
   patientName?: string;
   notes?: string;
+  time?: string;
+  available?: boolean;
+  reason?: string;
 }
 
 export interface DoctorAvailabilityData {
@@ -600,6 +603,7 @@ export interface DoctorAvailabilityData {
   isOnDuty: boolean;
   nonAvailabilityReason?: string;
   slots: AvailableSlotItem[];
+  availableSlots?: AvailableSlotItem[];
 }
 
 export interface DoctorLeaveItem {
@@ -1769,7 +1773,9 @@ export interface PatientDirectoryCounts {
   employees: number;
   alerts: number;
   seniorPwd: number;
+  myPatients?: number;
 }
+
 
 export interface ClinicPatient {
   id: string;
@@ -2213,6 +2219,7 @@ export interface CheckInRequest {
   roomId?: string;
   queueDate?: string;
   visitType?: VisitType | string;
+  seriesPrefix?: string;
 }
 
 export interface RecordTriageRequest {
@@ -3273,24 +3280,31 @@ export const clinicService = {
     hasAlerts?: boolean,
     page: number = 1,
     pageSize: number = 50,
-    filterMode?: string
+    filterMode?: string,
+    staffId?: string,
+    doctorId?: string
   ) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (typeof hasAlerts === 'boolean') params.append('hasAlerts', String(hasAlerts));
     if (filterMode) params.append('filterMode', filterMode);
+    if (staffId) params.append('staffId', staffId);
+    if (doctorId) params.append('doctorId', doctorId);
     params.append('page', String(page));
     params.append('pageSize', String(pageSize));
     const qs = params.toString();
     return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
   },
 
-  async getPatientCounts(search?: string) {
+  async getPatientCounts(search?: string, staffId?: string, doctorId?: string) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
+    if (staffId) params.append('staffId', staffId);
+    if (doctorId) params.append('doctorId', doctorId);
     const qs = params.toString();
     return clinicApiClient.get<PatientDirectoryCounts>(`/patients/counts${qs ? `?${qs}` : ''}`);
   },
+
 
   async getPatientById(id: string) {
     return clinicApiClient.get<ClinicPatient>(`/patients/${id}`);

@@ -71,7 +71,10 @@ import PatientDirectoryCard, {
   PatientDirectoryTableHeader,
   type PatientDirectoryViewMode,
   hasKnownAllergies,
+  type ClinicalServiceType,
 } from '../../components/patient/PatientDirectoryCard';
+import ScheduleVisitModal from '../../components/patient/ScheduleVisitModal';
+import ServiceCheckInModal, { type ServiceCheckInPayload } from '../../components/patient/ServiceCheckInModal';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
@@ -91,6 +94,7 @@ import {
   getManilaTodayStr,
   ClinicPatient,
   PatientDirectoryCounts,
+  StaffMember,
   RegisterPatientPayload,
   PatientChart,
   LabOrderSlipData,
@@ -104,6 +108,7 @@ import {
   PatientAddressDto,
   PatientGuardianDto,
 } from '../../services/clinicService';
+
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { getSetting } from '../../services/runtimeConfig';
 import { shouldQueueOffline } from '../../services/outboxPolicy';
@@ -123,7 +128,47 @@ const humanizeKey = (key: string) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
+type PatientFilter = 'ALL' | 'MY_PATIENTS' | 'STUDENTS' | 'EMPLOYEES' | 'ALERTS' | 'SENIOR_PWD';
+
+export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null | undefined): boolean => {
+  if (!currentStaff || !currentStaff.id) return false;
+  const staffId = currentStaff.id;
+  const isDoctor = currentStaff.role === 'Doctor';
+  const isNurse = currentStaff.role === 'Nurse';
+
+  if (isDoctor) {
+    return (
+      p.customFields?.assigned_doctor_id === staffId ||
+      p.customFields?.doctor_id === staffId ||
+      (p as any).activeQueueDoctorId === staffId ||
+      (p as any).doctorId === staffId
+    );
+  }
+
+  if (isNurse) {
+    const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
+    const patientRoomId = (p as any).roomId || (p as any).activeQueueRoomId || p.customFields?.room_id || p.customFields?.assigned_room_id;
+    const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+
+    return (
+      p.customFields?.nurse_id === staffId ||
+      p.customFields?.assigned_nurse_id === staffId ||
+      p.customFields?.vitals_recorded_by_nurse_id === staffId ||
+      p.customFields?.recorded_by_nurse_id === staffId ||
+      roomMatch
+    );
+  }
+
+  return (
+    p.customFields?.assigned_doctor_id === staffId ||
+    p.customFields?.doctor_id === staffId ||
+    p.customFields?.nurse_id === staffId ||
+    p.customFields?.assigned_nurse_id === staffId ||
+    p.customFields?.staff_id === staffId ||
+    (p as any).activeQueueDoctorId === staffId ||
+    (p as any).doctorId === staffId
+  );
+};
 
 export type PatientsScreenProps = StaticScreenProps<
   | {
@@ -162,11 +207,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<PatientFilter>(() => {
     const saved = getSessionItem('clinicez_patients_filter_mode') as PatientFilter | null;
-    if (saved && ['ALL', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'].includes(saved)) {
+    if (saved && ['ALL', 'MY_PATIENTS', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'].includes(saved)) {
       return saved;
     }
     return 'ALL';
   });
+
   const [viewMode, setViewMode] = useState<PatientDirectoryViewMode>(() => {
     const saved = getSessionItem('clinicez_patients_view_mode') as PatientDirectoryViewMode | null;
     if (saved === 'cards' || saved === 'table') {
@@ -454,6 +500,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const isRegisteringRef = useRef(false);
   const isFirstFocusRef = useRef(true);
   const [checkingInPatientId, setCheckingInPatientId] = useState<string | null>(null);
+  const [serviceModalPatient, setServiceModalPatient] = useState<ClinicPatient | null>(null);
+  const [selectedServiceIntent, setSelectedServiceIntent] = useState<ClinicalServiceType>('Doctor Consultation');
   const [checkInModalPatient, setCheckInModalPatient] = useState<ClinicPatient | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
@@ -482,6 +530,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   // Edit Patient Demographics state
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
   const [patientToEdit, setPatientToEdit] = useState<ClinicPatient | null>(null);
+
+  // In-Place Schedule Visit Modal state
+  const [scheduleModalPatient, setScheduleModalPatient] = useState<ClinicPatient | null>(null);
 
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
@@ -543,12 +594,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
     const activeFilter = filterOverride !== undefined ? filterOverride : filterMode;
     const hasAlertsFilter = activeFilter === 'ALERTS' ? true : undefined;
-    const serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD') ? activeFilter : undefined;
+    const serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD' || activeFilter === 'MY_PATIENTS') ? activeFilter : undefined;
+    const staffId = currentStaff?.id;
+    const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
 
     setPage(1);
     setScrollY(0);
     lastScrollYRef.current = 0;
-    clinicService.getPatientCounts(activeSearch || undefined).then(([countsData]) => {
+    clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId).then(([countsData]) => {
       if (countsData) {
         setTotalCounts(countsData);
       }
@@ -559,7 +612,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       hasAlertsFilter,
       1,
       PAGE_SIZE,
-      serverFilterMode
+      serverFilterMode,
+      staffId,
+      doctorId
     );
     if (err) {
       setPatientsError(err.message || 'Unable to load patients.');
@@ -569,7 +624,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const items = data ?? [];
     setPatients(items);
     setHasMore(items.length === PAGE_SIZE);
-  }, [debouncedSearchTerm, filterMode]);
+  }, [debouncedSearchTerm, filterMode, currentStaff]);
 
   const loadMorePatients = useCallback(async () => {
     if (isLoadingMoreRef.current || loadingMore || loading || !hasMore) return;
@@ -579,15 +634,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const nextPage = page + 1;
     const activeSearch = debouncedSearchTerm;
     const hasAlertsFilter = filterMode === 'ALERTS' ? true : undefined;
-    const serverFilterMode = (filterMode === 'ALERTS' || filterMode === 'SENIOR_PWD') ? filterMode : undefined;
+    const serverFilterMode = (filterMode === 'ALERTS' || filterMode === 'SENIOR_PWD' || filterMode === 'MY_PATIENTS') ? filterMode : undefined;
+    const staffId = currentStaff?.id;
+    const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
 
     const [data, err] = await clinicService.getPatients(
       activeSearch || undefined,
       hasAlertsFilter,
       nextPage,
       PAGE_SIZE,
-      serverFilterMode
+      serverFilterMode,
+      staffId,
+      doctorId
     );
+
 
     setLoadingMore(false);
     isLoadingMoreRef.current = false;
@@ -1509,63 +1569,28 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setSelectedRxSlip(updatedSlip);
   };
 
-  const handleQueueCheckIn = (patient: ClinicPatient) => {
+  const handleQueueCheckIn = (patient: ClinicPatient, serviceType?: ClinicalServiceType) => {
     if (isCheckingInRef.current || checkingInPatientId) return;
-    const isUrgent =
-      patient.alerts?.toLowerCase().includes('fall') ||
-      patient.alerts?.toLowerCase().includes('chest');
-    const defaultDoc =
-      currentStaff?.role === 'Doctor' && currentStaff.isActive ? currentStaff : null;
-    const defaultDocRooms = defaultDoc?.assignedRoomIds ?? (defaultDoc?.assignedRoomId ? [defaultDoc.assignedRoomId] : []);
-    setCheckInModalPatient(patient);
-    setCheckInDoctorId(defaultDoc?.id ?? '');
-    setCheckInRoomId(defaultDocRooms[0] ?? '');
-    setCheckInPriority(isUrgent ? 'Urgent' : 'Routine');
-    setCheckInVisitType('Consultation');
-    setCheckInComplaint(
-      patient.chronicConditions
-        ? `Follow-up: ${patient.chronicConditions}`
-        : 'General consultation',
-    );
+    setServiceModalPatient(patient);
+    setSelectedServiceIntent(serviceType || 'Doctor Consultation');
   };
 
-  const handleSelectCheckInDoctor = (docId: string) => {
-    setCheckInDoctorId(docId);
-    if (!docId) {
-      return;
-    }
-    const doc = activeDoctors.find((d) => d.id === docId);
-    const docRooms = doc?.assignedRoomIds ?? (doc?.assignedRoomId ? [doc.assignedRoomId] : []);
-    if (docRooms.length > 0) {
-      setCheckInRoomId(docRooms[0]);
-    }
+  const handleSelectService = (patient: ClinicPatient, serviceType: ClinicalServiceType) => {
+    if (isCheckingInRef.current || checkingInPatientId) return;
+    setServiceModalPatient(patient);
+    setSelectedServiceIntent(serviceType);
   };
 
-  const handleConfirmQueueCheckIn = async () => {
-    if (!checkInModalPatient || isCheckingInRef.current || checkingInPatientId) return;
-    const patient = checkInModalPatient;
+  const handleConfirmServiceCheckIn = async (payload: ServiceCheckInPayload) => {
+    if (!serviceModalPatient || isCheckingInRef.current || checkingInPatientId) return;
+    const patient = serviceModalPatient;
     isCheckingInRef.current = true;
     setCheckingInPatientId(patient.id);
 
-    const chosenDoctor = checkInDoctorId
-      ? activeDoctors.find((d) => d.id === checkInDoctorId)
-      : undefined;
-    const chosenRoom = checkInRoomId
-      ? activeRooms.find((r) => r.id === checkInRoomId)
-      : undefined;
-
     try {
       const [, checkInErr] = await clinicService.checkInPatient({
-        patientId: patient.id,
-        patientName: patient.fullName,
-        doctorId: chosenDoctor?.id,
-        doctorName: chosenDoctor ? formatStaffName(chosenDoctor) : undefined,
-        roomId: chosenRoom?.id,
-        roomOrStation: chosenRoom?.name,
-        priority: checkInPriority,
-        visitType: checkInVisitType,
-        chiefComplaint: checkInComplaint.trim() || 'General consultation',
-        queueDate: getManilaTodayStr(),
+        ...payload,
+        queueDate: payload.queueDate || getManilaTodayStr(),
       });
       if (checkInErr) {
         if (
@@ -1573,7 +1598,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           checkInErr.errorCode === 'CONFLICT' ||
           checkInErr.errorCode === 'active_queue_ticket_exists'
         ) {
-          setCheckInModalPatient(null);
+          setServiceModalPatient(null);
           setConflictModal({
             visible: true,
             error: checkInErr,
@@ -1584,7 +1609,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         notify.error(checkInErr.message || 'Could not add the patient to the queue.');
         return;
       }
-      setCheckInModalPatient(null);
+      setServiceModalPatient(null);
       navigation.navigate('Dashboard');
     } finally {
       isCheckingInRef.current = false;
@@ -1594,11 +1619,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
   const filterCounts = useMemo(() => {
     if (!patients) return null;
+    let myPatients = 0;
     let students = 0;
     let employees = 0;
     let alerts = 0;
     let seniorPwd = 0;
     for (const p of patients) {
+      if (isMyPatient(p, currentStaff)) {
+        myPatients++;
+      }
       if (
         p.customFields?.classification === 'Student' ||
         p.customFields?.category === 'Student' ||
@@ -1622,14 +1651,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
     return {
       all: patients.length,
+      myPatients,
       students,
       employees,
       alerts,
       seniorPwd,
     };
-  }, [patients]);
+  }, [patients, currentStaff]);
 
   const filteredPatients = (patients ?? []).filter((p) => {
+    if (filterMode === 'MY_PATIENTS') {
+      return isMyPatient(p, currentStaff);
+    }
     if (filterMode === 'ALERTS') {
       return hasKnownAllergies(p.allergies) || !!(p.alerts && p.alerts.trim().length > 0);
     }
@@ -1652,6 +1685,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
     return true;
   });
+
 
   const formatTabCount = useCallback(
     (loaded: number | undefined, total: number | undefined): string | number | undefined => {
@@ -1830,6 +1864,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           onChange={handleFilterModeChange}
           options={[
             { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
+            { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
             { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
             { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
             {
@@ -1841,6 +1876,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
           ]}
         />
+
 
         {isWorkstation ? (
           <View style={styles.toolbarRight}>
@@ -1908,14 +1944,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onOpenChart={(p) => handleOpenChart(p)}
                   onEditDemographics={handleOpenEditDemographics}
                   onOpenPhilHealth={handleOpenPhilHealthProfile}
-                  onBookAppointment={(p) =>
-                    navigation.navigate('Appointments', {
-                      patientId: p.id,
-                      patientName: p.fullName,
-                      patientCode: p.patientCode,
-                    })
-                  }
+                  onScheduleVisit={(p) => setScheduleModalPatient(p)}
+                  onBookAppointment={(p) => setScheduleModalPatient(p)}
+                  onQueuePatient={handleQueueCheckIn}
                   onAddToQueue={handleQueueCheckIn}
+                  onSelectService={handleSelectService}
                 />
               ))}
               {virtualWindow.paddingBottom > 0 && (
@@ -1953,14 +1986,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onOpenChart={(p) => handleOpenChart(p)}
                   onEditDemographics={handleOpenEditDemographics}
                   onOpenPhilHealth={handleOpenPhilHealthProfile}
-                  onBookAppointment={(p) =>
-                    navigation.navigate('Appointments', {
-                      patientId: p.id,
-                      patientName: p.fullName,
-                      patientCode: p.patientCode,
-                    })
-                  }
+                  onScheduleVisit={(p) => setScheduleModalPatient(p)}
+                  onBookAppointment={(p) => setScheduleModalPatient(p)}
+                  onQueuePatient={handleQueueCheckIn}
                   onAddToQueue={handleQueueCheckIn}
+                  onSelectService={handleSelectService}
                 />
               ))}
               {isDesktop && row.items.length === 1 && (
@@ -3131,171 +3161,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         onSaved={handlePhilHealthProfileSaved}
       />
 
-      {/* Walk-In Check-In & Room Routing Modal */}
-      <Modal
-        visible={!!checkInModalPatient}
-        onClose={() => !checkingInPatientId && setCheckInModalPatient(null)}
-        title="Walk-In Check-In & Routing"
-        subtitle={
-          checkInModalPatient
-            ? `Queue ${checkInModalPatient.fullName} (${checkInModalPatient.patientCode}) and optionally assign a doctor or room`
-            : ''
-        }
-        maxWidth={540}
-        footer={
-          <>
-            <Button
-              title="Cancel"
-              variant="ghost"
-              onPress={() => setCheckInModalPatient(null)}
-              disabled={!!checkingInPatientId}
-            />
-            <Button
-              title="Confirm Check-In"
-              icon="check"
-              onPress={handleConfirmQueueCheckIn}
-              loading={!!checkingInPatientId}
-            />
-          </>
-        }
-      >
-        <View style={{ gap: theme.spacing.md }}>
-          {/* Harmonized Attending Doctor & Room Selector */}
-          <QueueRoutingSelector
-            selectedDoctorId={checkInDoctorId}
-            onSelectDoctor={setCheckInDoctorId}
-            selectedRoomId={checkInRoomId}
-            onSelectRoom={setCheckInRoomId}
-            activeDoctors={activeDoctors}
-            activeRooms={activeRooms}
-            formatStaffName={formatStaffName}
-          />
-
-          {/* Visit Type Picker */}
-          <View style={{ gap: theme.spacing.xs }}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-              Visit Type / Purpose
-            </ThemedText>
-            <View style={styles.visitTypeGrid}>
-              {VISIT_TYPE_OPTIONS.map((opt) => {
-                const isSelected = checkInVisitType === opt.key;
-                return (
-                  <Pressable
-                    key={opt.key}
-                    accessibilityRole="button"
-                    accessibilityLabel={opt.label}
-                    onPress={() => setCheckInVisitType(opt.key)}
-                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                    style={[
-                      styles.visitTypeChip,
-                      isSelected ? styles.visitTypeChip_selected : null,
-                    ]}
-                  >
-                    {isSelected && (
-                      <IconSlot
-                        value="check"
-                        size={12}
-                        color={theme.colors.primary}
-                      />
-                    )}
-                    <ThemedText
-                      variant="smallBold"
-                      color={isSelected ? theme.colors.primary : theme.colors.text}
-                    >
-                      {opt.label}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Priority Picker */}
-          <View style={{ gap: theme.spacing.xs }}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-              Queue Priority
-            </ThemedText>
-            <View style={styles.priorityGrid}>
-              {(
-                [
-                  {
-                    key: 'Routine',
-                    label: 'Routine',
-                    icon: 'check',
-                  },
-                  {
-                    key: 'Urgent',
-                    label: 'Urgent',
-                    icon: 'clock',
-                  },
-                  {
-                    key: 'Emergency',
-                    label: 'Emergency (STAT)',
-                    icon: 'emergency',
-                  },
-                ] as const
-              ).map((prio) => {
-                const isSelected = checkInPriority === prio.key;
-                const isEmergency = prio.key === 'Emergency';
-                const isUrgent = prio.key === 'Urgent';
-
-                const chipStyle = [
-                  styles.priorityChip,
-                  !isEmergency && !isUrgent && (isSelected ? styles.priorityChip_routine_selected : styles.priorityChip_routine),
-                  isUrgent && (isSelected ? styles.priorityChip_urgent_selected : styles.priorityChip_urgent),
-                  isEmergency && (isSelected ? styles.priorityChip_emergency_selected : styles.priorityChip_emergency),
-                ];
-
-                const textColor = isEmergency
-                  ? theme.colors.emergencyText
-                  : isUrgent
-                  ? theme.colors.urgentText
-                  : isSelected
-                  ? theme.colors.routineText
-                  : theme.colors.text;
-
-                const iconColor = isEmergency
-                  ? theme.colors.emergencyText
-                  : isUrgent
-                  ? theme.colors.urgentText
-                  : isSelected
-                  ? theme.colors.routineText
-                  : theme.colors.textMuted;
-
-                return (
-                  <Pressable
-                    key={prio.key}
-                    accessibilityRole="button"
-                    accessibilityLabel={prio.label}
-                    onPress={() => setCheckInPriority(prio.key)}
-                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                    style={chipStyle}
-                  >
-                    {(isSelected || isUrgent || isEmergency) && (
-                      <IconSlot
-                        value={isSelected ? 'check' : prio.icon}
-                        size={13}
-                        color={iconColor}
-                      />
-                    )}
-                    <ThemedText variant="smallBold" color={textColor}>
-                      {prio.label}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Chief Complaint */}
-          <Input
-            label="Chief Complaint / Reason for Visit"
-            value={checkInComplaint}
-            onChangeText={setCheckInComplaint}
-            placeholder="e.g. Fever and cough for 2 days, annual physical exam"
-          />
-        </View>
-      </Modal>
+      {/* Multi-Service Queueing Modal */}
+      <ServiceCheckInModal
+        visible={!!serviceModalPatient}
+        patient={serviceModalPatient}
+        initialService={selectedServiceIntent}
+        activeDoctors={activeDoctors}
+        activeRooms={activeRooms}
+        onClose={() => setServiceModalPatient(null)}
+        onConfirm={handleConfirmServiceCheckIn}
+      />
 
       {/* Active Queue Ticket Conflict Modal */}
       <QueueConflictModal
@@ -3307,6 +3182,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
         error={conflictModal?.error}
         patientName={conflictModal?.patientName}
+      />
+
+      {/* In-Place Schedule Visit Modal */}
+      <ScheduleVisitModal
+        visible={!!scheduleModalPatient}
+        patient={scheduleModalPatient}
+        onClose={() => setScheduleModalPatient(null)}
+        onNavigateToAppointments={(patientId) => {
+          setScheduleModalPatient(null);
+          navigation.navigate('Appointments', patientId ? { patientId } : undefined);
+        }}
       />
     </ScrollView>
   </ResponsiveLayout>

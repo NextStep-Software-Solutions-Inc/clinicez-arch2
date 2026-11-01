@@ -8,11 +8,13 @@ using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Search;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Patients.Queries;
+
 
 public sealed record GetClinicPatientsQuery(
     string? SearchTerm = null,
@@ -26,7 +28,10 @@ public sealed record GetClinicPatientsQuery(
     Guid? CursorId = null,
     string? AfterLastName = null,
     string? AfterFirstName = null,
-    Guid? AfterId = null) : IRequest<IReadOnlyList<ClinicPatientDto>>
+    Guid? AfterId = null,
+    Guid? StaffId = null,
+    Guid? DoctorId = null,
+    IReadOnlyList<Guid>? RoomIds = null) : IRequest<IReadOnlyList<ClinicPatientDto>>
 {
     public string? EffectiveCursorLastName => CursorLastName ?? AfterLastName;
     public string? EffectiveCursorFirstName => CursorFirstName ?? AfterFirstName;
@@ -36,10 +41,17 @@ public sealed record GetClinicPatientsQuery(
 public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPatientsQuery, IReadOnlyList<ClinicPatientDto>>
 {
     private readonly IRepository<Patient> _patientRepo;
+    private readonly IRepository<QueueItem>? _queueRepo;
+    private readonly IRepository<ConsultationEncounter>? _encounterRepo;
 
-    public GetClinicPatientsQueryHandler(IRepository<Patient> patientRepo)
+    public GetClinicPatientsQueryHandler(
+        IRepository<Patient> patientRepo,
+        IRepository<QueueItem>? queueRepo = null,
+        IRepository<ConsultationEncounter>? encounterRepo = null)
     {
         _patientRepo = patientRepo;
+        _queueRepo = queueRepo;
+        _encounterRepo = encounterRepo;
     }
 
     public async Task<IReadOnlyList<ClinicPatientDto>> Handle(GetClinicPatientsQuery request, CancellationToken ct)
@@ -70,6 +82,110 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             query = query.Where(p => p.VerificationStatus == filterVs);
         }
 
+        var effectiveStaffId = request.StaffId ?? request.DoctorId;
+        var relatedPatientIds = new List<Guid>();
+        if (effectiveStaffId.HasValue)
+        {
+            var staffId = effectiveStaffId.Value;
+            var queuePatientIds = _queueRepo != null
+                ? await _queueRepo.Query()
+                    .AsNoTracking()
+                    .Where(q => (q.DoctorId == staffId || (request.RoomIds != null && q.RoomId.HasValue && request.RoomIds.Contains(q.RoomId.Value))) &&
+                                q.Status != QueueStatus.Completed && q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow)
+                    .Select(q => q.PatientId)
+                    .Distinct()
+                    .ToListAsync(ct)
+                : new List<Guid>();
+
+            var encounterPatientIds = _encounterRepo != null
+                ? await _encounterRepo.Query()
+                    .AsNoTracking()
+                    .Where(e => e.DoctorId == staffId)
+                    .Select(e => e.PatientId)
+                    .Distinct()
+                    .ToListAsync(ct)
+                : new List<Guid>();
+
+            relatedPatientIds = queuePatientIds.Concat(encounterPatientIds).Distinct().ToList();
+        }
+
+        try
+        {
+            var pgQuery = query;
+            if (string.Equals(request.FilterMode, "MY_PATIENTS", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!effectiveStaffId.HasValue)
+                {
+                    pgQuery = pgQuery.Where(_ => false);
+                }
+                else
+                {
+                    var staffId = effectiveStaffId.Value;
+                    var staffIdStr = staffId.ToString();
+                    pgQuery = pgQuery.Where(p =>
+                        (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
+                        p.Vitals.Any(v => !v.IsDeleted && v.NurseId == staffId) ||
+                        EF.Functions.JsonContains(p.CustomFields, $"{{\"assigned_doctor_id\":\"{staffIdStr}\"}}") ||
+                        EF.Functions.JsonContains(p.CustomFields, $"{{\"doctor_id\":\"{staffIdStr}\"}}") ||
+                        EF.Functions.JsonContains(p.CustomFields, $"{{\"nurse_id\":\"{staffIdStr}\"}}") ||
+                        EF.Functions.JsonContains(p.CustomFields, $"{{\"assigned_nurse_id\":\"{staffIdStr}\"}}") ||
+                        EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), $"%{staffIdStr}%"));
+                }
+            }
+
+            return await ExecuteProjectedQuery(pgQuery, request, ct);
+        }
+        catch
+        {
+            var memQuery = query;
+            if (string.Equals(request.FilterMode, "MY_PATIENTS", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!effectiveStaffId.HasValue)
+                {
+                    memQuery = memQuery.Where(_ => false);
+                }
+                else
+                {
+                    var staffId = effectiveStaffId.Value;
+                    var staffIdStr = staffId.ToString();
+
+                    var patientVitalsAndCustom = await query
+                        .Select(p => new
+                        {
+                            p.Id,
+                            HasNurseVitals = p.Vitals.Any(v => !v.IsDeleted && v.NurseId == staffId),
+                            p.CustomFields
+                        })
+                        .ToListAsync(ct);
+
+                    var matchedIds = patientVitalsAndCustom
+                        .Where(p =>
+                            (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
+                            p.HasNurseVitals ||
+                            (p.CustomFields != null && (
+                                (p.CustomFields.TryGetValue("assigned_doctor_id", out var ad) && string.Equals(ad?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                                (p.CustomFields.TryGetValue("doctor_id", out var d) && string.Equals(d?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                                (p.CustomFields.TryGetValue("nurse_id", out var n) && string.Equals(n?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                                (p.CustomFields.TryGetValue("assigned_nurse_id", out var an) && string.Equals(an?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                                p.CustomFields.Values.Any(v => v != null && v.ToString()!.Contains(staffIdStr, StringComparison.OrdinalIgnoreCase))
+                            )))
+                        .Select(p => p.Id)
+                        .ToHashSet();
+
+                    memQuery = memQuery.Where(p => matchedIds.Contains(p.Id));
+                }
+            }
+
+            return await ExecuteProjectedQuery(memQuery, request, ct);
+        }
+
+    }
+
+    private static async Task<IReadOnlyList<ClinicPatientDto>> ExecuteProjectedQuery(
+        IQueryable<Patient> query,
+        GetClinicPatientsQuery request,
+        CancellationToken ct)
+    {
         var pageSize = Math.Max(1, request.PageSize);
         var cursorLastName = request.EffectiveCursorLastName;
         var cursorFirstName = request.EffectiveCursorFirstName;
@@ -249,3 +365,4 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
         }).ToList().AsReadOnly();
     }
 }
+
