@@ -77,6 +77,11 @@ export {
 } from './GuardianSection';
 
 export {
+  default as ConsultationTypeModal,
+  type ConsultationTypeModalProps,
+} from './ConsultationTypeModal';
+
+export {
   canUseGuardianAsSponsor,
   mapGuardianRelationshipToDependent,
   buildPrincipalSponsorFromGuardian,

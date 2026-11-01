@@ -74,7 +74,12 @@ import PatientDirectoryCard, {
   type ClinicalServiceType,
 } from '../../components/patient/PatientDirectoryCard';
 import ScheduleVisitModal from '../../components/patient/ScheduleVisitModal';
-import ServiceCheckInModal, { type ServiceCheckInPayload } from '../../components/patient/ServiceCheckInModal';
+import ServiceCheckInModal, {
+  isSeniorOrPwdEligible,
+  type ServiceCheckInPayload,
+} from '../../components/patient/ServiceCheckInModal';
+import ConsultationTypeModal from '../../components/patient/ConsultationTypeModal';
+import { RecordVitalsModal } from '../../components/consultation';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
@@ -93,6 +98,7 @@ import {
   clinicService,
   getManilaTodayStr,
   ClinicPatient,
+  PatientQueueItem,
   PatientDirectoryCounts,
   StaffMember,
   RegisterPatientPayload,
@@ -196,7 +202,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const parsed = typeof rawRouteTooth === 'number' ? rawRouteTooth : parseInt(String(rawRouteTooth), 10);
     return !isNaN(parsed) && parsed > 0 ? parsed : undefined;
   }, [rawRouteTooth]);
-  const { letterhead, rooms = [] } = useClinic();
+  const { letterhead, rooms = [], accreditationNumber } = useClinic();
+  const hasPhilHealthAccreditation = Boolean(accreditationNumber && accreditationNumber.trim());
   const { currentName, staff: staffList, current: currentStaff } = useStaff();
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
   const [totalCounts, setTotalCounts] = useState<PatientDirectoryCounts | null>(null);
@@ -533,6 +540,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
   // In-Place Schedule Visit Modal state
   const [scheduleModalPatient, setScheduleModalPatient] = useState<ClinicPatient | null>(null);
+
+  // Standalone Consultation Type Choice Modal state (for PhilHealth accredited clinics)
+  const [consultationChoicePatient, setConsultationChoicePatient] = useState<ClinicPatient | null>(null);
+
+  // Standalone Direct Record Vitals Modal state
+  const [vitalsModalVisible, setVitalsModalVisible] = useState(false);
+  const [vitalsPatient, setVitalsPatient] = useState<ClinicPatient | null>(null);
+  const [vitalsQueueItemId, setVitalsQueueItemId] = useState<string | null>(null);
 
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
@@ -1602,6 +1617,207 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
+  const ensureEncounterQueueItem = async (
+    patient: ClinicPatient,
+    service: {
+      visitType: string;
+      chiefComplaint: string;
+      seriesPrefix?: string;
+    }
+  ): Promise<{ queueItem: PatientQueueItem; isExisting: boolean } | null> => {
+    try {
+      const todayStr = getManilaTodayStr();
+      const [queueRes] = await clinicService.getQueue({ date: todayStr });
+      const activeItems = (queueRes || []).filter(
+        (item) =>
+          item.patientId === patient.id &&
+          !['Completed', 'Cancelled', 'NoShow', 'DischargedNonDoctor'].includes(item.status)
+      );
+
+      if (activeItems.length > 0) {
+        return { queueItem: activeItems[0], isExisting: true };
+      }
+
+      const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
+      const prefix = service.seriesPrefix || (isSeniorOrPwd ? 'SQ' : 'Q');
+
+      const [newQueueItem, err] = await clinicService.checkInPatient({
+        patientId: patient.id,
+        patientName: patient.fullName,
+        doctorId: currentStaff?.role === 'Doctor' ? currentStaff.id : undefined,
+        doctorName: currentStaff?.role === 'Doctor' ? currentName : undefined,
+        priority: 'Routine',
+        visitType: service.visitType,
+        chiefComplaint: service.chiefComplaint,
+        seriesPrefix: prefix,
+        queueDate: todayStr,
+        allowDuplicateActive: true,
+      });
+
+      if (err || !newQueueItem) {
+        throw err || new Error('Failed to create encounter queue ticket');
+      }
+
+      setPatients((prev) =>
+        (prev || []).map((p) =>
+          p.id === patient.id ? { ...p, activeQueueTicket: newQueueItem.queueNumber } : p
+        )
+      );
+
+      return { queueItem: newQueueItem, isExisting: false };
+    } catch (e: any) {
+      notify.error(e?.message || 'Failed to initialize encounter ticket');
+      return null;
+    }
+  };
+
+  const handleStartConsultationAction = async (
+    patient: ClinicPatient,
+    forcedProgram?: 'regular' | 'yakap'
+  ) => {
+    if (hasPhilHealthAccreditation && !forcedProgram) {
+      setConsultationChoicePatient(patient);
+      return;
+    }
+    setConsultationChoicePatient(null);
+
+    const isYakap = forcedProgram === 'yakap';
+    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
+    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
+    const visitType = isYakap ? 'PhilHealthKonsulta' : 'WalkInConsultation';
+    const chiefComplaint = isYakap ? 'PhilHealth Yakap Consultation' : 'General Consultation';
+
+    const encounter = await ensureEncounterQueueItem(patient, {
+      visitType,
+      chiefComplaint,
+      seriesPrefix,
+    });
+    if (!encounter) return;
+
+    const { queueItem, isExisting } = encounter;
+    const currentDoctorId = currentStaff?.role === 'Doctor' ? currentStaff.id : undefined;
+    const currentDoctorName = currentStaff?.role === 'Doctor' ? currentName : undefined;
+    const currentRoom = currentStaff?.assignedRoomName || (rooms.length > 0 ? rooms[0].name : undefined);
+    const currentRoomId = currentStaff?.assignedRoomId || (rooms.length > 0 ? rooms[0].id : undefined);
+
+    if (isExisting && queueItem.status === 'InConsultation') {
+      if (queueItem.doctorId && currentDoctorId && queueItem.doctorId !== currentDoctorId) {
+        Alert.alert(
+          'Active Consultation in Progress',
+          `${patient.fullName} is currently in consultation with ${queueItem.doctorName || 'another doctor'}. Would you like to take over this session?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Take Over',
+              onPress: async () => {
+                await clinicService.callQueueItem(
+                  queueItem.id,
+                  currentDoctorId,
+                  currentDoctorName,
+                  currentRoom,
+                  currentRoomId
+                );
+                navigation.navigate('Consultations', {
+                  queueId: queueItem.id,
+                  queueItemId: queueItem.id,
+                  patientId: patient.id,
+                  patientName: patient.fullName,
+                });
+                notify.success(`Consultation resumed (${queueItem.queueNumber})`);
+              },
+            },
+          ]
+        );
+        return;
+      }
+      navigation.navigate('Consultations', {
+        queueId: queueItem.id,
+        queueItemId: queueItem.id,
+        patientId: patient.id,
+        patientName: patient.fullName,
+      });
+      notify.info(`Resuming active consultation (${queueItem.queueNumber})`);
+      return;
+    }
+
+    await clinicService.callQueueItem(
+      queueItem.id,
+      currentDoctorId,
+      currentDoctorName,
+      currentRoom,
+      currentRoomId
+    );
+
+    navigation.navigate('Consultations', {
+      queueId: queueItem.id,
+      queueItemId: queueItem.id,
+      patientId: patient.id,
+      patientName: patient.fullName,
+    });
+    notify.success(`Consultation started (${queueItem.queueNumber})`);
+  };
+
+  const handleStartProfilingAction = async (patient: ClinicPatient) => {
+    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
+    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
+    await ensureEncounterQueueItem(patient, {
+      visitType: 'PhilHealthKonsulta',
+      chiefComplaint: 'Patient Profiling (Yakap FPE)',
+      seriesPrefix,
+    });
+    handleOpenPhilHealthProfile(patient);
+  };
+
+  const handleRecordVitalsAction = async (patient: ClinicPatient) => {
+    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
+    const seriesPrefix = isSeniorOrPwd ? 'SV' : 'V';
+    const encounter = await ensureEncounterQueueItem(patient, {
+      visitType: 'VitalsCheck',
+      chiefComplaint: 'Vitals Check',
+      seriesPrefix,
+    });
+    if (!encounter) return;
+    setVitalsPatient(patient);
+    setVitalsQueueItemId(encounter.queueItem.id);
+    setVitalsModalVisible(true);
+  };
+
+  const handlePerformProcedureAction = async (patient: ClinicPatient) => {
+    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
+    const seriesPrefix = isSeniorOrPwd ? 'SP' : 'P';
+    const encounter = await ensureEncounterQueueItem(patient, {
+      visitType: 'ClinicalProcedure',
+      chiefComplaint: 'Clinical Procedure',
+      seriesPrefix,
+    });
+    if (encounter?.queueItem?.queueNumber) {
+      notify.success(`Procedure encounter logged (${encounter.queueItem.queueNumber})`);
+    }
+    handleOpenChart(patient, 'procedures');
+  };
+
+  const handleIssueClearanceAction = async (patient: ClinicPatient) => {
+    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
+    const seriesPrefix = isSeniorOrPwd ? 'SA' : 'A';
+    const encounter = await ensureEncounterQueueItem(patient, {
+      visitType: 'Administrative',
+      chiefComplaint: 'Administrative & Clearance',
+      seriesPrefix,
+    });
+    if (encounter?.queueItem?.queueNumber) {
+      notify.success(`Administrative encounter logged (${encounter.queueItem.queueNumber})`);
+    }
+    handleOpenChart(patient, 'documents');
+  };
+
+  const handleVitalsRecorded = () => {
+    setVitalsModalVisible(false);
+    setVitalsPatient(null);
+    setVitalsQueueItemId(null);
+    notify.success('Vitals recorded successfully');
+    fetchPatients();
+  };
+
   const filterCounts = useMemo(() => {
     if (!patients) return null;
     let myPatients = 0;
@@ -1934,6 +2150,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onQueuePatient={handleQueueCheckIn}
                   onAddToQueue={handleQueueCheckIn}
                   onSelectService={handleSelectService}
+                  onStartConsultation={handleStartConsultationAction}
+                  onStartProfiling={handleStartProfilingAction}
+                  onRecordVitals={handleRecordVitalsAction}
+                  onPerformProcedure={handlePerformProcedureAction}
+                  onIssueClearance={handleIssueClearanceAction}
+                  hasPhilHealthAccreditation={hasPhilHealthAccreditation}
                 />
               ))}
               {virtualWindow.paddingBottom > 0 && (
@@ -1976,6 +2198,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onQueuePatient={handleQueueCheckIn}
                   onAddToQueue={handleQueueCheckIn}
                   onSelectService={handleSelectService}
+                  onStartConsultation={handleStartConsultationAction}
+                  onStartProfiling={handleStartProfilingAction}
+                  onRecordVitals={handleRecordVitalsAction}
+                  onPerformProcedure={handlePerformProcedureAction}
+                  onIssueClearance={handleIssueClearanceAction}
+                  hasPhilHealthAccreditation={hasPhilHealthAccreditation}
                 />
               ))}
               {isDesktop && row.items.length === 1 && (
@@ -3144,6 +3372,34 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
         patient={selectedPatientForProfile}
         onSaved={handlePhilHealthProfileSaved}
+      />
+
+      {/* PhilHealth Accredited Consultation Type Selection Modal */}
+      <ConsultationTypeModal
+        visible={Boolean(consultationChoicePatient)}
+        patient={consultationChoicePatient}
+        onClose={() => setConsultationChoicePatient(null)}
+        onSelectType={(program) => {
+          const pt = consultationChoicePatient;
+          if (pt) {
+            handleStartConsultationAction(pt, program);
+          }
+        }}
+      />
+
+      {/* Standalone Direct Record Vitals Modal */}
+      <RecordVitalsModal
+        visible={vitalsModalVisible}
+        onClose={() => {
+          setVitalsModalVisible(false);
+          setVitalsPatient(null);
+          setVitalsQueueItemId(null);
+        }}
+        patient={vitalsPatient}
+        queueItemId={vitalsQueueItemId}
+        currentStaffId={currentStaff?.id}
+        currentStaffName={currentStaff ? formatStaffName(currentStaff) : currentName}
+        onSuccess={handleVitalsRecorded}
       />
 
       {/* Multi-Service Queueing Modal */}

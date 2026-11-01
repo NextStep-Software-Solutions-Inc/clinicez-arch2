@@ -1181,5 +1181,112 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(componentCode).toContain('boundaryMode="futureOrToday"');
     expect(componentCode).toContain('testID="schedule-visit-date-input"');
   });
+
+  test('30. buildPatientOverflowMenuItems supports direct clinical action handlers and Yakap FPE profiling when accredited', () => {
+    let consultationTriggered = false;
+    let profilingTriggered = false;
+    let vitalsTriggered = false;
+    let procedureTriggered = false;
+    let clearanceTriggered = false;
+
+    const items = buildPatientOverflowMenuItems(basePatient, {
+      hasPhilHealthAccreditation: true,
+      onStartConsultation: () => { consultationTriggered = true; },
+      onStartProfiling: () => { profilingTriggered = true; },
+      onRecordVitals: () => { vitalsTriggered = true; },
+      onPerformProcedure: () => { procedureTriggered = true; },
+      onIssueClearance: () => { clearanceTriggered = true; },
+    });
+
+    const labels = items.map((i) => i.label);
+    expect(labels).toContain('Doctor Consultation');
+    expect(labels).toContain('Start Patient Profiling (Yakap FPE)');
+    expect(labels).toContain('Vitals Check');
+    expect(labels).toContain('Clinical Procedure');
+    expect(labels).toContain('Administrative & Clearance');
+
+    items.find((i) => i.id === 'service-consultation')!.onPress();
+    expect(consultationTriggered).toBe(true);
+
+    items.find((i) => i.id === 'start-profiling')!.onPress();
+    expect(profilingTriggered).toBe(true);
+
+    items.find((i) => i.id === 'service-vitals')!.onPress();
+    expect(vitalsTriggered).toBe(true);
+
+    items.find((i) => i.id === 'service-procedure')!.onPress();
+    expect(procedureTriggered).toBe(true);
+
+    items.find((i) => i.id === 'service-administrative')!.onPress();
+    expect(clearanceTriggered).toBe(true);
+  });
+
+  test('31. buildPatientOverflowMenuItems omits Yakap FPE profiling when clinic is not accredited and patient has no PIN', () => {
+    const unaccreditedPatient = { ...basePatient, philHealthNumber: null };
+    const items = buildPatientOverflowMenuItems(unaccreditedPatient, {
+      hasPhilHealthAccreditation: false,
+      onStartConsultation: () => {},
+      onStartProfiling: () => {},
+      onRecordVitals: () => {},
+      onPerformProcedure: () => {},
+      onIssueClearance: () => {},
+    });
+
+    const labels = items.map((i) => i.label);
+    expect(labels).toContain('Doctor Consultation');
+    expect(labels).not.toContain('Start Patient Profiling (Yakap FPE)');
+  });
+
+  test('32. ConsultationTypeModal renders patient identity, PhilHealth PIN status, and choice cards', async () => {
+    const { default: ConsultationTypeModal } = await import('../components/patient/ConsultationTypeModal');
+    let selectedProgram: string | null = null;
+    let closed = false;
+
+    const patientWithPin = {
+      ...basePatient,
+      philHealthNumber: '11-578958036-9',
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ConsultationTypeModal, {
+        visible: true,
+        patient: patientWithPin,
+        onClose: () => { closed = true; },
+        onSelectType: (type) => { selectedProgram = type; },
+      })
+    );
+
+    expect(markup).toContain('Start Consultation');
+    expect(markup).toContain('Select consultation program for this encounter');
+    expect(markup).toContain(patientWithPin.fullName);
+    expect(markup).toContain('PhilHealth PIN: 11-578958036-9');
+    expect(markup).toContain('Regular Consultation');
+    expect(markup).toContain('Standard Care');
+    expect(markup).toContain('PhilHealth Yakap Consultation');
+    expect(markup).toContain('Cancel');
+  });
+
+  test('33. Patients.screen.tsx integrates direct clinical actions, ConsultationTypeModal, and RecordVitalsModal', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // Handlers and headless encounter tracking for clinic census
+    expect(code).toContain('ensureEncounterQueueItem');
+    expect(code).toContain('handleStartConsultationAction');
+    expect(code).toContain('handleStartProfilingAction');
+    expect(code).toContain('handleRecordVitalsAction');
+    expect(code).toContain('handlePerformProcedureAction');
+    expect(code).toContain('handleIssueClearanceAction');
+    expect(code).toContain('handleVitalsRecorded');
+
+    // Accreditation gating
+    expect(code).toContain('accreditationNumber');
+    expect(code).toContain('hasPhilHealthAccreditation');
+
+    // Modals rendered
+    expect(code).toContain('<ConsultationTypeModal');
+    expect(code).toContain('<RecordVitalsModal');
+  });
 });
 

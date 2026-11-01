@@ -79,6 +79,12 @@ export interface PatientDirectoryCardProps {
   onAddToQueue?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
   onQueuePatient?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
   onSelectService?: (patient: ClinicPatient, serviceType: ClinicalServiceType) => void;
+  onStartConsultation?: (patient: ClinicPatient) => void;
+  onStartProfiling?: (patient: ClinicPatient) => void;
+  onRecordVitals?: (patient: ClinicPatient) => void;
+  onPerformProcedure?: (patient: ClinicPatient) => void;
+  onIssueClearance?: (patient: ClinicPatient) => void;
+  hasPhilHealthAccreditation?: boolean;
 }
 
 /**
@@ -161,6 +167,12 @@ export function buildPatientOverflowMenuItems(
     onSelectService?: (p: ClinicPatient, serviceType: ClinicalServiceType) => void;
     onQueuePatient?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
     onAddToQueue?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
+    onStartConsultation?: (p: ClinicPatient) => void;
+    onStartProfiling?: (p: ClinicPatient) => void;
+    onRecordVitals?: (p: ClinicPatient) => void;
+    onPerformProcedure?: (p: ClinicPatient) => void;
+    onIssueClearance?: (p: ClinicPatient) => void;
+    hasPhilHealthAccreditation?: boolean;
   }
 ): ActionMenuItem[] {
   const items: ActionMenuItem[] = [];
@@ -202,37 +214,95 @@ export function buildPatientOverflowMenuItems(
       onPress: () => scheduleHandler(patient),
     });
   }
-  const serviceHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
-  if (serviceHandler) {
-    items.push({
-      id: 'service-consultation',
-      label: 'Doctor Consultation',
-      icon: 'stethoscope',
-      dividerBefore: true,
-      hint: 'Physician evaluation & care',
-      onPress: () => serviceHandler(patient, 'Doctor Consultation'),
-    });
-    items.push({
-      id: 'service-vitals',
-      label: 'Vitals Check',
-      icon: 'activity',
-      hint: 'Blood pressure & triage monitoring',
-      onPress: () => serviceHandler(patient, 'Vitals Check'),
-    });
-    items.push({
-      id: 'service-procedure',
-      label: 'Clinical Procedure',
-      icon: 'syringe',
-      hint: 'Wound care, injection, or dressing',
-      onPress: () => serviceHandler(patient, 'Clinical Procedure'),
-    });
-    items.push({
-      id: 'service-administrative',
-      label: 'Administrative & Clearance',
-      icon: 'file',
-      hint: 'Medical certificate & clearances',
-      onPress: () => serviceHandler(patient, 'Administrative & Clearance'),
-    });
+
+  const hasDirectClinicalActions = Boolean(
+    handlers.onStartConsultation ||
+    handlers.onStartProfiling ||
+    handlers.onRecordVitals ||
+    handlers.onPerformProcedure ||
+    handlers.onIssueClearance
+  );
+
+  if (hasDirectClinicalActions) {
+    if (handlers.onStartConsultation) {
+      items.push({
+        id: 'service-consultation',
+        label: 'Doctor Consultation',
+        icon: 'stethoscope',
+        dividerBefore: true,
+        hint: 'Physician evaluation & care',
+        onPress: () => handlers.onStartConsultation!(patient),
+      });
+    }
+    if (handlers.onStartProfiling && (handlers.hasPhilHealthAccreditation || patient.philHealthNumber)) {
+      items.push({
+        id: 'start-profiling',
+        label: 'Start Patient Profiling (Yakap FPE)',
+        icon: 'shield',
+        hint: 'Yakap risk profiling & health exam',
+        onPress: () => handlers.onStartProfiling!(patient),
+      });
+    }
+    if (handlers.onRecordVitals) {
+      items.push({
+        id: 'service-vitals',
+        label: 'Vitals Check',
+        icon: 'activity',
+        hint: 'Blood pressure & triage monitoring',
+        onPress: () => handlers.onRecordVitals!(patient),
+      });
+    }
+    if (handlers.onPerformProcedure) {
+      items.push({
+        id: 'service-procedure',
+        label: 'Clinical Procedure',
+        icon: 'syringe',
+        hint: 'Wound care, injection, or dressing',
+        onPress: () => handlers.onPerformProcedure!(patient),
+      });
+    }
+    if (handlers.onIssueClearance) {
+      items.push({
+        id: 'service-administrative',
+        label: 'Administrative & Clearance',
+        icon: 'file',
+        hint: 'Medical certificate & clearances',
+        onPress: () => handlers.onIssueClearance!(patient),
+      });
+    }
+  } else {
+    const serviceHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
+    if (serviceHandler) {
+      items.push({
+        id: 'service-consultation',
+        label: 'Doctor Consultation',
+        icon: 'stethoscope',
+        dividerBefore: true,
+        hint: 'Physician evaluation & care',
+        onPress: () => serviceHandler(patient, 'Doctor Consultation'),
+      });
+      items.push({
+        id: 'service-vitals',
+        label: 'Vitals Check',
+        icon: 'activity',
+        hint: 'Blood pressure & triage monitoring',
+        onPress: () => serviceHandler(patient, 'Vitals Check'),
+      });
+      items.push({
+        id: 'service-procedure',
+        label: 'Clinical Procedure',
+        icon: 'syringe',
+        hint: 'Wound care, injection, or dressing',
+        onPress: () => serviceHandler(patient, 'Clinical Procedure'),
+      });
+      items.push({
+        id: 'service-administrative',
+        label: 'Administrative & Clearance',
+        icon: 'file',
+        hint: 'Medical certificate & clearances',
+        onPress: () => serviceHandler(patient, 'Administrative & Clearance'),
+      });
+    }
   }
   return items;
 }
@@ -284,6 +354,12 @@ function PatientDirectoryCard({
   onAddToQueue,
   onQueuePatient,
   onSelectService,
+  onStartConsultation,
+  onStartProfiling,
+  onRecordVitals,
+  onPerformProcedure,
+  onIssueClearance,
+  hasPhilHealthAccreditation,
 }: PatientDirectoryCardProps) {
   const initials = getPatientInitials(patient);
   const demographics = formatPatientDemographicsLine(patient);
@@ -301,6 +377,12 @@ function PatientDirectoryCard({
     onOpenChart,
     onScheduleVisit: handleScheduleVisit,
     onBookAppointment: handleScheduleVisit,
+    onStartConsultation,
+    onStartProfiling,
+    onRecordVitals,
+    onPerformProcedure,
+    onIssueClearance,
+    hasPhilHealthAccreditation,
     onSelectService: onSelectService || (handleQueuePatient ? (p, s) => handleQueuePatient(p, s) : undefined),
   });
 
