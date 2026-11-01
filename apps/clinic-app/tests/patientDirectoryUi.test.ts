@@ -1288,5 +1288,28 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(code).toContain('<ConsultationTypeModal');
     expect(code).toContain('<RecordVitalsModal');
   });
+
+  test('34. Patients.screen.tsx strictly uses canonical VisitType enum values in headless check-in', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // ensureEncounterQueueItem parameter is strongly typed to VisitType
+    expect(code).toContain('visitType: VisitType;');
+
+    // Direct actions strictly use backend-supported VisitType enum strings
+    expect(code).toContain("const visitType: VisitType = 'Consultation';");
+    expect(code).toContain("visitType: 'VitalsCheckOnly'");
+    expect(code).toContain("visitType: 'StandaloneProcedure'");
+    expect(code).toContain("visitType: 'AdministrativeDocument'");
+
+    // Must not use unmapped domain names as visitType
+    expect(code).not.toContain("visitType: 'WalkInConsultation'");
+    expect(code).not.toContain("visitType = 'WalkInConsultation'");
+    expect(code).not.toContain("visitType: 'PhilHealthKonsulta'");
+    expect(code).not.toContain("visitType: 'VitalsCheck'");
+    expect(code).not.toContain("visitType: 'ClinicalProcedure'");
+    expect(code).not.toContain("visitType: 'Administrative'");
+  });
 });
 

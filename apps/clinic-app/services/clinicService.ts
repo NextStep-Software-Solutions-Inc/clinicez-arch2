@@ -3294,7 +3294,7 @@ export const clinicService = {
     if (doctorId) params.append('doctorId', doctorId);
     params.append('page', String(page));
     params.append('pageSize', String(pageSize));
-    params.append('queueDate', queueDate || getManilaTodayStr());
+    if (queueDate) params.append('queueDate', queueDate);
     const qs = params.toString();
     return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
   },

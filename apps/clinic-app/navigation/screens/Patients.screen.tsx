@@ -1620,7 +1620,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const ensureEncounterQueueItem = async (
     patient: ClinicPatient,
     service: {
-      visitType: string;
+      visitType: VisitType;
       chiefComplaint: string;
       seriesPrefix?: string;
     }
@@ -1655,7 +1655,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       });
 
       if (err || !newQueueItem) {
-        throw err || new Error('Failed to create encounter queue ticket');
+        throw err || new Error((err as any)?.message || 'Failed to create encounter queue ticket');
       }
 
       setPatients((prev) =>
@@ -1684,7 +1684,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const isYakap = forcedProgram === 'yakap';
     const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
     const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
-    const visitType = isYakap ? 'PhilHealthKonsulta' : 'WalkInConsultation';
+    const visitType: VisitType = 'Consultation';
     const chiefComplaint = isYakap ? 'PhilHealth Yakap Consultation' : 'General Consultation';
 
     const encounter = await ensureEncounterQueueItem(patient, {
@@ -1761,7 +1761,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
     const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
     await ensureEncounterQueueItem(patient, {
-      visitType: 'PhilHealthKonsulta',
+      visitType: 'Consultation',
       chiefComplaint: 'Patient Profiling (Yakap FPE)',
       seriesPrefix,
     });
@@ -1772,7 +1772,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
     const seriesPrefix = isSeniorOrPwd ? 'SV' : 'V';
     const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'VitalsCheck',
+      visitType: 'VitalsCheckOnly',
       chiefComplaint: 'Vitals Check',
       seriesPrefix,
     });
@@ -1786,7 +1786,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
     const seriesPrefix = isSeniorOrPwd ? 'SP' : 'P';
     const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'ClinicalProcedure',
+      visitType: 'StandaloneProcedure',
       chiefComplaint: 'Clinical Procedure',
       seriesPrefix,
     });
@@ -1800,7 +1800,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
     const seriesPrefix = isSeniorOrPwd ? 'SA' : 'A';
     const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'Administrative',
+      visitType: 'AdministrativeDocument',
       chiefComplaint: 'Administrative & Clearance',
       seriesPrefix,
     });
