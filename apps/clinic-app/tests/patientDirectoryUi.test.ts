@@ -142,6 +142,9 @@ const {
   isSeniorOrPwdEligible,
   resolveTicketPrefix,
   formatQueueTicketNumber,
+  formatQueueStatusMeta,
+  formatVisitTypeMeta,
+  formatTicketSubtext,
 } = await import('../components/patient/ServiceCheckInModal');
 
 import type { ClinicPatient } from '../services/clinicService';
@@ -1356,7 +1359,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('Queued (Q-001 +1)');
   });
 
-  test('37. ServiceCheckInModal renders all active tickets when duplicate queue conflict detected', () => {
+  test('37. ServiceCheckInModal renders restyled active queue dialog with human-readable statuses, non-redundant details, and request summary', () => {
     const conflictPatient: ClinicPatient = {
       ...basePatient,
       activeQueueTicket: 'Q-001',
@@ -1370,19 +1373,18 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onSuccess: () => {},
         initialConflictWarning: {
           queueNumber: 'Q-001',
-          status: 'Waiting',
+          status: 'InConsultation',
           patientName: conflictPatient.fullName,
-          chiefComplaint: 'Follow-up visit',
           activeTickets: [
-            { queueNumber: 'Q-001', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Follow-up visit' },
+            { queueNumber: 'Q-001', status: 'InConsultation', visitType: 'Consultation', chiefComplaint: 'Doctor Consultation' },
             { queueNumber: 'Q-004', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Fever and cough' },
           ],
           payload: {
             patientId: conflictPatient.id,
+            patientName: conflictPatient.fullName,
             visitType: 'Consultation',
-            serviceType: 'Doctor Consultation',
-            priority: 'Normal',
-            chiefComplaint: 'Follow-up visit',
+            priority: 'Routine',
+            chiefComplaint: 'Doctor Consultation',
             seriesPrefix: 'Q',
           },
         },
@@ -1392,10 +1394,17 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('Patient Already in Queue');
     expect(markup).toContain('2 Active Queue Tickets Found');
     expect(markup).toContain('conflict-tickets-list');
-    expect(markup).toContain('Ticket Q-001');
-    expect(markup).toContain('Ticket Q-004');
+    expect(markup).toContain('Q-001');
+    expect(markup).toContain('Q-004');
+    // Human-readable clinical status badge instead of raw PascalCase InConsultation
+    expect(markup).toContain('In Consultation');
+    expect(markup).not.toContain('InConsultation');
+    expect(markup).toContain('Currently with clinician');
     expect(markup).toContain('Fever and cough');
-    expect(markup).toContain('Continue queueing');
+    // New ticket request summary
+    expect(markup).toContain('NEW TICKET TO ISSUE');
+    expect(markup).toContain('Regular (Q)');
+    expect(markup).toContain('Issue additional ticket');
     expect(markup).toContain('Go back');
   });
 
@@ -1405,7 +1414,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     let closed = false;
 
     const tickets = [
-      { id: 'item-1', queueNumber: 'Q-001', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Cough and colds' },
+      { id: 'item-1', queueNumber: 'Q-001', status: 'InConsultation', visitType: 'Consultation', chiefComplaint: 'Cough and colds' },
       { id: 'item-2', queueNumber: 'Q-004', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Hypertension follow-up' },
     ];
 
@@ -1424,8 +1433,10 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('Select Queue Ticket');
     expect(markup).toContain('has 2 active tickets');
     expect(markup).toContain('ACTIVE TICKETS AVAILABLE (2)');
-    expect(markup).toContain('Ticket Q-001');
-    expect(markup).toContain('Ticket Q-004');
+    expect(markup).toContain('Q-001');
+    expect(markup).toContain('Q-004');
+    expect(markup).toContain('In Consultation');
+    expect(markup).not.toContain('InConsultation');
     expect(markup).toContain('Cough and colds');
     expect(markup).toContain('Hypertension follow-up');
     expect(markup).toContain('Issue new ticket instead');
@@ -1449,6 +1460,41 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     // Action handlers using picker for ≥2 tickets
     expect(code).toContain('startConsultationWithQueueItem');
     expect(code).toContain('setTicketPickerState');
+  });
+
+  test('40. formatQueueStatusMeta, formatVisitTypeMeta, and formatTicketSubtext eliminate raw enums and redundant labels', () => {
+    expect(formatQueueStatusMeta('InConsultation')).toEqual({
+      label: 'In Consultation',
+      variant: 'info',
+      icon: 'stethoscope',
+    });
+    expect(formatQueueStatusMeta('Waiting')).toEqual({
+      label: 'Waiting',
+      variant: 'routine',
+      icon: 'clock',
+    });
+    expect(formatQueueStatusMeta('InTriage').label).toBe('In Triage');
+
+    expect(formatVisitTypeMeta('Consultation').label).toBe('Doctor Consultation');
+    expect(formatVisitTypeMeta('VitalsCheckOnly').label).toBe('Vitals Check');
+    expect(formatVisitTypeMeta('StandaloneProcedure').label).toBe('Clinical Procedure');
+    expect(formatVisitTypeMeta('AdministrativeDocument').label).toBe('Administrative & Clearance');
+
+    // Deduplicates generic service label stored in chiefComplaint
+    expect(
+      formatTicketSubtext(
+        { visitType: 'Consultation', chiefComplaint: 'Doctor Consultation', status: 'InConsultation' },
+        'Doctor Consultation'
+      )
+    ).toBe('Currently with clinician');
+
+    // Preserves distinct clinical chief complaint and assigned clinician
+    expect(
+      formatTicketSubtext(
+        { visitType: 'Consultation', chiefComplaint: 'Acute migraine', doctorName: 'Maria Santos', status: 'Waiting' },
+        'Doctor Consultation'
+      )
+    ).toBe('Acute migraine • Dr. Maria Santos');
   });
 });
 

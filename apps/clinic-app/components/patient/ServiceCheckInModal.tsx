@@ -14,6 +14,7 @@ import {
   Icon,
   Modal,
   type IconName,
+  type BadgeVariant,
 } from '../ui';
 import { theme } from '../../constants/theme';
 import {
@@ -53,6 +54,15 @@ export interface ServiceCheckInPayload {
   allowDuplicateActive?: boolean;
 }
 
+export interface ConflictActiveTicketSummary {
+  queueNumber: string;
+  status: string;
+  visitType?: string;
+  chiefComplaint?: string;
+  doctorName?: string;
+  checkInTime?: string;
+}
+
 export interface ServiceCheckInModalProps {
   visible: boolean;
   patient: ClinicPatient | null;
@@ -68,12 +78,7 @@ export interface ServiceCheckInModalProps {
     status: string;
     patientName: string;
     payload: ServiceCheckInPayload;
-    activeTickets?: Array<{
-      queueNumber: string;
-      status: string;
-      visitType?: string;
-      chiefComplaint?: string;
-    }>;
+    activeTickets?: ConflictActiveTicketSummary[];
   } | null;
   style?: StyleProp<ViewStyle>;
 }
@@ -141,6 +146,133 @@ export function formatQueueTicketNumber(prefix: string, sequence: number = 1): s
   const normalizedPrefix = prefix.toUpperCase();
   const seqStr = String(sequence).padStart(3, '0');
   return `${normalizedPrefix}-${seqStr}`;
+}
+
+/**
+ * Maps raw QueueStatus strings to clinical workstation labels, Badge variants, and icons.
+ */
+export function formatQueueStatusMeta(status?: string | null): {
+  label: string;
+  variant: BadgeVariant;
+  icon: IconName;
+} {
+  const normalized = String(status || 'Waiting').trim();
+  switch (normalized) {
+    case 'InConsultation':
+      return { label: 'In Consultation', variant: 'info', icon: 'stethoscope' };
+    case 'Called':
+      return { label: 'Called to Room', variant: 'info', icon: 'bell' };
+    case 'InTriage':
+      return { label: 'In Triage', variant: 'warning', icon: 'heartPulse' };
+    case 'Sidelined':
+    case 'Deferred':
+      return { label: 'On Hold', variant: 'warning', icon: 'hourglass' };
+    case 'PendingVerification':
+      return { label: 'Pending Verification', variant: 'warning', icon: 'hourglass' };
+    case 'Verified':
+      return { label: 'Checked In', variant: 'routine', icon: 'checkCircle' };
+    case 'Waiting':
+      return { label: 'Waiting', variant: 'routine', icon: 'clock' };
+    default: {
+      const humanized = normalized.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+      return { label: humanized || 'In Queue', variant: 'routine', icon: 'clock' };
+    }
+  }
+}
+
+/**
+ * Maps VisitType enum strings or service names to human-readable clinical labels and icons.
+ */
+export function formatVisitTypeMeta(visitType?: string | null): {
+  label: string;
+  icon: IconName;
+} {
+  const normalized = String(visitType || 'Consultation').trim();
+  switch (normalized) {
+    case 'Consultation':
+    case 'Doctor Consultation':
+      return { label: 'Doctor Consultation', icon: 'stethoscope' };
+    case 'FollowUp':
+      return { label: 'Follow-Up Consultation', icon: 'stethoscope' };
+    case 'UrgentCare':
+    case 'Emergency':
+      return { label: 'Urgent Consultation', icon: 'emergency' };
+    case 'VitalsCheckOnly':
+    case 'Vitals Check':
+      return { label: 'Vitals Check', icon: 'heartPulse' };
+    case 'StandaloneProcedure':
+    case 'ProcedureOnly':
+    case 'Clinical Procedure':
+      return { label: 'Clinical Procedure', icon: 'syringe' };
+    case 'AdministrativeDocument':
+    case 'Administrative & Clearance':
+      return { label: 'Administrative & Clearance', icon: 'file' };
+    default: {
+      const humanized = normalized.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+      return { label: humanized || 'Clinical Visit', icon: 'clipboard' };
+    }
+  }
+}
+
+/**
+ * Builds non-redundant secondary metadata for an active ticket card
+ * (chief complaint if distinct from generic service label, assigned clinician, check-in time).
+ */
+export function formatTicketSubtext(
+  ticket: {
+    visitType?: string | null;
+    chiefComplaint?: string | null;
+    doctorName?: string | null;
+    checkInTime?: string | null;
+    status?: string | null;
+  },
+  resolvedServiceLabel: string
+): string {
+  const parts: string[] = [];
+  const rawComplaint = (ticket.chiefComplaint || '').trim();
+  const genericLabels = new Set([
+    resolvedServiceLabel.toLowerCase(),
+    String(ticket.visitType || '').trim().toLowerCase(),
+    'general consultation',
+    'doctor consultation',
+    'vitals check',
+    'clinical procedure',
+    'administrative & clearance',
+    'clinical',
+  ]);
+
+  if (rawComplaint && !genericLabels.has(rawComplaint.toLowerCase())) {
+    parts.push(rawComplaint);
+  }
+  if (ticket.doctorName && ticket.doctorName.trim()) {
+    const dr = ticket.doctorName.trim();
+    parts.push(dr.startsWith('Dr.') ? dr : `Dr. ${dr}`);
+  }
+  if (ticket.checkInTime) {
+    const parsedDate = new Date(ticket.checkInTime);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      try {
+        const timeStr = new Intl.DateTimeFormat('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'Asia/Manila',
+        }).format(parsedDate);
+        parts.push(`Checked in ${timeStr}`);
+      } catch {
+        // Fallback silently if Intl timezone is unsupported
+      }
+    }
+  }
+
+  if (parts.length > 0) {
+    return parts.join(' • ');
+  }
+
+  if (ticket.status === 'InConsultation') return 'Currently with clinician';
+  if (ticket.status === 'InTriage') return 'Currently at triage desk';
+  if (ticket.status === 'Called') return 'Called to consultation room';
+  return 'Active in today’s queue';
 }
 
 export const CLINICAL_SERVICES: Array<{
@@ -222,12 +354,7 @@ export default function ServiceCheckInModal({
     status: string;
     patientName: string;
     payload: ServiceCheckInPayload;
-    activeTickets?: Array<{
-      queueNumber: string;
-      status: string;
-      visitType?: string;
-      chiefComplaint?: string;
-    }>;
+    activeTickets?: ConflictActiveTicketSummary[];
   } | null>(initialConflictWarning ?? null);
 
   // Issued Ticket Confirmation State (Post-Queue Dialog)
@@ -243,10 +370,10 @@ export default function ServiceCheckInModal({
       const eligible = isSeniorOrPwdEligible(patient);
       setIsPrioritySeries(eligible);
       setSelectedService(initialService);
-      setConflictWarning(null);
+      setConflictWarning(initialConflictWarning ?? null);
       setIssuedTicket(null);
     }
-  }, [visible, patient, initialService]);
+  }, [visible, patient, initialService, initialConflictWarning]);
 
   // Ticket prefix
   const currentPrefix = useMemo(() => {
@@ -295,23 +422,37 @@ export default function ServiceCheckInModal({
       allowDuplicateActive: allowDuplicate,
     };
 
+    const buildActiveTicketSummaries = (
+      fallbackQueueNumber: string,
+      fallbackStatus: string,
+      fallbackVisitType: string
+    ): ConflictActiveTicketSummary[] => {
+      if (patient.activeQueueTickets && patient.activeQueueTickets.length > 0) {
+        return patient.activeQueueTickets.map((t) => ({
+          queueNumber: t.queueNumber,
+          status: String(t.status),
+          visitType: String(t.visitType || 'Consultation'),
+          chiefComplaint: t.chiefComplaint || undefined,
+          doctorName: t.doctorName || undefined,
+          checkInTime: t.checkInTime || undefined,
+        }));
+      }
+      return [
+        {
+          queueNumber: fallbackQueueNumber,
+          status: fallbackStatus,
+          visitType: fallbackVisitType,
+        },
+      ];
+    };
+
     // If patient already has an active queue ticket and staff has not confirmed duplicate override, warn staff immediately
     if (!allowDuplicate && (patient.activeQueueTicket || (patient.activeQueueTickets && patient.activeQueueTickets.length > 0))) {
-      const tickets = patient.activeQueueTickets && patient.activeQueueTickets.length > 0
-        ? patient.activeQueueTickets.map((t) => ({
-            queueNumber: t.queueNumber,
-            status: String(t.status),
-            visitType: String(t.visitType || 'Clinical'),
-            chiefComplaint: t.chiefComplaint || undefined,
-          }))
-        : [
-            {
-              queueNumber: patient.activeQueueTicket || 'Existing Ticket',
-              status: (patient as any).activeQueueStatus || (patient as any).verificationStatus || 'In queue',
-              visitType: serviceConfig.label,
-              chiefComplaint: undefined,
-            },
-          ];
+      const tickets = buildActiveTicketSummaries(
+        patient.activeQueueTicket || 'Existing Ticket',
+        (patient as any).activeQueueStatus || (patient as any).verificationStatus || 'Waiting',
+        serviceConfig.label
+      );
 
       setConflictWarning({
         queueNumber: tickets[0].queueNumber,
@@ -373,21 +514,12 @@ export default function ServiceCheckInModal({
         const ticketNumber = match ? match[1] : (conflictErr.activeQueueTicket || conflictErr.queueNumber || patient.activeQueueTicket || 'Existing Ticket');
         const queueStatus = match ? match[2] : 'Waiting';
 
-        const tickets = patient.activeQueueTickets && patient.activeQueueTickets.length > 0
-          ? patient.activeQueueTickets.map((t) => ({
-              queueNumber: t.queueNumber,
-              status: String(t.status),
-              visitType: String(t.visitType || 'Clinical'),
-              chiefComplaint: t.chiefComplaint || undefined,
-            }))
-          : undefined;
-
         setConflictWarning({
           queueNumber: ticketNumber,
           status: queueStatus,
           patientName: patient.fullName,
           payload,
-          activeTickets: tickets,
+          activeTickets: buildActiveTicketSummaries(ticketNumber, queueStatus, serviceConfig.label),
         });
         return;
       }
@@ -414,21 +546,12 @@ export default function ServiceCheckInModal({
         const ticketNumber = match ? match[1] : (e.activeQueueTicket || e.queueNumber || patient.activeQueueTicket || 'Existing Ticket');
         const queueStatus = match ? match[2] : 'Waiting';
 
-        const tickets = patient.activeQueueTickets && patient.activeQueueTickets.length > 0
-          ? patient.activeQueueTickets.map((t) => ({
-              queueNumber: t.queueNumber,
-              status: String(t.status),
-              visitType: String(t.visitType || 'Clinical'),
-              chiefComplaint: t.chiefComplaint || undefined,
-            }))
-          : undefined;
-
         setConflictWarning({
           queueNumber: ticketNumber,
           status: queueStatus,
           patientName: patient.fullName,
           payload,
-          activeTickets: tickets,
+          activeTickets: buildActiveTicketSummaries(ticketNumber, queueStatus, serviceConfig.label),
         });
       } else {
         notify.error(e?.message || 'Check-in failed. Please try again.');
@@ -523,79 +646,146 @@ export default function ServiceCheckInModal({
 
   // 2. Active Queue Warning Dialog
   if (conflictWarning) {
+    const resolvedTickets: ConflictActiveTicketSummary[] =
+      conflictWarning.activeTickets && conflictWarning.activeTickets.length > 0
+        ? conflictWarning.activeTickets
+        : [
+            {
+              queueNumber: conflictWarning.queueNumber,
+              status: conflictWarning.status,
+              visitType: String(conflictWarning.payload.visitType || selectedService),
+              chiefComplaint: conflictWarning.payload.chiefComplaint,
+            },
+          ];
+
+    const pendingServiceMeta = formatVisitTypeMeta(
+      String(conflictWarning.payload.visitType || selectedService)
+    );
+    const pendingSeriesPrefix = (conflictWarning.payload.seriesPrefix || currentPrefix).toUpperCase();
+    const isPendingPriority = pendingSeriesPrefix.startsWith('S') && pendingSeriesPrefix.length > 1;
+
+    const conflictSubtitle =
+      resolvedTickets.length > 1
+        ? `${conflictWarning.patientName} already has ${resolvedTickets.length} active visits today`
+        : `${conflictWarning.patientName} already has an active visit today`;
+
+    const conflictFooter = (
+      <View style={styles.modalFooter}>
+        <Button
+          title="Go back"
+          variant="outline"
+          icon="arrowLeft"
+          onPress={() => setConflictWarning(null)}
+          disabled={submitting}
+          testID="conflict-go-back-button"
+        />
+        <Button
+          title="Issue additional ticket"
+          variant="primary"
+          icon="ticket"
+          loading={submitting}
+          onPress={() => handleConfirm(conflictWarning.payload, true)}
+          testID="conflict-continue-button"
+        />
+      </View>
+    );
+
     return (
       <Modal
         visible={visible}
         onClose={() => setConflictWarning(null)}
         title="Patient Already in Queue"
-        subtitle="Active visit detected"
+        subtitle={conflictSubtitle}
+        maxWidth={520}
+        footer={conflictFooter}
         testID="active-queue-warning-dialog"
       >
         <View style={styles.conflictWrap}>
-          <View style={styles.conflictWarningCard}>
-            <View style={styles.conflictIconRow}>
-              <View style={styles.conflictIconBadge}>
-                <Icon name="alert" size={24} color={theme.colors.warningText} />
-              </View>
-              <View style={styles.conflictTextWrap}>
-                <ThemedText variant="bodyBold" color={theme.colors.warningText}>
-                  {conflictWarning.activeTickets && conflictWarning.activeTickets.length > 1
-                    ? `${conflictWarning.activeTickets.length} Active Queue Tickets Found`
-                    : 'Active Queue Ticket Found'}
-                </ThemedText>
-                <ThemedText variant="small" color={theme.colors.text}>
-                  {conflictWarning.patientName} is already checked in for today:
-                </ThemedText>
-                {conflictWarning.activeTickets && conflictWarning.activeTickets.length > 1 ? (
-                  <View style={styles.conflictTicketsList} testID="conflict-tickets-list">
-                    {conflictWarning.activeTickets.map((t, idx) => (
-                      <View key={t.queueNumber + '-' + idx} style={styles.conflictTicketCard}>
-                        <View style={styles.conflictTicketHeader}>
-                          <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                            Ticket {t.queueNumber}
-                          </ThemedText>
-                          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                            {t.visitType} • {t.status}
-                          </ThemedText>
-                        </View>
-                        {t.chiefComplaint ? (
-                          <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
-                            {t.chiefComplaint}
-                          </ThemedText>
-                        ) : null}
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.conflictTicketPill}>
-                    <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                      Ticket {conflictWarning.queueNumber} • {conflictWarning.status}
-                    </ThemedText>
-                  </View>
-                )}
-              </View>
+          {/* 1. Slim Warning Callout Banner */}
+          <View style={styles.conflictAlertBanner}>
+            <View style={styles.conflictAlertIconWrap}>
+              <Icon name="alert" size={theme.sizes.iconMd} color={theme.colors.warningText} />
+            </View>
+            <View style={styles.conflictAlertTextCol}>
+              <ThemedText variant="smallBold" color={theme.colors.warningText}>
+                {resolvedTickets.length > 1
+                  ? `${resolvedTickets.length} Active Queue Tickets Found`
+                  : 'Active Queue Ticket Found'}
+              </ThemedText>
+              <ThemedText variant="small" color={theme.colors.text} style={styles.conflictAlertBody}>
+                Most visits only require a single queue ticket. Review today’s active queue below before issuing another ticket.
+              </ThemedText>
             </View>
           </View>
 
-          <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.conflictPrompt}>
-            A patient typically has one active ticket at a time. Do you want to continue and issue an additional queue ticket for this patient?
-          </ThemedText>
+          {/* 2. Clean Active Queue Ticket Cards */}
+          <View style={styles.conflictTicketsSection}>
+            <View style={styles.sectionHeaderRow}>
+              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
+                TODAY’S ACTIVE QUEUE
+              </ThemedText>
+              <Badge label={`${resolvedTickets.length} active`} variant="neutral" size="xs" />
+            </View>
 
-          <View style={styles.modalFooter}>
-            <Button
-              title="Go back"
-              variant="ghost"
-              onPress={() => setConflictWarning(null)}
-              disabled={submitting}
-              testID="conflict-go-back-button"
-            />
-            <Button
-              title="Continue queueing"
-              variant="primary"
-              icon="ticket"
-              loading={submitting}
-              onPress={() => handleConfirm(conflictWarning.payload, true)}
-              testID="conflict-continue-button"
+            <View style={styles.conflictTicketsList} testID="conflict-tickets-list">
+              {resolvedTickets.map((t, idx) => {
+                const statusMeta = formatQueueStatusMeta(t.status);
+                const visitMeta = formatVisitTypeMeta(t.visitType);
+                const subtext = formatTicketSubtext(t, visitMeta.label);
+
+                return (
+                  <View
+                    key={`${t.queueNumber}-${idx}`}
+                    style={styles.conflictTicketCard}
+                    testID={`conflict-ticket-card-${t.queueNumber}`}
+                  >
+                    <View style={styles.conflictTicketBadgeBox}>
+                      <Icon name="ticket" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+                      <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                        {t.queueNumber}
+                      </ThemedText>
+                    </View>
+
+                    <View style={styles.conflictTicketMetaCol}>
+                      <ThemedText variant="smallBold" color={theme.colors.text} numberOfLines={1}>
+                        {visitMeta.label}
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
+                        {subtext}
+                      </ThemedText>
+                    </View>
+
+                    <Badge
+                      label={statusMeta.label}
+                      variant={statusMeta.variant}
+                      size="sm"
+                      icon={statusMeta.icon}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* 3. Pending New Ticket Request Summary */}
+          <View style={styles.conflictNewRequestCard} testID="conflict-new-request-summary">
+            <View style={styles.conflictNewRequestLeft}>
+              <View style={styles.conflictNewRequestIconWrap}>
+                <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+              </View>
+              <View style={styles.conflictTicketMetaCol}>
+                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
+                  NEW TICKET TO ISSUE
+                </ThemedText>
+                <ThemedText variant="smallBold" color={theme.colors.text} numberOfLines={1}>
+                  {pendingServiceMeta.label}
+                </ThemedText>
+              </View>
+            </View>
+            <Badge
+              label={isPendingPriority ? `Priority (${pendingSeriesPrefix})` : `Regular (${pendingSeriesPrefix})`}
+              variant="outline"
+              size="sm"
             />
           </View>
         </View>
@@ -1008,59 +1198,95 @@ const styles = StyleSheet.create({
     minWidth: 140,
   },
   conflictWrap: {
-    paddingVertical: theme.spacing.md,
     gap: theme.spacing.lg,
   },
-  conflictWarningCard: {
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.warningBg,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.warningBorder,
-  },
-  conflictIconRow: {
+  conflictAlertBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
   },
-  conflictIconBadge: {
-    marginTop: 2,
-  },
-  conflictTextWrap: {
-    flex: 1,
-    gap: 6,
-  },
-  conflictTicketPill: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: theme.colors.surface,
+  conflictAlertIconWrap: {
+    width: 36,
+    height: 36,
     borderRadius: theme.radii.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignSelf: 'flex-start',
-    marginTop: 4,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  conflictAlertTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  conflictAlertBody: {
+    lineHeight: 19,
+  },
+  conflictTicketsSection: {
+    gap: theme.spacing.sm,
   },
   conflictTicketsList: {
-    gap: 6,
-    marginTop: 4,
+    gap: theme.spacing.sm,
     width: '100%',
   },
   conflictTicketCard: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.sm + 2,
+    paddingHorizontal: theme.spacing.md,
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.sm,
-    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+  },
+  conflictTicketBadgeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    minWidth: 82,
+    paddingVertical: 6,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.primaryLighter,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+  },
+  conflictTicketMetaCol: {
+    flex: 1,
     gap: 2,
   },
-  conflictTicketHeader: {
+  conflictNewRequestCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
   },
-  conflictPrompt: {
-    lineHeight: 20,
+  conflictNewRequestLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flex: 1,
+  },
+  conflictNewRequestIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
 });
