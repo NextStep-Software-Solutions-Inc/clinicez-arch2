@@ -13,7 +13,6 @@ import {
   Badge,
   Icon,
   Modal,
-  Input,
   type IconName,
 } from '../ui';
 import { theme } from '../../constants/theme';
@@ -23,8 +22,9 @@ import {
   type StaffMember,
   type QueuePriority,
   type VisitType,
+  type PatientQueueItem,
 } from '../../services/clinicService';
-import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { useStaff } from '../../context/StaffContext';
 import { notify } from '../../utils/feedback';
 import {
   getPatientInitials,
@@ -48,6 +48,7 @@ export interface ServiceCheckInPayload {
   chiefComplaint: string;
   seriesPrefix: string;
   queueDate?: string;
+  allowDuplicateActive?: boolean;
 }
 
 export interface ServiceCheckInModalProps {
@@ -57,8 +58,9 @@ export interface ServiceCheckInModalProps {
   activeDoctors?: StaffMember[];
   activeRooms?: Array<{ id: string; name: string; isActive?: boolean }>;
   onClose: () => void;
-  onConfirm?: (payload: ServiceCheckInPayload) => Promise<void> | void;
+  onConfirm?: (payload: ServiceCheckInPayload) => Promise<PatientQueueItem | null | void> | PatientQueueItem | null | void;
   onSuccess?: (ticketNumber?: string) => void;
+  onNavigateToDashboard?: () => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -174,73 +176,15 @@ export const CLINICAL_SERVICES: Array<{
   },
 ];
 
-const CONSULTATION_COMPLAINT_PRESETS = [
-  'General checkup',
-  'Fever / Cough',
-  'Hypertension follow-up',
-  'Prescription refill',
-  'Diagnostic order slip',
-];
-
-const VITALS_PURPOSE_PRESETS = [
-  'Pre-employment / Enrollment',
-  'Hypertension / BP Monitoring',
-  'Blood Sugar Check',
-  'General Walk-in',
-];
-
-const PROCEDURE_TYPE_PRESETS = [
-  'Wound dressing / Cleaning',
-  'Suture removal',
-  'IM/IV Injection',
-  'Tetanus toxoid',
-  'Vaccination',
-  'Nebulization',
-  'Ear irrigation',
-  'Blood glucose fingerstick',
-];
-
-const DOCUMENT_TYPE_PRESETS = [
-  'Medical Certificate',
-  'Fit-to-Work / School Clearance',
-  'Health Certificate',
-  'Medical Records Release',
-  'PhilHealth Annex Form',
-];
-
-const REQUESTING_ENTITY_PRESETS = [
-  'Employer',
-  'School',
-  'Sports League',
-  'Travel',
-  'LGU',
-];
-
 export default function ServiceCheckInModal({
   visible,
   patient,
   initialService = 'Doctor Consultation',
-  activeDoctors: doctorsProp,
-  activeRooms: roomsProp,
   onClose,
   onConfirm,
   onSuccess,
-  style,
+  onNavigateToDashboard,
 }: ServiceCheckInModalProps) {
-  const { staff } = useStaff();
-
-  // Active clinic doctors pool
-  const activeDoctors = useMemo(() => {
-    if (doctorsProp && doctorsProp.length > 0) return doctorsProp;
-    return (staff ?? []).filter((s) => s.role === 'Doctor' && s.isActive !== false);
-  }, [doctorsProp, staff]);
-
-  // Active rooms pool
-  const activeRooms = useMemo(() => {
-    if (roomsProp && roomsProp.length > 0) return roomsProp;
-    return [];
-  }, [roomsProp]);
-
   // Priority series evaluation
   const isSeniorOrPwd = useMemo(() => isSeniorOrPwdEligible(patient), [patient]);
 
@@ -250,32 +194,23 @@ export default function ServiceCheckInModal({
   // Ticket Series Preference: defaults to Priority series if Senior/PWD eligible
   const [isPrioritySeries, setIsPrioritySeries] = useState<boolean>(isSeniorOrPwd);
 
-  // Form State: Priority
-  const [priority, setPriority] = useState<QueuePriority>('Routine');
-
-  // Form State: Consultation
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
-  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
-  const [complaint, setComplaint] = useState<string>('General checkup');
-
-  // Form State: Vitals
-  const [vitalsStation, setVitalsStation] = useState<string>('Triage Station A');
-  const [vitalsPurpose, setVitalsPurpose] = useState<string>('General Walk-in');
-  const [vitalsNotes, setVitalsNotes] = useState<string>('');
-
-  // Form State: Procedure
-  const [procedureName, setProcedureName] = useState<string>('Wound dressing / Cleaning');
-  const [procedureBay, setProcedureBay] = useState<string>('Treatment Bay');
-  const [orderingDoctorId, setOrderingDoctorId] = useState<string>('');
-  const [procedureNotes, setProcedureNotes] = useState<string>('');
-
-  // Form State: Administrative
-  const [docType, setDocType] = useState<string>('Medical Certificate');
-  const [requestingEntity, setRequestingEntity] = useState<string>('Employer');
-  const [adminNotes, setAdminNotes] = useState<string>('');
-
   // Loading State
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // Active Queue Conflict Warning State
+  const [conflictWarning, setConflictWarning] = useState<{
+    queueNumber: string;
+    status: string;
+    patientName: string;
+    payload: ServiceCheckInPayload;
+  } | null>(null);
+
+  // Issued Ticket Confirmation State (Post-Queue Dialog)
+  const [issuedTicket, setIssuedTicket] = useState<{
+    queueNumber: string;
+    serviceType: ClinicalServiceType;
+    patientName: string;
+  } | null>(null);
 
   // Reset or initialize state whenever patient or initialService changes
   useEffect(() => {
@@ -283,54 +218,10 @@ export default function ServiceCheckInModal({
       const eligible = isSeniorOrPwdEligible(patient);
       setIsPrioritySeries(eligible);
       setSelectedService(initialService);
-      setPriority(
-        patient.alerts?.toLowerCase().includes('fall') || patient.alerts?.toLowerCase().includes('chest')
-          ? 'Urgent'
-          : 'Routine'
-      );
-
-      // Default doctor if on duty
-      const defaultDoc = activeDoctors[0];
-      if (defaultDoc) {
-        setSelectedDoctorId(defaultDoc.id);
-        const docRooms = defaultDoc.assignedRoomIds ?? (defaultDoc.assignedRoomId ? [defaultDoc.assignedRoomId] : []);
-        setSelectedRoomId(docRooms[0] ?? '');
-      } else {
-        setSelectedDoctorId('');
-        setSelectedRoomId('');
-      }
-
-      setComplaint(
-        patient.chronicConditions ? `Follow-up: ${patient.chronicConditions}` : 'General checkup'
-      );
-      setVitalsStation(activeRooms.find((r) => r.name.toLowerCase().includes('triage'))?.name || 'Triage Station A');
-      setVitalsPurpose('General Walk-in');
-      setVitalsNotes('');
-
-      setProcedureName('Wound dressing / Cleaning');
-      setProcedureBay(activeRooms.find((r) => r.name.toLowerCase().includes('procedure'))?.name || 'Treatment Bay');
-      setOrderingDoctorId('');
-      setProcedureNotes('');
-
-      setDocType('Medical Certificate');
-      setRequestingEntity('Employer');
-      setAdminNotes('');
+      setConflictWarning(null);
+      setIssuedTicket(null);
     }
-  }, [visible, patient, initialService, activeDoctors, activeRooms]);
-
-  // Handle doctor selection & room auto-populate
-  const handleSelectDoctor = useCallback(
-    (docId: string) => {
-      setSelectedDoctorId(docId);
-      if (!docId) return;
-      const doc = activeDoctors.find((d) => d.id === docId);
-      const docRooms = doc?.assignedRoomIds ?? (doc?.assignedRoomId ? [doc.assignedRoomId] : []);
-      if (docRooms.length > 0) {
-        setSelectedRoomId(docRooms[0]);
-      }
-    },
-    [activeDoctors]
-  );
+  }, [visible, patient, initialService]);
 
   // Ticket prefix preview
   const currentPrefix = useMemo(() => {
@@ -341,73 +232,100 @@ export default function ServiceCheckInModal({
     return formatQueueTicketNumber(currentPrefix, 1);
   }, [currentPrefix]);
 
+  const handleCloseAll = useCallback(() => {
+    setConflictWarning(null);
+    setIssuedTicket(null);
+    onClose();
+  }, [onClose]);
+
   // Submission handler
-  const handleConfirm = async () => {
+  const handleConfirm = async (overridePayload?: ServiceCheckInPayload, allowDuplicate = false) => {
     if (!patient || submitting) return;
     setSubmitting(true);
 
     try {
       const serviceConfig = CLINICAL_SERVICES.find((s) => s.type === selectedService)!;
-      let constructedComplaint = '';
-      let chosenDoctorId: string | undefined = undefined;
-      let chosenDoctorName: string | undefined = undefined;
-      let chosenRoomId: string | undefined = undefined;
-      let chosenRoomOrStation: string | undefined = undefined;
-
-      if (selectedService === 'Doctor Consultation') {
-        constructedComplaint = complaint.trim() || 'General consultation';
-        const doc = activeDoctors.find((d) => d.id === selectedDoctorId);
-        chosenDoctorId = doc?.id;
-        chosenDoctorName = doc ? formatStaffName(doc) : undefined;
-        const room = activeRooms.find((r) => r.id === selectedRoomId);
-        chosenRoomId = room?.id;
-        chosenRoomOrStation = room?.name;
-      } else if (selectedService === 'Vitals Check') {
-        constructedComplaint = vitalsNotes.trim()
-          ? `Vitals check: ${vitalsPurpose} (${vitalsNotes.trim()})`
-          : `Vitals check: ${vitalsPurpose}`;
-        chosenRoomOrStation = vitalsStation;
-      } else if (selectedService === 'Clinical Procedure') {
-        const doc = activeDoctors.find((d) => d.id === orderingDoctorId);
-        const orderDocStr = doc ? `Ordered by ${formatStaffName(doc)}` : '';
-        const notesStr = [procedureNotes.trim(), orderDocStr].filter(Boolean).join(' • ');
-        constructedComplaint = notesStr
-          ? `Procedure: ${procedureName} (${notesStr})`
-          : `Procedure: ${procedureName}`;
-        chosenRoomOrStation = procedureBay;
-        chosenDoctorId = doc?.id;
-        chosenDoctorName = doc ? formatStaffName(doc) : undefined;
-      } else if (selectedService === 'Administrative & Clearance') {
-        constructedComplaint = adminNotes.trim()
-          ? `Administrative: ${docType} for ${requestingEntity} (${adminNotes.trim()})`
-          : `Administrative: ${docType} for ${requestingEntity}`;
-        chosenRoomOrStation = 'Administrative Desk / Reception';
-      }
-
-      const payload: ServiceCheckInPayload = {
+      const payload: ServiceCheckInPayload = overridePayload || {
         patientId: patient.id,
         patientName: patient.fullName,
-        doctorId: chosenDoctorId,
-        doctorName: chosenDoctorName,
-        roomId: chosenRoomId,
-        roomOrStation: chosenRoomOrStation,
-        priority,
+        priority: 'Routine',
         visitType: serviceConfig.visitType,
-        chiefComplaint: constructedComplaint,
+        chiefComplaint: serviceConfig.label,
         seriesPrefix: currentPrefix,
+        allowDuplicateActive: allowDuplicate,
       };
 
       if (onConfirm) {
-        await onConfirm(payload);
-      } else {
-        const [res, err] = await clinicService.checkInPatient(payload);
-        if (err) {
-          notify.error(err.message || 'Could not queue the patient.');
+        const maybeResult = await onConfirm(payload);
+        if (maybeResult && (maybeResult as any).queueNumber) {
+          setIssuedTicket({
+            queueNumber: (maybeResult as any).queueNumber,
+            serviceType: selectedService,
+            patientName: patient.fullName,
+          });
+          onSuccess?.((maybeResult as any).queueNumber);
           return;
         }
-        notify.success(`Ticket ${res?.queueNumber || currentPrefix} issued for ${patient.fullName}`);
-        onSuccess?.(res?.queueNumber);
-        onClose();
+      }
+
+      // Perform check-in call with retry for race condition
+      let attempt = 0;
+      let lastRes: any = null;
+      let lastErr: any = null;
+
+      while (attempt < 2) {
+        attempt++;
+        const [res, err] = await clinicService.checkInPatient({
+          ...payload,
+          allowDuplicateActive: allowDuplicate,
+        });
+
+        if (!err && res) {
+          lastRes = res;
+          lastErr = null;
+          break;
+        }
+
+        if (err) {
+          // If active queue conflict
+          const isConflict =
+            err.status === 409 ||
+            err.errorCode === 'CONFLICT' ||
+            err.errorCode === 'active_queue_ticket_exists' ||
+            err.message?.toLowerCase().includes('already checked in');
+
+          if (isConflict && !allowDuplicate) {
+            setConflictWarning({
+              queueNumber: (err as any).queueNumber || (err as any).ticketNumber || 'Existing Ticket',
+              status: (err as any).status || 'Waiting',
+              patientName: patient.fullName,
+              payload,
+            });
+            return;
+          }
+
+          // If race condition / sequence collision, retry once silently
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 100));
+            continue;
+          }
+          lastErr = err;
+        }
+      }
+
+      if (lastErr) {
+        notify.error(lastErr.message || 'Could not queue the patient.');
+        return;
+      }
+
+      if (lastRes) {
+        setConflictWarning(null);
+        setIssuedTicket({
+          queueNumber: lastRes.queueNumber || ticketPreview,
+          serviceType: selectedService,
+          patientName: patient.fullName,
+        });
+        onSuccess?.(lastRes.queueNumber);
       }
     } catch (e: any) {
       notify.error(e?.message || 'Check-in failed. Please try again.');
@@ -423,6 +341,132 @@ export default function ServiceCheckInModal({
   const hasAllergies = hasKnownAllergies(patient.allergies);
   const isStat = hasStatAllergy(patient.allergies);
 
+  // 1. Post-Queue Confirmation Dialog
+  if (issuedTicket) {
+    return (
+      <Modal
+        visible={visible}
+        onClose={handleCloseAll}
+        title="Ticket Issued"
+        subtitle="Patient is waiting in queue"
+        testID="post-queue-dialog"
+      >
+        <View style={styles.postQueueWrap}>
+          <View style={styles.postQueueSuccessBadge}>
+            <Icon name="checkCircle" size={32} color={theme.colors.routineText} />
+          </View>
+
+          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.postQueueLabel}>
+            QUEUE TICKET NUMBER
+          </ThemedText>
+          <View style={styles.postQueueTicketBox}>
+            <ThemedText variant="display" color={theme.colors.primaryDark} style={styles.postQueueTicketNumber}>
+              {issuedTicket.queueNumber}
+            </ThemedText>
+          </View>
+
+          <View style={styles.postQueuePatientDetails}>
+            <ThemedText variant="title" color={theme.colors.text}>
+              {issuedTicket.patientName}
+            </ThemedText>
+            <View style={styles.postQueueBadgeRow}>
+              <Badge label={issuedTicket.serviceType} variant="routine" size="sm" />
+              <Badge label="Waiting in queue" variant="outline" size="sm" icon="clock" />
+            </View>
+          </View>
+
+          <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.postQueueHint}>
+            The patient has been added to the workstation queue. You can view their progress on the dashboard.
+          </ThemedText>
+
+          <View style={styles.postQueueActions}>
+            <Button
+              title="Done"
+              variant="outline"
+              size="lg"
+              onPress={handleCloseAll}
+              style={styles.postQueueButton}
+              testID="post-queue-done-button"
+            />
+            {onNavigateToDashboard ? (
+              <Button
+                title="View on Dashboard"
+                variant="primary"
+                size="lg"
+                icon="arrowRight"
+                onPress={() => {
+                  handleCloseAll();
+                  onNavigateToDashboard();
+                }}
+                style={styles.postQueueButton}
+                testID="post-queue-dashboard-button"
+              />
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  // 2. Active Queue Warning Dialog
+  if (conflictWarning) {
+    return (
+      <Modal
+        visible={visible}
+        onClose={() => setConflictWarning(null)}
+        title="Patient Already in Queue"
+        subtitle="Active visit detected"
+        testID="active-queue-warning-dialog"
+      >
+        <View style={styles.conflictWrap}>
+          <View style={styles.conflictWarningCard}>
+            <View style={styles.conflictIconRow}>
+              <View style={styles.conflictIconBadge}>
+                <Icon name="alert" size={24} color={theme.colors.warningText} />
+              </View>
+              <View style={styles.conflictTextWrap}>
+                <ThemedText variant="bodyBold" color={theme.colors.warningText}>
+                  Active Queue Ticket Found
+                </ThemedText>
+                <ThemedText variant="small" color={theme.colors.text}>
+                  {conflictWarning.patientName} is already checked in for today:
+                </ThemedText>
+                <View style={styles.conflictTicketPill}>
+                  <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                    Ticket {conflictWarning.queueNumber} • {conflictWarning.status}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.conflictPrompt}>
+            A patient typically has one active ticket at a time. Do you want to continue and issue an additional queue ticket for this patient?
+          </ThemedText>
+
+          <View style={styles.modalFooter}>
+            <Button
+              title="Go back"
+              variant="ghost"
+              onPress={() => setConflictWarning(null)}
+              disabled={submitting}
+              testID="conflict-go-back-button"
+            />
+            <Button
+              title="Continue queueing"
+              variant="primary"
+              icon="ticket"
+              loading={submitting}
+              onPress={() => handleConfirm(conflictWarning.payload, true)}
+              testID="conflict-continue-button"
+            />
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  // 3. Main Simplified Selection Dialog
   const modalFooter = (
     <View style={styles.modalFooter}>
       <Button
@@ -433,11 +477,11 @@ export default function ServiceCheckInModal({
         testID="cancel-check-in-button"
       />
       <Button
-        title="Confirm Check-In (Issue Ticket)"
+        title="Continue"
         variant="primary"
-        icon="ticket"
+        icon="arrowRight"
         loading={submitting}
-        onPress={handleConfirm}
+        onPress={() => handleConfirm()}
         testID="confirm-check-in-button"
       />
     </View>
@@ -448,53 +492,44 @@ export default function ServiceCheckInModal({
       visible={visible}
       onClose={onClose}
       title="Queue Patient"
-      subtitle="Issue waiting room ticket and select clinical service"
-      maxWidth={720}
-      testID="service-check-in-modal"
+      subtitle="Select clinical service and ticket series"
       footer={modalFooter}
+      testID="service-checkin-modal"
     >
-      <ScrollView
-        style={styles.modalScroll}
-        contentContainerStyle={styles.modalScrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Patient Identity Banner */}
-        <View style={styles.patientBannerCard} testID="patient-identity-banner">
-          <View style={styles.avatarCircle}>
-            <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+        <View style={styles.patientBanner}>
+          <View style={styles.avatarWrap}>
+            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
               {initials}
             </ThemedText>
           </View>
-          <View style={styles.bannerInfo}>
-            <View style={styles.bannerNameRow}>
-              <ThemedText variant="h3" color={theme.colors.text}>
+          <View style={styles.patientInfoCol}>
+            <View style={styles.nameRow}>
+              <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.patientName}>
                 {patient.fullName}
               </ThemedText>
-              <Badge label={patient.patientCode} variant="neutral" size="sm" />
-              {patient.clinicEzId ? (
-                <Badge label={patient.clinicEzId} variant="primary" size="sm" />
-              ) : null}
-              {patient.seniorCitizenId ? (
-                <Badge label={`Senior ${patient.seniorCitizenId}`} variant="warning" size="sm" />
-              ) : null}
-              {patient.pwdId ? (
-                <Badge label={`PWD ${patient.pwdId}`} variant="purple" size="sm" />
-              ) : null}
+              <Badge label={patient.patientCode} variant="outline" size="sm" />
             </View>
-
             <ThemedText variant="small" color={theme.colors.textSecondary}>
-              {demographicsLine || 'Age and demographics recorded'}
+              {demographicsLine}
             </ThemedText>
 
-            {/* Clinical Alert & Safety Strip */}
             {hasAllergies || patient.alerts ? (
-              <View style={styles.alertsContainer}>
+              <View style={styles.alertStripsRow}>
                 {hasAllergies ? (
-                  <View style={[styles.compactNoticeStrip, styles.allergyStrip]}>
-                    <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                    {isStat ? <Badge label="STAT" variant="emergency" size="sm" /> : null}
-                    <ThemedText variant="captionBold" color={theme.colors.emergencyText} numberOfLines={1}>
-                      Allergies: {patient.allergies}
+                  <View style={[styles.compactNoticeStrip, isStat ? styles.statStrip : styles.allergyStrip]}>
+                    <Icon
+                      name="alert"
+                      size={theme.sizes.iconSm}
+                      color={isStat ? theme.colors.emergencyText : theme.colors.urgentText}
+                    />
+                    <ThemedText
+                      variant="captionBold"
+                      color={isStat ? theme.colors.emergencyText : theme.colors.urgentText}
+                      numberOfLines={1}
+                    >
+                      {patient.allergies}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -621,560 +656,71 @@ export default function ServiceCheckInModal({
             </View>
           ) : null}
         </View>
-
-        {/* 3. Clinical Urgency / Priority */}
-        <View style={styles.formSection}>
-          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-            VISIT PRIORITY
-          </ThemedText>
-          <View style={styles.chipsRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Routine Priority"
-              onPress={() => setPriority('Routine')}
-              style={[
-                styles.chip,
-                priority === 'Routine' ? styles.chipSelected : styles.chipUnselected,
-              ]}
-            >
-              <ThemedText
-                variant="smallBold"
-                color={priority === 'Routine' ? theme.colors.primaryDark : theme.colors.text}
-              >
-                Routine
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Urgent Priority"
-              onPress={() => setPriority('Urgent')}
-              style={[
-                styles.chip,
-                priority === 'Urgent' ? styles.chipUrgentSelected : styles.chipUnselected,
-              ]}
-            >
-              <ThemedText
-                variant="smallBold"
-                color={priority === 'Urgent' ? theme.colors.warningText : theme.colors.text}
-              >
-                Urgent
-              </ThemedText>
-            </Pressable>
-
-            {selectedService === 'Doctor Consultation' ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Emergency Priority"
-                onPress={() => setPriority('Emergency')}
-                style={[
-                  styles.chip,
-                  priority === 'Emergency' ? styles.chipEmergencySelected : styles.chipUnselected,
-                ]}
-              >
-                <ThemedText
-                  variant="smallBold"
-                  color={priority === 'Emergency' ? theme.colors.emergencyText : theme.colors.text}
-                >
-                  Emergency
-                </ThemedText>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-
-        {/* 4. Service-Specific View Contents */}
-
-        {/* A. Doctor Consultation View */}
-        {selectedService === 'Doctor Consultation' ? (
-          <View style={styles.tailoredViewContainer}>
-            {/* Attending Physician Picker */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                ATTENDING PHYSICIAN
-              </ThemedText>
-              <View style={styles.chipsRow} testID="doctor-picker">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Any Available Doctor"
-                  onPress={() => handleSelectDoctor('')}
-                  style={[
-                    styles.chip,
-                    !selectedDoctorId ? styles.chipSelected : styles.chipUnselected,
-                  ]}
-                >
-                  <ThemedText
-                    variant="smallBold"
-                    color={!selectedDoctorId ? theme.colors.primaryDark : theme.colors.text}
-                  >
-                    Any Available Doctor
-                  </ThemedText>
-                </Pressable>
-
-                {activeDoctors.map((doc) => {
-                  const isSelected = selectedDoctorId === doc.id;
-                  return (
-                    <Pressable
-                      key={doc.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={formatStaffName(doc)}
-                      onPress={() => handleSelectDoctor(doc.id)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="smallBold"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {formatStaffName(doc)}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Consultation Room */}
-            {activeRooms.length > 0 ? (
-              <View style={styles.formSection}>
-                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                  CONSULTATION ROOM
-                </ThemedText>
-                <View style={styles.chipsRow} testID="room-picker">
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Auto-assign Room"
-                    onPress={() => setSelectedRoomId('')}
-                    style={[
-                      styles.chip,
-                      !selectedRoomId ? styles.chipSelected : styles.chipUnselected,
-                    ]}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={!selectedRoomId ? theme.colors.primaryDark : theme.colors.text}
-                    >
-                      Auto-assign Room
-                    </ThemedText>
-                  </Pressable>
-                  {activeRooms.map((rm) => {
-                    const isSelected = selectedRoomId === rm.id;
-                    return (
-                      <Pressable
-                        key={rm.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={rm.name}
-                        onPress={() => setSelectedRoomId(rm.id)}
-                        style={[
-                          styles.chip,
-                          isSelected ? styles.chipSelected : styles.chipUnselected,
-                        ]}
-                      >
-                        <ThemedText
-                          variant="smallBold"
-                          color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                        >
-                          {rm.name}
-                        </ThemedText>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            {/* Chief Complaint */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                CHIEF COMPLAINT & SYMPTOMS
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                {CONSULTATION_COMPLAINT_PRESETS.map((preset) => {
-                  const isSelected = complaint === preset;
-                  return (
-                    <Pressable
-                      key={preset}
-                      accessibilityRole="button"
-                      accessibilityLabel={preset}
-                      onPress={() => setComplaint(preset)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="small"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {preset}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Input
-                label="Custom Complaint / Clinical Notes"
-                value={complaint}
-                onChangeText={setComplaint}
-                placeholder="Describe primary symptom or reason for visit..."
-                testID="complaint-input"
-              />
-            </View>
-          </View>
-        ) : null}
-
-        {/* B. Vitals Check Intent View (Nursing Care / No SOAP) */}
-        {selectedService === 'Vitals Check' ? (
-          <View style={styles.tailoredViewContainer}>
-            {/* Triage Station */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                TRIAGE STATION / NURSING BAY
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                {['Triage Station A', 'Triage Station B', 'Nursing Bay 1', 'Main Reception Triage'].map((st) => {
-                  const isSelected = vitalsStation === st;
-                  return (
-                    <Pressable
-                      key={st}
-                      accessibilityRole="button"
-                      accessibilityLabel={st}
-                      onPress={() => setVitalsStation(st)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="smallBold"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {st}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Vitals Purpose Presets */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                VITALS MONITORING PURPOSE
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                {VITALS_PURPOSE_PRESETS.map((p) => {
-                  const isSelected = vitalsPurpose === p;
-                  return (
-                    <Pressable
-                      key={p}
-                      accessibilityRole="button"
-                      accessibilityLabel={p}
-                      onPress={() => setVitalsPurpose(p)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="small"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {p}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Input
-                label="Preliminary Triage Remarks"
-                value={vitalsNotes}
-                onChangeText={setVitalsNotes}
-                placeholder="Optional notes for nursing station (e.g. routine BP check, pre-employment)..."
-                testID="vitals-notes-input"
-              />
-            </View>
-          </View>
-        ) : null}
-
-        {/* C. Clinical Procedure Intent View (Nursing Care / No SOAP) */}
-        {selectedService === 'Clinical Procedure' ? (
-          <View style={styles.tailoredViewContainer}>
-            {/* Procedure Type Presets */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                PROCEDURE TYPE
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                {PROCEDURE_TYPE_PRESETS.map((proc) => {
-                  const isSelected = procedureName === proc;
-                  return (
-                    <Pressable
-                      key={proc}
-                      accessibilityRole="button"
-                      accessibilityLabel={proc}
-                      onPress={() => setProcedureName(proc)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="small"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {proc}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Input
-                label="Procedure Name"
-                value={procedureName}
-                onChangeText={setProcedureName}
-                placeholder="Specify clinical procedure..."
-                testID="procedure-name-input"
-              />
-            </View>
-
-            {/* Treatment Bay / Room */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                TREATMENT BAY / ROOM
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                {['Treatment Bay 1', 'Minor Procedure Room', 'Injection Station', 'Nebulization Bay'].map((b) => {
-                  const isSelected = procedureBay === b;
-                  return (
-                    <Pressable
-                      key={b}
-                      accessibilityRole="button"
-                      accessibilityLabel={b}
-                      onPress={() => setProcedureBay(b)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="smallBold"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {b}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Ordering Doctor (Optional - separated from clinical notes) */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                ORDERING DOCTOR (OPTIONAL)
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="No ordering doctor / Walk-in"
-                  onPress={() => setOrderingDoctorId('')}
-                  style={[
-                    styles.chip,
-                    !orderingDoctorId ? styles.chipSelected : styles.chipUnselected,
-                  ]}
-                >
-                  <ThemedText
-                    variant="smallBold"
-                    color={!orderingDoctorId ? theme.colors.primaryDark : theme.colors.text}
-                  >
-                    No Ordering Doctor (Walk-in)
-                  </ThemedText>
-                </Pressable>
-                {activeDoctors.map((doc) => {
-                  const isSelected = orderingDoctorId === doc.id;
-                  return (
-                    <Pressable
-                      key={doc.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={formatStaffName(doc)}
-                      onPress={() => setOrderingDoctorId(doc.id)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="smallBold"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {formatStaffName(doc)}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Target Site & Clinical Notes */}
-            <View style={styles.formSection}>
-              <Input
-                label="Target Site & Clinical Notes"
-                value={procedureNotes}
-                onChangeText={setProcedureNotes}
-                placeholder="e.g. Left arm laceration dressing change, 0.5ml IM right deltoid..."
-                testID="procedure-notes-input"
-              />
-            </View>
-          </View>
-        ) : null}
-
-        {/* D. Administrative & Clearance Intent View */}
-        {selectedService === 'Administrative & Clearance' ? (
-          <View style={styles.tailoredViewContainer}>
-            {/* Document Type */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                DOCUMENT / CLEARANCE TYPE
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                {DOCUMENT_TYPE_PRESETS.map((d) => {
-                  const isSelected = docType === d;
-                  return (
-                    <Pressable
-                      key={d}
-                      accessibilityRole="button"
-                      accessibilityLabel={d}
-                      onPress={() => setDocType(d)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="small"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {d}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Requesting Entity */}
-            <View style={styles.formSection}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                REQUESTING ENTITY / REASON
-              </ThemedText>
-              <View style={styles.chipsRow}>
-                {REQUESTING_ENTITY_PRESETS.map((e) => {
-                  const isSelected = requestingEntity === e;
-                  return (
-                    <Pressable
-                      key={e}
-                      accessibilityRole="button"
-                      accessibilityLabel={e}
-                      onPress={() => setRequestingEntity(e)}
-                      style={[
-                        styles.chip,
-                        isSelected ? styles.chipSelected : styles.chipUnselected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="small"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {e}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Input
-                label="Requesting Entity / Details"
-                value={requestingEntity}
-                onChangeText={setRequestingEntity}
-                placeholder="e.g. ABC Corporation, DepEd, Sports League..."
-                testID="requesting-entity-input"
-              />
-            </View>
-
-            {/* Additional Remarks */}
-            <View style={styles.formSection}>
-              <Input
-                label="Administrative Remarks / Notes"
-                value={adminNotes}
-                onChangeText={setAdminNotes}
-                placeholder="Purpose or additional release notes..."
-                testID="admin-notes-input"
-              />
-            </View>
-          </View>
-        ) : null}
       </ScrollView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalScroll: {
-    maxHeight: 560,
-  },
-  modalScrollContent: {
+  scrollContent: {
+    paddingBottom: theme.spacing.lg,
     gap: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
   },
-  patientBannerCard: {
+  modalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.md,
+  },
+  patientBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
-    borderRadius: theme.radii.lg,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: theme.sizes.borderWidth,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
     borderColor: theme.colors.borderLight,
   },
-  avatarCircle: {
-    width: 44,
-    height: 44,
+  avatarWrap: {
+    width: 48,
+    height: 48,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.routineBg,
+    backgroundColor: theme.colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.routineBorder,
   },
-  bannerInfo: {
+  patientInfoCol: {
     flex: 1,
-    gap: theme.spacing.xs,
+    gap: 2,
   },
-  bannerNameRow: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
-  alertsContainer: {
+  patientName: {
+    fontSize: theme.typography.body.fontSize,
+  },
+  alertStripsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
+    marginTop: 4,
   },
   compactNoticeStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radii.md,
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: theme.radii.sm,
   },
   allergyStrip: {
+    backgroundColor: theme.colors.urgentBg,
+  },
+  statStrip: {
     backgroundColor: theme.colors.emergencyBg,
   },
   alertStrip: {
@@ -1194,102 +740,170 @@ const styles = StyleSheet.create({
   ticketPreviewBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.routineBg,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 2,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.routineBorder,
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: theme.radii.sm,
   },
   serviceCardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   serviceCard: {
     flex: 1,
-    minWidth: 150,
+    minWidth: 140,
     padding: theme.spacing.md,
-    borderRadius: theme.radii.lg,
-    borderWidth: theme.sizes.borderWidth,
-    gap: theme.spacing.xs,
+    borderRadius: theme.radii.md,
+    borderWidth: 1.5,
+    gap: 4,
   },
   serviceCardSelected: {
-    backgroundColor: theme.colors.routineBg,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryDark,
+    backgroundColor: theme.colors.primaryLight,
   },
   serviceCardUnselected: {
-    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
   },
   serviceCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   serviceIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.radii.full,
+    width: 28,
+    height: 28,
+    borderRadius: theme.radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   serviceIconWrapSelected: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.surface,
   },
   serviceIconWrapUnselected: {
     backgroundColor: theme.colors.surfaceMuted,
   },
   chipsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
   chip: {
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.radii.lg,
-    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+  },
+  chipSelected: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryDark,
   },
   chipUnselected: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
   },
-  chipSelected: {
-    backgroundColor: theme.colors.routineBg,
-    borderColor: theme.colors.primary,
-  },
-  chipUrgentSelected: {
-    backgroundColor: theme.colors.warningBg,
-    borderColor: theme.colors.warningBorder,
-  },
-  chipEmergencySelected: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderColor: theme.colors.emergencyBorder,
-  },
   priorityBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.routineBg,
+    gap: theme.spacing.xs,
     padding: theme.spacing.sm,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.routineBorder,
+    backgroundColor: theme.colors.routineBg,
+    borderRadius: theme.radii.sm,
+    marginTop: 4,
   },
-  tailoredViewContainer: {
-    gap: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-    borderTopWidth: theme.sizes.borderWidth,
-    borderTopColor: theme.colors.borderLight,
+  postQueueWrap: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
+    gap: theme.spacing.md,
   },
-  modalFooter: {
+  postQueueSuccessBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.routineBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  postQueueLabel: {
+    letterSpacing: 1,
+  },
+  postQueueTicketBox: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.xl,
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: theme.radii.lg,
+    borderWidth: 2,
+    borderColor: theme.colors.primaryDark,
+  },
+  postQueueTicketNumber: {
+    fontSize: theme.fontSizes['4xl'],
+    fontWeight: '800',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  postQueuePatientDetails: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  postQueueBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    gap: theme.spacing.xs,
+  },
+  postQueueHint: {
+    textAlign: 'center',
+    maxWidth: 380,
+    marginTop: theme.spacing.xs,
+  },
+  postQueueActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.md,
-    marginTop: theme.spacing.sm,
+    marginTop: theme.spacing.lg,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  postQueueButton: {
+    minWidth: 140,
+  },
+  conflictWrap: {
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.lg,
+  },
+  conflictWarningCard: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.warningBorder,
+  },
+  conflictIconRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.md,
+  },
+  conflictIconBadge: {
+    marginTop: 2,
+  },
+  conflictTextWrap: {
+    flex: 1,
+    gap: 6,
+  },
+  conflictTicketPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  conflictPrompt: {
+    lineHeight: 20,
   },
 });

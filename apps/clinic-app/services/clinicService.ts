@@ -2220,6 +2220,7 @@ export interface CheckInRequest {
   queueDate?: string;
   visitType?: VisitType | string;
   seriesPrefix?: string;
+  allowDuplicateActive?: boolean;
 }
 
 export interface RecordTriageRequest {

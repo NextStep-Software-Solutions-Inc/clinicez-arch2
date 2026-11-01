@@ -594,7 +594,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
     const activeFilter = filterOverride !== undefined ? filterOverride : filterMode;
     const hasAlertsFilter = activeFilter === 'ALERTS' ? true : undefined;
-    const serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD' || activeFilter === 'MY_PATIENTS') ? activeFilter : undefined;
+    const serverFilterMode = activeFilter !== 'ALL' ? activeFilter : undefined;
     const staffId = currentStaff?.id;
     const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
 
@@ -634,7 +634,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const nextPage = page + 1;
     const activeSearch = debouncedSearchTerm;
     const hasAlertsFilter = filterMode === 'ALERTS' ? true : undefined;
-    const serverFilterMode = (filterMode === 'ALERTS' || filterMode === 'SENIOR_PWD' || filterMode === 'MY_PATIENTS') ? filterMode : undefined;
+    const serverFilterMode = filterMode !== 'ALL' ? filterMode : undefined;
     const staffId = currentStaff?.id;
     const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
 
@@ -1588,29 +1588,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setCheckingInPatientId(patient.id);
 
     try {
-      const [, checkInErr] = await clinicService.checkInPatient({
+      const [data, checkInErr] = await clinicService.checkInPatient({
         ...payload,
         queueDate: payload.queueDate || getManilaTodayStr(),
       });
       if (checkInErr) {
-        if (
-          checkInErr.status === 409 ||
-          checkInErr.errorCode === 'CONFLICT' ||
-          checkInErr.errorCode === 'active_queue_ticket_exists'
-        ) {
-          setServiceModalPatient(null);
-          setConflictModal({
-            visible: true,
-            error: checkInErr,
-            patientName: patient.fullName,
-          });
-          return;
-        }
-        notify.error(checkInErr.message || 'Could not add the patient to the queue.');
-        return;
+        throw checkInErr;
       }
-      setServiceModalPatient(null);
-      navigation.navigate('Dashboard');
+      return data;
     } finally {
       isCheckingInRef.current = false;
       setCheckingInPatientId(null);
@@ -3170,6 +3155,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         activeRooms={activeRooms}
         onClose={() => setServiceModalPatient(null)}
         onConfirm={handleConfirmServiceCheckIn}
+        onSuccess={() => fetchPatients()}
+        onNavigateToDashboard={() => {
+          setServiceModalPatient(null);
+          navigation.navigate('Dashboard');
+        }}
       />
 
       {/* Active Queue Ticket Conflict Modal */}

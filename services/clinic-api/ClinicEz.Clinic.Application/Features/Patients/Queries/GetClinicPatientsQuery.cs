@@ -77,6 +77,24 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.DateOfBirth <= seniorCutoff);
         }
 
+        if (string.Equals(request.FilterMode, "STUDENTS", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(p =>
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Student\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Student\"}") ||
+                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"Student\"%") ||
+                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"student_id\"%"));
+        }
+
+        if (string.Equals(request.FilterMode, "EMPLOYEES", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(p =>
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Employee\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Employee\"}") ||
+                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"Employee\"%") ||
+                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"employee_id\"%"));
+        }
+
         if (!string.IsNullOrWhiteSpace(request.VerificationStatus) && Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var filterVs))
         {
             query = query.Where(p => p.VerificationStatus == filterVs);
@@ -133,7 +151,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 }
             }
 
-            return await ExecuteProjectedQuery(pgQuery, request, ct);
+            return await ExecuteProjectedQuery(pgQuery, request, _queueRepo, ct);
         }
         catch
         {
@@ -176,7 +194,35 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 }
             }
 
-            return await ExecuteProjectedQuery(memQuery, request, ct);
+            if (string.Equals(request.FilterMode, "STUDENTS", StringComparison.OrdinalIgnoreCase))
+            {
+                var patientCustoms = await query.Select(p => new { p.Id, p.CustomFields }).ToListAsync(ct);
+                var studentIds = patientCustoms
+                    .Where(p => p.CustomFields != null && (
+                        (p.CustomFields.TryGetValue("classification", out var c) && string.Equals(c?.ToString(), "Student", StringComparison.OrdinalIgnoreCase)) ||
+                        (p.CustomFields.TryGetValue("category", out var cat) && string.Equals(cat?.ToString(), "Student", StringComparison.OrdinalIgnoreCase)) ||
+                        p.CustomFields.ContainsKey("student_id")
+                    ))
+                    .Select(p => p.Id)
+                    .ToHashSet();
+                memQuery = memQuery.Where(p => studentIds.Contains(p.Id));
+            }
+
+            if (string.Equals(request.FilterMode, "EMPLOYEES", StringComparison.OrdinalIgnoreCase))
+            {
+                var patientCustoms = await query.Select(p => new { p.Id, p.CustomFields }).ToListAsync(ct);
+                var empIds = patientCustoms
+                    .Where(p => p.CustomFields != null && (
+                        (p.CustomFields.TryGetValue("classification", out var c) && string.Equals(c?.ToString(), "Employee", StringComparison.OrdinalIgnoreCase)) ||
+                        (p.CustomFields.TryGetValue("category", out var cat) && string.Equals(cat?.ToString(), "Employee", StringComparison.OrdinalIgnoreCase)) ||
+                        p.CustomFields.ContainsKey("employee_id")
+                    ))
+                    .Select(p => p.Id)
+                    .ToHashSet();
+                memQuery = memQuery.Where(p => empIds.Contains(p.Id));
+            }
+
+            return await ExecuteProjectedQuery(memQuery, request, _queueRepo, ct);
         }
 
     }
@@ -184,6 +230,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
     private static async Task<IReadOnlyList<ClinicPatientDto>> ExecuteProjectedQuery(
         IQueryable<Patient> query,
         GetClinicPatientsQuery request,
+        IRepository<QueueItem>? queueRepo,
         CancellationToken ct)
     {
         var pageSize = Math.Max(1, request.PageSize);
@@ -307,6 +354,22 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             })
             .ToListAsync(ct);
 
+        Dictionary<Guid, (string QueueNumber, Guid Id, Guid? DoctorId)>? activeTicketMap = null;
+        if (queueRepo != null && projected.Count > 0)
+        {
+            var pIds = projected.Select(p => p.Id).ToList();
+            var activeTickets = await queueRepo.Query()
+                .AsNoTracking()
+                .Where(q => pIds.Contains(q.PatientId) &&
+                            q.Status != QueueStatus.Completed && q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow)
+                .Select(q => new { q.PatientId, q.QueueNumber, q.Id, q.DoctorId })
+                .ToListAsync(ct);
+
+            activeTicketMap = activeTickets
+                .GroupBy(t => t.PatientId)
+                .ToDictionary(g => g.Key, g => (g.First().QueueNumber, g.First().Id, g.First().DoctorId));
+        }
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         return projected.Select(p =>
         {
@@ -316,6 +379,18 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             var middleInitial = !string.IsNullOrWhiteSpace(p.MiddleName) ? $" {p.MiddleName[0]}." : "";
             var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix}" : "";
             var fullName = $"{p.LastName}, {p.FirstName}{middleInitial}{suffix}";
+
+            var hasActiveTicket = activeTicketMap != null && activeTicketMap.ContainsKey(p.Id);
+            var activeTicket = hasActiveTicket ? activeTicketMap![p.Id] : (QueueNumber: (string?)null, Id: (Guid?)null, DoctorId: (Guid?)null);
+            var customFields = p.CustomFields != null
+                ? new Dictionary<string, object?>(p.CustomFields)
+                : new Dictionary<string, object?>();
+
+            if (hasActiveTicket && activeTicket.DoctorId.HasValue)
+            {
+                customFields["activeQueueDoctorId"] = activeTicket.DoctorId.Value.ToString();
+                customFields["doctorId"] = activeTicket.DoctorId.Value.ToString();
+            }
 
             return new ClinicPatientDto(
                 p.Id,
@@ -338,10 +413,10 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.PwdId,
                 p.BloodType?.ToString(),
                 p.CreatedAt,
-                p.CustomFields,
+                customFields.Count > 0 ? customFields : null,
                 p.VerificationStatus.ToString(),
-                ActiveQueueTicket: null,
-                ActiveQueueItemId: null,
+                ActiveQueueTicket: hasActiveTicket ? activeTicket.QueueNumber : null,
+                ActiveQueueItemId: hasActiveTicket ? activeTicket.Id : null,
                 PastMedicalHistories: null,
                 ClinicEzId: p.ClinicEzId,
                 LandlineNumber: p.LandlineNumber,

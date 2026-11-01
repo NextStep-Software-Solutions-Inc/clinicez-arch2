@@ -430,6 +430,11 @@ export default function DashboardScreen() {
     setActioningId(null);
 
     if (err) {
+      if (err.status === 409 || err.errorCode === 'CONFLICT' || err.errorCode === 'active_queue_ticket_exists') {
+        notify.warning(err.message || 'This patient is already being attended by another provider.');
+        loadData();
+        return;
+      }
       notify.error(err.message || 'Could not call the patient.');
       return;
     }
@@ -1030,33 +1035,32 @@ export default function DashboardScreen() {
           filteredQueue.map((item) => {
             const badge = statusBadge(item.status);
             const isActioning = actioningId === item.id;
-            const canCall = item.status === 'Waiting' || item.status === 'Triaged';
             const isCompleted = item.status === 'Completed' || item.status === 'DischargedNonDoctor';
-            const canTriage = !isCompleted && item.status !== 'Cancelled' && item.status !== 'NoShow' && item.status !== 'Diverted';
-            const canDischarge =
-              (item.status === 'Triaged' || (item.visitType && item.visitType !== 'Consultation')) &&
-              !isCompleted &&
-              item.status !== 'Cancelled' &&
-              item.status !== 'NoShow' &&
-              item.status !== 'Diverted';
-            const canDivert =
-              !isCompleted &&
-              item.status !== 'Cancelled' &&
-              item.status !== 'NoShow' &&
-              item.status !== 'Diverted';
+            const isInConsult = item.status === 'InConsultation';
+            const isWaiting = item.status === 'Waiting';
+            const isTriaged = item.status === 'Triaged';
+            const isOnHold = item.status === 'OnHold';
+            const isTerminal = isCompleted || item.status === 'Cancelled' || item.status === 'NoShow' || item.status === 'Diverted';
 
             // Wait time calculation for all active waiting patients
-            const isWaitingState = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
+            const isWaitingState = isWaiting || isTriaged || isOnHold;
             const waited = isWaitingState ? waitingMinutes(item.checkInTime) : null;
             const isOverdueWait = waited !== null && waited > 60;
 
-            // Direct action eligibility
-            const canHold = item.status === 'Waiting' || item.status === 'Triaged';
-            const canNoShow = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
-            const canCancel = item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow';
-            const canReactivate = item.status === 'OnHold' || item.status === 'NoShow';
-            const canExamine = item.status !== 'Cancelled' && item.status !== 'NoShow';
-            const canAssignOrReassign = item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow';
+            // Direct action eligibility - turn-based workstation workflow to prevent race conditions
+            const canCall = isWaiting || isTriaged;
+            const canExamine = isInConsult || isCompleted;
+            const canTriage = (isWaiting || isTriaged) && !isTerminal;
+            const canDischarge =
+              (isTriaged || isInConsult) &&
+              !isCompleted &&
+              !isTerminal;
+            const canDivert = !isTerminal;
+            const canHold = isWaiting || isTriaged;
+            const canNoShow = isWaiting || isTriaged || isOnHold;
+            const canCancel = !isTerminal;
+            const canReactivate = isOnHold || item.status === 'NoShow';
+            const canAssignOrReassign = !isTerminal;
 
             const hasCareActions = canCall || canExamine || canTriage || canAssignOrReassign;
             const hasFlowActions = canHold || canReactivate || canDischarge || isCompleted;

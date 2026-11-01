@@ -33,7 +33,8 @@ public sealed record CheckInPatientCommand(
     Guid? RoomId = null,
     DateOnly? QueueDate = null,
     VisitType VisitType = VisitType.Consultation,
-    string? SeriesPrefix = null) : IRequest<QueueItemDto>;
+    string? SeriesPrefix = null,
+    bool AllowDuplicateActive = false) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -94,10 +95,14 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         var today = request.QueueDate
             ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
-        // Enforce active queue day uniqueness: prevent duplicate active tickets today.
+        // Enforce active queue day uniqueness: prevent duplicate active tickets today across clinical services unless explicitly allowed by staff.
         // Terminal tickets (Completed, Cancelled, NoShow, DischargedNonDoctor, Diverted) do not conflict.
-        // Non-consultation visits (e.g. retail purchase, cashier settlement, vitals check) do not conflict.
-        if (request.VisitType == VisitType.Consultation)
+        // Pure retail purchases, cashier settlements, and lab drop-offs (non-clinical) do not conflict.
+        bool isNonClinicalVisit = request.VisitType == VisitType.RetailPurchase ||
+                                  request.VisitType == VisitType.CashierSettlement ||
+                                  request.VisitType == VisitType.LaboratorySpecimen;
+
+        if (!isNonClinicalVisit && !request.AllowDuplicateActive)
         {
             QueueStatus[] activeStatuses =
             [
@@ -113,7 +118,9 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today &&
                 q.PatientId == request.PatientId &&
-                q.VisitType == VisitType.Consultation &&
+                q.VisitType != VisitType.RetailPurchase &&
+                q.VisitType != VisitType.CashierSettlement &&
+                q.VisitType != VisitType.LaboratorySpecimen &&
                 activeStatuses.Contains(q.Status))
                 .OrderByDescending(q => q.CheckInTime)
                 .FirstOrDefaultAsync(cancellationToken);

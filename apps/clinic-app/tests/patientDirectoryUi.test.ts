@@ -770,7 +770,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenCode).toContain("formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients)");
 
     // Server-side filtering parameters passed in fetchPatients
-    expect(screenCode).toContain("serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD' || activeFilter === 'MY_PATIENTS')");
+    expect(screenCode).toContain("serverFilterMode = activeFilter !== 'ALL' ? activeFilter : undefined;");
   });
 
   test('17. isMyPatient isolates patients assigned to or seen by doctors and nurses', () => {
@@ -996,7 +996,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('data-testid="ticket-series-preview"');
 
     // Footer actions
-    expect(markup).toContain('Confirm Check-In (Issue Ticket)');
+    expect(markup).toContain('Continue');
     expect(markup).toContain('Cancel');
   });
 

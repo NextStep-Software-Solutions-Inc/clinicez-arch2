@@ -65,6 +65,21 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
             throw new NotFoundException($"Queue item '{request.Id}' was not found in this clinic.");
         }
 
+        if (item.Status == QueueStatus.InConsultation)
+        {
+            if (item.DoctorId.HasValue && request.DoctorId.HasValue && item.DoctorId.Value != request.DoctorId.Value)
+            {
+                var assignedDoc = !string.IsNullOrWhiteSpace(item.DoctorName) ? item.DoctorName : "another healthcare provider";
+                var roomInfo = !string.IsNullOrWhiteSpace(item.RoomOrStation) ? $" in {item.RoomOrStation}" : "";
+                throw new ConflictException($"This patient has already been called by {assignedDoc}{roomInfo}.");
+            }
+        }
+
+        if (item.Status == QueueStatus.Completed || item.Status == QueueStatus.Cancelled || item.Status == QueueStatus.NoShow)
+        {
+            throw new InvalidOperationException($"Cannot call a patient whose visit is {item.Status}.");
+        }
+
         item.Status = QueueStatus.InConsultation;
         item.CalledTime = DateTime.UtcNow;
         if (request.DoctorId.HasValue) item.DoctorId = request.DoctorId.Value;
