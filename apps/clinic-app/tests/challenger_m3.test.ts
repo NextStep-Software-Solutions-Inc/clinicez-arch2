@@ -436,7 +436,8 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
         })
       );
       expect(seniorMarkup).toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
-      expect(seniorMarkup).toContain('Preview: SQ-001');
+      expect(seniorMarkup).toContain('Senior &amp; PWD Priority');
+      expect(seniorMarkup).not.toContain('SQ-001');
 
       const youngMarkup = renderToStaticMarkup(
         React.createElement(ServiceCheckInModal, {
@@ -446,7 +447,8 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
         })
       );
       expect(youngMarkup).not.toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
-      expect(youngMarkup).toContain('Preview: Q-001');
+      expect(youngMarkup).toContain('Regular Series');
+      expect(youngMarkup).not.toContain('Q-001');
     });
 
     test('4.8 ServiceCheckInModal provides manual chips for Regular and Priority series', () => {
@@ -459,8 +461,10 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
       );
       expect(markup).toContain('data-testid="series-regular-chip"');
       expect(markup).toContain('data-testid="series-priority-chip"');
-      expect(markup).toContain('Regular Queue Series (Q-001)');
-      expect(markup).toContain('Senior &amp; PWD Priority (SQ-001)');
+      expect(markup).toContain('Regular Queue Series');
+      expect(markup).toContain('Senior &amp; PWD Priority');
+      expect(markup).not.toContain('Q-001');
+      expect(markup).not.toContain('SQ-001');
     });
   });
 

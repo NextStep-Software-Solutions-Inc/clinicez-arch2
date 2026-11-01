@@ -223,14 +223,10 @@ export default function ServiceCheckInModal({
     }
   }, [visible, patient, initialService]);
 
-  // Ticket prefix preview
+  // Ticket prefix
   const currentPrefix = useMemo(() => {
     return resolveTicketPrefix(selectedService, isPrioritySeries);
   }, [selectedService, isPrioritySeries]);
-
-  const ticketPreview = useMemo(() => {
-    return formatQueueTicketNumber(currentPrefix, 1);
-  }, [currentPrefix]);
 
   const handleCloseAll = useCallback(() => {
     setConflictWarning(null);
@@ -241,94 +237,119 @@ export default function ServiceCheckInModal({
   // Submission handler
   const handleConfirm = async (overridePayload?: ServiceCheckInPayload, allowDuplicate = false) => {
     if (!patient || submitting) return;
+
+    const serviceConfig = CLINICAL_SERVICES.find((s) => s.type === selectedService)!;
+    const payload: ServiceCheckInPayload = overridePayload || {
+      patientId: patient.id,
+      patientName: patient.fullName,
+      priority: 'Routine',
+      visitType: serviceConfig.visitType,
+      chiefComplaint: serviceConfig.label,
+      seriesPrefix: currentPrefix,
+      allowDuplicateActive: allowDuplicate,
+    };
+
+    // If patient already has an active queue ticket and staff has not confirmed duplicate override, warn staff immediately
+    if (!allowDuplicate && patient.activeQueueTicket) {
+      setConflictWarning({
+        queueNumber: patient.activeQueueTicket,
+        status: (patient as any).activeQueueStatus || (patient as any).verificationStatus || 'In queue',
+        patientName: patient.fullName,
+        payload,
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      const serviceConfig = CLINICAL_SERVICES.find((s) => s.type === selectedService)!;
-      const payload: ServiceCheckInPayload = overridePayload || {
-        patientId: patient.id,
-        patientName: patient.fullName,
-        priority: 'Routine',
-        visitType: serviceConfig.visitType,
-        chiefComplaint: serviceConfig.label,
-        seriesPrefix: currentPrefix,
-        allowDuplicateActive: allowDuplicate,
-      };
+      let result: PatientQueueItem | null = null;
+      let conflictErr: any = null;
 
       if (onConfirm) {
-        const maybeResult = await onConfirm(payload);
-        if (maybeResult && (maybeResult as any).queueNumber) {
-          setIssuedTicket({
-            queueNumber: (maybeResult as any).queueNumber,
-            serviceType: selectedService,
-            patientName: patient.fullName,
-          });
-          onSuccess?.((maybeResult as any).queueNumber);
-          return;
-        }
-      }
-
-      // Perform check-in call with retry for race condition
-      let attempt = 0;
-      let lastRes: any = null;
-      let lastErr: any = null;
-
-      while (attempt < 2) {
-        attempt++;
-        const [res, err] = await clinicService.checkInPatient({
-          ...payload,
-          allowDuplicateActive: allowDuplicate,
-        });
-
-        if (!err && res) {
-          lastRes = res;
-          lastErr = null;
-          break;
-        }
-
-        if (err) {
-          // If active queue conflict
+        try {
+          const maybeResult = await onConfirm(payload);
+          if (maybeResult && (maybeResult as any).queueNumber) {
+            result = maybeResult as PatientQueueItem;
+          }
+        } catch (err: any) {
           const isConflict =
-            err.status === 409 ||
-            err.errorCode === 'CONFLICT' ||
-            err.errorCode === 'active_queue_ticket_exists' ||
-            err.message?.toLowerCase().includes('already checked in');
+            err?.status === 409 ||
+            err?.errorCode === 'CONFLICT' ||
+            err?.errorCode === 'active_queue_ticket_exists' ||
+            err?.message?.toLowerCase().includes('already checked in');
 
           if (isConflict && !allowDuplicate) {
-            setConflictWarning({
-              queueNumber: (err as any).queueNumber || (err as any).ticketNumber || 'Existing Ticket',
-              status: (err as any).status || 'Waiting',
-              patientName: patient.fullName,
-              payload,
-            });
-            return;
+            conflictErr = err;
+          } else {
+            throw err;
           }
+        }
+      } else {
+        const [res, err] = await clinicService.checkInPatient(payload);
+        if (err) {
+          const isConflict =
+            err?.status === 409 ||
+            err?.errorCode === 'CONFLICT' ||
+            err?.errorCode === 'active_queue_ticket_exists' ||
+            err?.message?.toLowerCase().includes('already checked in');
 
-          // If race condition / sequence collision, retry once silently
-          if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 100));
-            continue;
+          if (isConflict && !allowDuplicate) {
+            conflictErr = err;
+          } else {
+            throw err;
           }
-          lastErr = err;
+        } else if (res) {
+          result = res;
         }
       }
 
-      if (lastErr) {
-        notify.error(lastErr.message || 'Could not queue the patient.');
+      if (conflictErr) {
+        const msg = conflictErr.message || '';
+        const match = msg.match(/is already checked in as\s+([^\s(]+)\s*\(([^)]+)\)/i);
+        const ticketNumber = match ? match[1] : (conflictErr.activeQueueTicket || conflictErr.queueNumber || patient.activeQueueTicket || 'Existing Ticket');
+        const queueStatus = match ? match[2] : 'Waiting';
+
+        setConflictWarning({
+          queueNumber: ticketNumber,
+          status: queueStatus,
+          patientName: patient.fullName,
+          payload,
+        });
         return;
       }
 
-      if (lastRes) {
+      if (result) {
         setConflictWarning(null);
         setIssuedTicket({
-          queueNumber: lastRes.queueNumber || ticketPreview,
+          queueNumber: result.queueNumber,
           serviceType: selectedService,
           patientName: patient.fullName,
         });
-        onSuccess?.(lastRes.queueNumber);
+        onSuccess?.(result.queueNumber);
       }
     } catch (e: any) {
-      notify.error(e?.message || 'Check-in failed. Please try again.');
+      const isConflict =
+        e?.status === 409 ||
+        e?.errorCode === 'CONFLICT' ||
+        e?.errorCode === 'active_queue_ticket_exists' ||
+        e?.message?.toLowerCase().includes('already checked in');
+
+      if (isConflict && !allowDuplicate) {
+        const msg = e.message || '';
+        const match = msg.match(/is already checked in as\s+([^\s(]+)\s*\(([^)]+)\)/i);
+        const ticketNumber = match ? match[1] : (e.activeQueueTicket || e.queueNumber || patient.activeQueueTicket || 'Existing Ticket');
+        const queueStatus = match ? match[2] : 'Waiting';
+
+        setConflictWarning({
+          queueNumber: ticketNumber,
+          status: queueStatus,
+          patientName: patient.fullName,
+          payload,
+        });
+      } else {
+        notify.error(e?.message || 'Check-in failed. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -604,7 +625,7 @@ export default function ServiceCheckInModal({
             <View style={styles.ticketPreviewBadge} testID="ticket-series-preview">
               <Icon name="ticket" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
               <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                Preview: {ticketPreview}
+                {isPrioritySeries ? 'Senior & PWD Priority' : 'Regular Series'}
               </ThemedText>
             </View>
           </View>
@@ -624,7 +645,7 @@ export default function ServiceCheckInModal({
                 variant="smallBold"
                 color={!isPrioritySeries ? theme.colors.primaryDark : theme.colors.text}
               >
-                Regular Queue Series ({resolveTicketPrefix(selectedService, false)}-001)
+                Regular Queue Series
               </ThemedText>
             </Pressable>
 
@@ -642,7 +663,7 @@ export default function ServiceCheckInModal({
                 variant="smallBold"
                 color={isPrioritySeries ? theme.colors.primaryDark : theme.colors.text}
               >
-                Senior & PWD Priority ({resolveTicketPrefix(selectedService, true)}-001)
+                Senior & PWD Priority
               </ThemedText>
             </Pressable>
           </View>

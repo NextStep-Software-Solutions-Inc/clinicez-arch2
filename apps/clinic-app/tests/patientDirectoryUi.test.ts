@@ -1031,9 +1031,10 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
     expect(seniorMarkup).toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
-    expect(seniorMarkup).toContain('SQ-001');
+    expect(seniorMarkup).toContain('Senior &amp; PWD Priority');
+    expect(seniorMarkup).not.toContain('SQ-001');
 
-    // Markup for young patient defaults to regular Q-001 preview
+    // Markup for young patient defaults to regular queue series without pre-submission queue number
     const youngMarkup = renderToStaticMarkup(
       React.createElement(ServiceCheckInModal, {
         visible: true,
@@ -1041,7 +1042,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onClose: () => {},
       })
     );
-    expect(youngMarkup).toContain('Q-001');
+    expect(youngMarkup).toContain('Regular Queue Series');
+    expect(youngMarkup).not.toContain('Q-001');
     expect(youngMarkup).not.toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
   });
 
@@ -1089,6 +1091,30 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenCode).toContain('initialService={selectedServiceIntent}');
     expect(screenCode).toContain('onClose={() => setServiceModalPatient(null)}');
     expect(screenCode).toContain('onConfirm={handleConfirmServiceCheckIn}');
+  });
+
+  test('26. ServiceCheckInModal displays series selection without speculative pre-submission queue numbers', () => {
+    const patientWithActive: ClinicPatient = {
+      ...basePatient,
+      activeQueueTicket: 'P-001',
+      activeQueueItemId: 'q-item-123',
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ServiceCheckInModal, {
+        visible: true,
+        patient: patientWithActive,
+        onClose: () => {},
+      })
+    );
+
+    // Initial render displays clean series choices without showing speculative pre-submission queue numbers
+    expect(markup).toContain('Regular Queue Series');
+    expect(markup).toContain('Senior &amp; PWD Priority');
+    expect(markup).not.toContain('Preview: P-001');
+    expect(markup).not.toContain('Preview: Q-001');
+    expect(markup).not.toContain('Regular Queue Series (');
+    expect(markup).not.toContain('Senior &amp; PWD Priority (');
   });
 });
 
