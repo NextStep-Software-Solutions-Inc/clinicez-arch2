@@ -171,5 +171,153 @@ public sealed class GetPatientCountsQueryTests
         searchResult.Alerts.Should().Be(1);
         searchResult.SeniorPwd.Should().Be(0);
         searchResult.Students.Should().Be(0);
+        searchResult.MyPatients.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_WithStaffId_ComputesMyPatientsAccurately_ForDoctor()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var handler = new GetClinicPatientCountsQueryHandler(repo);
+
+        var doctorId = Guid.NewGuid();
+
+        var p1 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-CNT-01",
+            FirstName = "Doctor",
+            LastName = "Patient1",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            ContactNumber = "09170000101",
+            CustomFields = new Dictionary<string, object?> { ["assigned_doctor_id"] = doctorId.ToString() }
+        };
+        var p2 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-CNT-02",
+            FirstName = "Doctor",
+            LastName = "Patient2",
+            DateOfBirth = new DateOnly(1991, 2, 2),
+            ContactNumber = "09170000102",
+            CustomFields = new Dictionary<string, object?> { ["doctor_id"] = doctorId.ToString() }
+        };
+        var p3 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-CNT-03",
+            FirstName = "Other",
+            LastName = "Patient3",
+            DateOfBirth = new DateOnly(1992, 3, 3),
+            ContactNumber = "09170000103",
+            CustomFields = new Dictionary<string, object?> { ["assigned_doctor_id"] = Guid.NewGuid().ToString() }
+        };
+
+        context.Patients.AddRange(p1, p2, p3);
+        await context.SaveChangesAsync();
+
+        var result = await handler.Handle(new GetClinicPatientCountsQuery(DoctorId: doctorId), CancellationToken.None);
+
+        result.All.Should().Be(3);
+        result.MyPatients.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_WithStaffId_ComputesMyPatientsAccurately_ForNurse()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var handler = new GetClinicPatientCountsQueryHandler(repo);
+
+        var nurseId = Guid.NewGuid();
+
+        var p1 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-CNT-N1",
+            FirstName = "Nurse",
+            LastName = "VitalsPatient",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            ContactNumber = "09170000201"
+        };
+        p1.Vitals.Add(new PatientVitals
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = p1.Id,
+            NurseId = nurseId
+        });
+
+        var p2 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-CNT-N2",
+            FirstName = "Nurse",
+            LastName = "CustomPatient",
+            DateOfBirth = new DateOnly(1991, 2, 2),
+            ContactNumber = "09170000202",
+            CustomFields = new Dictionary<string, object?> { ["nurse_id"] = nurseId.ToString() }
+        };
+
+        var p3 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-CNT-N3",
+            FirstName = "Other",
+            LastName = "Patient",
+            DateOfBirth = new DateOnly(1992, 3, 3),
+            ContactNumber = "09170000203"
+        };
+
+        context.Patients.AddRange(p1, p2, p3);
+        await context.SaveChangesAsync();
+
+        var result = await handler.Handle(new GetClinicPatientCountsQuery(StaffId: nurseId), CancellationToken.None);
+
+        result.All.Should().Be(3);
+        result.MyPatients.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_WithoutStaffId_ReturnsZeroMyPatients()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var handler = new GetClinicPatientCountsQueryHandler(repo);
+
+        var p1 = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-CNT-NOSTAFF",
+            FirstName = "Test",
+            LastName = "Patient",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            ContactNumber = "09170000301",
+            CustomFields = new Dictionary<string, object?> { ["assigned_doctor_id"] = Guid.NewGuid().ToString() }
+        };
+
+        context.Patients.Add(p1);
+        await context.SaveChangesAsync();
+
+        var result = await handler.Handle(new GetClinicPatientCountsQuery(), CancellationToken.None);
+
+        result.All.Should().Be(1);
+        result.MyPatients.Should().Be(0);
     }
 }
+

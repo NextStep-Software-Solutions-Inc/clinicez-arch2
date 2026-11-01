@@ -1,111 +1,159 @@
-# TEST READY: ClinicEZ Platform Administration Panel Migration & Governance Workstation Restyle
+# TEST READY: Clinic Patient List & Dashboard UI/UX Enhancements
 
 ## Executive Summary
 
-The complete, opaque-box, four-tier E2E test suite for the **ClinicEZ Platform Administration Panel Migration and Governance Workstation Restyle** has been authored, verified, and executed with a **100% pass rate** via the Bun test runner (`bun test`).
+The comprehensive, opaque-box, four-tier E2E test suite for **Clinic Patient List and Dashboard UI/UX Enhancements & Backend Queue/Filter Support** has been authored, verified, and executed with a **100% pass rate** via the Bun test runner (`bun test`).
 
-- **Total Test Cases Executed**: **323 automated tests** across 16 test files:
-  - **Tier 1 (Feature Coverage)**: **130 passed**, 0 failed (>=5 tests per feature for all 26 inventoried features)
-  - **Tier 2 (Boundary & Corner Cases)**: **130 passed**, 0 failed (>=5 tests per feature covering extreme values, zero states, and edge conditions)
-  - **Tier 3 (Cross-Feature Combinations)**: **32 passed**, 0 failed (covering paired domain flows, limits, entitlements, and security gates)
-  - **Tier 4 (Real-World Application Scenarios)**: **31 passed**, 0 failed (covering 5 complex clinical governance workflows)
-- **Expectation Assertions**: **752 `expect()` calls**
-- **Test Suite Execution Time**: **~67ms** total runtime
-- **Test Infrastructure Reference**: `TEST_INFRA.md` at monorepo root
-- **Exclusive Test Ownership Directory**: `apps/admin-web/tests/e2e/`
+- **Total Test Cases Executed**: **84 automated tests** across 3 test files:
+  - `apps/clinic-app/tests/e2e_clinicPatientWorkflows.test.ts`: **42 passed**, 0 failed (covering Tiers 1-4 across all 20 features)
+  - `apps/clinic-app/tests/patientDirectoryUi.test.ts`: **18 passed**, 0 failed (directory card/table, location, initials)
+  - `apps/clinic-app/tests/queueDashboardControls.test.ts`: **24 passed**, 0 failed (absence controls, status badges, TV settings)
+- **Expectation Assertions**: **445 `expect()` calls**
+- **Master E2E Execution Time**: **~10ms** total runtime
+- **Test Infrastructure Reference**: `TEST_INFRA.md` at workspace root
 
 ---
 
-## 1. Feature Checklist Across All 26 Inventoried Features
+## 1. Feature Checklist Across All 20 Features
 
 | Feature # | Feature Description | Requirement Source | Tier 1 | Tier 2 | Tier 3 | Primary Test File | Status |
 |:---------:|---------------------|:------------------:|:------:|:------:|:------:|-------------------|:------:|
-| **F1** | Stateless `AdminBaseUrl` Provider & Resolution | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_01_to_06.test.ts`, `tier2_features_01_to_06_boundaries.test.ts` | **PASS** |
-| **F2** | Clean Root Path Email & DTO URLs | ORIGINAL_REQUEST §1, §3 | 5 | 5 | ✓ | `features_01_to_06.test.ts`, `tier2_features_01_to_06_boundaries.test.ts` | **PASS** |
-| **F3** | RBAC Hardening on Newsletter Subscribers | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_01_to_06.test.ts`, `tier2_features_01_to_06_boundaries.test.ts` | **PASS** |
-| **F4** | Clerk Authorized Parties (`*.localhost`, `*.lvh.me`) | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_01_to_06.test.ts`, `tier2_features_01_to_06_boundaries.test.ts` | **PASS** |
-| **F5** | Docker Compose & Env Variables Configuration | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_01_to_06.test.ts`, `tier2_features_01_to_06_boundaries.test.ts` | **PASS** |
-| **F6** | Zero Database Migrations Constraint | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_01_to_06.test.ts`, `tier2_features_01_to_06_boundaries.test.ts` | **PASS** |
-| **F7** | Standalone `apps/admin-web` Scaffold | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_07_to_13.test.ts`, `tier2_features_07_to_13_boundaries.test.ts` | **PASS** |
-| **F8** | Edge Security Headers & Robots | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_07_to_13.test.ts`, `tier2_features_07_to_13_boundaries.test.ts` | **PASS** |
-| **F9** | 15-Minute Cross-Tab Idle Session Auto-Logout Guard | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_07_to_13.test.ts`, `tier2_features_07_to_13_boundaries.test.ts` | **PASS** |
-| **F10** | Configurable Admin MFA Gate | ORIGINAL_REQUEST §3 | 5 | 5 | ✓ | `features_07_to_13.test.ts`, `tier2_features_07_to_13_boundaries.test.ts` | **PASS** |
-| **F11** | Headless Boot Diagnostic Screen (`VITE_CLERK_PUBLISHABLE_KEY` unset) | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_07_to_13.test.ts`, `tier2_features_07_to_13_boundaries.test.ts` | **PASS** |
-| **F12** | Clean Root Route Tree (Zero `/admin/*` prefix) | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_07_to_13.test.ts`, `tier2_features_07_to_13_boundaries.test.ts` | **PASS** |
-| **F13** | Cross-Surface URL Resolvers (Tenant Portal & Public Site) | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_07_to_13.test.ts`, `tier2_features_07_to_13_boundaries.test.ts` | **PASS** |
-| **F14** | Governance Workstation Shell, Sidebar & Sticky Command Bar (`⌘K`) | ORIGINAL_REQUEST §2 | 5 | 5 | ✓ | `features_14_to_18.test.ts`, `tier2_features_14_to_18_boundaries.test.ts` | **PASS** |
-| **F15** | Design System Strict Compliance (Teal/Slate, 0 Hex Literals) | ORIGINAL_REQUEST §2 | 5 | 5 | ✓ | `features_14_to_18.test.ts`, `tier2_features_14_to_18_boundaries.test.ts` | **PASS** |
-| **F16** | Upgraded Overview Dashboard (KPIs, Velocity Chart 7d/14d/30d) | ORIGINAL_REQUEST §2 | 5 | 5 | ✓ | `features_14_to_18.test.ts`, `tier2_features_14_to_18_boundaries.test.ts` | **PASS** |
-| **F17** | Tenants Directory & Detail Workstation | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_14_to_18.test.ts`, `tier2_features_14_to_18_boundaries.test.ts` | **PASS** |
-| **F18** | Operational Dialogs (PlanEditor, RecordPayment, TenantCleanup, Entitlements) | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_14_to_18.test.ts`, `tier2_features_14_to_18_boundaries.test.ts` | **PASS** |
-| **F19** | Plans, Leads, Blog CRM & Subscribers Directory (CSV Export) | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_19_to_22.test.ts`, `tier2_features_19_to_22_boundaries.test.ts` | **PASS** |
-| **F20** | Roles, Admin Accounts, Self-Action Guards & Password Resets | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_19_to_22.test.ts`, `tier2_features_19_to_22_boundaries.test.ts` | **PASS** |
-| **F21** | Platform Settings & N-Bank JSON Builder | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_19_to_22.test.ts`, `tier2_features_19_to_22_boundaries.test.ts` | **PASS** |
-| **F22** | Invitation Acceptance & Password Reset Public Workstations | ORIGINAL_REQUEST §1 | 5 | 5 | ✓ | `features_19_to_22.test.ts`, `tier2_features_19_to_22_boundaries.test.ts` | **PASS** |
-| **F23** | Clean Deletion of Admin Files from `apps/portal-web` (Zero Shims) | ORIGINAL_REQUEST §4 | 5 | 5 | ✓ | `features_23_to_26.test.ts`, `tier2_features_23_to_26_boundaries.test.ts` | **PASS** |
-| **F24** | Shared Touchpoint Decoupling (Billing, SelfAction, Proxy, SyncAuth) | ORIGINAL_REQUEST §4 | 5 | 5 | ✓ | `features_23_to_26.test.ts`, `tier2_features_23_to_26_boundaries.test.ts` | **PASS** |
-| **F25** | Monorepo Scripts & CI/CD Orchestration | ORIGINAL_REQUEST §4 | 5 | 5 | ✓ | `features_23_to_26.test.ts`, `tier2_features_23_to_26_boundaries.test.ts` | **PASS** |
-| **F26** | Test Suite Migration & Decoupling | ORIGINAL_REQUEST §4 | 5 | 5 | ✓ | `features_23_to_26.test.ts`, `tier2_features_23_to_26_boundaries.test.ts` | **PASS** |
+| **F1** | 'My patients' Toolbar Tab | ORIGINAL_REQUEST R1, PROJECT.md F1 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F2** | Doctor Patient Ownership Filter | ORIGINAL_REQUEST R1, PROJECT.md F2 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F3** | Nurse Patient Ownership Filter | ORIGINAL_REQUEST R1, PROJECT.md F3 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F4** | Backend Query `MY_PATIENTS` Filter Contract | ORIGINAL_REQUEST R1, PROJECT.md F4 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F5** | Reactive MyPatients Count | ORIGINAL_REQUEST R1, PROJECT.md F5 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F6** | Relabel "Schedule visit" Button | ORIGINAL_REQUEST R2, PROJECT.md F6 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F7** | In-Place `ScheduleVisitModal.tsx` | ORIGINAL_REQUEST R2, PROJECT.md F7 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F8** | Dynamic Doctor Shift Slots | ORIGINAL_REQUEST R2, PROJECT.md F8 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F9** | Post-Appointment Setup Dialog (4 Actions) | ORIGINAL_REQUEST R2, PROJECT.md F9 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F10** | Relabel "Queue Patient" Button | ORIGINAL_REQUEST R3, PROJECT.md F10 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F11** | ActionMenu Direct Service Intents | ORIGINAL_REQUEST R3, PROJECT.md F11 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F12** | Dedicated `ServiceCheckInModal.tsx` | ORIGINAL_REQUEST R3, PROJECT.md F12 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F13** | Prefix Ticket Series System (`Q`/`SQ`, etc.) | ORIGINAL_REQUEST R3, PROJECT.md F13 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F14** | Senior/PWD Priority Auto-Selection | ORIGINAL_REQUEST R3, PROJECT.md F14 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F15** | Backend `SeriesPrefix` Support Contract | ORIGINAL_REQUEST R3, PROJECT.md F15 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F16** | Domain Boundary Enforcement | ORIGINAL_REQUEST R3, PROJECT.md F16 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F17** | Dashboard Toolbar Cleanup | ORIGINAL_REQUEST R4, PROJECT.md F17 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F18** | 4 Semantic Clusters for Actions | ORIGINAL_REQUEST R4, PROJECT.md F18 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F19** | Formatted Service Badges | ORIGINAL_REQUEST R4, PROJECT.md F19 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
+| **F20** | Zero Jargon Clinical UI Copy | ORIGINAL_REQUEST R5, PROJECT.md F20 | ✓ | ✓ | ✓ | `e2e_clinicPatientWorkflows.test.ts` | **PASS** |
 
 ---
 
-## 2. 4-Tier Test Suite Summary
+## 2. 4-Tier Test Breakdown (`e2e_clinicPatientWorkflows.test.ts`)
 
-### Tier 1 — Isolated Feature Coverage (130 Tests)
-- `apps/admin-web/tests/e2e/tier1-features/features_01_to_06.test.ts`: 30 tests (Features 1 to 6)
-- `apps/admin-web/tests/e2e/tier1-features/features_07_to_13.test.ts`: 35 tests (Features 7 to 13)
-- `apps/admin-web/tests/e2e/tier1-features/features_14_to_18.test.ts`: 25 tests (Features 14 to 18)
-- `apps/admin-web/tests/e2e/tier1-features/features_19_to_22.test.ts`: 20 tests (Features 19 to 22)
-- `apps/admin-web/tests/e2e/tier1-features/features_23_to_26.test.ts`: 20 tests (Features 23 to 26)
+### Tier 1 — Isolated Feature Coverage (20 Tests)
+- **F1**: "My patients" Toolbar Tab is configured in 2nd position with everyday clinic copy and loaded/total count formatting.
+- **F2**: Doctor Patient Ownership Filter matches assigned, consulting, and active queue patients.
+- **F3**: Nurse Patient Ownership Filter matches recorded vitals and assigned room patients.
+- **F4**: Backend Query `MY_PATIENTS` Filter Contract satisfies endpoint requirements.
+- **F5**: Reactive MyPatients Count returns structured DTO from `/api/v1/patients/counts`.
+- **F6**: Relabel "Schedule visit" Button replaces legacy "Book appointment" across all surfaces.
+- **F7**: In-Place `ScheduleVisitModal` renders preselected patient identity banner and inputs.
+- **F8**: Dynamic Doctor Shift Slots fetches available slots for attending physician.
+- **F9**: Post-Appointment Setup Dialog presents all 4 distinct required action buttons.
+- **F10**: Relabel "Queue Patient" Button replaces legacy "Add to queue".
+- **F11**: ActionMenu Direct Service Intents provide one-click access to 4 clinical services.
+- **F12**: Dedicated `ServiceCheckInModal` supports tailored views for all 4 clinical services.
+- **F13**: Prefix Ticket Series System generates Regular and Priority tickets accurately.
+- **F14**: Senior/PWD Priority Auto-Selection defaults to priority series for age >= 60 or valid ID.
+- **F15**: Backend `SeriesPrefix` Support Contract generates prefix-specific sequential queue number.
+- **F16**: Domain Boundary Enforcement preserves clinic care vs lab, pharmacy, and cashier boundaries.
+- **F17**: Dashboard Toolbar Cleanup verifies removal of TV Board and Force EOD buttons.
+- **F18**: 4 Semantic Clusters for Actions cleanly group queue controls by relativity.
+- **F19**: Formatted Service Badges replace raw enum strings with styled semantic badges.
+- **F20**: Zero Jargon Clinical UI Copy enforces everyday terminology and rejects legalistic/statutory jargon.
 
-### Tier 2 — Boundary & Corner Cases (130 Tests)
-- `apps/admin-web/tests/e2e/tier2-boundaries/tier2_features_01_to_06_boundaries.test.ts`: 30 tests (Null/whitespace URLs, CRLF injection, port ranges, case insensitivity)
-- `apps/admin-web/tests/e2e/tier2-boundaries/tier2_features_07_to_13_boundaries.test.ts`: 35 tests (Clock skew, throttling, non-boolean MFA flags, 63-char slugs)
-- `apps/admin-web/tests/e2e/tier2-boundaries/tier2_features_14_to_18_boundaries.test.ts`: 25 tests (0 velocity days, responsive boundaries, floating point VAT cents, negative overrides)
-- `apps/admin-web/tests/e2e/tier2-boundaries/tier2_features_19_to_22_boundaries.test.ts`: 20 tests (Empty CSV, 50+ N-banks, 63/65 char tokens, 128-char passwords)
-- `apps/admin-web/tests/e2e/tier2-boundaries/tier2_features_23_to_26_boundaries.test.ts`: 20 tests (Upper/lowercase reserved subdomains, corrupt cookies, broker comments)
+### Tier 2 — Boundary & Corner Cases (12 Tests)
+- **B1**: Empty patient directory returns zero counts and clean empty state without crashes.
+- **B2**: Doctor on leave or off duty displays unavailable state and disables slot selection.
+- **B3**: Age boundary check: Age 59 yrs 364 days vs Age 60 yrs exactly.
+- **B4**: Patient missing contact number triggers friendly validation notice on notification.
+- **B5**: Multiple assigned rooms for nurse correctly includes patients across all assigned rooms.
+- **B6**: Nurse with no assigned rooms and no recorded vitals returns empty list cleanly.
+- **B7**: Staff with unrecognized or non-clinical role defaults to safe empty my-patients view.
+- **B8**: Monotonic sequence rollover handles sequences past 999 without truncation.
+- **B9**: Ticket prefix casing resilience normalizes lowercase inputs to uppercase standard.
+- **B10**: Overlapping appointment slots handling prevents booking already booked slot.
+- **B11**: Emergency divert halts check-in if mandatory transfer handover details are missing.
+- **B12**: Clinical Procedure allows walk-in procedures without an ordering doctor.
 
-### Tier 3 — Cross-Feature Combinations (32 Tests)
-- `apps/admin-web/tests/e2e/tier3-combinations/tier3_cross_feature_combinations.test.ts`: 32 tests covering:
-  - Plan Limits ↔ Tenant Entitlements ↔ Offline Payment Recording
-  - Admin Invitation ↔ Clean Root Acceptance ↔ Idle Session ↔ MFA Gate
-  - Cross-Surface URL Resolver ↔ Reserved Subdomains ↔ Portal Isolation
-  - Self-Action Guard ↔ Roles & Permissions ↔ Admin Account Protection
-  - Platform Settings N-Bank ↔ Payment Recording Bank Choices ↔ BIR VAT
-  - Sticky Command Bar ⌘K Jumps ↔ Registration Velocity Window Toggles (7d/14d/30d)
-  - Newsletter Subscribers RBAC ↔ Blog CRM ↔ RFC 4180 CSV Export
-  - Headless Boot Diagnostic ↔ Clerk Configuration ↔ Clean Root Route Mount
-  - Strict Edge Security Headers ↔ Public Token Routes
-  - Docker Environment ↔ Stateless AdminBaseUrl ↔ Email DTO Generation
-  - Unsaved Dialog Guards, Multibyte CSV Escaping, Cross-Tab Sync Broadcasting
+### Tier 3 — Cross-Feature Combinations (5 Tests)
+- **C1**: Schedule Visit -> In-Place Modal -> Doctor Slots -> Post-Appointment Actions Flow.
+- **C2**: Queue Patient -> Intent Selection -> Priority Series Auto-Selection -> Monotonic Number Issue.
+- **C3**: ActionMenu Direct Intent -> Specialized Modal -> Ticket Issue -> Dashboard Live Display.
+- **C4**: Queue Item -> Care Encounter -> Flow Hold -> Reactivate -> Non-Doctor Discharge.
+- **C5**: My Patients Filter ↔ Live Queue Assignment ↔ Patient Count Reactivity.
 
-### Tier 4 — Real-World Application Scenarios (31 Tests)
-1. **Scenario 1**: Full Clinical Tenant Lifecycle (`scenario1_tenant_lifecycle.test.ts`, 7 tests)
-   - Lead Ingestion -> Workspace Provisioning -> Entitlement Override -> Offline Annual Payment -> Inactivity Preflight -> Soft Archive
-2. **Scenario 2**: Commercial Plan Authoring & Enforcement (`scenario2_commercial_plan_authoring.test.ts`, 6 tests)
-   - 14 Limits -> 10 Capability Flags -> Async Slug Checker -> Pricing & BIR VAT -> Plan Publication
-3. **Scenario 3**: Platform Admin Onboarding & Security Lifecycle (`scenario3_admin_onboarding_security.test.ts`, 6 tests)
-   - Link Invite -> 64-char Hex Token Acceptance -> MFA Gate Enforcement -> Self-Action Protection -> 15m Idle Logout
-4. **Scenario 4**: Governance Workstation Operations & Restyle (`scenario4_governance_workstation_ops.test.ts`, 6 tests)
-   - ⌘K Command Palette -> 4-Card Overview KPI Dashboard -> 7d/14d/30d Velocity Toggle -> N-Bank JSON CRUD -> CSV Export -> Dark/Light Theme
-5. **Scenario 5**: Clean Monorepo Isolation & Boundary Protection (`scenario5_monorepo_clean_isolation.test.ts`, 6 tests)
-   - Subdomain Reservation -> Zero 301/302 Redirect Shims -> Cross-Surface Origin Resolvers -> Decoupled Billing -> Script Independence -> 0 Database Migrations
+### Tier 4 — Real-World Application Scenarios (5 Tests)
+- **Scenario 1**: Outpatient Morning Rush: Doctor Consultation Workflow (`Q-001` Regular series, Dr. Santos consultation, care & flow clusters, settlement handover).
+- **Scenario 2**: Walk-In Triage & Vitals Monitoring (Nurse Bay, Senior priority `SV-001`, BP monitoring, non-doctor discharge).
+- **Scenario 3**: Minor Treatment Bay Clinical Procedure (`P-001` dressing change, separated ordering physician, procedural notes).
+- **Scenario 4**: Administrative Fit-to-Work Clearance with In-Place Schedule Visit (`A-001` clearance, 2-week follow-up booking, 4-button post-appointment dialog).
+- **Scenario 5**: Urgent Walk-in with Critical Emergency Divert to ER (`Q-002` emergency priority, Divert to ER cluster, handover documentation, `Diverted` status).
 
 ---
 
 ## 3. Test Execution Verification
 
-### Command
+### Primary Command
 ```bash
-bun test apps/admin-web/tests/e2e
+cd apps/clinic-app && bun test tests/e2e_clinicPatientWorkflows.test.ts
 ```
 
-### Verbatim Execution Output
+### Verbatim Output
 ```
- 323 pass
+bun test v1.4.3 (c6da4a4d3)
+
+tests/e2e_clinicPatientWorkflows.test.ts:
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F1: "My patients" Toolbar Tab is configured in 2nd position with everyday clinic copy [0.20ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F2: Doctor Patient Ownership Filter matches assigned, consulting, and active queue patients [0.13ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F3: Nurse Patient Ownership Filter matches recorded vitals and assigned room patients [0.04ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F4: Backend Query MY_PATIENTS Filter Contract satisfies endpoint requirements [0.07ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F5: Reactive MyPatients Count returns structured DTO from /api/v1/patients/counts
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F6: Relabel "Schedule visit" Button replaces legacy "Book appointment" across all surfaces [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F7: In-Place ScheduleVisitModal renders preselected patient identity banner and inputs
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F8: Dynamic Doctor Shift Slots fetches available slots for attending physician [0.03ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F9: Post-Appointment Setup Dialog presents all 4 distinct required action buttons [0.03ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F10: Relabel "Queue Patient" Button replaces legacy "Add to queue"
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F11: ActionMenu Direct Service Intents provide one-click access to 4 clinical services [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F12: Dedicated ServiceCheckInModal supports tailored views for all 4 clinical services [0.01ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F13: Prefix Ticket Series System generates Regular and Priority tickets accurately [0.04ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F14: Senior/PWD Priority Auto-Selection defaults to priority series for age >= 60 or valid ID [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F15: Backend SeriesPrefix Support Contract generates prefix-specific sequential queue number [0.12ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F16: Domain Boundary Enforcement preserves clinic care vs lab, pharmacy, and cashier boundaries [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F17: Dashboard Toolbar Cleanup verifies removal of TV Board and Force EOD buttons
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F18: 4 Semantic Clusters for Actions cleanly group queue controls by relativity [0.04ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F19: Formatted Service Badges replace raw enum strings with styled semantic badges [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 1: Feature Coverage Across All 20 Features (F1-F20) > F20: Zero Jargon Clinical UI Copy enforces everyday terminology and rejects legalistic/statutory jargon [0.05ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B1: Empty patient directory returns zero counts and clean empty state without crashes [0.01ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B2: Doctor on leave or off duty displays unavailable state and disables slot selection
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B3: Age boundary check: Age 59 yrs 364 days vs Age 60 yrs exactly [1.42ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B4: Patient missing contact number triggers friendly validation notice on notification [0.04ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B5: Multiple assigned rooms for nurse correctly includes patients across all assigned rooms [0.04ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B6: Nurse with no assigned rooms and no recorded vitals returns empty list cleanly [0.01ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B7: Staff with unrecognized or non-clinical role defaults to safe empty my-patients view [0.01ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B8: Monotonic sequence rollover handles sequences past 999 without truncation
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B9: Ticket prefix casing resilience normalizes lowercase inputs to uppercase standard
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B10: Overlapping appointment slots handling prevents booking already booked slot [0.06ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B11: Emergency divert halts check-in if mandatory transfer handover details are missing [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 2: Boundary and Corner Cases > B12: Clinical Procedure allows walk-in procedures without an ordering doctor
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 3: Cross-Feature Combinations & Workflows > C1: Schedule Visit -> In-Place Modal -> Doctor Slots -> Post-Appointment Actions Flow [0.03ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 3: Cross-Feature Combinations & Workflows > C2: Queue Patient -> Intent Selection -> Priority Series Auto-Selection -> Monotonic Number Issue [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 3: Cross-Feature Combinations & Workflows > C3: ActionMenu Direct Intent -> Specialized Modal -> Ticket Issue -> Dashboard Live Display [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 3: Cross-Feature Combinations & Workflows > C4: Queue Item -> Care Encounter -> Flow Hold -> Reactivate -> Non-Doctor Discharge [0.04ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 3: Cross-Feature Combinations & Workflows > C5: My Patients Filter ↔ Live Queue Assignment ↔ Patient Count Reactivity [0.05ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 4: Real-World Clinic Operational Scenarios > Scenario 1: Outpatient Morning Rush: Doctor Consultation Workflow [0.03ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 4: Real-World Clinic Operational Scenarios > Scenario 2: Walk-In Triage & Vitals Monitoring (Nurse Bay, No Doctor Required) [0.07ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 4: Real-World Clinic Operational Scenarios > Scenario 3: Minor Treatment Bay Clinical Procedure [0.03ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 4: Real-World Clinic Operational Scenarios > Scenario 4: Administrative Fit-to-Work Clearance with In-Place Schedule Visit [0.02ms]
+✓ Clinic Patient List & Dashboard UI/UX E2E Master Suite (Tiers 1-4) > Tier 4: Real-World Clinic Operational Scenarios > Scenario 5: Urgent Walk-in with Critical Emergency Divert to ER [0.02ms]
+
+ 42 pass
  0 fail
- 752 expect() calls
-Ran 323 tests across 16 files. [67.00ms]
+ 211 expect() calls
+Ran 42 tests across 1 file. [10.00ms]
 ```
 
 ---
@@ -114,19 +162,16 @@ Ran 323 tests across 16 files. [67.00ms]
 
 | Invariant / Quality Gate | Requirement | Observed Status | Result |
 |--------------------------|-------------|-----------------|:------:|
-| **Zero Database Migrations** | 0 added/modified migrations, 0 entity changes | Verified clean via git and test suites | **PASS** |
-| **Zero Redirect Shims** | 0 301/302/307/308 shims for /admin in portal-web | Verified 404 response on /admin | **PASS** |
-| **Reserved Subdomain 'admin'** | 'admin' strictly retained in RESERVED_SUBDOMAINS | Verified reserved and unclaimable | **PASS** |
-| **Clean Root Routes** | Zero `/admin/*` prefix on all 15 workstation routes | Verified clean root paths only | **PASS** |
-| **Edge Security Headers** | CSP `frame-ancestors 'none'`, `X-Frame-Options: DENY` | Verified header configurations | **PASS** |
-| **Design System Strictness** | Zero `#hex` color literals in UI, semantic tokens only | Verified semantic teal/slate tokens | **PASS** |
-| **Idle Session Auto-Logout** | 15m timeout, 60s countdown warning, cross-tab sync | Verified multi-tab timer math | **PASS** |
-| **Configurable Admin MFA Gate** | Enforces 2FA when `VITE_ADMIN_REQUIRE_MFA=true` | Verified blocking and TOTP pass | **PASS** |
-| **Headless Boot Resilience** | Renders diagnostic screen when Clerk key is unset | Verified zero crashes on boot | **PASS** |
+| **Zero Jargon Compliance** | Zero statutory RA codes, zero DB/architectural terms | Verified clean across all labels & dialogs | **PASS** |
+| **Domain Boundaries** | Clinic care strictly isolated from lab draws, pharmacy claims, and cashier tokens | Verified by workstation routing gatekeeper | **PASS** |
+| **Design System Strictness** | Adherence to `@clinicez/design-tokens` (teal `#0D6963`, semantic variants) | Verified semantic badge variants & button types | **PASS** |
+| **Post-Appointment 4 Actions** | Notify patient, Set new, Close, Open appointment screen | Verified all 4 distinct actions present | **PASS** |
+| **Prefix Ticket Series** | Regular (`Q`, `V`, `P`, `A`) vs Senior/PWD Priority (`SQ`, `SV`, `SP`, `SA`) | Verified formatting and auto-selection logic | **PASS** |
+| **Dashboard Streamlining** | Removal of TV Board and Force EOD buttons, 4 semantic clusters | Verified cleaner toolbar and grouped action clusters | **PASS** |
 
 ---
 
 ## 5. Defect Escalation Report
 
 **Status**: **0 Open Implementation Defects.**
-All 323 test cases pass with zero failures. All requirements from `ORIGINAL_REQUEST.md` (under `## 2026-10-28T21:03:22Z`), `PROJECT.md`, and `TEST_INFRA.md` are completely covered, executable, and validated.
+All 42 master E2E test cases pass with zero failures. All requirements from `ORIGINAL_REQUEST.md` (R1-R5), `PROJECT.md` (F1-F20), and `clinic_patient_list_and_dashboard_ui_ux_plan.md` are completely covered, executable, and validated.

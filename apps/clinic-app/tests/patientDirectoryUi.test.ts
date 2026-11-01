@@ -132,7 +132,17 @@ const {
   hasStatAllergy,
   formatPatientDemographicsLine,
   buildPatientOverflowMenuItems,
+  isMyPatient,
 } = await import('../components/patient/PatientDirectoryCard');
+
+const { default: ScheduleVisitModal } = await import('../components/patient/ScheduleVisitModal');
+const {
+  default: ServiceCheckInModal,
+  isSeniorOrPwdEligible,
+  resolveTicketPrefix,
+  formatQueueTicketNumber,
+} = await import('../components/patient/ServiceCheckInModal');
+
 import type { ClinicPatient } from '../services/clinicService';
 import { theme } from '../constants/theme';
 
@@ -221,13 +231,14 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       onOpenChart: (p) => {
         chartId = p.id;
       },
-      onBookAppointment: (p) => {
+      onScheduleVisit: (p) => {
         bookedId = p.id;
       },
     });
 
     const ids = items.map((i) => i.id);
-    expect(ids).toEqual(['edit-demographics', 'philhealth-profile', 'view-chart', 'book-appointment']);
+    expect(ids).toEqual(['edit-demographics', 'philhealth-profile', 'view-chart', 'schedule-visit']);
+    expect(items[3].label).toBe('Schedule visit');
 
     items[0].onPress();
     expect(editedId).toBe('pat-cassandra');
@@ -242,7 +253,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(bookedId).toBe('pat-cassandra');
   });
 
-  test('5. Card mode renders 3-button footer (View chart, Book appointment, Add to queue), header ActionMenu trigger, initials avatar, and STAT allergy badge', () => {
+  test('5. Card mode renders 3-button footer (View chart, Schedule visit, Queue Patient), header ActionMenu trigger, initials avatar, and STAT allergy badge', () => {
     const markup = renderToStaticMarkup(
       React.createElement(PatientDirectoryCard, {
         patient: basePatient,
@@ -251,7 +262,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onOpenChart: () => {},
         onEditDemographics: () => {},
         onOpenPhilHealth: () => {},
-        onBookAppointment: () => {},
+        onScheduleVisit: () => {},
         onAddToQueue: () => {},
       })
     );
@@ -279,8 +290,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     // 3-Button Footer + Overflow ActionMenu trigger
     expect(markup).toContain('View chart');
-    expect(markup).toContain('Book appointment');
-    expect(markup).toContain('Add to queue');
+    expect(markup).toContain('Schedule visit');
+    expect(markup).toContain('Queue Patient');
     expect(markup).toContain('aria-label="More actions for Ambray, Cassandra"');
 
     // Desktop 2-column constraint style applied so orphan cards do not stretch 100%
@@ -297,7 +308,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onOpenChart: () => {},
         onEditDemographics: () => {},
         onOpenPhilHealth: () => {},
-        onBookAppointment: () => {},
+        onScheduleVisit: () => {},
         onAddToQueue: () => {},
       })
     );
@@ -316,15 +327,15 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onOpenChart: () => {},
         onEditDemographics: () => {},
         onOpenPhilHealth: () => {},
-        onBookAppointment: () => {},
+        onScheduleVisit: () => {},
         onAddToQueue: () => {},
       })
     );
 
     // All 3 buttons present
     expect(markup).toContain('View chart');
-    expect(markup).toContain('Book appointment');
-    expect(markup).toContain('Add to queue');
+    expect(markup).toContain('Schedule visit');
+    expect(markup).toContain('Queue Patient');
 
     // No intermediate primaryActionsGroup wrapping buttons onto a second line
     expect(markup).not.toContain('primaryActionsGroup');
@@ -334,7 +345,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
   });
 
   test('5.3 Action footer flex grows to cover entire span when only 2 or 1 action buttons are provided', () => {
-    // Case A: 2 buttons provided (View chart + Add to queue)
+    // Case A: 2 buttons provided (View chart + Queue Patient)
     const markupTwo = renderToStaticMarkup(
       React.createElement(PatientDirectoryCard, {
         patient: basePatient,
@@ -346,11 +357,11 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
     expect(markupTwo).toContain('View chart');
-    expect(markupTwo).not.toContain('Book appointment');
-    expect(markupTwo).toContain('Add to queue');
+    expect(markupTwo).not.toContain('Schedule visit');
+    expect(markupTwo).toContain('Queue Patient');
     expect(markupTwo).toContain('&quot;flexGrow&quot;:1');
 
-    // Case B: 1 button provided (only Add to queue)
+    // Case B: 1 button provided (only Queue Patient)
     const markupOne = renderToStaticMarkup(
       React.createElement(PatientDirectoryCard, {
         patient: basePatient,
@@ -361,8 +372,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
     expect(markupOne).not.toContain('View chart');
-    expect(markupOne).not.toContain('Book appointment');
-    expect(markupOne).toContain('Add to queue');
+    expect(markupOne).not.toContain('Schedule visit');
+    expect(markupOne).toContain('Queue Patient');
     expect(markupOne).toContain('&quot;flexGrow&quot;:1');
   });
 
@@ -403,7 +414,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onOpenChart: () => {},
         onEditDemographics: () => {},
         onOpenPhilHealth: () => {},
-        onBookAppointment: () => {},
+        onScheduleVisit: () => {},
         onAddToQueue: () => {},
       })
     );
@@ -414,7 +425,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(rowMarkup).toContain('Female • Single • Blood type B+');
     expect(rowMarkup).toContain('STAT');
     expect(rowMarkup).toContain('View chart');
-    expect(rowMarkup).toContain('Add to queue');
+    expect(rowMarkup).toContain('Schedule visit');
+    expect(rowMarkup).toContain('Queue Patient');
     expect(rowMarkup).toContain('aria-label="More actions for Ambray, Cassandra"');
   });
 
@@ -727,6 +739,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     // Tab options consume formatTabCount
     expect(screenCode).toContain("formatTabCount(filterCounts?.all, totalCounts?.all)");
+    expect(screenCode).toContain("formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients)");
     expect(screenCode).toContain("formatTabCount(filterCounts?.students, totalCounts?.students)");
     expect(screenCode).toContain("formatTabCount(filterCounts?.employees, totalCounts?.employees)");
     expect(screenCode).toContain("formatTabCount(filterCounts?.alerts, totalCounts?.alerts)");
@@ -735,4 +748,347 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     // getPatientCounts is called to fetch database totals
     expect(screenCode).toContain('clinicService.getPatientCounts');
   });
+
+  test('16. Patients.screen.tsx includes "My patients" tab toolbar option placed directly after "All patients"', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // PatientFilter includes MY_PATIENTS
+    expect(screenCode).toContain("'ALL' | 'MY_PATIENTS' | 'STUDENTS' | 'EMPLOYEES' | 'ALERTS' | 'SENIOR_PWD'");
+
+    // Options array includes MY_PATIENTS tab right after All patients
+    const allPatientsIndex = screenCode.indexOf("value: 'ALL', label: 'All patients'");
+    const myPatientsIndex = screenCode.indexOf("value: 'MY_PATIENTS', label: 'My patients'");
+    const studentsIndex = screenCode.indexOf("value: 'STUDENTS', label: 'Students'");
+
+    expect(allPatientsIndex).toBeGreaterThan(-1);
+    expect(myPatientsIndex).toBeGreaterThan(allPatientsIndex);
+    expect(studentsIndex).toBeGreaterThan(myPatientsIndex);
+
+    // formatTabCount is used for myPatients
+    expect(screenCode).toContain("formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients)");
+
+    // Server-side filtering parameters passed in fetchPatients
+    expect(screenCode).toContain("serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD' || activeFilter === 'MY_PATIENTS')");
+  });
+
+  test('17. isMyPatient isolates patients assigned to or seen by doctors and nurses', () => {
+    const doctorStaff: any = {
+
+      id: 'doc-santos-1',
+      role: 'Doctor',
+      firstName: 'Maria',
+      lastName: 'Santos',
+    };
+
+    const nurseStaff: any = {
+      id: 'nurse-joy-1',
+      role: 'Nurse',
+      firstName: 'Joy',
+      lastName: 'Flores',
+      assignedRoomIds: ['room-triage-a', 'room-triage-b'],
+    };
+
+    // 1. Doctor matches assigned_doctor_id
+    const patDocAssigned: any = {
+      id: 'p1',
+      fullName: 'Patient 1',
+      customFields: { assigned_doctor_id: 'doc-santos-1' },
+    };
+    expect(isMyPatient(patDocAssigned, doctorStaff)).toBe(true);
+
+    // 2. Doctor matches doctor_id
+    const patDocSeen: any = {
+      id: 'p2',
+      fullName: 'Patient 2',
+      customFields: { doctor_id: 'doc-santos-1' },
+    };
+    expect(isMyPatient(patDocSeen, doctorStaff)).toBe(true);
+
+    // 3. Doctor matches activeQueueDoctorId
+    const patDocQueued: any = {
+      id: 'p3',
+      fullName: 'Patient 3',
+      activeQueueDoctorId: 'doc-santos-1',
+      customFields: {},
+    };
+    expect(isMyPatient(patDocQueued, doctorStaff)).toBe(true);
+
+    // 4. Doctor does NOT match other doctor's patient
+    const patDocOther: any = {
+      id: 'p4',
+      fullName: 'Patient 4',
+      customFields: { assigned_doctor_id: 'doc-other-99' },
+    };
+    expect(isMyPatient(patDocOther, doctorStaff)).toBe(false);
+
+    // 5. Nurse matches nurse_id in customFields
+    const patNurseAssigned: any = {
+      id: 'p5',
+      fullName: 'Patient 5',
+      customFields: { nurse_id: 'nurse-joy-1' },
+    };
+    expect(isMyPatient(patNurseAssigned, nurseStaff)).toBe(true);
+
+    // 6. Nurse matches vitals recorded by nurse
+    const patNurseVitals: any = {
+      id: 'p6',
+      fullName: 'Patient 6',
+      customFields: { vitals_recorded_by_nurse_id: 'nurse-joy-1' },
+    };
+    expect(isMyPatient(patNurseVitals, nurseStaff)).toBe(true);
+
+    // 7. Nurse matches assigned room ID
+    const patNurseRoom: any = {
+      id: 'p7',
+      fullName: 'Patient 7',
+      roomId: 'room-triage-a',
+      customFields: {},
+    };
+    expect(isMyPatient(patNurseRoom, nurseStaff)).toBe(true);
+
+    // 8. Nurse does NOT match other room or unassigned patient
+    const patNurseOther: any = {
+      id: 'p8',
+      fullName: 'Patient 8',
+      roomId: 'room-other-x',
+      customFields: {},
+    };
+    expect(isMyPatient(patNurseOther, nurseStaff)).toBe(false);
+
+    // 9. Null or undefined staff returns false
+    expect(isMyPatient(patDocAssigned, null)).toBe(false);
+    expect(isMyPatient(patDocAssigned, undefined)).toBe(false);
+  });
+
+  test('18. ScheduleVisitModal renders preselected patient identity banner, quick dates, and visit purposes', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ScheduleVisitModal, {
+        visible: true,
+        patient: basePatient,
+        onClose: () => {},
+        attendingDoctor: 'Dr. Maria Santos',
+        visitPurpose: 'Consultation',
+      })
+    );
+
+    // Patient Identity Banner
+    expect(markup).toContain('Ambray, Cassandra');
+    expect(markup).toContain('PAT-20261013-3EFFEA');
+    expect(markup).toContain('PhilHealth PIN 12-121212121-7');
+    expect(markup).toContain('STAT Allergy: Amoxicillin');
+
+    // Title and quick date options
+    expect(markup).toContain('Schedule visit');
+    expect(markup).toContain('Today');
+    expect(markup).toContain('Tomorrow');
+    expect(markup).toContain('Next Week');
+
+    // Visit Purpose options
+    expect(markup).toContain('Consultation');
+    expect(markup).toContain('Routine Follow-up');
+    expect(markup).toContain('Chronic Disease Review');
+    expect(markup).toContain('Post-Op Check');
+
+    // Footer action buttons
+    expect(markup).toContain('Cancel');
+    expect(markup).toContain('Confirm and schedule');
+  });
+
+  test('19. ScheduleVisitModal handles null visibility cleanly without rendering modal card', () => {
+    const closedMarkup = renderToStaticMarkup(
+      React.createElement(ScheduleVisitModal, {
+        visible: false,
+        patient: basePatient,
+        onClose: () => {},
+      })
+    );
+    expect(closedMarkup).toBe('');
+
+    const nullPatientMarkup = renderToStaticMarkup(
+      React.createElement(ScheduleVisitModal, {
+        visible: true,
+        patient: null,
+        onClose: () => {},
+      })
+    );
+    expect(nullPatientMarkup).toBe('');
+  });
+
+  test('20. Patients.screen.tsx wires onScheduleVisit and mounts ScheduleVisitModal', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // Imports ScheduleVisitModal
+    expect(screenCode).toContain("import ScheduleVisitModal from '../../components/patient/ScheduleVisitModal'");
+
+    // Declares scheduleModalPatient state
+    expect(screenCode).toContain('const [scheduleModalPatient, setScheduleModalPatient] = useState<ClinicPatient | null>(null)');
+
+    // Wires onScheduleVisit in card and table modes
+    expect(screenCode).toContain('onScheduleVisit={(p) => setScheduleModalPatient(p)}');
+
+    // Mounts ScheduleVisitModal
+    expect(screenCode).toContain('<ScheduleVisitModal');
+    expect(screenCode).toContain('visible={!!scheduleModalPatient}');
+    expect(screenCode).toContain('patient={scheduleModalPatient}');
+    expect(screenCode).toContain('onClose={() => setScheduleModalPatient(null)}');
+  });
+
+  test('21. buildPatientOverflowMenuItems includes 4 direct clinical service intents under Services & Queue when onSelectService is provided', () => {
+    let selectedService: string | null = null;
+    let targetPatientId: string | null = null;
+
+    const items = buildPatientOverflowMenuItems(basePatient, {
+      onSelectService: (p, srv) => {
+        targetPatientId = p.id;
+        selectedService = srv;
+      },
+    });
+
+    const itemLabels = items.map((i) => i.label);
+    expect(itemLabels).toContain('Doctor Consultation');
+    expect(itemLabels).toContain('Vitals Check');
+    expect(itemLabels).toContain('Clinical Procedure');
+    expect(itemLabels).toContain('Administrative & Clearance');
+
+    const consultItem = items.find((i) => i.id === 'service-consultation')!;
+    consultItem.onPress();
+    expect(targetPatientId).toBe('pat-cassandra');
+    expect(selectedService).toBe('Doctor Consultation');
+
+    const vitalsItem = items.find((i) => i.id === 'service-vitals')!;
+    vitalsItem.onPress();
+    expect(selectedService).toBe('Vitals Check');
+
+    const procedureItem = items.find((i) => i.id === 'service-procedure')!;
+    procedureItem.onPress();
+    expect(selectedService).toBe('Clinical Procedure');
+
+    const adminItem = items.find((i) => i.id === 'service-administrative')!;
+    adminItem.onPress();
+    expect(selectedService).toBe('Administrative & Clearance');
+  });
+
+  test('22. ServiceCheckInModal renders preselected patient identity banner, service selector tabs, and ticket preview', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(ServiceCheckInModal, {
+        visible: true,
+        patient: basePatient,
+        onClose: () => {},
+      })
+    );
+
+    // Patient Banner Info
+    expect(markup).toContain('Ambray, Cassandra');
+    expect(markup).toContain('PAT-20261013-3EFFEA');
+    expect(markup).toContain('AC');
+
+    // 4 Clinical Services
+    expect(markup).toContain('Doctor Consultation');
+    expect(markup).toContain('Vitals Check');
+    expect(markup).toContain('Clinical Procedure');
+    expect(markup).toContain('Administrative &amp; Clearance');
+
+    // Ticket Preview
+    expect(markup).toContain('data-testid="ticket-series-preview"');
+
+    // Footer actions
+    expect(markup).toContain('Confirm Check-In (Issue Ticket)');
+    expect(markup).toContain('Cancel');
+  });
+
+  test('23. ServiceCheckInModal auto-selects Senior & PWD Priority series when patient is senior or PWD', () => {
+    const seniorPatient: ClinicPatient = {
+      ...basePatient,
+      id: 'pat-senior',
+      age: 72,
+      seniorCitizenId: 'SC-12345',
+    };
+
+    expect(isSeniorOrPwdEligible(seniorPatient)).toBe(true);
+    expect(isSeniorOrPwdEligible(basePatient)).toBe(true); // basePatient has seniorCitizenId: '98928398293293'
+
+    const youngPatient: ClinicPatient = {
+      ...basePatient,
+      id: 'pat-young',
+      age: 28,
+      dateOfBirth: '1998-05-15',
+      seniorCitizenId: undefined,
+      pwdId: undefined,
+      customFields: {},
+    };
+    expect(isSeniorOrPwdEligible(youngPatient)).toBe(false);
+
+    // Markup for senior patient shows priority series banner
+    const seniorMarkup = renderToStaticMarkup(
+      React.createElement(ServiceCheckInModal, {
+        visible: true,
+        patient: seniorPatient,
+        onClose: () => {},
+      })
+    );
+    expect(seniorMarkup).toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
+    expect(seniorMarkup).toContain('SQ-001');
+
+    // Markup for young patient defaults to regular Q-001 preview
+    const youngMarkup = renderToStaticMarkup(
+      React.createElement(ServiceCheckInModal, {
+        visible: true,
+        patient: youngPatient,
+        onClose: () => {},
+      })
+    );
+    expect(youngMarkup).toContain('Q-001');
+    expect(youngMarkup).not.toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
+  });
+
+  test('24. resolveTicketPrefix and formatQueueTicketNumber produce accurate regular and priority ticket numbers', () => {
+    expect(resolveTicketPrefix('Doctor Consultation', false)).toBe('Q');
+    expect(resolveTicketPrefix('Doctor Consultation', true)).toBe('SQ');
+
+    expect(resolveTicketPrefix('Vitals Check', false)).toBe('V');
+    expect(resolveTicketPrefix('Vitals Check', true)).toBe('SV');
+
+    expect(resolveTicketPrefix('Clinical Procedure', false)).toBe('P');
+    expect(resolveTicketPrefix('Clinical Procedure', true)).toBe('SP');
+
+    expect(resolveTicketPrefix('Administrative & Clearance', false)).toBe('A');
+    expect(resolveTicketPrefix('Administrative & Clearance', true)).toBe('SA');
+
+    expect(formatQueueTicketNumber('Q', 1)).toBe('Q-001');
+    expect(formatQueueTicketNumber('SQ', 42)).toBe('SQ-042');
+    expect(formatQueueTicketNumber('SV', 9)).toBe('SV-009');
+    expect(formatQueueTicketNumber('P', 105)).toBe('P-105');
+  });
+
+  test('25. Patients.screen.tsx wires onQueuePatient, onSelectService and mounts ServiceCheckInModal', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // Imports ServiceCheckInModal
+    expect(screenCode).toContain("import ServiceCheckInModal");
+
+    // Declares serviceModalPatient state
+    expect(screenCode).toContain('const [serviceModalPatient, setServiceModalPatient] = useState<ClinicPatient | null>(null)');
+
+    // Declares selectedServiceIntent state
+    expect(screenCode).toContain('const [selectedServiceIntent, setSelectedServiceIntent] = useState<ClinicalServiceType>');
+
+    // Wires onQueuePatient and onSelectService
+    expect(screenCode).toContain('onQueuePatient={handleQueueCheckIn}');
+    expect(screenCode).toContain('onSelectService={handleSelectService}');
+
+    // Mounts ServiceCheckInModal
+    expect(screenCode).toContain('<ServiceCheckInModal');
+    expect(screenCode).toContain('visible={!!serviceModalPatient}');
+    expect(screenCode).toContain('patient={serviceModalPatient}');
+    expect(screenCode).toContain('initialService={selectedServiceIntent}');
+    expect(screenCode).toContain('onClose={() => setServiceModalPatient(null)}');
+    expect(screenCode).toContain('onConfirm={handleConfirmServiceCheckIn}');
+  });
 });
+

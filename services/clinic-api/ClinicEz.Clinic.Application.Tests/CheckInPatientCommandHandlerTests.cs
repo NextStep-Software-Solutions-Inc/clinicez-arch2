@@ -290,4 +290,82 @@ public class CheckInPatientCommandHandlerTests
         command.RoomOrStation.Should().Be("Room 1");
         command.RoomId.Should().Be(Guid.Parse("8c2deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e"));
     }
+
+    [Fact]
+    public async Task Handle_WithSeriesPrefix_GeneratesMonotonicSequentialTicketForThatSeries()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var appointmentPublisher = Substitute.For<IPatientAppointmentPublisher>();
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var apptRepo = TestDbHelper.CreateRepository<Appointment>(context, sieve);
+
+        var handler = new CheckInPatientCommandHandler(queueRepo, apptRepo, uow, clinicContext, IdentityOf(clinicId, tenantId), appointmentPublisher);
+
+        // Act & Assert: Senior Consultation (SQ)
+        var pat1 = Guid.NewGuid();
+        var res1 = await handler.Handle(new CheckInPatientCommand(
+            pat1, "Senior Patient 1", SeriesPrefix: "SQ", VisitType: VisitType.Consultation), CancellationToken.None);
+        res1.QueueNumber.Should().Be("SQ-001");
+
+        // Act & Assert: Regular Consultation (Q)
+        var pat2 = Guid.NewGuid();
+        var res2 = await handler.Handle(new CheckInPatientCommand(
+            pat2, "Regular Patient 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation), CancellationToken.None);
+        res2.QueueNumber.Should().Be("Q-001");
+
+        // Act & Assert: Second Senior Consultation (SQ) -> SQ-002
+        var pat3 = Guid.NewGuid();
+        var res3 = await handler.Handle(new CheckInPatientCommand(
+            pat3, "Senior Patient 2", SeriesPrefix: "SQ", VisitType: VisitType.Consultation), CancellationToken.None);
+        res3.QueueNumber.Should().Be("SQ-002");
+
+        // Act & Assert: Vitals Check (V) -> V-001
+        var pat4 = Guid.NewGuid();
+        var res4 = await handler.Handle(new CheckInPatientCommand(
+            pat4, "Triage Patient", SeriesPrefix: "V", VisitType: VisitType.VitalsCheckOnly), CancellationToken.None);
+        res4.QueueNumber.Should().Be("V-001");
+
+        // Act & Assert: Clinical Procedure (P) -> P-001
+        var pat5 = Guid.NewGuid();
+        var res5 = await handler.Handle(new CheckInPatientCommand(
+            pat5, "Procedure Patient", SeriesPrefix: "P", VisitType: VisitType.StandaloneProcedure), CancellationToken.None);
+        res5.QueueNumber.Should().Be("P-001");
+
+        // Act & Assert: Administrative (A) -> A-001
+        var pat6 = Guid.NewGuid();
+        var res6 = await handler.Handle(new CheckInPatientCommand(
+            pat6, "Admin Patient", SeriesPrefix: "A", VisitType: VisitType.AdministrativeDocument), CancellationToken.None);
+        res6.QueueNumber.Should().Be("A-001");
+    }
+
+    [Fact]
+    public void CheckInPatientCommand_ShouldDeserializeSeriesPrefixFromJson_Successfully()
+    {
+        var json = """
+        {
+            "patientId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+            "patientName": "Juan Dela Cruz",
+            "seriesPrefix": "SQ",
+            "priority": 1,
+            "visitType": 1
+        }
+        """;
+
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var command = System.Text.Json.JsonSerializer.Deserialize<CheckInPatientCommand>(json, options);
+
+        command.Should().NotBeNull();
+        command!.SeriesPrefix.Should().Be("SQ");
+    }
 }

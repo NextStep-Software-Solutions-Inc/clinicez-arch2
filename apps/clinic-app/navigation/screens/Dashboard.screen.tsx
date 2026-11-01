@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Linking, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
   ThemedText,
@@ -38,9 +38,6 @@ import {
 } from '../../components/analytics';
 import DateRangePickerModal from '../../components/ui/DateRangePickerModal';
 import DatePickerModal from '../../components/ui/DatePickerModal';
-import { getPortalBaseUrl } from '../../services/runtimeConfig';
-import { resolveTenantContext } from '@shared/safe';
-import { buildCloudTvDisplayUrl } from '../../utils/queueDisplayRoute';
 import {
   clinicService,
   PatientQueueItem,
@@ -56,6 +53,7 @@ import {
   MorbidityReport,
   TaxDiscountAuditReport,
   DoctorSharesReport,
+  VisitType,
   getManilaTodayStr,
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
@@ -124,6 +122,22 @@ const statusBadge = (status: QueueStatus): { label: string; variant: BadgeVarian
       return { label: 'Diverted (ER Transfer)', variant: 'emergency', icon: 'alert' };
     default:
       return { label: status, variant: 'neutral' };
+  }
+};
+
+const getServiceBadge = (
+  visitType?: VisitType | string
+): { label: string; variant: BadgeVariant; icon?: string } => {
+  switch (visitType) {
+    case 'VitalsCheckOnly':
+      return { label: 'Vitals Check', variant: 'info', icon: 'activity' };
+    case 'StandaloneProcedure':
+      return { label: 'Procedure', variant: 'primary', icon: 'syringe' };
+    case 'AdministrativeDocument':
+      return { label: 'Administrative', variant: 'neutral', icon: 'file' };
+    case 'Consultation':
+    default:
+      return { label: 'Consultation', variant: 'primary', icon: 'stethoscope' };
   }
 };
 
@@ -250,20 +264,6 @@ export default function DashboardScreen() {
   const [savingDischarge, setSavingDischarge] = useState<boolean>(false);
   const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
 
-  const handleOpenTvDisplay = useCallback(() => {
-    const portalBase = getPortalBaseUrl();
-    const ctx = resolveTenantContext();
-    const tvUrl = buildCloudTvDisplayUrl(portalBase, settings, ctx, true);
-
-    if (typeof window !== 'undefined' && window.open) {
-      window.open(tvUrl, '_blank');
-    } else {
-      Linking.openURL(tvUrl).catch(() => {
-        notify.error('Could not open TV display.');
-      });
-    }
-  }, [settings]);
-
   const [activeTab, setActiveTab] = useState<DashboardTab>('QUEUE');
   const [metrics, setMetrics] = useState<QueueMetrics | null>(null);
   const [queue, setQueue] = useState<PatientQueueItem[] | null>(null);
@@ -284,7 +284,7 @@ export default function DashboardScreen() {
   const [savingTriage, setSavingTriage] = useState(false);
   const [editVitalsItem, setEditVitalsItem] = useState<PatientQueueItem | null>(null);
 
-  // Statutory reports and analytics state
+  // Clinic reports and analytics state
   const [reportType, setReportType] = useState<ReportType>('DAILY_EOD');
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
   const [morbidityReport, setMorbidityReport] = useState<MorbidityReport | null>(null);
@@ -762,7 +762,7 @@ export default function DashboardScreen() {
     const bmi =
       heightCm && weightKg ? Math.round((weightKg / ((heightCm / 100) * (heightCm / 100))) * 10) / 10 : undefined;
 
-    const payload: RecordTriageRequest = {
+    const request: RecordTriageRequest = {
       nurseId: currentStaff?.id,
       recordedByNurseName: currentName,
       systolicBp,
@@ -792,7 +792,7 @@ export default function DashboardScreen() {
     };
 
     setSavingTriage(true);
-    const [, err] = await clinicService.recordTriage(triageItem.id, payload);
+    const [, err] = await clinicService.recordTriage(triageItem.id, request);
     setSavingTriage(false);
 
     if (err) {
@@ -1005,22 +1005,7 @@ export default function DashboardScreen() {
               ]}
             />
           </View>
-          <View style={styles.queueButtonsWrap}>
-            <Button
-              title="Open TV Board"
-              variant="outline"
-              icon="maximize"
-              size="sm"
-              onPress={handleOpenTvDisplay}
-            />
-            <Button
-              title="Force EOD / Close Day"
-              variant="outline"
-              icon="clock"
-              size="sm"
-              onPress={() => setShowForceEodModal(true)}
-            />
-          </View>
+          <View style={styles.queueButtonsWrap} />
         </View>
 
         {showSkeleton ? (
@@ -1070,6 +1055,14 @@ export default function DashboardScreen() {
             const canNoShow = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
             const canCancel = item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow';
             const canReactivate = item.status === 'OnHold' || item.status === 'NoShow';
+            const canExamine = item.status !== 'Cancelled' && item.status !== 'NoShow';
+            const canAssignOrReassign = item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow';
+
+            const hasCareActions = canCall || canExamine || canTriage || canAssignOrReassign;
+            const hasFlowActions = canHold || canReactivate || canDischarge || isCompleted;
+            const hasExceptionActions = canNoShow || canCancel;
+            const hasEmergencyActions = canDivert;
+            const serviceBadge = getServiceBadge(item.visitType);
 
             return (
               <Card key={item.id}>
@@ -1088,9 +1081,12 @@ export default function DashboardScreen() {
                       </ThemedText>
                     </View>
                     <View style={styles.badgeRow}>
-                      {item.visitType && item.visitType !== 'Consultation' ? (
-                        <Badge label={item.visitType} variant="neutral" size="sm" />
-                      ) : null}
+                      <Badge
+                        label={serviceBadge.label}
+                        variant={serviceBadge.variant}
+                        icon={serviceBadge.icon}
+                        size="sm"
+                      />
                       {item.roomOrStation ? (
                         <Badge label={item.roomOrStation} variant="outline" size="sm" icon="clinic" />
                       ) : null}
@@ -1129,150 +1125,167 @@ export default function DashboardScreen() {
                     </View>
                   ) : null}
 
-                  <View style={styles.actionRow}>
-                    {canTriage ? (
-                      <Button
-                        title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
-                        variant="outline"
-                        size="sm"
-                        icon="activity"
-                        onPress={() => {
-                          if (item.hasVitals) {
-                            handleOpenEditVitals(item);
-                          } else {
-                            handleOpenTriage(item);
-                          }
-                        }}
-                      />
+                  <View style={styles.actionClustersWrap}>
+                    {hasCareActions ? (
+                      <View style={styles.actionCluster} testID="care-encounter-cluster">
+                        {canCall ? (
+                          <Button
+                            title="Call patient"
+                            variant="primary"
+                            size="sm"
+                            icon="arrowRight"
+                            loading={isActioning}
+                            disabled={isActioning}
+                            onPress={() => handleCallPatient(item)}
+                          />
+                        ) : null}
+                        {canExamine ? (
+                          <Button
+                            title="Examine"
+                            variant="secondary"
+                            size="sm"
+                            icon="consultations"
+                            onPress={() =>
+                              navigation.navigate('Consultations', {
+                                patientId: item.patientId,
+                                patientName: item.patientName,
+                                queueId: item.id,
+                              })
+                            }
+                          />
+                        ) : null}
+                        {canTriage ? (
+                          <Button
+                            title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
+                            variant="outline"
+                            size="sm"
+                            icon="activity"
+                            onPress={() => {
+                              if (item.hasVitals) {
+                                handleOpenEditVitals(item);
+                              } else {
+                                handleOpenTriage(item);
+                              }
+                            }}
+                          />
+                        ) : null}
+                        {canAssignOrReassign ? (
+                          item.doctorName ? (
+                            <Button
+                              title="Reassign"
+                              variant="ghost"
+                              size="sm"
+                              icon="refresh"
+                              onPress={() => handleOpenReassign(item)}
+                            />
+                          ) : (
+                            <Button
+                              title="Assign doctor"
+                              variant="outline"
+                              size="sm"
+                              icon="userCheck"
+                              onPress={() => handleOpenReassign(item)}
+                            />
+                          )
+                        ) : null}
+                      </View>
                     ) : null}
-                    {item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow' ? (
-                      item.doctorName ? (
+
+                    {hasFlowActions ? (
+                      <View style={styles.actionCluster} testID="flow-completion-cluster">
+                        {canHold ? (
+                          <Button
+                            title="Put on hold"
+                            variant="outline"
+                            size="sm"
+                            icon="clock"
+                            loading={isActioning}
+                            disabled={isActioning}
+                            onPress={() => handlePutOnHold(item)}
+                          />
+                        ) : null}
+                        {canReactivate ? (
+                          <Button
+                            title="Re-activate"
+                            variant="primary"
+                            size="sm"
+                            icon="refresh"
+                            loading={isActioning}
+                            disabled={isActioning}
+                            onPress={() => handleReactivate(item)}
+                          />
+                        ) : null}
+                        {canDischarge ? (
+                          <Button
+                            title="Discharge visit"
+                            variant="outline"
+                            size="sm"
+                            icon="check"
+                            loading={isActioning}
+                            disabled={isActioning}
+                            onPress={() => {
+                              setDischargeModalItem(item);
+                              setDischargeRemarks('');
+                            }}
+                          />
+                        ) : null}
+                        {isCompleted ? (
+                          <Button
+                            title="Bill visit"
+                            variant="success"
+                            size="sm"
+                            icon="billing"
+                            onPress={() =>
+                              navigation.navigate('Billing', {
+                                patientId: item.patientId,
+                                patientName: item.patientName,
+                              })
+                            }
+                          />
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {hasExceptionActions ? (
+                      <View style={styles.actionCluster} testID="exceptions-cluster">
+                        {canNoShow ? (
+                          <Button
+                            title="No-show"
+                            variant="outline"
+                            size="sm"
+                            icon="alertCircle"
+                            loading={isActioning}
+                            disabled={isActioning}
+                            onPress={() => handleMarkNoShow(item)}
+                          />
+                        ) : null}
+                        {canCancel ? (
+                          <Button
+                            title="Cancel visit"
+                            variant="ghost"
+                            size="sm"
+                            icon="trash"
+                            loading={isActioning}
+                            disabled={isActioning}
+                            onPress={() => handleCancelVisit(item)}
+                          />
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {hasEmergencyActions ? (
+                      <View style={[styles.actionCluster, styles.emergencyCluster]} testID="emergency-cluster">
                         <Button
-                          title="Reassign"
-                          variant="ghost"
+                          title="Divert to ER"
+                          variant="danger"
                           size="sm"
-                          icon="refresh"
-                          onPress={() => handleOpenReassign(item)}
+                          icon="alert"
+                          testID="divert-emergency-button"
+                          loading={isActioning}
+                          disabled={isActioning}
+                          onPress={() => setDivertModalItem(item)}
                         />
-                      ) : (
-                        <Button
-                          title="Assign doctor"
-                          variant="outline"
-                          size="sm"
-                          icon="userCheck"
-                          onPress={() => handleOpenReassign(item)}
-                        />
-                      )
-                    ) : null}
-                    {canCall ? (
-                      <Button
-                        title="Call patient"
-                        variant="primary"
-                        size="sm"
-                        icon="arrowRight"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleCallPatient(item)}
-                      />
-                    ) : null}
-                    {item.status !== 'Cancelled' && item.status !== 'NoShow' ? (
-                      <Button
-                        title="Examine"
-                        variant="secondary"
-                        size="sm"
-                        icon="consultations"
-                        onPress={() =>
-                          navigation.navigate('Consultations', {
-                            patientId: item.patientId,
-                            patientName: item.patientName,
-                            queueId: item.id,
-                          })
-                        }
-                      />
-                    ) : null}
-                    {canHold ? (
-                      <Button
-                        title="Put on hold"
-                        variant="outline"
-                        size="sm"
-                        icon="clock"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handlePutOnHold(item)}
-                      />
-                    ) : null}
-                    {canReactivate ? (
-                      <Button
-                        title="Re-activate"
-                        variant="primary"
-                        size="sm"
-                        icon="refresh"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleReactivate(item)}
-                      />
-                    ) : null}
-                    {canNoShow ? (
-                      <Button
-                        title="No-show"
-                        variant="outline"
-                        size="sm"
-                        icon="alertCircle"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleMarkNoShow(item)}
-                      />
-                    ) : null}
-                    {canCancel ? (
-                      <Button
-                        title="Cancel visit"
-                        variant="ghost"
-                        size="sm"
-                        icon="trash"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => handleCancelVisit(item)}
-                      />
-                    ) : null}
-                    {canDischarge ? (
-                      <Button
-                        title="Discharge visit"
-                        variant="outline"
-                        size="sm"
-                        icon="check"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => {
-                          setDischargeModalItem(item);
-                          setDischargeRemarks('');
-                        }}
-                      />
-                    ) : null}
-                    {canDivert ? (
-                      <Button
-                        title="Divert to ER"
-                        variant="danger"
-                        size="sm"
-                        icon="alert"
-                        testID="divert-emergency-button"
-                        loading={isActioning}
-                        disabled={isActioning}
-                        onPress={() => setDivertModalItem(item)}
-                      />
-                    ) : null}
-                    {isCompleted ? (
-                      <Button
-                        title="Bill visit"
-                        variant="success"
-                        size="sm"
-                        icon="billing"
-                        onPress={() =>
-                          navigation.navigate('Billing', {
-                            patientId: item.patientId,
-                            patientName: item.patientName,
-                          })
-                        }
-                      />
+                      </View>
                     ) : null}
                   </View>
                 </CardContent>
@@ -1666,7 +1679,7 @@ export default function DashboardScreen() {
   };
 
   // ------------------------------------------------------------------
-  // Tab: statutory reports
+  // Tab: clinic reports
   // ------------------------------------------------------------------
   const renderReportBody = () => {
     if (loading && !currentReportReady) return <LoadingBlock rows={6} />;
@@ -2472,7 +2485,7 @@ export default function DashboardScreen() {
         title="Discharge / Complete Visit"
         subtitle={
           dischargeModalItem
-            ? `Ticket ${dischargeModalItem.queueNumber} · ${dischargeModalItem.patientName} (${dischargeModalItem.visitType ?? 'General Outpatient'})`
+            ? `Ticket ${dischargeModalItem.queueNumber} · ${dischargeModalItem.patientName} (${getServiceBadge(dischargeModalItem.visitType).label})`
             : ''
         }
         maxWidth={480}
@@ -2604,6 +2617,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
+  },
+  actionClustersWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  actionCluster: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  emergencyCluster: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
   },
   listGap: {
     gap: theme.spacing.md,

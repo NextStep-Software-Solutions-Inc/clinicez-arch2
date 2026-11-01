@@ -3,12 +3,65 @@ import { View, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'rea
 import { ThemedText, Badge, Button, Card, Icon, ActionMenu, type ActionMenuItem } from '@ui';
 import { theme } from '@constants/theme';
 import { formatLongAge } from '../../utils/age';
-import type { ClinicPatient } from '../../services/clinicService';
+import type { ClinicPatient, StaffMember } from '../../services/clinicService';
 import { computePatientLocation } from './patientLocation';
 
 export { computePatientLocation };
 
+/**
+ * Determines whether a patient is assigned to or was seen by the current staff member (Doctor or Nurse).
+ */
+export function isMyPatient(
+  patient: ClinicPatient,
+  currentStaff: StaffMember | null | undefined
+): boolean {
+  if (!currentStaff || !currentStaff.id) return false;
+  const staffId = currentStaff.id;
+  const isDoctor = currentStaff.role === 'Doctor';
+  const isNurse = currentStaff.role === 'Nurse';
+
+  if (isDoctor) {
+    return (
+      patient.customFields?.assigned_doctor_id === staffId ||
+      patient.customFields?.doctor_id === staffId ||
+      (patient as any).activeQueueDoctorId === staffId ||
+      (patient as any).doctorId === staffId
+    );
+  }
+
+  if (isNurse) {
+    const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
+    const patientRoomId = (patient as any).roomId || (patient as any).activeQueueRoomId || patient.customFields?.room_id || patient.customFields?.assigned_room_id;
+    const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+
+    return (
+      patient.customFields?.nurse_id === staffId ||
+      patient.customFields?.assigned_nurse_id === staffId ||
+      patient.customFields?.vitals_recorded_by_nurse_id === staffId ||
+      patient.customFields?.recorded_by_nurse_id === staffId ||
+      roomMatch
+    );
+  }
+
+  return (
+    patient.customFields?.assigned_doctor_id === staffId ||
+    patient.customFields?.doctor_id === staffId ||
+    patient.customFields?.nurse_id === staffId ||
+    patient.customFields?.assigned_nurse_id === staffId ||
+    patient.customFields?.staff_id === staffId ||
+    (patient as any).activeQueueDoctorId === staffId ||
+    (patient as any).doctorId === staffId
+  );
+}
+
+
 export type PatientDirectoryViewMode = 'cards' | 'table';
+
+export type ClinicalServiceType =
+  | 'Doctor Consultation'
+  | 'Vitals Check'
+  | 'Clinical Procedure'
+  | 'Administrative & Clearance';
 
 export interface PatientDirectoryCardProps {
   patient: ClinicPatient;
@@ -21,8 +74,11 @@ export interface PatientDirectoryCardProps {
   onOpenChart?: (patient: ClinicPatient) => void;
   onEditDemographics?: (patient: ClinicPatient) => void;
   onOpenPhilHealth?: (patient: ClinicPatient) => void;
+  onScheduleVisit?: (patient: ClinicPatient) => void;
   onBookAppointment?: (patient: ClinicPatient) => void;
-  onAddToQueue?: (patient: ClinicPatient) => void;
+  onAddToQueue?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
+  onQueuePatient?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
+  onSelectService?: (patient: ClinicPatient, serviceType: ClinicalServiceType) => void;
 }
 
 /**
@@ -100,7 +156,11 @@ export function buildPatientOverflowMenuItems(
     onEditDemographics?: (p: ClinicPatient) => void;
     onOpenPhilHealth?: (p: ClinicPatient) => void;
     onOpenChart?: (p: ClinicPatient) => void;
+    onScheduleVisit?: (p: ClinicPatient) => void;
     onBookAppointment?: (p: ClinicPatient) => void;
+    onSelectService?: (p: ClinicPatient, serviceType: ClinicalServiceType) => void;
+    onQueuePatient?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
+    onAddToQueue?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
   }
 ): ActionMenuItem[] {
   const items: ActionMenuItem[] = [];
@@ -109,7 +169,7 @@ export function buildPatientOverflowMenuItems(
       id: 'edit-demographics',
       label: 'Edit Demographics',
       icon: 'edit',
-      hint: 'Update personal, contact, and statutory details',
+      hint: 'Update personal, contact, and identity details',
       onPress: () => handlers.onEditDemographics!(patient),
     });
   }
@@ -133,12 +193,45 @@ export function buildPatientOverflowMenuItems(
       onPress: () => handlers.onOpenChart!(patient),
     });
   }
-  if (handlers.onBookAppointment) {
+  const scheduleHandler = handlers.onScheduleVisit || handlers.onBookAppointment;
+  if (scheduleHandler) {
     items.push({
-      id: 'book-appointment',
-      label: 'Book appointment',
+      id: 'schedule-visit',
+      label: 'Schedule visit',
       icon: 'calendar',
-      onPress: () => handlers.onBookAppointment!(patient),
+      onPress: () => scheduleHandler(patient),
+    });
+  }
+  const serviceHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
+  if (serviceHandler) {
+    items.push({
+      id: 'service-consultation',
+      label: 'Doctor Consultation',
+      icon: 'stethoscope',
+      dividerBefore: true,
+      hint: 'Physician evaluation & care',
+      onPress: () => serviceHandler(patient, 'Doctor Consultation'),
+    });
+    items.push({
+      id: 'service-vitals',
+      label: 'Vitals Check',
+      icon: 'activity',
+      hint: 'Blood pressure & triage monitoring',
+      onPress: () => serviceHandler(patient, 'Vitals Check'),
+    });
+    items.push({
+      id: 'service-procedure',
+      label: 'Clinical Procedure',
+      icon: 'syringe',
+      hint: 'Wound care, injection, or dressing',
+      onPress: () => serviceHandler(patient, 'Clinical Procedure'),
+    });
+    items.push({
+      id: 'service-administrative',
+      label: 'Administrative & Clearance',
+      icon: 'file',
+      hint: 'Medical certificate & clearances',
+      onPress: () => serviceHandler(patient, 'Administrative & Clearance'),
     });
   }
   return items;
@@ -186,8 +279,11 @@ function PatientDirectoryCard({
   onOpenChart,
   onEditDemographics,
   onOpenPhilHealth,
+  onScheduleVisit,
   onBookAppointment,
   onAddToQueue,
+  onQueuePatient,
+  onSelectService,
 }: PatientDirectoryCardProps) {
   const initials = getPatientInitials(patient);
   const demographics = formatPatientDemographicsLine(patient);
@@ -196,11 +292,16 @@ function PatientDirectoryCard({
   const isStatAllergy = hasStatAllergy(patient.allergies);
   const isQueued = Boolean(patient.activeQueueTicket);
 
+  const handleScheduleVisit = onScheduleVisit || onBookAppointment;
+  const handleQueuePatient = onQueuePatient || onAddToQueue;
+
   const menuItems = buildPatientOverflowMenuItems(patient, {
     onEditDemographics,
     onOpenPhilHealth,
     onOpenChart,
-    onBookAppointment,
+    onScheduleVisit: handleScheduleVisit,
+    onBookAppointment: handleScheduleVisit,
+    onSelectService: onSelectService || (handleQueuePatient ? (p, s) => handleQueuePatient(p, s) : undefined),
   });
 
   if (mode === 'table') {
@@ -346,15 +447,24 @@ function PatientDirectoryCard({
               onPress={() => onOpenChart(patient)}
             />
           ) : null}
-          {onAddToQueue ? (
+          {handleScheduleVisit ? (
             <Button
-              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
+              title="Schedule visit"
+              variant="secondary"
+              size="sm"
+              icon="calendar"
+              onPress={() => handleScheduleVisit(patient)}
+            />
+          ) : null}
+          {handleQueuePatient ? (
+            <Button
+              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Queue Patient'}
               variant="primary"
               size="sm"
               icon={isQueued ? 'checkCircle' : 'plus'}
               loading={checkingIn}
               disabled={disableCheckIn}
-              onPress={() => onAddToQueue(patient)}
+              onPress={() => handleQueuePatient(patient)}
             />
           ) : null}
           <ActionMenu
@@ -505,7 +615,7 @@ function PatientDirectoryCard({
       </View>
 
       {/* Streamlined Action Footer: single line for action buttons, flex grow if 1 or 2 */}
-      {onOpenChart || onBookAppointment || onAddToQueue ? (
+      {onOpenChart || handleScheduleVisit || handleQueuePatient ? (
         <View style={styles.actionRow}>
           {onOpenChart ? (
             <Button
@@ -519,21 +629,21 @@ function PatientDirectoryCard({
               onPress={() => onOpenChart(patient)}
             />
           ) : null}
-          {onBookAppointment ? (
+          {handleScheduleVisit ? (
             <Button
-              title="Book appointment"
+              title="Schedule visit"
               variant="secondary"
               size="sm"
               icon="calendar"
               numberOfLines={1}
               style={styles.actionBtn}
               textStyle={styles.actionBtnText}
-              onPress={() => onBookAppointment(patient)}
+              onPress={() => handleScheduleVisit(patient)}
             />
           ) : null}
-          {onAddToQueue ? (
+          {handleQueuePatient ? (
             <Button
-              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
+              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Queue Patient'}
               variant="primary"
               size="sm"
               icon={isQueued ? 'checkCircle' : 'plus'}
@@ -542,7 +652,7 @@ function PatientDirectoryCard({
               disabled={disableCheckIn}
               style={styles.actionBtn}
               textStyle={styles.actionBtnText}
-              onPress={() => onAddToQueue(patient)}
+              onPress={() => handleQueuePatient(patient)}
             />
           ) : null}
         </View>

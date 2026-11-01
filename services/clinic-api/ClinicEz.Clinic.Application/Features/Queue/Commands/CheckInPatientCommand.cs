@@ -32,7 +32,8 @@ public sealed record CheckInPatientCommand(
     string? RoomOrStation = null,
     Guid? RoomId = null,
     DateOnly? QueueDate = null,
-    VisitType VisitType = VisitType.Consultation) : IRequest<QueueItemDto>;
+    VisitType VisitType = VisitType.Consultation,
+    string? SeriesPrefix = null) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -45,6 +46,9 @@ public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPa
         RuleFor(x => x.ChiefComplaint)
             .MaximumLength(255)
             .WithMessage("Chief complaint must not exceed 255 characters.");
+        RuleFor(x => x.SeriesPrefix)
+            .MaximumLength(10)
+            .When(x => !string.IsNullOrEmpty(x.SeriesPrefix));
     }
 }
 
@@ -124,14 +128,35 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             }
         }
 
-        // Sequence number generation for today in this clinic
-        var lastSequence = await _queueRepository.Query(q => 
-            q.ClinicId == _clinicContext.ClinicId && 
-            q.QueueDate == today)
-            .MaxAsync(q => (int?)q.SequenceNumber, cancellationToken) ?? 0;
+        // Sequence number generation for today in this clinic matching SeriesPrefix
+        var rawSeriesPrefix = string.IsNullOrWhiteSpace(request.SeriesPrefix)
+            ? "Q"
+            : request.SeriesPrefix.Trim().TrimEnd('-').ToUpperInvariant();
+        var seriesPrefix = string.IsNullOrWhiteSpace(rawSeriesPrefix) ? "Q" : rawSeriesPrefix;
+        var seriesPattern = $"{seriesPrefix}-";
 
-        var nextSequence = lastSequence + 1;
-        var queueNumber = $"Q-{nextSequence:D3}";
+        var matchingQueueNumbers = await _queueRepository.Query(q => 
+            q.ClinicId == _clinicContext.ClinicId && 
+            q.QueueDate == today &&
+            q.QueueNumber.StartsWith(seriesPattern))
+            .Select(q => q.QueueNumber)
+            .ToListAsync(cancellationToken);
+
+        int maxSeriesSequence = 0;
+        foreach (var qNum in matchingQueueNumbers)
+        {
+            if (qNum.StartsWith(seriesPattern, StringComparison.OrdinalIgnoreCase))
+            {
+                var suffix = qNum[seriesPattern.Length..];
+                if (int.TryParse(suffix, out var parsedSeq) && parsedSeq > maxSeriesSequence)
+                {
+                    maxSeriesSequence = parsedSeq;
+                }
+            }
+        }
+
+        var nextSequence = maxSeriesSequence + 1;
+        var queueNumber = $"{seriesPrefix}-{nextSequence:D3}";
 
         Appointment? appointment = null;
         if (request.AppointmentId.HasValue)

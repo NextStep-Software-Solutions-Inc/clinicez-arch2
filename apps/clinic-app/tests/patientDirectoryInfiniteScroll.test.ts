@@ -130,7 +130,7 @@ describe('Patient Directory Scalability & Infinite Scroll Contract', () => {
     expect(screenCode).toContain('loadMorePatients()');
 
     // 3.4 Server-side filter mode integration
-    expect(screenCode).toContain("const serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD') ? activeFilter : undefined;");
+    expect(screenCode).toContain("const serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD' || activeFilter === 'MY_PATIENTS') ? activeFilter : undefined;");
 
     // 3.5 Infinite scroll bottom indicator & load button
     expect(screenCode).toContain('Loading more patients (50 at a time)...');
