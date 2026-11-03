@@ -1,0 +1,56 @@
+namespace ClinicEz.Patient.Application.Common.DTOs;
+
+public sealed record VitalSignsDto(
+    Guid Id,
+    Guid PatientId,
+    Guid? ClinicId,
+    Guid? ConsultationId,
+    DateTime RecordedAt,
+    decimal? WeightKg,
+    decimal? HeightCm,
+    decimal? Bmi,
+    int? SystolicBp,
+    int? DiastolicBp,
+    int? HeartRateBpm,
+    decimal? TemperatureCelsius,
+    decimal? OxygenSaturationPercent,
+    int? RespiratoryRateBreathsPerMin,
+    decimal? FastingBloodGlucose,
+    string? TakenBy,
+    string? Facility,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt,
+    decimal? BloodGlucoseMgDl = null,
+    decimal? SleepHours = null);
+
+public sealed record RecordPatientVitalsRequest(
+    Guid? ClinicId = null,
+    Guid? ConsultationId = null,
+    DateTime? RecordedAt = null,
+    decimal? WeightKg = null,
+    decimal? HeightCm = null,
+    decimal? Bmi = null,
+    int? SystolicBp = null,
+    int? DiastolicBp = null,
+    int? HeartRateBpm = null,
+    decimal? TemperatureCelsius = null,
+    decimal? OxygenSaturationPercent = null,
+    int? RespiratoryRateBreathsPerMin = null,
+    decimal? FastingBloodGlucose = null,
+    string? TakenBy = null,
+    string? Facility = null,
+    decimal? BloodGlucoseMgDl = null,
+    decimal? SleepHours = null);
+
+public sealed record LatestVitalsDto(
+    int? HeartRateBpm,
+    string? HeartRateTrend,
+    int? SystolicBp,
+    int? DiastolicBp,
+    string? BpCategory,
+    decimal? BloodGlucoseMgDl,
+    string? GlucoseCategory,
+    decimal? SleepHours,
+    string? SleepFormatted,
+    string? SleepDeepFormatted,
+    DateTime RecordedAt);

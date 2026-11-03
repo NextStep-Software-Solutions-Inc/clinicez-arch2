@@ -64,4 +64,50 @@ public sealed class ClinicRepository : IClinicRepository
             q = q.Where(c => EF.Functions.ILike(c.Name, $"%{query}%"));
         return q.CountAsync(ct);
     }
+
+    public async Task<IReadOnlyList<ClinicHealthcareProvider>> SearchProvidersAsync(string? query, int skip, int take, CancellationToken ct = default)
+    {
+        var q = _ctx.ClinicHealthcareProviders
+            .Include(p => p.Clinic)
+            .Where(p => p.IsActive)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var pattern = $"%{query}%";
+            q = q.Where(p => EF.Functions.ILike(p.Name, pattern) ||
+                             EF.Functions.ILike(p.Specialty, pattern) ||
+                             EF.Functions.ILike(p.Clinic.Name, pattern));
+        }
+
+        return await q
+            .OrderBy(p => p.DisplayOrder)
+            .ThenBy(p => p.Name)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ClinicService>> SearchServicesAsync(string? query, int skip, int take, CancellationToken ct = default)
+    {
+        var q = _ctx.ClinicServices
+            .Include(s => s.Clinic)
+            .Where(s => s.IsActive)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var pattern = $"%{query}%";
+            q = q.Where(s => EF.Functions.ILike(s.Name, pattern) ||
+                             (s.Description != null && EF.Functions.ILike(s.Description, pattern)) ||
+                             EF.Functions.ILike(s.Clinic.Name, pattern));
+        }
+
+        return await q
+            .OrderBy(s => s.DisplayOrder)
+            .ThenBy(s => s.Name)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct);
+    }
 }

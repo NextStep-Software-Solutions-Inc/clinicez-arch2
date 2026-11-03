@@ -57,6 +57,21 @@ export const lightColors = {
   purpleBorder: palette.violet[200],
   purpleText: palette.violet[800],
 
+  // Telemetry & Clinical Metrics (Vitals Bento & Health Pass)
+  telemetryNormal: palette.teal[600],
+  telemetryNormalBg: palette.teal[100],
+  telemetryNormalText: palette.teal[700],
+  telemetryElevated: palette.amber[600],
+  telemetryElevatedBg: palette.amber[100],
+  telemetryElevatedText: palette.amber[700],
+
+  // Interactive Chips & Filters (Search Results & Filter Pills)
+  chip: palette.slate[100],
+  chipText: palette.slate[700],
+  chipBorder: palette.slate[200],
+  chipActive: palette.teal[600],
+  chipActiveText: palette.slate[0],
+
   // Surfaces
   background: palette.slate[50],
   surface: palette.slate[0],
@@ -143,6 +158,21 @@ export const darkColors: Record<ColorToken, string> = {
   purpleBg: palette.violet[900],
   purpleBorder: palette.violet[800],
   purpleText: palette.violet[200],
+
+  // Telemetry & Clinical Metrics (Vitals Bento & Health Pass)
+  telemetryNormal: palette.teal[400],
+  telemetryNormalBg: palette.teal[900],
+  telemetryNormalText: palette.teal[200],
+  telemetryElevated: palette.amber[400],
+  telemetryElevatedBg: palette.amber[900],
+  telemetryElevatedText: palette.amber[200],
+
+  // Interactive Chips & Filters (Search Results & Filter Pills)
+  chip: palette.slate[800],
+  chipText: palette.slate[200],
+  chipBorder: palette.slate[700],
+  chipActive: palette.teal[400],
+  chipActiveText: palette.slate[950],
 
   background: palette.slate[950],
   surface: palette.slate[900],

@@ -1,9 +1,4 @@
-import { describe, expect, test, mock } from 'bun:test';
-
-mock.module('react-native', () => ({
-  Platform: { OS: 'web', select: <T>(obj: { web?: T; default?: T }) => obj.web ?? obj.default },
-  DeviceEventEmitter: { emit: () => {}, addListener: () => ({ remove: () => {} }) },
-}));
+import { describe, expect, test } from 'bun:test';
 
 const {
   getPersistedRecordsSegment,

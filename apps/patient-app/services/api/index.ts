@@ -7,3 +7,7 @@ export * from './appointmentsApi';
 export * from './useApi';
 export * from './syncService';
 export * from './filesApi';
+export * from './vitalsApi';
+export * from './medicationsApi';
+export * from './searchApi';
+export { recordPatientVitals } from './vitalsApi';

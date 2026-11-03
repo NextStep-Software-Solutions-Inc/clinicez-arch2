@@ -49,6 +49,7 @@ public sealed class Patient : BaseEntity, ISyncable
     public ICollection<EmergencyContact> EmergencyContacts { get; set; } = [];
     public ICollection<PatientAllergy> Allergies { get; set; } = [];
     public ICollection<PatientMedication> Medications { get; set; } = [];
+    public ICollection<PatientMedicationAdherence> MedicationAdherences { get; set; } = [];
     public ICollection<PatientSurgicalHistory> SurgicalHistories { get; set; } = [];
     public ICollection<PatientPastIllness> PastIllnesses { get; set; } = [];
     public ICollection<PatientChronicCondition> ChronicConditions { get; set; } = [];

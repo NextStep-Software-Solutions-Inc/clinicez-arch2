@@ -43,8 +43,12 @@ export const breakpoints = {
 } as const;
 
 export const sizes = {
-  /** Minimum hit area on touch devices. */
+  /** Minimum hit area on touch devices (iOS HIG standard: 44pt). */
   touchTarget: 44,
+  /** Android Material Design touch target recommendation (48dp). */
+  touchTargetAndroid: 48,
+  /** Minimum recommended spacing between adjacent touch targets to prevent accidental taps. */
+  touchTargetGap: 8,
   controlSm: 32,
   controlMd: 40,
   controlLg: 48,
@@ -63,6 +67,12 @@ export const sizes = {
   formMaxWidth: 720,
   dialogWidth: 560,
   borderWidth: 1,
+  /** Patient App Horizontal Card Carousel width and spacing */
+  cardCarouselWidth: 300,
+  cardCarouselGap: 12,
+  /** Header title scroll animation threshold (px) and translation delta (px) */
+  headerScrollThreshold: 48,
+  headerScrollOffsetTranslate: 6,
 } as const;
 
 /** Font family names (Geist). Each weight is its own family on native. */

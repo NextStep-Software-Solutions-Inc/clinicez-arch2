@@ -1,12 +1,12 @@
-# E2E Test Infra: Clinic Patient List, Dashboard UI/UX & Queue/Filter Enhancements
+# E2E Test Infra: Google Stitch Patient Home Screens (PR #128)
 
 ## Test Philosophy
-- **Opaque-Box & Requirement-Driven**: Tests are derived strictly from `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `clinic_patient_list_and_dashboard_ui_ux_plan.md`, validating observable contracts, user flows, state transitions, and UI component outputs.
+- **Opaque-Box & Requirement-Driven**: Tests are derived strictly from `ORIGINAL_REQUEST.md`, `PROJECT.md`, and Google Stitch design specifications (assets `first_login_home`, `no_appointment_home`, `multiple_appointment_home`, `search_results`). Tests validate observable UI contracts, state transitions, animated header transformations, live telemetry displays, and user interactions without coupling to internal private state.
 - **4-Tier Testing Methodology**:
-  - **Tier 1 (Feature Coverage)**: Isolated behavioral verification of all 20 features (F1 to F20) defined in `PROJECT.md § Feature Inventory`.
-  - **Tier 2 (Boundary & Corner Cases)**: Edge conditions, empty states, age boundary thresholds (59 vs 60), doctors on leave, missing contact info, multiple room assignments, and ticket sequence formatting.
-  - **Tier 3 (Cross-Feature Combinations)**: Multi-step workflows connecting directory filters, scheduling dialogs, multi-service check-in, ticket generation, and live dashboard cluster updates.
-  - **Tier 4 (Real-World Application Scenarios)**: Realistic end-to-end clinical workstation operations reflecting daily Philippine outpatient clinic routines.
+  - **Tier 1 (Feature Coverage)**: Isolated behavioral verification of all core features: 4 visual states (First Login / Zero Data, No Appointment, Multiple Appointments, Search Results); hidden animated header interpolating on scroll y > 48; live vitals display; medication adherence "Log Now"; appointments 0/1/N; and unified search filtering.
+  - **Tier 2 (Boundary & Corner Cases)**: Empty data handling, offline SQLite cache fallback, 0 vs 1 vs multiple appointments, search with zero results, special characters in queries, rapid and negative scroll offsets, and abnormal vital sign values.
+  - **Tier 3 (Cross-Feature Combinations)**: Multi-step interactions connecting search filtering back to home, medication adherence logging reflected in schedule counts, appointments carousel scrolling, and modal transitions (QR health pass).
+  - **Tier 4 (Real-World Application Scenarios)**: Realistic end-to-end patient journeys (e.g., Sarah Jenkins starting as a new patient with zero data, onboarding, booking a clinic consultation, syncing vitals, logging medication, and searching specialized care packages).
 
 ---
 
@@ -14,58 +14,54 @@
 
 | # | Feature | Requirement Source | Tier 1 | Tier 2 | Tier 3 | Primary Test Target |
 |---|---------|---------------------|:------:|:------:|:------:|---------------------|
-| **F1** | 'My patients' Toolbar Tab | ORIGINAL_REQUEST R1, PROJECT.md F1 | ✓ | ✓ | ✓ | `Patients.screen.tsx`, `SegmentedControl.tsx` |
-| **F2** | Doctor Patient Ownership Filter | ORIGINAL_REQUEST R1, PROJECT.md F2 | ✓ | ✓ | ✓ | `Patients.screen.tsx`, `clinicService.ts` |
-| **F3** | Nurse Patient Ownership Filter | ORIGINAL_REQUEST R1, PROJECT.md F3 | ✓ | ✓ | ✓ | `Patients.screen.tsx`, `clinicService.ts` |
-| **F4** | Backend Query `MY_PATIENTS` Filter Contract | ORIGINAL_REQUEST R1, PROJECT.md F4 | ✓ | ✓ | ✓ | `GetClinicPatientsQuery.cs` |
-| **F5** | Reactive MyPatients Count | ORIGINAL_REQUEST R1, PROJECT.md F5 | ✓ | ✓ | ✓ | `GetClinicPatientCountsQuery.cs` |
-| **F6** | Relabel "Schedule visit" Button | ORIGINAL_REQUEST R2, PROJECT.md F6 | ✓ | ✓ | ✓ | `PatientDirectoryCard.tsx` (Card/Table/Menu) |
-| **F7** | In-Place `ScheduleVisitModal.tsx` | ORIGINAL_REQUEST R2, PROJECT.md F7 | ✓ | ✓ | ✓ | `ScheduleVisitModal.tsx` |
-| **F8** | Dynamic Doctor Shift Slots | ORIGINAL_REQUEST R2, PROJECT.md F8 | ✓ | ✓ | ✓ | `clinicService.getDoctorAvailableSlots` |
-| **F9** | Post-Appointment Setup Dialog (4 Actions) | ORIGINAL_REQUEST R2, PROJECT.md F9 | ✓ | ✓ | ✓ | `ScheduleVisitModal.tsx` |
-| **F10** | Relabel "Queue Patient" Button | ORIGINAL_REQUEST R3, PROJECT.md F10 | ✓ | ✓ | ✓ | `PatientDirectoryCard.tsx` |
-| **F11** | ActionMenu Direct Service Intents | ORIGINAL_REQUEST R3, PROJECT.md F11 | ✓ | ✓ | ✓ | `PatientDirectoryCard.tsx` (ActionMenu) |
-| **F12** | Dedicated `ServiceCheckInModal.tsx` (4 Views) | ORIGINAL_REQUEST R3, PROJECT.md F12 | ✓ | ✓ | ✓ | `ServiceCheckInModal.tsx` |
-| **F13** | Prefix Ticket Series System (`Q`/`SQ`, `V`/`SV`, `P`/`SP`, `A`/`SA`) | ORIGINAL_REQUEST R3, PROJECT.md F13 | ✓ | ✓ | ✓ | Ticket Series Generation Engine |
-| **F14** | Senior/PWD Priority Auto-Selection | ORIGINAL_REQUEST R3, PROJECT.md F14 | ✓ | ✓ | ✓ | Age & ID Auto-Selector Logic |
-| **F15** | Backend `SeriesPrefix` Support Contract | ORIGINAL_REQUEST R3, PROJECT.md F15 | ✓ | ✓ | ✓ | `CheckInPatientCommand.cs` |
-| **F16** | Domain Boundary Enforcement | ORIGINAL_REQUEST R3, PROJECT.md F16 | ✓ | ✓ | ✓ | Workstation Boundary Gatekeeper |
-| **F17** | Dashboard Toolbar Cleanup (Removed TV & EOD) | ORIGINAL_REQUEST R4, PROJECT.md F17 | ✓ | ✓ | ✓ | `Dashboard.screen.tsx` |
-| **F18** | 4 Semantic Clusters for Actions | ORIGINAL_REQUEST R4, PROJECT.md F18 | ✓ | ✓ | ✓ | `Dashboard.screen.tsx` Action Groups |
-| **F19** | Formatted Service Badges (Semantic Badges) | ORIGINAL_REQUEST R4, PROJECT.md F19 | ✓ | ✓ | ✓ | Badge Formatter & Token Styler |
-| **F20** | Zero Jargon Clinical UI Copy | ORIGINAL_REQUEST R5, PROJECT.md F20 | ✓ | ✓ | ✓ | UI Copy & Clinical Language Validator |
+| **F1** | Vitals Backend Schema & Endpoints | ORIGINAL_REQUEST R3, PROJECT.md F1 | ✓ | ✓ | ✓ | `patient-api` Vitals Endpoints & `vitalSigns` schema |
+| **F2** | Medication Adherence Backend Endpoints | ORIGINAL_REQUEST R3, PROJECT.md F2 | ✓ | ✓ | ✓ | `patient-api` Medications Endpoints & `logPatientMedication` |
+| **F3** | Unified Discovery Search Endpoint | ORIGINAL_REQUEST R3, PROJECT.md F3 | ✓ | ✓ | ✓ | `patient-api` Search & `listClinics` client |
+| **F4** | Frontend API Client & SWR Hooks | ORIGINAL_REQUEST R3, PROJECT.md F4 | ✓ | ✓ | ✓ | `patientApi.ts`, `appointmentsService.ts` |
+| **F5** | Offline SQLite Sync & Persistence | PROJECT.md F5 | ✓ | ✓ | ✓ | SQLite schema (`vitalSigns`, `appointments`, `patientMedications`) |
+| **F6** | Header Scroll Animation Component | ORIGINAL_REQUEST R2, PROJECT.md F6 | ✓ | ✓ | ✓ | `HeaderScrollTitle.tsx` (opacity/translateY interpolation) |
+| **F7** | Stitch 4-State UI Components | ORIGINAL_REQUEST R1, PROJECT.md F7 | ✓ | ✓ | ✓ | `VitalsBentoGrid`, `MedicationsSchedule`, `AppointmentsSection`, `WelcomeOnboardingCard`, `HealthPassCard` |
+| **F8** | Stitch Screen 4 Search Results Component | ORIGINAL_REQUEST R1/R3, PROJECT.md F8 | ✓ | ✓ | ✓ | `SearchResultsView.tsx` (Chips: All, Doctors, Clinics, Services, Available Today) |
+| **F9** | Home Screen Assembly (Mobile & Web) | ORIGINAL_REQUEST R1/R4, PROJECT.md F9 | ✓ | ✓ | ✓ | `Home.screen.tsx`, `Home.screen.web.tsx` |
+| **F10**| Dynamic Contract Test Suite | PROJECT.md F10 | ✓ | ✓ | ✓ | `stitchPatientHomeScreens.test.ts` |
+| **F11**| E2E Testing Suite (Tiers 1-4) | ORIGINAL_REQUEST R5, PROJECT.md F11 | ✓ | ✓ | ✓ | `stitchPatientHomeE2E.test.ts` |
 
 ---
 
 ## Test Architecture
 
-- **Test Runner**: Bun test runner (`bun test`) executing headless React Native and TypeScript suites.
-- **Locations**:
-  - `apps/clinic-app/tests/e2e_clinicPatientWorkflows.test.ts`: Master E2E suite executing Tiers 1 through 4 across all 20 features.
-  - `apps/clinic-app/tests/patientDirectoryUi.test.ts`: Directory cards, table mode, and demographic line tests.
-  - `apps/clinic-app/tests/queueDashboardControls.test.ts`: Queue dashboard control logic and action guards.
-- **Execution Command**:
+- **Test Runner**: Bun test runner (`bun test`) executing headless React Native and TypeScript test suites.
+- **Preload Harness**: `apps/patient-app/tests/setup-preload.ts` providing pre-stubs for React Native Flow entries, `expo-sqlite`, `expo-constants`, `@react-native-community/netinfo`, `expo-crypto`, and `expo-secure-store`.
+- **Database Engine**: In-memory SQLite (`bun:sqlite` with `drizzle-orm/bun-sqlite`) simulating local offline caching and data persistence without native module overhead.
+- **Primary Suite Location**:
+  `apps/patient-app/tests/e2e/stitchPatientHomeE2E.test.ts`
+- **Execution Commands**:
   ```bash
-  cd apps/clinic-app && bun test tests/e2e_clinicPatientWorkflows.test.ts
+  # Run dedicated E2E test suite from patient-app:
+  cd apps/patient-app && bun test --preload ./tests/setup-preload.ts tests/e2e/stitchPatientHomeE2E.test.ts
+
+  # Or from workspace root:
+  bun test --preload ./apps/patient-app/tests/setup-preload.ts apps/patient-app/tests/e2e/stitchPatientHomeE2E.test.ts
   ```
 
 ---
 
 ## Real-World Application Scenarios (Tier 4)
 
-| # | Scenario | Features Exercised | Clinical Workflow Summary | Complexity |
-|---|----------|--------------------|---------------------------|------------|
-| **S1** | **Outpatient Morning Rush: Doctor Consultation** | F1, F2, F6, F10, F11, F12, F13, F18, F19, F20 | Walk-in patient arrives with acute fever and cough. Receptionist queues patient for Dr. Santos in Consultation Room 101. Regular ticket `Q-001` is generated. Dr. Santos sees ticket in Care & Encounter cluster, calls patient, conducts examination, and completes consultation. | High |
-| **S2** | **Walk-In Vitals Triage (Nursing Bay)** | F3, F10, F12, F13, F14, F18, F19, F20 | Senior citizen (72 yo with Senior ID) arrives for routine hypertension monitoring. System automatically defaults to Senior & PWD Priority series `SV-001`. Triage nurse records vitals (BP, HR, SpO2) and completes non-doctor triage discharge without doctor presence or SOAP note. | Medium |
-| **S3** | **Minor Treatment Bay Clinical Procedure** | F3, F10, F11, F12, F13, F18, F19, F20 | Walk-in patient requires wound dressing change for arm laceration ordered by outside physician. Staff uses ActionMenu direct intent "Clinical Procedure". Ticket `P-001` is issued. Treatment bay nurse claims ticket, performs dressing change, records procedural notes, and completes visit. | High |
-| **S4** | **Administrative Fit-to-Work Clearance with Scheduled Follow-up** | F6, F7, F8, F9, F11, F12, F13, F18, F19, F20 | Employee patient requests medical fit-to-work clearance. Staff issues administrative ticket `A-001`. Patient also requires a 2-week follow-up visit. Staff clicks "Schedule visit" directly from patient card, checks doctor's dynamic shift slots, confirms visit, and triggers patient SMS notification from the 4-button post-appointment dialog. | High |
-| **S5** | **Emergency Critical Walk-in with ER Diversion** | F10, F12, F13, F18, F19, F20 | Walk-in patient presents with severe chest pain and diaphoresis. Priority escalated to Emergency. Ticket `Q-002` flagged with critical indicator. Staff triggers "Divert to ER" in Emergency cluster, capturing transport ambulance, hospital destination, escort paramedic, and clinical handover notes. Ticket status transitions to `Diverted`. | High |
+| # | Scenario | Features Exercised | Patient Journey Summary |
+|---|----------|--------------------|-------------------------|
+| **S1** | **First-Time Patient Onboarding & Consultation Booking** | F6, F7, F9, F11 | Sarah Jenkins registers with zero prior records. Home screen renders State 1 (Digital Health Pass `PC-8942-01`, Step 1 of 3 Welcome Card, "Book Your First Consultation", empty dashes for vitals `-- bpm`, and "No active medications scheduled"). Sarah browses clinics, books her first appointment, and the home screen transitions from State 1 to an active patient dashboard. |
+| **S2** | **Active Outpatient Telemetry Sync & Medication Adherence** | F1, F2, F5, F7, F9, F11 | Active patient with hypertension logs in. Home screen loads 2x2 Bento telemetry grid showing live vitals (Heart rate 72 bpm, BP 118/76 mmHg Optimal, Blood Glucose 94 mg/dL Fasting, Oxygen 98%). Patient checks today's schedule with Lisinopril (already taken) and Omega-3 DHA (pending). Patient taps "Log Now", which optimistically updates the badge to "Taken" and dispatches the adherence event. |
+| **S3** | **Multi-Appointment Schedule & Same-Day Clinic Check-In** | F4, F7, F9, F11 | Patient has two upcoming consultations (Metro Cardiology Center tomorrow at 10:30 AM with Dr. Evelyn Reed, and Oakwood Primary Care on Friday with Dr. David Chen). Home screen displays State 3 Appointments Carousel with "2 Scheduled" badge. The first card displays "Tomorrow" badge and active "Check in" CTA, while the second displays "Confirmed" with "Manage Visit". Patient checks directions and manages appointment. |
+| **S4** | **Care Discovery & Procedure Scheduling (State 4 Search)** | F3, F7, F8, F9, F11 | Patient enters symptoms/care query "cardiac" into the top search bar. The home screen transitions seamlessly to State 4 Search Results View. Patient toggles filter chips between "All (8)", "Doctors (3)", "Clinics (2)", and "Services (3)". Patient views Dr. Evelyn Reed (Cardiology Specialist, 4.9 ★, Accepts Insurance), Metro Cardiology Center (Open Today), and "Comprehensive Cardiac Screening" package (45 Mins, Covered by Insurance). Patient taps "Schedule" to book the screening package. |
+| **S5** | **Offline Interruption & Cache Recovery Resilience** | F1, F4, F5, F7, F11 | Patient opens app in subway station without network connectivity. Network request fails gracefully. The app reads cached vitals, medications, and appointment records from local SQLite database, preventing blank screens or unhandled exceptions. As soon as connection is restored, background sync pulls updated clinical records. |
 
 ---
 
 ## Coverage Thresholds and Quality Gates
 
-1. **Feature Coverage**: 100% of the 20 features (F1 to F20) verified in Tier 1.
-2. **Boundary Resilience**: Zero regressions on empty lists, 59 vs 60 age boundaries, missing contact information, and off-duty doctor slot requests.
-3. **Zero Jargon Compliance**: All labels, dialog titles, buttons, and helper texts verified against plain everyday clinic copy (no statutory RA codes, no database terminology).
-4. **Design Token Adherence**: Verified compliance with `@clinicez/design-tokens` (teal `#0D6963`, semantic variants, typography scales).
+1. **Stitch State Parity**: 100% verification across all 4 visual states (First Login / Zero Data, No Appointment, Multiple Appointments, Search Results).
+2. **Scroll Animation Accuracy**: Verification that header title and subtitle are hidden (opacity 0, translateY 6) at offset 0, and transition smoothly to visible (opacity 1, translateY 0) when scroll offset reaches or exceeds 48px.
+3. **Zero Mock Invariant**: Zero hardcoded mock records rendered when live API or SQLite data is present; fallback to empty states rather than static placeholder arrays.
+4. **Token Guard Strictness**: 0 forbidden hex literals, 0 raw numeric font sizes, 0 raw numeric border radii in all `.tsx` components (`bun run lint:tokens`).
+5. **Type Safety**: 0 TypeScript compilation errors under `strict: true` (`bun run typecheck:patient`).

@@ -22,6 +22,12 @@ import type {
     BookingServiceOption,
     BookingProviderOption,
 } from './types';
+export type {
+    AppointmentItem,
+    AvailableSlotsResponse,
+    BookingServiceOption,
+    BookingProviderOption,
+};
 
 export interface FetchAppointmentsResult {
     items: AppointmentItem[];

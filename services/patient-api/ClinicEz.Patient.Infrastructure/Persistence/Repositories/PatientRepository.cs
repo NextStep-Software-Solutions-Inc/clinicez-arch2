@@ -83,9 +83,42 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
             .Take(take)
             .ToListAsync(cancellationToken);
 
+    public async Task AddVitalSignsAsync(VitalSigns vitalSigns, CancellationToken cancellationToken = default)
+        => await Context.VitalSigns.AddAsync(vitalSigns, cancellationToken);
+
+    public async Task<IReadOnlyList<PatientMedication>> GetMedicationsAsync(Guid patientId, CancellationToken cancellationToken = default)
+        => await Context.PatientMedications.AsNoTracking()
+            .Where(m => m.PatientId == patientId)
+            .OrderByDescending(m => m.IsCurrentlyTaking)
+            .ThenBy(m => m.MedicationName)
+            .ToListAsync(cancellationToken);
+
+    public async Task<PatientMedication?> GetMedicationByIdAsync(Guid patientId, Guid medicationId, CancellationToken cancellationToken = default)
+        => await Context.PatientMedications
+            .FirstOrDefaultAsync(m => m.PatientId == patientId && m.Id == medicationId, cancellationToken);
+
     public async Task<IReadOnlyList<VaccinationAdministered>> GetVaccinationsAdministeredAsync(Guid patientId, CancellationToken cancellationToken = default)
         => await Context.VaccinationsAdministered.AsNoTracking()
             .Where(v => v.PatientId == patientId)
             .OrderByDescending(v => v.DateAdministered)
             .ToListAsync(cancellationToken);
+
+    public async Task<VitalSigns?> GetLatestVitalsAsync(Guid patientId, CancellationToken cancellationToken = default)
+        => await Context.VitalSigns.AsNoTracking()
+            .Where(v => v.PatientId == patientId)
+            .OrderByDescending(v => v.RecordedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<PatientMedicationAdherence>> GetMedicationAdherenceForDateAsync(
+        Guid patientId, DateOnly date, CancellationToken cancellationToken = default)
+    {
+        var startOfDay = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var endOfDay = date.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        return await Context.PatientMedicationAdherences.AsNoTracking()
+            .Where(a => a.PatientId == patientId && a.TakenAt >= startOfDay && a.TakenAt <= endOfDay)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AddMedicationAdherenceAsync(PatientMedicationAdherence adherence, CancellationToken cancellationToken = default)
+        => await Context.PatientMedicationAdherences.AddAsync(adherence, cancellationToken);
 }

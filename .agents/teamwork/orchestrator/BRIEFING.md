@@ -1,68 +1,76 @@
-# BRIEFING — 2026-10-09T15:33:30Z
+# BRIEFING — 2026-11-03T01:26:00Z
 
 ## Mission
-Research Clinic EZ monorepo architecture and produce a comprehensive, production-ready, full-stack architectural plan and specification for missing clinic features (R1-R5) aligned with PhilHealth-case1 Yakap data dictionary.
+Completely replace patient-app home screens using Google Stitch designs (4 states: First Login, No Appointment, Multiple Appointments, Search Results) wired to live patient-api endpoints (zero mock data: live vitals, medications with Log Now, appointments, live search), hidden animated header, strict design token compliance, 100% tests passing, and git push to PR #128.
 
 ## 🔒 My Identity
 - Archetype: orchestrator
 - Roles: orchestrator, user_liaison, human_reporter, successor
-- Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator
+- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/.agents/teamwork/orchestrator
 - Original parent: parent
-- Original parent conversation ID: da232b28-e513-4fe3-9939-ee4339c4a39a
+- Original parent conversation ID: 7a1a3f3f-e284-457e-a25d-168c417b762b
 
 ## 🔒 My Workflow
 - **Pattern**: Project Orchestration
-- **Scope document**: c:\Users\User\projects\nextstep\github\clinicez-arch2\PROJECT.md
-1. **Decompose**: Survey existing Clinic EZ monorepo architecture, Yakap schema, and clinic app via Explorers, then decompose into R1-R5 architectural plan specification milestones.
-2. **Dispatch & Execute**: Subagent dispatch (Explorers -> Workers -> Reviewers -> Challengers -> Auditors).
+- **Scope document**: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/PROJECT.md
+1. **Decompose**: Survey existing patient-app, patient-api, Stitch designs, and design tokens via 3 parallel Explorers, then decompose into milestones.
+2. **Dispatch & Execute**: Direct/Delegated iteration loop (Explorers -> Workers -> Reviewers -> Challengers -> Auditors).
 3. **On failure**: Retry -> Replace -> Skip -> Redistribute -> Redesign -> Escalate.
 4. **Succession**: At 16 spawns, write handoff.md, spawn successor.
 - **Work items**:
-  1. Survey & Architecture Research (Explorers) [pending]
-  2. Synthesize & Author Comprehensive Plan (docs/plans/comprehensive-clinic-features-plan.md) [pending]
-  3. Review, Challenge & Audit Plan Specification [pending]
-- **Current phase**: 1
-- **Current focus**: Survey & Architecture Research
+  1. Phase 0: Survey full scope [done]
+  2. Phase 1: Aggregate Survey into PROJECT.md & Decompose [done]
+  3. Phase 2: Dual Track Execution (M1 Backend [done], M3 Stitch Components [done], E2E Testing Track [done])
+  4. Phase 3: M2 Client API & SWR [done] -> M4 Assembly & Navigation [in-progress]
+  5. Phase 4: Final E2E Verification & Git Push PR #128 [pending]
+- **Current phase**: 3 (Screen Assembly)
+- **Current focus**: Milestone 4: Home Screen Assembly & Dynamic Contract Tests
 
 ## 🔒 Key Constraints
-- Zero source code modifications in apps/ or services/. All deliverables are architectural plans and specifications (docs/plans/comprehensive-clinic-features-plan.md).
-- Strict Clean Architecture adherence in ClinicEz.Clinic (.Domain, .Application, .Infrastructure) and React Native Expo conventions in apps/clinic-app.
-- Strict 1:1 mapping with PhilHealth-case1 statutory coding libraries (lib_immchild, lib_immyoungw, lib_immpregw, lib_immelderly, OtherImm, statutory fallback 999) and bi-directional XML schema compatibility (<ENLISTMENT>, <PROFILE>, <SOAP>, <DIAGNOSTIC>, <MEDICINE>) with YakapClinicalMapper.
-- Define EF Core schemas, MediatR commands/queries/validators, Interop Hub event envelopes/topics, and Expo frontend components/state hooks.
+- Complete replacement of patient-app home screens using Google Stitch designs (4 states: First Login, No Appointment, Multiple Appointments, Search Results).
+- Hidden header title & subtitle initially hidden at scroll offset y=0 and animate into view on scroll.
+- Zero mock data: wire live patient-api endpoints for vitals (HR, BP, glucose, sleep/SpO2), medications ("Log Now"), appointments (0, 1, multiple), and live search.
+- Clean Architecture in patient-api and React Native / Expo in apps/patient-app.
+- Enforce strict design tokens (bun run lint:tokens), zero TypeScript errors (bun run typecheck:patient), and full tests (bun test).
+- Commit and push to origin/connect_google_stitch_patient_home for GitHub PR #128.
 - Never reuse a subagent after it has delivered its handoff — always spawn fresh.
 
 ## Current Parent
-- Conversation ID: da232b28-e513-4fe3-9939-ee4339c4a39a
-- Updated: 2026-10-09T15:33:30Z
+- Conversation ID: 7a1a3f3f-e284-457e-a25d-168c417b762b
+- Updated: 2026-11-03T00:33:00Z
 
 ## Key Decisions Made
-- Architectural plan deliverable target: docs/plans/comprehensive-clinic-features-plan.md
-- Dispatch 3 Explorers in parallel to deeply investigate backend architecture/Yakap, appointments/scheduling, and frontend apps/clinic-app.
+- Milestone 2 completed: vitalsApi, medicationsApi, searchApi, useVitals, useTodayMedications, useLiveSearch, and useAppointments implemented with 880 tests passing.
+- Dispatched Worker M4 (conv: c3c8e67a-c98b-4c53-8153-0cc704901a59) for full screen assembly (Home.screen.tsx, Home.screen.web.tsx, HomeStack.tsx, stitchPatientHomeScreens.test.ts).
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| Explorer 1 | teamwork_preview_explorer | Backend Architecture & Yakap Compliance | completed | fcf75f63-5f2d-4b63-8429-3d7bfa939359 |
-| Explorer 2 | teamwork_preview_explorer | Clinical Consultations & Scheduling | completed | 43163c87-60ca-4eff-b49f-38dba69e7524 |
-| Explorer 3 | teamwork_preview_explorer | Frontend Expo Architecture & UI | completed | 8e2f8c2d-4f81-4800-bfe9-93ed88208a7b |
-| Worker 1 | teamwork_preview_worker | Master Plan Author | completed | 47c21fcd-f85a-46bb-b934-78e8c96a1130 |
-| Reviewer 1 | teamwork_preview_reviewer | Backend Architecture Reviewer | completed | ba062032-072c-4bda-8d33-21c36e1c4084 |
-| Reviewer 2 | teamwork_preview_reviewer | Frontend Expo Reviewer | completed | ab9d0d03-6176-40f1-a862-f7b41b5306ed |
-| Challenger 1 | teamwork_preview_challenger | Scheduling & XML Challenger | completed | 6800944b-a479-40d7-9328-d4d3df0fc975 |
-| Challenger 2 | teamwork_preview_challenger | Growth & CDS Challenger | completed | 13a9999e-5e05-469b-b309-efe38d4fa438 |
-| Auditor 1 | teamwork_preview_auditor | Forensic Integrity Auditor | completed | 8f8a6b3c-682c-41af-8a71-ebc2e9f44b80 |
-| Worker 2 | teamwork_preview_worker | Master Plan Remediation Author | completed | 76f18eac-f80b-45aa-92c7-e89ce8ec9b64 |
+| Explorer 1 | teamwork_explorer | Frontend Stitch UI & Patient App | completed | 0f6b7f81-e302-4428-9ad0-c477abde7dc5 |
+| Explorer 2 | teamwork_explorer | Backend APIs & Vitals/Medications/Search | completed | 8c98ee0d-58f6-46f6-9ffa-1a8a212441ea |
+| Explorer 3 | teamwork_explorer | Test Infra & Verification Suite | completed | f46525c5-d60b-4cf9-8686-a0d156d7cc63 |
+| E2E Test Writer | teamwork_test_writer | E2E Testing Track (Tiers 1-4) | completed | fec148ea-85fe-418b-91fc-a0536cb87e0d |
+| Worker M1 | teamwork_worker | Backend Services & Endpoints (M1) | completed | 112af045-991e-4485-965f-8104da7d5280 |
+| Worker M3 | teamwork_worker | Stitch UI Components & Scroll Header (M3) | completed | 0497e0e2-2110-4c56-a14f-925418f00b5b |
+| Worker M2 | teamwork_worker | Frontend API Client & SWR Layer (M2) | completed | e4bf5302-bc46-48a7-ae22-a96db2e012f5 |
+| Worker M4 | teamwork_worker | Screen Assembly & Dynamic Tests (M4) | in-progress | c3c8e67a-c98b-4c53-8153-0cc704901a59 |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 10 / 16
-- Pending subagents: none
+- Spawn count: 8 / 16
+- Pending subagents: c3c8e67a-c98b-4c53-8153-0cc704901a59
 - Predecessor: none
 - Successor: not yet spawned
 
 ## Active Timers
-- Heartbeat cron: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522/task-147
-- Safety timer: none
+- Heartbeat cron: c6ee021d-366a-49fc-8115-0cb2244e3301/task-31
+- Safety timer: c6ee021d-366a-49fc-8115-0cb2244e3301/task-293
 
 ## Artifact Index
-- docs/plans/comprehensive-clinic-features-plan.md — Comprehensive clinic features plan and architectural specification
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative User Request
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/PROJECT.md — Global Project Plan & Architecture
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/TEST_INFRA.md — E2E Testing Infrastructure Specification
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/TEST_READY.md — E2E Test Suite Ready Signal
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/.agents/teamwork/worker_m1_patient_api/handoff.md — Backend M1 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/.agents/teamwork/worker_m3_stitch_components/handoff.md — UI Components M3 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/connect_google_stitch_patient_home/.agents/teamwork/worker_m2_client_api/handoff.md — API & SWR M2 Handoff Report
