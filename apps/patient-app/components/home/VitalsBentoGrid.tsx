@@ -68,7 +68,11 @@ export default function VitalsBentoGrid({
         <View>
           <ThemedText variant="title">Recent Vitals</ThemedText>
           <View style={styles.subRow}>
-            <AppIcon name="sync" size={12} color="primary" />
+            <AppIcon
+              name={isZeroData ? 'info' : 'sync'}
+              size={12}
+              color={isZeroData ? 'textMuted' : 'primary'}
+            />
             <ThemedText variant="caption" color="textMuted">
               {isZeroData ? 'No readings logged yet' : 'Apple Health • Updated recently'}
             </ThemedText>
@@ -77,12 +81,12 @@ export default function VitalsBentoGrid({
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="View vitals history"
+          accessibilityLabel={isZeroData ? 'Learn more about vitals' : 'View vitals history'}
           onPress={onPressHistory}
           style={styles.historyRow}
         >
           <ThemedText variant="smallBold" color="primaryText">
-            History
+            {isZeroData ? 'Learn More' : 'History'}
           </ThemedText>
           <AppIcon name="chevronRight" size={sizes.iconSm} color="primary" />
         </Pressable>

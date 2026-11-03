@@ -32,3 +32,6 @@ export type {
 
 export { default as DailyMindfulMoment } from './DailyMindfulMoment';
 export type { DailyMindfulMomentProps } from './DailyMindfulMoment';
+
+export { default as HomeOfflinePill } from './HomeOfflinePill';
+export type { HomeOfflinePillProps } from './HomeOfflinePill';

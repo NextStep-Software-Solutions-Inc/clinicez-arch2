@@ -18,6 +18,7 @@ describe('Google Stitch - Patient App Home Screens Implementation Suite', () => 
       expect(existsSync(join(APP_ROOT, 'components/home/MedicationsSchedule.tsx'))).toBe(true);
       expect(existsSync(join(APP_ROOT, 'components/home/SearchResultsView.tsx'))).toBe(true);
       expect(existsSync(join(APP_ROOT, 'components/home/DailyMindfulMoment.tsx'))).toBe(true);
+      expect(existsSync(join(APP_ROOT, 'components/home/HomeOfflinePill.tsx'))).toBe(true);
       expect(existsSync(join(APP_ROOT, 'components/home/index.ts'))).toBe(true);
     });
 
@@ -150,10 +151,10 @@ describe('Google Stitch - Patient App Home Screens Implementation Suite', () => 
       expect(source.includes('Dr. David Chen')).toBe(false);
     });
 
-    test('integrates PhilHealth YAKAP benefit card and 7-day After Visit Summary', () => {
-      expect(source.includes('YakapActiveCard')).toBe(true);
-      expect(source.includes('YakapPromoCard')).toBe(true);
-      expect(source.includes('AfterVisitSummaryCard')).toBe(true);
+    test('does NOT render Yakap promo or active cards on the Stitch home screen', () => {
+      expect(source.includes('YakapActiveCard')).toBe(false);
+      expect(source.includes('YakapPromoCard')).toBe(false);
+      expect(source.includes('HomeOfflinePill')).toBe(true);
       expect(source.includes('DailyMindfulMoment')).toBe(true);
     });
   });
@@ -184,6 +185,9 @@ describe('Google Stitch - Patient App Home Screens Implementation Suite', () => 
       expect(source.includes('MedicationsSchedule')).toBe(true);
       expect(source.includes('SearchResultsView')).toBe(true);
       expect(source.includes('DailyMindfulMoment')).toBe(true);
+      expect(source.includes('HomeOfflinePill')).toBe(true);
+      expect(source.includes('YakapActiveCard')).toBe(false);
+      expect(source.includes('YakapPromoCard')).toBe(false);
 
       // Verify no hardcoded mock doctor fallbacks
       expect(source.includes('Dr. Evelyn Reed')).toBe(false);
@@ -206,6 +210,7 @@ describe('Google Stitch - Patient App Home Screens Implementation Suite', () => 
         'components/home/MedicationsSchedule.tsx',
         'components/home/SearchResultsView.tsx',
         'components/home/DailyMindfulMoment.tsx',
+        'components/home/HomeOfflinePill.tsx',
       ];
 
       const strip = (s: string) =>

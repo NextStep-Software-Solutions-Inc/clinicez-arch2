@@ -20,7 +20,6 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
-import { useYakapRegistrationStatus } from '../../hooks/useYakapRegistrationStatus';
 import { desc, eq } from 'drizzle-orm';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { getHomeDashboard, listClinics } from '../../services/discovery/discoveryService';
@@ -34,8 +33,6 @@ import {
   getPatientVitals,
   logPatientMedication,
 } from '../../services/api/patientApi';
-import YakapPromoCard from '../../components/yakap/YakapPromoCard';
-import YakapActiveCard from '../../components/yakap/YakapActiveCard';
 import { db } from '../../db/index';
 import { consultations, type Consultation } from '../../db/schema/consultations';
 import { vitalSigns, type VitalSign } from '../../db/schema/vitalSigns';
@@ -47,6 +44,7 @@ import {
   HeaderScrollTitle,
   HealthPassCard,
   HealthPassQrModal,
+  HomeOfflinePill,
   MedicationsSchedule,
   type MedicationScheduleItem,
   QuickActionsGrid,
@@ -64,7 +62,6 @@ export default function HomeScreenWeb() {
   const patientId = usePatientId();
   const { isDesktop, isCompact } = useBreakpoint();
   const { unreadCount } = useNotificationContext();
-  const yakapStatus = useYakapRegistrationStatus(patientId);
 
   // Animated scroll tracker for header title & subtitle fade-in
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -194,8 +191,6 @@ export default function HomeScreenWeb() {
       } finally {
         if (mounted) setIsLoading(false);
       }
-
-      void yakapStatus.refresh();
     };
 
     void loadData();
@@ -545,7 +540,7 @@ export default function HomeScreenWeb() {
                     })
                   }
                   onLinkInsurance={() =>
-                    navigation.navigate('Main', { screen: 'YakapRegistrationScreen' })
+                    navigation.navigate('Main', { screen: 'GovernmentIdsScreen' })
                   }
                   onFindClinic={() =>
                     navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })
@@ -662,18 +657,6 @@ export default function HomeScreenWeb() {
                 }
               />
 
-              {/* PhilHealth YAKAP Benefit Card */}
-              {yakapStatus.isConfirmedRegistered ? (
-                <YakapActiveCard
-                  philhealthPin={yakapStatus.philhealthPin}
-                  assignedClinicName={yakapStatus.assignedClinicName}
-                  gamotUsed={yakapStatus.gamotUsed}
-                  annualAllocation={yakapStatus.annualAllocation}
-                />
-              ) : (
-                <YakapPromoCard />
-              )}
-
               {/* Daily Mindful Moment Banner */}
               <DailyMindfulMoment />
             </View>
@@ -696,7 +679,7 @@ export default function HomeScreenWeb() {
                   })
                 }
                 onLinkInsurance={() =>
-                  navigation.navigate('Main', { screen: 'YakapRegistrationScreen' })
+                  navigation.navigate('Main', { screen: 'GovernmentIdsScreen' })
                 }
                 onFindClinic={() =>
                   navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })
@@ -788,17 +771,6 @@ export default function HomeScreenWeb() {
               }
             />
 
-            {yakapStatus.isConfirmedRegistered ? (
-              <YakapActiveCard
-                philhealthPin={yakapStatus.philhealthPin}
-                assignedClinicName={yakapStatus.assignedClinicName}
-                gamotUsed={yakapStatus.gamotUsed}
-                annualAllocation={yakapStatus.annualAllocation}
-              />
-            ) : (
-              <YakapPromoCard />
-            )}
-
             {recentConsultation ? (
               <View style={[styles.sectionWrap, { gap: spacing.sm }]}>
                 <ThemedText variant="title">Recent Visit Summary</ThemedText>
@@ -820,6 +792,9 @@ export default function HomeScreenWeb() {
           </>
         )}
       </ScrollView>
+
+      {/* Floating Offline Network Pill (Stitch Specification) */}
+      <HomeOfflinePill bottomOffset={spacing['2xl']} />
 
       {/* Enlarged Health Pass QR Code Modal */}
       <HealthPassQrModal

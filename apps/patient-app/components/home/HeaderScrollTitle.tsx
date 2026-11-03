@@ -59,7 +59,7 @@ export default function HeaderScrollTitle({
       <ThemedText variant="title" color="text" numberOfLines={1} style={styles.title}>
         {title}
       </ThemedText>
-      <ThemedText variant="captionBold" color="primary" numberOfLines={1} style={styles.subtitle}>
+      <ThemedText variant="caption" color="textSecondary" numberOfLines={1} style={styles.subtitle}>
         {subtitle}
       </ThemedText>
     </Animated.View>
@@ -72,11 +72,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
     fontWeight: '700',
   },
   subtitle: {
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    marginTop: 1,
+    letterSpacing: 0.1,
   },
 });

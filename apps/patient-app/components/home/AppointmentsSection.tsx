@@ -85,7 +85,7 @@ export default function AppointmentsSection({
           />
         </View>
 
-        {isFirstLogin ? (
+        {appointments.length === 0 ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Explore clinics"
@@ -333,17 +333,18 @@ export default function AppointmentsSection({
           <ThemedText variant="small" color="textSecondary" style={styles.textCenter}>
             You don't have any appointments scheduled across network clinics.
           </ThemedText>
-          <View style={[styles.emptyButtonsRow, { gap: spacing.sm, marginTop: spacing.sm }]}>
+          <View style={[styles.emptyButtonsCol, { gap: spacing.xs, marginTop: spacing.sm }]}>
             <Button
               label="Book an Appointment"
               variant="primary"
-              size="sm"
+              size="md"
+              fullWidth
               icon="plus"
               onPress={onBookAppointment}
             />
             <Button
               label="View Visit History"
-              variant="outline"
+              variant="ghost"
               size="sm"
               icon="clock"
               onPress={onViewHistory ?? onExploreClinics}
