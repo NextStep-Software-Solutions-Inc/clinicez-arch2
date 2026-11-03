@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -54,29 +55,39 @@ import {
   WelcomeOnboardingCard,
 } from '../../components/home';
 
+/**
+ * Clinic EZ Patient App - Responsive Web Home Screen
+ *
+ * Implements 1:1 Google Stitch specification:
+ * - Desktop View (>= 1024px): Two-column clinical workstation rail
+ * - Mobile / Compact View (< 1024px): Single fluid vertical flow matching native
+ * - 4 Unified States: First Login, No Appointments, Multiple Appointments, and Search Mode
+ */
 export default function HomeScreenWeb() {
   const { colors, spacing, radii, shadows, sizes } = useAppTheme();
   const navigation = useNavigation<any>();
   const { user } = useUser();
   const { getToken } = useAuth();
   const patientId = usePatientId();
-  const { isDesktop, isCompact } = useBreakpoint();
+  const { isDesktop } = useBreakpoint();
   const { unreadCount } = useNotificationContext();
 
-  // Animated scroll tracker for header title & subtitle fade-in
+  // Scroll tracking for animated sticky header title & subtitle
   const scrollY = useRef(new Animated.Value(0)).current;
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Live state
+  // Dynamic clinical state from patient-api & SQLite cache
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [liveAppointments, setLiveAppointments] = useState<AppointmentItem[]>([]);
   const [recentConsultation, setRecentConsultation] = useState<Consultation | null>(null);
   const [recentVitals, setRecentVitals] = useState<VitalSign | null>(null);
   const [medications, setMedications] = useState<MedicationScheduleItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [searchResultsClinics, setSearchResultsClinics] = useState<ClinicDetail[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<SearchFilterType>('all');
@@ -84,86 +95,83 @@ export default function HomeScreenWeb() {
   // Modals
   const [showQrModal, setShowQrModal] = useState(false);
 
-  // Load real data from backend & database
-  useEffect(() => {
-    let mounted = true;
+  // Load clinical dashboard & telemetry
+  const loadData = useCallback(async () => {
+    try {
+      // 1. Dashboard summary
+      const dash = await getHomeDashboard(patientId);
+      setDashboard(dash);
 
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        // 1. Dashboard summary
-        const dash = await getHomeDashboard(patientId);
-        if (mounted) setDashboard(dash);
-
-        if (patientId) {
-          // 2. Live Vitals from patient-api + SQLite cache
-          let currentVitals: VitalSign | null = null;
-          try {
-            const liveVitals = await getPatientVitals(getToken, patientId, 1);
-            if (liveVitals && liveVitals.length > 0) {
-              const v = liveVitals[0];
-              currentVitals = {
-                id: v.id,
-                patientId: v.patientId,
-                measuredAt: v.recordedAt ?? v.createdAt ?? new Date().toISOString(),
-                heartRateBpm: v.heartRateBpm ?? null,
-                bpSystolic: v.systolicBp ?? null,
-                bpDiastolic: v.diastolicBp ?? null,
-                fastingBloodGlucose: v.fastingBloodGlucose ? String(v.fastingBloodGlucose) : null,
-                spO2Percent: v.oxygenSaturationPercent ? String(v.oxygenSaturationPercent) : null,
-                temperatureCelsius: v.temperatureCelsius ? String(v.temperatureCelsius) : null,
-                respiratoryRateBreathsPerMin: v.respiratoryRateBreathsPerMin ?? null,
-                weightKg: v.weightKg ? String(v.weightKg) : null,
-                heightCm: v.heightCm ? String(v.heightCm) : null,
-                bmi: v.bmi ? String(v.bmi) : null,
-                syncedAt: new Date().toISOString(),
-              } as unknown as VitalSign;
-            }
-          } catch {
-            // Live fetch failed, proceed to local DB fallback
+      if (patientId) {
+        // 2. Telemetry vitals from patient-api with local SQLite fallback
+        let currentVitals: VitalSign | null = null;
+        try {
+          const liveVitals = await getPatientVitals(getToken, patientId, 1);
+          if (liveVitals && liveVitals.length > 0) {
+            const v = liveVitals[0];
+            currentVitals = {
+              id: v.id,
+              patientId: v.patientId,
+              measuredAt: v.recordedAt ?? v.createdAt ?? new Date().toISOString(),
+              heartRateBpm: v.heartRateBpm ?? null,
+              bpSystolic: v.systolicBp ?? null,
+              bpDiastolic: v.diastolicBp ?? null,
+              fastingBloodGlucose: v.fastingBloodGlucose ? String(v.fastingBloodGlucose) : null,
+              spO2Percent: v.oxygenSaturationPercent ? String(v.oxygenSaturationPercent) : null,
+              temperatureCelsius: v.temperatureCelsius ? String(v.temperatureCelsius) : null,
+              respiratoryRateBreathsPerMin: v.respiratoryRateBreathsPerMin ?? null,
+              weightKg: v.weightKg ? String(v.weightKg) : null,
+              heightCm: v.heightCm ? String(v.heightCm) : null,
+              bmi: v.bmi ? String(v.bmi) : null,
+              syncedAt: new Date().toISOString(),
+            } as unknown as VitalSign;
           }
+        } catch {
+          // Fall through to SQLite cache
+        }
 
-          if (!currentVitals) {
-            const localVList = await db
-              .select()
-              .from(vitalSigns)
-              .where(eq(vitalSigns.patientId, patientId))
-              .orderBy(desc(vitalSigns.measuredAt))
-              .limit(1);
-            currentVitals = localVList[0] ?? null;
+        if (!currentVitals) {
+          const localVList = await db
+            .select()
+            .from(vitalSigns)
+            .where(eq(vitalSigns.patientId, patientId))
+            .orderBy(desc(vitalSigns.measuredAt))
+            .limit(1);
+          currentVitals = localVList[0] ?? null;
+        }
+        setRecentVitals(currentVitals);
+
+        // 3. Today's medications from patient-api
+        try {
+          const liveMeds = await getPatientMedications(getToken, patientId);
+          if (liveMeds && liveMeds.length > 0) {
+            const mappedMeds: MedicationScheduleItem[] = liveMeds.map((m) => ({
+              id: m.id,
+              name: m.medicationName,
+              dosage: m.dosage ?? '',
+              instruction: `${m.frequency ?? 'Daily'}${m.purpose ? ` • ${m.purpose}` : ''}`,
+              isTaken: false,
+            }));
+            setMedications(mappedMeds);
+          } else {
+            setMedications([]);
           }
-          if (mounted) setRecentVitals(currentVitals);
+        } catch {
+          setMedications([]);
+        }
 
-          // 3. Live Medications from patient-api
-          try {
-            const liveMeds = await getPatientMedications(getToken, patientId);
-            if (liveMeds && liveMeds.length > 0) {
-              const mappedMeds: MedicationScheduleItem[] = liveMeds.map((m) => ({
-                id: m.id,
-                name: m.medicationName,
-                dosage: m.dosage ?? '',
-                instruction: `${m.frequency ?? 'Daily'}${m.purpose ? ` • ${m.purpose}` : ''}`,
-                isTaken: false,
-              }));
-              if (mounted) setMedications(mappedMeds);
-            } else {
-              if (mounted) setMedications([]);
-            }
-          } catch {
-            if (mounted) setMedications([]);
+        // 4. Appointments via appointmentsService
+        try {
+          const aptRes = await fetchAppointments(patientId, db, getToken);
+          if (aptRes.items) {
+            setLiveAppointments(aptRes.items);
           }
+        } catch {
+          // Non-blocking appointments fallback
+        }
 
-          // 4. Live Appointments via appointmentsService
-          try {
-            const aptRes = await fetchAppointments(patientId, db, getToken);
-            if (mounted && aptRes.items) {
-              setLiveAppointments(aptRes.items);
-            }
-          } catch {
-            // Live appointments fallback
-          }
-
-          // 5. Recent Consultation
+        // 5. Recent Consultation within 7 days
+        try {
           const cList = await db
             .select()
             .from(consultations)
@@ -172,37 +180,42 @@ export default function HomeScreenWeb() {
             .limit(1);
           const c = cList[0] ?? null;
           if (c && c.visitDate) {
-            try {
-              const diff = differenceInCalendarDays(new Date(), parseISO(c.visitDate));
-              if (diff >= 0 && diff <= 7) {
-                if (mounted) setRecentConsultation(c);
-              } else {
-                if (mounted) setRecentConsultation(null);
-              }
-            } catch {
-              if (mounted) setRecentConsultation(null);
+            const diff = differenceInCalendarDays(new Date(), parseISO(c.visitDate));
+            if (diff >= 0 && diff <= 7) {
+              setRecentConsultation(c);
+            } else {
+              setRecentConsultation(null);
             }
           } else {
-            if (mounted) setRecentConsultation(null);
+            setRecentConsultation(null);
           }
+        } catch {
+          setRecentConsultation(null);
         }
-      } catch (err) {
-        console.error('Failed to load home dashboard:', err);
-      } finally {
-        if (mounted) setIsLoading(false);
       }
-    };
+    } catch (err) {
+      console.warn('Unable to load web home dashboard:', err);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, [patientId, getToken]);
 
+  useEffect(() => {
+    setIsLoading(true);
     void loadData();
-    const unsub = navigation.addListener('focus', loadData);
+    const unsub = navigation.addListener('focus', () => {
+      void loadData();
+    });
+    return () => unsub();
+  }, [loadData, navigation]);
 
-    return () => {
-      mounted = false;
-      unsub();
-    };
-  }, [navigation, patientId, getToken]);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void loadData();
+  }, [loadData]);
 
-  // Search execution when query changes
+  // Search query execution
   useEffect(() => {
     let active = true;
     const query = searchQuery.trim();
@@ -235,13 +248,22 @@ export default function HomeScreenWeb() {
     };
   }, [searchQuery, patientId, getToken]);
 
-  // Derived patient details
+  // Voice Search interactive simulation
+  const handleVoiceSearch = () => {
+    setIsListeningVoice(true);
+    setTimeout(() => {
+      setIsListeningVoice(false);
+    }, 3000);
+  };
+
+  // Resolved Patient Identity
   const patientFullName = useMemo(() => {
-    if (user?.fullName) return user.fullName;
-    if (user?.firstName) return `${user.firstName} ${user.lastName ?? ''}`.trim();
-    if (dashboard?.greetingName && dashboard.greetingName !== 'Patient') return dashboard.greetingName;
+    if (dashboard?.greetingName) return dashboard.greetingName;
+    if (user?.firstName) {
+      return `${user.firstName} ${user.lastName || ''}`.trim();
+    }
     return 'Sarah Jenkins';
-  }, [user, dashboard]);
+  }, [dashboard, user]);
 
   const patientInitials = useMemo(() => {
     const first = user?.firstName?.[0] ?? '';
@@ -314,15 +336,16 @@ export default function HomeScreenWeb() {
     }));
   }, [liveAppointments, dashboard?.nextAppointments]);
 
-  // Determine if patient is in State 1 (First Login / Zero Data)
+  // Determine whether patient is in State 1 (First Login / Zero Data)
   const isFirstLogin = useMemo(() => {
     const noAppointments = displayAppointments.length === 0;
-    const noVitals = !recentVitals || (recentVitals.heartRateBpm == null && recentVitals.bpSystolic == null);
+    const noVitals =
+      !recentVitals || (recentVitals.heartRateBpm == null && recentVitals.bpSystolic == null);
     const noMeds = medications.length === 0;
     return noAppointments && noVitals && noMeds;
   }, [displayAppointments.length, recentVitals, medications.length]);
 
-  // Adherence logging
+  // Medication adherence dose
   const handleToggleMedication = async (medId: string) => {
     setMedications((prev) =>
       prev.map((item) => (item.id === medId ? { ...item, isTaken: true } : item)),
@@ -333,7 +356,7 @@ export default function HomeScreenWeb() {
           takenAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.warn('Failed to log medication dose online:', err);
+        console.warn('Failed to record medication adherence:', err);
       }
     }
   };
@@ -350,13 +373,13 @@ export default function HomeScreenWeb() {
 
   return (
     <ThemedView style={styles.screenWrapper}>
-      {/* Top Floating App Bar with Scroll Animated Header Title */}
+      {/* Sticky App Header with Animated Title & Subtitle Micro-interaction */}
       <View
         style={[
           styles.appHeader,
           {
             paddingTop: spacing.md,
-            paddingHorizontal: spacing.xl,
+            paddingHorizontal: isDesktop ? spacing['2xl'] : spacing.lg,
             backgroundColor: isScrolled ? colors.surface : colors.background,
             borderBottomColor: isScrolled ? colors.borderLight : colors.transparent,
           },
@@ -364,7 +387,7 @@ export default function HomeScreenWeb() {
         ]}
       >
         <View style={styles.headerLeft}>
-          <ClinicEzLogo size={32} showWordmark={false} />
+          <ClinicEzLogo size={36} showWordmark={false} />
           <HeaderScrollTitle scrollY={scrollY} />
         </View>
 
@@ -388,7 +411,7 @@ export default function HomeScreenWeb() {
                 style={[
                   styles.unreadBadge,
                   {
-                    backgroundColor: colors.emergency,
+                    backgroundColor: colors.primary,
                     borderRadius: radii.full,
                   },
                 ]}
@@ -423,6 +446,7 @@ export default function HomeScreenWeb() {
         </View>
       </View>
 
+      {/* Main Home Scroll View */}
       <ScrollView
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -432,16 +456,31 @@ export default function HomeScreenWeb() {
           },
         )}
         scrollEventThrottle={16}
-        contentContainerStyle={[styles.container, { padding: spacing.xl, gap: spacing.xl }]}
+        contentInsetAdjustmentBehavior="automatic"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingHorizontal: isDesktop ? spacing['2xl'] : spacing.md,
+            paddingBottom: spacing['3xl'],
+          },
+        ]}
       >
-        {/* Interactive Search Bar */}
+        {/* Interactive Search Bar (Stitch Specification) */}
         <View style={styles.searchBarWrapper}>
           <View
             style={[
               styles.searchBarContainer,
               {
                 backgroundColor: colors.surface,
-                borderColor: isSearchActive ? colors.primary : colors.border,
+                borderColor: isSearchActive ? colors.primary : colors.borderLight,
                 borderRadius: radii.full,
                 borderWidth: sizes.borderWidth,
                 paddingHorizontal: spacing.md,
@@ -453,7 +492,11 @@ export default function HomeScreenWeb() {
             <AppIcon name="search" size={sizes.iconMd} color="primary" />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search medical records, doctors, and tests..."
+              placeholder={
+                isListeningVoice
+                  ? 'Listening for clinics or doctors...'
+                  : 'Search clinics, doctors, or symptoms...'
+              }
               placeholderTextColor={colors.textLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -468,7 +511,20 @@ export default function HomeScreenWeb() {
               >
                 <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
               </Pressable>
-            ) : null}
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Voice search"
+                onPress={handleVoiceSearch}
+                style={styles.searchActionBtn}
+              >
+                <AppIcon
+                  name="mic"
+                  size={sizes.iconSm}
+                  color={isListeningVoice ? 'primary' : 'textSecondary'}
+                />
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Filter search"
@@ -480,7 +536,7 @@ export default function HomeScreenWeb() {
           </View>
         </View>
 
-        {/* State 4: Search Results Mode */}
+        {/* State 4: Active Search Results Mode */}
         {isSearchActive ? (
           <SearchResultsView
             query={searchQuery}
@@ -519,18 +575,16 @@ export default function HomeScreenWeb() {
             onSeeAllPackages={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
           />
         ) : isDesktop ? (
-          /* Desktop Workstation 2-Column Layout */
-          <View style={[styles.desktopColumns, { gap: spacing.xl }]}>
-            {/* Left Main Column */}
+          /* Desktop Two-Column Workstation Layout */
+          <View style={[styles.desktopColumns, { gap: spacing['2xl'] }]}>
+            {/* Left Column: Health Pass, Onboarding, Quick Actions, Appointments */}
             <View style={[styles.mainColDesktop, { gap: spacing.lg }]}>
-              {/* PulseCare / ClinicEZ Health Pass Card */}
               <HealthPassCard
                 patientFullName={patientFullName}
                 patientIdCode={patientIdCode}
                 onOpenQrModal={() => setShowQrModal(true)}
               />
 
-              {/* State 1: Welcome Onboarding Checklist (First Login) */}
               {isFirstLogin ? (
                 <WelcomeOnboardingCard
                   onCompleteProfile={() =>
@@ -548,21 +602,15 @@ export default function HomeScreenWeb() {
                 />
               ) : null}
 
-              {/* Quick Care Actions (4-Column Bento Tiles) */}
               <QuickActionsGrid
-                onReachDoctor={() =>
-                  navigation.navigate('Main', { screen: 'MessagesInboxScreen' })
-                }
-                onServices={() =>
-                  navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })
-                }
+                onReachDoctor={() => navigation.navigate('Main', { screen: 'MessagesInboxScreen' })}
+                onServices={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
                 onRecords={() => navigation.navigate('RecordsScreen')}
                 onPrescriptions={() =>
                   navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
                 }
               />
 
-              {/* Appointments Section */}
               <AppointmentsSection
                 appointments={displayAppointments}
                 isFirstLogin={isFirstLogin}
@@ -611,7 +659,6 @@ export default function HomeScreenWeb() {
                 }
               />
 
-              {/* 7-Day Pinned After-Visit Summary (AVS) Card */}
               {recentConsultation ? (
                 <View style={[styles.sectionWrap, { gap: spacing.sm }]}>
                   <ThemedText variant="title">Recent Visit Summary</ThemedText>
@@ -630,21 +677,15 @@ export default function HomeScreenWeb() {
               ) : null}
             </View>
 
-            {/* Right Rail Column */}
+            {/* Right Column: Vitals Telemetry, Medication Schedule, Mindful Moment */}
             <View style={[styles.rightColDesktop, { gap: spacing.lg }]}>
-              {/* Recent Vitals 2x2 Bento Telemetry Grid */}
               <VitalsBentoGrid
                 vitals={recentVitals}
                 isZeroData={isFirstLogin || !recentVitals}
-                onPressHistory={() =>
-                  navigation.navigate('Main', { screen: 'VitalSignsScreen' })
-                }
-                onPressConnect={() =>
-                  navigation.navigate('Main', { screen: 'VitalSignsScreen' })
-                }
+                onPressHistory={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
+                onPressConnect={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
               />
 
-              {/* Today's Care & Medication Schedule */}
               <MedicationsSchedule
                 medications={medications}
                 isZeroData={isFirstLogin || medications.length === 0}
@@ -652,17 +693,14 @@ export default function HomeScreenWeb() {
                 onAddMedication={() =>
                   navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
                 }
-                onManageAll={() =>
-                  navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
-                }
+                onManageAll={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
               />
 
-              {/* Daily Mindful Moment Banner */}
               <DailyMindfulMoment />
             </View>
           </View>
         ) : (
-          /* Mobile / Compact Web Linear Flow */
+          /* Mobile / Compact Single Fluid Layout */
           <>
             <HealthPassCard
               patientFullName={patientFullName}
@@ -688,12 +726,8 @@ export default function HomeScreenWeb() {
             ) : null}
 
             <QuickActionsGrid
-              onReachDoctor={() =>
-                navigation.navigate('Main', { screen: 'MessagesInboxScreen' })
-              }
-              onServices={() =>
-                navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })
-              }
+              onReachDoctor={() => navigation.navigate('Main', { screen: 'MessagesInboxScreen' })}
+              onServices={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
               onRecords={() => navigation.navigate('RecordsScreen')}
               onPrescriptions={() =>
                 navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
@@ -751,12 +785,8 @@ export default function HomeScreenWeb() {
             <VitalsBentoGrid
               vitals={recentVitals}
               isZeroData={isFirstLogin || !recentVitals}
-              onPressHistory={() =>
-                navigation.navigate('Main', { screen: 'VitalSignsScreen' })
-              }
-              onPressConnect={() =>
-                navigation.navigate('Main', { screen: 'VitalSignsScreen' })
-              }
+              onPressHistory={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
+              onPressConnect={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
             />
 
             <MedicationsSchedule
@@ -766,9 +796,7 @@ export default function HomeScreenWeb() {
               onAddMedication={() =>
                 navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
               }
-              onManageAll={() =>
-                navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
-              }
+              onManageAll={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
             />
 
             {recentConsultation ? (
@@ -793,14 +821,15 @@ export default function HomeScreenWeb() {
         )}
       </ScrollView>
 
-      {/* Floating Offline Network Pill (Stitch Specification) */}
+      {/* Floating Offline Network Pill (Google Stitch Centered Banner) */}
       <HomeOfflinePill bottomOffset={spacing['2xl']} />
 
-      {/* Enlarged Health Pass QR Code Modal */}
+      {/* Enlarged Digital Health Pass QR Code Modal */}
       <HealthPassQrModal
         visible={showQrModal}
         patientFullName={patientFullName}
         patientIdCode={patientIdCode}
+        isNewlyIssued={isFirstLogin}
         onClose={() => setShowQrModal(false)}
       />
     </ThemedView>
@@ -815,75 +844,78 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    zIndex: 10,
+    paddingBottom: 12,
+    zIndex: 50,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
+    gap: 12,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   headerIconButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   unreadBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 10,
+    right: 10,
     width: 8,
     height: 8,
   },
   avatarButton: {
-    width: 38,
-    height: 38,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
   container: {
-    width: '100%',
+    paddingTop: 16,
+    gap: 24,
   },
   searchBarWrapper: {
     width: '100%',
-    maxWidth: 760,
-    alignSelf: 'center',
   },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
+    gap: 10,
   },
   searchInput: {
     flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    fontWeight: '400',
+    paddingVertical: 4,
   },
   searchActionBtn: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   desktopColumns: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     width: '100%',
-    maxWidth: 1200,
-    alignSelf: 'center',
   },
   mainColDesktop: {
-    flex: 3,
+    flex: 1.1,
     minWidth: 0,
   },
   rightColDesktop: {
-    flex: 2,
-    minWidth: 320,
+    flex: 0.9,
+    minWidth: 0,
   },
   sectionWrap: {
     width: '100%',

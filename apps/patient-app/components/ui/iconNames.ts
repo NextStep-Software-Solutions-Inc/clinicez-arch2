@@ -25,6 +25,7 @@ export const iconNames = [
   'close',
   'more',
   'search',
+  'mic',
   'filter',
   'sort',
   'refresh',

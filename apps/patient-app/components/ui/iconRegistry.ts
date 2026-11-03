@@ -19,6 +19,7 @@ export const NATIVE_ICONS: Record<IconName, { android: string; ios: string }> = 
   close: { android: 'close', ios: 'xmark' },
   more: { android: 'more_horiz', ios: 'ellipsis' },
   search: { android: 'search', ios: 'magnifyingglass' },
+  mic: { android: 'mic', ios: 'mic.fill' },
   filter: { android: 'filter_list', ios: 'line.3.horizontal.decrease' },
   sort: { android: 'swap_vert', ios: 'arrow.up.arrow.down' },
   refresh: { android: 'refresh', ios: 'arrow.clockwise' },

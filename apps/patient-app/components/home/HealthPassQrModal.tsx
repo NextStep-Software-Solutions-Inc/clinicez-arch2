@@ -11,6 +11,7 @@ export interface HealthPassQrModalProps {
   patientFullName: string;
   patientIdCode: string;
   bloodGroup?: string | null;
+  isNewlyIssued?: boolean;
   onClose: () => void;
 }
 
@@ -19,6 +20,7 @@ export default function HealthPassQrModal({
   patientFullName,
   patientIdCode,
   bloodGroup = 'A+ Pos',
+  isNewlyIssued = false,
   onClose,
 }: HealthPassQrModalProps) {
   const { colors, spacing, radii, shadows, sizes } = useAppTheme();
@@ -63,7 +65,12 @@ export default function HealthPassQrModal({
             <AppIcon name="close" size={sizes.iconMd} color="textSecondary" />
           </Pressable>
 
-          <Badge label="VERIFIED HEALTH PASS" tone="success" size="sm" icon="checkCircle" />
+          <Badge
+            label={isNewlyIssued ? 'NEWLY ISSUED HEALTH PASS' : 'VERIFIED HEALTH PASS'}
+            tone="success"
+            size="sm"
+            icon="checkCircle"
+          />
 
           <View style={[styles.modalHeaderInfo, { gap: spacing.xs }]}>
             <ThemedText variant="h2" style={styles.textCenter}>

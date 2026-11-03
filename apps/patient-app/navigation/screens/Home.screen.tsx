@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -56,6 +57,19 @@ import {
   WelcomeOnboardingCard,
 } from '../../components/home';
 
+/**
+ * Clinic EZ Patient App - Unified Home Screen
+ *
+ * Implements 1:1 Google Stitch specification across 4 clinical states:
+ * - State 1: First Login / Zero Data (Welcome Checklist + Zero-Data Bento + Empty Schedule)
+ * - State 2: No Appointments (Populated Vitals Bento + Populated Schedule + Empty Appt Card)
+ * - State 3: Multiple Appointments (Multi-Card Horizontal Carousel + Full Health Data)
+ * - State 4: Search Mode (Search Bar + Category Filter Chips + Doctors / Clinics / Packages)
+ *
+ * Hidden Micro-interaction:
+ * - Animated Header: Title and subtitle are hidden at y=0, then smoothly fade in
+ *   and slide up into the sticky app header as the user scrolls past 48px.
+ */
 export default function HomeScreen() {
   const { colors, spacing, radii, shadows, sizes } = useAppTheme();
   const navigation = useNavigation<any>();
@@ -66,107 +80,106 @@ export default function HomeScreen() {
   const contentInsets = useContentInsets();
   const { unreadCount } = useNotificationContext();
 
-  // Animated scroll tracker for header title & subtitle fade-in
+  // Scroll tracking for animated sticky header title & subtitle
   const scrollY = useRef(new Animated.Value(0)).current;
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Live state
+  // Dynamic clinical state from patient-api & SQLite cache
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [liveAppointments, setLiveAppointments] = useState<AppointmentItem[]>([]);
   const [recentConsultation, setRecentConsultation] = useState<Consultation | null>(null);
   const [recentVitals, setRecentVitals] = useState<VitalSign | null>(null);
   const [medications, setMedications] = useState<MedicationScheduleItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Search & Filter state
+  // State 4: Search & Discovery
   const [searchQuery, setSearchQuery] = useState('');
+  const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [searchResultsClinics, setSearchResultsClinics] = useState<ClinicDetail[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<SearchFilterType>('all');
 
-  // Modals
+  // Modal: Enlarged Digital Health Pass QR Code
   const [showQrModal, setShowQrModal] = useState(false);
 
-  // Load real data from backend & database
-  useEffect(() => {
-    let mounted = true;
+  // Load patient clinical dashboard & telemetry
+  const loadData = useCallback(async () => {
+    try {
+      // 1. Dashboard summary
+      const dash = await getHomeDashboard(patientId);
+      setDashboard(dash);
 
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        // 1. Dashboard summary
-        const dash = await getHomeDashboard(patientId);
-        if (mounted) setDashboard(dash);
-
-        if (patientId) {
-          // 2. Live Vitals from patient-api + SQLite cache
-          let currentVitals: VitalSign | null = null;
-          try {
-            const liveVitals = await getPatientVitals(getToken, patientId, 1);
-            if (liveVitals && liveVitals.length > 0) {
-              const v = liveVitals[0];
-              currentVitals = {
-                id: v.id,
-                patientId: v.patientId,
-                measuredAt: v.recordedAt ?? v.createdAt ?? new Date().toISOString(),
-                heartRateBpm: v.heartRateBpm ?? null,
-                bpSystolic: v.systolicBp ?? null,
-                bpDiastolic: v.diastolicBp ?? null,
-                fastingBloodGlucose: v.fastingBloodGlucose ? String(v.fastingBloodGlucose) : null,
-                spO2Percent: v.oxygenSaturationPercent ? String(v.oxygenSaturationPercent) : null,
-                temperatureCelsius: v.temperatureCelsius ? String(v.temperatureCelsius) : null,
-                respiratoryRateBreathsPerMin: v.respiratoryRateBreathsPerMin ?? null,
-                weightKg: v.weightKg ? String(v.weightKg) : null,
-                heightCm: v.heightCm ? String(v.heightCm) : null,
-                bmi: v.bmi ? String(v.bmi) : null,
-                syncedAt: new Date().toISOString(),
-              } as unknown as VitalSign;
-            }
-          } catch {
-            // Live fetch failed, proceed to local DB fallback
+      if (patientId) {
+        // 2. Telemetry vitals from patient-api with local SQLite fallback
+        let currentVitals: VitalSign | null = null;
+        try {
+          const liveVitals = await getPatientVitals(getToken, patientId, 1);
+          if (liveVitals && liveVitals.length > 0) {
+            const v = liveVitals[0];
+            currentVitals = {
+              id: v.id,
+              patientId: v.patientId,
+              measuredAt: v.recordedAt ?? v.createdAt ?? new Date().toISOString(),
+              heartRateBpm: v.heartRateBpm ?? null,
+              bpSystolic: v.systolicBp ?? null,
+              bpDiastolic: v.diastolicBp ?? null,
+              fastingBloodGlucose: v.fastingBloodGlucose ? String(v.fastingBloodGlucose) : null,
+              spO2Percent: v.oxygenSaturationPercent ? String(v.oxygenSaturationPercent) : null,
+              temperatureCelsius: v.temperatureCelsius ? String(v.temperatureCelsius) : null,
+              respiratoryRateBreathsPerMin: v.respiratoryRateBreathsPerMin ?? null,
+              weightKg: v.weightKg ? String(v.weightKg) : null,
+              heightCm: v.heightCm ? String(v.heightCm) : null,
+              bmi: v.bmi ? String(v.bmi) : null,
+              syncedAt: new Date().toISOString(),
+            } as unknown as VitalSign;
           }
+        } catch {
+          // Fall through to SQLite cache
+        }
 
-          if (!currentVitals) {
-            const localVList = await db
-              .select()
-              .from(vitalSigns)
-              .where(eq(vitalSigns.patientId, patientId))
-              .orderBy(desc(vitalSigns.measuredAt))
-              .limit(1);
-            currentVitals = localVList[0] ?? null;
+        if (!currentVitals) {
+          const localVList = await db
+            .select()
+            .from(vitalSigns)
+            .where(eq(vitalSigns.patientId, patientId))
+            .orderBy(desc(vitalSigns.measuredAt))
+            .limit(1);
+          currentVitals = localVList[0] ?? null;
+        }
+        setRecentVitals(currentVitals);
+
+        // 3. Today's medications from patient-api
+        try {
+          const liveMeds = await getPatientMedications(getToken, patientId);
+          if (liveMeds && liveMeds.length > 0) {
+            const mappedMeds: MedicationScheduleItem[] = liveMeds.map((m) => ({
+              id: m.id,
+              name: m.medicationName,
+              dosage: m.dosage ?? '',
+              instruction: `${m.frequency ?? 'Daily'}${m.purpose ? ` • ${m.purpose}` : ''}`,
+              isTaken: false,
+            }));
+            setMedications(mappedMeds);
+          } else {
+            setMedications([]);
           }
-          if (mounted) setRecentVitals(currentVitals);
+        } catch {
+          setMedications([]);
+        }
 
-          // 3. Live Medications from patient-api
-          try {
-            const liveMeds = await getPatientMedications(getToken, patientId);
-            if (liveMeds && liveMeds.length > 0) {
-              const mappedMeds: MedicationScheduleItem[] = liveMeds.map((m) => ({
-                id: m.id,
-                name: m.medicationName,
-                dosage: m.dosage ?? '',
-                instruction: `${m.frequency ?? 'Daily'}${m.purpose ? ` • ${m.purpose}` : ''}`,
-                isTaken: false,
-              }));
-              if (mounted) setMedications(mappedMeds);
-            } else {
-              if (mounted) setMedications([]);
-            }
-          } catch {
-            if (mounted) setMedications([]);
+        // 4. Appointments via appointmentsService
+        try {
+          const aptRes = await fetchAppointments(patientId, db, getToken);
+          if (aptRes.items) {
+            setLiveAppointments(aptRes.items);
           }
+        } catch {
+          // Non-blocking appointments fallback
+        }
 
-          // 4. Live Appointments via appointmentsService
-          try {
-            const aptRes = await fetchAppointments(patientId, db, getToken);
-            if (mounted && aptRes.items) {
-              setLiveAppointments(aptRes.items);
-            }
-          } catch {
-            // Live appointments fallback
-          }
-
-          // 5. Recent Consultation
+        // 5. Recent consultation check for discharge instructions (within 7 days)
+        try {
           const cList = await db
             .select()
             .from(consultations)
@@ -175,37 +188,42 @@ export default function HomeScreen() {
             .limit(1);
           const c = cList[0] ?? null;
           if (c && c.visitDate) {
-            try {
-              const diff = differenceInCalendarDays(new Date(), parseISO(c.visitDate));
-              if (diff >= 0 && diff <= 7) {
-                if (mounted) setRecentConsultation(c);
-              } else {
-                if (mounted) setRecentConsultation(null);
-              }
-            } catch {
-              if (mounted) setRecentConsultation(null);
+            const diff = differenceInCalendarDays(new Date(), parseISO(c.visitDate));
+            if (diff >= 0 && diff <= 7) {
+              setRecentConsultation(c);
+            } else {
+              setRecentConsultation(null);
             }
           } else {
-            if (mounted) setRecentConsultation(null);
+            setRecentConsultation(null);
           }
+        } catch {
+          setRecentConsultation(null);
         }
-      } catch (err) {
-        console.error('Failed to load home dashboard:', err);
-      } finally {
-        if (mounted) setIsLoading(false);
       }
-    };
+    } catch (err) {
+      console.warn('Unable to load home clinical dashboard:', err);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, [patientId, getToken]);
 
+  useEffect(() => {
+    setIsLoading(true);
     void loadData();
-    const unsub = navigation.addListener('focus', loadData);
+    const unsub = navigation.addListener('focus', () => {
+      void loadData();
+    });
+    return () => unsub();
+  }, [loadData, navigation]);
 
-    return () => {
-      mounted = false;
-      unsub();
-    };
-  }, [navigation, patientId, getToken]);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void loadData();
+  }, [loadData]);
 
-  // Search execution when query changes
+  // Live search debounced query execution
   useEffect(() => {
     let active = true;
     const query = searchQuery.trim();
@@ -238,13 +256,22 @@ export default function HomeScreen() {
     };
   }, [searchQuery, patientId, getToken]);
 
-  // Derived patient details
+  // Voice Search interactive simulation (Stitch specification)
+  const handleVoiceSearch = () => {
+    setIsListeningVoice(true);
+    setTimeout(() => {
+      setIsListeningVoice(false);
+    }, 3000);
+  };
+
+  // Resolved Patient Identity
   const patientFullName = useMemo(() => {
-    if (user?.fullName) return user.fullName;
-    if (user?.firstName) return `${user.firstName} ${user.lastName ?? ''}`.trim();
-    if (dashboard?.greetingName && dashboard.greetingName !== 'Patient') return dashboard.greetingName;
+    if (dashboard?.greetingName) return dashboard.greetingName;
+    if (user?.firstName) {
+      return `${user.firstName} ${user.lastName || ''}`.trim();
+    }
     return 'Sarah Jenkins';
-  }, [user, dashboard]);
+  }, [dashboard, user]);
 
   const patientInitials = useMemo(() => {
     const first = user?.firstName?.[0] ?? '';
@@ -261,7 +288,7 @@ export default function HomeScreen() {
     return 'PC-8942-01';
   }, [patientId]);
 
-  // Map appointments to DisplayAppointment
+  // Format appointments for Google Stitch carousel
   const displayAppointments: DisplayAppointment[] = useMemo(() => {
     if (liveAppointments.length > 0) {
       return liveAppointments
@@ -317,15 +344,16 @@ export default function HomeScreen() {
     }));
   }, [liveAppointments, dashboard?.nextAppointments]);
 
-  // Determine if patient is in State 1 (First Login / Zero Data)
+  // Determine whether user is in State 1 (First Login / Zero Data)
   const isFirstLogin = useMemo(() => {
     const noAppointments = displayAppointments.length === 0;
-    const noVitals = !recentVitals || (recentVitals.heartRateBpm == null && recentVitals.bpSystolic == null);
+    const noVitals =
+      !recentVitals || (recentVitals.heartRateBpm == null && recentVitals.bpSystolic == null);
     const noMeds = medications.length === 0;
     return noAppointments && noVitals && noMeds;
   }, [displayAppointments.length, recentVitals, medications.length]);
 
-  // Adherence logging
+  // Log medication adherence dose
   const handleToggleMedication = async (medId: string) => {
     setMedications((prev) =>
       prev.map((item) => (item.id === medId ? { ...item, isTaken: true } : item)),
@@ -336,7 +364,7 @@ export default function HomeScreen() {
           takenAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.warn('Failed to log medication dose online:', err);
+        console.warn('Failed to record medication adherence:', err);
       }
     }
   };
@@ -353,7 +381,7 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.screenWrapper}>
-      {/* Top Floating App Bar with Scroll Animated Header Title */}
+      {/* Sticky App Header with Animated Title & Subtitle Micro-interaction */}
       <View
         style={[
           styles.appHeader,
@@ -367,7 +395,7 @@ export default function HomeScreen() {
         ]}
       >
         <View style={styles.headerLeft}>
-          <ClinicEzLogo size={32} showWordmark={false} />
+          <ClinicEzLogo size={36} showWordmark={false} />
           <HeaderScrollTitle scrollY={scrollY} />
         </View>
 
@@ -391,7 +419,7 @@ export default function HomeScreen() {
                 style={[
                   styles.unreadBadge,
                   {
-                    backgroundColor: colors.emergency,
+                    backgroundColor: colors.primary,
                     borderRadius: radii.full,
                   },
                 ]}
@@ -426,6 +454,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Main Home Scroll View */}
       <ScrollView
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -436,19 +465,27 @@ export default function HomeScreen() {
         )}
         scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
         contentContainerStyle={[
           styles.container,
           { paddingBottom: contentInsets.bottom + spacing['2xl'] },
         ]}
       >
-        {/* Interactive Search Bar */}
+        {/* Interactive Search Bar (Stitch Specification) */}
         <View style={styles.searchBarWrapper}>
           <View
             style={[
               styles.searchBarContainer,
               {
                 backgroundColor: colors.surface,
-                borderColor: isSearchActive ? colors.primary : colors.border,
+                borderColor: isSearchActive ? colors.primary : colors.borderLight,
                 borderRadius: radii.full,
                 borderWidth: sizes.borderWidth,
                 paddingHorizontal: spacing.md,
@@ -460,7 +497,12 @@ export default function HomeScreen() {
             <AppIcon name="search" size={sizes.iconMd} color="primary" />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search medical records, doctors, and tests..."
+              accessibilityLabel="Search medical records, doctors, and tests..."
+              placeholder={
+                isListeningVoice
+                  ? 'Listening for clinics or doctors...'
+                  : 'Search clinics, doctors, or symptoms...'
+              }
               placeholderTextColor={colors.textLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -475,7 +517,20 @@ export default function HomeScreen() {
               >
                 <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
               </Pressable>
-            ) : null}
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Voice search"
+                onPress={handleVoiceSearch}
+                style={styles.searchActionBtn}
+              >
+                <AppIcon
+                  name="mic"
+                  size={sizes.iconSm}
+                  color={isListeningVoice ? 'primary' : 'textSecondary'}
+                />
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Filter search"
@@ -487,7 +542,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* State 4: Search Results Mode */}
+        {/* State 4: Active Search Results Mode */}
         {isSearchActive ? (
           <SearchResultsView
             query={searchQuery}
@@ -526,16 +581,16 @@ export default function HomeScreen() {
             onSeeAllPackages={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
           />
         ) : (
-          /* Normal Home States (States 1, 2, and 3) */
+          /* Normal Clinical Home States (States 1, 2, and 3) */
           <>
-            {/* PulseCare / ClinicEZ Health Pass Card */}
+            {/* PulseCare / Clinic EZ Health Pass Card */}
             <HealthPassCard
               patientFullName={patientFullName}
               patientIdCode={patientIdCode}
               onOpenQrModal={() => setShowQrModal(true)}
             />
 
-            {/* State 1: Welcome Onboarding Checklist (First Login) */}
+            {/* State 1: Welcome Onboarding Checklist (Only for First Login / Zero Data) */}
             {isFirstLogin ? (
               <WelcomeOnboardingCard
                 onCompleteProfile={() =>
@@ -553,21 +608,17 @@ export default function HomeScreen() {
               />
             ) : null}
 
-            {/* Quick Care Actions (4-Column Bento Tiles) */}
+            {/* Quick Actions (4-Column Self-Service Bento Tiles) */}
             <QuickActionsGrid
-              onReachDoctor={() =>
-                navigation.navigate('Main', { screen: 'MessagesInboxScreen' })
-              }
-              onServices={() =>
-                navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })
-              }
+              onReachDoctor={() => navigation.navigate('Main', { screen: 'MessagesInboxScreen' })}
+              onServices={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
               onRecords={() => navigation.navigate('RecordsScreen')}
               onPrescriptions={() =>
                 navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
               }
             />
 
-            {/* Appointments Section: State 1 (Zero-data) / State 2 (Empty) / State 3 (Multiple Cards Carousel) */}
+            {/* Appointments Section: State 1 (Zero-data) / State 2 (Empty) / State 3 (Carousel) */}
             <AppointmentsSection
               appointments={displayAppointments}
               isFirstLogin={isFirstLogin}
@@ -616,19 +667,15 @@ export default function HomeScreen() {
               }
             />
 
-            {/* Recent Vitals 2x2 Bento Telemetry Grid (State 1 zero-data vs State 2/3 populated) */}
+            {/* Recent Vitals 2x2 Telemetry Bento Grid */}
             <VitalsBentoGrid
               vitals={recentVitals}
               isZeroData={isFirstLogin || !recentVitals}
-              onPressHistory={() =>
-                navigation.navigate('Main', { screen: 'VitalSignsScreen' })
-              }
-              onPressConnect={() =>
-                navigation.navigate('Main', { screen: 'VitalSignsScreen' })
-              }
+              onPressHistory={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
+              onPressConnect={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
             />
 
-            {/* Today's Care & Medication Schedule (State 1 zero-data vs State 2/3 populated) */}
+            {/* Today's Care & Medication Schedule */}
             <MedicationsSchedule
               medications={medications}
               isZeroData={isFirstLogin || medications.length === 0}
@@ -636,12 +683,10 @@ export default function HomeScreen() {
               onAddMedication={() =>
                 navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
               }
-              onManageAll={() =>
-                navigation.navigate('Main', { screen: 'PrescriptionsScreen' })
-              }
+              onManageAll={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
             />
 
-            {/* 7-Day Pinned After-Visit Summary (AVS) Card */}
+            {/* Pinned AVS Discharge Summary (Only if consultation within 7 days) */}
             {recentConsultation ? (
               <View style={[styles.sectionWrap, { gap: spacing.sm }]}>
                 <ThemedText variant="title">Recent Visit Summary</ThemedText>
@@ -659,20 +704,21 @@ export default function HomeScreen() {
               </View>
             ) : null}
 
-            {/* Warm Human Care Tip / Daily Mindful Moment Banner */}
+            {/* Daily Mindful Moment Banner */}
             <DailyMindfulMoment />
           </>
         )}
       </ScrollView>
 
-      {/* Floating Offline Network Pill (Stitch Specification) */}
-      <HomeOfflinePill bottomOffset={contentInsets.bottom + spacing.md} />
+      {/* Floating Offline Network Pill (Google Stitch Centered Banner) */}
+      <HomeOfflinePill bottomOffset={insets.bottom + spacing.xl} />
 
-      {/* Enlarged Health Pass QR Code Modal */}
+      {/* Enlarged Digital Health Pass QR Code Modal */}
       <HealthPassQrModal
         visible={showQrModal}
         patientFullName={patientFullName}
         patientIdCode={patientIdCode}
+        isNewlyIssued={isFirstLogin}
         onClose={() => setShowQrModal(false)}
       />
     </ThemedView>
@@ -687,43 +733,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    zIndex: 10,
+    paddingBottom: 12,
+    zIndex: 50,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
+    gap: 12,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   headerIconButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   unreadBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 10,
+    right: 10,
     width: 8,
     height: 8,
   },
   avatarButton: {
-    width: 38,
-    height: 38,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
   container: {
-    padding: 16,
-    gap: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 20,
   },
   searchBarWrapper: {
     width: '100%',
@@ -731,15 +781,18 @@ const styles = StyleSheet.create({
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
+    gap: 10,
   },
   searchInput: {
     flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    fontWeight: '400',
+    paddingVertical: 4,
   },
   searchActionBtn: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionWrap: {
     width: '100%',
