@@ -32,7 +32,7 @@ public sealed class RecordPatientVitalsCommandHandler : IRequestHandler<RecordPa
         {
             Id = Guid.NewGuid(),
             PatientId = command.PatientId,
-            ClinicId = req.ClinicId ?? Guid.Empty,
+            ClinicId = req.ClinicId,
             ConsultationId = req.ConsultationId,
             RecordedAt = req.RecordedAt ?? now,
             WeightKg = req.WeightKg,
@@ -44,6 +44,8 @@ public sealed class RecordPatientVitalsCommandHandler : IRequestHandler<RecordPa
             TemperatureCelsius = req.TemperatureCelsius,
             OxygenSaturationPercent = req.OxygenSaturationPercent,
             RespiratoryRateBreathsPerMin = req.RespiratoryRateBreathsPerMin,
+            BloodGlucoseMgDl = req.BloodGlucoseMgDl ?? req.FastingBloodGlucose,
+            SleepHours = req.SleepHours,
             CreatedAt = now,
             CreatedBy = "PatientApp"
         };
@@ -66,11 +68,13 @@ public sealed class RecordPatientVitalsCommandHandler : IRequestHandler<RecordPa
             vital.TemperatureCelsius,
             vital.OxygenSaturationPercent,
             vital.RespiratoryRateBreathsPerMin,
-            req.FastingBloodGlucose,
+            vital.BloodGlucoseMgDl,
             req.TakenBy,
             req.Facility,
             vital.CreatedAt,
-            vital.UpdatedAt
+            vital.UpdatedAt,
+            vital.BloodGlucoseMgDl,
+            vital.SleepHours
         );
     }
 }

@@ -1,6 +1,7 @@
 using ClinicEz.Patient.Api.Abstractions;
 using ClinicEz.Patient.Application.Common.DTOs;
 using ClinicEz.Patient.Application.Features.Patients.Commands.RecordPatientVitals;
+using ClinicEz.Patient.Application.Features.Patients.Queries.GetLatestVitals;
 using ClinicEz.Patient.Application.Features.Patients.Queries.GetPatientVitals;
 using ClinicEz.Shared.Common;
 using MediatR;
@@ -10,6 +11,28 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace ClinicEz.Patient.Api.Endpoints.Patients;
+
+public sealed class GetLatestPatientVitalsEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapGet("/patients/{patientId:guid}/vitals/latest", async (
+                Guid patientId,
+                ISender sender = null!,
+                CancellationToken ct = default) =>
+            {
+                var vitals = await sender.Send(new GetLatestVitalsQuery(patientId), ct);
+                return Results.Ok(ApiResponse<LatestVitalsDto?>.Success(vitals));
+            })
+            .WithTags("Patients")
+            .WithName("GetLatestPatientVitals")
+            .WithSummary("Get the latest vital signs telemetry for a patient")
+            .WithDescription("Retrieves the latest heart rate, trend, blood pressure, glucose, and sleep telemetry formatted for Stitch Bento grid.")
+            .Produces<ApiResponse<LatestVitalsDto>>(StatusCodes.Status200OK)
+            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
+    }
+}
 
 public sealed class GetPatientVitalsEndpoint : IEndpoint
 {
@@ -50,7 +73,7 @@ public sealed class RecordPatientVitalsEndpoint : IEndpoint
             .WithTags("Patients")
             .WithName("RecordPatientVitals")
             .WithSummary("Record new vital signs for a patient")
-            .WithDescription("Records systolic/diastolic blood pressure, heart rate, oxygen saturation, temperature, weight, height, BMI.")
+            .WithDescription("Records systolic/diastolic blood pressure, heart rate, blood glucose, sleep hours, oxygen saturation, temperature, weight, height, BMI.")
             .Produces<ApiResponse<VitalSignsDto>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)

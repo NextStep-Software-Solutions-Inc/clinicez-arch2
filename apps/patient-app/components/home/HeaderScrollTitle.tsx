@@ -9,6 +9,7 @@ export interface HeaderScrollTitleProps {
   subtitle?: string;
   opacity?: Animated.AnimatedInterpolation<number>;
   translateY?: Animated.AnimatedInterpolation<number>;
+  testID?: string;
 }
 
 export default function HeaderScrollTitle({
@@ -17,6 +18,7 @@ export default function HeaderScrollTitle({
   subtitle = 'Open Health Network',
   opacity,
   translateY,
+  testID = 'header-scroll-title',
 }: HeaderScrollTitleProps) {
   const { spacing } = useAppTheme();
 
@@ -42,6 +44,8 @@ export default function HeaderScrollTitle({
 
   return (
     <Animated.View
+      accessibilityRole="header"
+      testID={testID}
       style={[
         styles.container,
         {

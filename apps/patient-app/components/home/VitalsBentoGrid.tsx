@@ -1,13 +1,29 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import { AppIcon } from '../ui/Icon';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import type { VitalSign } from '../../db/schema/vitalSigns';
 
+export interface VitalsData {
+  heartRateBpm?: number | null;
+  heartRateTrend?: string | null;
+  bpSystolic?: number | null;
+  bpDiastolic?: number | null;
+  bpCategory?: string | null;
+  fastingBloodGlucose?: number | string | null;
+  bloodGlucoseMgDl?: number | null;
+  glucoseCategory?: string | null;
+  sleepHours?: number | null;
+  sleepFormatted?: string | null;
+  sleepDeepFormatted?: string | null;
+  spO2Percent?: number | string | null;
+}
+
 export interface VitalsBentoGridProps {
-  vitals?: VitalSign | null;
+  vitals?: VitalSign | VitalsData | null;
   isZeroData?: boolean;
   onPressHistory: () => void;
   onPressConnect?: () => void;
@@ -21,10 +37,29 @@ export default function VitalsBentoGrid({
 }: VitalsBentoGridProps) {
   const { colors, spacing, radii, shadows, sizes } = useAppTheme();
 
-  const hasHeartRate = !isZeroData && vitals?.heartRateBpm != null;
-  const hasBp = !isZeroData && (vitals?.bpSystolic != null || vitals?.bpDiastolic != null);
-  const hasGlucose = !isZeroData && vitals?.fastingBloodGlucose != null;
-  const hasOxygen = !isZeroData && vitals?.spO2Percent != null;
+  const v = vitals as (VitalSign & VitalsData) | null | undefined;
+  const heartRate = v?.heartRateBpm ?? null;
+  const hasHeartRate = !isZeroData && heartRate != null;
+  const heartRateTrend = v?.heartRateTrend ?? '+2 bpm';
+
+  const systolic = v?.bpSystolic ?? null;
+  const diastolic = v?.bpDiastolic ?? null;
+  const hasBp = !isZeroData && (systolic != null || diastolic != null);
+  const bpCategory = v?.bpCategory ?? (hasBp ? 'Optimal' : 'Clinical');
+
+  const rawGlucose = v?.bloodGlucoseMgDl ?? v?.fastingBloodGlucose ?? null;
+  const glucoseVal = rawGlucose != null ? Number(rawGlucose).toFixed(0) : null;
+  const hasGlucose = !isZeroData && glucoseVal != null;
+  const glucoseCategory = v?.glucoseCategory ?? 'Fasting';
+
+  const sleepFormatted =
+    v?.sleepFormatted ??
+    (v?.sleepHours
+      ? `${Math.floor(v.sleepHours)}h ${Math.round((v.sleepHours % 1) * 60)}m`
+      : null);
+  const deepSleepFormatted = v?.sleepDeepFormatted ?? '2h 10m';
+  const hasSleep = !isZeroData && (sleepFormatted != null || v?.sleepHours != null);
+  const hasOxygen = !isZeroData && v?.spO2Percent != null;
 
   return (
     <View style={[styles.sectionWrap, { gap: spacing.sm }]}>
@@ -90,7 +125,7 @@ export default function VitalsBentoGrid({
             </ThemedText>
             <View style={styles.metricRow}>
               <ThemedText variant="h1">
-                {hasHeartRate ? vitals!.heartRateBpm : '--'}
+                {hasHeartRate ? heartRate : '--'}
               </ThemedText>
               <ThemedText variant="caption" color="textSecondary" style={styles.metricUnit}>
                 bpm
@@ -100,12 +135,23 @@ export default function VitalsBentoGrid({
 
           <View style={styles.trendRow}>
             {hasHeartRate ? (
-              <>
-                <AppIcon name="activity" size={14} color="emergency" />
-                <ThemedText variant="captionBold" color="emergency">
-                  Active
-                </ThemedText>
-              </>
+              <View style={styles.sparklineFlexRow}>
+                <View style={styles.trendLabelGroup}>
+                  <AppIcon name="activity" size={14} color="emergency" />
+                  <ThemedText variant="captionBold" color="emergency">
+                    {heartRateTrend}
+                  </ThemedText>
+                </View>
+                <Svg width={56} height={20} viewBox="0 0 56 20">
+                  <Path
+                    d="M0,14 L12,12 L22,16 L32,8 L42,11 L56,4"
+                    fill="none"
+                    stroke={colors.emergency}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              </View>
             ) : (
               <ThemedText variant="caption" color="textMuted">
                 No data recorded
@@ -141,7 +187,7 @@ export default function VitalsBentoGrid({
               <AppIcon name="activity" size={sizes.iconMd} color="primary" />
             </View>
             <Badge
-              label={hasBp ? 'Optimal' : 'Clinical'}
+              label={hasBp ? bpCategory : 'Clinical'}
               tone={hasBp ? 'success' : 'neutral'}
               size="sm"
             />
@@ -153,9 +199,7 @@ export default function VitalsBentoGrid({
             </ThemedText>
             <View style={styles.metricRow}>
               <ThemedText variant="h2">
-                {hasBp
-                  ? `${vitals!.bpSystolic ?? '--'}/${vitals!.bpDiastolic ?? '--'}`
-                  : '--/--'}
+                {hasBp ? `${systolic ?? '--'}/${diastolic ?? '--'}` : '--/--'}
               </ThemedText>
               <ThemedText variant="caption" color="textSecondary" style={styles.metricUnit}>
                 mmHg
@@ -165,12 +209,17 @@ export default function VitalsBentoGrid({
 
           <View style={styles.trendRow}>
             {hasBp ? (
-              <>
-                <AppIcon name="checkCircle" size={14} color="success" />
-                <ThemedText variant="captionBold" color="success">
-                  Stable • Sys/Dia
+              <View style={styles.sparklineFlexRow}>
+                <View style={styles.trendLabelGroup}>
+                  <AppIcon name="checkCircle" size={14} color="success" />
+                  <ThemedText variant="captionBold" color="success">
+                    Stable
+                  </ThemedText>
+                </View>
+                <ThemedText variant="caption" color="textSecondary">
+                  Sys/Dia
                 </ThemedText>
-              </>
+              </View>
             ) : (
               <ThemedText variant="caption" color="textMuted">
                 Sys / Dia
@@ -205,7 +254,7 @@ export default function VitalsBentoGrid({
             >
               <AppIcon name="lab" size={sizes.iconMd} color="info" />
             </View>
-            <Badge label="Fasting" tone="neutral" size="sm" />
+            <Badge label={glucoseCategory} tone="neutral" size="sm" />
           </View>
 
           <View style={styles.metricValGroup}>
@@ -214,7 +263,7 @@ export default function VitalsBentoGrid({
             </ThemedText>
             <View style={styles.metricRow}>
               <ThemedText variant="h1">
-                {hasGlucose ? Number(vitals!.fastingBloodGlucose).toFixed(0) : '--'}
+                {hasGlucose ? glucoseVal : '--'}
               </ThemedText>
               <ThemedText variant="caption" color="textSecondary" style={styles.metricUnit}>
                 mg/dL
@@ -223,9 +272,26 @@ export default function VitalsBentoGrid({
           </View>
 
           <View style={styles.trendRow}>
-            <ThemedText variant="caption" color="textSecondary">
-              Target: 70–99
-            </ThemedText>
+            {hasGlucose ? (
+              <View style={styles.sparklineFlexRow}>
+                <ThemedText variant="caption" color="textSecondary">
+                  Normal 70-99
+                </ThemedText>
+                <Svg width={56} height={20} viewBox="0 0 56 20">
+                  <Path
+                    d="M0,10 L14,14 L28,8 L40,11 L56,9"
+                    fill="none"
+                    stroke={colors.primary}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              </View>
+            ) : (
+              <ThemedText variant="caption" color="textSecondary">
+                Target: 70–99
+              </ThemedText>
+            )}
           </View>
         </View>
 
@@ -256,34 +322,87 @@ export default function VitalsBentoGrid({
               <AppIcon name="clock" size={sizes.iconMd} color="purple" />
             </View>
             <Badge
-              label={hasOxygen ? `${Number(vitals!.spO2Percent).toFixed(0)}%` : 'Trackers'}
-              tone={hasOxygen ? 'success' : 'neutral'}
+              label={
+                hasSleep
+                  ? '+12%'
+                  : hasOxygen
+                    ? `${Number(v?.spO2Percent).toFixed(0)}%`
+                    : 'Duration'
+              }
+              tone={hasSleep || hasOxygen ? 'success' : 'neutral'}
               size="sm"
             />
           </View>
 
           <View style={styles.metricValGroup}>
             <ThemedText variant="caption" color="textSecondary">
-              {hasOxygen ? 'Oxygen Saturation' : 'Sleep Total'}
+              {hasSleep ? 'Sleep Total' : hasOxygen ? 'Oxygen Saturation' : 'Sleep Total'}
             </ThemedText>
             <View style={styles.metricRow}>
               <ThemedText variant="h1">
-                {hasOxygen
-                  ? `${Number(vitals!.spO2Percent).toFixed(0)}%`
-                  : '--'}
+                {hasSleep
+                  ? sleepFormatted
+                  : hasOxygen
+                    ? `${Number(v?.spO2Percent).toFixed(0)}%`
+                    : '--h --m'}
               </ThemedText>
-              {!hasOxygen ? (
-                <ThemedText variant="caption" color="textSecondary" style={styles.metricUnit}>
-                  h m
-                </ThemedText>
-              ) : null}
             </View>
           </View>
 
           <View style={styles.trendRow}>
-            <ThemedText variant="caption" color="textSecondary">
-              {hasOxygen ? 'Optimal SpO2' : 'Synced trackers'}
-            </ThemedText>
+            {hasSleep ? (
+              <View style={styles.sparklineFlexRow}>
+                <ThemedText variant="caption" color="textSecondary">
+                  Deep: {deepSleepFormatted}
+                </ThemedText>
+                <View style={styles.sleepBars}>
+                  <View
+                    style={[
+                      styles.sleepBar,
+                      {
+                        height: 6,
+                        backgroundColor: colors.purpleBg,
+                        borderRadius: radii.full,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.sleepBar,
+                      {
+                        height: 10,
+                        backgroundColor: colors.purpleBg,
+                        borderRadius: radii.full,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.sleepBar,
+                      {
+                        height: 14,
+                        backgroundColor: colors.purple,
+                        borderRadius: radii.full,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.sleepBar,
+                      {
+                        height: 10,
+                        backgroundColor: colors.purpleBg,
+                        borderRadius: radii.full,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : (
+              <ThemedText variant="caption" color="textSecondary">
+                {hasOxygen ? 'Optimal SpO2' : 'Synced trackers'}
+              </ThemedText>
+            )}
           </View>
         </View>
       </View>
@@ -406,6 +525,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  sparklineFlexRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  trendLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  sleepBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 2,
+    height: 16,
+  },
+  sleepBar: {
+    width: 6,
   },
   connectBanner: {
     flexDirection: 'row',

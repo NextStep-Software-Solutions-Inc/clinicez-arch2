@@ -102,4 +102,23 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
             .Where(v => v.PatientId == patientId)
             .OrderByDescending(v => v.DateAdministered)
             .ToListAsync(cancellationToken);
+
+    public async Task<VitalSigns?> GetLatestVitalsAsync(Guid patientId, CancellationToken cancellationToken = default)
+        => await Context.VitalSigns.AsNoTracking()
+            .Where(v => v.PatientId == patientId)
+            .OrderByDescending(v => v.RecordedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<PatientMedicationAdherence>> GetMedicationAdherenceForDateAsync(
+        Guid patientId, DateOnly date, CancellationToken cancellationToken = default)
+    {
+        var startOfDay = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var endOfDay = date.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        return await Context.PatientMedicationAdherences.AsNoTracking()
+            .Where(a => a.PatientId == patientId && a.TakenAt >= startOfDay && a.TakenAt <= endOfDay)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AddMedicationAdherenceAsync(PatientMedicationAdherence adherence, CancellationToken cancellationToken = default)
+        => await Context.PatientMedicationAdherences.AddAsync(adherence, cancellationToken);
 }

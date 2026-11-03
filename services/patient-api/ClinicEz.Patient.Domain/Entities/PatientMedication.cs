@@ -19,4 +19,6 @@ public sealed class PatientMedication : BaseEntity, ISyncable
     public string? PrescribedBy { get; set; }
     public string? Purpose { get; set; }
     public string? Notes { get; set; }
+
+    public ICollection<PatientMedicationAdherence> Adherences { get; set; } = [];
 }

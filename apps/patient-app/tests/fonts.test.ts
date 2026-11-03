@@ -1,8 +1,10 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { defaultReactNativeMock } from './setup-preload';
 
 // fonts.ts depends on react-native + font asset modules; stub them for a pure unit test.
 mock.module('react-native', () => ({
-  Platform: { OS: 'ios' },
+  ...defaultReactNativeMock,
+  Platform: { ...defaultReactNativeMock.Platform, OS: 'ios' },
   StyleSheet: { flatten: (style: unknown) => (Array.isArray(style) ? Object.assign({}, ...style.flat(Infinity).filter(Boolean)) : (style ?? {})) },
 }));
 for (const path of [

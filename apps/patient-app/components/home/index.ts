@@ -17,13 +17,18 @@ export { default as AppointmentsSection } from './AppointmentsSection';
 export type { AppointmentsSectionProps, DisplayAppointment } from './AppointmentsSection';
 
 export { default as VitalsBentoGrid } from './VitalsBentoGrid';
-export type { VitalsBentoGridProps } from './VitalsBentoGrid';
+export type { VitalsBentoGridProps, VitalsData } from './VitalsBentoGrid';
 
 export { default as MedicationsSchedule } from './MedicationsSchedule';
 export type { MedicationsScheduleProps, MedicationScheduleItem } from './MedicationsSchedule';
 
 export { default as SearchResultsView } from './SearchResultsView';
-export type { SearchResultsViewProps, SearchFilterType } from './SearchResultsView';
+export type {
+  SearchResultsViewProps,
+  SearchFilterType,
+  SearchDoctorItem,
+  SearchPackageItem,
+} from './SearchResultsView';
 
 export { default as DailyMindfulMoment } from './DailyMindfulMoment';
 export type { DailyMindfulMomentProps } from './DailyMindfulMoment';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Dimensions, FlatList, Image, Pressable, StyleSheet, View } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Card from '../ui/Card';
 import Badge, { type BadgeTone } from '../ui/Badge';
@@ -12,7 +12,9 @@ export interface DisplayAppointment {
   id: string;
   clinicId?: string;
   clinicName: string;
+  clinicSuite?: string;
   doctorName: string;
+  doctorAvatarUrl?: string;
   specialty: string;
   timeLabel: string;
   badgeLabel: string;
@@ -27,6 +29,7 @@ export interface AppointmentsSectionProps {
   onBookAppointment: () => void;
   onExploreClinics: () => void;
   onViewAll: () => void;
+  onViewHistory?: () => void;
   onCheckIn: (appointment: DisplayAppointment) => void;
   onManageVisit: (appointment: DisplayAppointment) => void;
   onDirections: (appointment: DisplayAppointment) => void;
@@ -39,11 +42,14 @@ export default function AppointmentsSection({
   onBookAppointment,
   onExploreClinics,
   onViewAll,
+  onViewHistory,
   onCheckIn,
   onManageVisit,
   onDirections,
 }: AppointmentsSectionProps) {
   const { colors, spacing, radii, shadows, sizes } = useAppTheme();
+  const screenWidth = Dimensions.get('window').width;
+  const carouselCardWidth = Math.min(340, Math.max(280, Math.round(screenWidth * 0.85)));
 
   return (
     <View style={[styles.sectionWrap, { gap: spacing.sm }]}>
@@ -116,12 +122,16 @@ export default function AppointmentsSection({
           keyExtractor={(item) => item.id}
           horizontal
           showsHorizontalScrollIndicator={false}
+          snapToInterval={carouselCardWidth + spacing.md}
+          snapToAlignment="start"
+          decelerationRate="fast"
           ItemSeparatorComponent={() => <View style={{ width: spacing.md }} />}
           renderItem={({ item }) => (
             <View
               style={[
                 styles.appointmentCarouselCard,
                 {
+                  width: carouselCardWidth,
                   backgroundColor: colors.card,
                   borderColor: colors.border,
                   borderWidth: sizes.borderWidth,
@@ -151,7 +161,7 @@ export default function AppointmentsSection({
                     numberOfLines={1}
                     style={styles.flex}
                   >
-                    {item.clinicName}
+                    {item.clinicSuite ? `${item.clinicName} • ${item.clinicSuite}` : item.clinicName}
                   </ThemedText>
                 </View>
                 <Badge label={item.badgeLabel} tone={item.badgeTone} size="sm" />
@@ -159,19 +169,34 @@ export default function AppointmentsSection({
 
               {/* Doctor Info */}
               <View style={styles.doctorInfoRow}>
-                <View
-                  style={[
-                    styles.doctorAvatarWrap,
-                    {
-                      backgroundColor: colors.primarySubtle,
-                      borderColor: colors.primaryBorder,
-                      borderWidth: sizes.borderWidth,
-                      borderRadius: radii.full,
-                    },
-                  ]}
-                >
-                  <AppIcon name="user" size={sizes.iconLg} color="primary" />
-                </View>
+                {item.doctorAvatarUrl ? (
+                  <Image
+                    source={{ uri: item.doctorAvatarUrl }}
+                    style={[
+                      styles.doctorAvatarImage,
+                      {
+                        borderRadius: radii.full,
+                        borderColor: colors.borderLight,
+                        borderWidth: sizes.borderWidth,
+                      },
+                    ]}
+                    accessibilityLabel={`Portrait of ${item.doctorName}`}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.doctorAvatarWrap,
+                      {
+                        backgroundColor: colors.primarySubtle,
+                        borderColor: colors.primaryBorder,
+                        borderWidth: sizes.borderWidth,
+                        borderRadius: radii.full,
+                      },
+                    ]}
+                  >
+                    <AppIcon name="user" size={sizes.iconLg} color="primary" />
+                  </View>
+                )}
                 <View style={styles.doctorDetails}>
                   <ThemedText variant="bodyBold" numberOfLines={1}>
                     {item.doctorName}
@@ -317,10 +342,11 @@ export default function AppointmentsSection({
               onPress={onBookAppointment}
             />
             <Button
-              label="Browse Clinics"
+              label="View Visit History"
               variant="outline"
               size="sm"
-              onPress={onExploreClinics}
+              icon="clock"
+              onPress={onViewHistory ?? onExploreClinics}
             />
           </View>
         </Card>
@@ -383,6 +409,10 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  doctorAvatarImage: {
+    width: 48,
+    height: 48,
   },
   doctorDetails: {
     flex: 1,

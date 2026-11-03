@@ -12,4 +12,6 @@ public interface IClinicRepository
     Task AddAsync(Clinic clinic, CancellationToken ct = default);
     void Update(Clinic clinic);
     Task<int> CountAsync(string? query, CancellationToken ct = default);
+    Task<IReadOnlyList<ClinicHealthcareProvider>> SearchProvidersAsync(string? query, int skip, int take, CancellationToken ct = default);
+    Task<IReadOnlyList<ClinicService>> SearchServicesAsync(string? query, int skip, int take, CancellationToken ct = default);
 }

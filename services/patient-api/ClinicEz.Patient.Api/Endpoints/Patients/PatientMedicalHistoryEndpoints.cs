@@ -42,7 +42,6 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
         group.MapPost("/medications", CreateMedication).WithName("CreatePatientMedication").RequireAuthorization();
         group.MapPut("/medications/{medicationId:guid}", UpdateMedication).WithName("UpdatePatientMedication").RequireAuthorization();
         group.MapDelete("/medications/{medicationId:guid}", DeleteMedication).WithName("DeletePatientMedication").RequireAuthorization();
-        group.MapPost("/medications/{medicationId:guid}/log", LogMedication).WithName("LogPatientMedication").RequireAuthorization();
 
         // ── Surgical History ─────────────────────────────────────────────────
         group.MapGet("/surgical-histories", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
@@ -372,29 +371,4 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
-
-    private static async Task<IResult> LogMedication(Guid id, Guid medicationId, LogMedicationRequest? req, ApplicationDbContext db, CancellationToken ct)
-    {
-        var entity = await db.PatientMedications.FirstOrDefaultAsync(m => (m.Id == medicationId || m.ClientId == medicationId) && m.PatientId == id, ct);
-        if (entity is null) return Results.NotFound(ApiResponse<object>.Fail($"Medication '{medicationId}' was not found."));
-
-        var now = req?.TakenAt ?? DateTime.UtcNow;
-        entity.UpdatedAt = now;
-        entity.UpdatedBy = "PatientApp";
-        if (!string.IsNullOrWhiteSpace(req?.Notes))
-        {
-            entity.Notes = string.IsNullOrWhiteSpace(entity.Notes) ? req.Notes : $"{entity.Notes}; {req.Notes}";
-        }
-
-        await db.SaveChangesAsync(ct);
-
-        var dto = new PatientMedicationDto(
-            entity.Id, entity.ClientId, entity.MedicationName, entity.GenericName, entity.Dosage,
-            entity.Frequency, entity.Route, entity.StartDate, entity.EndDate, entity.IsCurrentlyTaking,
-            entity.PrescribedBy, entity.Purpose, entity.Notes, entity.UpdatedAt);
-
-        return Results.Ok(ApiResponse<PatientMedicationDto>.Success(dto, "Medication dose logged successfully."));
-    }
 }
-
-public sealed record LogMedicationRequest(DateTime? TakenAt, string? Notes);

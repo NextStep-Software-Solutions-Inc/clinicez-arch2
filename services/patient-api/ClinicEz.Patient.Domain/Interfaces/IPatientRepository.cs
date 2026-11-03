@@ -31,4 +31,13 @@ public interface IPatientRepository : IBaseRepository<ClinicEz.Patient.Domain.En
 
     /// <summary>Vaccinations a facility administered to the patient, newest first.</summary>
     Task<IReadOnlyList<VaccinationAdministered>> GetVaccinationsAdministeredAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    /// <summary>The patient's single most recent vital-sign measurement, or null.</summary>
+    Task<VitalSigns?> GetLatestVitalsAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    /// <summary>Medication adherence logs for a specific patient and date.</summary>
+    Task<IReadOnlyList<PatientMedicationAdherence>> GetMedicationAdherenceForDateAsync(Guid patientId, DateOnly date, CancellationToken cancellationToken = default);
+
+    /// <summary>Records dose adherence for a medication.</summary>
+    Task AddMedicationAdherenceAsync(PatientMedicationAdherence adherence, CancellationToken cancellationToken = default);
 }

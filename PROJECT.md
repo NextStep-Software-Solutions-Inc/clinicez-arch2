@@ -39,12 +39,12 @@ This project completely replaces the patient-app home screens using the Google S
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Backend Services & Endpoints | F1, F2, F3 | none | PLANNED |
-| M2 | Frontend API Client & SWR Layer | F4, F5 | M1 | PLANNED |
-| M3 | Google Stitch UI Components & Scroll Header | F6, F7, F8 | none | PLANNED |
+| M1 | Backend Services & Endpoints | F1, F2, F3 | none | DONE |
+| M2 | Frontend API Client & SWR Layer | F4, F5 | M1 | IN_PROGRESS |
+| M3 | Google Stitch UI Components & Scroll Header | F6, F7, F8 | none | DONE |
 | M4 | Screen Assembly & Dynamic Contract Tests | F9, F10 | M2, M3 | PLANNED |
 | M5 | Final E2E Verification & Git Push (PR #128) | F12, F13 | M4, E2E Track | PLANNED |
-| E2E | E2E Testing Track | F11 (Tiers 1-4) | none | PLANNED |
+| E2E | E2E Testing Track | F11 (Tiers 1-4) | none | DONE |
 
 ---
 

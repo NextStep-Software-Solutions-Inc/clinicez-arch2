@@ -11,13 +11,16 @@ export interface MedicationScheduleItem {
   name: string;
   dosage: string;
   instruction: string;
+  scheduledTime?: string;
   isTaken: boolean;
+  takenAt?: string | null;
 }
 
 export interface MedicationsScheduleProps {
   medications: MedicationScheduleItem[];
   isZeroData?: boolean;
-  onToggleMedication: (id: string) => void;
+  onToggleMedication?: (id: string) => void;
+  onToggleAdherence?: (id: string) => void;
   onAddMedication: () => void;
   onManageAll: () => void;
 }
@@ -26,10 +29,19 @@ export default function MedicationsSchedule({
   medications,
   isZeroData = false,
   onToggleMedication,
+  onToggleAdherence,
   onAddMedication,
   onManageAll,
 }: MedicationsScheduleProps) {
   const { colors, spacing, radii, shadows, sizes } = useAppTheme();
+
+  const handleToggle = (id: string) => {
+    if (onToggleAdherence) {
+      onToggleAdherence(id);
+    } else if (onToggleMedication) {
+      onToggleMedication(id);
+    }
+  };
 
   const isEmpty = isZeroData || medications.length === 0;
 
@@ -172,7 +184,7 @@ export default function MedicationsSchedule({
                     ) : null}
                   </View>
                   <ThemedText variant="caption" color="textSecondary" numberOfLines={1}>
-                    {item.instruction}
+                    {item.scheduledTime ? `${item.instruction} • ${item.scheduledTime}` : item.instruction}
                   </ThemedText>
                 </View>
               </View>
@@ -184,7 +196,7 @@ export default function MedicationsSchedule({
                   label="Log Now"
                   variant="primary"
                   size="sm"
-                  onPress={() => onToggleMedication(item.id)}
+                  onPress={() => handleToggle(item.id)}
                 />
               )}
             </View>

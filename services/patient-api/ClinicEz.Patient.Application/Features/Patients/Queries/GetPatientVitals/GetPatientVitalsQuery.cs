@@ -32,11 +32,13 @@ public sealed class GetPatientVitalsQueryHandler : IRequestHandler<GetPatientVit
             v.TemperatureCelsius,
             v.OxygenSaturationPercent,
             v.RespiratoryRateBreathsPerMin,
-            null,
+            v.BloodGlucoseMgDl,
             null,
             null,
             v.CreatedAt,
-            v.UpdatedAt
+            v.UpdatedAt,
+            v.BloodGlucoseMgDl,
+            v.SleepHours
         )).ToList();
     }
 }

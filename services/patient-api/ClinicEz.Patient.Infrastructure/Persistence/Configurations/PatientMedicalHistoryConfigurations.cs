@@ -47,6 +47,31 @@ public sealed class PatientMedicationConfiguration : IEntityTypeConfiguration<Pa
     }
 }
 
+public sealed class PatientMedicationAdherenceConfiguration : IEntityTypeConfiguration<PatientMedicationAdherence>
+{
+    public void Configure(EntityTypeBuilder<PatientMedicationAdherence> builder)
+    {
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.DoseSlot).HasMaxLength(50);
+        builder.Property(a => a.Notes).HasMaxLength(500);
+        builder.Property(a => a.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(a => a.UpdatedBy).HasMaxLength(128);
+
+        builder.HasOne(a => a.Patient)
+            .WithMany(p => p.MedicationAdherences)
+            .HasForeignKey(a => a.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(a => a.PatientMedication)
+            .WithMany(m => m.Adherences)
+            .HasForeignKey(a => a.PatientMedicationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(a => new { a.PatientId, a.TakenAt });
+        builder.HasIndex(a => new { a.PatientMedicationId, a.TakenAt });
+    }
+}
+
 public sealed class PatientSurgicalHistoryConfiguration : IEntityTypeConfiguration<PatientSurgicalHistory>
 {
     public void Configure(EntityTypeBuilder<PatientSurgicalHistory> builder)

@@ -9,7 +9,7 @@ import { SkeletonCard } from '../ui/Skeleton';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import type { ClinicDetail, ClinicProvider, ClinicService } from '../../services/discovery/types';
 
-export type SearchFilterType = 'all' | 'doctors' | 'clinics' | 'services' | 'available';
+export type SearchFilterType = 'all' | 'doctors' | 'clinics' | 'services' | 'available' | 'available_today';
 
 export interface SearchDoctorItem extends ClinicProvider {
   clinicId: string;
@@ -28,9 +28,15 @@ export interface SearchPackageItem extends ClinicService {
 export interface SearchResultsViewProps {
   query: string;
   clinics: ClinicDetail[];
+  results?: {
+    doctors?: SearchDoctorItem[];
+    clinics?: ClinicDetail[];
+    packages?: SearchPackageItem[];
+  };
   isLoading?: boolean;
   selectedFilter: SearchFilterType;
   onSelectFilter: (filter: SearchFilterType) => void;
+  onClearSearch?: () => void;
   onBookDoctor: (doctorId: string, clinicId?: string) => void;
   onViewClinic: (clinicId: string) => void;
   onSchedulePackage: (serviceId: string, clinicId?: string) => void;
@@ -42,9 +48,11 @@ export interface SearchResultsViewProps {
 export default function SearchResultsView({
   query,
   clinics,
+  results,
   isLoading = false,
   selectedFilter,
   onSelectFilter,
+  onClearSearch,
   onBookDoctor,
   onViewClinic,
   onSchedulePackage,
@@ -92,19 +100,24 @@ export default function SearchResultsView({
     return list;
   }, [clinics]);
 
+  const doctorsList = results?.doctors ?? allDoctors;
+  const clinicsList = results?.clinics ?? clinics;
+  const packagesList = results?.packages ?? allPackages;
+
   // Filter based on active filter chip
+  const isAvailableFilter = selectedFilter === 'available' || selectedFilter === 'available_today';
   const showDoctors =
-    selectedFilter === 'all' || selectedFilter === 'doctors' || selectedFilter === 'available';
+    selectedFilter === 'all' || selectedFilter === 'doctors' || isAvailableFilter;
   const showClinics =
-    selectedFilter === 'all' || selectedFilter === 'clinics' || selectedFilter === 'available';
+    selectedFilter === 'all' || selectedFilter === 'clinics' || isAvailableFilter;
   const showServices =
     selectedFilter === 'all' || selectedFilter === 'services';
 
   const filterChips: { id: SearchFilterType; label: string; count?: number; icon?: any }[] = [
-    { id: 'all', label: `All (${clinics.length + allDoctors.length + allPackages.length})` },
-    { id: 'doctors', label: `Doctors (${allDoctors.length})` },
-    { id: 'clinics', label: `Clinics (${clinics.length})` },
-    { id: 'services', label: `Services (${allPackages.length})` },
+    { id: 'all', label: `All (${clinicsList.length + doctorsList.length + packagesList.length})` },
+    { id: 'doctors', label: `Doctors (${doctorsList.length})` },
+    { id: 'clinics', label: `Clinics (${clinicsList.length})` },
+    { id: 'services', label: `Services (${packagesList.length})` },
     { id: 'available', label: 'Available Today', icon: 'activity' },
   ];
 
@@ -117,13 +130,15 @@ export default function SearchResultsView({
     );
   }
 
-  const hasAnyResults = clinics.length > 0 || allDoctors.length > 0 || allPackages.length > 0;
+  const hasAnyResults = clinicsList.length > 0 || doctorsList.length > 0 || packagesList.length > 0;
 
   if (!hasAnyResults) {
     return (
       <EmptyState
         title="No Results Found"
         message={`We couldn't find any clinics, doctors, or tests matching "${query}".`}
+        actionLabel={onClearSearch ? 'Clear Search' : undefined}
+        onActionPress={onClearSearch}
       />
     );
   }
@@ -177,7 +192,7 @@ export default function SearchResultsView({
       </ScrollView>
 
       {/* Section 1: Doctors & Specialists */}
-      {showDoctors && allDoctors.length > 0 ? (
+      {showDoctors && doctorsList.length > 0 ? (
         <View style={[styles.sectionBlock, { gap: spacing.sm }]}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionTitleWithBadge}>
@@ -193,7 +208,7 @@ export default function SearchResultsView({
               <ThemedText variant="captionBold" color="textSecondary" style={styles.uppercase}>
                 Doctors & Specialists
               </ThemedText>
-              <Badge label={`${allDoctors.length} Found`} tone="primary" size="sm" />
+              <Badge label={`${doctorsList.length} Found`} tone="primary" size="sm" />
             </View>
 
             {onSeeAllDoctors ? (
@@ -213,7 +228,7 @@ export default function SearchResultsView({
 
           {/* Doctor Cards */}
           <View style={[styles.cardsList, { gap: spacing.sm }]}>
-            {allDoctors.map((doc) => (
+            {doctorsList.map((doc) => (
               <View
                 key={`${doc.clinicId}-${doc.id}`}
                 style={[
@@ -342,7 +357,7 @@ export default function SearchResultsView({
       ) : null}
 
       {/* Section 2: Clinics & Care Centers */}
-      {showClinics && clinics.length > 0 ? (
+      {showClinics && clinicsList.length > 0 ? (
         <View style={[styles.sectionBlock, { gap: spacing.sm }]}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionTitleWithBadge}>
@@ -358,7 +373,7 @@ export default function SearchResultsView({
               <ThemedText variant="captionBold" color="textSecondary" style={styles.uppercase}>
                 Clinics & Care Centers
               </ThemedText>
-              <Badge label={`${clinics.length} Facilities`} tone="neutral" size="sm" />
+              <Badge label={`${clinicsList.length} Facilities`} tone="neutral" size="sm" />
             </View>
 
             {onSeeAllClinics ? (
@@ -378,7 +393,7 @@ export default function SearchResultsView({
 
           {/* Clinic Cards */}
           <View style={[styles.cardsList, { gap: spacing.sm }]}>
-            {clinics.map((clinic) => (
+            {clinicsList.map((clinic) => (
               <View
                 key={clinic.id}
                 style={[
@@ -504,7 +519,7 @@ export default function SearchResultsView({
       ) : null}
 
       {/* Section 3: Specialized Care Packages */}
-      {showServices && allPackages.length > 0 ? (
+      {showServices && packagesList.length > 0 ? (
         <View style={[styles.sectionBlock, { gap: spacing.sm }]}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionTitleWithBadge}>
@@ -520,7 +535,7 @@ export default function SearchResultsView({
               <ThemedText variant="captionBold" color="textSecondary" style={styles.uppercase}>
                 Specialized Care Packages
               </ThemedText>
-              <Badge label={`${allPackages.length} Packages`} tone="neutral" size="sm" />
+              <Badge label={`${packagesList.length} Packages`} tone="neutral" size="sm" />
             </View>
 
             {onSeeAllPackages ? (
@@ -540,7 +555,7 @@ export default function SearchResultsView({
 
           {/* Package Cards */}
           <View style={[styles.cardsList, { gap: spacing.sm }]}>
-            {allPackages.map((pkg) => (
+            {packagesList.map((pkg) => (
               <View
                 key={`${pkg.clinicId}-${pkg.id}`}
                 style={[

@@ -6,7 +6,7 @@ public sealed class VitalSigns : BaseEntity
 {
     public Guid PatientId { get; set; }
     public Patient Patient { get; set; } = null!;
-    public Guid ClinicId { get; set; }
+    public Guid? ClinicId { get; set; }
     public Guid? ConsultationId { get; set; }
     public Consultation? Consultation { get; set; }
 
@@ -20,4 +20,6 @@ public sealed class VitalSigns : BaseEntity
     public decimal? TemperatureCelsius { get; set; }
     public decimal? OxygenSaturationPercent { get; set; }
     public int? RespiratoryRateBreathsPerMin { get; set; }
+    public decimal? BloodGlucoseMgDl { get; set; }
+    public decimal? SleepHours { get; set; }
 }

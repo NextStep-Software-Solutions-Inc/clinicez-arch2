@@ -16,15 +16,34 @@ import { mock } from 'bun:test';
 if (typeof (globalThis as Record<string, unknown>).__DEV__ === 'undefined') {
   (globalThis as Record<string, unknown>).__DEV__ = false;
 }
+if (typeof (global as any).__DEV__ === 'undefined') {
+  (global as any).__DEV__ = false;
+}
 
-mock.module('react-native', () => ({
+if (typeof (globalThis as any).expo === 'undefined') {
+  (globalThis as any).expo = {
+    EventEmitter: class {
+      addListener() { return { remove: () => {} }; }
+      removeListener() {}
+      removeAllListeners() {}
+      emit() {}
+    },
+    modules: {},
+  };
+}
+
+mock.module('expo-linear-gradient', () => ({
+  LinearGradient: 'LinearGradient',
+}));
+
+export const defaultReactNativeMock = {
   Platform: {
     OS: 'web',
     select: (obj: Record<string, unknown>) => obj?.web ?? obj?.default,
   },
   StyleSheet: {
     create: <T>(styles: T): T => styles,
-    flatten: <T>(styles: T): T => styles,
+    flatten: <T>(styles: T): T => (Array.isArray(styles) ? Object.assign({}, ...styles.flat(Infinity).filter(Boolean)) : (styles ?? {})),
   },
   AppState: {
     currentState: 'active',
@@ -34,6 +53,13 @@ mock.module('react-native', () => ({
     emit: () => {},
     addListener: () => ({ remove: () => {} }),
   },
+  NativeEventEmitter: class {
+    addListener() { return { remove: () => {} }; }
+    removeListener() {}
+    removeAllListeners() {}
+    emit() {}
+  },
+  NativeModules: {},
   TurboModuleRegistry: {
     get: () => null,
     getEnforcing: () => ({}),
@@ -43,6 +69,12 @@ mock.module('react-native', () => ({
     addEventListener: () => ({ remove: () => {} }),
   },
   useWindowDimensions: () => ({ width: 1280, height: 800, scale: 1, fontScale: 1 }),
+  useColorScheme: () => 'light' as const,
+  PixelRatio: { get: () => 1, getFontScale: () => 1, roundToNearestPixel: (n: number) => n },
+  Image: 'Image',
+  FlatList: 'FlatList',
+  SectionList: 'SectionList',
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
   View: 'View',
   Text: 'Text',
   Pressable: 'Pressable',
@@ -50,7 +82,92 @@ mock.module('react-native', () => ({
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
-}));
+  processColor: (c: any) => c,
+  Touchable: { Mixin: {} },
+  PanResponder: {
+    create: () => ({ panHandlers: {} }),
+  },
+  TouchableOpacity: 'TouchableOpacity',
+  TouchableHighlight: 'TouchableHighlight',
+  TouchableWithoutFeedback: 'TouchableWithoutFeedback',
+  Animated: {
+    Value: class {
+      constructor(public val: any = 0) {}
+      setValue(val: any) { this.val = val; }
+      interpolate(config: any) { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb?.() }),
+    spring: () => ({ start: (cb?: any) => cb?.() }),
+    event: () => () => {},
+    View: 'AnimatedView',
+    Text: 'AnimatedText',
+  },
+};
+
+const originalMockModule = (mock as any).module.bind(mock);
+(mock as any).module = (moduleName: string, factory: any) => {
+  if (moduleName === 'react-native') {
+    return originalMockModule(moduleName, () => {
+      const custom = typeof factory === 'function' ? factory() : factory;
+      return {
+        ...defaultReactNativeMock,
+        ...custom,
+        Platform: {
+          ...defaultReactNativeMock.Platform,
+          ...(custom?.Platform ?? {}),
+        },
+      };
+    });
+  }
+  return originalMockModule(moduleName, factory);
+};
+
+mock.module('react-native', () => defaultReactNativeMock);
+
+mock.module('react-native-svg', () => {
+  const SvgMock = 'SvgMock';
+  return {
+    default: SvgMock,
+    Svg: SvgMock,
+    Path: SvgMock,
+    Circle: SvgMock,
+    Rect: SvgMock,
+    G: SvgMock,
+    Line: SvgMock,
+    Polyline: SvgMock,
+    Polygon: SvgMock,
+    Text: SvgMock,
+    TSpan: SvgMock,
+    TextPath: SvgMock,
+    Use: SvgMock,
+    Image: SvgMock,
+    Symbol: SvgMock,
+    Defs: SvgMock,
+    LinearGradient: SvgMock,
+    RadialGradient: SvgMock,
+    Stop: SvgMock,
+    ClipPath: SvgMock,
+    Pattern: SvgMock,
+    Mask: SvgMock,
+    parse: () => null,
+  };
+});
+
+for (const path of [
+  '@expo-google-fonts/geist/400Regular',
+  '@expo-google-fonts/geist/500Medium',
+  '@expo-google-fonts/geist/600SemiBold',
+  '@expo-google-fonts/geist/700Bold',
+  '@expo-google-fonts/geist-mono/400Regular',
+  '@expo-google-fonts/geist-mono/500Medium',
+  '@expo-google-fonts/geist-mono/600SemiBold',
+  '@expo-google-fonts/geist-mono/700Bold',
+]) {
+  const name = path.split('/').pop()!;
+  mock.module(path, () => ({
+    [`${path.includes('mono') ? 'GeistMono' : 'Geist'}_${name}`]: 1,
+  }));
+}
 
 mock.module('expo-sqlite', () => ({
   openDatabaseSync: () => ({}),
@@ -122,4 +239,8 @@ mock.module('expo-secure-store', () => ({
     if (typeof store.delete === 'function') store.delete(key);
     else delete (store as Record<string, unknown>)[key];
   },
+}));
+
+mock.module('expo-linear-gradient', () => ({
+  LinearGradient: 'LinearGradient',
 }));

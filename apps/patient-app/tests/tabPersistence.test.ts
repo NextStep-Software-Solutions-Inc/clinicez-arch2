@@ -1,9 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
-
-mock.module('react-native', () => ({
-  Platform: { OS: 'web', select: <T>(obj: { web?: T; default?: T }) => obj.web ?? obj.default },
-  DeviceEventEmitter: { emit: () => {}, addListener: () => ({ remove: () => {} }) },
-}));
+import { describe, expect, test, beforeEach } from 'bun:test';
 
 const {
   getPersistedTab,
