@@ -26,13 +26,7 @@ import {
   type AvailableSlotItem,
 } from '../../services/clinicService';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
-import { notify, Alert } from '../../utils/feedback';
-import {
-  getPatientInitials,
-  hasKnownAllergies,
-  hasStatAllergy,
-  formatPatientDemographicsLine,
-} from './PatientDirectoryCard';
+import { notify } from '../../utils/feedback';
 
 export interface ScheduledVisitDetails {
   appointmentId: string;
@@ -408,11 +402,6 @@ export default function ScheduleVisitModal({
     return null;
   }
 
-  const initials = getPatientInitials(patient);
-  const demographicsLine = formatPatientDemographicsLine(patient);
-  const hasAllergies = hasKnownAllergies(patient.allergies);
-  const isStatAllergy = hasStatAllergy(patient.allergies);
-
   const todayIso = getTodayIsoDate();
   const tomorrowIso = getRelativeIsoDate(1);
   const nextWeekIso = getRelativeIsoDate(7);
@@ -432,7 +421,7 @@ export default function ScheduleVisitModal({
                   Schedule visit
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Direct clinic appointment setup
+                  {patient.fullName}
                 </ThemedText>
               </View>
             </View>
@@ -445,50 +434,6 @@ export default function ScheduleVisitModal({
             >
               <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
             </Pressable>
-          </View>
-
-          {/* Patient Identity Banner */}
-          <View style={styles.patientBanner}>
-            <View style={styles.avatarCircle}>
-              <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
-                {initials}
-              </ThemedText>
-            </View>
-            <View style={styles.bannerInfoCol}>
-              <View style={styles.bannerNameRow}>
-                <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
-                  {patient.fullName}
-                </ThemedText>
-                <Badge label={patient.patientCode} variant="neutral" size="sm" />
-                {patient.clinicEzId ? (
-                  <Badge label={patient.clinicEzId} variant="primary" size="sm" />
-                ) : null}
-              </View>
-              <ThemedText variant="small" color={theme.colors.textSecondary}>
-                {demographicsLine || `${patient.age ?? ''} yrs • ${patient.sex ?? ''}`}
-              </ThemedText>
-              <View style={styles.bannerBadgesRow}>
-                {patient.philHealthNumber ? (
-                  <Badge
-                    label={`PhilHealth PIN ${patient.philHealthNumber}`}
-                    variant="primary"
-                    size="sm"
-                    icon="shield"
-                  />
-                ) : null}
-                {hasAllergies ? (
-                  <Badge
-                    label={isStatAllergy ? `STAT Allergy: ${patient.allergies}` : `Allergies: ${patient.allergies}`}
-                    variant="emergency"
-                    size="sm"
-                    icon="alertCircle"
-                  />
-                ) : null}
-                {patient.alerts ? (
-                  <Badge label={patient.alerts} variant="warning" size="sm" icon="alert" />
-                ) : null}
-              </View>
-            </View>
           </View>
 
           {/* Conditional View: Post-Appointment Setup Dialog vs Initial Booking Form */}
@@ -839,11 +784,11 @@ export default function ScheduleVisitModal({
                 </View>
               </View>
 
-              {/* Clinical Notes / Reason Section */}
+              {/* Notes / Reason Section */}
               <View style={styles.formSection}>
                 <Input
-                  label="Clinical Notes / Reason for Visit"
-                  placeholder="Chief complaint or special clinical instructions..."
+                  label="Notes / Reason for visit"
+                  placeholder="Reason for visit or notes (optional)"
                   value={clinicalNotes}
                   onChangeText={setClinicalNotes}
                   multiline
@@ -924,41 +869,6 @@ const styles = StyleSheet.create({
   closeBtn: {
     padding: theme.spacing.xs,
     borderRadius: theme.radii.md,
-  },
-  patientBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceMuted,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-  },
-  avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bannerInfoCol: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  bannerNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  bannerBadgesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
   },
   formScroll: {
     flex: 1,

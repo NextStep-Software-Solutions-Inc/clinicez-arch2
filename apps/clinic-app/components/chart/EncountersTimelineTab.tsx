@@ -165,7 +165,7 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'YAKAP' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'YAKAP' ? '700' : '500' }}
             >
-              PhilHealth Konsulta Only
+              YAKAP
             </ThemedText>
           </Pressable>
           <Pressable
@@ -177,7 +177,7 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'STANDARD' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'STANDARD' ? '700' : '500' }}
             >
-              Private / Cash
+              Standard
             </ThemedText>
           </Pressable>
         </View>

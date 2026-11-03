@@ -121,7 +121,7 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(element.props.truncateSubtitle).toBe(true);
   });
 
-  test('2. ExternalDocumentVaultTab renders filter chips with horizontal non-wrapping structure', () => {
+  test('2. ExternalDocumentVaultTab renders External/Internal vault types, inline no-wrap filter chips + right Attach button, and removes sub-filter chips', () => {
     const sampleAttachments: ClinicRecordAttachmentRecord[] = [
       {
         id: 'att-1',
@@ -129,23 +129,27 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
         recordType: 'OutsideChestXRay',
         title: 'Outside Chest X-Ray Film',
         fileName: 'cxr.pdf',
+        fileSizeBytes: 204800,
+        createdAt: '2026-10-15T08:00:00Z',
         storageUri: 'tenants/1/vault/cxr.pdf.cez',
         encryptionAlgorithm: 'AES-256-GCM',
         verificationStatus: 'Pending',
         uploadedAtUtc: '2026-10-15T08:00:00Z',
-      },
+      } as any,
       {
         id: 'att-2',
         patientId: mockPatient.id,
         recordType: 'COR',
         title: 'Certificate of Registration',
         fileName: 'cor.jpg',
+        fileSizeBytes: 102400,
+        createdAt: '2026-10-14T08:00:00Z',
         storageUri: 'tenants/1/vault/cor.jpg.cez',
         encryptionAlgorithm: 'AES-256-GCM',
         verificationStatus: 'Verified',
         verifiedByStaffName: 'Dr. Santos',
         uploadedAtUtc: '2026-10-14T08:00:00Z',
-      },
+      } as any,
     ];
 
     const markup = renderToStaticMarkup(
@@ -155,20 +159,73 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
       })
     );
 
+    // Verify 2 vault types (External, Internal) are rendered
+    expect(markup).toContain('External');
+    expect(markup).toContain('Internal');
+
     // Verify all status filter chips are rendered
     expect(markup).toContain('All (2)');
     expect(markup).toContain('Pending Review (1)');
     expect(markup).toContain('Verified (1)');
     expect(markup).toContain('Rejected (0)');
 
-    // Verify document type filter chips are rendered
-    expect(markup).toContain('All Records (2)');
-    expect(markup).toContain('Outside Chest X-Ray');
-    expect(markup).toContain('Cert of Registration (COR)');
-    expect(markup).toContain('Outside Labs');
+    // Verify removed sub-filter chips are absent
+    expect(markup).not.toContain('All Records');
+    expect(markup).not.toContain('Cert of Registration (COR)');
+    expect(markup).not.toContain('Outside Labs');
 
     // Verify Attach External Document button is rendered
     expect(markup).toContain('Attach External Document');
+  });
+
+  test('2b. ExternalDocumentVaultTab INTERNAL vault mode renders clinic-issued certificates and referrals with no-wrap chips', () => {
+    const internalMarkup = renderToStaticMarkup(
+      React.createElement(ExternalDocumentVaultTab, {
+        patient: mockPatient,
+        attachments: [],
+        initialVaultType: 'INTERNAL',
+        medicalCertificates: [
+          {
+            id: 'mc-1',
+            certificateNumber: 'MC-2026-0001',
+            patientId: mockPatient.id,
+            patientName: mockPatient.fullName,
+            doctorName: 'Rizal',
+            prcLicenseNumber: '0123456',
+            issueDate: '2026-10-20',
+            diagnosis: 'Upper Respiratory Tract Infection',
+            fitnessStatus: 'FitToWork',
+            isSigned: true,
+            createdAt: '2026-10-20T09:00:00Z',
+          } as any,
+        ],
+        referralLetters: [
+          {
+            id: 'ref-1',
+            referralNumber: 'REF-2026-0001',
+            patientId: mockPatient.id,
+            patientName: mockPatient.fullName,
+            referringDoctorName: 'Rizal',
+            referralDate: '2026-10-21',
+            referredToFacility: 'PGH',
+            referredDepartment: 'Pulmonology',
+            provisionalDiagnosis: 'Community-Acquired Pneumonia',
+            reasonForReferral: 'Specialist evaluation',
+            isSigned: true,
+            createdAt: '2026-10-21T09:00:00Z',
+          } as any,
+        ],
+      })
+    );
+
+    expect(internalMarkup).toContain('External');
+    expect(internalMarkup).toContain('Internal');
+    expect(internalMarkup).toContain('All (2)');
+    expect(internalMarkup).toContain('Certificates (1)');
+    expect(internalMarkup).toContain('Referrals (1)');
+    expect(internalMarkup).toContain('MC-2026-0001');
+    expect(internalMarkup).toContain('REF-2026-0001');
+    expect(internalMarkup).not.toContain('Attach External Document');
   });
 
   test('3. ExternalDocumentVaultTab invokes onUploadDocument when Attach External Document is clicked', () => {

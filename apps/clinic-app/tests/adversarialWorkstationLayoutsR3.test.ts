@@ -475,7 +475,7 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
           if (tab === 'procedures') expect(markup).toContain('Ordered / Scheduled');
           if (tab === 'immunizations') expect(markup).toContain('Administer Vaccine');
           if (tab === 'profiles') expect(markup).toContain('Health Profiles');
-          if (tab === 'vault') expect(markup).toContain('All Records');
+          if (tab === 'vault') expect(markup).toContain('Attach External Document');
         }
       }
     }, 30000);

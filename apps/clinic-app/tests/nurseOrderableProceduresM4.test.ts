@@ -499,5 +499,29 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       // Non-clinical phlebotomy intake button is NOT rendered
       expect(markup).not.toContain('data-testid="collect-specimen-lab-1"');
     });
+
+    test('5.8 DiagnosticLabTab and NursingProceduresTab enforce single-row topBar and horizontally scrollable no-wrap filter chips', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const diagSrc = fs.readFileSync(
+        path.resolve(__dirname, '../components/chart/DiagnosticLabTab.tsx'),
+        'utf8'
+      );
+      const procSrc = fs.readFileSync(
+        path.resolve(__dirname, '../components/chart/NursingProceduresTab.tsx'),
+        'utf8'
+      );
+
+      for (const src of [diagSrc, procSrc]) {
+        expect(src).toMatch(/topBar:\s*\{[\s\S]*?flexWrap:\s*'nowrap'[\s\S]*?minWidth:\s*0/);
+        expect(src).toMatch(/filterScrollWrap:\s*\{[\s\S]*?flex:\s*1[\s\S]*?minWidth:\s*0/);
+        expect(src).toMatch(/filterScroll:\s*\{[\s\S]*?flexShrink:\s*1[\s\S]*?minWidth:\s*0[\s\S]*?maxWidth:\s*'100%'/);
+        expect(src).toMatch(/filterRow:\s*\{[\s\S]*?flexWrap:\s*'nowrap'/);
+        expect(src).toMatch(/filterBtn:\s*\{[\s\S]*?flexShrink:\s*0/);
+      }
+
+      expect(diagSrc).toMatch(/orderDiagnosticBtn:\s*\{[\s\S]*?flexShrink:\s*0/);
+      expect(procSrc).toMatch(/orderProcedureBtn:\s*\{[\s\S]*?flexShrink:\s*0/);
+    });
   });
 });

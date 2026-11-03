@@ -3,6 +3,7 @@ import Modal from '../ui/Modal';
 import { useClinic } from '../../context/ClinicContext';
 import type { ClinicPatient } from '../../services/clinicService';
 import EditPatientModal from '../patient/EditPatientModal';
+import { reconcileChartWithPatient } from './PatientSummarySpine';
 import {
   CenteredModalChartLayout,
   SplitPaneChartLayout,
@@ -14,8 +15,11 @@ import {
   type ChartLayoutProps,
   type PatientChartModalProps,
   CHART_TABS,
+  CHART_TAB_LABELS,
   DEFAULT_CHART_LAYOUT,
   getAvailableChartTabs,
+  pushChartTabHistory,
+  popChartTabHistory,
 } from './types';
 
 export { CHART_TABS };
@@ -86,16 +90,22 @@ export default function PatientChartModal({
 
   const defaultInitialTab: ChartTab = activeTabProp || (focusToothNumber ? 'dental' : initialTab);
   const [internalTab, setInternalTab] = useState<ChartTab>(defaultInitialTab);
+  const [tabHistory, setTabHistory] = useState<ChartTab[]>([]);
   const [activeLayout, setActiveLayout] = useState<ChartLayoutMode>(configuredLayout);
   const [editDemographicsVisible, setEditDemographicsVisible] = useState(false);
   const [currentPatient, setCurrentPatient] = useState<ClinicPatient | null>(patient);
 
   const tabVisibleRef = useRef(false);
+  const prevPatientIdRef = useRef<string | undefined>(patient?.id);
   const layoutVisibleRef = useRef(false);
   const prevConfiguredLayoutRef = useRef(configuredLayout);
 
   useEffect(() => {
     setCurrentPatient(patient);
+    if (patient?.id !== prevPatientIdRef.current) {
+      prevPatientIdRef.current = patient?.id;
+      setTabHistory([]);
+    }
   }, [patient]);
 
   useEffect(() => {
@@ -106,6 +116,7 @@ export default function PatientChartModal({
 
   useEffect(() => {
     if (visible && !tabVisibleRef.current) {
+      setTabHistory([]);
       if (activeTabProp) {
         setInternalTab(activeTabProp);
       } else if (focusToothNumber) {
@@ -113,6 +124,8 @@ export default function PatientChartModal({
       } else if (initialTab) {
         setInternalTab(initialTab);
       }
+    } else if (!visible && tabVisibleRef.current) {
+      setTabHistory([]);
     }
     tabVisibleRef.current = visible;
   }, [visible, activeTabProp, initialTab, focusToothNumber]);
@@ -171,12 +184,35 @@ export default function PatientChartModal({
   };
 
   const displayPatient = currentPatient || patient;
+  const reconciledChart = useMemo(
+    () => (patientChart ? reconcileChartWithPatient(patientChart, displayPatient) : patientChart),
+    [patientChart, displayPatient],
+  );
   const activeTab = activeTabProp ?? internalTab;
 
+  const allowedTabIds = useMemo(
+    () => availableTabs.map((t) => t.value),
+    [availableTabs],
+  );
+  const { previousTab } = useMemo(
+    () => popChartTabHistory(tabHistory, allowedTabIds),
+    [tabHistory, allowedTabIds],
+  );
+
   const handleTabChange = (tab: ChartTab) => {
+    if (tab === activeTab) return;
+    setTabHistory((prev) => pushChartTabHistory(prev, activeTab, tab));
     setInternalTab(tab);
     onTabChange?.(tab);
   };
+
+  const handleBackTab = useCallback(() => {
+    const { previousTab: target, nextHistory } = popChartTabHistory(tabHistory, allowedTabIds);
+    if (!target) return;
+    setTabHistory(nextHistory);
+    setInternalTab(target);
+    onTabChange?.(target);
+  }, [tabHistory, allowedTabIds, onTabChange]);
 
   if (!visible) {
     return null;
@@ -184,7 +220,7 @@ export default function PatientChartModal({
 
   const layoutProps: ChartLayoutProps = {
     patient: displayPatient,
-    patientChart,
+    patientChart: reconciledChart,
     loadingChart: isRefreshing,
     chartError,
     patientAttachments,
@@ -195,6 +231,9 @@ export default function PatientChartModal({
     onEditDemographics: handleEditPress,
     currentLayout: activeLayout,
     onSwitchLayout: setActiveLayout,
+    canGoBackTab: Boolean(previousTab),
+    previousTabLabel: previousTab ? CHART_TAB_LABELS[previousTab] : null,
+    onBackTab: previousTab ? handleBackTab : undefined,
     onViewPrescriptionSlip,
     onOpenExternalDispense,
     onViewLabSlip,

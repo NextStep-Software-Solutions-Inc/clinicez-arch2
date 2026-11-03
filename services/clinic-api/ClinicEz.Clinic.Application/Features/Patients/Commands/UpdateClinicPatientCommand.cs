@@ -76,6 +76,7 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
             .Include(p => p.Allergies)
             .Include(p => p.Addresses)
             .Include(p => p.Guardians)
+            .Include(p => p.PhilHealthMembership)
             .FirstOrDefaultAsync(p => p.Id == request.Id, ct);
 
         if (patient == null)
@@ -159,6 +160,14 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         patient.Email = request.Email?.Trim();
 
         patient.PhilHealthNumber = request.PhilHealthNumber?.Trim();
+        if (patient.PhilHealthMembership != null)
+        {
+            patient.PhilHealthMembership.MemberPin = string.IsNullOrWhiteSpace(patient.PhilHealthNumber)
+                ? null
+                : patient.PhilHealthNumber;
+            patient.PhilHealthMembership.UpdatedAt = DateTime.UtcNow;
+            patient.PhilHealthMembership.UpdatedBy = _clinicContext?.StaffId?.ToString() ?? "ClinicStaff";
+        }
         patient.SeniorCitizenId = request.SeniorCitizenId?.Trim();
         patient.PwdId = request.PwdId?.Trim();
         if (Enum.TryParse<BloodType>(request.BloodType, true, out var bt)) patient.BloodType = bt; else if (request.BloodType == null) patient.BloodType = null;

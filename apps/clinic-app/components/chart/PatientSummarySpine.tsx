@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, Skeleton } from '../ui';
@@ -131,6 +131,101 @@ export function formatPhilHealthPin(pin?: string): string {
   const digits = pin.replace(/\D/g, '');
   if (digits.length !== 12) return pin;
   return `${digits.slice(0, 2)}-${digits.slice(2, 11)}-${digits.slice(11)}`;
+}
+
+const BLOOD_TYPE_ENUM_LABELS: Record<string, string> = {
+  APOSITIVE: 'A+',
+  ANEGATIVE: 'A-',
+  BPOSITIVE: 'B+',
+  BNEGATIVE: 'B-',
+  ABPOSITIVE: 'AB+',
+  ABNEGATIVE: 'AB-',
+  OPOSITIVE: 'O+',
+  ONEGATIVE: 'O-',
+};
+
+export function formatBloodTypeLabel(raw?: string | null): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const upper = trimmed.toUpperCase();
+  if (upper === 'UNKNOWN') return undefined;
+  return BLOOD_TYPE_ENUM_LABELS[upper] || trimmed;
+}
+
+/**
+ * Synchronizes `PatientChart.demographics` against an authoritative `ClinicPatient` record so
+ * stale chart membership snapshots (e.g. an older `PatientPhilHealthMembership.MemberPin`)
+ * never overwrite demographic edits saved on the patient record.
+ */
+export function reconcileChartWithPatient(
+  chart: PatientChart,
+  patient?: ClinicPatient | null,
+): PatientChart {
+  if (!patient) return chart;
+  const isLoadedPatient = Boolean(
+    patient.patientCode || patient.dateOfBirth || patient.philHealthNumber !== undefined,
+  );
+  if (!isLoadedPatient) return chart;
+
+  const hasAuthoritativePin =
+    'philHealthNumber' in patient && patient.philHealthNumber !== undefined;
+  const resolvedPin = hasAuthoritativePin
+    ? patient.philHealthNumber?.trim() || undefined
+    : chart.demographics?.philHealthNumber;
+
+  const hasAuthoritativeSenior =
+    'seniorCitizenId' in patient && patient.seniorCitizenId !== undefined;
+  const resolvedSeniorId = hasAuthoritativeSenior
+    ? patient.seniorCitizenId || undefined
+    : chart.demographics?.seniorCitizenId;
+
+  const hasAuthoritativePwd = 'pwdId' in patient && patient.pwdId !== undefined;
+  const resolvedPwdId = hasAuthoritativePwd
+    ? patient.pwdId || undefined
+    : chart.demographics?.pwdId;
+
+  const resolvedBloodType =
+    formatBloodTypeLabel(patient.bloodType) ||
+    formatBloodTypeLabel(chart.demographics?.bloodType);
+
+  const resolvedMemberStatus =
+    (patient.customFields?.philHealthMemberType as string | undefined) ||
+    chart.demographics?.memberStatus;
+
+  const existingMembership = (chart as any).philHealthMembership;
+  const syncedMembership =
+    existingMembership && hasAuthoritativePin
+      ? {
+          ...existingMembership,
+          philHealthPin: resolvedPin ?? null,
+        }
+      : existingMembership;
+
+  return {
+    ...chart,
+    patientName: patient.fullName || chart.patientName,
+    ...(syncedMembership !== undefined ? { philHealthMembership: syncedMembership } : {}),
+    demographics: {
+      ...chart.demographics,
+      patientName: patient.fullName || chart.demographics?.patientName,
+      patientCode: patient.patientCode || chart.demographics?.patientCode,
+      age: patient.age ?? chart.demographics?.age ?? 0,
+      dob: patient.dateOfBirth || chart.demographics?.dob || '',
+      dateOfBirth: patient.dateOfBirth || chart.demographics?.dateOfBirth,
+      sex: patient.sex || chart.demographics?.sex || '',
+      bloodType: resolvedBloodType,
+      contactNumber: patient.contactNumber || chart.demographics?.contactNumber || '',
+      verificationStatus: patient.verificationStatus || chart.demographics?.verificationStatus,
+      philHealthNumber: resolvedPin,
+      memberStatus: resolvedMemberStatus,
+      seniorCitizenId: resolvedSeniorId,
+      isSenior: Boolean(resolvedSeniorId) || (patient.age ?? chart.demographics?.age ?? 0) >= 60,
+      pwdId: resolvedPwdId,
+      isPwd: Boolean(resolvedPwdId),
+      alerts: patient.alerts ?? chart.demographics?.alerts,
+    },
+  };
 }
 
 /**
@@ -307,6 +402,10 @@ export default function PatientSummarySpine({
   const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
   const isRefreshing = Boolean(loading || isLocalRefreshing);
 
+  useEffect(() => {
+    setCollapsed(Boolean(defaultCollapsed || compact || variant === 'compact'));
+  }, [defaultCollapsed, compact, variant]);
+
   const handleRefresh = async () => {
     if (isRefreshing) return;
     if (onPressRefresh) {
@@ -327,28 +426,97 @@ export default function PatientSummarySpine({
     }
   };
 
-  // Consolidated demographics
-  const demo = demoProp || chart?.demographics;
-  const fullName = demo?.patientName || patient?.fullName || chart?.patientName || 'Patient';
-  const patientCode = demo?.patientCode || patient?.patientCode || '—';
-  const age = demo?.age ?? patient?.age ?? 0;
-  const sex = demo?.sex || patient?.sex || '—';
-  const dob = demo?.dob || demo?.dateOfBirth || patient?.dateOfBirth;
-  const bloodType = demo?.bloodType || patient?.bloodType;
-  const isVerified = (demo?.verificationStatus || patient?.verificationStatus) !== 'PendingVerification';
+  // Consolidated demographics (explicit `demographics` prop > authoritative `patient` record > `chart.demographics` fallback)
+  const chartDemo = chart?.demographics;
+  const demo = demoProp || chartDemo;
+  const hasLoadedPatient = Boolean(
+    patient && (patient.patientCode || patient.dateOfBirth || patient.philHealthNumber !== undefined),
+  );
+  const hasAuthoritativePatientPin = Boolean(
+    patient && 'philHealthNumber' in patient && patient.philHealthNumber !== undefined,
+  );
+  const fullName =
+    demoProp?.patientName ||
+    (hasLoadedPatient ? patient?.fullName : undefined) ||
+    chartDemo?.patientName ||
+    patient?.fullName ||
+    chart?.patientName ||
+    'Patient';
+  const patientCode = demoProp?.patientCode || patient?.patientCode || chartDemo?.patientCode || '—';
+  const dob =
+    demoProp?.dob ||
+    demoProp?.dateOfBirth ||
+    patient?.dateOfBirth ||
+    chartDemo?.dob ||
+    chartDemo?.dateOfBirth;
+  const derivedAgeFromDob = useMemo(() => {
+    if (!dob) return undefined;
+    const parsed = new Date(dob);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    const now = new Date();
+    let yrs = now.getFullYear() - parsed.getFullYear();
+    const m = now.getMonth() - parsed.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < parsed.getDate())) {
+      yrs -= 1;
+    }
+    return Math.max(0, yrs);
+  }, [dob]);
+  const rawAge =
+    demoProp?.age ??
+    (hasLoadedPatient ? patient?.age : undefined) ??
+    chartDemo?.age ??
+    patient?.age;
+  const age = derivedAgeFromDob ?? rawAge ?? 0;
+  const hasKnownAge =
+    derivedAgeFromDob !== undefined ||
+    demo?.age != null ||
+    Boolean(patient?.age != null && (patient.patientCode || patient.dateOfBirth));
+  const sex = demoProp?.sex || patient?.sex || chartDemo?.sex || '—';
+  const bloodType =
+    formatBloodTypeLabel(demoProp?.bloodType) ||
+    formatBloodTypeLabel(patient?.bloodType) ||
+    formatBloodTypeLabel(chartDemo?.bloodType);
+  const isVerified =
+    (demoProp?.verificationStatus || patient?.verificationStatus || chartDemo?.verificationStatus) !==
+    'PendingVerification';
 
-  // Consolidated PhilHealth credentials
-  const pin = demo?.philHealthNumber || patient?.philHealthNumber;
-  const memberStatus = demo?.memberStatus || (pin ? 'Member' : undefined);
-  const atc = activeAtc || demo?.philHealthAtc || demo?.atc;
-  const caseNo = activeCaseNo || demo?.activeCaseNo;
+  // Consolidated PhilHealth credentials (authoritative `patient.philHealthNumber` wins over stale chart membership snapshots)
+  const pin =
+    demoProp?.philHealthNumber !== undefined
+      ? demoProp.philHealthNumber?.trim() || undefined
+      : hasAuthoritativePatientPin
+        ? patient?.philHealthNumber?.trim() || undefined
+        : chartDemo?.philHealthNumber?.trim() || undefined;
+  const memberStatus =
+    demoProp?.memberStatus ||
+    (patient?.customFields?.philHealthMemberType as string | undefined) ||
+    chartDemo?.memberStatus ||
+    undefined;
+  const atc =
+    activeAtc !== undefined
+      ? activeAtc?.trim() || undefined
+      : demo?.philHealthAtc?.trim() || demo?.atc?.trim() || undefined;
+  const caseNo =
+    activeCaseNo !== undefined
+      ? activeCaseNo?.trim() || undefined
+      : demo?.activeCaseNo?.trim() || undefined;
 
   // Senior / PWD
-  const seniorId = demo?.seniorCitizenId || patient?.seniorCitizenId;
-  const isSenior = demo?.isSenior || Boolean(seniorId) || age >= 60;
-  const pwdId = demo?.pwdId || patient?.pwdId;
-  const isPwd = demo?.isPwd || Boolean(pwdId);
-  const alertsStr = demo?.alerts || patient?.alerts || '';
+  const seniorId =
+    demoProp?.seniorCitizenId !== undefined
+      ? demoProp.seniorCitizenId
+      : hasLoadedPatient && patient && 'seniorCitizenId' in patient && patient.seniorCitizenId !== undefined
+        ? patient.seniorCitizenId
+        : chartDemo?.seniorCitizenId || patient?.seniorCitizenId;
+  const isSenior = Boolean(demoProp?.isSenior ?? (seniorId ? true : chartDemo?.isSenior)) || (hasKnownAge && age >= 60);
+  const pwdId =
+    demoProp?.pwdId !== undefined
+      ? demoProp.pwdId
+      : hasLoadedPatient && patient && 'pwdId' in patient && patient.pwdId !== undefined
+        ? patient.pwdId
+        : chartDemo?.pwdId || patient?.pwdId;
+  const isPwd = Boolean(demoProp?.isPwd ?? (pwdId ? true : chartDemo?.isPwd));
+  const alertsStr = demoProp?.alerts || patient?.alerts || chartDemo?.alerts || '';
 
   // Latest Vitals
   const latestVitals = vitalsProp || chart?.vitalsHistory?.[0] || null;
@@ -357,6 +525,16 @@ export default function PatientSummarySpine({
   const rrValue: number | undefined = latestVitals?.respiratoryRateBreathsPerMin ?? rawVitals?.respiratoryRate;
   const tempValue: number | undefined = latestVitals?.temperatureCelsius ?? rawVitals?.temperature;
   const spo2Value: number | undefined = latestVitals?.oxygenSaturationPercent ?? rawVitals?.oxygenSaturation;
+  const weightValue: number | undefined = latestVitals?.weightKg ?? rawVitals?.weight;
+  const heightValue: number | undefined = latestVitals?.heightCm ?? rawVitals?.height;
+  const bmiValue: number | undefined = useMemo(() => {
+    if (latestVitals?.bmi && latestVitals.bmi > 0) return latestVitals.bmi;
+    if (weightValue && heightValue && weightValue > 0 && heightValue > 0) {
+      const heightM = heightValue / 100;
+      return Number((weightValue / (heightM * heightM)).toFixed(2));
+    }
+    return undefined;
+  }, [latestVitals?.bmi, weightValue, heightValue]);
 
   const bpEval = evaluateBloodPressure(latestVitals?.systolicBp, latestVitals?.diastolicBp);
   const hrEval = evaluateHeartRate(hrValue);
@@ -364,8 +542,8 @@ export default function PatientSummarySpine({
   const tempEval = evaluateTemperature(tempValue);
   const spo2Eval = evaluateOxygenSat(spo2Value);
 
-  // Pediatric check (Under 19 years old)
-  const isPediatric = age < 19 || Boolean(latestVitals?.zScoreWeightForAge);
+  // Pediatric check (Under 19 years old when age is known, or explicit WHO Z-score recorded)
+  const isPediatric = (hasKnownAge && age < 19) || Boolean(latestVitals?.zScoreWeightForAge);
 
   // Red Alerts (Zone 4: Anaphylaxis, Fall Risk, Pregnancy)
   const redAlerts = useMemo(() => {
@@ -468,31 +646,41 @@ export default function PatientSummarySpine({
 
   // Active chronic problems (ICD-10)
   const activeProblems = useMemo(() => {
-    const probList = problemsProp || chart?.problems;
+    const probList = problemsProp ?? chart?.problems;
     if (probList && probList.length > 0) {
       return probList.filter((p) => p.status === 'Active');
     }
     if (patient?.chronicConditions) {
-      return patient.chronicConditions.split(',').map((c, i) => ({
-        id: `c-${i}`,
-        icd10Code: 'CHRONIC',
-        problemTitle: c.trim(),
-        isChronicNcd: true,
-      }));
+      return patient.chronicConditions
+        .split(',')
+        .map((c, i) => ({
+          id: `c-${i}`,
+          icd10Code: '',
+          problemTitle: c.trim(),
+          isChronicNcd: true,
+        }))
+        .filter((p) => p.problemTitle.length > 0);
     }
     return [];
   }, [problemsProp, chart?.problems, patient?.chronicConditions]);
 
   // Active medications
   const activeMeds = useMemo(() => {
-    if (rxProp && rxProp.length > 0) {
-      return rxProp.map((rx) => `${rx.genericName} ${rx.dosage || ''} ${rx.sig ? `(${rx.sig})` : ''}`.trim());
+    const formatMedLabel = (rx: any) =>
+      [rx.genericName, rx.dosage, rx.sig ? `(${rx.sig})` : '']
+        .map((part) => (part || '').trim())
+        .filter(Boolean)
+        .join(' ');
+
+    if (rxProp !== undefined && rxProp !== null) {
+      return rxProp.map(formatMedLabel).filter(Boolean);
     }
     const list: string[] = [];
     if (chart?.consultations && chart.consultations.length > 0) {
       const latestRx = chart.consultations[0].prescriptions || [];
       latestRx.forEach((rx) => {
-        list.push(`${rx.genericName} ${rx.dosage || ''} ${rx.sig ? `(${rx.sig})` : ''}`.trim());
+        const label = formatMedLabel(rx);
+        if (label) list.push(label);
       });
     }
     return list;
@@ -580,14 +768,11 @@ export default function PatientSummarySpine({
           {onPressEdit ? (
             <Pressable
               onPress={onPressEdit}
-              style={styles.editDemographicsBtn}
+              style={styles.actionIconBtn}
               accessibilityRole="button"
               accessibilityLabel="Edit Demographics"
             >
-              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-              <ThemedText variant="captionBold" color={theme.colors.primary}>
-                Edit Demographics
-              </ThemedText>
+              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
             </Pressable>
           ) : null}
           {onPressRefresh ? (
@@ -731,7 +916,7 @@ export default function PatientSummarySpine({
                 {onPressRecordVitals ? (
                   <Pressable
                     onPress={onPressRecordVitals}
-                    style={styles.editDemographicsBtn}
+                    style={styles.vitalsActionBtn}
                     accessibilityRole="button"
                     accessibilityLabel={latestVitals ? 'Update Vitals' : 'Record Vitals'}
                   >
@@ -927,11 +1112,11 @@ export default function PatientSummarySpine({
                 <View style={styles.vitalTile}>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>BMI (kg/m²)</ThemedText>
                   <ThemedText variant="bodyBold" color={theme.colors.text}>
-                    {latestVitals.bmi ? `${latestVitals.bmi}` : '—'}
+                    {bmiValue !== undefined ? `${bmiValue}` : '—'}
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    {latestVitals.weightKg ? `${latestVitals.weightKg} kg` : ''}
-                    {latestVitals.heightCm ? ` • ${latestVitals.heightCm} cm` : ''}
+                    {weightValue ? `${weightValue} kg` : ''}
+                    {weightValue && heightValue ? ` • ${heightValue} cm` : heightValue ? `${heightValue} cm` : ''}
                   </ThemedText>
                 </View>
               </View>
@@ -1007,10 +1192,21 @@ export default function PatientSummarySpine({
                 {activeProblems.length > 0 ? (
                   activeProblems.map((prob) => (
                     <View key={prob.id} style={styles.problemPill}>
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        {prob.icd10Code}
-                      </ThemedText>
-                      <ThemedText variant="caption" color={theme.colors.text} numberOfLines={1}>
+                      {prob.icd10Code ? (
+                        <ThemedText
+                          variant="captionBold"
+                          color={theme.colors.primaryDark}
+                          style={styles.pillFixedToken}
+                        >
+                          {prob.icd10Code}
+                        </ThemedText>
+                      ) : null}
+                      <ThemedText
+                        variant="caption"
+                        color={theme.colors.text}
+                        numberOfLines={1}
+                        style={styles.pillTruncateText}
+                      >
                         {prob.problemTitle}
                       </ThemedText>
                     </View>
@@ -1032,8 +1228,15 @@ export default function PatientSummarySpine({
                 {activeMeds.length > 0 ? (
                   activeMeds.map((med, idx) => (
                     <View key={idx} style={styles.medicationPill}>
-                      <Icon name="pill" size={12} color={theme.colors.routineText} />
-                      <ThemedText variant="caption" color={theme.colors.text} numberOfLines={1}>
+                      <View style={styles.pillFixedToken}>
+                        <Icon name="pill" size={12} color={theme.colors.routineText} />
+                      </View>
+                      <ThemedText
+                        variant="caption"
+                        color={theme.colors.text}
+                        numberOfLines={1}
+                        style={styles.pillTruncateText}
+                      >
                         {med}
                       </ThemedText>
                     </View>
@@ -1054,6 +1257,8 @@ export default function PatientSummarySpine({
 
 const styles = StyleSheet.create({
   spineContainer: {
+    width: '100%',
+    overflow: 'hidden',
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1068,12 +1273,14 @@ const styles = StyleSheet.create({
   },
   topRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: theme.spacing.sm,
   },
   demographicsGroup: {
     flex: 1,
+    minWidth: 200,
     gap: 2,
   },
   nameRow: {
@@ -1095,6 +1302,7 @@ const styles = StyleSheet.create({
   },
   topActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
@@ -1103,15 +1311,15 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceSubtle,
   },
-  editDemographicsBtn: {
+  vitalsActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
   },
   toggleCollapseBtn: {
@@ -1163,8 +1371,10 @@ const styles = StyleSheet.create({
   },
   sectionHeaderRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: theme.spacing.xs,
     marginBottom: 6,
   },
   vitalsGrid: {
@@ -1251,16 +1461,19 @@ const styles = StyleSheet.create({
   halfPane: {
     flex: 1,
     minWidth: 240,
+    maxWidth: '100%',
   },
   pillsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
+    maxWidth: '100%',
   },
   problemPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    maxWidth: '100%',
     backgroundColor: theme.colors.surfaceSubtle,
     borderColor: theme.colors.border,
     borderWidth: 1,
@@ -1272,11 +1485,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    maxWidth: '100%',
     backgroundColor: theme.colors.routineBg,
     borderColor: theme.colors.routineBorder,
     borderWidth: 1,
     borderRadius: theme.radii.xs,
     paddingVertical: 3,
     paddingHorizontal: 8,
+  },
+  pillFixedToken: {
+    flexShrink: 0,
+  },
+  pillTruncateText: {
+    flexShrink: 1,
   },
 });

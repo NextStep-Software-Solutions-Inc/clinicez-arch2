@@ -130,51 +130,62 @@ export default function NursingProceduresTab({
       {/* FILTER BUTTONS & ACTION BAR                                               */}
       {/* ========================================================================= */}
       <View style={styles.topBar}>
-        <View style={styles.filterRow}>
-          <Pressable
-            onPress={() => setSelectedFilter('ALL')}
-            style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
+        <View style={styles.filterScrollWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterRow}
           >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <Pressable
+              onPress={() => setSelectedFilter('ALL')}
+              style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
             >
-              All ({procedures.length})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('SCHEDULED')}
-            style={[styles.filterBtn, selectedFilter === 'SCHEDULED' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'SCHEDULED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                All ({procedures.length})
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('SCHEDULED')}
+              style={[styles.filterBtn, selectedFilter === 'SCHEDULED' && styles.filterBtn_active]}
             >
-              Ordered / Scheduled
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('IN_PROGRESS')}
-            style={[styles.filterBtn, selectedFilter === 'IN_PROGRESS' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'IN_PROGRESS' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'SCHEDULED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Ordered / Scheduled
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('IN_PROGRESS')}
+              style={[styles.filterBtn, selectedFilter === 'IN_PROGRESS' && styles.filterBtn_active]}
             >
-              In Progress
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('COMPLETED')}
-            style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'IN_PROGRESS' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                In Progress
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('COMPLETED')}
+              style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
             >
-              Completed
-            </ThemedText>
-          </Pressable>
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Completed
+              </ThemedText>
+            </Pressable>
+          </ScrollView>
         </View>
 
         {canOrderProcedures ? (
@@ -183,8 +194,8 @@ export default function NursingProceduresTab({
             onPress={onOrderProcedure || (() => setOrderModalVisible(true))}
             style={styles.orderProcedureBtn}
           >
-            <Icon name="plus" size={14} color={theme.colors.onPrimary} />
-            <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+            <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
+            <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.onPrimary}>
               Order Procedure
             </ThemedText>
           </Pressable>
@@ -395,21 +406,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    flexWrap: 'nowrap',
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
+  },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
   },
   filterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
   },
   filterBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    flexShrink: 0,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
   filterBtn_active: {
@@ -419,11 +445,13 @@ const styles = StyleSheet.create({
   orderProcedureBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    flexShrink: 0,
+    gap: theme.spacing.xs,
     backgroundColor: theme.colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.sm,
+    minHeight: theme.sizes.controlSm,
   },
   proceduresList: {
     gap: theme.spacing.sm,

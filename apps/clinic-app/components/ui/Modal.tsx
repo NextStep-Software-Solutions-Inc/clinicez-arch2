@@ -26,6 +26,7 @@ export interface ModalProps {
   onClose?: () => void;
   title?: string;
   subtitle?: string;
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
   maxWidth?: number;
@@ -44,6 +45,7 @@ export default function Modal({
   onClose,
   title,
   subtitle,
+  headerExtra,
   children,
   footer,
   maxWidth = 540,
@@ -151,6 +153,9 @@ export default function Modal({
                         {subtitle}
                       </ThemedText>
                     ) : null}
+                    {headerExtra ? (
+                      <View style={styles.headerExtra}>{headerExtra}</View>
+                    ) : null}
                   </View>
 
                   {onClose ? (
@@ -253,6 +258,9 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 2,
+  },
+  headerExtra: {
+    marginTop: theme.spacing.xs,
   },
   closeBtn: {
     width: theme.sizes.controlMd - theme.spacing.xs,

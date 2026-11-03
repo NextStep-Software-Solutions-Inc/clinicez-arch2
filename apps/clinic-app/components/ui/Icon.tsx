@@ -51,7 +51,9 @@ import {
   KeyRound,
   Landmark,
   LayoutDashboard,
+  LayoutGrid,
   Lightbulb,
+  List,
   Lock,
   LogOut,
   Mail,
@@ -89,6 +91,7 @@ import {
   Star,
   Stethoscope,
   Syringe,
+  Table2,
   Tag,
   Ticket,
   Timer,
@@ -168,6 +171,9 @@ export const ICONS = {
   layoutModal: AppWindow,
   layoutSplit: PanelLeft,
   layoutDrawer: PanelRight,
+  grid: LayoutGrid,
+  list: List,
+  table: Table2,
 
   // Direction
   arrowRight: ArrowRight,

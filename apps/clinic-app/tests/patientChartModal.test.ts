@@ -111,6 +111,8 @@ const {
   SplitPaneChartLayout,
   SlideOverDrawerChartLayout,
   CHART_LAYOUT_OPTIONS,
+  pushChartTabHistory,
+  popChartTabHistory,
 } = await import('../components/chart');
 const { default: HealthProfilesTab } = await import('../components/chart/HealthProfilesTab');
 const { getSessionItem, setSessionItem } = await import('../utils/deviceStorage');
@@ -347,7 +349,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).not.toContain('Fallback Code 999');
   });
 
-  test('7. Renders External Document Vault tab with category filters and upload button', () => {
+  test('7. Renders Document Vault tab with External/Internal vault switcher, inline status filters, and upload button (without sub-filter chips)', () => {
     const markup = renderToStaticMarkup(
       React.createElement(PatientChartModal, {
         visible: true,
@@ -358,9 +360,15 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('All Records');
-    expect(markup).toContain('Outside Chest X-Ray');
-    expect(markup).toContain('Cert of Registration (COR)');
+    expect(markup).toContain('External');
+    expect(markup).toContain('Internal');
+    expect(markup).toContain('Pending Review');
+    expect(markup).toContain('Verified');
+    expect(markup).toContain('Rejected');
+    expect(markup).toContain('Attach External Document');
+    expect(markup).not.toContain('All Records');
+    expect(markup).not.toContain('Cert of Registration (COR)');
+    expect(markup).not.toContain('Outside Labs');
   });
 
   test('8. Handles loading state by rendering SkeletonList', () => {
@@ -816,5 +824,116 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).toContain('aria-label="Refresh patient chart"');
     expect(markup).toContain('lucide-refresh-cw');
     expect(markup).toContain('role="image"');
+  });
+
+  test('27. Authoritative ClinicPatient PhilHealth PIN wins over stale chart demographics PIN and normalizes blood type enum', () => {
+    const updatedPatient: ClinicPatient = {
+      ...mockPatient,
+      philHealthNumber: '19-124741828-8',
+      bloodType: 'APositive',
+    };
+    const staleChart: PatientChart = {
+      ...mockChart,
+      demographics: {
+        ...mockChart.demographics,
+        philHealthNumber: '19-124741828-1',
+        bloodType: 'A+',
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: updatedPatient,
+        patientChart: staleChart,
+        preferredLayout: 'modal',
+        onClose: () => {},
+      })
+    );
+
+    expect(markup).toContain('PIN: 19-124741828-8');
+    expect(markup).not.toContain('19-124741828-1');
+    expect(markup).toContain('A+');
+    expect(markup).not.toContain('APositive');
+  });
+
+  test('28. Patient Chart tab history stack supports multi-step Back navigation and skips unavailable tabs', () => {
+    let history: string[] = [];
+    history = pushChartTabHistory(history, 'summary', 'summary');
+    expect(history).toEqual([]);
+
+    history = pushChartTabHistory(history, 'summary', 'diagnostics');
+    expect(history).toEqual(['summary']);
+
+    history = pushChartTabHistory(history, 'diagnostics', 'dental');
+    history = pushChartTabHistory(history, 'dental', 'vault');
+    expect(history).toEqual(['summary', 'diagnostics', 'dental']);
+
+    // When dental is allowed, popping returns dental first
+    const step1 = popChartTabHistory(history, ['summary', 'diagnostics', 'dental', 'vault']);
+    expect(step1.previousTab).toBe('dental');
+    expect(step1.nextHistory).toEqual(['summary', 'diagnostics']);
+
+    // When dental is disallowed, popping skips dental and returns diagnostics
+    const skipped = popChartTabHistory(history, ['summary', 'diagnostics', 'vault']);
+    expect(skipped.previousTab).toBe('diagnostics');
+    expect(skipped.nextHistory).toEqual(['summary']);
+  });
+
+  test('29. All three Patient Chart layouts render Back to previous section button when canGoBackTab is true', () => {
+    const baseProps = {
+      patient: mockPatient,
+      patientChart: mockChart,
+      activeTab: 'diagnostics' as const,
+      onTabChange: () => {},
+      onClose: () => {},
+      onEditDemographics: () => {},
+      currentLayout: 'modal' as const,
+      onSwitchLayout: () => {},
+      canGoBackTab: true,
+      previousTabLabel: 'Summary',
+      onBackTab: () => {},
+    };
+
+    const modalHtml = renderToStaticMarkup(React.createElement(CenteredModalChartLayout, baseProps));
+    expect(modalHtml).toContain('aria-label="Back to Summary"');
+    expect(modalHtml).not.toContain('>Back<');
+
+    const splitHtml = renderToStaticMarkup(
+      React.createElement(SplitPaneChartLayout, { ...baseProps, currentLayout: 'split' })
+    );
+    expect(splitHtml).toContain('aria-label="Back to Summary"');
+    expect(splitHtml).not.toContain('>Back<');
+
+    const drawerHtml = renderToStaticMarkup(
+      React.createElement(SlideOverDrawerChartLayout, { ...baseProps, currentLayout: 'drawer' })
+    );
+    expect(drawerHtml).toContain('aria-label="Back to Summary"');
+    expect(drawerHtml).not.toContain('>Back<');
+
+    const initialModalHtml = renderToStaticMarkup(
+      React.createElement(CenteredModalChartLayout, {
+        ...baseProps,
+        canGoBackTab: false,
+        onBackTab: undefined,
+      })
+    );
+    expect(initialModalHtml).not.toContain('aria-label="Back to Summary"');
+  });
+
+  test('30. Consultations workstation wires Patient Chart expand/collapse, Back button, WALKEDIN ATC default, and Vitals metadata', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const consultSource = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx'),
+      'utf8'
+    );
+
+    expect(consultSource).toContain("useState<string>('WALKEDIN')");
+    expect(consultSource).not.toContain('ICD-10 linked to PhilHealth');
+    expect(consultSource).toContain('expand-patient-chart-btn');
+    expect(consultSource).toContain('collapse-patient-chart-btn');
+    expect(consultSource).toContain('patient-chart-back-btn');
+    expect(consultSource).toContain('latestVitalsRecordedMeta');
   });
 });

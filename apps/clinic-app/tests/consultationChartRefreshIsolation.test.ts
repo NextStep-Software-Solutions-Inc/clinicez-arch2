@@ -77,7 +77,7 @@ describe('Consultation Chart Refresh & Encounter Isolation Suite', () => {
     test('1.2 defines dedicated refreshPatientChart callback', () => {
       expect(code).toContain('const refreshPatientChart = useCallback(async');
       expect(code).toContain('clinicService.getPatientChart(patientId)');
-      expect(code).toContain('setPatientChart(chartData)');
+      expect(code).toContain('reconcileChartWithPatient(chartData, effectiveRecord)');
     });
 
     test('1.3 defines dedicated refreshDiagnosticsTab callback', () => {

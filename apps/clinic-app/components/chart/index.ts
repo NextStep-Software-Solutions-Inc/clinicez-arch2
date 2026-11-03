@@ -7,6 +7,8 @@ export {
   evaluateOxygenSat,
   evaluateZScoreCategory,
   formatPhilHealthPin,
+  formatBloodTypeLabel,
+  reconcileChartWithPatient,
 } from './PatientSummarySpine';
 export type { PatientSummarySpineProps, VitalsThresholdResult, UrgencyLevel } from './PatientSummarySpine';
 
@@ -14,9 +16,12 @@ export { default as PatientChartModal, CHART_TABS } from './PatientChartModal';
 export type { PatientChartModalProps, ChartTab, ChartLayoutMode } from './types';
 export {
   CHART_LAYOUT_OPTIONS,
+  CHART_TAB_LABELS,
   DEFAULT_CHART_LAYOUT,
   DENTAL_CHART_TAB,
   getAvailableChartTabs,
+  pushChartTabHistory,
+  popChartTabHistory,
   type ChartLayoutProps,
   type ChartLayoutOptionMeta,
 } from './types';

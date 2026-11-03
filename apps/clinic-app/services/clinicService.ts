@@ -518,6 +518,23 @@ export interface ConsultationRecord {
   adolescentAssessment?: EncounterAdolescentAssessmentDto | null;
   headsssAssessments?: EncounterHeadsssDomainAssessmentDto[];
   bpMonitoringLogs?: PatientBpMonitoringLogDto[];
+  counselingCodes?: string | null;
+  routineVaccineName?: string | null;
+  routineVaccineDate?: string | null;
+  adultsRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  cancerScreeningCodes?: string | null;
+  diagnosticServicesOption?: string | null;
+  hasMedicationPrescription?: boolean;
+  hasReferral?: boolean;
+  otherMedicalAdviceSpec?: string | null;
+  hasFollowUp?: boolean;
+  followUpDate?: string | null;
+  followUpScheduleText?: string | null;
+  followUpReason?: string | null;
+  followUpVaccineName?: string | null;
+  followUpVaccineNextDate?: string | null;
 }
 
 export interface AppointmentItem {
@@ -2355,6 +2372,23 @@ export interface CreateConsultationRequest {
   adolescentAssessment?: EncounterAdolescentAssessmentDto | null;
   headsssAssessments?: EncounterHeadsssDomainAssessmentDto[];
   bpMonitoringLogs?: PatientBpMonitoringLogDto[];
+  counselingCodes?: string | null;
+  routineVaccineName?: string | null;
+  routineVaccineDate?: string | null;
+  adultsRoutineScreeningCode?: string | null;
+  pediatricRoutineScreeningCode?: string | null;
+  prenatalScreeningServicesCode?: string | null;
+  cancerScreeningCodes?: string | null;
+  diagnosticServicesOption?: string | null;
+  hasMedicationPrescription?: boolean;
+  hasReferral?: boolean;
+  otherMedicalAdviceSpec?: string | null;
+  hasFollowUp?: boolean;
+  followUpDate?: string | null;
+  followUpScheduleText?: string | null;
+  followUpReason?: string | null;
+  followUpVaccineName?: string | null;
+  followUpVaccineNextDate?: string | null;
 }
 
 export interface CreateInvoiceRequest {

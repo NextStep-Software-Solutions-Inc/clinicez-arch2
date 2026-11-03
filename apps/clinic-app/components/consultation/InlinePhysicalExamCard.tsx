@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   Pressable,
   ScrollView,
 } from 'react-native';
+import type { EhrOptionDescriptor } from '@shared/safe';
 import {
   ThemedText,
   Button,
@@ -15,9 +16,11 @@ import {
   Icon,
   Badge,
 } from '@ui';
-import type { IconName } from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import type { PatientPhysicalExamFindingDto, PatientPhysicalExamDto } from '../../services/clinicService';
+import type { PhilHealthLibraryName } from '../../services/philHealthCatalogService';
+import { useEhrOptions } from '../../hooks/useEhrOptions';
+import { usePhilHealthCatalog } from '../../utils/usePhilHealthCatalog';
 
 export type SystemExamStatus = 'Normal' | 'Abnormal';
 
@@ -93,19 +96,24 @@ export const DEFAULT_PHYSICAL_EXAM_NORMAL: PhysicalExamFindings = {
   musculoskeletalId: '1',
 };
 
-interface ExamSystemConfig {
+export interface ExamSystemConfig {
   key: keyof PhysicalExamFindings;
   remarksKey: keyof PhysicalExamFindings;
   codeKey: keyof PhysicalExamFindings;
   label: string;
   normalDescription: string;
   normalCode: string;
-  icon: IconName;
   placeholder: string;
-  options: StatutoryOption[];
+  philHealthLibrary?: PhilHealthLibraryName;
+  optionSet?: string;
+  options?: StatutoryOption[];
 }
 
-const EXAM_SYSTEMS: ExamSystemConfig[] = [
+/**
+ * Schema-only pointers linking each physical examination field group to its live server
+ * PhilHealth Catalog (`lib_*`) or EHR Option Set (`pe_*`). Zero finding options are hardcoded here.
+ */
+const DEFAULT_EXAM_SYSTEM_SCHEMA: ExamSystemConfig[] = [
   {
     key: 'generalSurvey',
     remarksKey: 'generalSurveyRemarks',
@@ -113,13 +121,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'General Survey',
     normalDescription: 'Conscious, coherent, oriented to person/place/time, not in acute distress',
     normalCode: '1',
-    icon: 'patient',
     placeholder: 'Describe distress, altered sensorium, posture, or orientation deficits...',
-    options: [
-      { code: '1', description: 'Conscious, coherent, oriented, not in acute distress', isNormal: true },
-      { code: '2', description: 'Altered sensorium / In acute distress' },
-      { code: '99', description: 'Others' },
-    ],
+    optionSet: 'pe_general_survey',
   },
   {
     key: 'skin',
@@ -128,21 +131,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Skin & Extremities',
     normalDescription: 'Essentially normal, warm to touch, good turgor, no rashes or petechiae',
     normalCode: '1',
-    icon: 'activity',
     placeholder: 'Describe lesions, petechiae, cyanosis, pallor, or edema...',
-    options: [
-      { code: '1', description: 'Essentially normal', isNormal: true },
-      { code: '9', description: 'Rashes/Petechiae' },
-      { code: '5', description: 'Edema/swelling' },
-      { code: '4', description: 'Cyanosis/mottled skin' },
-      { code: '8', description: 'Poor skin turgor' },
-      { code: '7', description: 'Pale nailbeds' },
-      { code: '3', description: 'Cold clammy' },
-      { code: '2', description: 'Clubbing' },
-      { code: '10', description: 'Weak pulses' },
-      { code: '6', description: 'Decreased mobility' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_skin_extremities',
   },
   {
     key: 'heent',
@@ -151,19 +141,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'HEENT',
     normalDescription: 'Anicteric sclerae, pink palpebral conjunctivae, tonsils not enlarged, no exudates',
     normalCode: '11',
-    icon: 'eye',
     placeholder: 'Describe icterus, conjunctival injection, pharyngeal erythema, discharge...',
-    options: [
-      { code: '11', description: 'Essentially Normal', isNormal: true },
-      { code: '16', description: 'Pale conjunctivae' },
-      { code: '15', description: 'Icteric sclerae' },
-      { code: '13', description: 'Cervical lympadenopathy' },
-      { code: '12', description: 'Abnormal pupillary reaction' },
-      { code: '14', description: 'Dry mucous membrane' },
-      { code: '17', description: 'Sunken eyeballs' },
-      { code: '18', description: 'Sunken fontanelle' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_heent',
   },
   {
     key: 'chest',
@@ -172,18 +151,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Chest & Lungs',
     normalDescription: 'Symmetrical chest expansion, clear breath sounds, no crackles, wheezes, or rales',
     normalCode: '6',
-    icon: 'activity',
     placeholder: 'Describe wheezes, rhonchi, crackles, stridor, or retractions...',
-    options: [
-      { code: '6', description: 'Essentially normal', isNormal: true },
-      { code: '4', description: 'Crackles/rales' },
-      { code: '5', description: 'Wheezes' },
-      { code: '8', description: 'Decreased breath sounds' },
-      { code: '3', description: 'Retractions' },
-      { code: '7', description: 'Asymmetrical chest expansion' },
-      { code: '10', description: 'Lumps over breast(s)' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_chest',
   },
   {
     key: 'heart',
@@ -192,18 +161,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Heart & CVS',
     normalDescription: 'Distinct heart sounds, normal rate, regular rhythm, no murmurs, thrills, or gallops',
     normalCode: '5',
-    icon: 'heartPulse',
     placeholder: 'Describe murmurs (grade/location), irregular rhythm, rub, or tachycardia...',
-    options: [
-      { code: '5', description: 'Essentially normal', isNormal: true },
-      { code: '4', description: 'Murmurs' },
-      { code: '7', description: 'Irregular rhythm' },
-      { code: '3', description: 'Heaves/trills' },
-      { code: '6', description: 'Displaced apex beat' },
-      { code: '8', description: 'Muffled heart sounds' },
-      { code: '9', description: 'Pericardial bulge' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_heart',
   },
   {
     key: 'abdomen',
@@ -212,18 +171,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Abdomen',
     normalDescription: 'Soft, non-tender, non-distended, normoactive bowel sounds, no palpable organomegaly',
     normalCode: '7',
-    icon: 'dot',
     placeholder: 'Describe tenderness, guarding, rigidity, masses, or organomegaly...',
-    options: [
-      { code: '7', description: 'Essentially normal', isNormal: true },
-      { code: '9', description: 'Abdominal tenderness' },
-      { code: '8', description: 'Abdominal rigidity' },
-      { code: '11', description: 'Palpable mass(es)' },
-      { code: '10', description: 'Hyperactive bowel sounds' },
-      { code: '12', description: 'Tympanitic/dull abdomen' },
-      { code: '13', description: 'Uterine contraction' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_abdomen',
   },
   {
     key: 'neuro',
@@ -232,20 +181,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Neurological',
     normalDescription: 'Intact cranial nerves, gross motor 5/5 all extremities, sensory intact, no focal deficits',
     normalCode: '6',
-    icon: 'zap',
     placeholder: 'Describe focal motor weakness, sensory loss, tremor, ataxia, or reflex changes...',
-    options: [
-      { code: '6', description: 'Essentially normal', isNormal: true },
-      { code: '4', description: 'Motor Deficit' },
-      { code: '5', description: 'Sensory Deficit' },
-      { code: '2', description: 'Seizures' },
-      { code: '7', description: 'Abnormal gait' },
-      { code: '10', description: 'Abnormal reflex(es)' },
-      { code: '12', description: 'Poor muscle tone/strength' },
-      { code: '13', description: 'Poor coordination' },
-      { code: '1', description: 'Developmental delay' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_neuro',
   },
   {
     key: 'rectal',
@@ -254,17 +191,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Digital Rectal Exam',
     normalDescription: 'Good sphincter tone, smooth rectal vault, no masses, no blood on examining glove',
     normalCode: '1',
-    icon: 'shield',
     placeholder: 'Describe hemorrhoids, fissures, tenderness, prostate enlargement, or blood...',
-    options: [
-      { code: '1', description: 'Essentially normal', isNormal: true },
-      { code: '4', description: 'Hemorrhoids' },
-      { code: '2', description: 'Enlarge Prospate' },
-      { code: '3', description: 'Mass' },
-      { code: '5', description: 'Pus' },
-      { code: '0', description: 'Not Applicable' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_digital_rectal',
   },
   {
     key: 'gu',
@@ -273,15 +201,8 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Genitourinary',
     normalDescription: 'Essentially normal, no suprapubic tenderness, no flank tenderness, no discharge',
     normalCode: '1',
-    icon: 'checkCircle',
     placeholder: 'Describe CVA tenderness, genital ulcers, urethral/vaginal discharge, hernia...',
-    options: [
-      { code: '1', description: 'Essentially normal', isNormal: true },
-      { code: '4', description: 'Presence of abnormal discharge' },
-      { code: '2', description: 'Blood stained in exam finger' },
-      { code: '3', description: 'Cervical dilatation' },
-      { code: '99', description: 'Others' },
-    ],
+    philHealthLibrary: 'lib_genitourinary',
   },
   {
     key: 'musculoskeletal',
@@ -290,44 +211,302 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     label: 'Musculoskeletal',
     normalDescription: 'Full range of motion in all joints, no deformities, no joint swelling or tenderness',
     normalCode: '1',
-    icon: 'activity',
     placeholder: 'Describe joint swelling, erythema, deformity, limited range of motion, muscle atrophy...',
-    options: [
-      { code: '1', description: 'Essentially normal (Full ROM, no deformities)', isNormal: true },
-      { code: '2', description: 'Joint swelling / tenderness' },
-      { code: '3', description: 'Limited range of motion' },
-      { code: '4', description: 'Deformity / fracture' },
-      { code: '99', description: 'Others' },
-    ],
+    optionSet: 'pe_musculoskeletal',
   },
 ];
+
+function mapDescriptorToExamSystem(desc: EhrOptionDescriptor): ExamSystemConfig | null {
+  const schemaFallback = DEFAULT_EXAM_SYSTEM_SCHEMA.find(
+    (s) => String(s.key).toLowerCase() === desc.code.toLowerCase()
+  );
+  const key = (schemaFallback?.key ?? (desc.code as keyof PhysicalExamFindings));
+  if (!key) return null;
+
+  const meta = desc.metadata ?? {};
+  const remarksKey = (meta.remarksKey ?? schemaFallback?.remarksKey ?? `${String(key)}Remarks`) as keyof PhysicalExamFindings;
+  const codeKey = (meta.codeKey ?? schemaFallback?.codeKey ?? `${String(key)}Id`) as keyof PhysicalExamFindings;
+  const normalCode = meta.normalCode ?? desc.philHealthCode ?? schemaFallback?.normalCode ?? '1';
+  const philHealthLibrary = (desc.philHealthLibrary ?? schemaFallback?.philHealthLibrary) as PhilHealthLibraryName | undefined;
+  const optionSet = meta.optionSet ?? (!philHealthLibrary ? schemaFallback?.optionSet : undefined);
+
+  return {
+    key,
+    remarksKey,
+    codeKey,
+    label: desc.label || schemaFallback?.label || String(key),
+    normalDescription:
+      meta.normalDescription || schemaFallback?.normalDescription || 'Essentially normal',
+    normalCode,
+    placeholder:
+      meta.placeholder ||
+      schemaFallback?.placeholder ||
+      `Describe abnormal ${desc.label.toLowerCase()} findings...`,
+    philHealthLibrary,
+    optionSet,
+  };
+}
+
+function sortStatutoryOptions(options: StatutoryOption[]): StatutoryOption[] {
+  return [...options].sort((a, b) => {
+    if (a.isNormal && !b.isNormal) return -1;
+    if (!a.isNormal && b.isNormal) return 1;
+    if (a.code === '99' && b.code !== '99') return 1;
+    if (b.code === '99' && a.code !== '99') return -1;
+    if (a.code === '0' && b.code !== '0') return 1;
+    if (b.code === '0' && a.code !== '0') return -1;
+    const numA = Number(a.code);
+    const numB = Number(b.code);
+    if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
+      return numA - numB;
+    }
+    return a.description.localeCompare(b.description);
+  });
+}
+
+interface PhysicalExamSystemRowProps {
+  sys: ExamSystemConfig;
+  index: number;
+  findings: PhysicalExamFindings;
+  disabled: boolean;
+  onToggleSystem: (sys: ExamSystemConfig, resolvedOptions: StatutoryOption[]) => void;
+  onSelectOption: (sys: ExamSystemConfig, option: StatutoryOption) => void;
+  onRemarksChange: (remarksKey: keyof PhysicalExamFindings, text: string) => void;
+}
+
+const PhysicalExamSystemRow: React.FC<PhysicalExamSystemRowProps> = ({
+  sys,
+  index,
+  findings,
+  disabled,
+  onToggleSystem,
+  onSelectOption,
+  onRemarksChange,
+}) => {
+  const hasInjectedOptions = Boolean(sys.options && sys.options.length > 0);
+  const catalog = usePhilHealthCatalog(
+    sys.philHealthLibrary ?? 'lib_skin_extremities',
+    !hasInjectedOptions && Boolean(sys.philHealthLibrary)
+  );
+  const ehrSet = useEhrOptions(sys.optionSet ?? '', {
+    enabled: !hasInjectedOptions && !sys.philHealthLibrary && Boolean(sys.optionSet),
+  });
+
+  const resolvedOptions: StatutoryOption[] = useMemo(() => {
+    if (sys.options && sys.options.length > 0) {
+      return sys.options;
+    }
+    if (sys.philHealthLibrary && catalog.items.length > 0) {
+      const mapped = catalog.items.map((item) => ({
+        code: item.code,
+        description: item.description,
+        isNormal:
+          item.code === sys.normalCode ||
+          /essentially normal/i.test(item.description) ||
+          /^normal$/i.test(item.description),
+      }));
+      return sortStatutoryOptions(mapped);
+    }
+    if (sys.optionSet && ehrSet.options.length > 0) {
+      const mapped = ehrSet.options
+        .filter((opt) => opt.isActive !== false)
+        .map((opt) => {
+          const code = opt.philHealthCode || opt.code;
+          return {
+            code,
+            description: opt.label,
+            isNormal:
+              opt.metadata?.isNormal === 'true' ||
+              code === sys.normalCode ||
+              /essentially normal/i.test(opt.label),
+          };
+        });
+      return sortStatutoryOptions(mapped);
+    }
+    return [];
+  }, [sys.options, sys.philHealthLibrary, sys.optionSet, sys.normalCode, catalog.items, ehrSet.options]);
+
+  const status = (findings[sys.key] as SystemExamStatus) || 'Normal';
+  const isAbnormal = status === 'Abnormal';
+  const remarks = (findings[sys.remarksKey] as string) || '';
+  const selectedCode = (findings[sys.codeKey] as string) || (isAbnormal ? '' : sys.normalCode);
+
+  return (
+    <View
+      style={[
+        styles.systemRow,
+        index > 0 && styles.systemRowDivider,
+        isAbnormal && styles.systemRowAbnormal,
+      ]}
+    >
+      <View style={styles.systemHeader}>
+        <View style={styles.systemTitleGroup}>
+          <ThemedText variant="bodyBold" style={styles.systemLabel}>
+            {sys.label}
+          </ThemedText>
+        </View>
+
+        <Pressable
+          disabled={disabled}
+          onPress={() => onToggleSystem(sys, resolvedOptions)}
+          accessibilityRole="button"
+          accessibilityLabel={`Toggle ${sys.label} status`}
+          style={[
+            styles.toggleButton,
+            isAbnormal ? styles.toggleButtonAbnormal : styles.toggleButtonNormal,
+          ]}
+        >
+          <ThemedText
+            variant="smallBold"
+            color={isAbnormal ? theme.colors.warning : theme.colors.primary}
+          >
+            {isAbnormal ? 'Set Normal' : 'Set Abnormal'}
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      {resolvedOptions.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.chipsContainer}
+        >
+          {resolvedOptions.map((opt) => {
+            const isSelected =
+              selectedCode === opt.code || (opt.isNormal && !isAbnormal && !selectedCode);
+            const isNormalOpt = Boolean(opt.isNormal);
+            const textColor = !isSelected
+              ? theme.colors.textSecondary
+              : isNormalOpt
+                ? theme.colors.successText
+                : theme.colors.warningText;
+
+            return (
+              <Pressable
+                key={opt.code}
+                disabled={disabled}
+                onPress={() => onSelectOption(sys, opt)}
+                accessibilityRole="button"
+                accessibilityLabel={`${sys.label}: ${opt.description}`}
+                accessibilityState={{ selected: isSelected }}
+                style={[
+                  styles.chip,
+                  isSelected && isNormalOpt && styles.chipSelectedNormal,
+                  isSelected && !isNormalOpt && styles.chipSelectedAbnormal,
+                ]}
+              >
+                {isSelected ? (
+                  <Icon
+                    name={isNormalOpt ? 'check' : 'alert'}
+                    size={12}
+                    color={textColor}
+                  />
+                ) : null}
+                <ThemedText
+                  variant={isSelected ? 'smallBold' : 'small'}
+                  color={textColor}
+                >
+                  {opt.description}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+
+      {isAbnormal || remarks ? (
+        <View style={styles.remarksContainer}>
+          <Input
+            label={`Clinical Findings & Remarks (${sys.label})`}
+            value={remarks}
+            onChangeText={(txt) => onRemarksChange(sys.remarksKey, txt)}
+            placeholder={sys.placeholder}
+            multiline
+            numberOfLines={2}
+            editable={!disabled}
+          />
+        </View>
+      ) : (
+        <ThemedText variant="small" color={theme.colors.textMuted} style={styles.normalNote}>
+          {sys.normalDescription}
+        </ThemedText>
+      )}
+    </View>
+  );
+};
 
 export interface InlinePhysicalExamCardProps {
   findings: PhysicalExamFindings;
   onChange: (updated: PhysicalExamFindings) => void;
   disabled?: boolean;
+  embedded?: boolean;
+  collapsible?: boolean;
+  defaultExpanded?: boolean;
+  systems?: ExamSystemConfig[];
 }
 
 export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
   findings,
   onChange,
   disabled = false,
+  embedded = false,
+  collapsible = false,
+  defaultExpanded = false,
+  systems: systemsOverride,
 }) => {
-  const isAllNormal = EXAM_SYSTEMS.every(
+  const { options: systemDescriptors } = useEhrOptions('physical_exam_system', {
+    enabled: !systemsOverride || systemsOverride.length === 0,
+  });
+
+  const renderedSystems: ExamSystemConfig[] = useMemo(() => {
+    if (systemsOverride && systemsOverride.length > 0) {
+      return systemsOverride;
+    }
+    if (systemDescriptors && systemDescriptors.length > 0) {
+      const mapped = systemDescriptors
+        .filter((d) => d.isActive !== false)
+        .map(mapDescriptorToExamSystem)
+        .filter((item): item is ExamSystemConfig => item !== null);
+      if (mapped.length > 0) {
+        return mapped;
+      }
+    }
+    return DEFAULT_EXAM_SYSTEM_SCHEMA;
+  }, [systemsOverride, systemDescriptors]);
+
+  const abnormalCount = renderedSystems.filter((sys) => findings[sys.key] === 'Abnormal').length;
+  const [expanded, setExpanded] = useState<boolean>(defaultExpanded || abnormalCount > 0);
+
+  useEffect(() => {
+    if (defaultExpanded || abnormalCount > 0) {
+      setExpanded(true);
+    }
+  }, [defaultExpanded, abnormalCount]);
+
+  const isAllNormal = renderedSystems.every(
     (sys) => findings[sys.key] === 'Normal' && !findings[sys.remarksKey]
   );
 
   const handleSetAllNormal = () => {
     if (disabled) return;
-    onChange({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
+    const resetState: PhysicalExamFindings = { ...DEFAULT_PHYSICAL_EXAM_NORMAL };
+    for (const sys of renderedSystems) {
+      (resetState as any)[sys.key] = 'Normal';
+      (resetState as any)[sys.codeKey] = sys.normalCode;
+      (resetState as any)[sys.remarksKey] = '';
+    }
+    onChange(resetState);
   };
 
-  const handleToggleSystem = (sys: ExamSystemConfig) => {
+  const handleToggleSystem = (sys: ExamSystemConfig, resolvedOptions: StatutoryOption[]) => {
     if (disabled) return;
     const current = (findings[sys.key] as SystemExamStatus) || 'Normal';
     const next: SystemExamStatus = current === 'Normal' ? 'Abnormal' : 'Normal';
-    const nextCode = next === 'Normal' ? sys.normalCode : (sys.options.find((o) => !o.isNormal)?.code || '99');
-    const defaultAbnormalDesc = sys.options.find((o) => o.code === nextCode)?.description || '';
+    const firstAbnormalOpt = resolvedOptions.find((o) => !o.isNormal && o.code !== '0');
+    const nextCode = next === 'Normal' ? sys.normalCode : (firstAbnormalOpt?.code || '99');
+    const defaultAbnormalDesc =
+      resolvedOptions.find((o) => o.code === nextCode)?.description || '';
 
     onChange({
       ...findings,
@@ -365,13 +544,88 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
     });
   };
 
-  const abnormalCount = EXAM_SYSTEMS.filter((sys) => findings[sys.key] === 'Abnormal').length;
+  const showSystemsBody = !collapsible || expanded;
+  const systemChecklistSubtitle = `${renderedSystems.length}-system organ examination checklist`;
+
+  const systemsBody = (
+    <>
+      <ThemedText variant="small" color={theme.colors.textMuted} style={styles.hint}>
+        Select examination finding chips for each organ system, or add clinical remarks below.
+      </ThemedText>
+
+      <View style={styles.systemList}>
+        {renderedSystems.map((sys, idx) => (
+          <PhysicalExamSystemRow
+            key={String(sys.key)}
+            sys={sys}
+            index={idx}
+            findings={findings}
+            disabled={disabled}
+            onToggleSystem={handleToggleSystem}
+            onSelectOption={handleSelectOption}
+            onRemarksChange={handleRemarksChange}
+          />
+        ))}
+      </View>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <View style={styles.embeddedContainer} testID="embedded-physical-exam-section">
+        <View style={styles.embeddedHeader}>
+          <View style={styles.embeddedTitleCol}>
+            <View style={styles.embeddedTitleRow}>
+              <Icon name="stethoscope" size={theme.sizes.iconSm} color={theme.colors.primary} />
+              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                Physical Examination
+              </ThemedText>
+              {abnormalCount > 0 ? (
+                <Badge
+                  label={`${abnormalCount} Abnormal`}
+                  variant="warning"
+                  size="sm"
+                />
+              ) : null}
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              {systemChecklistSubtitle}
+            </ThemedText>
+          </View>
+          <View style={styles.headerActions}>
+            {abnormalCount > 0 ? (
+              <Button
+                title="Set All Normal"
+                size="sm"
+                variant="primary"
+                disabled={disabled}
+                onPress={handleSetAllNormal}
+                icon="check"
+                testID="set-all-normal-btn"
+              />
+            ) : null}
+            {collapsible ? (
+              <Button
+                title={expanded ? 'Collapse' : 'Show systems'}
+                size="sm"
+                variant="outline"
+                icon={expanded ? 'chevronUp' : 'chevronDown'}
+                onPress={() => setExpanded((prev) => !prev)}
+                testID="toggle-physical-exam-systems-btn"
+              />
+            ) : null}
+          </View>
+        </View>
+        {showSystemsBody ? <View style={styles.embeddedBody}>{systemsBody}</View> : null}
+      </View>
+    );
+  }
 
   return (
     <Card style={styles.card}>
       <CardHeader
         title="Physical Examination (PE)"
-        subtitle="PhilHealth Konsulta physical examination statutory findings"
+        subtitle={systemChecklistSubtitle}
         rightAction={
           <View style={styles.headerActions}>
             {abnormalCount > 0 ? (
@@ -382,143 +636,21 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
             ) : (
               <Badge label="All Systems Normal" variant="success" />
             )}
-            <Button
-              title="All Essentially Normal"
-              size="sm"
-              variant={isAllNormal ? 'secondary' : 'primary'}
-              disabled={disabled}
-              onPress={handleSetAllNormal}
-              icon="check"
-            />
+            {abnormalCount > 0 ? (
+              <Button
+                title="Set All Normal"
+                size="sm"
+                variant="primary"
+                disabled={disabled}
+                onPress={handleSetAllNormal}
+                icon="check"
+                testID="set-all-normal-btn"
+              />
+            ) : null}
           </View>
         }
       />
-      <CardContent style={styles.content}>
-        <ThemedText variant="small" color={theme.colors.textMuted} style={styles.hint}>
-          Select statutory examination finding chips for each organ system. Detailed clinical notes and descriptions can be entered in the open text field.
-        </ThemedText>
-
-        <View style={styles.systemList}>
-          {EXAM_SYSTEMS.map((sys) => {
-            const status = (findings[sys.key] as SystemExamStatus) || 'Normal';
-            const isAbnormal = status === 'Abnormal';
-            const remarks = (findings[sys.remarksKey] as string) || '';
-            const selectedCode = (findings[sys.codeKey] as string) || (isAbnormal ? '' : sys.normalCode);
-
-            return (
-              <View
-                key={String(sys.key)}
-                style={[
-                  styles.systemRow,
-                  isAbnormal ? styles.systemRowAbnormal : styles.systemRowNormal,
-                ]}
-              >
-                <View style={styles.systemHeader}>
-                  <View style={styles.systemTitleGroup}>
-                    <Icon
-                      name={sys.icon}
-                      size={18}
-                      color={isAbnormal ? theme.colors.warning : theme.colors.primary}
-                    />
-                    <ThemedText variant="bodyBold" style={styles.systemLabel}>
-                      {sys.label}
-                    </ThemedText>
-                    {isAbnormal ? (
-                      <Badge label="Abnormal" variant="warning" />
-                    ) : (
-                      <Badge label="Essentially Normal" variant="neutral" />
-                    )}
-                  </View>
-
-                  <Pressable
-                    disabled={disabled}
-                    onPress={() => handleToggleSystem(sys)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Toggle ${sys.label} status`}
-                    style={[
-                      styles.toggleButton,
-                      isAbnormal ? styles.toggleButtonAbnormal : styles.toggleButtonNormal,
-                    ]}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={isAbnormal ? theme.colors.warning : theme.colors.primary}
-                    >
-                      {isAbnormal ? 'Flagged Abnormal' : 'Set Abnormal'}
-                    </ThemedText>
-                  </Pressable>
-                </View>
-
-                {/* PhilHealth Statutory Options Chips */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.chipsScroll}
-                  contentContainerStyle={styles.chipsContainer}
-                >
-                  {sys.options.map((opt) => {
-                    const isSelected = selectedCode === opt.code || (opt.isNormal && !isAbnormal && !selectedCode);
-                    const isNormalOpt = Boolean(opt.isNormal);
-                    const textColor = !isSelected
-                      ? theme.colors.textSecondary
-                      : isNormalOpt
-                        ? theme.colors.successText
-                        : theme.colors.warningText;
-
-                    return (
-                      <Pressable
-                        key={opt.code}
-                        disabled={disabled}
-                        onPress={() => handleSelectOption(sys, opt)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${sys.label}: ${opt.description}`}
-                        accessibilityState={{ selected: isSelected }}
-                        style={[
-                          styles.chip,
-                          isSelected && isNormalOpt && styles.chipSelectedNormal,
-                          isSelected && !isNormalOpt && styles.chipSelectedAbnormal,
-                        ]}
-                      >
-                        {isSelected ? (
-                          <Icon
-                            name={isNormalOpt ? 'check' : 'alert'}
-                            size={12}
-                            color={textColor}
-                          />
-                        ) : null}
-                        <ThemedText
-                          variant={isSelected ? 'smallBold' : 'small'}
-                          color={textColor}
-                        >
-                          {opt.description}
-                        </ThemedText>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-
-                {isAbnormal || remarks ? (
-                  <View style={styles.remarksContainer}>
-                    <Input
-                      label={`Clinical Findings & Remarks (${sys.label})`}
-                      value={remarks}
-                      onChangeText={(txt) => handleRemarksChange(sys.remarksKey, txt)}
-                      placeholder={sys.placeholder}
-                      multiline
-                      numberOfLines={2}
-                      editable={!disabled}
-                    />
-                  </View>
-                ) : (
-                  <ThemedText variant="small" color={theme.colors.textMuted} style={styles.normalNote}>
-                    {sys.normalDescription}
-                  </ThemedText>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      </CardContent>
+      <CardContent style={styles.content}>{systemsBody}</CardContent>
     </Card>
   );
 };
@@ -530,6 +662,35 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radii.lg,
   },
+  embeddedContainer: {
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.border,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.border,
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  embeddedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  embeddedTitleCol: {
+    flex: 1,
+    minWidth: 200,
+    gap: 2,
+  },
+  embeddedTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  embeddedBody: {
+    paddingTop: theme.spacing.sm,
+  },
   content: {
     paddingTop: theme.spacing.xs,
   },
@@ -539,23 +700,23 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   hint: {
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   systemList: {
-    gap: theme.spacing.sm,
+    gap: 0,
   },
   systemRow: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
+    paddingVertical: theme.spacing.md,
   },
-  systemRowNormal: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
+  systemRowDivider: {
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
   },
   systemRowAbnormal: {
     backgroundColor: theme.colors.warningBg,
-    borderColor: theme.colors.warningBorder,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: theme.spacing.md,
+    marginVertical: theme.spacing.xs,
   },
   systemHeader: {
     flexDirection: 'row',
@@ -623,8 +784,11 @@ const styles = StyleSheet.create({
   },
 });
 
-export function to1NFFindings(findings: PhysicalExamFindings): PatientPhysicalExamFindingDto[] {
-  return EXAM_SYSTEMS.map((sys) => {
+export function to1NFFindings(
+  findings: PhysicalExamFindings,
+  systems: ExamSystemConfig[] = DEFAULT_EXAM_SYSTEM_SCHEMA
+): PatientPhysicalExamFindingDto[] {
+  return systems.map((sys) => {
     const isNormal = findings[sys.key] === 'Normal';
     const remarks = findings[sys.remarksKey] as string | undefined;
     const optionCode = findings[sys.codeKey] as string | undefined;
@@ -639,12 +803,13 @@ export function to1NFFindings(findings: PhysicalExamFindings): PatientPhysicalEx
 }
 
 /**
- * Reconstructs the 10-system PhysicalExamFindings workstation state from pure 1NF relational child rows.
+ * Reconstructs PhysicalExamFindings workstation state from pure 1NF relational child rows.
  * Supports PatientPhysicalExamDto[] (nested findings) or flat PatientPhysicalExamFindingDto[].
  * Returns null if input is missing, empty, contains zero exam findings, or contains only degenerate child rows.
  */
 export function from1NFFindings(
-  input?: PatientPhysicalExamDto[] | PatientPhysicalExamFindingDto[] | null
+  input?: PatientPhysicalExamDto[] | PatientPhysicalExamFindingDto[] | null,
+  systems: ExamSystemConfig[] = DEFAULT_EXAM_SYSTEM_SCHEMA
 ): PhysicalExamFindings | null {
   if (!input || !Array.isArray(input) || input.length === 0) {
     return null;
@@ -695,8 +860,8 @@ export function from1NFFindings(
     const norm = normalizeSystemName(finding.system);
     if (!norm) continue;
 
-    // Pass 1: Exact normalized match against sys.label or sys.key across all 10 systems in EXAM_SYSTEMS
-    let matchedSys = EXAM_SYSTEMS.find((sys) => {
+    // Pass 1: Exact normalized match against sys.label or sys.key across active system schema
+    let matchedSys = systems.find((sys) => {
       const sysLabelNorm = normalizeSystemName(sys.label);
       const sysKeyNorm = normalizeSystemName(String(sys.key));
       return norm === sysLabelNorm || norm === sysKeyNorm;
@@ -704,7 +869,7 @@ export function from1NFFindings(
 
     // Pass 2: Safe fuzzy heuristic strictly avoiding substring collisions (e.g. gastro, abdo, norm === 'gi')
     if (!matchedSys) {
-      matchedSys = EXAM_SYSTEMS.find((sys) => {
+      matchedSys = systems.find((sys) => {
         if (sys.key === 'generalSurvey' && (norm.includes('general') || norm.includes('survey'))) return true;
         if (sys.key === 'skin' && (norm.includes('skin') || norm.includes('extremit'))) return true;
         if (sys.key === 'heent' && (norm.includes('heent') || norm.includes('head') || norm.includes('eye'))) return true;

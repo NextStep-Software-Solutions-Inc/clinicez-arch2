@@ -5,8 +5,36 @@ export {
   from1NFFindings,
 } from './InlinePhysicalExamCard';
 export { default as WorkflowModeSelector } from './WorkflowModeSelector';
+export { default as NursePreAssessmentCard } from './NursePreAssessmentCard';
+export type { NursePreAssessmentCardProps } from './NursePreAssessmentCard';
 export { default as ReviewOfSystemsChecklist } from './ReviewOfSystemsChecklist';
-export { default as SpecificEncounterFormsCard } from './SpecificEncounterFormsCard';
+export {
+  default as SpecificEncounterFormsCard,
+  getEncounterFormTabsForPatient,
+} from './SpecificEncounterFormsCard';
+export type {
+  FormTab,
+  EncounterFormTabDescriptor,
+  EncounterFormsCohortInput,
+  SpecificEncounterFormsCardProps,
+} from './SpecificEncounterFormsCard';
+export {
+  default as PlanManagementCard,
+  DEFAULT_YAKAP_PLAN_MANAGEMENT,
+  splitDelimitedCodes,
+  toggleScreeningCode,
+  hydratePlanManagementFromEncounter,
+  buildPlanManagementPayload,
+  getScreeningCohortTabsForPatient,
+} from './PlanManagementCard';
+export type {
+  PlanManagementOption,
+  DiagnosticPlanFlag,
+  ScreeningCohortTab,
+  ScreeningCohortTabDescriptor,
+  YakapPlanManagementState,
+  PlanManagementCardProps,
+} from './PlanManagementCard';
 export type {
   SystemExamStatus,
   PhysicalExamFindings,

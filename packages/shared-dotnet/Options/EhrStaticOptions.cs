@@ -278,10 +278,174 @@ public static class EhrStaticOptions
         // LIB-027: PE General Survey
         Add("pe_general_survey", new[]
         {
-            new EhrOptionDescriptor { Code = "AWAKE_ALERT", Label = "Awake, Alert, Oriented", PhilHealthCode = "01", PhilHealthLibrary = "lib_pe_general_survey" },
-            new EhrOptionDescriptor { Code = "CONSCIOUS_COHERENT", Label = "Conscious, Coherent, Ambulatory", PhilHealthCode = "02", PhilHealthLibrary = "lib_pe_general_survey" },
-            new EhrOptionDescriptor { Code = "ALTERED_MENTAL_STATUS", Label = "Lethargic / Altered Mental Status", PhilHealthCode = "03", PhilHealthLibrary = "lib_pe_general_survey" },
-            new EhrOptionDescriptor { Code = "ACUTE_DISTRESS", Label = "In Acute Cardiorespiratory / Pain Distress", PhilHealthCode = "04", PhilHealthLibrary = "lib_pe_general_survey" }
+            new EhrOptionDescriptor { Code = "1", Label = "Conscious, coherent, oriented, not in acute distress", PhilHealthCode = "1", PhilHealthLibrary = "lib_pe_general_survey", Metadata = new Dictionary<string, string> { ["isNormal"] = "true" } },
+            new EhrOptionDescriptor { Code = "2", Label = "Altered sensorium / In acute distress", PhilHealthCode = "2", PhilHealthLibrary = "lib_pe_general_survey" },
+            new EhrOptionDescriptor { Code = "99", Label = "Others", PhilHealthCode = "99", PhilHealthLibrary = "lib_pe_general_survey", RequiresSpecifyText = true }
+        });
+
+        // PE Musculoskeletal Findings
+        Add("pe_musculoskeletal", new[]
+        {
+            new EhrOptionDescriptor { Code = "1", Label = "Essentially normal (Full ROM, no deformities)", PhilHealthCode = "1", Metadata = new Dictionary<string, string> { ["isNormal"] = "true" } },
+            new EhrOptionDescriptor { Code = "2", Label = "Joint swelling / tenderness", PhilHealthCode = "2" },
+            new EhrOptionDescriptor { Code = "3", Label = "Limited range of motion", PhilHealthCode = "3" },
+            new EhrOptionDescriptor { Code = "4", Label = "Deformity / fracture", PhilHealthCode = "4" },
+            new EhrOptionDescriptor { Code = "99", Label = "Others", PhilHealthCode = "99", RequiresSpecifyText = true }
+        });
+
+        // Physical Examination Organ Systems Registry (drives dynamic PE checklist)
+        Add("physical_exam_system", new[]
+        {
+            new EhrOptionDescriptor
+            {
+                Code = "generalSurvey",
+                Label = "General Survey",
+                PhilHealthCode = "1",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "generalSurveyRemarks",
+                    ["codeKey"] = "generalSurveyId",
+                    ["normalCode"] = "1",
+                    ["optionSet"] = "pe_general_survey",
+                    ["normalDescription"] = "Conscious, coherent, oriented to person/place/time, not in acute distress",
+                    ["placeholder"] = "Describe distress, altered sensorium, posture, or orientation deficits..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "skin",
+                Label = "Skin & Extremities",
+                PhilHealthCode = "1",
+                PhilHealthLibrary = "lib_skin_extremities",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "skinRemarks",
+                    ["codeKey"] = "skinId",
+                    ["normalCode"] = "1",
+                    ["normalDescription"] = "Essentially normal, warm to touch, good turgor, no rashes or petechiae",
+                    ["placeholder"] = "Describe lesions, petechiae, cyanosis, pallor, or edema..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "heent",
+                Label = "HEENT",
+                PhilHealthCode = "11",
+                PhilHealthLibrary = "lib_heent",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "heentRemarks",
+                    ["codeKey"] = "heentId",
+                    ["normalCode"] = "11",
+                    ["normalDescription"] = "Anicteric sclerae, pink palpebral conjunctivae, tonsils not enlarged, no exudates",
+                    ["placeholder"] = "Describe icterus, conjunctival injection, pharyngeal erythema, discharge..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "chest",
+                Label = "Chest & Lungs",
+                PhilHealthCode = "6",
+                PhilHealthLibrary = "lib_chest",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "chestRemarks",
+                    ["codeKey"] = "chestId",
+                    ["normalCode"] = "6",
+                    ["normalDescription"] = "Symmetrical chest expansion, clear breath sounds, no crackles, wheezes, or rales",
+                    ["placeholder"] = "Describe wheezes, rhonchi, crackles, stridor, or retractions..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "heart",
+                Label = "Heart & CVS",
+                PhilHealthCode = "5",
+                PhilHealthLibrary = "lib_heart",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "heartRemarks",
+                    ["codeKey"] = "heartId",
+                    ["normalCode"] = "5",
+                    ["normalDescription"] = "Distinct heart sounds, normal rate, regular rhythm, no murmurs, thrills, or gallops",
+                    ["placeholder"] = "Describe murmurs (grade/location), irregular rhythm, rub, or tachycardia..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "abdomen",
+                Label = "Abdomen",
+                PhilHealthCode = "7",
+                PhilHealthLibrary = "lib_abdomen",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "abdomenRemarks",
+                    ["codeKey"] = "abdomenId",
+                    ["normalCode"] = "7",
+                    ["normalDescription"] = "Soft, non-tender, non-distended, normoactive bowel sounds, no palpable organomegaly",
+                    ["placeholder"] = "Describe tenderness, guarding, rigidity, masses, or organomegaly..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "neuro",
+                Label = "Neurological",
+                PhilHealthCode = "6",
+                PhilHealthLibrary = "lib_neuro",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "neuroRemarks",
+                    ["codeKey"] = "neuroId",
+                    ["normalCode"] = "6",
+                    ["normalDescription"] = "Intact cranial nerves, gross motor 5/5 all extremities, sensory intact, no focal deficits",
+                    ["placeholder"] = "Describe focal motor weakness, sensory loss, tremor, ataxia, or reflex changes..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "rectal",
+                Label = "Digital Rectal Exam",
+                PhilHealthCode = "1",
+                PhilHealthLibrary = "lib_digital_rectal",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "rectalRemarks",
+                    ["codeKey"] = "rectalId",
+                    ["normalCode"] = "1",
+                    ["normalDescription"] = "Good sphincter tone, smooth rectal vault, no masses, no blood on examining glove",
+                    ["placeholder"] = "Describe hemorrhoids, fissures, tenderness, prostate enlargement, or blood..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "gu",
+                Label = "Genitourinary",
+                PhilHealthCode = "1",
+                PhilHealthLibrary = "lib_genitourinary",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "guRemarks",
+                    ["codeKey"] = "guId",
+                    ["normalCode"] = "1",
+                    ["normalDescription"] = "Essentially normal, no suprapubic tenderness, no flank tenderness, no discharge",
+                    ["placeholder"] = "Describe CVA tenderness, genital ulcers, urethral/vaginal discharge, hernia..."
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "musculoskeletal",
+                Label = "Musculoskeletal",
+                PhilHealthCode = "1",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["remarksKey"] = "musculoskeletalRemarks",
+                    ["codeKey"] = "musculoskeletalId",
+                    ["normalCode"] = "1",
+                    ["optionSet"] = "pe_musculoskeletal",
+                    ["normalDescription"] = "Full range of motion in all joints, no deformities, no joint swelling or tenderness",
+                    ["placeholder"] = "Describe joint swelling, erythema, deformity, limited range of motion, muscle atrophy..."
+                }
+            }
         });
 
         // LIB-028: Consultation Reason
@@ -307,24 +471,90 @@ public static class EhrStaticOptions
             new EhrOptionDescriptor { Code = "SECONDARY_COMORBIDITY", Label = "Secondary / Comorbid Condition", PhilHealthCode = "2", PhilHealthLibrary = "lib_specific_diagnosis" }
         });
 
-        // LIB-039: Counseling Topic
+        // LIB-039: Counseling and Health Education (YAKAP 2.0 Annex B Plan/Management Section A)
         Add("counseling_topic", new[]
         {
-            new EhrOptionDescriptor { Code = "HEALTHY_LIFESTYLE", Label = "Healthy Diet & Physical Activity", PhilHealthCode = "01", PhilHealthLibrary = "lib_counseling_topic" },
-            new EhrOptionDescriptor { Code = "SMOKING_CESSATION", Label = "Smoking & Vape Cessation", PhilHealthCode = "02", PhilHealthLibrary = "lib_counseling_topic" },
-            new EhrOptionDescriptor { Code = "ALCOHOL_MODERATION", Label = "Alcohol Harm Reduction", PhilHealthCode = "03", PhilHealthLibrary = "lib_counseling_topic" },
-            new EhrOptionDescriptor { Code = "MEDICATION_ADHERENCE", Label = "Chronic Disease Medication Adherence", PhilHealthCode = "04", PhilHealthLibrary = "lib_counseling_topic" },
-            new EhrOptionDescriptor { Code = "FAMILY_PLANNING", Label = "Family Planning & Reproductive Health", PhilHealthCode = "05", PhilHealthLibrary = "lib_counseling_topic" },
-            new EhrOptionDescriptor { Code = "BREASTFEEDING_NUTRITION", Label = "Infant & Young Child Feeding / Breastfeeding", PhilHealthCode = "06", PhilHealthLibrary = "lib_counseling_topic" },
-            new EhrOptionDescriptor { Code = "MENTAL_HEALTH_COPING", Label = "Stress Management & Mental Wellness", PhilHealthCode = "07", PhilHealthLibrary = "lib_counseling_topic" },
-            new EhrOptionDescriptor { Code = "OTHER_COUNSELING", Label = "Other Counseling Topic", PhilHealthCode = "08", PhilHealthLibrary = "lib_counseling_topic", RequiresSpecifyText = true }
+            new EhrOptionDescriptor { Code = "5", Label = "Healthy diet and proper nutrition", PhilHealthCode = "5", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "6", Label = "Weight management", PhilHealthCode = "6", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "7", Label = "Adequate physical activity and exercise", PhilHealthCode = "7", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "8", Label = "Healthy sleeping habits", PhilHealthCode = "8", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "9", Label = "Avoiding alcohol, tobacco, vaping, and illicit substances", PhilHealthCode = "9", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "10", Label = "Reducing screen time", PhilHealthCode = "10", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "17", Label = "Personal hygiene and dental care", PhilHealthCode = "17", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "11", Label = "Injury prevention measures", PhilHealthCode = "11", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "12", Label = "Safe sexual practices and reproductive health", PhilHealthCode = "12", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "13", Label = "Self-care and mental health advice", PhilHealthCode = "13", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "14", Label = "Appropriate health-seeking behaviors", PhilHealthCode = "14", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "15", Label = "Adherence to maintenance medications", PhilHealthCode = "15", PhilHealthLibrary = "lib_counseling_health_education" },
+            new EhrOptionDescriptor { Code = "16", Label = "Routine vaccination", PhilHealthCode = "16", PhilHealthLibrary = "lib_counseling_health_education", RequiresSpecifyText = true }
         });
 
-        // LIB-041: Diagnostic Plan Option
+        // LIB-040: YAKAP 2.0 Routine & Cancer Screening Cohorts (Annex B Plan/Management Sections B–E)
+        Add("yakap_adult_screening", new[]
+        {
+            new EhrOptionDescriptor { Code = "0", Label = "Not applicable", PhilHealthCode = "0", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "4", Label = "Chest X-Ray (annual)", PhilHealthCode = "4", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "7", Label = "Fasting Blood Sugar (>40 yrs)", PhilHealthCode = "7", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "14", Label = "75-g Oral Glucose Tolerance Test (>40 yrs)", PhilHealthCode = "14", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "18", Label = "HbA1c Test (>40 yrs)", PhilHealthCode = "18", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "13", Label = "Cervical Cytology / Pap Smear (30–65 yrs)", PhilHealthCode = "13", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "31", Label = "Visual Inspection with Acetic Acid (VIA)", PhilHealthCode = "31", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "15", Label = "Annual FOBT / FIT (≥50 yrs)", PhilHealthCode = "15", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "35", Label = "Colonoscopy (≥50 yrs)", PhilHealthCode = "35", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "99", Label = "Other adult screening (CVD/Caries risk, Mammography, CBE, DRE, PSA)", PhilHealthCode = "99", PhilHealthLibrary = "lib_diagnostic" }
+        });
+
+        Add("yakap_pediatric_screening", new[]
+        {
+            new EhrOptionDescriptor { Code = "0", Label = "Not applicable", PhilHealthCode = "0", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "4", Label = "Annual Chest X-Ray (>15 yrs)", PhilHealthCode = "4", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "1", Label = "Complete Blood Count (CBC) with Platelet Count", PhilHealthCode = "1", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "7", Label = "Fasting Blood Sugar (FBS)", PhilHealthCode = "7", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "14", Label = "75-g Oral Glucose Tolerance Test (OGTT)", PhilHealthCode = "14", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "6", Label = "Lipid Profile", PhilHealthCode = "6", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "24", Label = "HIV Rapid Diagnostic Test", PhilHealthCode = "24", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "25", Label = "Hepatitis B (HBsAg) Test", PhilHealthCode = "25", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "43", Label = "Syphilis Test (RPR)", PhilHealthCode = "43", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "5", Label = "Sputum Microscopy / MTB Test", PhilHealthCode = "5", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "28", Label = "Filariasis Test Strip", PhilHealthCode = "28", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "45", Label = "Malaria Blood Smear / RDT", PhilHealthCode = "45", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "99", Label = "Other pediatric/adolescent screening (Oral, Vision, PHQ-9)", PhilHealthCode = "99", PhilHealthLibrary = "lib_diagnostic" }
+        });
+
+        Add("yakap_prenatal_screening", new[]
+        {
+            new EhrOptionDescriptor { Code = "0", Label = "Not applicable", PhilHealthCode = "0", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "1", Label = "Complete Blood Count (CBC) / Hemoglobin", PhilHealthCode = "1", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "30", Label = "Urine HCG Pregnancy Test", PhilHealthCode = "30", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "5", Label = "TB Screening (Sputum Microscopy)", PhilHealthCode = "5", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "2", Label = "Urinalysis", PhilHealthCode = "2", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "3", Label = "Fecalysis", PhilHealthCode = "3", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "31", Label = "Visual Inspection with Acetic Acid (VIA)", PhilHealthCode = "31", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "43", Label = "Syphilis Test (RPR)", PhilHealthCode = "43", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "24", Label = "HIV Test", PhilHealthCode = "24", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "25", Label = "Hepatitis B (HBsAg) Test", PhilHealthCode = "25", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "13", Label = "Pap Smear", PhilHealthCode = "13", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "14", Label = "75-g Oral Glucose Tolerance Test (OGTT)", PhilHealthCode = "14", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "7", Label = "Fasting Blood Sugar (FBS)", PhilHealthCode = "7", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "18", Label = "HbA1c Test", PhilHealthCode = "18", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "99", Label = "Prenatal Ultrasound / Blood Typing / Other STI Screening", PhilHealthCode = "99", PhilHealthLibrary = "lib_diagnostic" }
+        });
+
+        Add("yakap_cancer_screening", new[]
+        {
+            new EhrOptionDescriptor { Code = "15", Label = "Fecal Occult Blood Test (FOBT) / FIT", PhilHealthCode = "15", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "39", Label = "Alpha Fetoprotein (AFP)", PhilHealthCode = "39", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "13", Label = "Pap Smear Cytology", PhilHealthCode = "13", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "35", Label = "Colonoscopy", PhilHealthCode = "35", PhilHealthLibrary = "lib_diagnostic" },
+            new EhrOptionDescriptor { Code = "99", Label = "Breast Ultrasound / Liver Ultrasound / Mammography / Others", PhilHealthCode = "99", PhilHealthLibrary = "lib_diagnostic" }
+        });
+
+        // LIB-041: Diagnostic Services Option (YAKAP 2.0 Annex B Plan/Management Section F)
         Add("diagnostic_plan_option", new[]
         {
-            new EhrOptionDescriptor { Code = "ORDER_NOW", Label = "Order In-Clinic or Reference Lab Now", PhilHealthCode = "1", PhilHealthLibrary = "lib_diagnostic_plan" },
-            new EhrOptionDescriptor { Code = "SCHEDULE_FUTURE", Label = "Schedule for Future Visit / Preparation", PhilHealthCode = "2", PhilHealthLibrary = "lib_diagnostic_plan" }
+            new EhrOptionDescriptor { Code = "N", Label = "No diagnostics needed", PhilHealthCode = "N", PhilHealthLibrary = "lib_diagnostic_services_option" },
+            new EhrOptionDescriptor { Code = "Y", Label = "Request diagnostics", PhilHealthCode = "Y", PhilHealthLibrary = "lib_diagnostic_services_option" },
+            new EhrOptionDescriptor { Code = "R", Label = "With diagnostic results", PhilHealthCode = "R", PhilHealthLibrary = "lib_diagnostic_services_option" }
         });
 
         // LIB-042: Routine Immunization Status

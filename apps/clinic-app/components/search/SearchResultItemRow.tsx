@@ -62,7 +62,7 @@ export default function SearchResultItemRow({
       <View style={[styles.iconContainer, isActive && styles.iconContainerActive]}>
         <Icon
           name={iconName}
-          size={theme.sizes.iconSm}
+          size={theme.sizes.iconMd}
           color={isActive ? theme.colors.primary : theme.colors.textSecondary}
         />
       </View>
@@ -101,21 +101,19 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
     backgroundColor: theme.colors.surface,
-    borderLeftWidth: 3,
-    borderLeftColor: 'transparent',
-    minHeight: 52,
+    borderRadius: theme.radii.lg,
+    minHeight: 60,
   },
   rowActive: {
     backgroundColor: theme.colors.primarySubtle,
-    borderLeftColor: theme.colors.primary,
   },
   iconContainer: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
+    width: theme.sizes.controlMd,
+    height: theme.sizes.controlMd,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surfaceMuted,
     alignItems: 'center',
@@ -127,7 +125,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     minWidth: 0,
-    gap: theme.spacing.xs / 2,
+    gap: theme.spacing.xs,
   },
   titleRow: {
     flexDirection: 'row',
@@ -141,13 +139,13 @@ const styles = StyleSheet.create({
   trailing: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
     flexShrink: 0,
   },
   categoryBadge: {
-    paddingHorizontal: theme.spacing.xs + 2,
-    paddingVertical: 1,
-    borderRadius: theme.radii.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,

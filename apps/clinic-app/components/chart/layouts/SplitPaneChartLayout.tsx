@@ -14,7 +14,7 @@ import {
 import type { IconName } from '../../ui/Icon';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
 import { formatCompressedLongAge } from '../../../utils/age';
-import { formatPhilHealthPin } from '../PatientSummarySpine';
+import { formatPhilHealthPin, formatBloodTypeLabel } from '../PatientSummarySpine';
 import ChartLayoutSwitcher from '../ChartLayoutSwitcher';
 import ChartTabContentView from '../ChartTabContentView';
 import type { ChartLayoutProps, ChartTab } from '../types';
@@ -181,8 +181,8 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                   ) : (
                     <Badge label="Unverified" variant="warning" size="sm" icon="alert" />
                   )}
-                  {patient.bloodType ? (
-                    <Badge label={`Type ${patient.bloodType}`} variant="neutral" size="sm" icon="droplet" />
+                  {formatBloodTypeLabel(patient.bloodType) ? (
+                    <Badge label={`Type ${formatBloodTypeLabel(patient.bloodType)}`} variant="neutral" size="sm" icon="droplet" />
                   ) : null}
                 </View>
               </View>
@@ -368,16 +368,33 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
         <View style={styles.canvasContainer}>
           {/* Workstation Top Bar */}
           <View style={styles.canvasHeader}>
-            <View style={styles.canvasHeaderTitle}>
-              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                Patient Chart
-              </ThemedText>
-              <ThemedText variant="title" color={theme.colors.text}>
-                {activeNavItem?.label || 'Clinical View'}
-              </ThemedText>
-              <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                {patient?.fullName || 'Patient'} • Code: {patient?.patientCode || '—'}
-              </ThemedText>
+            <View style={styles.canvasHeaderLeft}>
+              {props.canGoBackTab && props.onBackTab ? (
+                <Pressable
+                  onPress={props.onBackTab}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.backSectionBtn, pressed && styles.closeBtnPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    props.previousTabLabel
+                      ? `Back to ${props.previousTabLabel}`
+                      : 'Back to previous section'
+                  }
+                >
+                  <Icon name="arrowLeft" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                </Pressable>
+              ) : null}
+              <View style={styles.canvasHeaderTitle}>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                  Patient Chart
+                </ThemedText>
+                <ThemedText variant="title" color={theme.colors.text}>
+                  {activeNavItem?.label || 'Clinical View'}
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {patient?.fullName || 'Patient'} • Code: {patient?.patientCode || '—'}
+                </ThemedText>
+              </View>
             </View>
 
             <View style={styles.canvasHeaderActions}>
@@ -677,8 +694,31 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surface,
   },
+  canvasHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    minWidth: 0,
+    marginRight: theme.spacing.md,
+  },
   canvasHeaderTitle: {
     flex: 1,
+    minWidth: 0,
+  },
+  backSectionBtn: {
+    minWidth: theme.sizes.controlSm,
+    minHeight: theme.sizes.controlSm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   canvasHeaderActions: {
     flexDirection: 'row',

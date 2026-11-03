@@ -18,6 +18,7 @@ export interface AdministrativeDocumentsTabProps {
   referralLetters?: ReferralLetterRecord[];
   isLoading?: boolean;
   onRefreshChart?: () => void;
+  embedded?: boolean;
 }
 
 export type DocumentFilterType = 'ALL' | 'CERTIFICATES' | 'REFERRALS';
@@ -29,6 +30,7 @@ export default function AdministrativeDocumentsTab({
   referralLetters = [],
   isLoading = false,
   onRefreshChart,
+  embedded = false,
 }: AdministrativeDocumentsTabProps) {
   const [filterType, setFilterType] = useState<DocumentFilterType>('ALL');
   const [actioningDocId, setActioningDocId] = useState<string | null>(null);
@@ -82,79 +84,61 @@ export default function AdministrativeDocumentsTab({
     );
   }
 
-  if (totalDocuments === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <EmptyState
-          icon="file"
-          title="No Issued Administrative Documents"
-          description="Official signed medical certificates and formal hospital referral letters issued to this patient will appear here for 1-click reprinting."
-          actionTitle={onRefreshChart ? 'Refresh Chart' : undefined}
-          onAction={onRefreshChart}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* HEADER SUMMARY STRIP */}
-      <View style={styles.headerStrip}>
-        <View style={styles.headerInfo}>
-          <ThemedText variant="title" color={theme.colors.text}>
-            Administrative Certificate Vault
+  const renderFilterChips = () => (
+    <View style={styles.filterScrollWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={styles.filterGroup}
+      >
+        <Pressable
+          style={[styles.filterPill, filterType === 'ALL' && styles.filterPillActive]}
+          onPress={() => setFilterType('ALL')}
+        >
+          <ThemedText
+            variant="captionBold"
+            numberOfLines={1}
+            color={filterType === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+          >
+            All ({totalDocuments})
           </ThemedText>
-          <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            Secure cryptographic registry of issued medical certificates and referral letters
+        </Pressable>
+        <Pressable
+          style={[styles.filterPill, filterType === 'CERTIFICATES' && styles.filterPillActive]}
+          onPress={() => setFilterType('CERTIFICATES')}
+        >
+          <ThemedText
+            variant="captionBold"
+            numberOfLines={1}
+            color={filterType === 'CERTIFICATES' ? theme.colors.primaryDark : theme.colors.textSecondary}
+          >
+            Certificates ({totalCerts})
           </ThemedText>
-        </View>
+        </Pressable>
+        <Pressable
+          style={[styles.filterPill, filterType === 'REFERRALS' && styles.filterPillActive]}
+          onPress={() => setFilterType('REFERRALS')}
+        >
+          <ThemedText
+            variant="captionBold"
+            numberOfLines={1}
+            color={filterType === 'REFERRALS' ? theme.colors.primaryDark : theme.colors.textSecondary}
+          >
+            Referrals ({totalReferrals})
+          </ThemedText>
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
 
-        {/* Filter Pills */}
-        <View style={styles.filterGroup}>
-          <Pressable
-            style={[styles.filterPill, filterType === 'ALL' && styles.filterPillActive]}
-            onPress={() => setFilterType('ALL')}
-          >
-            <ThemedText
-              variant="caption"
-              color={filterType === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              style={filterType === 'ALL' ? styles.filterPillTextActive : undefined}
-            >
-              All ({totalDocuments})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={[styles.filterPill, filterType === 'CERTIFICATES' && styles.filterPillActive]}
-            onPress={() => setFilterType('CERTIFICATES')}
-          >
-            <ThemedText
-              variant="caption"
-              color={filterType === 'CERTIFICATES' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              style={filterType === 'CERTIFICATES' ? styles.filterPillTextActive : undefined}
-            >
-              Certificates ({totalCerts})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={[styles.filterPill, filterType === 'REFERRALS' && styles.filterPillActive]}
-            onPress={() => setFilterType('REFERRALS')}
-          >
-            <ThemedText
-              variant="caption"
-              color={filterType === 'REFERRALS' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              style={filterType === 'REFERRALS' ? styles.filterPillTextActive : undefined}
-            >
-              Referrals ({totalReferrals})
-            </ThemedText>
-          </Pressable>
-        </View>
-      </View>
-
+  const renderSections = () => (
+    <>
       {/* MEDICAL CERTIFICATES SECTION */}
       {filteredCerts.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Icon name="file" size={16} color={theme.colors.primary} />
+            <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.primary} />
             <ThemedText variant="small" color={theme.colors.primaryDark} style={styles.sectionTitle}>
               Medical Certificates ({filteredCerts.length})
             </ThemedText>
@@ -250,7 +234,7 @@ export default function AdministrativeDocumentsTab({
 
                   {hasDigest ? (
                     <View style={styles.digestRow}>
-                      <Icon name="shield" size={12} color={theme.colors.successText} />
+                      <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.successText} />
                       <ThemedText variant="code" color={theme.colors.textMuted} style={styles.digestText}>
                         Seal Digest: {cert.securityDigest}
                       </ThemedText>
@@ -267,7 +251,7 @@ export default function AdministrativeDocumentsTab({
       {filteredReferrals.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Icon name="file" size={16} color={theme.colors.primary} />
+            <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.primary} />
             <ThemedText variant="small" color={theme.colors.primaryDark} style={styles.sectionTitle}>
               Referral Letters ({filteredReferrals.length})
             </ThemedText>
@@ -364,7 +348,7 @@ export default function AdministrativeDocumentsTab({
 
                   {hasDigest ? (
                     <View style={styles.digestRow}>
-                      <Icon name="shield" size={12} color={theme.colors.successText} />
+                      <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.successText} />
                       <ThemedText variant="code" color={theme.colors.textMuted} style={styles.digestText}>
                         Seal Digest: {letter.securityDigest}
                       </ThemedText>
@@ -376,6 +360,59 @@ export default function AdministrativeDocumentsTab({
           })}
         </View>
       )}
+    </>
+  );
+
+  if (embedded) {
+    const hasVisibleInternal = filteredCerts.length > 0 || filteredReferrals.length > 0;
+    return (
+      <View style={styles.embeddedContainer}>
+        <View style={styles.embeddedTopBar}>{renderFilterChips()}</View>
+        {hasVisibleInternal ? (
+          renderSections()
+        ) : (
+          <EmptyState
+            icon="file"
+            title="No internal documents in vault"
+            description="Official signed medical certificates and formal hospital referral letters issued to this patient will appear here."
+          />
+        )}
+      </View>
+    );
+  }
+
+  if (totalDocuments === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <EmptyState
+          icon="file"
+          title="No Issued Administrative Documents"
+          description="Official signed medical certificates and formal hospital referral letters issued to this patient will appear here for 1-click reprinting."
+          actionTitle={onRefreshChart ? 'Refresh Chart' : undefined}
+          onAction={onRefreshChart}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      {/* HEADER SUMMARY STRIP */}
+      <View style={styles.headerStrip}>
+        <View style={styles.headerInfo}>
+          <ThemedText variant="title" color={theme.colors.text}>
+            Administrative Certificate Vault
+          </ThemedText>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Secure cryptographic registry of issued medical certificates and referral letters
+          </ThemedText>
+        </View>
+
+        {/* Filter Pills */}
+        {renderFilterChips()}
+      </View>
+
+      {renderSections()}
     </ScrollView>
   );
 }
@@ -387,6 +424,17 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: theme.spacing.md,
     gap: theme.spacing.lg,
+  },
+  embeddedContainer: {
+    gap: theme.spacing.md,
+  },
+  embeddedTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'nowrap',
+    width: '100%',
+    minWidth: 0,
   },
   loadingContainer: {
     padding: theme.spacing.xl,
@@ -403,7 +451,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.md,
     borderRadius: theme.radii.lg,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     flexDirection: 'row',
     alignItems: 'center',
@@ -415,25 +463,36 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 200,
   },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
   filterGroup: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
     alignItems: 'center',
   },
   filterPill: {
-    paddingHorizontal: theme.spacing.sm,
+    flexShrink: 0,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
   },
   filterPillActive: {
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primary,
-  },
-  filterPillTextActive: {
-    fontWeight: '700',
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
   },
   section: {
     gap: theme.spacing.sm,

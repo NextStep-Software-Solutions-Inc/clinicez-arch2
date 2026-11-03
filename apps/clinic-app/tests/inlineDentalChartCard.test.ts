@@ -350,4 +350,42 @@ describe('InlineDentalChartCard — Consultation Workstation Dental Odontogram',
     expect(errorHtml).toContain('inline-dental-chart-card-error');
     expect(errorHtml).toContain('Network error loading odontogram');
   });
+
+  test('10. Surfaces (Canonical MODBL) chips render in a horizontal ScrollView and odontograms center horizontally', async () => {
+    const html = renderToStaticMarkup(
+      React.createElement(InlineDentalChartCard, {
+        teeth: sampleTeeth,
+        initialToothNumber: 16,
+      })
+    );
+
+    expect(html).toContain('data-testid="surfaces-chips-scroll"');
+    expect(html).toContain('data-testid="odontogram-scroll-viewport"');
+    expect(html).toContain('M (Mesial)');
+    expect(html).toContain('O (Occlusal)');
+    expect(html).toContain('D (Distal)');
+    expect(html).toContain('B (Buccal)');
+    expect(html).toContain('L (Lingual)');
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const inlineCardSrc = fs.readFileSync(
+      path.resolve(__dirname, '../components/consultation/InlineDentalChartCard.tsx'),
+      'utf8'
+    );
+    const dentalTabSrc = fs.readFileSync(
+      path.resolve(__dirname, '../components/chart/DentalChartTab.tsx'),
+      'utf8'
+    );
+
+    // InlineDentalChartCard horizontal centering + scrollable surfaces
+    expect(inlineCardSrc).toContain("gridScrollViewport:\n    {\n      width: '100%',\n    }".replace(/\s+/g, ' ').length > 0 ? "width: '100%'" : '');
+    expect(inlineCardSrc).toMatch(/gridScrollViewport:\s*\{\s*width:\s*'100%'\s*,?\s*\}/);
+    expect(inlineCardSrc).toMatch(/gridScroll:\s*\{[\s\S]*?flexGrow:\s*1[\s\S]*?minWidth:\s*'100%'[\s\S]*?justifyContent:\s*'center'/);
+    expect(inlineCardSrc).toMatch(/surfacesScroll:\s*\{\s*width:\s*'100%'/);
+
+    // DentalChartTab horizontal centering
+    expect(dentalTabSrc).toMatch(/gridScrollViewport:\s*\{\s*width:\s*'100%'\s*,?\s*\}/);
+    expect(dentalTabSrc).toMatch(/gridScrollContent:\s*\{[\s\S]*?flexGrow:\s*1[\s\S]*?minWidth:\s*'100%'[\s\S]*?justifyContent:\s*'center'/);
+  });
 });

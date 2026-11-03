@@ -130,6 +130,8 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           patient={patient}
           patientId={patient?.id}
           attachments={patientChart?.attachments || patientAttachments}
+          medicalCertificates={patientChart?.medicalCertificates || []}
+          referralLetters={patientChart?.referralLetters || []}
           onUploadDocument={onUploadDocument}
           onVerifyAttachment={onVerifyAttachment}
           onDownloadAttachment={onDownloadAttachment}

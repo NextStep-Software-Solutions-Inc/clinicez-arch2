@@ -18,6 +18,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
 import {
   PatientSummarySpine,
+  reconcileChartWithPatient,
   PatientChartModal,
   CHART_TABS,
   type ChartTab,
@@ -1141,7 +1142,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       setPatientChart(null);
       setPatientAttachments([]);
     }
-    const [chartData, chartErr] = await clinicService.getPatientChart(patient.id);
+    const [[chartData, chartErr], [freshPatient]] = await Promise.all([
+      clinicService.getPatientChart(patient.id),
+      typeof clinicService.getPatientById === 'function'
+        ? clinicService.getPatientById(patient.id)
+        : Promise.resolve([null, null] as const),
+    ]);
+    const authoritativePatient = freshPatient || patient;
+    if (freshPatient) {
+      setSelectedPatient(freshPatient);
+      setPatients((prev) =>
+        prev ? prev.map((p) => (p.id === freshPatient.id ? freshPatient : p)) : prev,
+      );
+    }
     if (chartData) {
       if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
         const [dentalData] = await clinicService.getPatientDentalChart(patient.id);
@@ -1150,7 +1163,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           chartData.dentalChart = dentalData;
         }
       }
-      setPatientChart(chartData);
+      setPatientChart(reconcileChartWithPatient(chartData, authoritativePatient));
       setChartError(null);
       if (chartData.attachments && chartData.attachments.length > 0) {
         setPatientAttachments(chartData.attachments);
@@ -1312,6 +1325,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     if (selectedPatient?.id === updated.id) {
       setSelectedPatient(updated);
     }
+    setPatientChart((prev) =>
+      prev && prev.patientId === updated.id
+        ? reconcileChartWithPatient(prev, updated)
+        : prev
+    );
   };
 
   const handleVerifyAttachment = async (
@@ -2201,24 +2219,25 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
       {/* Filters & Workstation View Switcher Toolbar */}
       <View style={styles.toolbarRow}>
-        <SegmentedControl<PatientFilter>
-          value={filterMode}
-          onChange={handleFilterModeChange}
-          options={[
-            { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
-            { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
-            { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
-            { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
-            {
-              value: 'ALERTS',
-              label: 'Alerts & allergies',
-              count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
-              badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
-            },
-            { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
-          ]}
-        />
-
+        <View style={styles.toolbarTabs}>
+          <SegmentedControl<PatientFilter>
+            value={filterMode}
+            onChange={handleFilterModeChange}
+            options={[
+              { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
+              { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
+              { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
+              { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
+              {
+                value: 'ALERTS',
+                label: 'Alerts & allergies',
+                count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
+                badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
+              },
+              { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
+            ]}
+          />
+        </View>
 
         {isWorkstation ? (
           <View style={styles.toolbarRight}>
@@ -2226,8 +2245,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               value={viewMode}
               onChange={handleViewModeChange}
               options={[
-                { value: 'cards', label: 'Cards' },
-                { value: 'table', label: 'Compact Table' },
+                { value: 'cards', label: 'Cards view', icon: 'grid', iconOnly: true },
+                { value: 'table', label: 'Compact table view', icon: 'list', iconOnly: true },
               ]}
             />
           </View>
@@ -2260,7 +2279,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         <Card style={styles.tableCard}>
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator={false}
+            showsHorizontalScrollIndicator
             contentContainerStyle={styles.tableScrollContent}
           >
             <View
@@ -2717,7 +2736,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
                         Principal Member Details
                       </ThemedText>
-                      <Badge label="Dependent Coverage" variant="info" size="sm" />
                     </View>
                     <Button
                       title={formGuardianSponsor ? formGuardianSponsor.buttonLabel : 'Use Legal Guardian'}
@@ -2727,9 +2745,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       onPress={handleApplyFormGuardianAsSponsor}
                     />
                   </View>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Required when claiming PhilHealth benefits under a principal member.
-                  </ThemedText>
 
                   <Input
                     label="Principal Member Full Name *"
@@ -3658,14 +3673,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
+  },
+  toolbarTabs: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
   },
   toolbarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    flexShrink: 0,
+    gap: theme.spacing.sm,
   },
   infiniteScrollFooter: {
     paddingVertical: theme.spacing.xl,
@@ -3718,10 +3740,12 @@ const styles = StyleSheet.create({
   },
   tableScrollContent: {
     flexGrow: 1,
+    minWidth: '100%',
   },
   tableInner: {
+    flex: 1,
     width: '100%',
-    minWidth: 920,
+    minWidth: 1080,
   },
   modalOverlay: {
     flex: 1,

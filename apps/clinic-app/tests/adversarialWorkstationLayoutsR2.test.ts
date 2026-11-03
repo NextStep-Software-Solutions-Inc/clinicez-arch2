@@ -463,7 +463,9 @@ describe('Adversarial Review Round 2: Medical Chart Workstation Layouts Robustne
           } else if (tab === 'profiles') {
             expect(markup).toContain('Health Profiles');
           } else if (tab === 'vault') {
-            expect(markup).toContain('All Records');
+            expect(markup).toContain('Attach External Document');
+            expect(markup).toContain('External');
+            expect(markup).toContain('Internal');
           }
         });
       }

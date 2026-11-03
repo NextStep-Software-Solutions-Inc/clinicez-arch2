@@ -208,6 +208,7 @@ mock.module('../hooks/usePsgcLocations', () => ({
 
 // Dynamic import of target components after mocks are registered
 const { default: WorkflowModeSelector } = await import('../components/consultation/WorkflowModeSelector');
+const { default: NursePreAssessmentCard } = await import('../components/consultation/NursePreAssessmentCard');
 const {
   InlinePhysicalExamCard,
   to1NFFindings,
@@ -216,7 +217,10 @@ const {
 type PhysicalExamFindings = import('../components/consultation/InlinePhysicalExamCard').PhysicalExamFindings;
 
 const { default: ReviewOfSystemsChecklist } = await import('../components/consultation/ReviewOfSystemsChecklist');
-const { default: SpecificEncounterFormsCard } = await import('../components/consultation/SpecificEncounterFormsCard');
+const {
+  default: SpecificEncounterFormsCard,
+  getEncounterFormTabsForPatient,
+} = await import('../components/consultation/SpecificEncounterFormsCard');
 const { default: PsgcAddressSelector } = await import('../components/ui/PsgcAddressSelector');
 const { locationService } = await import('../services/locationService');
 
@@ -242,28 +246,59 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
         currentMode = mode;
       };
 
-      // 1. Regular mode rendering
+      // 1. Regular mode rendering (ATC input hidden even when onChangeAtc provided)
       const regularHtml = renderToStaticMarkup(
         React.createElement(WorkflowModeSelector, {
           mode: 'Regular',
           onChange: handleChange,
+          atcValue: 'WALKEDIN',
+          onChangeAtc: () => {},
         })
       );
       expect(regularHtml).toContain('Clinical Workflow Mode');
-      expect(regularHtml).toContain('Regular Clinical');
+      expect(regularHtml).not.toContain('Regular Clinical');
       expect(regularHtml).toContain('Regular Consultation');
       expect(regularHtml).toContain('Standard EHR clinical consultation');
+      expect(regularHtml).not.toContain('Authorization Transaction Code (ATC)');
 
-      // 2. YakapAvailment mode rendering
+      // 2. YakapAvailment mode rendering (ATC input embedded inside Clinical Workflow Mode card)
       const yakapHtml = renderToStaticMarkup(
         React.createElement(WorkflowModeSelector, {
           mode: 'YakapAvailment',
           onChange: handleChange,
+          atcValue: 'WALKEDIN',
+          onChangeAtc: () => {},
         })
       );
-      expect(yakapHtml).toContain('YAKAP 2.0 Availment');
+      expect(yakapHtml).not.toContain('YAKAP 2.0 Availment');
       expect(yakapHtml).toContain('Yakap Availment');
       expect(yakapHtml).toContain('PhilHealth YAKAP 2.0 statutory consultation encounter');
+      expect(yakapHtml).toContain('Authorization Transaction Code (ATC)');
+      expect(yakapHtml).toContain('WALKEDIN');
+
+      // 3. Consultation Workspace Expand & Split View icon-only toggle button
+      const splitHtml = renderToStaticMarkup(
+        React.createElement(WorkflowModeSelector, {
+          mode: 'Regular',
+          onChange: handleChange,
+          isExpanded: false,
+          onToggleExpand: () => {},
+        })
+      );
+      expect(splitHtml).toContain('Expand consultation workspace');
+      expect(splitHtml).not.toContain('>Expand<');
+      expect(splitHtml).not.toContain('Split view');
+
+      const expandedHtml = renderToStaticMarkup(
+        React.createElement(WorkflowModeSelector, {
+          mode: 'Regular',
+          onChange: handleChange,
+          isExpanded: true,
+          onToggleExpand: () => {},
+        })
+      );
+      expect(expandedHtml).not.toContain('>Split view<');
+      expect(expandedHtml).toContain('Switch back to 2-column split pane');
     });
 
     test('Stress Test: 100 rapid mode switches guarantee ZERO loss of consultation clinical data', () => {
@@ -577,10 +612,10 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
         })
       );
 
-      expect(html).toContain('Review of Systems (ROS)');
       expect(html).toContain('Presenting Symptoms');
-      expect(html).toContain('Pure 1NF symptom itemization');
-      expect(html).toContain('1 Selected');
+      expect(html).not.toContain('Pure 1NF symptom itemization');
+      expect(html).not.toContain('lib_signs_symptoms');
+      expect(html).toContain('1 selected');
       expect(html).toContain('Fever / Lagnat');
       expect(html).toContain('Chest Pain');
     });
@@ -693,6 +728,95 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
       expect(html).toContain('PhilHealth YAKAP 2.0 specialized cohorts');
       // Active count: Ob-Gyne (gravidity) + BP log = 2 Active
       expect(html).toContain('2 Active');
+    });
+
+    test('Cohort auto-filtering & highlighting hides inapplicable tabs by patient age and sex while preserving populated data', () => {
+      // 1. Adult Male (35yo Male) -> hides Ob-Gyne, Pediatric, Adolescent, HEADSSS; shows & recommends BP Log
+      const adultMaleTabs = getEncounterFormTabsForPatient({
+        patientAgeYears: 35,
+        patientSex: 'Male',
+      });
+      expect(adultMaleTabs.map((t) => t.id)).toEqual(['bplog']);
+      expect(adultMaleTabs[0].isRecommended).toBe(true);
+
+      const adultMaleHtml = renderToStaticMarkup(
+        React.createElement(SpecificEncounterFormsCard, {
+          defaultExpanded: true,
+          patientAgeYears: 35,
+          patientSex: 'Male',
+          onObGyneExamChange: () => {},
+          onPediatricMilestonesChange: () => {},
+          onAdolescentAssessmentChange: () => {},
+          onHeadsssAssessmentsChange: () => {},
+          onBpMonitoringLogsChange: () => {},
+        })
+      );
+      expect(adultMaleHtml).toContain('BP Monitoring Log');
+      expect(adultMaleHtml).toContain('Systolic (mmHg)');
+      expect(adultMaleHtml).not.toContain('Ob-Gyne Exam');
+      expect(adultMaleHtml).not.toContain('Pediatric Milestones');
+      expect(adultMaleHtml).not.toContain('Adolescent Assessment');
+      expect(adultMaleHtml).not.toContain('HEADSSS Assessment');
+
+      // 2. Adult Female (29yo Female) -> shows Ob-Gyne + BP Log (both recommended); hides Pediatric, Adolescent, HEADSSS
+      const adultFemaleTabs = getEncounterFormTabsForPatient({
+        patientAgeYears: 29,
+        patientSex: 'Female',
+      });
+      expect(adultFemaleTabs.map((t) => t.id)).toEqual(['obgyne', 'bplog']);
+      expect(adultFemaleTabs.every((t) => t.isRecommended)).toBe(true);
+
+      // 3. Pediatric Male (4yo Male) -> shows Pediatric Milestones (recommended) + BP Log; hides Ob-Gyne, Adolescent, HEADSSS
+      const pediatricTabs = getEncounterFormTabsForPatient({
+        patientAgeYears: 4,
+        patientSex: 'Male',
+      });
+      expect(pediatricTabs.map((t) => t.id)).toEqual(['pediatric', 'bplog']);
+      expect(pediatricTabs.find((t) => t.id === 'pediatric')?.isRecommended).toBe(true);
+
+      // 4. Adolescent Male (15yo Male) -> shows Adolescent + HEADSSS (recommended) + BP Log; hides Ob-Gyne and female SMR inputs
+      const adolescentMaleTabs = getEncounterFormTabsForPatient({
+        patientAgeYears: 15,
+        patientSex: 'Male',
+      });
+      expect(adolescentMaleTabs.map((t) => t.id)).toEqual(['adolescent', 'headsss', 'bplog']);
+      const adolescentMaleHtml = renderToStaticMarkup(
+        React.createElement(SpecificEncounterFormsCard, {
+          defaultExpanded: true,
+          patientAgeYears: 15,
+          patientSex: 'Male',
+          onObGyneExamChange: () => {},
+          onPediatricMilestonesChange: () => {},
+          onAdolescentAssessmentChange: () => {},
+          onHeadsssAssessmentsChange: () => {},
+          onBpMonitoringLogsChange: () => {},
+        })
+      );
+      expect(adolescentMaleHtml).toContain('Tanner Stage (1 - 5)');
+      expect(adolescentMaleHtml).toContain('SMR Pubic Hair Rating');
+      expect(adolescentMaleHtml).not.toContain('Menarche Age (Years)');
+      expect(adolescentMaleHtml).not.toContain('SMR Breast Rating');
+      expect(adolescentMaleHtml).not.toContain('Ob-Gyne Exam');
+
+      // 5. Adolescent Female (15yo Female) -> includes Ob-Gyne + Adolescent + HEADSSS + BP Log
+      const adolescentFemaleTabs = getEncounterFormTabsForPatient({
+        patientAgeYears: 15,
+        patientSex: 'Female',
+      });
+      expect(adolescentFemaleTabs.map((t) => t.id)).toEqual([
+        'obgyne',
+        'adolescent',
+        'headsss',
+        'bplog',
+      ]);
+
+      // 6. Safety rule: already-populated encounter data is never hidden even if outside cohort
+      const preservedTabs = getEncounterFormTabsForPatient({
+        patientAgeYears: 35,
+        patientSex: 'Male',
+        headsssAssessments: [{ domain: 'Safety', assessmentText: 'Assessed', hasRedFlags: false }],
+      });
+      expect(preservedTabs.map((t) => t.id)).toEqual(['headsss', 'bplog']);
     });
 
     test('State isolation: mutating Ob-Gyne does not leak or contaminate other cohort states', () => {
@@ -1005,6 +1129,72 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
       expect(html).not.toContain('Select Province');
       expect(html).not.toContain('Select City');
       expect(html).not.toContain('Select Barangay');
+    });
+  });
+
+  // =========================================================================
+  // TEST 6: NursePreAssessmentCard Rendering & Nurse Snapshot Attribution
+  // =========================================================================
+  describe('Test 6: NursePreAssessmentCard Rendering & Nurse Snapshot Attribution', () => {
+    test('Renders nurse name snapshot, triage acuity badge, observation pills, and notes cleanly', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(NursePreAssessmentCard, {
+          vitals: {
+            id: 'vit-101',
+            tenantId: 'ten-1',
+            clinicId: 'clin-1',
+            queueItemId: 'q-101',
+            patientId: 'pat-101',
+            recordedByNurseName: 'Nurse Maria Santos, RN',
+            recordedAt: '2026-11-03T09:54:00+08:00',
+            preAssessmentRemarks: 'Alert & Oriented • Mild Distress',
+            preAssessmentNotes: 'Patient accompanied by daughter, ambulatory.',
+            triageAcuityReason: 'Routine',
+          },
+        })
+      );
+
+      expect(html).toContain('Nurse Pre-assessment');
+      expect(html).toContain('Recorded by');
+      expect(html).toContain('Nurse Maria Santos, RN');
+      expect(html).toContain('Triage: Routine');
+      expect(html).toContain('Alert &amp; Oriented');
+      expect(html).toContain('Mild Distress');
+      expect(html).toContain('Patient accompanied by daughter, ambulatory.');
+    });
+
+    test('Falls back to fallbackNurseName when recordedByNurseName is absent and omits card when pre-assessment is empty', () => {
+      const fallbackHtml = renderToStaticMarkup(
+        React.createElement(NursePreAssessmentCard, {
+          vitals: {
+            id: 'vit-102',
+            tenantId: 'ten-1',
+            clinicId: 'clin-1',
+            queueItemId: 'q-102',
+            patientId: 'pat-102',
+            recordedAt: '2026-11-03T10:15:00+08:00',
+            preAssessmentRemarks: 'Alert & Oriented',
+          },
+          fallbackNurseName: 'RN Carlo Reyes',
+        })
+      );
+      expect(fallbackHtml).toContain('RN Carlo Reyes');
+
+      const emptyHtml = renderToStaticMarkup(
+        React.createElement(NursePreAssessmentCard, {
+          vitals: {
+            id: 'vit-103',
+            tenantId: 'ten-1',
+            clinicId: 'clin-1',
+            queueItemId: 'q-103',
+            patientId: 'pat-103',
+            recordedAt: '2026-11-03T10:15:00+08:00',
+            systolicBp: 120,
+            diastolicBp: 80,
+          },
+        })
+      );
+      expect(emptyHtml).toBe('');
     });
   });
 });

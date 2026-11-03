@@ -157,11 +157,14 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             var mem = await _membershipRepo.Query(m => m.PatientId == request.PatientId).FirstOrDefaultAsync(cancellationToken);
             if (mem != null)
             {
+                var syncedMemberPin = patient != null && !string.IsNullOrWhiteSpace(patient.PhilHealthNumber)
+                    ? patient.PhilHealthNumber
+                    : mem.MemberPin;
                 philhealthDto = new PatientPhilHealthMembershipDto(
                     mem.Id,
                     mem.MemberType.ToString(),
                     mem.DependentRelationship?.ToString(),
-                    mem.MemberPin,
+                    syncedMemberPin,
                     mem.PrincipalMemberPin,
                     mem.PrincipalLastName,
                     mem.PrincipalFirstName,
@@ -365,7 +368,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                     ?? primaryAddress?.RegionName
                     ?? GetCustomFieldString(patient, "primary_province")
                     ?? GetCustomFieldString(patient, "secondary_province"),
-                PhilHealthNumber: philhealthDto?.PhilHealthPin ?? patient.PhilHealthNumber,
+                PhilHealthNumber: !string.IsNullOrWhiteSpace(patient.PhilHealthNumber)
+                    ? patient.PhilHealthNumber
+                    : philhealthDto?.PhilHealthPin,
                 SeniorCitizenId: patient.SeniorCitizenId,
                 PwdId: patient.PwdId,
                 BloodType: patient.BloodType.HasValue ? patient.BloodType.Value switch
@@ -611,7 +616,24 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 c.PhilHealthSoapTransNo,
                 c.DoctorPhilHealthPan,
                 c.PhilHealthAtc,
-                DentalFindings: encounterFindings.Count > 0 ? encounterFindings : null
+                DentalFindings: encounterFindings.Count > 0 ? encounterFindings : null,
+                CounselingCodes: c.CounselingCodes,
+                RoutineVaccineName: c.RoutineVaccineName,
+                RoutineVaccineDate: c.RoutineVaccineDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                AdultsRoutineScreeningCode: c.AdultsRoutineScreeningCode,
+                PediatricRoutineScreeningCode: c.PediatricRoutineScreeningCode,
+                PrenatalScreeningServicesCode: c.PrenatalScreeningServicesCode,
+                CancerScreeningCodes: c.PhilHealthManagementCodes,
+                DiagnosticServicesOption: c.DiagnosticServicesOption,
+                HasMedicationPrescription: c.HasMedicationPrescription || c.Prescriptions.Count > 0,
+                HasReferral: c.HasReferral,
+                OtherMedicalAdviceSpec: c.OtherMedicalAdviceSpec,
+                HasFollowUp: c.HasFollowUp,
+                FollowUpDate: c.FollowUpDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                FollowUpScheduleText: c.FollowUpScheduleText,
+                FollowUpReason: c.FollowUpReason,
+                FollowUpVaccineName: c.FollowUpVaccineName,
+                FollowUpVaccineNextDate: c.FollowUpVaccineNextDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
             );
         }).ToList();
 

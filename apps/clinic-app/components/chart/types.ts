@@ -37,6 +37,51 @@ export const DENTAL_CHART_TAB: SegmentedOption<ChartTab> = {
   label: 'Dental Chart',
 };
 
+export const CHART_TAB_LABELS: Record<ChartTab, string> = {
+  summary: 'Summary',
+  encounters: 'Encounters',
+  diagnostics: 'Diagnostics',
+  procedures: 'Procedures',
+  immunizations: 'Immunizations',
+  profiles: 'Health Profiles',
+  vault: 'Doc Vault',
+  documents: 'Admin Vault',
+  dental: 'Dental Chart',
+};
+
+export function pushChartTabHistory<T extends string>(
+  history: readonly T[],
+  currentTab: T,
+  nextTab: T,
+  maxDepth = 20,
+): T[] {
+  if (nextTab === currentTab) {
+    return [...history];
+  }
+  const next = [...history, currentTab];
+  return next.length > maxDepth ? next.slice(next.length - maxDepth) : next;
+}
+
+export function popChartTabHistory<T extends string>(
+  history: readonly T[],
+  allowedTabs?: readonly T[],
+): { previousTab: T | null; nextHistory: T[] } {
+  if (history.length === 0) {
+    return { previousTab: null, nextHistory: [] };
+  }
+  const allowedSet = allowedTabs ? new Set<T>(allowedTabs) : null;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const candidate = history[i];
+    if (!allowedSet || allowedSet.has(candidate)) {
+      return {
+        previousTab: candidate,
+        nextHistory: history.slice(0, i),
+      };
+    }
+  }
+  return { previousTab: null, nextHistory: [] };
+}
+
 export function getAvailableChartTabs(
   enableDentalModule?: boolean,
   hasDentalRecords?: boolean
@@ -106,6 +151,11 @@ export interface ChartLayoutProps {
   // In-modal quick layout switcher
   currentLayout: ChartLayoutMode;
   onSwitchLayout: (layout: ChartLayoutMode) => void;
+
+  // Previous chart section navigation
+  canGoBackTab?: boolean;
+  previousTabLabel?: string | null;
+  onBackTab?: () => void;
 
   // Clinical Tab Action Handlers
   onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;

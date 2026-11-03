@@ -55,7 +55,24 @@ public sealed record CreateConsultationCommand(
     string? SoapTransNo = null,
     string? GeneralSurveyId = null,
     string? GeneralSurveyRemarks = null,
-    string? PhysicalExamFindingsJson = null) : IRequest<ConsultationEncounterDto>;
+    string? PhysicalExamFindingsJson = null,
+    string? CounselingCodes = null,
+    string? RoutineVaccineName = null,
+    string? RoutineVaccineDate = null,
+    string? AdultsRoutineScreeningCode = null,
+    string? PediatricRoutineScreeningCode = null,
+    string? PrenatalScreeningServicesCode = null,
+    string? CancerScreeningCodes = null,
+    string? DiagnosticServicesOption = null,
+    bool? HasMedicationPrescription = null,
+    bool? HasReferral = null,
+    string? OtherMedicalAdviceSpec = null,
+    bool? HasFollowUp = null,
+    string? FollowUpDate = null,
+    string? FollowUpScheduleText = null,
+    string? FollowUpReason = null,
+    string? FollowUpVaccineName = null,
+    string? FollowUpVaccineNextDate = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class CreateConsultationCommandValidator : AbstractValidator<CreateConsultationCommand>
 {
@@ -182,6 +199,25 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             encounter.PhilHealthSignSympCode = request.PhilHealthSignSympCode;
             encounter.PhilHealthOtherComplaint = request.PhilHealthOtherComplaint;
             encounter.PhilHealthPainSite = request.PhilHealthPainSite;
+            ConsultationPlanManagementMapper.Apply(
+                encounter,
+                request.CounselingCodes,
+                request.RoutineVaccineName,
+                request.RoutineVaccineDate,
+                request.AdultsRoutineScreeningCode,
+                request.PediatricRoutineScreeningCode,
+                request.PrenatalScreeningServicesCode,
+                request.CancerScreeningCodes,
+                request.DiagnosticServicesOption,
+                request.HasMedicationPrescription,
+                request.HasReferral,
+                request.OtherMedicalAdviceSpec,
+                request.HasFollowUp,
+                request.FollowUpDate,
+                request.FollowUpScheduleText,
+                request.FollowUpReason,
+                request.FollowUpVaccineName,
+                request.FollowUpVaccineNextDate);
             encounter.UpdatedAt = DateTime.UtcNow;
             encounter.UpdatedBy = request.DoctorName.Trim();
 
@@ -261,6 +297,26 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = request.DoctorName
             };
+
+            ConsultationPlanManagementMapper.Apply(
+                encounter,
+                request.CounselingCodes,
+                request.RoutineVaccineName,
+                request.RoutineVaccineDate,
+                request.AdultsRoutineScreeningCode,
+                request.PediatricRoutineScreeningCode,
+                request.PrenatalScreeningServicesCode,
+                request.CancerScreeningCodes,
+                request.DiagnosticServicesOption,
+                request.HasMedicationPrescription,
+                request.HasReferral,
+                request.OtherMedicalAdviceSpec,
+                request.HasFollowUp,
+                request.FollowUpDate,
+                request.FollowUpScheduleText,
+                request.FollowUpReason,
+                request.FollowUpVaccineName,
+                request.FollowUpVaccineNextDate);
 
             if (request.GeneralSurveyId != null || request.GeneralSurveyRemarks != null || !string.IsNullOrWhiteSpace(request.PhysicalExamFindingsJson))
             {
@@ -382,43 +438,8 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             }
         }
 
-        return new ConsultationEncounterDto(
-            encounter.Id,
-            encounter.TenantId,
-            encounter.ClinicId,
-            encounter.QueueItemId,
-            encounter.AppointmentId,
-            encounter.PatientId,
-            encounter.PatientName,
-            encounter.DoctorId,
-            encounter.DoctorName,
-            encounter.EncounterDate,
-            encounter.Subjective,
-            encounter.Objective,
-            encounter.Assessment,
-            encounter.Plan,
-            encounter.HomeInstructions,
-            encounter.DoctorPrcLicense,
-            encounter.DoctorPtr,
-            encounter.DoctorS2License,
-            encounter.IsSigned,
-            encounter.SignedAt,
-            encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
-            encounter.IsYakapEligible,
-            encounter.PhilHealthSignSympCode,
-            encounter.PhilHealthOtherComplaint,
-            encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
-            encounter.DoctorPhilHealthPan,
-            encounter.PhilHealthAtc,
-            encounter.PhilHealthCaseNo,
-            null,
-            encounter.PhilHealthSoapTransNo,
-            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
-            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
-            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null,
-            RxPharmacyStatusDto.From(encounter));
+        return ConsultationPlanManagementMapper.ToDto(
+            encounter,
+            rxStatus: RxPharmacyStatusDto.From(encounter));
     }
 }

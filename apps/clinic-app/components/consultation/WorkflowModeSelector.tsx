@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import ThemedText from '../ui/ThemedText';
-import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 import Icon from '../ui/Icon';
+import Input from '../ui/Input';
 import { theme } from '../../constants/theme';
 import type { VisitWorkflowMode } from '../../services/clinicService';
 
@@ -10,17 +11,25 @@ export interface WorkflowModeSelectorProps {
   mode: VisitWorkflowMode;
   onChange: (nextMode: VisitWorkflowMode) => void;
   disabled?: boolean;
+  atcValue?: string;
+  onChangeAtc?: (value: string) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export default function WorkflowModeSelector({
   mode,
   onChange,
   disabled = false,
+  atcValue,
+  onChangeAtc,
+  isExpanded = false,
+  onToggleExpand,
 }: WorkflowModeSelectorProps) {
   const isYakap = mode === 'YakapAvailment';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radii.lg, padding: theme.spacing.md }]}>
+    <View style={styles.container}>
       <View style={styles.headerRow}>
         <View style={styles.titleArea}>
           <ThemedText variant="bodyBold">Clinical Workflow Mode</ThemedText>
@@ -30,31 +39,41 @@ export default function WorkflowModeSelector({
               : 'Standard EHR clinical consultation (Cash, HMO, Corporate, Walk-in)'}
           </ThemedText>
         </View>
-        <Badge
-          variant={isYakap ? 'primary' : 'neutral'}
-          label={isYakap ? 'YAKAP 2.0 Availment' : 'Regular Clinical'}
-        />
+        {onToggleExpand ? (
+          <View style={styles.headerActions}>
+            <Button
+              iconOnly
+              icon={isExpanded ? 'layoutSplit' : 'maximize'}
+              variant="secondary"
+              size="sm"
+              onPress={onToggleExpand}
+              accessibilityLabel={
+                isExpanded
+                  ? 'Switch back to 2-column split pane'
+                  : 'Expand consultation workspace'
+              }
+              testID={
+                isExpanded
+                  ? 'toggle-split-pane-btn'
+                  : 'expand-consultation-workspace-btn'
+              }
+            />
+          </View>
+        ) : null}
       </View>
 
-      <View style={[styles.toggleContainer, { backgroundColor: theme.colors.surfaceMuted, borderRadius: theme.radii.md, marginTop: theme.spacing.sm }]}>
+      <View style={styles.toggleContainer}>
         <TouchableOpacity
           disabled={disabled}
           onPress={() => onChange('Regular')}
           style={[
             styles.toggleBtn,
-            !isYakap && [
-              styles.activeBtn,
-              {
-                backgroundColor: theme.colors.surface,
-                borderRadius: theme.radii.sm,
-                borderColor: theme.colors.border,
-              },
-            ],
+            !isYakap && styles.activeRegularBtn,
           ]}
         >
           <Icon
             name="file"
-            size={16}
+            size={theme.sizes.iconSm}
             color={!isYakap ? theme.colors.primary : theme.colors.textSecondary}
           />
           <ThemedText
@@ -70,19 +89,12 @@ export default function WorkflowModeSelector({
           onPress={() => onChange('YakapAvailment')}
           style={[
             styles.toggleBtn,
-            isYakap && [
-              styles.activeBtn,
-              {
-                backgroundColor: theme.colors.primary,
-                borderRadius: theme.radii.sm,
-                borderColor: theme.colors.primaryDark,
-              },
-            ],
+            isYakap && styles.activeYakapBtn,
           ]}
         >
           <Icon
             name="shield"
-            size={16}
+            size={theme.sizes.iconSm}
             color={isYakap ? theme.colors.onPrimary : theme.colors.textSecondary}
           />
           <ThemedText
@@ -93,38 +105,80 @@ export default function WorkflowModeSelector({
           </ThemedText>
         </TouchableOpacity>
       </View>
+
+      {isYakap && onChangeAtc ? (
+        <View style={styles.atcSection}>
+          <Input
+            label="Authorization Transaction Code (ATC)"
+            placeholder="e.g. WALKEDIN or ATC-2026-99214"
+            value={atcValue ?? ''}
+            onChangeText={onChangeAtc}
+            editable={!disabled}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    borderWidth: 1,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
     width: '100%',
   },
   headerRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
   },
   titleArea: {
     flex: 1,
-    marginRight: 12,
+    minWidth: 220,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexShrink: 0,
   },
   toggleContainer: {
     flexDirection: 'row',
-    padding: 3,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.xs,
   },
   toggleBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 6,
+    paddingVertical: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
-  activeBtn: {
-    borderWidth: 1,
-    elevation: 1,
+  activeRegularBtn: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.sm,
+    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    ...theme.shadows.sm,
+  },
+  activeYakapBtn: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radii.sm,
+    borderColor: theme.colors.primaryDark,
+    borderWidth: theme.sizes.borderWidth,
+    ...theme.shadows.sm,
+  },
+  atcSection: {
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
   },
 });

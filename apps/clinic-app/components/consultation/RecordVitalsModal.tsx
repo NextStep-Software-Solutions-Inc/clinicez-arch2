@@ -20,7 +20,7 @@ import {
   resolveCohort,
   evaluateBmi,
   evaluateCentralObesity,
-  CohortBanner,
+  CohortHeaderMeta,
   StandardVitalsSection,
   AnthropometricsSection,
   VisualAcuitySection,
@@ -227,11 +227,8 @@ export default function RecordVitalsModal({
       visible={visible}
       onClose={onClose}
       title={title}
-      subtitle={
-        patient
-          ? `${patient.fullName} (${patient.age}yo ${patient.sex}) • Code: ${patient.patientCode || 'PAT'}`
-          : 'Consultation triage vitals'
-      }
+      subtitle={patient ? patient.fullName : undefined}
+      headerExtra={<CohortHeaderMeta cohort={cohort} />}
       maxWidth={640}
       footer={
         <View style={styles.modalFooter}>
@@ -252,7 +249,6 @@ export default function RecordVitalsModal({
       }
     >
       <ScrollView showsVerticalScrollIndicator={false}>
-        <CohortBanner cohort={cohort} />
         <StandardVitalsSection form={form} updateField={updateField} cohort={cohort} />
         <AnthropometricsSection
           form={form}

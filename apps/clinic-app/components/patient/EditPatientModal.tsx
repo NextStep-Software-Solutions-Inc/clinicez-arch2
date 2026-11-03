@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
 import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl, PsgcAddressSelector, Select, type SelectOption } from '../ui';
 import { theme } from '../../constants/theme';
@@ -22,19 +21,12 @@ import {
   mergePatientCustomFields,
   hasPreviousValue,
 } from './patientCustomFieldsMerger';
-import StructuredAllergyIntakeModal, {
-  AllergyPillList,
-  CreateAllergyRequest,
-} from './StructuredAllergyIntakeModal';
-import StructuredMedicalHistoryModal, {
-  MedicalHistoryPillList,
-  MedicalHistoryItem,
-  PHILHEALTH_QUICK_CONDITIONS,
+import type { CreateAllergyRequest } from './StructuredAllergyIntakeModal';
+import {
+  type MedicalHistoryItem,
   formatMedicalHistoriesSummary,
   parseChronicConditionsStringToStructured,
 } from './StructuredMedicalHistoryModal';
-import ClinicalAlertsSection from './ClinicalAlertsSection';
-import YakapEnlistmentSection from './YakapEnlistmentSection';
 import GuardianSection, {
   createEmptyGuardianDraft,
   isMinorFromDob,
@@ -360,43 +352,8 @@ export function EditPatientModal({
   const [pwdId, setPwdId] = useState(patient?.pwdId || '');
   const [bloodType, setBloodType] = useState('');
   const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
-  const [allergyModalVisible, setAllergyModalVisible] = useState(false);
-  const [chronicConditions, setChronicConditions] = useState('');
   const [structuredMedicalHistories, setStructuredMedicalHistories] = useState<MedicalHistoryItem[]>([]);
-  const [medicalHistoryModalVisible, setMedicalHistoryModalVisible] = useState(false);
   const [alerts, setAlerts] = useState('');
-
-  const toggleQuickCondition = (code: string, title: string) => {
-    setStructuredMedicalHistories((prev) => {
-      const exists = prev.some(
-        (c) =>
-          c.philHealthMdiseaseCode === code ||
-          c.conditionTitle.trim().toLowerCase() === title.trim().toLowerCase()
-      );
-      if (exists) {
-        return prev.filter(
-          (c) =>
-            c.philHealthMdiseaseCode !== code &&
-            c.conditionTitle.trim().toLowerCase() !== title.trim().toLowerCase()
-        );
-      } else {
-        return [...prev, { conditionTitle: title, philHealthMdiseaseCode: code }];
-      }
-    });
-  };
-
-  const quickCodesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.code)), []);
-  const quickTitlesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.title.toLowerCase())), []);
-
-  const additionalConditions = useMemo(() => {
-    return structuredMedicalHistories.filter(
-      (c) =>
-        (!(c.philHealthMdiseaseCode && quickCodesSet.has(c.philHealthMdiseaseCode)) &&
-         !quickTitlesSet.has(c.conditionTitle.trim().toLowerCase())) ||
-        Boolean(c.clinicalNotes?.trim()) ||
-        Boolean(c.icd10Code?.trim())
-    );
-  }, [structuredMedicalHistories, quickCodesSet, quickTitlesSet]);
 
   // Institutional classification
   const [classification, setClassification] = useState<'General' | 'Student' | 'Employee'>('General');
@@ -513,11 +470,9 @@ export function EditPatientModal({
     return effectiveCustomFields.filter((f) => f.category === 'Emergency Contacts');
   }, [effectiveCustomFields]);
 
-  const additionalCustomFields = useMemo(() => {
-    return effectiveCustomFields.filter(
-      (f) => f.category !== 'Address' && f.category !== 'Emergency Contacts'
-    );
-  }, [effectiveCustomFields]);
+  const renderedCustomFields = useMemo(() => {
+    return [...addressFields, ...emergencyFields];
+  }, [addressFields, emergencyFields]);
 
   const handleCustomFieldChange = (key: string, val: any) => {
     setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
@@ -588,7 +543,6 @@ export function EditPatientModal({
         ? (patient as any).pastMedicalHistories
         : parseChronicConditionsStringToStructured(patient.chronicConditions);
     setStructuredMedicalHistories(initialConditions);
-    setChronicConditions(patient.chronicConditions || '');
     setAlerts(patient.alerts || '');
 
     const cf = patient.customFields || {};
@@ -687,9 +641,9 @@ export function EditPatientModal({
       return;
     }
 
-    // Defensive validation for dynamic custom fields
-    if (effectiveCustomFields.length > 0) {
-      const { isValid, errors } = validateCustomFields(effectiveCustomFields, customFieldValues, staticValues);
+    // Defensive validation for rendered demographic custom fields
+    if (renderedCustomFields.length > 0) {
+      const { isValid, errors } = validateCustomFields(renderedCustomFields, customFieldValues, staticValues);
       if (!isValid) {
         setCustomFieldErrors(errors);
         const errorMessages = Object.values(errors);
@@ -726,7 +680,7 @@ export function EditPatientModal({
 
     const mergedCustomFields = mergePatientCustomFields({
       patient,
-      effectiveCustomFields,
+      effectiveCustomFields: renderedCustomFields,
       customFieldValues,
       staticValues,
       tenantCustomFieldsCount: tenantCustomFields.length,
@@ -839,8 +793,7 @@ export function EditPatientModal({
   };
 
   return (
-    <>
-      <Modal raw visible={visible} animationType="slide" transparent onClose={onClose}>
+    <Modal raw visible={visible} animationType="slide" transparent onClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}
@@ -1168,7 +1121,6 @@ export function EditPatientModal({
                     <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
                       Principal Member Details
                     </ThemedText>
-                    <Badge label="Dependent Coverage" variant="info" size="sm" />
                   </View>
                   <Button
                     title={guardianSponsor ? guardianSponsor.buttonLabel : 'Use Legal Guardian'}
@@ -1178,9 +1130,6 @@ export function EditPatientModal({
                     onPress={handleApplyGuardianAsSponsor}
                   />
                 </View>
-                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  Required when claiming PhilHealth benefits under a principal member.
-                </ThemedText>
 
                 <Input
                   label="Principal Member Full Name *"
@@ -1274,131 +1223,6 @@ export function EditPatientModal({
                 />
               </View>
             </View>
-
-            {/* PhilHealth YAKAP Annual Enlistment Lifecycle Section */}
-            <YakapEnlistmentSection
-              customFields={customFieldValues}
-              onCustomFieldsChange={(next) => setCustomFieldValues(next)}
-            />
-
-            {/* Additional Details */}
-            {additionalCustomFields.length > 0 && (
-              <>
-                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-                  Additional Details
-                </ThemedText>
-                <DynamicCustomFieldsRenderer
-                  fields={additionalCustomFields}
-                  values={customFieldValues}
-                  onChange={handleCustomFieldChange}
-                  errors={customFieldErrors}
-                  staticValues={staticValues}
-                />
-              </>
-            )}
-
-            {/* Clinical Summary & Alerts */}
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Clinical Summary & Alerts
-            </ThemedText>
-
-            {/* Embedded Structured Allergy Section */}
-            <View style={styles.allergySectionCard}>
-              <View style={styles.allergySectionHeader}>
-                <View style={styles.allergySectionTitleRow}>
-                  <Icon name="emergency" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Known Allergies
-                  </ThemedText>
-                </View>
-                <Button
-                  title="+ Add Allergy"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => setAllergyModalVisible(true)}
-                />
-              </View>
-
-              <AllergyPillList
-                allergies={structuredAllergies}
-                onRemove={(index) => {
-                  setStructuredAllergies((prev) => prev.filter((_, i) => i !== index));
-                }}
-              />
-            </View>
-
-            {/* Section 1: Past Medical History & Chronic Conditions */}
-            <View style={styles.formSectionBox}>
-              <View style={styles.sectionHeaderBetween}>
-                <View style={styles.sectionHeaderLeft}>
-                  <Icon name="medical" size={16} color={theme.colors.primary} />
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Past Medical History & Chronic Conditions
-                  </ThemedText>
-                </View>
-                <Button
-                  title="+ Add / Select Condition"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => setMedicalHistoryModalVisible(true)}
-                />
-              </View>
-
-              {/* Quick Chips Row */}
-              <View style={styles.quickChipsRow}>
-                {PHILHEALTH_QUICK_CONDITIONS.map((qc) => {
-                  const isSelected = structuredMedicalHistories.some(
-                    (c) =>
-                      c.philHealthMdiseaseCode === qc.code ||
-                      c.conditionTitle.trim().toLowerCase() === qc.title.trim().toLowerCase()
-                  );
-                  return (
-                    <Pressable
-                      key={qc.code}
-                      style={[styles.quickChip, isSelected && styles.quickChipActive]}
-                      onPress={() => toggleQuickCondition(qc.code, qc.title)}
-                    >
-                      <ThemedText
-                        variant={isSelected ? 'captionBold' : 'caption'}
-                        color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
-                      >
-                        {qc.label}
-                      </ThemedText>
-                      {isSelected ? (
-                        <Icon name="check" size={12} color={theme.colors.primary} />
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {additionalConditions.length > 0 && (
-                <View style={styles.additionalConditionsWrap}>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 6 }}>
-                    Additional Documented Conditions:
-                  </ThemedText>
-                  <MedicalHistoryPillList
-                    items={additionalConditions}
-                    onRemove={(index) => {
-                      const target = additionalConditions[index];
-                      setStructuredMedicalHistories((prev) => prev.filter((item) => item !== target));
-                    }}
-                  />
-                </View>
-              )}
-
-              {structuredMedicalHistories.length === 0 && (
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
-                  No chronic conditions recorded.
-                </ThemedText>
-              )}
-            </View>
-
-            {/* Section 2: Dedicated Clinical & Safety Alerts */}
-            <ClinicalAlertsSection
-              alerts={alerts}
-              onChangeAlerts={setAlerts}
-            />
           </ScrollView>
 
           {/* Action Footer */}
@@ -1423,23 +1247,6 @@ export function EditPatientModal({
         </View>
       </View>
     </Modal>
-
-    {/* Structured Allergy Intake Sub-Modal */}
-    <StructuredAllergyIntakeModal
-      visible={visible && allergyModalVisible}
-      onClose={() => setAllergyModalVisible(false)}
-      allergies={structuredAllergies}
-      onChange={setStructuredAllergies}
-    />
-
-    {/* Structured Medical History Intake Sub-Modal */}
-    <StructuredMedicalHistoryModal
-      visible={visible && medicalHistoryModalVisible}
-      onClose={() => setMedicalHistoryModalVisible(false)}
-      conditions={structuredMedicalHistories}
-      onChange={setStructuredMedicalHistories}
-    />
-  </>
   );
 }
 
@@ -1570,63 +1377,6 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
     paddingTop: theme.spacing.md,
-  },
-  allergySectionCard: {
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm + 4,
-    backgroundColor: theme.colors.surfaceMuted,
-    gap: theme.spacing.xs,
-  },
-  allergySectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xs,
-  },
-  allergySectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  formSectionBox: {
-    gap: theme.spacing.xs,
-  },
-  sectionHeaderBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  additionalConditionsWrap: {
-    marginTop: theme.spacing.xs,
-  },
-  quickChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 6,
-  },
-  quickChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderWidth: 1,
-    borderRadius: theme.radii.full || 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  quickChipActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
   },
   sponsorCard: {
     backgroundColor: theme.colors.surfaceSubtle,

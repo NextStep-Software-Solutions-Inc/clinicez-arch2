@@ -1,17 +1,25 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, SegmentedControl } from '../ui';
 import RejectionReasonModal from './RejectionReasonModal';
+import AdministrativeDocumentsTab from './AdministrativeDocumentsTab';
 import type {
   ClinicPatient,
   ClinicRecordAttachmentRecord,
+  MedicalCertificateRecord,
+  ReferralLetterRecord,
 } from '../../services/clinicService';
+
+export type VaultType = 'EXTERNAL' | 'INTERNAL';
 
 export interface ExternalDocumentVaultTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
   attachments?: ClinicRecordAttachmentRecord[];
+  medicalCertificates?: MedicalCertificateRecord[];
+  referralLetters?: ReferralLetterRecord[];
+  initialVaultType?: VaultType;
   onUploadDocument?: () => void;
   onUploadDoc?: () => void;
   onVerifyAttachment?: (attachmentId: string, isApproved: boolean, rejectionReason?: string) => Promise<void>;
@@ -45,16 +53,21 @@ export default function ExternalDocumentVaultTab({
   patient,
   patientId,
   attachments = [],
+  medicalCertificates = [],
+  referralLetters = [],
+  initialVaultType = 'EXTERNAL',
   onUploadDocument,
   onUploadDoc,
   onVerifyAttachment,
   onDownloadAttachment,
   onRefreshChart,
 }: ExternalDocumentVaultTabProps) {
+  const [vaultType, setVaultType] = useState<VaultType>(initialVaultType);
   const [statusFilter, setStatusFilter] = useState<VaultStatusFilter>('ALL');
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [rejectingAttachment, setRejectingAttachment] = useState<ClinicRecordAttachmentRecord | null>(null);
+
+  const internalCount = medicalCertificates.length + referralLetters.length;
 
   const pendingCount = useMemo(() => {
     return attachments.filter((att) => {
@@ -113,336 +126,303 @@ export default function ExternalDocumentVaultTab({
       if (statusFilter === 'VERIFIED' && !isVerified) return false;
       if (statusFilter === 'REJECTED' && !isRejected) return false;
 
-      if (selectedCategory === 'ALL') return true;
-      if (selectedCategory === 'OutsideChestXRay') {
-        return att.recordType === 'OutsideChestXRay' || att.title?.toLowerCase().includes('x-ray');
-      }
-      if (selectedCategory === 'COR') {
-        return att.recordType === 'COR' || att.title?.toLowerCase().includes('cor') || att.title?.toLowerCase().includes('certificate');
-      }
-      if (selectedCategory === 'OutsideLab') {
-        return att.recordType === 'OutsideLabReport' || att.recordType === 'DiagnosticLabReport';
-      }
-      return att.recordType === selectedCategory;
+      return true;
     });
-  }, [attachments, selectedCategory, statusFilter]);
+  }, [attachments, statusFilter]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* ========================================================================= */}
-      {/* TOP CONTROLS & STATUS / CATEGORY FILTERS                                  */}
+      {/* VAULT TYPE SWITCHER (EXTERNAL vs INTERNAL)                                */}
       {/* ========================================================================= */}
-      <View style={styles.topBar}>
-        <View style={styles.actionsRow}>
-          <Pressable onPress={handleUpload} style={styles.uploadBtn}>
-            <Icon name="upload" size={14} color={theme.colors.onPrimary} />
-            <ThemedText variant="captionBold" color={theme.colors.onPrimary} numberOfLines={1}>
-              Attach External Document
-            </ThemedText>
-          </Pressable>
-        </View>
-
-        <View style={styles.filtersWrapper}>
-          {/* Status Filter Chips */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.statusFilterRow}
-            style={styles.filterScrollView}
-          >
-            <Pressable
-              onPress={() => setStatusFilter('ALL')}
-              style={[styles.statusChip, statusFilter === 'ALL' && styles.statusChip_active]}
-            >
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={statusFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              >
-                All ({attachments.length})
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setStatusFilter('PENDING')}
-              style={[
-                styles.statusChip,
-                statusFilter === 'PENDING' && styles.statusChip_active,
-                pendingCount > 0 && styles.statusChip_pendingAlert,
-              ]}
-            >
-              {pendingCount > 0 && <Icon name="alert" size={12} color={theme.colors.warningText} />}
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={
-                  statusFilter === 'PENDING'
-                    ? theme.colors.primaryDark
-                    : pendingCount > 0
-                    ? theme.colors.warningText
-                    : theme.colors.textSecondary
-                }
-              >
-                Pending Review ({pendingCount})
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setStatusFilter('VERIFIED')}
-              style={[styles.statusChip, statusFilter === 'VERIFIED' && styles.statusChip_active]}
-            >
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={statusFilter === 'VERIFIED' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              >
-                Verified ({verifiedCount})
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setStatusFilter('REJECTED')}
-              style={[styles.statusChip, statusFilter === 'REJECTED' && styles.statusChip_active]}
-            >
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={statusFilter === 'REJECTED' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              >
-                Rejected ({rejectedCount})
-              </ThemedText>
-            </Pressable>
-          </ScrollView>
-
-          {/* Record Category Filter Chips */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterRow}
-            style={styles.filterScrollView}
-          >
-            <Pressable
-              onPress={() => setSelectedCategory('ALL')}
-              style={[styles.filterBtn, selectedCategory === 'ALL' && styles.filterBtn_active]}
-            >
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={selectedCategory === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              >
-                All Records ({attachments.length})
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setSelectedCategory('OutsideChestXRay')}
-              style={[styles.filterBtn, selectedCategory === 'OutsideChestXRay' && styles.filterBtn_active]}
-            >
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={selectedCategory === 'OutsideChestXRay' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              >
-                Outside Chest X-Ray
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setSelectedCategory('COR')}
-              style={[styles.filterBtn, selectedCategory === 'COR' && styles.filterBtn_active]}
-            >
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={selectedCategory === 'COR' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              >
-                Cert of Registration (COR)
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setSelectedCategory('OutsideLab')}
-              style={[styles.filterBtn, selectedCategory === 'OutsideLab' && styles.filterBtn_active]}
-            >
-              <ThemedText
-                variant="captionBold"
-                numberOfLines={1}
-                color={selectedCategory === 'OutsideLab' ? theme.colors.primaryDark : theme.colors.textSecondary}
-              >
-                Outside Labs
-              </ThemedText>
-            </Pressable>
-          </ScrollView>
-        </View>
+      <View style={styles.vaultTypeBar}>
+        <SegmentedControl<VaultType>
+          options={[
+            {
+              value: 'EXTERNAL',
+              label: 'External',
+              count: attachments.length,
+              badgeVariant: pendingCount > 0 ? 'warning' : 'primary',
+            },
+            {
+              value: 'INTERNAL',
+              label: 'Internal',
+              count: internalCount,
+            },
+          ]}
+          value={vaultType}
+          onChange={setVaultType}
+        />
       </View>
 
-      {/* ========================================================================= */}
-      {/* ATTACHMENT CARDS LIST                                                     */}
-      {/* ========================================================================= */}
-      {filteredAttachments.length > 0 ? (
-        <View style={styles.attachmentsList}>
-          {filteredAttachments.map((att) => {
-            const isVerified = att.verificationStatus === 'Verified';
-            const isRejected = att.verificationStatus === 'Rejected';
-            const isPending = !isVerified && !isRejected;
+      {vaultType === 'INTERNAL' ? (
+        <AdministrativeDocumentsTab
+          embedded
+          patient={patient}
+          patientId={patientId}
+          medicalCertificates={medicalCertificates}
+          referralLetters={referralLetters}
+          onRefreshChart={onRefreshChart}
+        />
+      ) : (
+        <>
+          {/* ========================================================================= */}
+          {/* INLINE STATUS FILTERS (LEFT, NO-WRAP SCROLL) + ATTACH BUTTON (RIGHT)      */}
+          {/* ========================================================================= */}
+          <View style={styles.topBar}>
+            <View style={styles.filterScrollWrap}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.statusFilterRow}
+                style={styles.filterScrollView}
+              >
+                <Pressable
+                  onPress={() => setStatusFilter('ALL')}
+                  style={[styles.statusChip, statusFilter === 'ALL' && styles.statusChip_active]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    numberOfLines={1}
+                    color={statusFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    All ({attachments.length})
+                  </ThemedText>
+                </Pressable>
 
-            const isCxr = att.recordType === 'OutsideChestXRay' || att.title?.toLowerCase().includes('x-ray');
+                <Pressable
+                  onPress={() => setStatusFilter('PENDING')}
+                  style={[
+                    styles.statusChip,
+                    statusFilter === 'PENDING' && styles.statusChip_active,
+                    pendingCount > 0 && styles.statusChip_pendingAlert,
+                  ]}
+                >
+                  {pendingCount > 0 && <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />}
+                  <ThemedText
+                    variant="captionBold"
+                    numberOfLines={1}
+                    color={
+                      statusFilter === 'PENDING'
+                        ? theme.colors.primaryDark
+                        : pendingCount > 0
+                        ? theme.colors.warningText
+                        : theme.colors.textSecondary
+                    }
+                  >
+                    Pending Review ({pendingCount})
+                  </ThemedText>
+                </Pressable>
 
-            return (
-              <View key={att.id} style={styles.attachmentCard}>
-                {/* Header */}
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderLeft}>
-                    <View style={styles.titleRow}>
-                      <ThemedText variant="bodyBold" color={theme.colors.text}>
-                        {att.title || att.fileName}
-                      </ThemedText>
-                      <Badge label={att.recordType} variant="neutral" size="sm" />
-                      {isCxr ? (
-                        <Badge label="Chest X-Ray" variant="purple" size="sm" />
+                <Pressable
+                  onPress={() => setStatusFilter('VERIFIED')}
+                  style={[styles.statusChip, statusFilter === 'VERIFIED' && styles.statusChip_active]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    numberOfLines={1}
+                    color={statusFilter === 'VERIFIED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    Verified ({verifiedCount})
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setStatusFilter('REJECTED')}
+                  style={[styles.statusChip, statusFilter === 'REJECTED' && styles.statusChip_active]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    numberOfLines={1}
+                    color={statusFilter === 'REJECTED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    Rejected ({rejectedCount})
+                  </ThemedText>
+                </Pressable>
+              </ScrollView>
+            </View>
+
+            <Pressable
+              testID="attach-external-document-btn"
+              onPress={handleUpload}
+              style={styles.uploadBtn}
+            >
+              <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
+              <ThemedText variant="captionBold" color={theme.colors.onPrimary} numberOfLines={1}>
+                Attach External Document
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          {/* ========================================================================= */}
+          {/* ATTACHMENT CARDS LIST                                                     */}
+          {/* ========================================================================= */}
+          {filteredAttachments.length > 0 ? (
+            <View style={styles.attachmentsList}>
+              {filteredAttachments.map((att) => {
+                const isVerified = att.verificationStatus === 'Verified';
+                const isRejected = att.verificationStatus === 'Rejected';
+                const isPending = !isVerified && !isRejected;
+
+                const isCxr = att.recordType === 'OutsideChestXRay' || att.title?.toLowerCase().includes('x-ray');
+
+                return (
+                  <View key={att.id} style={styles.attachmentCard}>
+                    {/* Header */}
+                    <View style={styles.cardHeader}>
+                      <View style={styles.cardHeaderLeft}>
+                        <View style={styles.titleRow}>
+                          <ThemedText variant="bodyBold" color={theme.colors.text}>
+                            {att.title || att.fileName}
+                          </ThemedText>
+                          <Badge label={att.recordType} variant="neutral" size="sm" />
+                          {isCxr ? (
+                            <Badge label="Chest X-Ray" variant="purple" size="sm" />
+                          ) : null}
+                        </View>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          {att.fileName} • {Math.round(att.fileSizeBytes / 1024)} KB • Document Date: {att.documentDate || new Date(att.createdAt).toLocaleDateString()}
+                        </ThemedText>
+                      </View>
+
+                      <Badge
+                        label={att.verificationStatus || 'Pending Review'}
+                        variant={isVerified ? 'success' : isRejected ? 'emergency' : 'warning'}
+                        size="sm"
+                        icon={isVerified ? 'checkCircle' : isRejected ? 'alert' : 'clock'}
+                      />
+                    </View>
+
+                    {/* Amber Quarantine Warning Banner for Pending Documents */}
+                    {isPending ? (
+                      <View style={styles.quarantineBanner}>
+                        <View style={styles.quarantineBannerHeader}>
+                          <Icon name="alert" size={14} color={theme.colors.warningText} />
+                          <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                            Self-Enrolled Outside Document - Requires Clinical Verification
+                          </ThemedText>
+                        </View>
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                          Uploaded by patient during registration. Review film/document clarity, patient identification, and clinical validity before approving into patient EMR chart.
+                        </ThemedText>
+                      </View>
+                    ) : null}
+
+                    {/* Outside Chest X-Ray Conformance Box */}
+                    {isCxr ? (
+                      <View style={styles.cxrStatutoryBox}>
+                        <View style={styles.cxrStatutoryTop}>
+                          <Icon name="scan" size={14} color={theme.colors.purpleText} />
+                          <ThemedText variant="captionBold" color={theme.colors.purpleText}>
+                            PhilHealth Chest X-Ray Conformance
+                          </ThemedText>
+                        </View>
+                        <ThemedText variant="caption" color={theme.colors.text}>
+                          Findings: Essentially Normal • Observation: No acute infiltrate
+                        </ThemedText>
+                      </View>
+                    ) : null}
+
+                    {/* Rejection Details Callout */}
+                    {isRejected ? (
+                      <View style={styles.rejectionNoticeBox}>
+                        <View style={styles.rejectionNoticeHeader}>
+                          <Icon name="alert" size={14} color={theme.colors.emergencyText} />
+                          <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                            Rejected Document
+                          </ThemedText>
+                        </View>
+                        <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                          Reason: {att.rejectionReason || 'Document did not meet clinical verification criteria.'}
+                        </ThemedText>
+                        {att.verifiedByStaffName ? (
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            Reviewed by {att.verifiedByStaffName}
+                          </ThemedText>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {/* Security & Audit Trail */}
+                    <View style={styles.metaRow}>
+                      <View style={styles.metaPill}>
+                        <Icon name="lock" size={12} color={theme.colors.routineText} />
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                          {att.encryptionAlgorithm || 'AES-256-GCM Encrypted'}
+                        </ThemedText>
+                      </View>
+
+                      {att.uploadedByStaffName ? (
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Uploaded by: {att.uploadedByStaffName}
+                        </ThemedText>
+                      ) : null}
+
+                      {isVerified && att.verifiedByStaffName ? (
+                        <ThemedText variant="caption" color={theme.colors.successText}>
+                          • Verified by {att.verifiedByStaffName}
+                        </ThemedText>
                       ) : null}
                     </View>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      {att.fileName} • {Math.round(att.fileSizeBytes / 1024)} KB • Document Date: {att.documentDate || new Date(att.createdAt).toLocaleDateString()}
-                    </ThemedText>
-                  </View>
 
-                  <Badge
-                    label={att.verificationStatus || 'Pending Review'}
-                    variant={isVerified ? 'success' : isRejected ? 'emergency' : 'warning'}
-                    size="sm"
-                    icon={isVerified ? 'checkCircle' : isRejected ? 'alert' : 'clock'}
-                  />
-                </View>
-
-                {/* Amber Quarantine Warning Banner for Pending Documents */}
-                {isPending ? (
-                  <View style={styles.quarantineBanner}>
-                    <View style={styles.quarantineBannerHeader}>
-                      <Icon name="alert" size={14} color={theme.colors.warningText} />
-                      <ThemedText variant="captionBold" color={theme.colors.warningText}>
-                        Self-Enrolled Outside Document - Requires Clinical Verification
-                      </ThemedText>
-                    </View>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Uploaded by patient during registration. Review film/document clarity, patient identification, and clinical validity before approving into patient EMR chart.
-                    </ThemedText>
-                  </View>
-                ) : null}
-
-                {/* Outside Chest X-Ray Conformance Box */}
-                {isCxr ? (
-                  <View style={styles.cxrStatutoryBox}>
-                    <View style={styles.cxrStatutoryTop}>
-                      <Icon name="scan" size={14} color={theme.colors.purpleText} />
-                      <ThemedText variant="captionBold" color={theme.colors.purpleText}>
-                        PhilHealth Chest X-Ray Conformance
-                      </ThemedText>
-                    </View>
-                    <ThemedText variant="caption" color={theme.colors.text}>
-                      Findings: Essentially Normal • Observation: No acute infiltrate
-                    </ThemedText>
-                  </View>
-                ) : null}
-
-                {/* Rejection Details Callout */}
-                {isRejected ? (
-                  <View style={styles.rejectionNoticeBox}>
-                    <View style={styles.rejectionNoticeHeader}>
-                      <Icon name="alert" size={14} color={theme.colors.emergencyText} />
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                        Rejected Document
-                      </ThemedText>
-                    </View>
-                    <ThemedText variant="caption" color={theme.colors.emergencyText}>
-                      Reason: {att.rejectionReason || 'Document did not meet clinical verification criteria.'}
-                    </ThemedText>
-                    {att.verifiedByStaffName ? (
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Reviewed by {att.verifiedByStaffName}
+                    {/* Notes */}
+                    {att.notes ? (
+                      <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ fontStyle: 'italic' }}>
+                        Notes: {att.notes}
                       </ThemedText>
                     ) : null}
-                  </View>
-                ) : null}
 
-                {/* Security & Audit Trail */}
-                <View style={styles.metaRow}>
-                  <View style={styles.metaPill}>
-                    <Icon name="lock" size={12} color={theme.colors.routineText} />
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      {att.encryptionAlgorithm || 'AES-256-GCM Encrypted'}
-                    </ThemedText>
-                  </View>
+                    {/* Action Buttons */}
+                    <View style={styles.cardFooter}>
+                      {onDownloadAttachment ? (
+                        <Pressable
+                          onPress={() => onDownloadAttachment(att.id)}
+                          style={styles.actionBtn}
+                        >
+                          <Icon name="download" size={14} color={theme.colors.primaryDark} />
+                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                            View / Download
+                          </ThemedText>
+                        </Pressable>
+                      ) : null}
 
-                  {att.uploadedByStaffName ? (
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Uploaded by: {att.uploadedByStaffName}
-                    </ThemedText>
-                  ) : null}
-
-                  {isVerified && att.verifiedByStaffName ? (
-                    <ThemedText variant="caption" color={theme.colors.successText}>
-                      • Verified by {att.verifiedByStaffName}
-                    </ThemedText>
-                  ) : null}
-                </View>
-
-                {/* Notes */}
-                {att.notes ? (
-                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ fontStyle: 'italic' }}>
-                    Notes: {att.notes}
-                  </ThemedText>
-                ) : null}
-
-                {/* Action Buttons */}
-                <View style={styles.cardFooter}>
-                  {onDownloadAttachment ? (
-                    <Pressable
-                      onPress={() => onDownloadAttachment(att.id)}
-                      style={styles.actionBtn}
-                    >
-                      <Icon name="download" size={14} color={theme.colors.primaryDark} />
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        View / Download
-                      </ThemedText>
-                    </Pressable>
-                  ) : null}
-
-                  {isPending && onVerifyAttachment ? (
-                    <View style={styles.reviewActions}>
-                      <Pressable
-                        onPress={() => handleVerify(att.id, true)}
-                        style={[styles.actionBtn, styles.actionBtn_success]}
-                        disabled={verifyingId === att.id}
-                      >
-                        <Icon name="checkCircle" size={14} color={theme.colors.successText} />
-                        <ThemedText variant="captionBold" color={theme.colors.successText}>
-                          Verify & Accept
-                        </ThemedText>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => handleOpenRejectModal(att)}
-                        style={[styles.actionBtn, styles.actionBtn_danger]}
-                        disabled={verifyingId === att.id}
-                      >
-                        <Icon name="close" size={14} color={theme.colors.emergencyText} />
-                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                          Reject
-                        </ThemedText>
-                      </Pressable>
+                      {isPending && onVerifyAttachment ? (
+                        <View style={styles.reviewActions}>
+                          <Pressable
+                            onPress={() => handleVerify(att.id, true)}
+                            style={[styles.actionBtn, styles.actionBtn_success]}
+                            disabled={verifyingId === att.id}
+                          >
+                            <Icon name="checkCircle" size={14} color={theme.colors.successText} />
+                            <ThemedText variant="captionBold" color={theme.colors.successText}>
+                              Verify & Accept
+                            </ThemedText>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => handleOpenRejectModal(att)}
+                            style={[styles.actionBtn, styles.actionBtn_danger]}
+                            disabled={verifyingId === att.id}
+                          >
+                            <Icon name="close" size={14} color={theme.colors.emergencyText} />
+                            <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                              Reject
+                            </ThemedText>
+                          </Pressable>
+                        </View>
+                      ) : null}
                     </View>
-                  ) : null}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      ) : (
-        <EmptyState
-          icon="file"
-          title="No external documents in vault"
-          description="Zero uploaded medical clearances, outside films, or scanned certificates for this patient."
-        />
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <EmptyState
+              icon="file"
+              title="No external documents in vault"
+              description="Zero uploaded medical clearances, outside films, or scanned certificates for this patient."
+            />
+          )}
+        </>
       )}
 
       {/* Rejection Reason Modal */}
@@ -465,38 +445,50 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: theme.spacing.lg,
   },
-  topBar: {
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
-  },
-  actionsRow: {
+  vaultTypeBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    marginBottom: theme.spacing.sm,
+    width: '100%',
+    minWidth: 0,
   },
-  filtersWrapper: {
-    gap: theme.spacing.xs,
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'nowrap',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
+  },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
   },
   filterScrollView: {
     flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
   },
   statusFilterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'nowrap',
     gap: theme.spacing.xs,
-    paddingVertical: 2,
   },
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
   statusChip_active: {
@@ -507,35 +499,16 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.warningBorder,
     backgroundColor: theme.colors.warningBg,
   },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'nowrap',
-    gap: theme.spacing.xs,
-    paddingVertical: 2,
-  },
-  filterBtn: {
-    flexShrink: 0,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
-  filterBtn_active: {
-    backgroundColor: theme.colors.primarySubtle,
-    borderColor: theme.colors.primaryBorder,
-  },
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
-    gap: 4,
+    gap: theme.spacing.xs,
     backgroundColor: theme.colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.sm,
+    minHeight: theme.sizes.controlSm,
   },
   attachmentsList: {
     gap: theme.spacing.sm,

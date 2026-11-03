@@ -6,7 +6,7 @@ import Icon from '../ui/Icon';
 import Badge from '../ui/Badge';
 import SegmentedControl from '../ui/SegmentedControl';
 import { theme } from '../../constants/theme';
-import type { PediatricZScoreResult } from '../../services/clinicService';
+import type { PediatricZScoreResult, TriageVitals } from '../../services/clinicService';
 
 export type MeasurementPosture = 'STANDING' | 'RECUMBENT';
 
@@ -298,6 +298,52 @@ export function togglePreAssessmentChip(currentRemarks: string, chip: string): s
   return currentRemarks.trim() ? `${currentRemarks.trim()} • ${chip}` : chip;
 }
 
+export function hydrateVitalsFormFromRecord(
+  vitalsData: Partial<TriageVitals> | null | undefined,
+  cohort: DemographicCohort,
+): VitalsFormState {
+  if (!vitalsData) {
+    return {
+      ...EMPTY_VITALS_FORM,
+      posture: cohort.isInfant ? 'RECUMBENT' : 'STANDING',
+    };
+  }
+  return {
+    bpSys: vitalsData.systolicBp != null ? String(vitalsData.systolicBp) : '',
+    bpDia: vitalsData.diastolicBp != null ? String(vitalsData.diastolicBp) : '',
+    hr: vitalsData.heartRateBpm != null ? String(vitalsData.heartRateBpm) : '',
+    rr: vitalsData.respiratoryRateBreathsPerMin != null ? String(vitalsData.respiratoryRateBreathsPerMin) : '',
+    temp: vitalsData.temperatureCelsius != null ? String(vitalsData.temperatureCelsius) : '',
+    spo2: vitalsData.oxygenSaturationPercent != null ? String(vitalsData.oxygenSaturationPercent) : '',
+    pain: vitalsData.painScore != null ? String(vitalsData.painScore) : '',
+    height: vitalsData.heightCm != null ? String(vitalsData.heightCm) : '',
+    weight: vitalsData.weightKg != null ? String(vitalsData.weightKg) : '',
+    bodyLength:
+      vitalsData.bodyLengthCm != null
+        ? String(vitalsData.bodyLengthCm)
+        : cohort.isInfant && vitalsData.heightCm != null
+          ? String(vitalsData.heightCm)
+          : '',
+    headCircumference: vitalsData.headCircumferenceCm != null ? String(vitalsData.headCircumferenceCm) : '',
+    midUpperArmCircumference:
+      vitalsData.midUpperArmCircumferenceCm != null ? String(vitalsData.midUpperArmCircumferenceCm) : '',
+    skinfoldThickness: vitalsData.skinfoldThicknessMm != null ? String(vitalsData.skinfoldThicknessMm) : '',
+    limbsCircumference: vitalsData.limbsCircumferenceCm != null ? String(vitalsData.limbsCircumferenceCm) : '',
+    waistCircumference: vitalsData.waistCircumferenceCm != null ? String(vitalsData.waistCircumferenceCm) : '',
+    hipCircumference: vitalsData.hipCircumferenceCm != null ? String(vitalsData.hipCircumferenceCm) : '',
+    visualAcuityLeft: vitalsData.visualAcuityLeft || '',
+    visualAcuityRight: vitalsData.visualAcuityRight || '',
+    notes: vitalsData.notes || '',
+    posture: vitalsData.isMeasuredRecumbent || cohort.isInfant ? 'RECUMBENT' : 'STANDING',
+    preAssessmentNotes: vitalsData.preAssessmentNotes || '',
+    preAssessmentRemarks: vitalsData.preAssessmentRemarks || '',
+    triagePriority:
+      vitalsData.triageAcuityReason === 'Urgent' || vitalsData.triageAcuityReason === 'Emergency'
+        ? vitalsData.triageAcuityReason
+        : 'Routine',
+  };
+}
+
 // Sub-components
 
 export function CohortBanner({ cohort }: { cohort: DemographicCohort }) {
@@ -324,6 +370,26 @@ export function CohortBanner({ cohort }: { cohort: DemographicCohort }) {
   );
 }
 
+export function CohortHeaderMeta({ cohort }: { cohort: DemographicCohort }) {
+  return (
+    <View style={styles.cohortHeaderMeta}>
+      <Badge
+        label={cohort.label}
+        variant={cohort.isInfant ? 'purple' : cohort.isUnderFive ? 'info' : 'primary'}
+        size="sm"
+      />
+      <Badge
+        label={cohort.isFemale ? 'Female' : 'Male'}
+        variant="neutral"
+        size="sm"
+      />
+      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+        {cohort.sublabel}
+      </ThemedText>
+    </View>
+  );
+}
+
 export interface StandardVitalsSectionProps {
   form: VitalsFormState;
   updateField: (key: keyof VitalsFormState, val: string) => void;
@@ -336,7 +402,7 @@ export function StandardVitalsSection({
   cohort,
 }: StandardVitalsSectionProps) {
   return (
-    <>
+    <View style={styles.sectionFirst}>
       <View style={styles.sectionHeader}>
         <Icon name="heartPulse" size={theme.sizes.iconSm} color={theme.colors.primary} />
         <ThemedText variant="smallBold" color={theme.colors.text}>
@@ -412,7 +478,7 @@ export function StandardVitalsSection({
           />
         </View>
       </View>
-    </>
+    </View>
   );
 }
 
@@ -436,7 +502,7 @@ export function AnthropometricsSection({
   zScorePreview,
 }: AnthropometricsSectionProps) {
   return (
-    <>
+    <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
         <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
         <ThemedText variant="smallBold" color={theme.colors.text}>
@@ -686,7 +752,7 @@ export function AnthropometricsSection({
           </View>
         </View>
       ) : null}
-    </>
+    </View>
   );
 }
 
@@ -700,7 +766,7 @@ export function VisualAcuitySection({
   updateField,
 }: VisualAcuitySectionProps) {
   return (
-    <>
+    <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
         <Icon name="eye" size={theme.sizes.iconSm} color={theme.colors.primary} />
         <ThemedText variant="smallBold" color={theme.colors.text}>
@@ -737,7 +803,7 @@ export function VisualAcuitySection({
           numberOfLines={2}
         />
       </View>
-    </>
+    </View>
   );
 }
 
@@ -751,7 +817,7 @@ export function PreAssessmentSection({
   updateField,
 }: PreAssessmentSectionProps) {
   return (
-    <>
+    <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
         <Icon name="consultations" size={theme.sizes.iconSm} color={theme.colors.primary} />
         <ThemedText variant="smallBold" color={theme.colors.text}>
@@ -824,18 +890,14 @@ export function PreAssessmentSection({
           numberOfLines={3}
         />
       </View>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   cohortBanner: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
   cohortHeader: {
     gap: theme.spacing.xs,
@@ -845,11 +907,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
+  cohortHeaderMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginTop: 2,
+  },
+  sectionFirst: {
+    paddingBottom: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
+  sectionCard: {
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
   },
   formGrid: {
