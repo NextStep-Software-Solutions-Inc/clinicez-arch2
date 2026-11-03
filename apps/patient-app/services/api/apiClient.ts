@@ -23,6 +23,8 @@ const BASE_URL = ensureApiPrefix(process.env.EXPO_PUBLIC_API_URL ?? '');
 const API_PREFIX = '/api/v1';
 const UPLOAD_TIMEOUT_MS = 120_000;
 
+export type TokenProvider = () => Promise<string | null>;
+
 /** A single structured error from the backend. */
 export interface ApiFieldError {
     /** Null for non-field errors (e.g. 404, 409, 503). */

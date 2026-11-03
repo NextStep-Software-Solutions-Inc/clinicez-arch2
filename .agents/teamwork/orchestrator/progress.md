@@ -1,7 +1,7 @@
 # Progress Log — Connect Google Stitch Patient Home Orchestrator
 
 ## Current Status
-Last visited: 2026-11-03T01:08:00Z
+Last visited: 2026-11-03T01:17:00Z
 - [x] Initialized DISPATCH.md and BRIEFING.md
 - [x] Phase 0: Survey full scope via 3 parallel Explorers (all 3 completed)
   - [x] Explorer 1: Frontend Stitch UI (`explorer_survey_stitch_ui/handoff.md`)
@@ -13,7 +13,7 @@ Last visited: 2026-11-03T01:08:00Z
   - [x] Milestone 1 Backend Services & Endpoints (conv: 112af045-991e-4485-965f-8104da7d5280): COMPLETED (`worker_m1_patient_api/handoff.md`, 644 backend tests pass)
   - [x] Milestone 3 Google Stitch UI Components & Scroll Header (conv: 0497e0e2-2110-4c56-a14f-925418f00b5b): COMPLETED (`worker_m3_stitch_components/handoff.md`, 0 token violations, 0 type errors, passing component tests)
 - [/] Phase 3: Client API & Screen Assembly
-  - [/] Milestone 2 Frontend API Client & SWR Layer (conv: e4bf5302-bc46-48a7-ae22-a96db2e012f5): In Progress
+  - [/] Milestone 2 Frontend API Client & SWR Layer (conv: e4bf5302-bc46-48a7-ae22-a96db2e012f5): In Progress (`vitalsApi.ts`, `medicationsApi.ts`, `searchApi.ts`, SWR hooks, `vitalsApi.test.ts` implemented; running tests)
   - [ ] Milestone 4 Home Screen Assembly & Dynamic Contract Tests: Pending
 - [ ] Phase 4: Final Verification Gate (Tiers 1-4, Tier 5 Adversarial Hardening, Forensic Audit)
 - [ ] Phase 5: Lint tokens, typecheck, tests pass, PR #128 commit and push
@@ -22,8 +22,5 @@ Last visited: 2026-11-03T01:08:00Z
 Current iteration: 0 / 32
 
 ## Retrospective Notes
-- Phase 2 successfully completed:
-  - E2E Testing Track verified 4-tier test suite.
-  - Milestone 1 backend endpoints verified with 644 passing .NET tests.
-  - Milestone 3 UI components verified with 0 token violations and 0 TypeScript errors.
-- Dispatched Worker M2 for Frontend API Client & SWR Layer (`vitalsApi`, `medicationsApi`, `searchApi`, SWR hooks, SQLite sync).
+- Heartbeat tick 5 verified that Worker M2 has authored all three pure HTTP client services (`vitalsApi.ts`, `medicationsApi.ts`, `searchApi.ts`), custom SWR hooks (`useVitals`, `useTodayMedications`, `useLiveSearch`), and test suite `vitalsApi.test.ts`.
+- Awaiting final verification and handoff report from Worker M2.

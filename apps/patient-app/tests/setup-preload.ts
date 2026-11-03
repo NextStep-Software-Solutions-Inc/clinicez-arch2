@@ -20,17 +20,36 @@ if (typeof (global as any).__DEV__ === 'undefined') {
   (global as any).__DEV__ = false;
 }
 
-if (typeof (globalThis as any).expo === 'undefined') {
-  (globalThis as any).expo = {
-    EventEmitter: class {
-      addListener() { return { remove: () => {} }; }
-      removeListener() {}
-      removeAllListeners() {}
-      emit() {}
-    },
-    modules: {},
+if (typeof (globalThis as any).ErrorUtils === 'undefined') {
+  const noopHandler = {
+    setGlobalHandler: () => {},
+    getGlobalHandler: () => () => {},
+    reportFatalError: () => {},
+    reportError: () => {},
   };
+  (globalThis as any).ErrorUtils = noopHandler;
+  (global as any).ErrorUtils = noopHandler;
 }
+
+const expoModulesProxy = new Proxy({} as any, {
+  get(_target, prop) {
+    return {
+      name: String(prop),
+      addListener: () => {},
+      removeListeners: () => {},
+    };
+  },
+});
+
+(globalThis as any).expo = {
+  EventEmitter: class {
+    addListener() { return { remove: () => {} }; }
+    removeListener() {}
+    removeAllListeners() {}
+    emit() {}
+  },
+  modules: expoModulesProxy,
+};
 
 mock.module('expo-linear-gradient', () => ({
   LinearGradient: 'LinearGradient',
