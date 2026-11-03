@@ -83,6 +83,20 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
             .Take(take)
             .ToListAsync(cancellationToken);
 
+    public async Task AddVitalSignsAsync(VitalSigns vitalSigns, CancellationToken cancellationToken = default)
+        => await Context.VitalSigns.AddAsync(vitalSigns, cancellationToken);
+
+    public async Task<IReadOnlyList<PatientMedication>> GetMedicationsAsync(Guid patientId, CancellationToken cancellationToken = default)
+        => await Context.PatientMedications.AsNoTracking()
+            .Where(m => m.PatientId == patientId)
+            .OrderByDescending(m => m.IsCurrentlyTaking)
+            .ThenBy(m => m.MedicationName)
+            .ToListAsync(cancellationToken);
+
+    public async Task<PatientMedication?> GetMedicationByIdAsync(Guid patientId, Guid medicationId, CancellationToken cancellationToken = default)
+        => await Context.PatientMedications
+            .FirstOrDefaultAsync(m => m.PatientId == patientId && m.Id == medicationId, cancellationToken);
+
     public async Task<IReadOnlyList<VaccinationAdministered>> GetVaccinationsAdministeredAsync(Guid patientId, CancellationToken cancellationToken = default)
         => await Context.VaccinationsAdministered.AsNoTracking()
             .Where(v => v.PatientId == patientId)

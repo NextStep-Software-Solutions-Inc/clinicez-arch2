@@ -14,9 +14,7 @@ const HomeStack = createNativeStackNavigator({
     Home: createNativeStackScreen({
       screen: HomeScreen,
       options: {
-        title: 'Home',
-        headerLargeTitleEnabled: true,
-        headerRight: () => <BottomTabsHeaderRight />,
+        headerShown: false,
       },
     }),
   },

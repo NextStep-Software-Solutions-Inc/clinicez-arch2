@@ -1,176 +1,216 @@
-# Project: Clinic Patient List and Dashboard UI/UX Enhancements & Backend Queue/Filter Support
+# Project: Connect Google Stitch Patient Home Screens (PR #128)
 
-## Architecture
+## Architecture Overview
+This project completely replaces the patient-app home screens using the Google Stitch designs across all 4 visual states (First Login, No Appointment, Multiple Appointments, Search Results), wired to live patient-api endpoints with zero mock data.
 
-ClinicEZ is an outpatient clinic electronic health record and clinical workstation system. This project enhances the Clinic Patient Directory (`apps/clinic-app/navigation/screens/Patients.screen.tsx`), Patient Directory Card/Table components (`apps/clinic-app/components/patient/PatientDirectoryCard.tsx`), live Queue Dashboard (`apps/clinic-app/navigation/screens/Dashboard.screen.tsx`), and the backend CQRS query/command endpoints (`services/clinic-api`).
-
-The system strictly adheres to:
-1. **ClinicEZ Design Tokens (`@clinicez/design-tokens`)**: Teal `#0D6963` brand palette, semantic badge variants, design token scales, zero raw emojis/pictographs in JSX strings.
-2. **Everyday Clinic Language (Zero Jargon)**: Plain clinic terminology without statutory numbers ("RA 9994", "RA 7277") or database/technical jargon.
-3. **Clinical Domain Boundaries**: Clinic care (SOAP notes, vitals, procedures, clearances) stays in `clinic-app` / `clinic-api`; diagnostic specimen collection stays in `laboratory-app`; pharmacy claims stay in `pharmacy-app`; cashier settlement stays in `cashier-app`.
-4. **No Backward Compatibility Constraints**: Clean removal of legacy or obsolete artifacts.
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Workstation Frontend                            │
-│                                                                        │
-│  Patients.screen.tsx                                                   │
-│   ├── Segmented Toolbar: ALL | MY_PATIENTS | STUDENTS | EMPLOYEES ...  │
-│   ├── PatientDirectoryCard.tsx (Card & Compact Table modes)            │
-│   │    ├── "Schedule visit" ──► ScheduleVisitModal.tsx                │
-│   │    │                          ├── Dynamic Doctor Shift Slots       │
-│   │    │                          └── 4-Button Post-Setup Dialog       │
-│   │    ├── "Queue Patient"  ──► ServiceCheckInModal.tsx               │
-│   │    └── ActionMenu (⋮)   ──► 4 Direct Service Intents               │
-│   │                                 ├── Doctor Consultation (Q / SQ)   │
-│   │                                 ├── Vitals Check Only (V / SV)     │
-│   │                                 ├── Clinical Procedure (P / SP)    │
-│   │                                 └── Administrative (A / SA)        │
-│   │                                 └── Auto Senior/PWD Priority       │
-│   └── Dashboard.screen.tsx                                             │
-│        ├── Removed: TV Board & Force EOD buttons                       │
-│        ├── Formatted Semantic Service Badges                           │
-│        └── 4 Semantic Clusters: Care | Flow | Exceptions | Emergency   │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTP / JSON API
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       Backend API: clinic-api                          │
-│                                                                        │
-│  Queries:                                                              │
-│   ├── GetClinicPatientsQuery: supports filterMode == "MY_PATIENTS"     │
-│   └── GetClinicPatientCountsQuery: computes MyPatients count           │
-│  Commands:                                                             │
-│   └── CheckInPatientCommand: supports SeriesPrefix for prefix-specific │
-│       sequential queue numbers (Q-001, SQ-001, V-001, etc.)            │
-└────────────────────────────────────────────────────────────────────────┘
-```
+- **Backend Services**:
+  - `services/patient-api/`: .NET 10 ASP.NET Core Clean Architecture (`ClinicEz.Patient.Domain`, `.Application`, `.Infrastructure`, `.Api`).
+    - MediatR CQRS, EF Core PostgreSQL (`snake_case`), Minimal APIs (`IEndpoint` under `/api/v1`).
+    - Object-level ownership security via `PatientOwnershipMiddleware`.
+    - Endpoints for Vitals (`/api/v1/patients/{id}/vitals`), Medications & Adherence (`/api/v1/patients/{id}/medications/today`, `/log`), Appointments (`/api/v1/patients/{id}/appointments`), and Unified Search (`/api/v1/discovery/search`).
+- **Frontend Applications**:
+  - `apps/patient-app/`: React Native 0.85, Expo SDK 56, TypeScript (`strict: true`), `@clinicez/design-tokens`.
+    - Modular architecture under `components/home/`.
+    - Cross-platform parity across mobile (`Home.screen.tsx`) and web (`Home.screen.web.tsx`).
+    - Interpolated scroll-driven header animation hiding title at scroll y=0 and animating into view past 48px threshold.
+    - Zero mock data: live API client services, SWR hooks, and SQLite offline caching.
 
 ---
 
 ## Feature Inventory
-
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | 'My patients' Toolbar Tab | Add 'My patients' tab as 2nd tab in `Patients.screen.tsx` (`ALL`, `MY_PATIENTS`, `STUDENTS`, `EMPLOYEES`, `ALERTS`, `SENIOR_PWD`) | M1 | Survey |
-| 2 | Doctor Patient Ownership Filter | Filter patients assigned to or seen by current doctor (`assigned_doctor_id`, `doctor_id`, or active queue item doctor) | M1 | Survey |
-| 3 | Nurse Patient Ownership Filter | Filter patients whose vitals were recorded by this nurse or assigned to nurse's rooms (`assignedRoomIds`) | M1 | Survey |
-| 4 | Backend Query `MY_PATIENTS` Filter | Support `filterMode == "MY_PATIENTS"` and optional `StaffId`/`DoctorId` in `GetClinicPatientsQuery.cs` | M1 | Survey |
-| 5 | Reactive MyPatients Count | Update `GetClinicPatientCountsQuery.cs` and `PatientDirectoryCountsDto.cs` to return `MyPatients` count | M1 | Survey |
-| 6 | Relabel "Schedule visit" Button | Relabel button from "Book appointment" to "Schedule visit" on card, compact table, and ActionMenu | M2 | Survey |
-| 7 | In-Place `ScheduleVisitModal.tsx` | Implement in-place scheduling modal pre-selecting patient with identity banner, doctor picker, dates, and times | M2 | Survey |
-| 8 | Dynamic Doctor Shift Slots | Dynamically load attending doctor available shift slots via `clinicService.getDoctorAvailableSlots(doctorId, date)` | M2 | Survey |
-| 9 | Post-Appointment Setup Dialog | Display 4 distinct action buttons: "Notify patient (SMS / App)", "Set new", "Close", and "Open appointment screen" | M2 | Survey |
-| 10 | Relabel "Queue Patient" Button | Relabel primary check-in CTA button on card and compact table from "Add to queue" to "Queue Patient" | M3 | Survey |
-| 11 | ActionMenu Direct Service Intents | Add direct one-click actions under "Services & Queue" in ActionMenu: Doctor Consultation, Vitals Check, Clinical Procedure, Administrative & Clearance | M3 | Survey |
-| 12 | Dedicated `ServiceCheckInModal.tsx` | Implement dedicated check-in modal with specialized views for each of the 4 clinical services | M3 | Survey |
-| 13 | Prefix Ticket Series System | Generate Regular series (`Q`, `V`, `P`, `A`) vs Senior & PWD Priority series (`SQ`, `SV`, `SP`, `SA`) tickets | M3 | Survey |
-| 14 | Senior/PWD Priority Auto-Selection | Automatically default ticket series to Priority (`SQ`, `SV`, `SP`, `SA`) if patient age >= 60 or has Senior/PWD ID | M3 | Survey |
-| 15 | Backend `SeriesPrefix` Support | Extend `CheckInPatientCommand.cs` to accept `SeriesPrefix` and compute prefix-isolated monotonic sequences (`$"{{SeriesPrefix}}-{{nextSequence:D3}}"`) | M3 | Survey |
-| 16 | Domain Boundary Enforcement | Strictly maintain clinic care vs lab analyzer draws (`laboratory-app`) and pharmacy claim redemption (`pharmacy-app`) | M3 | Survey |
-| 17 | Dashboard Toolbar Cleanup | Remove "Open TV Board" and "Force EOD / Close Day" buttons from live queue toolbar in `Dashboard.screen.tsx` | M4 | Survey |
-| 18 | 4 Semantic Clusters for Actions | Group queue item action buttons into 4 clusters: Care & Encounter, Flow & Completion, Exceptions, Emergency: Divert to ER | M4 | Survey |
-| 19 | Formatted Service Badges | Map raw enum strings (`VitalsCheckOnly`, `StandaloneProcedure`, `AdministrativeDocument`, `Consultation`) to styled semantic badges | M4 | Survey |
-| 20 | Zero Jargon Clinical UI Copy | Enforce everyday clinic language across all components, labels, and dialogs; remove all statutory and legalistic references | M1-M4 | Survey |
+| F1 | Vitals Backend Schema & Endpoints | Add BloodGlucoseMgDl, SleepHours, nullable ClinicId to VitalSigns, EF Core migration, GET/POST vitals endpoints | M1 | Explorer 2 |
+| F2 | Medication Adherence Backend Endpoints | PatientMedicationAdherence entity, GET /medications/today, POST /medications/{id}/log | M1 | Explorer 2 |
+| F3 | Unified Discovery Search Backend Endpoint | GET /api/v1/discovery/search?q={query} returning doctors, clinics, and services | M1 | Explorer 2 |
+| F4 | Frontend API Client & SWR Hooks | vitalsApi, medicationsApi, searchApi, and SWR hooks with zero mock data | M2 | Explorer 1 & 2 |
+| F5 | Offline SQLite Sync & Persistence | Local caching in SQLite for vitals, medications, and appointments | M2 | Explorer 1 |
+| F6 | Header Scroll Animation Component | Animated.Value title/subtitle fade-in & slide-up on scroll y > 48px | M3 | Explorer 1 |
+| F7 | Stitch 4-State UI Components | Bento vitals grid, meds schedule with "Log Now", appointments carousel, onboarding card, digital health pass | M3 | Explorer 1 |
+| F8 | Stitch Screen 4 Search Results Component | Filter chips (All, Doctors, Clinics, Services, Available Today) & categorized result cards | M3 | Explorer 1 |
+| F9 | Home Screen Assembly (Mobile & Web) | Home.screen.tsx & Home.screen.web.tsx full replacement with 4-state machine & zero mock data | M4 | Explorer 1 |
+| F10 | Dynamic Contract Test Suite | Update stitchPatientHomeScreens.test.ts to test live dynamic data contracts | M4 | Explorer 3 |
+| F11 | E2E Testing Suite (Tiers 1-4) | Comprehensive opaque-box test suite for all Stitch features and boundaries | E2E Track | Explorer 3 |
+| F12 | Adversarial Hardening (Tier 5) | White-box stress tests, offline sync recovery, concurrency, edge cases | M5 | Explorer 3 |
+| F13 | Git Push & PR #128 Update | Clean lint:tokens, typecheck:patient, bun test, dotnet test, commit and push | M5 | Explorer 3 |
 
 ---
 
 ## Milestones
-
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| E2E | E2E Testing Track | Requirement-driven test suite (Tiers 1-4), TEST_INFRA.md, TEST_READY.md | none | DONE |
-| M1 | "My patients" Filter Tab & Server-side Filtering | R1: `Patients.screen.tsx`, `clinicService.ts`, `GetClinicPatientsQuery.cs`, `GetClinicPatientCountsQuery.cs`, `PatientDirectoryCountsDto.cs`, `PatientsController.cs` | none | DONE |
-| M2 | "Schedule visit" Modal & Post-Appointment Actions | R2: `PatientDirectoryCard.tsx`, `ScheduleVisitModal.tsx`, dynamic shift slot loading, 4-button post-appointment dialog | M1 | DONE |
-| M3 | Multi-Service Queueing, Ticket Series & Intents | R3: "Queue Patient" label, ActionMenu intents, `ServiceCheckInModal.tsx`, Regular/Priority series (`Q`/`SQ`, `V`/`SV`, `P`/`SP`, `A`/`SA`), `CheckInPatientCommand.cs` | M1 | DONE |
-| M4 | Dashboard Cleanup, Semantic Clusters & Badges | R4: `Dashboard.screen.tsx` toolbar cleanup, 4 semantic action clusters, formatted badges | M3 | DONE |
-| M5 | Final Milestone: 100% E2E Pass & Adversarial Hardening | Run full frontend & backend test suites, execute adversarial tests, forensic integrity audit | M1, M2, M3, M4, E2E | DONE |
-
-
-
+| M1 | Backend Services & Endpoints | F1, F2, F3 | none | PLANNED |
+| M2 | Frontend API Client & SWR Layer | F4, F5 | M1 | PLANNED |
+| M3 | Google Stitch UI Components & Scroll Header | F6, F7, F8 | none | PLANNED |
+| M4 | Screen Assembly & Dynamic Contract Tests | F9, F10 | M2, M3 | PLANNED |
+| M5 | Final E2E Verification & Git Push (PR #128) | F12, F13 | M4, E2E Track | PLANNED |
+| E2E | E2E Testing Track | F11 (Tiers 1-4) | none | PLANNED |
 
 ---
 
 ## Interface Contracts
 
-### 1. `GetClinicPatientsQuery` & `GetClinicPatientCountsQuery` ↔ `Patients.screen.tsx`
-- Query parameters on `GET /api/v1/patients`:
-  - `searchTerm?: string`
-  - `hasAlerts?: boolean`
-  - `verificationStatus?: string`
-  - `filterMode?: string` (`'ALL' | 'MY_PATIENTS' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES'`)
-  - `staffId?: Guid` (ID of the logged-in staff member)
-  - `doctorId?: Guid` (ID of the doctor if logged-in staff is a Doctor)
-  - `pageNumber: int`
-  - `pageSize: int`
-- Query parameters on `GET /api/v1/patients/counts`:
-  - `searchTerm?: string`
-  - `staffId?: Guid`
-  - `doctorId?: Guid`
-- Response from `GET /api/v1/patients/counts`:
+### 1. Vitals Endpoints (`patient-api` <-> `patient-app`)
+- `GET /api/v1/patients/{patientId}/vitals/latest`:
+  Returns:
   ```json
   {
-    "all": 120,
-    "myPatients": 18,
-    "students": 45,
-    "employees": 32,
-    "alerts": 12,
-    "seniorPwd": 24
+    "succeeded": true,
+    "data": {
+      "heartRateBpm": 72,
+      "heartRateTrend": "+2 bpm",
+      "systolicBp": 118,
+      "diastolicBp": 76,
+      "bpCategory": "Optimal",
+      "bloodGlucoseMgDl": 94,
+      "glucoseCategory": "Fasting",
+      "sleepHours": 7.75,
+      "sleepFormatted": "7h 45m",
+      "sleepDeepFormatted": "2h 10m",
+      "recordedAt": "2026-11-03T00:00:00Z"
+    }
   }
   ```
-
-### 2. `CheckInPatientCommand` ↔ `ServiceCheckInModal.tsx`
-- Request payload for `POST /api/v1/queue/check-in`:
+- `POST /api/v1/patients/{patientId}/vitals`:
+  Request:
   ```json
   {
-    "patientId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "patientName": "Juan Dela Cruz",
-    "seriesPrefix": "SQ",
-    "priority": "Routine",
-    "visitType": "Consultation",
-    "doctorId": "11111111-2222-3333-4444-555555555555",
-    "doctorName": "Dr. Maria Santos",
-    "roomId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-    "roomOrStation": "Room 101 - Consultation",
-    "chiefComplaint": "Persistent cough for 3 days"
+    "heartRateBpm": 72,
+    "systolicBp": 118,
+    "diastolicBp": 76,
+    "bloodGlucoseMgDl": 94,
+    "sleepHours": 7.75,
+    "recordedAt": "2026-11-03T00:00:00Z"
   }
   ```
-- Output: `QueueItemDto` with `queueNumber: "SQ-001"`.
+  Returns: `201 Created` with `ApiResponse<VitalSignsDto>`.
 
-### 3. Dynamic Doctor Slots: `clinicService.getDoctorAvailableSlots` ↔ `ScheduleVisitModal.tsx`
-- `GET /api/v1/doctors/{doctorId}/schedules/availability?date=YYYY-MM-DD`
-- Response:
+### 2. Medications & Adherence Endpoints (`patient-api` <-> `patient-app`)
+- `GET /api/v1/patients/{patientId}/medications/today`:
+  Returns:
   ```json
   {
-    "doctorId": "11111111-2222-3333-4444-555555555555",
-    "doctorName": "Dr. Maria Santos",
-    "date": "2026-11-01",
-    "isOnDuty": true,
-    "availableSlots": [
-      { "time": "09:00", "available": true },
-      { "time": "09:30", "available": true },
-      { "time": "10:00", "available": false, "reason": "Booked" }
+    "succeeded": true,
+    "data": [
+      {
+        "id": "guid",
+        "medicationName": "Lisinopril",
+        "dosage": "10mg",
+        "instructions": "1 tablet with breakfast",
+        "scheduledTime": "8:00 AM",
+        "isTaken": true,
+        "takenAt": "2026-11-03T08:15:00Z"
+      },
+      {
+        "id": "guid",
+        "medicationName": "Omega-3 DHA",
+        "dosage": "1000mg",
+        "instructions": "1 softgel after dinner",
+        "scheduledTime": "7:00 PM",
+        "isTaken": false,
+        "takenAt": null
+      }
     ]
+  }
+  ```
+- `POST /api/v1/patients/{patientId}/medications/{medicationId}/log`:
+  Request: `{ "takenAt": "2026-11-03T08:15:00Z" }`
+  Returns: `200 OK` with `ApiResponse<bool>`.
+
+### 3. Unified Discovery Search Endpoint (`patient-api` <-> `patient-app`)
+- `GET /api/v1/discovery/search?q={query}`:
+  Returns:
+  ```json
+  {
+    "succeeded": true,
+    "data": {
+      "doctors": [
+        {
+          "id": "guid",
+          "fullName": "Dr. Evelyn Reed, MD",
+          "specialty": "Cardiology Specialist",
+          "clinicName": "Metro Cardiology Center",
+          "distance": "1.2 km away",
+          "rating": 4.9,
+          "reviewsCount": 128,
+          "nextAvailableSlot": "Tomorrow, 10:30 AM",
+          "tags": ["Accepts Insurance", "In-Person & Telehealth"]
+        }
+      ],
+      "clinics": [
+        {
+          "id": "guid",
+          "name": "Metro Cardiology Center",
+          "address": "402 Medical Blvd, Suite 402",
+          "distance": "1.2 km away",
+          "isOpenNow": true,
+          "openText": "Open Today • Closes 6:00 PM",
+          "rating": 4.8,
+          "reviewsCount": 94,
+          "tags": ["Echo & Diagnostic Lab", "Walk-ins Welcome"]
+        }
+      ],
+      "services": [
+        {
+          "id": "guid",
+          "name": "Comprehensive Cardiac Screening",
+          "description": "Includes 12-lead ECG, Lipid Profile & Consult",
+          "durationMinutes": 45,
+          "isCovered": true,
+          "tags": ["Fully Covered by Insurance", "Prep Guide Included"]
+        }
+      ]
+    }
   }
   ```
 
 ---
 
 ## Code Layout
+```
+services/patient-api/
+  ClinicEz.Patient.Domain/
+    Entities/VitalSigns.cs
+    Entities/PatientMedicationAdherence.cs
+  ClinicEz.Patient.Application/
+    Patients/Commands/RecordVitals/
+    Patients/Queries/GetVitals/
+    Patients/Commands/LogMedicationAdherence/
+    Patients/Queries/GetTodayMedications/
+    Discovery/Queries/UnifiedSearch/
+  ClinicEz.Patient.Infrastructure/
+    Persistence/ApplicationDbContext.cs
+    Persistence/Migrations/
+  ClinicEz.Patient.Api/
+    Endpoints/Patients/PatientVitalsEndpoints.cs
+    Endpoints/Patients/PatientMedicationAdherenceEndpoints.cs
+    Endpoints/Discovery/UnifiedSearchEndpoint.cs
 
-- Frontend:
-  - `apps/clinic-app/navigation/screens/Patients.screen.tsx`: Tab toolbar, filter logic, modal mounting.
-  - `apps/clinic-app/components/patient/PatientDirectoryCard.tsx`: Relabeled buttons, ActionMenu direct intents.
-  - `apps/clinic-app/components/patient/ScheduleVisitModal.tsx`: [NEW] In-place modal with dynamic doctor slots & 4-button post-appointment view.
-  - `apps/clinic-app/components/patient/ServiceCheckInModal.tsx`: [NEW] Multi-service modal with 4 service views & Regular/Priority series.
-  - `apps/clinic-app/navigation/screens/Dashboard.screen.tsx`: Toolbar cleanup, semantic button clusters, formatted badges.
-  - `apps/clinic-app/services/clinicService.ts`: Query param extensions, DTO updates.
-  - `apps/clinic-app/tests/`: Automated tests.
-- Backend:
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetClinicPatientsQuery.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetClinicPatientCountsQuery.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/DTOs/PatientDirectoryCountsDto.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Queue/Commands/CheckInPatientCommand.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/PatientsController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Api/Controllers/QueueController.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/`: Automated unit & integration tests.
+apps/patient-app/
+  services/api/
+    vitalsApi.ts
+    medicationsApi.ts
+    searchApi.ts
+  hooks/
+    useVitals.ts
+    useTodayMedications.ts
+    useAppointments.ts
+    useLiveSearch.ts
+  components/home/
+    HeaderScrollTitle.tsx
+    HealthPassCard.tsx
+    HealthPassQrModal.tsx
+    WelcomeOnboardingCard.tsx
+    AppointmentsSection.tsx
+    VitalsBentoGrid.tsx
+    MedicationsSchedule.tsx
+    SearchResultsView.tsx
+    DailyMindfulMoment.tsx
+  navigation/screens/
+    Home.screen.tsx
+    Home.screen.web.tsx
+  tests/
+    stitchPatientHomeScreens.test.ts
+    e2e/
+      stitchPatientHomeE2E.test.ts
+```

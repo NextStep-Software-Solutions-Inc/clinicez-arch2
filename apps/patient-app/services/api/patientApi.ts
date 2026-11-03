@@ -712,4 +712,95 @@ export async function deletePatientHealthcareProvider(
     return api.delete<void>(getToken, `/patients/${patientId}/healthcare-providers/${providerId}`);
 }
 
+// ── Vitals & Medication Management (Google Stitch Patient Home) ───────────────
+
+export interface VitalSignsItem {
+    id: string;
+    patientId: string;
+    clinicId?: string;
+    consultationId?: string | null;
+    recordedAt: string;
+    weightKg?: number | null;
+    heightCm?: number | null;
+    bmi?: number | null;
+    systolicBp?: number | null;
+    diastolicBp?: number | null;
+    heartRateBpm?: number | null;
+    temperatureCelsius?: number | null;
+    oxygenSaturationPercent?: number | null;
+    respiratoryRateBreathsPerMin?: number | null;
+    fastingBloodGlucose?: number | null;
+    takenBy?: string | null;
+    facility?: string | null;
+    createdAt?: string;
+    updatedAt?: string | null;
+}
+
+export interface RecordVitalsPayload {
+    clinicId?: string;
+    consultationId?: string | null;
+    recordedAt?: string;
+    weightKg?: number | null;
+    heightCm?: number | null;
+    bmi?: number | null;
+    systolicBp?: number | null;
+    diastolicBp?: number | null;
+    heartRateBpm?: number | null;
+    temperatureCelsius?: number | null;
+    oxygenSaturationPercent?: number | null;
+    respiratoryRateBreathsPerMin?: number | null;
+    fastingBloodGlucose?: number | null;
+    takenBy?: string | null;
+    facility?: string | null;
+}
+
+/**
+ * Fetches the patient's recorded vitals history from patient-api, newest first.
+ */
+export async function getPatientVitals(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    take = 10,
+): Promise<VitalSignsItem[]> {
+    return api.get<VitalSignsItem[]>(getToken, `/patients/${patientId}/vitals?take=${take}`);
+}
+
+/**
+ * Records a new vital signs entry for the patient in patient-api.
+ */
+export async function recordPatientVitals(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: RecordVitalsPayload,
+): Promise<VitalSignsItem> {
+    return api.post<VitalSignsItem>(getToken, `/patients/${patientId}/vitals`, payload);
+}
+
+/**
+ * Retrieves the patient's active medications from patient-api.
+ */
+export async function getPatientMedications(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<MedicationItem[]> {
+    return api.get<MedicationItem[]>(getToken, `/patients/${patientId}/medications`);
+}
+
+/**
+ * Logs a medication dose or adherence for a patient in patient-api.
+ */
+export async function logPatientMedication(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    medicationId: string,
+    payload?: { takenAt?: string; notes?: string },
+): Promise<MedicationItem> {
+    return api.post<MedicationItem>(
+        getToken,
+        `/patients/${patientId}/medications/${medicationId}/log`,
+        payload ?? {},
+    );
+}
+
+
 
