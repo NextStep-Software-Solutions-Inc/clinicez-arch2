@@ -31,6 +31,7 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext, IDataPr
     // ── Medical history (patient self-entry) ────────────────────────────────
     public DbSet<PatientAllergy> PatientAllergies => Set<PatientAllergy>();
     public DbSet<PatientMedication> PatientMedications => Set<PatientMedication>();
+    public DbSet<PatientMedicationLog> PatientMedicationLogs => Set<PatientMedicationLog>();
     public DbSet<PatientSurgicalHistory> PatientSurgicalHistories => Set<PatientSurgicalHistory>();
     public DbSet<PatientPastIllness> PatientPastIllnesses => Set<PatientPastIllness>();
     public DbSet<PatientChronicCondition> PatientChronicConditions => Set<PatientChronicCondition>();

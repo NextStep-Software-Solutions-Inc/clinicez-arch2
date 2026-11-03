@@ -14,6 +14,8 @@ public sealed class VitalSignsConfiguration : IEntityTypeConfiguration<VitalSign
         builder.Property(v => v.Bmi).HasPrecision(5, 2);
         builder.Property(v => v.TemperatureCelsius).HasPrecision(4, 1);
         builder.Property(v => v.OxygenSaturationPercent).HasPrecision(4, 1);
+        builder.Property(v => v.FastingBloodGlucoseMgDl).HasPrecision(6, 1);
+        builder.Property(v => v.Source).HasMaxLength(40);
         builder.Property(v => v.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(v => v.UpdatedBy).HasMaxLength(128);
 

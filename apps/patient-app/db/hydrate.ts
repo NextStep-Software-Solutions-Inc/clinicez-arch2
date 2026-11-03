@@ -14,6 +14,7 @@ import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index'
 import { and, eq, ne, or } from 'drizzle-orm';
 import {
   patients,
+  patientHomeCache,
   patientGovernmentIds,
   patientAddresses,
   emergencyContacts,
@@ -124,6 +125,32 @@ export async function upsertPatientSummary(
     .insert(patients)
     .values(row)
     .onConflictDoUpdate({ target: patients.id, set: row });
+
+  if (summary.clinicEzId !== undefined || summary.welcomeVisitedStepsJson !== undefined) {
+    try {
+      await originalDb
+        .insert(patientHomeCache)
+        .values({
+          patientId: summary.id,
+          clinicEzId: summary.clinicEzId ?? null,
+          welcomeVisitedStepsJson: summary.welcomeVisitedStepsJson ?? '[]',
+          checkedInAppointmentsJson: '{}',
+          updatedAt: ts,
+        })
+        .onConflictDoUpdate({
+          target: patientHomeCache.patientId,
+          set: {
+            ...(summary.clinicEzId !== undefined ? { clinicEzId: summary.clinicEzId } : {}),
+            ...(summary.welcomeVisitedStepsJson !== undefined
+              ? { welcomeVisitedStepsJson: summary.welcomeVisitedStepsJson ?? '[]' }
+              : {}),
+            updatedAt: ts,
+          },
+        });
+    } catch {
+      // Optional cache table may not exist in older unit-test in-memory fixtures
+    }
+  }
   // Web: hydration bypasses the sync interceptor; make sure it is written to IndexedDB now.
   await flushDatabaseSnapshot();
 }

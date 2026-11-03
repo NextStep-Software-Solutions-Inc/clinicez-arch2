@@ -24,6 +24,8 @@ import AppointmentDetailScreen from '../screens/appointments/AppointmentDetail.s
 import ProviderProfileScreen from '../screens/appointments/ProviderProfile.screen';
 import RescheduleScreen from '../screens/appointments/Reschedule.screen';
 import AttachFilesScreen from '../screens/appointments/AttachFiles.screen';
+import ProfileScreen from '../screens/profile/Profile.screen';
+import PatientSearchScreen from '../screens/Search.screen';
 import PersonalDemographicsScreen from '../screens/profile/PersonalDemographics.screen';
 import GovernmentIdsScreen from '../screens/profile/GovernmentIds.screen';
 import ContactInfoScreen from '../screens/profile/ContactInfo.screen';
@@ -102,6 +104,8 @@ const SCREENS: [name: string, component: ComponentType<any>, title: string][] = 
   ['ProviderProfileScreen', ProviderProfileScreen, 'Provider Profile'],
   ['RescheduleScreen', RescheduleScreen, 'Reschedule'],
   ['AttachFilesScreen', AttachFilesScreen, 'Attach Files'],
+  ['ProfileScreen', ProfileScreen, 'My Profile'],
+  ['PatientSearchScreen', PatientSearchScreen, 'Search'],
   ['PersonalDemographicsScreen', PersonalDemographicsScreen, 'Personal Demographics'],
   ['GovernmentIdsScreen', GovernmentIdsScreen, 'Government IDs'],
   ['ContactInfoScreen', ContactInfoScreen, 'Contact Information'],

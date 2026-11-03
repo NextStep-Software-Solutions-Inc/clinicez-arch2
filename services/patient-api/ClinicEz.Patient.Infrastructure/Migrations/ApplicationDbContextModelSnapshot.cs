@@ -38,6 +38,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("cached_at");
 
+                    b.Property<DateTime?>("CheckedInAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_in_at");
+
                     b.Property<string>("ChiefComplaint")
                         .HasColumnType("text")
                         .HasColumnName("chief_complaint");
@@ -2646,6 +2650,14 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("updated_by");
 
+                    b.Property<string>("WelcomeVisitedStepsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("welcome_visited_steps_json");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -4463,6 +4475,91 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasDatabaseName("ix_patient_medications_patient_id");
 
                     b.ToTable("patient_medications", (string)null);
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMedicationLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateOnly>("LogDate")
+                        .HasColumnType("date")
+                        .HasColumnName("log_date");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<Guid>("PatientMedicationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_medication_id");
+
+                    b.Property<string>("ScheduledTimeLabel")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("scheduled_time_label");
+
+                    b.Property<DateTime>("TakenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("taken_at");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patient_medication_logs");
+
+                    b.HasIndex("PatientMedicationId")
+                        .HasDatabaseName("ix_patient_medication_logs_patient_medication_id");
+
+                    b.HasIndex("PatientId", "PatientMedicationId", "LogDate")
+                        .IsUnique()
+                        .HasDatabaseName("ix_patient_medication_logs_patient_id_patient_medication_id_lo")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("patient_medication_logs", (string)null);
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMentalHealthProfile", b =>
@@ -6808,6 +6905,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("created_by");
 
+                    b.Property<int?>("DeepSleepMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("deep_sleep_minutes");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -6819,6 +6920,11 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Property<int?>("DiastolicBp")
                         .HasColumnType("integer")
                         .HasColumnName("diastolic_bp");
+
+                    b.Property<decimal?>("FastingBloodGlucoseMgDl")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)")
+                        .HasColumnName("fasting_blood_glucose_mg_dl");
 
                     b.Property<int?>("HeartRateBpm")
                         .HasColumnType("integer")
@@ -6849,6 +6955,15 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Property<int?>("RespiratoryRateBreathsPerMin")
                         .HasColumnType("integer")
                         .HasColumnName("respiratory_rate_breaths_per_min");
+
+                    b.Property<int?>("SleepDurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("sleep_duration_minutes");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("source");
 
                     b.Property<int?>("SystolicBp")
                         .HasColumnType("integer")
@@ -7548,6 +7663,27 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMedicationLog", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
+                        .WithMany("MedicationLogs")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_medication_logs_patients_patient_id");
+
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.PatientMedication", "PatientMedication")
+                        .WithMany()
+                        .HasForeignKey("PatientMedicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_medication_logs_patient_medications_patient_medicat");
+
+                    b.Navigation("Patient");
+
+                    b.Navigation("PatientMedication");
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMentalHealthProfile", b =>
                 {
                     b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
@@ -7888,6 +8024,8 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("MaleReproductive");
 
                     b.Navigation("ManagedDependents");
+
+                    b.Navigation("MedicationLogs");
 
                     b.Navigation("Medications");
 

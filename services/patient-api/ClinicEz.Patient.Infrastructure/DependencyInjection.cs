@@ -32,8 +32,11 @@ using ClinicEz.Patient.Infrastructure.Services.Jobs;
 using ClinicEz.Patient.Infrastructure.Services.Jobs.Processors;
 using ClinicEz.Patient.Infrastructure.Services.Storage;
 using ClinicEz.Patient.Infrastructure.Services.Notifications;
+using ClinicEz.Patient.Infrastructure.Services.Home;
+using ClinicEz.Patient.Infrastructure.Services.Search;
 using ClinicEz.Patient.Infrastructure.Interop;
 using ClinicEz.Patient.Infrastructure.Locations;
+using ClinicEz.Shared.Search;
 
 namespace ClinicEz.Patient.Infrastructure;
 
@@ -112,6 +115,9 @@ public static class DependencyInjection
         services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Patient");
         services.AddScoped<ClinicEz.Patient.Application.Common.Interfaces.IImageConversionService, ClinicEz.Patient.Infrastructure.Services.ImageConversionService>();
         services.AddSingleton<IPsgcLocationService, PsgcLocationService>();
+        services.AddScoped<IPatientHomeService, PatientHomeService>();
+        services.AddScoped<IPatientCatalogSearchService, PatientCatalogSearchService>();
+        services.AddPluggableSearch<PatientCatalogSearchService>();
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core

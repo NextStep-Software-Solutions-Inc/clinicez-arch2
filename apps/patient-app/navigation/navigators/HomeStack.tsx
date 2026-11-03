@@ -1,22 +1,23 @@
 import { createNativeStackNavigator, createNativeStackScreen } from '@react-navigation/native-stack';
-import { isLiquidGlassSupported } from '@callstack/liquid-glass';
-
 import HomeScreen from '../screens/Home.screen';
-import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
+import PatientSearchScreen from '../screens/Search.screen';
 
 const HomeStack = createNativeStackNavigator({
   screenOptions: {
-    headerStyle: {
-      backgroundColor: isLiquidGlassSupported ? 'transparent' : undefined,
-    },
+    headerShown: false,
   },
   screens: {
     Home: createNativeStackScreen({
       screen: HomeScreen,
       options: {
-        title: 'Home',
-        headerLargeTitleEnabled: true,
-        headerRight: () => <BottomTabsHeaderRight />,
+        headerShown: false,
+      },
+    }),
+    PatientSearch: createNativeStackScreen({
+      screen: PatientSearchScreen,
+      options: {
+        headerShown: false,
+        animation: 'fade_from_bottom',
       },
     }),
   },

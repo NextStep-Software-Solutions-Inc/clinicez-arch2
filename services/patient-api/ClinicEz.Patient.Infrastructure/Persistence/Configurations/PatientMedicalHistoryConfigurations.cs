@@ -47,6 +47,33 @@ public sealed class PatientMedicationConfiguration : IEntityTypeConfiguration<Pa
     }
 }
 
+public sealed class PatientMedicationLogConfiguration : IEntityTypeConfiguration<PatientMedicationLog>
+{
+    public void Configure(EntityTypeBuilder<PatientMedicationLog> builder)
+    {
+        builder.HasKey(l => l.Id);
+        builder.Property(l => l.ScheduledTimeLabel).HasMaxLength(80);
+        builder.Property(l => l.Notes).HasMaxLength(500);
+        builder.Property(l => l.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(l => l.UpdatedBy).HasMaxLength(128);
+        builder.Property(l => l.DeletedBy).HasMaxLength(128);
+
+        builder.HasOne(l => l.Patient)
+            .WithMany(p => p.MedicationLogs)
+            .HasForeignKey(l => l.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(l => l.PatientMedication)
+            .WithMany()
+            .HasForeignKey(l => l.PatientMedicationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(l => new { l.PatientId, l.PatientMedicationId, l.LogDate })
+            .HasFilter("is_deleted = false")
+            .IsUnique();
+    }
+}
+
 public sealed class PatientSurgicalHistoryConfiguration : IEntityTypeConfiguration<PatientSurgicalHistory>
 {
     public void Configure(EntityTypeBuilder<PatientSurgicalHistory> builder)
