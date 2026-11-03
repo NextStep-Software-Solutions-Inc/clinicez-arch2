@@ -1,6 +1,6 @@
 # Design Tokens & UI/UX Component Reference
 
-This reference document presents complete token tables, typography scales, light/dark mode pairings, mobile touch standards, accessibility criteria, and UI/UX component patterns across ClinicEZ frontends.
+This reference document presents complete token tables, typography scales, light/dark mode pairings, mobile touch standards, accessibility criteria, and core component architecture patterns bounded by `@clinicez/design-tokens`.
 
 ---
 
@@ -56,7 +56,7 @@ export const sizes = {
   touchTarget: 44,
   /** Android Material Design recommendation (48dp). */
   touchTargetAndroid: 48,
-  /** Minimum spacing between adjacent touch targets. */
+  /** Minimum spacing between adjacent touch targets to prevent mis-taps. */
   touchTargetGap: 8,
   controlSm: 32,
   controlMd: 40,
@@ -71,19 +71,20 @@ export const sizes = {
   headerHeight: 64,
   borderWidth: 1,
 
-  // Patient App Layout Dimensions
+  // Layout & Micro-Interaction Metrics
   cardCarouselWidth: 300,
   cardCarouselGap: 12,
   headerScrollThreshold: 48, // 0 to 48px scroll range
-  headerScrollOffsetTranslate: 6, // 6px translation
+  headerScrollOffsetTranslate: 6, // 6px translateY delta
 };
 ```
 
 ---
 
-## 3. Patient App Home Component Architecture Patterns
+## 3. Core Token-Bounded Component Architecture Patterns
 
-### Health Pass Card with QR Modal Trigger
+### Pattern A: Digital Pass / Verified Credential Card
+Bounded by: `colors.primaryDark`, `colors.primary`, `radii.xl`, `spacing.lg`, `colors.onPrimary`, `shadows.md`.
 
 ```tsx
 import React from 'react';
@@ -93,11 +94,17 @@ import { useAppTheme } from '../../contexts/ThemeContext';
 import ThemedText from '../ui/ThemedText';
 import { AppIcon } from '../ui/Icon';
 
-export function HealthPassCard({ patientFullName, patientIdCode, onOpenQrModal }) {
+export function VerifiedCredentialCard({
+  title,
+  identifier,
+  subjectName,
+  onPressAction,
+  actionLabel,
+}) {
   const { colors, spacing, radii, shadows } = useAppTheme();
 
   return (
-    <View style={[styles.cardWrapper, shadows.md]}>
+    <View style={[styles.wrapper, shadows.md]}>
       <LinearGradient
         colors={[colors.primaryDark, colors.primary]}
         start={{ x: 0, y: 0 }}
@@ -105,20 +112,20 @@ export function HealthPassCard({ patientFullName, patientIdCode, onOpenQrModal }
         style={[styles.gradient, { borderRadius: radii.xl, padding: spacing.lg }]}
       >
         <View style={styles.topRow}>
-          <ThemedText variant="captionBold" color="onPrimary">CLINIC EZ • HEALTH PASS</ThemedText>
+          <ThemedText variant="captionBold" color="onPrimary">{title}</ThemedText>
           <View style={styles.verifiedBadge}>
             <ThemedText variant="captionBold" color="onPrimary">VERIFIED</ThemedText>
           </View>
         </View>
 
         <ThemedText variant="h2" color="onPrimary" style={{ marginVertical: spacing.md }}>
-          {patientFullName}
+          {subjectName}
         </ThemedText>
 
         <View style={styles.bottomRow}>
-          <ThemedText variant="caption" color="onPrimary">Tap terminal or present barcode</ThemedText>
-          <Pressable onPress={onOpenQrModal} style={styles.viewCardButton}>
-            <ThemedText variant="captionBold" color="onPrimary">View Card</ThemedText>
+          <ThemedText variant="code" color="onPrimary">{identifier}</ThemedText>
+          <Pressable onPress={onPressAction} style={styles.actionButton}>
+            <ThemedText variant="captionBold" color="onPrimary">{actionLabel}</ThemedText>
             <AppIcon name="qr_code" size={16} color="onPrimary" />
           </Pressable>
         </View>
@@ -128,37 +135,90 @@ export function HealthPassCard({ patientFullName, patientIdCode, onOpenQrModal }
 }
 ```
 
-### Vitals 2x2 Bento Telemetry Grid
+### Pattern B: Telemetry Bento Grid / Metric Tiles
+Bounded by: `colors.surface`, `radii.lg`, `spacing.sm`, `colors.telemetryNormalText`, `colors.telemetryElevatedText`, `colors.border`.
 
 ```tsx
-export function VitalsBentoGrid({ vitals, isFirstLogin, onLogVitals }) {
+export function MetricTile({
+  label,
+  value,
+  unit,
+  statusLabel,
+  isElevated = false,
+}) {
   const { colors, spacing, radii } = useAppTheme();
 
   return (
-    <View style={styles.gridContainer}>
-      <View style={styles.bentoRow}>
-        {/* Heart Rate Tile */}
-        <View style={[styles.tile, { backgroundColor: colors.surface, borderRadius: radii.lg }]}>
-          <ThemedText variant="caption" color="textMuted">Heart Rate</ThemedText>
-          <ThemedText variant="h2" color="text">
-            {vitals?.heartRateBpm ? `${vitals.heartRateBpm} bpm` : '--'}
-          </ThemedText>
-          <ThemedText variant="caption" color="successText">
-            {vitals?.heartRateTrend ?? 'Normal'}
-          </ThemedText>
-        </View>
+    <View
+      style={[
+        styles.tile,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radii.lg,
+          padding: spacing.md,
+        },
+      ]}
+    >
+      <ThemedText variant="caption" color="textMuted">{label}</ThemedText>
+      <ThemedText variant="h2" color="text">
+        {value != null ? `${value} ${unit ?? ''}`.trim() : '--'}
+      </ThemedText>
+      <ThemedText
+        variant="caption"
+        color={isElevated ? 'telemetryElevatedText' : 'telemetryNormalText'}
+      >
+        {statusLabel ?? 'Normal'}
+      </ThemedText>
+    </View>
+  );
+}
+```
 
-        {/* Blood Pressure Tile */}
-        <View style={[styles.tile, { backgroundColor: colors.surface, borderRadius: radii.lg }]}>
-          <ThemedText variant="caption" color="textMuted">Blood Pressure</ThemedText>
-          <ThemedText variant="h2" color="text">
-            {vitals?.systolicBp ? `${vitals.systolicBp}/${vitals.diastolicBp}` : '--'}
-          </ThemedText>
-          <ThemedText variant="caption" color="telemetryNormalText">
-            {vitals?.bpCategory ?? 'Optimal'}
-          </ThemedText>
-        </View>
-      </View>
+### Pattern C: Interactive Filter Chips Bar
+Bounded by: `colors.chip`, `colors.chipText`, `colors.chipBorder`, `colors.chipActive`, `colors.chipActiveText`, `radii.full`, `sizes.touchTarget`.
+
+```tsx
+export function FilterChipBar<T extends string>({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: { id: T; label: string }[];
+  selected: T;
+  onSelect: (val: T) => void;
+}) {
+  const { colors, spacing, radii, sizes } = useAppTheme();
+
+  return (
+    <View style={styles.chipRow}>
+      {options.map((opt) => {
+        const isActive = opt.id === selected;
+        return (
+          <Pressable
+            key={opt.id}
+            onPress={() => onSelect(opt.id)}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: isActive ? colors.chipActive : colors.chip,
+                borderColor: isActive ? colors.chipActive : colors.chipBorder,
+                borderRadius: radii.full,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.xs,
+                minHeight: sizes.touchTarget,
+              },
+            ]}
+          >
+            <ThemedText
+              variant="captionBold"
+              color={isActive ? 'onPrimary' : 'textSecondary'}
+            >
+              {opt.label}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

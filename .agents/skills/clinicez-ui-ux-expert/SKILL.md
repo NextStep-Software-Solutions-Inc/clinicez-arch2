@@ -1,224 +1,253 @@
 ---
 name: clinicez-ui-ux-expert
 description: >-
-  Expert guide for UI/UX design, user experience workflows, and frontend component architecture rooted in the ClinicEZ design system.
-  Use this skill when designing or building UI/UX features in clinic-app, portal-web, cashier-app, laboratory-app, patient-app, or pharmacy-app.
-  Enforces UI/UX design standards using `@clinicez/design-tokens` (teal #0D6963 brand palette, semantic colors, typography scales, clinical urgency states),
-  clinical workstation UX patterns, mobile touch interaction ergonomics (Fitts' Law, thumb zone, touch targets >= 44-48px), Stitch 4-state patient home screen architecture,
-  interaction design, error/loading/empty states, cross-platform parity (Expo React Native & Next.js/React Tailwind), accessibility, and responsive layouts.
+  Architectural authority and implementation guide for UI/UX design across all ClinicEZ applications (clinic-app, portal-web, patient-app, cashier-app, laboratory-app, pharmacy-app).
+  Strictly bounded by the @clinicez/design-tokens system: primitive palette, light/dark semantic color mappings, 4px spacing grid, typography scale, corner radii, touch target dimensions, and breakpoints.
+  Enforces clinical urgency visual encoding, mobile touch ergonomics (Fitts' Law, thumb zone, >=44-48px touch targets), 4-state component lifecycle (Loading, Empty, Error, Active), 60fps GPU micro-interactions, and cross-platform responsive parity.
 ---
 
 # ClinicEZ UI/UX Expert Skill
 
-This skill defines the UI/UX design foundation, interaction principles, visual hierarchy, mobile-first touch ergonomics, and component guidelines for all ClinicEZ frontend applications (web workstations, administrative portals, and mobile client apps). Its foundation is built directly upon the `@clinicez/design-tokens` design system, aligned with the **`/mobile-design`** philosophy: *Touch-first, battery-conscious, platform-respectful, offline-capable*.
+This skill defines the UI/UX design foundation, interaction principles, visual hierarchy, mobile-first touch ergonomics, and component guidelines for all ClinicEZ frontend applications (web workstations, administrative portals, and mobile client apps).
+
+> [!IMPORTANT]
+> **Design Token Boundary Mandate**:
+> This skill is strictly bounded by the core design tokens of `@clinicez/design-tokens`—not by any specific screen design, temporary wireframe, or one-off component.
+> Every layout, surface, typographic element, interactive control, animation delta, and clinical status across any screen in the ClinicEZ ecosystem must be derived directly from the design token system.
 
 ---
 
-## 1. UI/UX Core Foundations
+## 1. Design Token System Architecture
+
+The design token system provides a single source of truth across all platforms (web workstations, desktop rails, iOS, and Android mobile applications):
 
 ```mermaid
 flowchart TD
-  subgraph DESIGN_SYSTEM["@clinicez/design-tokens"]
-    PAL["Palette (Teal #0D6963 & Slate)"]
-    SEM["Semantic Colors (lightColors / darkColors)"]
-    TYP["Typography Scales & Spacing (4px Grid)"]
-    SIZ["Touch Targets (44pt iOS / 48dp Android, >=8px Gap)"]
-    TEL["Telemetry & Digital Pass Tokens"]
+  subgraph PRIMITIVES["Primitive Layer (palette.ts)"]
+    PAL_TEAL["Teal (#0D6963 Brand)"]
+    PAL_SLATE["Slate (Neutrals & Surfaces)"]
+    PAL_URGENCY["Red, Orange, Amber, Green, Blue, Violet"]
   end
 
-  subgraph UX_PRINCIPLES["UI/UX Design Principles"]
-    CLIN["Clinical Efficiency & Reduced Cognitive Load"]
-    TOUCH["Mobile Touch Ergonomics & Thumb Zone (Fitts' Law)"]
-    INT["4 Core States (Loading, Empty, Error, Active)"]
-    STITCH["Stitch Patient Home Lifecycle (4 States)"]
-    RESP["Cross-Platform Parity (Mobile Stack vs Web 2-Col Rail)"]
+  subgraph SEMANTICS["Semantic Layer (semantic.ts)"]
+    SEM_BRAND["primary, onPrimary, primaryLight, primarySubtle, primaryBorder"]
+    SEM_URG["emergency, urgent, routine, telemetryNormal, telemetryElevated"]
+    SEM_SURF["background, surface, card, surfaceMuted, surfaceSubtle, inputBackground, tabBar"]
+    SEM_TEXT["text, textSecondary, textMuted, textLight, textInverted"]
+    SEM_CHIP["chip, chipText, chipBorder, chipActive, chipActiveText"]
   end
 
-  DESIGN_SYSTEM --> UX_PRINCIPLES
-  UX_PRINCIPLES --> APPS["Clinic, Portal, Cashier, Lab, Pharmacy, Patient Apps"]
+  subgraph SCALES["Scales & Sizing (scales.ts & typography.ts)"]
+    SCALE_SPACE["4px Space Scale (xxs: 2px .. 5xl: 56px)"]
+    SCALE_RADII["Radius Scale (xs: 4px .. 2xl: 24px, full)"]
+    SCALE_SIZES["Touch Targets (44pt iOS, 48dp Android, 8px Gap)"]
+    SCALE_TYP["Type Scale (xs: 12px .. 4xl: 36px) & Geist Typography Presets"]
+    SCALE_BP["Breakpoints (mobile: 0, tablet: 768, desktop: 1024, wide: 1280)"]
+  end
+
+  PRIMITIVES --> SEMANTICS
+  SEMANTICS --> APPS["Clinic, Portal, Cashier, Lab, Pharmacy, Patient Apps"]
+  SCALES --> APPS
 ```
 
+### Strict Token Consumption Rules
+1. **Zero Raw Hex Colors**: Components and screens must **NEVER** use raw hex codes (e.g. `#0D6963`, `#F8FAFC`, `#000000`). All colors must be read from semantic tokens (`colors.primary`, `colors.surface`, etc.).
+2. **Zero Raw Numeric Font Sizes in StyleSheets**: All typography must use `<ThemedText variant="...">` or token styles (`theme.typography.*`, `fontSizes.*`). Nothing in a clinical UI may be styled below 12px (`fontSizeScale.xs`).
+3. **Zero Off-Grid Spacing**: Layout paddings, margins, and gaps must strictly consume `spaceScale` (`spacing.xs`, `spacing.sm`, `spacing.md`, etc.).
+4. **Dual-Theme Parity**: `darkColors` is strictly typed against `lightColors`. Every color token exists in both schemes with guaranteed $\ge 4.5:1$ WCAG contrast.
+
 ---
 
-## 2. Clinical UX Principles & Cognitive Load
+## 2. Semantic Color System & Clinical Visual Encoding
 
-Healthcare environments require fast, unambiguous, error-resistant user interfaces for both clinicians and patients.
+Healthcare interfaces require unambiguous visual hierarchy to ensure safety and minimize cognitive fatigue under high stress.
 
-1. **High-Density Workstation Hierarchy vs Glanceable Mobile Views**:
-   - **Clinician Workstations (`clinic-app`, `portal-web`)**: High density, 2-column triage rails, keyboard accelerators, instant scanability for encounter queues.
-   - **Patient Client Apps (`patient-app`)**: Low cognitive load, single primary decision per screen, high contrast, glanceable telemetry cards (Bento grid), single-tap adherence logging.
-2. **Clinical Urgency Visual Encoding**:
-   - Never rely solely on color for urgency—always combine semantic urgency colors with text badges (`STAT`, `Urgent`, `Routine`).
+### Clinical Urgency Encoding
 
-| Urgency Level | Visual Encoding | Semantic Token Mapping | UX Context |
+Never rely solely on color for urgency—always combine semantic urgency colors with clear typographic badges (`STAT`, `Urgent`, `Routine`, `Optimal`, `Elevated`):
+
+| Clinical Level | Visual Encoding | Semantic Color Tokens | Intended Clinical Context |
 |---|---|---|---|
-| **Emergency (STAT)** | Red Badge + Border | `emergencyBg`, `emergencyText`, `emergencyBorder` | Requires immediate medical attention / triage bump |
-| **Urgent** | Orange Badge + Text | `urgentBg`, `urgentText`, `urgentBorder` | Priority queue / expedited processing |
-| **Routine** | Teal Badge + Text | `routineBg`, `routineText`, `routineBorder` | Standard consultation / queue item |
-| **Telemetry Normal** | Teal Badge + Soft Tint | `telemetryNormalBg`, `telemetryNormalText` | Vitals in optimal reference range (HR 60-100, BP <120/80) |
-| **Telemetry Elevated** | Amber Badge + Accent | `telemetryElevatedBg`, `telemetryElevatedText` | Pre-hypertensive / fasting glucose monitoring |
+| **Emergency (STAT)** | Red Badge + Text + Border | `emergencyBg`, `emergencyText`, `emergencyBorder` | Triage bump, life-threatening vitals, immediate encounter required |
+| **Urgent** | Orange Badge + Text | `urgentBg`, `urgentText`, `urgentBorder` | Priority queue, overdue medication, expedited encounter |
+| **Routine** | Teal Badge + Text | `routineBg`, `routineText`, `routineBorder` | Standard consultation, regular appointment, normal queue item |
+| **Telemetry Normal** | Teal Badge + Soft Tint | `telemetryNormalBg`, `telemetryNormalText` | Vital signs within reference ranges (HR 60–100, BP <120/80) |
+| **Telemetry Elevated** | Amber Badge + Accent | `telemetryElevatedBg`, `telemetryElevatedText` | Pre-hypertensive, elevated fasting blood glucose, follow-up needed |
 
-3. **Error Prevention & Defensive Form UX**:
-   - Group related fields logically (Patient Identification -> Vitals -> Assessment).
-   - Use inline validation as fields lose focus (`onBlur`), rather than waiting for full form submission.
-   - Disable submit buttons while processing (`loading` state with spinner) to prevent duplicate submissions.
+### Interactive Surfaces & Chips
+- **Primary Actions**: `primary` (#0D6963 in light, #34C3A6 in dark) paired with `onPrimary`.
+- **Secondary Surfaces**: `surface` (card body), `surfaceMuted` (headers), `surfaceSubtle` (interactive icon circles).
+- **Filter Chips & Category Pills**:
+  - Inactive: `chip` background, `chipText`, `chipBorder`.
+  - Active / Selected: `chipActive` background, `chipActiveText`.
 
 ---
 
-## 3. Mobile Touch Interaction Ergonomics (from `/mobile-design`)
+## 3. Spatial, Typography & Dimension Scales
 
-> [!IMPORTANT]
-> **Mobile is NOT a Small Desktop**:
-> Mobile users operate with imprecise thumbs on dynamic, distracting environments. Always apply touch psychology and performance constraints.
+Every UI layout is constructed from discrete mathematical scales:
 
-1. **Fitts' Law & Touch Targets**:
-   - Minimum touch target: **44pt × 44pt** on iOS (`sizes.touchTarget`), **48dp × 48dp** on Android (`sizes.touchTargetAndroid`).
-   - Minimum spacing between interactive targets: **8–12px** (`sizes.touchTargetGap: 8`) to eliminate accidental neighbor taps.
-2. **Thumb Zone Architecture**:
-   - **Easy to Reach (Natural Thumb Arc)**: Primary CTAs ("Book Appointment", "Log Now", "Check In"), Bottom Navigation tabs, bottom sheet actions.
-   - **OK to Reach (Center)**: Scrollable content cards, Vitals Bento grid, medication schedules.
-   - **Hard to Reach (Top Stretch)**: Back button, profile avatar, non-critical settings.
+### Spacing Scale (`spaceScale` — 4px Baseline Grid)
+`xxs: 2`, `xs: 4`, `sm: 8`, `md: 12`, `lg: 16`, `xl: 20`, `2xl: 24`, `3xl: 32`, `4xl: 40`, `5xl: 56`.
+
+### Corner Radii Scale (`radiusScale`)
+- `xs: 4`: Tags, subtle badges.
+- `sm: 6`: Compact action buttons, tooltips.
+- `md: 10`: Standard card radius, form inputs (matches Portal `--radius`).
+- `lg: 14`: Large content cards, Bento grid tiles.
+- `xl: 18`: Modal dialogs, hero health pass cards.
+- `2xl: 24`: Prominent sheet wrappers.
+- `full: 9999`: Pills, avatar circles, filter chips.
+
+### Typography Scale & Presets (`typography.ts`)
+Rendered exclusively using the **Geist** (sans) and **Geist Mono** (tabular/numeric) typefaces:
+- `display` (36px / 700): Hero statistics, KPI counters.
+- `h1` (28px / 700): Primary page titles.
+- `h2` (22px / 600): Section headers, card group titles.
+- `title` (18px / 600): Subheadings, card titles.
+- `h3` / `bodyLarge` (16px / 600 or 400): Prominent body copy, primary button text.
+- `body` / `bodyBold` (14px / 400 or 600): Standard clinical table text, form inputs, list items.
+- `small` / `smallBold` (13px / 400 or 600): Secondary descriptions, metadata lines.
+- `caption` / `captionBold` (12px / 400 or 600): Timestamps, field labels, status pills.
+- `badge` (12px / 600, +0.2 letterSpacing): Clinical triage tags (`STAT`, `Urgent`, `Confirmed`).
+- `code` (12px / 500, GeistMono): Patient IDs, access codes, prescription dosage strings.
+
+---
+
+## 4. Mobile Touch Ergonomics Bounded by Tokens (from `/mobile-design`)
+
+> [!NOTE]
+> Mobile users operate with imprecise thumbs on dynamic, distracting environments. Design decisions must be grounded in physical touch constraints, not desktop assumptions.
+
+1. **Touch Targets (Fitts' Law)**:
+   - **iOS Minimum**: `sizes.touchTarget` = **44pt × 44pt**.
+   - **Android Minimum**: `sizes.touchTargetAndroid` = **48dp × 48dp**.
+   - **Spacing Guardrail**: `sizes.touchTargetGap` = **8px** minimum between adjacent interactive elements to prevent mis-taps.
+2. **Thumb Zone Hierarchy**:
+   - **Natural Thumb Arc (Bottom Viewport)**: Primary calls-to-action ("Book Appointment", "Log Now", "Check In"), bottom tab navigation, bottom sheet actions.
+   - **Neutral Reach Zone (Center Viewport)**: Content cards, Bento telemetry grids, scrollable list items.
+   - **Stretch Zone (Top Viewport)**: Navigation back buttons, avatar profiles, search input fields.
 3. **60fps GPU-Accelerated Micro-Interactions**:
-   - Only animate `transform` and `opacity` properties using the GPU. Avoid animating layout properties (`height`, `margin`, `padding`, `top`, `bottom`) that trigger CPU reflows.
-   - **Scroll-Animated Header Pattern**: Header title and subtitle are hidden at $y = 0$ (`opacity: 0`, `translateY: 6`), and smoothly interpolate across scroll offset `[0, 48]` (`sizes.headerScrollThreshold`) to full visibility (`opacity: 1`, `translateY: 0`).
+   - **Never animate layout geometry** (`width`, `height`, `margin`, `padding`, `top`, `bottom`)—these force CPU layout reflows and cause jank.
+   - **Always animate GPU properties**: `transform` (e.g. `translateY`, `scale`) and `opacity`.
+   - **Header Scroll Micro-Interaction**:
+     - At scroll offset $y = 0$, header title and subtitle are hidden (`opacity: 0`, `translateY: sizes.headerScrollOffsetTranslate` = 6px).
+     - Smoothly interpolate across $y \in [0, \text{sizes.headerScrollThreshold}]$ (0 to 48px) to reach full visibility (`opacity: 1`, `translateY: 0`).
+4. **List Performance**:
+   - Virtualized lists (`FlatList` / `FlashList`) for open-ended clinical collections.
+   - Memoize list items (`React.memo` + `useCallback`) to preserve 60fps scrolling.
 
 ---
 
-## 4. Stitch 4-State Patient Home Screen Architecture
+## 5. Universal 4-State Component Lifecycle
 
-The patient app home screen dynamically resolves across 4 distinct states according to real patient clinical data without dummy mock fallbacks:
+Every screen, widget, card, and data container in ClinicEZ must explicitly handle all 4 states using design tokens:
 
 ```mermaid
 stateDiagram-v2
-  [*] --> StateEvaluator
-  StateEvaluator --> State4_Search: searchQuery.length > 0
-  StateEvaluator --> State1_FirstLogin: appointments == 0 && vitals == null && meds == 0
-  StateEvaluator --> State2_NoAppointments: appointments == 0 && (vitals != null || meds > 0)
-  StateEvaluator --> State3_MultipleAppointments: appointments > 0
+  [*] --> LoadingState: Component Mount / Fetch
+  LoadingState --> ActiveState: Data Resolved (Items > 0)
+  LoadingState --> EmptyState: Data Resolved (Items == 0)
+  LoadingState --> ErrorState: Network / Validation Failure
+  ErrorState --> LoadingState: Retry Triggered
+  EmptyState --> LoadingState: Refresh / Action Triggered
 ```
 
-1. **State 1: First Login / Zero Data Home (`1cf209f95c7247fe8b5c2b7f9eacfc6b`)**:
-   - Displays `WelcomeOnboardingCard` with a 3-step getting started checklist:
-     1. Complete health profile
-     2. Link health insurance & PhilHealth YAKAP benefits
-     3. Find and bookmark primary clinic
-   - Telemetry shows `--` placeholder dashes in `VitalsBentoGrid` alongside a prominent "Sync Apple Health or Log Manually" connect banner.
-   - Appointments section displays a zero-data consultation prompt with "Book First Appointment".
-   - Medications schedule displays an empty-state card with "+ Add Medication".
-
-2. **State 2: No Appointments Variant (`39745062e8054cbc8c8fdd0df7bd7e9b`)**:
-   - Active when 0 appointments are scheduled but the patient has active telemetry or medications.
-   - Displays an empty consultation card with a primary "Book an Appointment" CTA and secondary "View Visit History" action.
-   - Populates live telemetry in `VitalsBentoGrid` (Heart Rate, Blood Pressure, Fasting Glucose, Sleep Hours).
-   - Displays today's scheduled doses with single-tap "Log Now" adherence tracking.
-
-3. **State 3: Multiple Appointments Patient Home (`0ea4134bdcec496f87fc90ffa94fcea4`)**:
-   - Features `HealthPassCard`: Digital linear gradient health pass with patient ID badge, blood group badge, NFC tap prompt, and trigger for `HealthPassQrModal`.
-   - Renders horizontal snap carousel for upcoming consultations with doctor avatar, presence indicator, specialty, appointment badge (`Confirmed`, `Pending`), "Check In" button, and "Directions" button.
-
-4. **State 4: Categorized Search Mode (`0a03c140a91843e59b4be878d9d3b196`)**:
-   - Triggered when `searchQuery.trim().length > 0`.
-   - Multi-category search filter chips (`All`, `Doctors`, `Clinics`, `Services`, `Available Today`).
-   - Categorized search results:
-     - **Doctors & Specialists**: Doctor card with portrait, rating, review count, location, and "Book Visit".
-     - **Clinics & Care Centers**: Facility card with address, open/close status, distance, and "View Clinic".
-     - **Specialized Care Packages**: Service card with coverage tags, duration, and "Schedule".
+1. **Loading State (Skeleton Loaders)**:
+   - Render layout-matched skeleton boxes using `colors.skeletonBase` and `colors.skeletonHighlight` with subtle pulse animation.
+   - Never use full-screen blank spinners that cause sudden layout shifts.
+2. **Empty State (Actionable Guidance)**:
+   - Never display a blank card, raw empty table, or dead-end screen.
+   - Always render an empty container using `colors.surface` or `colors.surfaceMuted`, an explanatory description in `colors.textMuted`, and an actionable primary button.
+3. **Error State (Clinical Safety & Recovery)**:
+   - Present human-readable, non-technical error explanations using `colors.emergency` / `colors.emergencyBg` / `colors.emergencyText`.
+   - Always include an immediate recovery path (e.g. "Retry", "Check Connection", or "Call Clinic").
+4. **Active State (Populated Presentation)**:
+   - Group data into clear visual sections using card containers (`colors.surface`, `radii.lg`, `radii.xl`, `shadows.sm`).
+   - Use high-contrast headings (`colors.text`) and secondary descriptors (`colors.textSecondary`).
 
 ---
 
-## 5. UI Component Architecture & Design Token Consumption
+## 6. Cross-Platform Parity & Consumption Patterns
 
-> [!IMPORTANT]
-> **Strict UI Token Mandate**:
-> Apps must **NEVER** use hardcoded hex values (`#0D6963`, `#F8FAFC`) or consume `palette.ts` raw values directly in component styles.
-> All UI styling must consume semantic tokens from `@clinicez/design-tokens` (`semantic.ts`) and scales from `scales.ts`.
+### Responsive Breakpoints (`scales.ts`)
+- `mobile`: 0–767px (single-column touch layout).
+- `tablet`: 768–1023px (compact multi-column grid).
+- `desktop`: 1024–1279px (workstation 2-column triage rail layout).
+- `wide`: $\ge 1280$px (expanded clinical dashboard).
 
-### Cross-Platform Layout Parity Pattern
+### Web Consumption Pattern (Next.js / Tailwind CSS)
+Semantic tokens are mapped to CSS custom properties. Consume them via Tailwind classes:
 
 ```tsx
-// Mobile Stack vs Desktop Workstation Rail
-export function ResponsiveHomeLayout({ isDesktop, children, railContent }) {
-  if (isDesktop) {
-    return (
-      <View style={styles.desktopRow}>
-        <View style={styles.mainWorkstationCol}>{children}</View>
-        <View style={styles.utilityRailCol}>{railContent}</View>
-      </View>
-    );
-  }
-  return <View style={styles.mobileCol}>{children}{railContent}</View>;
+export function ClinicalCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-surface border border-border rounded-md p-4 shadow-sm">
+      <h3 className="text-base font-semibold text-text mb-2">{title}</h3>
+      <div className="text-sm text-textSecondary">{children}</div>
+    </div>
+  );
 }
 ```
 
-### Micro-Interaction: Scroll Animated Header Pattern
+### Mobile Consumption Pattern (Expo / React Native)
+Semantic tokens are provided via typed `useAppTheme()` hook:
 
 ```tsx
 import React from 'react';
-import { Animated, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import ThemedText from '../ui/ThemedText';
 import { useAppTheme } from '../../contexts/ThemeContext';
 
-export function HeaderScrollTitle({ scrollY }: { scrollY: Animated.Value }) {
-  const { colors, typography, sizes } = useAppTheme();
-
-  const opacity = scrollY.interpolate({
-    inputRange: [0, sizes.headerScrollThreshold], // 0 to 48px
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-
-  const translateY = scrollY.interpolate({
-    inputRange: [0, sizes.headerScrollThreshold], // 0 to 48px
-    outputRange: [sizes.headerScrollOffsetTranslate, 0], // 6px to 0px
-    extrapolate: 'clamp',
-  });
+export function ActionTile({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors, spacing, radii, sizes } = useAppTheme();
 
   return (
-    <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
-      <Animated.Text style={[styles.title, { color: colors.text }]}>Clinic EZ</Animated.Text>
-      <Animated.Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-        Open Health Network
-      </Animated.Text>
-    </Animated.View>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.8}
+      style={[
+        styles.tile,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radii.lg,
+          padding: spacing.md,
+          minHeight: sizes.touchTarget,
+        },
+      ]}
+    >
+      <ThemedText variant="bodyBold" color="text">{label}</ThemedText>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { justifyContent: 'center' },
-  title: { fontSize: 16, fontWeight: '700' },
-  subtitle: { fontSize: 12, fontWeight: '500' },
+  tile: {
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
 ```
 
 ---
 
-## 6. Zero Mock Data & Offline Resilience
+## 7. Zero Mock Data Mandate
 
-1. **Zero Mock Fallbacks**:
-   - Never fall back to hardcoded dummy doctor names (`'Dr. Evelyn Reed'`, `'Dr. David Chen'`).
-   - If provider or clinic data is missing, display empty states or neutral fallback copy (`'Network Clinic'`, `'Healthcare Provider'`).
-2. **Bidirectional SQLite Caching & SWR**:
-   - All live remote data (vitals, medications, appointments, clinics) is mirrored locally to SQLite.
-   - In offline mode or during network timeouts, SWR immediately resolves cached data from SQLite tables (`vitalSigns`, `patientMedications`, `clinics`) without crashing.
+A clinical interface must never show misleading synthetic data in production or live tests:
+- **Never Hardcode Provider Fallbacks**: Do not inject placeholder doctor names (`'Dr. Evelyn Reed'`, `'Dr. David Chen'`). Use neutral descriptive copy (`'Healthcare Provider'`, `'Network Clinic'`) or an actionable empty state.
+- **Offline Resilience**: Mirror live backend records to local SQLite tables (`vitalSigns`, `patientMedications`, `clinics`). During network failures, resolve cached rows gracefully without displaying broken states.
 
 ---
 
-## 7. Technical Specifications & References
+## 8. UI/UX Quality & Token Audit Checklist
 
-For exhaustive token tables, typography scales, dark mode mappings, and full component code patterns, refer to:
+Before considering any UI implementation complete, run this audit checklist:
 
-- [Design Tokens & UI/UX Component Reference](references/design_tokens_and_components.md)
-- [Design Tokens Package Source](../../packages/design-tokens/src/index.ts)
-
----
-
-## 8. UI/UX Audit & Quality Checklist
-
-Before completing any UI screen or feature, perform this UI/UX audit:
-
-1. **Token Compliance**: No raw hex codes or direct `palette.ts` imports in `.tsx` / `.jsx`. Run `bun apps/patient-app/scripts/check-tokens.mjs --strict`.
-2. **Touch Target Size**: Minimum 44×44pt on iOS, 48×48dp on Android, with ≥8px spacing between neighbors.
-3. **Visual Hierarchy**: Clear primary, secondary, and muted text contrast satisfying WCAG 4.5:1.
-4. **4-State Completion**: Explicit Skeleton, Empty, Error, and Active states verified.
-5. **Stitch State Accuracy**: Correct handling of First Login, No Appointments, Multiple Appointments, and Search Mode.
-6. **Cross-Device Parity**: UI scales cleanly on desktop workstation (>=1024px), tablet (768px-1023px), and mobile (<768px).
-7. **Token Automated Tests**: `bun test packages/design-tokens/src/tokens.test.ts` passes with 0 failures.
+1. **Strict Token Guard**: Run `bun apps/patient-app/scripts/check-tokens.mjs --strict`. Must report **0 violations in 0 files**.
+2. **Contrast Verification**: Run `bun test packages/design-tokens/src/tokens.test.ts`. All text/background combinations must pass $\ge 4.5:1$ WCAG ratio across light and dark modes.
+3. **Touch Targets**: All mobile buttons, chips, and tappable rows have $\ge 44\text{pt}$ (iOS) or $\ge 48\text{dp}$ (Android) hit area with $\ge 8\text{px}$ gaps.
+4. **4-State Completeness**: Skeleton loading, actionable empty state, error state with retry, and active populated state are all implemented.
+5. **GPU Animation Safety**: Animated elements only interpolate `opacity` and `transform`. Layout properties (`height`, `margin`, `padding`) are strictly static.
+6. **Cross-Platform Verification**: Layout functions correctly on mobile touch screens (<768px) and scales to desktop workstation rails ($\ge 1024\text{px}$).
