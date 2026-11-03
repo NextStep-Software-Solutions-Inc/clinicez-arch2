@@ -43,6 +43,10 @@ describe('design tokens', () => {
     ['warningText', 'warningBg', 4.5],
     ['infoText', 'infoBg', 4.5],
     ['purpleText', 'purpleBg', 4.5],
+    ['telemetryNormalText', 'telemetryNormalBg', 4.5],
+    ['telemetryElevatedText', 'telemetryElevatedBg', 4.5],
+    ['chipText', 'chip', 4.5],
+    ['chipActiveText', 'chipActive', 4.5],
   ];
 
   for (const scheme of ['light', 'dark'] as const) {
