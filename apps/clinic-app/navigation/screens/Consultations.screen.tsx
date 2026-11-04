@@ -561,7 +561,13 @@ export default function ConsultationsScreen() {
 
   const nextEligiblePatient = useMemo(() => {
     const eligibleStatuses: QueueStatus[] = ['Triaged', 'ReEvaluation', 'Waiting'];
-    return displayedPatients.find((p) => eligibleStatuses.includes(p.status));
+    return displayedPatients.find(
+      (p) =>
+        eligibleStatuses.includes(p.status) &&
+        !p.isDirectVisit &&
+        !p.queueNumber?.startsWith('DV-') &&
+        !p.id.startsWith('ephemeral-')
+    );
   }, [displayedPatients]);
 
   // PhilHealth Yakap Claim Readiness States (Feature 17)
@@ -1127,9 +1133,14 @@ export default function ConsultationsScreen() {
       return;
     }
     setIssuingMedCert(true);
+    const activeVisit = await materializeVisitIfNeeded('InConsultation');
+    if (!activeVisit) {
+      setIssuingMedCert(false);
+      return;
+    }
     const [cert, certErr] = await clinicService.issueMedicalCertificate({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
       doctorId: doctor.id,
       doctorName: doctor.name,
       prcLicenseNumber: doctorPrc.trim(),
@@ -1171,9 +1182,14 @@ export default function ConsultationsScreen() {
       return;
     }
     setIssuingReferral(true);
+    const activeVisit = await materializeVisitIfNeeded('InConsultation');
+    if (!activeVisit) {
+      setIssuingReferral(false);
+      return;
+    }
     const [ref, refErr] = await clinicService.issueReferralLetter({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
       referringDoctorId: doctor.id,
       referringDoctorName: doctor.name,
       referredToFacility: refFacility.trim(),
@@ -1601,8 +1617,65 @@ export default function ConsultationsScreen() {
     setPostEncounterModalVisible(false);
   };
 
+  const materializeVisitIfNeeded = async (
+    initialStatus: QueueStatus = 'InConsultation'
+  ): Promise<PatientQueueItem | null> => {
+    if (!selectedPatient) return null;
+    if (!selectedPatient.id.startsWith('ephemeral-')) {
+      return selectedPatient;
+    }
+
+    const doctor = requireSigner();
+    const doctorId = doctor?.id || current?.id;
+    const doctorName = doctor?.name || (current ? formatStaffName(current) : undefined);
+    const isYakap =
+      philHealthAtc === 'WALKEDIN' ||
+      selectedPatient.visitType === 'YakapAvailment' ||
+      isYakapEligible;
+
+    const [directVisit, err] = await clinicService.ensureDirectVisit({
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      doctorId,
+      doctorName,
+      visitType: 'Consultation',
+      visitWorkflowMode: isYakap ? 'YakapAvailment' : 'Regular',
+      initialStatus,
+      chiefComplaint: selectedPatient.chiefComplaint,
+      allowDuplicateActive: isFollowUpEncounter,
+    });
+
+    if (err || !directVisit) {
+      notify.error(err?.message || 'Could not materialize direct visit record.');
+      return null;
+    }
+
+    const materialized: PatientQueueItem = {
+      ...selectedPatient,
+      ...directVisit,
+      isDirectVisit: true,
+    };
+
+    setSelectedPatient(materialized);
+    setPatients((prev) =>
+      (prev || []).map((p) => (p.id === selectedPatient.id ? materialized : p))
+    );
+    return materialized;
+  };
+
   const handleStartFollowUpEncounter = () => {
     if (!selectedPatient) return;
+    const ephemeralPatient: PatientQueueItem = {
+      ...selectedPatient,
+      id: `ephemeral-${selectedPatient.patientId}-${Date.now()}`,
+      queueNumber: 'DIRECT',
+      sequenceNumber: 0,
+      isDirectVisit: true,
+      status: 'InConsultation',
+      checkInTime: new Date().toISOString(),
+    };
+    setSelectedPatient(ephemeralPatient);
+    setPatients((prev) => [ephemeralPatient, ...(prev || []).filter((p) => p.id !== ephemeralPatient.id)]);
     setIsSigned(false);
     setSignedAt(null);
     setSignedConsultationId(null);
@@ -1640,17 +1713,104 @@ export default function ConsultationsScreen() {
   };
 
   useEffect(() => {
-    const params = route.params as { queueId?: string; queueItemId?: string; patientId?: string } | undefined;
+    const params = route.params as
+      | {
+          queueId?: string;
+          queueItemId?: string;
+          patientId?: string;
+          patientName?: string;
+          directVisitMode?: 'regular' | 'yakap';
+          forceSeparateVisit?: boolean;
+        }
+      | undefined;
     const targetQueueId = params?.queueId ?? params?.queueItemId;
-    const key = `${targetQueueId ?? ''}|${params?.patientId ?? ''}`;
-    if (key === '|' || appliedRouteKey.current === key) return;
+    const forceSeparate = Boolean(params?.forceSeparateVisit);
+    const key = `${targetQueueId ?? ''}|${params?.patientId ?? ''}|${forceSeparate ? 'sep' : 'std'}|${params?.directVisitMode ?? ''}`;
+    if (key === '|||' || (!targetQueueId && !params?.patientId) || appliedRouteKey.current === key) return;
+
+    const terminalStatuses: QueueStatus[] = [
+      'Completed',
+      'Cancelled',
+      'NoShow',
+      'DischargedNonDoctor',
+      'Diverted',
+    ];
     const target = targetQueueId
       ? patients.find((x) => x.id === targetQueueId)
-      : patients.find((x) => x.patientId === params?.patientId);
+      : !forceSeparate
+        ? patients.find(
+            (x) => x.patientId === params?.patientId && !terminalStatuses.includes(x.status)
+          )
+        : undefined;
+
     if (target) {
       appliedRouteKey.current = key;
+      if (params?.directVisitMode === 'yakap') {
+        setPhilHealthAtc('WALKEDIN');
+      }
       handleSelectPatient(target);
+      return;
     }
+
+    appliedRouteKey.current = key;
+    (async () => {
+      if (targetQueueId) {
+        const [allQueue] = await clinicService.getQueue({
+          date: getManilaTodayStr(),
+          view: 'All',
+        });
+        const fetchedTarget = (allQueue || []).find((x) => x.id === targetQueueId);
+        if (fetchedTarget) {
+          if (params?.directVisitMode === 'yakap') {
+            setPhilHealthAtc('WALKEDIN');
+          }
+          setPatients((prev) => [
+            fetchedTarget,
+            ...(prev || []).filter((p) => p.id !== fetchedTarget.id),
+          ]);
+          handleSelectPatient(fetchedTarget);
+          return;
+        }
+      }
+
+      if (params?.patientId) {
+        const [pat] = await clinicService.getPatientById(params.patientId);
+        if (pat) {
+          const ephemeralId = forceSeparate
+            ? `ephemeral-${pat.id}-${Date.now()}`
+            : `ephemeral-${pat.id}`;
+          const ephemeralPatient: PatientQueueItem = {
+            id: ephemeralId,
+            tenantId: pat.tenantId || '',
+            clinicId: pat.clinicId || '',
+            queueNumber: 'DIRECT',
+            sequenceNumber: 0,
+            queueDate: getManilaTodayStr(),
+            patientId: pat.id,
+            patientName: pat.fullName,
+            priority: 'Routine',
+            status: 'InConsultation',
+            checkInTime: new Date().toISOString(),
+            hasVitals: false,
+            visitType: 'Consultation',
+            isDirectVisit: true,
+          };
+          setPatients((prev) => [
+            ephemeralPatient,
+            ...(prev || []).filter((p) => p.id !== ephemeralPatient.id),
+          ]);
+          handleSelectPatient(ephemeralPatient);
+          if (forceSeparate) {
+            setIsFollowUpEncounter(true);
+          }
+          if (params.directVisitMode === 'yakap') {
+            setPhilHealthAtc('WALKEDIN');
+            setIsYakapEligible(true);
+            setVisitWorkflowMode('YakapAvailment');
+          }
+        }
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params, patients]);
 
@@ -2364,6 +2524,12 @@ export default function ConsultationsScreen() {
         })
       : {};
 
+    const activeVisit = await materializeVisitIfNeeded('InConsultation');
+    if (!activeVisit) {
+      setIsSigning(false);
+      return;
+    }
+
     let consultationId = signedConsultationId;
     if (!consultationId) {
       const shouldPersistPe =
@@ -2375,12 +2541,12 @@ export default function ConsultationsScreen() {
               DEFAULT_PHYSICAL_EXAM_NORMAL[k as keyof PhysicalExamFindings]
           ));
       const createPayload = {
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
+        patientId: activeVisit.patientId,
+        patientName: activeVisit.patientName,
         doctorId: doctor.id,
         doctorName: doctor.name,
-        queueItemId: isFollowUpEncounter ? undefined : selectedPatient.id,
-        appointmentId: selectedPatient.appointmentId,
+        queueItemId: activeVisit.id,
+        appointmentId: activeVisit.appointmentId,
         subjective,
         objective,
         assessment,
@@ -2431,17 +2597,7 @@ export default function ConsultationsScreen() {
           philHealthDrugCode: p.philHealthDrugCode,
         })),
       };
-      let [consultation, createErr] = await clinicService.createConsultation(createPayload);
-      if (
-        createErr &&
-        (createErr.status === 409 ||
-          (createErr.message || '').toLowerCase().includes('already been signed'))
-      ) {
-        [consultation, createErr] = await clinicService.createConsultation({
-          ...createPayload,
-          queueItemId: undefined,
-        });
-      }
+      const [consultation, createErr] = await clinicService.createConsultation(createPayload);
       if (createErr || !consultation?.id) {
         setIsSigning(false);
         const reason = createErr?.message || 'Unable to save consultation record';
@@ -2568,8 +2724,9 @@ export default function ConsultationsScreen() {
     // Step 3: Auto-create Diagnostic Lab Requisitions for outside labs BEFORE signing
     if (outsideLabs.length > 0) {
       const [, labErr] = await clinicService.createLabOrder({
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
+        patientId: activeVisit.patientId,
+        patientName: activeVisit.patientName,
+        queueItemId: activeVisit.id,
         consultationId,
         orderedByDoctorId: doctor.id,
         orderedByDoctorName: doctor.name,
@@ -2602,9 +2759,9 @@ export default function ConsultationsScreen() {
           (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
         );
         const [, procErr] = await clinicService.orderProcedure({
-          patientId: selectedPatient.patientId,
-          patientName: selectedPatient.patientName,
-          queueItemId: selectedPatient.id,
+          patientId: activeVisit.patientId,
+          patientName: activeVisit.patientName,
+          queueItemId: activeVisit.id,
           consultationId,
           procedureCode: proc.code || procInfo?.code,
           procedureName: proc.name,
@@ -2688,12 +2845,12 @@ export default function ConsultationsScreen() {
     }
 
     // Complete queue item
-    await clinicService.completeQueueItem(selectedPatient.id);
+    await clinicService.completeQueueItem(activeVisit.id);
 
     // Update local state immediately and await full refresh of queue & longitudinal patient chart
-    setSelectedPatient((prev) => (prev ? { ...prev, status: 'Completed' } : null));
+    setSelectedPatient((prev) => (prev ? { ...prev, id: activeVisit.id, status: 'Completed' } : null));
     setPatients((prev) =>
-      prev.map((p) => (p.id === selectedPatient.id ? { ...p, status: 'Completed' } : p))
+      prev.map((p) => (p.id === selectedPatient.id || p.id === activeVisit.id ? { ...p, id: activeVisit.id, status: 'Completed' } : p))
     );
     await Promise.all([
       loadQueue().catch(() => {}),
@@ -3038,6 +3195,9 @@ export default function ConsultationsScreen() {
     const doctor = requireSigner();
     if (!doctor) return;
 
+    const activeVisit = await materializeVisitIfNeeded('PendingProcedure');
+    if (!activeVisit) return;
+
     const availableRooms = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
     const defaultTargetRoom =
       treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? availableRooms[0];
@@ -3065,9 +3225,9 @@ export default function ConsultationsScreen() {
       const procTargetName = proc.targetRoomName || proc.roomName || procTargetRoom?.name || defaultResolvedName;
 
       const [orderedProc, procErr] = await clinicService.orderProcedure({
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        queueItemId: selectedPatient.id,
+        patientId: activeVisit.patientId,
+        patientName: activeVisit.patientName,
+        queueItemId: activeVisit.id,
         consultationId: signedConsultationId || undefined,
         procedureCode: proc.code || procInfo?.code,
         procedureName: proc.name,
@@ -3123,6 +3283,7 @@ export default function ConsultationsScreen() {
         prev
           ? {
               ...prev,
+              id: activeVisit.id,
               status: 'PendingProcedure',
               roomId: defaultTargetRoom?.id,
               roomOrStation: defaultResolvedName,
@@ -3146,7 +3307,7 @@ export default function ConsultationsScreen() {
           };
         });
       }
-      await refreshPatientChart(selectedPatient.patientId).catch(() => {});
+      await refreshPatientChart(activeVisit.patientId).catch(() => {});
       loadQueue();
     }
   };
@@ -3155,6 +3316,10 @@ export default function ConsultationsScreen() {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
+
+    const activeVisit = await materializeVisitIfNeeded('PendingProcedure');
+    if (!activeVisit) return;
+
     const target = orderedProcedures.find(
       (p) => p.name.toLowerCase() === procedureName.toLowerCase() && (toothNumber === undefined || p.toothNumber === toothNumber)
     );
@@ -3168,9 +3333,9 @@ export default function ConsultationsScreen() {
     const targetRoomId = target?.targetRoomId || target?.roomId || targetRoom?.id;
 
     const [proc, procErr] = await clinicService.orderProcedure({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
-      queueItemId: selectedPatient.id,
+      patientId: activeVisit.patientId,
+      patientName: activeVisit.patientName,
+      queueItemId: activeVisit.id,
       consultationId: signedConsultationId || undefined,
       procedureCode: target?.code || procInfo?.code,
       procedureName: procedureName,
@@ -3218,6 +3383,7 @@ export default function ConsultationsScreen() {
       prev
         ? {
             ...prev,
+            id: activeVisit.id,
             status: 'PendingProcedure',
             roomId: finalRoomId,
             roomOrStation: finalRoomName,
@@ -5382,7 +5548,11 @@ export default function ConsultationsScreen() {
                       variant="captionBold"
                       color={isSelected ? theme.colors.primaryDark : theme.colors.text}
                     >
-                      {p.queueNumber}
+                      {p.isDirectVisit || p.queueNumber?.startsWith('DV-') || p.queueNumber === 'DIRECT'
+                        ? p.queueNumber === 'DIRECT'
+                          ? 'Direct • Draft'
+                          : `Direct • ${p.queueNumber}`
+                        : p.queueNumber}
                     </ThemedText>
                     <ThemedText
                       variant="caption"
@@ -6193,7 +6363,21 @@ export default function ConsultationsScreen() {
             visible={recordVitalsModalVisible}
             onClose={() => setRecordVitalsModalVisible(false)}
             patient={patientRecord}
-            queueItemId={selectedPatient.id}
+            queueItemId={selectedPatient.id.startsWith('ephemeral-') ? null : selectedPatient.id}
+            initialDirectVisitStatus="InConsultation"
+            allowDuplicateActive={isFollowUpEncounter}
+            onMaterializeVisit={(directVisit) => {
+              const prevId = selectedPatient.id;
+              const materialized: PatientQueueItem = {
+                ...selectedPatient,
+                ...directVisit,
+                isDirectVisit: true,
+              };
+              setSelectedPatient(materialized);
+              setPatients((prev) =>
+                (prev || []).map((p) => (p.id === prevId ? materialized : p))
+              );
+            }}
             currentStaffId={signer?.id}
             currentStaffName={signerStaff ? formatStaffName(signerStaff) : signer?.name}
 

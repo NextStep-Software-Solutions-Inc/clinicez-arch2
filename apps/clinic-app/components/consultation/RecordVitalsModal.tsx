@@ -8,6 +8,7 @@ import {
   type RecordTriageRequest,
   type TriageVitals,
   type ClinicPatient,
+  type PatientQueueItem,
   type PediatricZScoreResult,
 } from '../../services/clinicService';
 import { notify } from '../../utils/feedback';
@@ -34,6 +35,9 @@ export interface RecordVitalsModalProps {
   onClose: () => void;
   patient: ClinicPatient | null;
   queueItemId?: string | null;
+  allowDuplicateActive?: boolean;
+  initialDirectVisitStatus?: 'Triaged' | 'InConsultation';
+  onMaterializeVisit?: (visit: PatientQueueItem) => void;
   currentStaffId?: string;
   currentStaffName?: string;
   onSuccess: (vitals: TriageVitals) => void;
@@ -45,6 +49,9 @@ export default function RecordVitalsModal({
   onClose,
   patient,
   queueItemId,
+  allowDuplicateActive = false,
+  initialDirectVisitStatus = 'Triaged',
+  onMaterializeVisit,
   currentStaffId,
   currentStaffName,
   onSuccess,
@@ -117,12 +124,7 @@ export default function RecordVitalsModal({
     setForm((prev) => ({ ...prev, [key]: val }));
   };
 
-  const handleSave = async () => {
-    if (!queueItemId) {
-      Alert.alert('Cannot record vitals', 'Active queue item ID is missing for this consultation.');
-      return;
-    }
-
+  const handleSave = async (completeVisitOnly: boolean = false) => {
     const systolicBp = parseOptionalInt(form.bpSys);
     const diastolicBp = parseOptionalInt(form.bpDia);
     const heartRateBpm = parseOptionalInt(form.hr);
@@ -172,6 +174,31 @@ export default function RecordVitalsModal({
       return;
     }
 
+    let effectiveQueueItemId = queueItemId;
+
+    if (!effectiveQueueItemId) {
+      if (!patient) {
+        Alert.alert('Cannot record vitals', 'Patient details are missing.');
+        return;
+      }
+      setSaving(true);
+      const initialStatus = completeVisitOnly ? 'DischargedNonDoctor' : initialDirectVisitStatus;
+      const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
+        patientId: patient.id,
+        patientName: patient.fullName,
+        visitType: completeVisitOnly ? 'VitalsCheckOnly' : 'Consultation',
+        initialStatus,
+        allowDuplicateActive,
+      });
+      if (visitErr || !directVisit) {
+        setSaving(false);
+        notify.error(visitErr?.message || 'Could not initialize direct visit for vitals.');
+        return;
+      }
+      effectiveQueueItemId = directVisit.id;
+      onMaterializeVisit?.(directVisit);
+    }
+
     const payload: RecordTriageRequest = {
       nurseId: currentStaffId,
       recordedByNurseName: currentStaffName,
@@ -209,7 +236,7 @@ export default function RecordVitalsModal({
     };
 
     setSaving(true);
-    const [savedVitals, err] = await clinicService.recordTriage(queueItemId, payload);
+    const [savedVitals, err] = await clinicService.recordTriage(effectiveQueueItemId!, payload);
     setSaving(false);
 
     if (err || !savedVitals) {
@@ -238,11 +265,19 @@ export default function RecordVitalsModal({
             onPress={onClose}
             disabled={saving}
           />
+          {!queueItemId && initialDirectVisitStatus === 'Triaged' && (
+            <Button
+              title="Save & Complete Vitals-Only"
+              variant="outline"
+              onPress={() => handleSave(true)}
+              disabled={saving}
+            />
+          )}
           <Button
             title="Save vitals"
             variant="primary"
             icon="check"
-            onPress={handleSave}
+            onPress={() => handleSave(false)}
             loading={saving}
           />
         </View>

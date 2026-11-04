@@ -126,32 +126,19 @@ public sealed class PatientCodeGenerator : IPatientCodeGenerator
 
                     if (tracker == null)
                     {
-                        // Smooth initial bootstrap from pre-existing maximum numeric patient codes
+                        // Smooth initial bootstrap from pre-existing maximum numeric patient codes across the clinic
                         var existingCodes = await _dbContext.Patients
                             .IgnoreQueryFilters()
-                            .Where(p => p.TenantId == tenantId && p.ClinicId == clinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix))
+                            .Where(p => p.ClinicId == clinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix))
                             .Select(p => p.PatientCode)
                             .ToListAsync(ct);
 
                         var localCodes = _dbContext.Patients.Local
-                            .Where(p => p.TenantId == tenantId && p.ClinicId == clinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix))
+                            .Where(p => p.ClinicId == clinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix))
                             .Select(p => p.PatientCode)
                             .ToList();
 
-                        var allKnownCodes = existingCodes.Concat(localCodes).Distinct();
-
-                        var maxSeq = 0;
-                        foreach (var code in allKnownCodes)
-                        {
-                            if (!string.IsNullOrEmpty(code) && code.Length > prefix.Length)
-                            {
-                                var suffix = code[prefix.Length..];
-                                if (int.TryParse(suffix, out var parsed) && parsed > 0 && parsed > maxSeq)
-                                {
-                                    maxSeq = parsed;
-                                }
-                            }
-                        }
+                        var maxSeq = ParseMaxSequence(existingCodes.Concat(localCodes).Distinct(), prefix);
 
                         var startSeq = maxSeq + 1;
                         var endSeq = maxSeq + count;
@@ -237,6 +224,148 @@ public sealed class PatientCodeGenerator : IPatientCodeGenerator
                 semaphore.Release();
             }
         }
+    }
+
+    public async Task SynchronizeTrackerWithMaxExistingAsync(
+        string tenantId,
+        Guid clinicId,
+        int? year = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            throw new ArgumentException("TenantId cannot be null or whitespace.", nameof(tenantId));
+        }
+
+        if (clinicId == Guid.Empty)
+        {
+            throw new ArgumentException("ClinicId cannot be empty.", nameof(clinicId));
+        }
+
+        if (year.HasValue && year.Value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(year), "Year must be a positive integer.");
+        }
+
+        var targetYear = year ?? DateTime.UtcNow.Year;
+        var prefix = $"PAT-{targetYear}-";
+        var lockKey = $"{tenantId}:{clinicId}:{targetYear}";
+        var semaphore = _semaphores.GetOrAdd(lockKey, _ => new SemaphoreSlim(1, 1));
+
+        if (!BypassSemaphore)
+        {
+            await semaphore.WaitAsync(ct);
+        }
+
+        try
+        {
+            var unsavedAddedIds = _dbContext.ChangeTracker.Entries<Patient>()
+                .Where(e => e.State == EntityState.Added)
+                .Select(e => e.Entity.Id)
+                .ToHashSet();
+
+            var existingCodes = await _dbContext.Patients
+                .IgnoreQueryFilters()
+                .Where(p => p.ClinicId == clinicId && !unsavedAddedIds.Contains(p.Id) && p.PatientCode != null && p.PatientCode.StartsWith(prefix))
+                .Select(p => p.PatientCode)
+                .ToListAsync(ct);
+
+            var localCommittedCodes = _dbContext.ChangeTracker.Entries<Patient>()
+                .Where(e => e.State != EntityState.Added && e.State != EntityState.Detached && e.Entity.ClinicId == clinicId && e.Entity.PatientCode != null && e.Entity.PatientCode.StartsWith(prefix))
+                .Select(e => e.Entity.PatientCode)
+                .ToList();
+
+            var maxSeq = ParseMaxSequence(existingCodes.Concat(localCommittedCodes).Distinct(), prefix);
+            if (maxSeq <= 0)
+            {
+                return;
+            }
+
+            const int maxAttempts = 5;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                PatientCodeSequenceTracker? tracker = null;
+                try
+                {
+                    tracker = (attempt == 1
+                        ? _dbContext.PatientCodeSequenceTrackers.Local
+                            .FirstOrDefault(t =>
+                                t.TenantId == tenantId &&
+                                t.ClinicId == clinicId &&
+                                t.Year == targetYear)
+                        : null)
+                        ?? await _dbContext.PatientCodeSequenceTrackers
+                            .IgnoreQueryFilters()
+                            .FirstOrDefaultAsync(t =>
+                                t.TenantId == tenantId &&
+                                t.ClinicId == clinicId &&
+                                t.Year == targetYear, ct);
+
+                    if (tracker == null)
+                    {
+                        tracker = new PatientCodeSequenceTracker
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            Year = targetYear,
+                            CurrentSequence = maxSeq,
+                            LastAssignedAt = DateTime.UtcNow,
+                            CreatedAt = DateTime.UtcNow,
+                            CreatedBy = "System:SequenceSelfHeal"
+                        };
+                        _dbContext.PatientCodeSequenceTrackers.Add(tracker);
+                        await SaveTrackerOnlyAsync(ct);
+                    }
+                    else if (tracker.CurrentSequence < maxSeq)
+                    {
+                        _logger?.LogWarning(
+                            "[PatientCodeGenerator] Self-healing stale sequence tracker for Clinic {ClinicId} (Tenant {TenantId}, Year {Year}): advancing {OldSeq} -> {MaxSeq}.",
+                            clinicId, tenantId, targetYear, tracker.CurrentSequence, maxSeq);
+                        tracker.CurrentSequence = maxSeq;
+                        tracker.LastAssignedAt = DateTime.UtcNow;
+                        tracker.UpdatedAt = DateTime.UtcNow;
+                        await SaveTrackerOnlyAsync(ct);
+                    }
+
+                    return;
+                }
+                catch (DbUpdateException) when (attempt < maxAttempts)
+                {
+                    if (tracker != null)
+                    {
+                        _dbContext.Entry(tracker).State = EntityState.Detached;
+                    }
+                    var jitter = Random.Shared.Next(10, 35);
+                    await Task.Delay(jitter * attempt, ct);
+                }
+            }
+        }
+        finally
+        {
+            if (!BypassSemaphore)
+            {
+                semaphore.Release();
+            }
+        }
+    }
+
+    private static int ParseMaxSequence(IEnumerable<string?> codes, string prefix)
+    {
+        var maxSeq = 0;
+        foreach (var code in codes)
+        {
+            if (!string.IsNullOrEmpty(code) && code.Length > prefix.Length)
+            {
+                var suffix = code[prefix.Length..];
+                if (int.TryParse(suffix, out var parsed) && parsed > 0 && parsed > maxSeq)
+                {
+                    maxSeq = parsed;
+                }
+            }
+        }
+
+        return maxSeq;
     }
 
     private async Task SaveTrackerOnlyAsync(CancellationToken ct)

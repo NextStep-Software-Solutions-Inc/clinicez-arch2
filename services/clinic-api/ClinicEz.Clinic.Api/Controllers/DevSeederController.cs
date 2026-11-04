@@ -68,7 +68,7 @@ public sealed class DevSeederController : ControllerBase
             !string.IsNullOrWhiteSpace(headerVal.ToString()))
             return headerVal.ToString();
 
-        return !string.IsNullOrWhiteSpace(_clinicContext.TenantId) ? _clinicContext.TenantId : null;
+        return null;
     }
 
     /// <summary>

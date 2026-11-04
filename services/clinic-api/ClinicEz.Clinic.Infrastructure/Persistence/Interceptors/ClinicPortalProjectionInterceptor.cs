@@ -155,7 +155,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
                 // Load existing persisted tickets for today Manila
                 var dbTickets = await db.QueueItems.IgnoreQueryFilters().AsNoTracking()
-                    .Where(q => q.ClinicId == clinicId && q.QueueDate == todayManila && !q.IsDeleted)
+                    .Where(q => q.ClinicId == clinicId && q.QueueDate == todayManila && !q.IsDeleted && !q.IsDirectVisit)
                     .ToListAsync(cancellationToken);
 
                 // Overlay change tracker modifications
@@ -163,7 +163,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
                 foreach (var qEntry in queueEntries.Where(e => e.Entity.ClinicId == clinicId))
                 {
-                    if (qEntry.State == EntityState.Deleted || qEntry.Entity.IsDeleted)
+                    if (qEntry.State == EntityState.Deleted || qEntry.Entity.IsDeleted || qEntry.Entity.IsDirectVisit)
                     {
                         activeTickets.Remove(qEntry.Entity.Id);
                     }

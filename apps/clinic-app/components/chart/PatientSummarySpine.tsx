@@ -719,7 +719,15 @@ export default function PatientSummarySpine({
               <Badge label={bloodType} variant="neutral" size="sm" icon="droplet" />
             ) : null}
             {effectiveTicket ? (
-              <Badge label={`Ticket: ${effectiveTicket}`} variant="primary" size="sm" icon="ticket" />
+              effectiveTicket === 'DIRECT' || effectiveTicket.startsWith('DV-') ? (
+                <Badge
+                  label={effectiveTicket === 'DIRECT' ? 'Direct • Draft' : `Direct • ${effectiveTicket}`}
+                  variant="routine"
+                  size="sm"
+                />
+              ) : (
+                <Badge label={`Ticket: ${effectiveTicket}`} variant="primary" size="sm" icon="ticket" />
+              )
             ) : null}
             {effectivePriority ? (
               <Badge

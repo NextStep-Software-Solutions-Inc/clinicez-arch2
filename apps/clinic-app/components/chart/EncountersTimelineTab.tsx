@@ -239,11 +239,6 @@ export default function EncountersTimelineTab({
                                   !isPrimaryPill && styles.headerDiagPill_secondary,
                                 ]}
                               >
-                                <Icon
-                                  name="activity"
-                                  size={12}
-                                  color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
-                                />
                                 <ThemedText
                                   variant="captionBold"
                                   color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
@@ -260,7 +255,7 @@ export default function EncountersTimelineTab({
 
                     <View style={styles.cardHeaderRight}>
                       {enc.isYakapEligible ? (
-                        <Badge label="YAKAP" variant="purple" size="sm" icon="yakap" />
+                        <Badge label="YAKAP" variant="purple" size="sm" />
                       ) : (
                         <Badge label="Standard" variant="neutral" size="sm" />
                       )}
@@ -343,11 +338,6 @@ export default function EncountersTimelineTab({
                                   key={d.id || `${enc.id}-soap-diag-${diagIdx}`}
                                   style={[styles.diagPill, isPrimaryPill && styles.diagPill_primary]}
                                 >
-                                  <Icon
-                                    name="activity"
-                                    size={12}
-                                    color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
-                                  />
                                   <ThemedText
                                     variant="captionBold"
                                     color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}

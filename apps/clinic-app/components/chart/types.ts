@@ -175,6 +175,7 @@ export interface ChartLayoutProps {
   onOrderProcedure?: () => void;
   onOrderDiagnostic?: () => void;
   queueItemId?: string | null;
+  allowDuplicateActive?: boolean;
 }
 
 export interface PatientChartModalProps {
@@ -200,6 +201,7 @@ export interface PatientChartModalProps {
   onOrderProcedure?: () => void;
   onOrderDiagnostic?: () => void;
   queueItemId?: string | null;
+  allowDuplicateActive?: boolean;
 
   // Tab Action Handlers
   onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;

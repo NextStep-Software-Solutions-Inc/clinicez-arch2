@@ -159,7 +159,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 
-        if (_notificationDispatcher != null)
+        if (_notificationDispatcher != null && !item.IsDirectVisit)
         {
             await _notificationDispatcher.DispatchCalledAlertAsync(item, item.DoctorName, item.RoomOrStation, cancellationToken);
             await _notificationDispatcher.EvaluateAndDispatchApproachingAlertsAsync(item.ClinicId, item.QueueDate, cancellationToken);

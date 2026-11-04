@@ -15,6 +15,7 @@ export interface QueueTicketPickerModalProps {
   patient: ClinicPatient | null;
   tickets: Array<PatientQueueItem | PatientActiveQueueTicket>;
   serviceTitle?: string;
+  createNewTitle?: string;
   onSelectTicket: (ticket: PatientQueueItem | PatientActiveQueueTicket) => void;
   onCreateNewTicket?: () => void;
 }
@@ -25,6 +26,7 @@ export default function QueueTicketPickerModal({
   patient,
   tickets,
   serviceTitle = 'Encounter',
+  createNewTitle = '+ Start Separate Direct Visit',
   onSelectTicket,
   onCreateNewTicket,
 }: QueueTicketPickerModalProps) {
@@ -40,7 +42,7 @@ export default function QueueTicketPickerModal({
       />
       {onCreateNewTicket ? (
         <Button
-          title="Add new ticket"
+          title={createNewTitle}
           variant="outline"
           icon="plus"
           onPress={onCreateNewTicket}

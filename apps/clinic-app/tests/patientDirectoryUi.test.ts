@@ -1284,8 +1284,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     const { join } = await import('path');
     const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
 
-    // Handlers and headless encounter tracking for clinic census
-    expect(code).toContain('ensureEncounterQueueItem');
+    // Handlers and zero-write active visit resolution
+    expect(code).toContain('resolveActiveVisitForAction');
     expect(code).toContain('handleStartConsultationAction');
     expect(code).toContain('handleStartProfilingAction');
     expect(code).toContain('handleRecordVitalsAction');
@@ -1300,29 +1300,25 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     // Modals rendered
     expect(code).toContain('<ConsultationTypeModal');
     expect(code).toContain('<RecordVitalsModal');
+    expect(code).toContain('<IssueMedicalCertificateModal');
   });
 
-  test('34. Patients.screen.tsx strictly uses canonical VisitType enum values in headless check-in', async () => {
+  test('34. Patients.screen.tsx strictly uses canonical zero-write navigation without eager lobby queue mutations', async () => {
     const { readFileSync } = await import('fs');
     const { join } = await import('path');
     const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
 
-    // ensureEncounterQueueItem parameter is strongly typed to VisitType
-    expect(code).toContain('visitType: VisitType;');
+    // Zero-write active visit resolution
+    expect(code).toContain('resolveActiveVisitForAction');
 
-    // Direct actions strictly use backend-supported VisitType enum strings
-    expect(code).toContain("const visitType: VisitType = 'Consultation';");
-    expect(code).toContain("visitType: 'VitalsCheckOnly'");
-    expect(code).toContain("visitType: 'StandaloneProcedure'");
-    expect(code).toContain("visitType: 'AdministrativeDocument'");
+    // Direct actions resolve active visits with canonical service titles
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Doctor Consultation'");
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Vitals Check'");
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Clinical Procedure'");
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Medical Certificate'");
 
-    // Must not use unmapped domain names as visitType
-    expect(code).not.toContain("visitType: 'WalkInConsultation'");
-    expect(code).not.toContain("visitType = 'WalkInConsultation'");
-    expect(code).not.toContain("visitType: 'PhilHealthKonsulta'");
-    expect(code).not.toContain("visitType: 'VitalsCheck'");
-    expect(code).not.toContain("visitType: 'ClinicalProcedure'");
-    expect(code).not.toContain("visitType: 'Administrative'");
+    // Eager check-in routine has been eliminated
+    expect(code).not.toContain('ensureEncounterQueueItem');
   });
 
   test('35. ServiceCheckInModal forces allowDuplicateActive=true on conflict confirmation', async () => {
@@ -1449,7 +1445,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).not.toContain('InConsultation');
     expect(markup).toContain('Cough and colds');
     expect(markup).toContain('Hypertension follow-up');
-    expect(markup).toContain('Add new ticket');
+    expect(markup).toContain('+ Start Separate Direct Visit');
     expect(markup).toContain('Cancel');
   });
 
@@ -1463,12 +1459,9 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(code).toContain('ticketPickerState');
     expect(code).toContain('<QueueTicketPickerModal');
 
-    // Matching items filtering logic
-    expect(code).toContain('matchingItems.length >= 2');
-    expect(code).toContain('multipleOptions: matchingItems');
-
-    // Action handlers using picker for ≥2 tickets
-    expect(code).toContain('startConsultationWithQueueItem');
+    // Active tickets filtering & picker trigger in resolveActiveVisitForAction
+    expect(code).toContain('resolveActiveVisitForAction');
+    expect(code).toContain('activeTickets.length === 1');
     expect(code).toContain('setTicketPickerState');
   });
 
@@ -1570,5 +1563,24 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(toggleMarkup).not.toContain('>Cards view<');
     expect(toggleMarkup).not.toContain('>Compact table view<');
   });
+
+  test('43. Register Patient modal sends typed patientCode and avoids binding patientCode error when left blank for auto-generation', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const screenSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+    const serviceSrc = fs.readFileSync(
+      path.resolve(__dirname, '../services/clinicService.ts'),
+      'utf8'
+    );
+
+    expect(serviceSrc).toMatch(/export interface RegisterPatientPayload\s*\{[\s\S]*?patientCode\?:\s*string;/);
+    expect(screenSrc).toContain('patientCode: formPatientCode.trim() || undefined,');
+    expect(screenSrc).toMatch(/if\s*\(formPatientCode\.trim\(\)\)\s*\{\s*if\s*\(pcErr\)\s*fieldErrorsMap\.patientCode\s*=\s*pcErr;\s*\}\s*else\s*\{\s*delete\s*fieldErrorsMap\.patientCode;\s*\}/);
+  });
 });
+
 

@@ -294,7 +294,7 @@ describe('Issue #52 — Consultations Patient Chart Profile RBAC & Doctor Permis
       );
       expect(lifestyleMarkup).not.toContain("Read-only mode: 'patients:write' permission is required");
       expect(lifestyleMarkup).not.toContain('Save Lifestyle Profile');
-      expect(lifestyleMarkup).toContain('Auto-save active');
+      expect(lifestyleMarkup).not.toContain('Auto-save active');
       expect(lifestyleMarkup).toContain('Changes to lifestyle and social history are saved automatically.');
 
       const lifestyleSavedMarkup = renderHtml(
@@ -329,7 +329,7 @@ describe('Issue #52 — Consultations Patient Chart Profile RBAC & Doctor Permis
       );
       expect(reproductiveMarkup).not.toContain("Read-only mode: 'patients:write' permission is required");
       expect(reproductiveMarkup).not.toContain("Save Women's Health Profile");
-      expect(reproductiveMarkup).toContain('Auto-save active');
+      expect(reproductiveMarkup).not.toContain('Auto-save active');
       expect(reproductiveMarkup).toContain("Changes to women's & reproductive health are saved automatically.");
 
       const reproductiveSavedMarkup = renderHtml(

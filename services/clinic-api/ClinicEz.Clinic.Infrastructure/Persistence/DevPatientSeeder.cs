@@ -1607,10 +1607,12 @@ public static class DevPatientSeeder
                 totalCreated, targetCount, (double)totalCreated / targetCount * 100);
         }
 
-        // 6. Update patient code sequence tracker in DB so future regular registrations don't collide
-        tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.ClinicId == clinicId && t.Year == year, ct);
+        // 6. Update patient code sequence tracker(s) in DB so future regular registrations don't collide
+        var clinicTrackers = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .Where(t => t.ClinicId == clinicId && t.Year == year)
+            .ToListAsync(ct);
 
+        tracker = clinicTrackers.FirstOrDefault(t => t.TenantId == tenantId);
         if (tracker == null)
         {
             dbContext.PatientCodeSequenceTrackers.Add(new PatientCodeSequenceTracker
@@ -1625,11 +1627,15 @@ public static class DevPatientSeeder
                 CreatedBy = "System:DevPatientSeeder"
             });
         }
-        else if (tracker.CurrentSequence < currentSeq)
+
+        foreach (var existingTracker in clinicTrackers)
         {
-            tracker.CurrentSequence = currentSeq;
-            tracker.LastAssignedAt = DateTime.UtcNow;
-            tracker.UpdatedAt = DateTime.UtcNow;
+            if (existingTracker.CurrentSequence < currentSeq)
+            {
+                existingTracker.CurrentSequence = currentSeq;
+                existingTracker.LastAssignedAt = DateTime.UtcNow;
+                existingTracker.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -2001,12 +2007,17 @@ public static class DevPatientSeeder
                 remainingMaxSeq = s;
         }
 
-        var tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.ClinicId == clinicId && (tenantId == null || t.TenantId == tenantId) && t.Year == year, ct);
-        if (tracker != null)
+        var trackers = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .Where(t => t.ClinicId == clinicId && t.Year == year)
+            .ToListAsync(ct);
+        if (trackers.Count > 0)
         {
-            tracker.CurrentSequence = remainingMaxSeq;
-            tracker.LastAssignedAt = DateTime.UtcNow;
+            foreach (var tracker in trackers)
+            {
+                tracker.CurrentSequence = remainingMaxSeq;
+                tracker.LastAssignedAt = DateTime.UtcNow;
+                tracker.UpdatedAt = DateTime.UtcNow;
+            }
             await dbContext.SaveChangesAsync(ct);
         }
 

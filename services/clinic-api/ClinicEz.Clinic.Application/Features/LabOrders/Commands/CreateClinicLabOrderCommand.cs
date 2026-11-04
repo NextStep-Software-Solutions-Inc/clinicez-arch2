@@ -26,7 +26,8 @@ public record CreateClinicLabOrderCommand(
     string? Notes = null,
     List<CreateLabOrderItemRequest>? Items = null,
     string? TargetFacilityId = null,
-    string? TargetTenantId = null
+    string? TargetTenantId = null,
+    Guid? QueueItemId = null
 ) : IRequest<ClinicLabOrderDto>;
 
 public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLabOrderCommand, ClinicLabOrderDto>
@@ -42,6 +43,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     private readonly IClaimSlipService _claims;
     private readonly IPatientDocumentPublisher _documents;
     private readonly IRepository<ServiceItem>? _serviceRepo;
+    private readonly IRepository<ConsultationEncounter>? _encounterRepo;
 
     public CreateClinicLabOrderCommandHandler(
         IRepository<LabOrder> orderRepo,
@@ -54,7 +56,8 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         IUploadGrantService uploadGrants,
         IClaimSlipService claims,
         IPatientDocumentPublisher documents,
-        IRepository<ServiceItem>? serviceRepo = null)
+        IRepository<ServiceItem>? serviceRepo = null,
+        IRepository<ConsultationEncounter>? encounterRepo = null)
     {
         _orderRepo = orderRepo;
         _patientRepo = patientRepo;
@@ -67,6 +70,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         _claims = claims;
         _documents = documents;
         _serviceRepo = serviceRepo;
+        _encounterRepo = encounterRepo;
     }
 
     public async Task<ClinicLabOrderDto> Handle(CreateClinicLabOrderCommand request, CancellationToken cancellationToken)
@@ -286,6 +290,17 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             ? request.OrderedByDoctorName.Trim()
             : $"{doctor.Title} {doctor.FirstName} {doctor.LastName}".Trim();
 
+        Guid? resolvedQueueItemId = request.QueueItemId;
+        if (!resolvedQueueItemId.HasValue && request.ConsultationId.HasValue && _encounterRepo != null)
+        {
+            var consultationId = request.ConsultationId.Value;
+            resolvedQueueItemId = await _encounterRepo
+                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.Id == consultationId)
+                .Select(e => e.QueueItemId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        var visitKey = (resolvedQueueItemId ?? request.ConsultationId)?.ToString();
+
         return new LabRequisitionIssuedEvent
         {
             RequisitionId = order.Id,
@@ -294,7 +309,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             OrderingFacilityName = clinic.Name,
             TenantId = clinic.TenantId,
             BranchId = _clinicContext.BranchId?.ToString(),
-            VisitKey = request.ConsultationId?.ToString(),
+            VisitKey = visitKey,
             TargetFacilityId = targetFacilityId?.ToString(),
             TargetTenantId = targetTenantId,
             OrderingDoctor = new OrderingDoctorDto

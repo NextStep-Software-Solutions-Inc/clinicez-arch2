@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Exceptions;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
@@ -17,6 +18,7 @@ using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Handling;
@@ -1862,5 +1864,270 @@ public class PatientCodeSequenceTests
         var exception = await act.Should().ThrowAsync<InvalidOperationException>();
         exception.WithMessage("*Failed to self-enroll student after multiple sequence allocation attempts*");
         exception.WithInnerException<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task RegisterPatient_WhenTrackerFarBehindSeededPatients_SelfHealsAndAssignsNextAfterMaxExisting()
+    {
+        // Arrange: Reproduces stale tracker (e.g. 15) while seeded patients exist up to PAT-YYYY-01098
+        var year = DateTime.UtcNow.Year;
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var generator = new PatientCodeGenerator(context);
+
+        await context.PatientCodeSequenceTrackers.AddAsync(new PatientCodeSequenceTracker
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            Year = year,
+            CurrentSequence = 15,
+            LastAssignedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "Seed"
+        });
+
+        await context.Patients.AddRangeAsync(
+            new Patient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = $"PAT-{year}-00016",
+                FirstName = "Seeded",
+                LastName = "Sixteen",
+                DateOfBirth = new DateOnly(1990, 1, 1),
+                Sex = BiologicalSex.Female,
+                ContactNumber = "09170000016",
+                CreatedAt = DateTime.UtcNow
+            },
+            new Patient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = $"PAT-{year}-01098",
+                FirstName = "Seeded",
+                LastName = "Max",
+                DateOfBirth = new DateOnly(1990, 1, 2),
+                Sex = BiologicalSex.Male,
+                ContactNumber = "09170001098",
+                CreatedAt = DateTime.UtcNow
+            });
+        await context.SaveChangesAsync();
+
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, codeGenerator: generator);
+        var command = new RegisterClinicPatientCommand(
+            FirstName: "Maria",
+            LastName: "Clara",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1996, 4, 12),
+            Sex: "Female",
+            CivilStatus: "Single",
+            ContactNumber: "09171234567",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            PatientCode: null);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert: Attempt 1 collided on 00016, self-healed tracker to 1098, and succeeded on Attempt 2 with 01099
+        result.PatientCode.Should().Be($"PAT-{year}-01099");
+
+        var updatedTracker = await context.PatientCodeSequenceTrackers
+            .FirstOrDefaultAsync(t => t.TenantId == _tenantId && t.ClinicId == _clinicId && t.Year == year);
+        updatedTracker.Should().NotBeNull();
+        updatedTracker!.CurrentSequence.Should().Be(1099);
+    }
+
+    [Fact]
+    public async Task BulkRegisterPatients_WhenTrackerFarBehindSeededPatients_SelfHealsAndAssignsBatchAfterMaxExisting()
+    {
+        var year = DateTime.UtcNow.Year;
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var generator = new PatientCodeGenerator(context);
+
+        await context.PatientCodeSequenceTrackers.AddAsync(new PatientCodeSequenceTracker
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            Year = year,
+            CurrentSequence = 5,
+            LastAssignedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "Seed"
+        });
+
+        await context.Patients.AddRangeAsync(
+            new Patient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = $"PAT-{year}-00006",
+                FirstName = "Seeded",
+                LastName = "Six",
+                DateOfBirth = new DateOnly(1990, 1, 1),
+                Sex = BiologicalSex.Female,
+                ContactNumber = "09170000006",
+                CreatedAt = DateTime.UtcNow
+            },
+            new Patient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = "tenant_default",
+                ClinicId = _clinicId,
+                PatientCode = $"PAT-{year}-01098",
+                FirstName = "AnonymousSeeded",
+                LastName = "Max",
+                DateOfBirth = new DateOnly(1990, 1, 2),
+                Sex = BiologicalSex.Male,
+                ContactNumber = "09170001098",
+                CreatedAt = DateTime.UtcNow
+            });
+        await context.SaveChangesAsync();
+
+        var handler = new BulkRegisterClinicPatientsCommandHandler(patientRepo, uow, _clinicContext, generator);
+        var command = new BulkRegisterClinicPatientsCommand(new List<BulkPatientItemDto>
+        {
+            new("BatchOne", "Patient", null, null, new DateOnly(2000, 1, 1), "Male", null, "09178880001", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+            new("BatchTwo", "Patient", null, null, new DateOnly(2001, 1, 1), "Female", null, "09178880002", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
+        });
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.CreatedPatients.Should().HaveCount(2);
+        result.CreatedPatients[0].PatientCode.Should().Be($"PAT-{year}-01099");
+        result.CreatedPatients[1].PatientCode.Should().Be($"PAT-{year}-01100");
+    }
+
+    [Fact]
+    public async Task RegisterPatient_WithExplicitCustomPatientCode_PersistsCustomCodeAndAdvancesTrackerWhenMatchingPrefix()
+    {
+        var year = DateTime.UtcNow.Year;
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var generator = new PatientCodeGenerator(context);
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, codeGenerator: generator);
+
+        var customCommand = new RegisterClinicPatientCommand(
+            FirstName: "Custom",
+            LastName: "Legacy",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1988, 8, 8),
+            Sex: "Male",
+            CivilStatus: null,
+            ContactNumber: "09171112222",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            PatientCode: "  LEGACY-0042  ");
+
+        var customResult = await handler.Handle(customCommand, CancellationToken.None);
+        customResult.PatientCode.Should().Be("LEGACY-0042");
+
+        var explicitStandardCommand = customCommand with
+        {
+            FirstName = "ExplicitSeq",
+            ContactNumber = "09171113333",
+            PatientCode = $"PAT-{year}-02500"
+        };
+        var explicitStdResult = await handler.Handle(explicitStandardCommand, CancellationToken.None);
+        explicitStdResult.PatientCode.Should().Be($"PAT-{year}-02500");
+
+        var nextAutoCommand = customCommand with
+        {
+            FirstName = "AutoAfterExplicit",
+            ContactNumber = "09171114444",
+            PatientCode = null
+        };
+        var nextAutoResult = await handler.Handle(nextAutoCommand, CancellationToken.None);
+        nextAutoResult.PatientCode.Should().Be($"PAT-{year}-02501");
+    }
+
+    [Fact]
+    public async Task RegisterPatient_WithDuplicateExplicitPatientCode_ThrowsConflictExceptionWithPatientCodeField()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var generator = new PatientCodeGenerator(context);
+
+        await context.Patients.AddAsync(new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "VIP-0001",
+            FirstName = "Existing",
+            LastName = "Vip",
+            DateOfBirth = new DateOnly(1980, 1, 1),
+            Sex = BiologicalSex.Female,
+            ContactNumber = "09179990001",
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, codeGenerator: generator);
+        var duplicateCommand = new RegisterClinicPatientCommand(
+            FirstName: "Duplicate",
+            LastName: "Attempt",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1992, 2, 2),
+            Sex: "Female",
+            CivilStatus: null,
+            ContactNumber: "09179990002",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            PatientCode: "VIP-0001");
+
+        var act = () => handler.Handle(duplicateCommand, CancellationToken.None);
+        var ex = (await act.Should().ThrowAsync<DuplicatePatientCodeConflictException>()).Which;
+        ex.PatientCode.Should().Be("VIP-0001");
+        DuplicatePatientCodeConflictException.FieldName.Should().Be("patientCode");
+        DuplicatePatientCodeConflictException.ErrorCode.Should().Be("DUPLICATE_PATIENT_CODE");
     }
 }

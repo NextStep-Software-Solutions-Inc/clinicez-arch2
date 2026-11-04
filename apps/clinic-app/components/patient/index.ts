@@ -87,3 +87,9 @@ export {
   buildPrincipalSponsorFromGuardian,
   type GuardianSponsorPrefill,
 } from './memberType';
+
+export {
+  default as IssueMedicalCertificateModal,
+  type IssueMedicalCertificateModalProps,
+  type FitnessStatus,
+} from './IssueMedicalCertificateModal';

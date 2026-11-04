@@ -73,6 +73,7 @@ export default function PatientChartModal({
   onOrderProcedure,
   onOrderDiagnostic,
   queueItemId,
+  allowDuplicateActive = false,
 }: PatientChartModalProps) {
   const { settings } = useClinic();
   const configuredLayout: ChartLayoutMode =
@@ -100,6 +101,7 @@ export default function PatientChartModal({
   const [activeLayout, setActiveLayout] = useState<ChartLayoutMode>(configuredLayout);
   const [editDemographicsVisible, setEditDemographicsVisible] = useState(false);
   const [currentPatient, setCurrentPatient] = useState<ClinicPatient | null>(patient);
+  const [materializedQueueItemId, setMaterializedQueueItemId] = useState<string | null>(null);
   const [catalogModalState, setCatalogModalState] = useState<{
     visible: boolean;
     initialCategory: CategoryTab;
@@ -117,6 +119,7 @@ export default function PatientChartModal({
     if (patient?.id !== prevPatientIdRef.current) {
       prevPatientIdRef.current = patient?.id;
       setTabHistory([]);
+      setMaterializedQueueItemId(null);
     }
   }, [patient]);
 
@@ -138,6 +141,7 @@ export default function PatientChartModal({
       }
     } else if (!visible && tabVisibleRef.current) {
       setTabHistory([]);
+      setMaterializedQueueItemId(null);
     }
     tabVisibleRef.current = visible;
   }, [visible, activeTabProp, initialTab, focusToothNumber]);
@@ -234,7 +238,11 @@ export default function PatientChartModal({
   }, [tabHistory, allowedTabIds, onTabChange]);
 
   const resolvedQueueItemId =
-    queueItemId ?? (patientChart as any)?.queueItemId ?? (displayPatient as any)?.queueItemId ?? null;
+    queueItemId ??
+    materializedQueueItemId ??
+    (patientChart as any)?.queueItemId ??
+    (displayPatient as any)?.queueItemId ??
+    null;
 
   const handleOpenBuiltInOrderProcedure = useCallback(() => {
     setCatalogModalState({ visible: true, initialCategory: 'Procedure' });
@@ -262,13 +270,36 @@ export default function PatientChartModal({
         notify.error('No patient selected.');
         return;
       }
-      const patientFullName = `${displayPatient.firstName || ''} ${displayPatient.lastName || ''}`.trim() || 'Patient';
+      const patientFullName =
+        displayPatient.fullName ||
+        `${displayPatient.firstName || ''} ${displayPatient.lastName || ''}`.trim() ||
+        'Patient';
       const isDiag = (order.category || '').toLowerCase().includes('diagnostic');
+
+      let effectiveQueueItemId = resolvedQueueItemId;
+      if (!effectiveQueueItemId) {
+        const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
+          patientId: displayPatient.id,
+          patientName: patientFullName,
+          doctorId: order.orderedByDoctorId,
+          doctorName: order.orderedByDoctorName,
+          visitType: isDiag ? 'Consultation' : 'StandaloneProcedure',
+          initialStatus: isDiag ? 'InConsultation' : 'PendingProcedure',
+          allowDuplicateActive: allowDuplicateActive && !materializedQueueItemId,
+        });
+        if (visitErr || !directVisit) {
+          notify.error(visitErr?.message || 'Could not initialize direct visit for order.');
+          return;
+        }
+        effectiveQueueItemId = directVisit.id;
+        setMaterializedQueueItemId(directVisit.id);
+      }
 
       if (isDiag) {
         const [, err] = await clinicService.createLabOrder({
           patientId: displayPatient.id,
           patientName: patientFullName,
+          queueItemId: effectiveQueueItemId || undefined,
           orderedByDoctorId: order.orderedByDoctorId,
           orderedByDoctorName: order.orderedByDoctorName,
           notes: order.instructions,
@@ -292,7 +323,7 @@ export default function PatientChartModal({
       const [, err] = await clinicService.orderProcedure({
         patientId: displayPatient.id,
         patientName: patientFullName,
-        queueItemId: resolvedQueueItemId || undefined,
+        queueItemId: effectiveQueueItemId || undefined,
         procedureCode: order.code || undefined,
         procedureName: order.name,
         category: order.category || 'Procedure',
@@ -311,7 +342,7 @@ export default function PatientChartModal({
       notify.success(`${order.name} ordered successfully.`);
       void handleRefresh();
     },
-    [displayPatient, resolvedQueueItemId, handleRefresh]
+    [displayPatient, resolvedQueueItemId, allowDuplicateActive, materializedQueueItemId, handleRefresh]
   );
 
   if (!visible) {
@@ -351,6 +382,7 @@ export default function PatientChartModal({
     onOrderProcedure: onOrderProcedure ?? handleOpenBuiltInOrderProcedure,
     onOrderDiagnostic: onOrderDiagnostic ?? handleOpenBuiltInOrderDiagnostic,
     queueItemId: resolvedQueueItemId,
+    allowDuplicateActive: allowDuplicateActive && !materializedQueueItemId,
   };
 
   return (

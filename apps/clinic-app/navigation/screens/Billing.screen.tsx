@@ -70,12 +70,16 @@ interface BillingPatient {
   patientName: string;
   queueItemId?: string;
   queueNumber?: string;
+  visitType?: string;
+  isDirectVisit?: boolean;
   doctorId?: string;
   doctorName?: string;
   isAlreadyBilled?: boolean;
   existingInvoiceNumber?: string;
   hasOpenSoa?: boolean;
   activeInvoice?: InvoiceRecord;
+  hasAddOnUnbilled?: boolean;
+  addOnUnbilledCount?: number;
   isPromissory?: boolean;
   promissoryDueDate?: string;
   promissoryReason?: string;
@@ -129,11 +133,11 @@ function formatPeso(value?: number | null): string {
 
 function toBillingPatient(
   item: PatientQueueItem,
-  billedMap?: Map<string, string>,
-  openSoaMap?: Map<string, InvoiceRecord>
+  paidByQueueId?: Map<string, string>,
+  openSoaByQueueId?: Map<string, InvoiceRecord>
 ): BillingPatient {
-  const openInv = openSoaMap?.get(item.id) || openSoaMap?.get(item.patientId);
-  const paidInvNum = billedMap?.get(item.id) || billedMap?.get(item.patientId);
+  const openInv = item.id ? openSoaByQueueId?.get(item.id) : undefined;
+  const paidInvNum = item.id ? paidByQueueId?.get(item.id) : undefined;
   const isPromissory = Boolean(
     openInv?.notes?.includes('[PROMISSORY NOTE]') ||
     openInv?.notes?.toLowerCase().includes('promissory note')
@@ -144,6 +148,8 @@ function toBillingPatient(
     patientName: item.patientName,
     queueItemId: item.id,
     queueNumber: item.queueNumber,
+    visitType: item.visitType,
+    isDirectVisit: Boolean(item.isDirectVisit || item.queueNumber?.startsWith('DV-')),
     doctorId: item.doctorId,
     doctorName: item.doctorName,
     hasOpenSoa: Boolean(openInv),
@@ -264,24 +270,26 @@ export default function BillingScreen() {
     setInvoices(allInvoices);
     if (settingsData) setClinicSettings(settingsData);
 
-    const billedMap = new Map<string, string>();
-    const openSoaMap = new Map<string, InvoiceRecord>();
+    const openSoaByQueueId = new Map<string, InvoiceRecord>();
+    const paidByQueueId = new Map<string, string>();
 
     for (const inv of allInvoices) {
-      if (inv.status === 'Voided') continue;
+      if (inv.status === 'Voided' || !inv.queueItemId) continue;
       if (inv.status === 'Draft' || inv.status === 'PartiallyPaid') {
-        if (inv.queueItemId) openSoaMap.set(inv.queueItemId, inv);
-        if (inv.patientId) openSoaMap.set(inv.patientId, inv);
+        openSoaByQueueId.set(inv.queueItemId, inv);
       } else if (inv.status === 'Paid') {
-        if (inv.queueItemId) billedMap.set(inv.queueItemId, inv.invoiceNumber);
-        if (inv.patientId) billedMap.set(inv.patientId, inv.invoiceNumber);
+        paidByQueueId.set(inv.queueItemId, inv.invoiceNumber);
       }
     }
 
     if (qErr) {
       errors.queue = qErr.message || 'Unable to load today\'s queue.';
     } else {
-      setPatients((queueData ?? []).map((item) => toBillingPatient(item, billedMap, openSoaMap)));
+      setPatients(
+        (queueData ?? []).map((item) =>
+          toBillingPatient(item, paidByQueueId, openSoaByQueueId)
+        )
+      );
     }
 
     if (eodErr || !eodData) {
@@ -361,25 +369,28 @@ export default function BillingScreen() {
       // Non-fatal if demographic lookup fails
     }
 
-    // Do NOT auto-rehydrate procedures if the patient has already been billed and settled today
-    if (p.isAlreadyBilled && !p.hasOpenSoa) {
-      return;
-    }
-
-    // Collect all items already billed and paid today for this patient to prevent double-billing
-    const paidInvoicesTodayForPatient = invoices.filter(
-      (inv) => inv.patientId === p.patientId && inv.status === 'Paid'
+    // Scope paid invoices strictly to this visit when queueItemId is present
+    const paidInvoicesForVisit = invoices.filter((inv) =>
+      p.queueItemId
+        ? inv.queueItemId === p.queueItemId && inv.status === 'Paid'
+        : inv.patientId === p.patientId && inv.status === 'Paid'
     );
-    const alreadyPaidItemCodes = new Set<string>();
-    const alreadyPaidItemNames = new Set<string>();
-    for (const paidInv of paidInvoicesTodayForPatient) {
+    const paidItemCodeCounts = new Map<string, number>();
+    const paidItemNameCounts = new Map<string, number>();
+    for (const paidInv of paidInvoicesForVisit) {
       for (const item of paidInv.lineItems || []) {
-        if (item.itemCode) alreadyPaidItemCodes.add(item.itemCode.toLowerCase());
-        if (item.description) alreadyPaidItemNames.add(item.description.toLowerCase());
+        if (item.itemCode) {
+          const k = item.itemCode.toLowerCase();
+          paidItemCodeCounts.set(k, (paidItemCodeCounts.get(k) || 0) + (item.quantity || 1));
+        }
+        if (item.description) {
+          const k = item.description.toLowerCase();
+          paidItemNameCounts.set(k, (paidItemNameCounts.get(k) || 0) + (item.quantity || 1));
+        }
       }
     }
 
-    // Auto-rehydrate any unbilled in-clinic procedures or consultations for today
+    // Auto-rehydrate any unbilled in-clinic procedures or consultations for this visit
     try {
       const [[procsData], [consultsData]] = await Promise.all([
         clinicService.getProcedures(p.patientId),
@@ -389,13 +400,30 @@ export default function BillingScreen() {
       const updatedItems = [...initialItems];
       let addedCount = 0;
 
-      // Ensure consultation service fee is present if not already billed
+      const visitConsultations = p.queueItemId
+        ? (consultsData ?? []).filter((c) => c.queueItemId === p.queueItemId)
+        : [];
+      const isConsultationVisit =
+        visitConsultations.length > 0 ||
+        (Boolean(p.doctorId) &&
+          p.visitType !== 'StandaloneProcedure' &&
+          p.visitType !== 'AdministrativeDocument' &&
+          p.visitType !== 'VitalsCheckOnly');
+
+      // Ensure consultation service fee is present if not already billed on THIS visit
       const hasConsultationItem = updatedItems.some(
         (i) => i.category?.toLowerCase() === 'consultation' || i.name.toLowerCase().includes('consultation')
       );
-      const isConsultationPaid = Array.from(alreadyPaidItemNames).some(name => name.includes('consultation'));
+      const isConsultationPaidOnVisit = Array.from(paidItemNameCounts.keys()).some((name) =>
+        name.includes('consultation')
+      );
 
-      if (!hasConsultationItem && !isConsultationPaid && (p.doctorId || (consultsData && consultsData.length > 0))) {
+      if (
+        !hasConsultationItem &&
+        !isConsultationPaidOnVisit &&
+        !p.isAlreadyBilled &&
+        isConsultationVisit
+      ) {
         const consultSvc = services.find(
           (s) => s.category?.toLowerCase() === 'consultation' || s.name.toLowerCase().includes('consultation')
         );
@@ -413,41 +441,81 @@ export default function BillingScreen() {
         addedCount++;
       }
 
-      // Check for ordered in-clinic procedures not yet in line items and not already paid
+      // Check for ordered in-clinic procedures not yet in line items and not already paid for this visit
       if (procsData && procsData.length > 0) {
-        for (const proc of procsData) {
-          if (proc.status === 'Cancelled') continue;
-          const alreadyBilled = updatedItems.some(
-            (i) => i.name.toLowerCase() === proc.procedureName.toLowerCase() ||
-                   (proc.procedureCode && i.code === proc.procedureCode)
-          );
-          const isProcPaid =
-            alreadyPaidItemNames.has(proc.procedureName.toLowerCase()) ||
-            (proc.procedureCode && alreadyPaidItemCodes.has(proc.procedureCode.toLowerCase()));
-
-          if (!alreadyBilled && !isProcPaid) {
-            const matchedSvc = services.find(
-              (s) => s.name.toLowerCase() === proc.procedureName.toLowerCase() ||
-                     (proc.procedureCode && s.code === proc.procedureCode)
-            );
-            updatedItems.push({
-              id: `proc-${proc.id || Date.now()}-${Math.random()}`,
-              code: proc.procedureCode || matchedSvc?.code || '',
-              name: proc.procedureName,
-              category: proc.category || matchedSvc?.category || 'Procedure',
-              price: matchedSvc?.standardPrice ?? 0,
-              qty: 1,
-              doctorId: proc.orderedByDoctorId || p.doctorId,
-              doctorName: proc.orderedByDoctorName || p.doctorName,
-            });
-            addedCount++;
+        const visitProcedures = procsData.filter((proc) => {
+          if (proc.status === 'Cancelled') return false;
+          if (p.queueItemId) {
+            return proc.queueItemId === p.queueItemId;
           }
+          return false;
+        });
+
+        const draftCodeCounts = new Map<string, number>();
+        const draftNameCounts = new Map<string, number>();
+        for (const item of initialItems) {
+          if (item.code) {
+            const k = item.code.toLowerCase();
+            draftCodeCounts.set(k, (draftCodeCounts.get(k) || 0) + (item.qty || 1));
+          }
+          if (item.name) {
+            const k = item.name.toLowerCase();
+            draftNameCounts.set(k, (draftNameCounts.get(k) || 0) + (item.qty || 1));
+          }
+        }
+
+        for (const proc of visitProcedures) {
+          const codeKey = proc.procedureCode?.toLowerCase();
+          const nameKey = proc.procedureName.toLowerCase();
+
+          const draftCodeRem = codeKey ? (draftCodeCounts.get(codeKey) || 0) : 0;
+          const draftNameRem = draftNameCounts.get(nameKey) || 0;
+          if (draftCodeRem > 0 || draftNameRem > 0) {
+            if (codeKey && draftCodeRem > 0) draftCodeCounts.set(codeKey, draftCodeRem - 1);
+            if (draftNameRem > 0) draftNameCounts.set(nameKey, draftNameRem - 1);
+            continue;
+          }
+
+          const paidCodeRem = codeKey ? (paidItemCodeCounts.get(codeKey) || 0) : 0;
+          const paidNameRem = paidItemNameCounts.get(nameKey) || 0;
+          if (paidCodeRem > 0 || paidNameRem > 0) {
+            if (codeKey && paidCodeRem > 0) paidItemCodeCounts.set(codeKey, paidCodeRem - 1);
+            if (paidNameRem > 0) paidItemNameCounts.set(nameKey, paidNameRem - 1);
+            continue;
+          }
+
+          const matchedSvc = services.find(
+            (s) =>
+              s.name.toLowerCase() === proc.procedureName.toLowerCase() ||
+              (proc.procedureCode && s.code === proc.procedureCode)
+          );
+          updatedItems.push({
+            id: `proc-${proc.id || Date.now()}-${Math.random()}`,
+            code: proc.procedureCode || matchedSvc?.code || '',
+            name: proc.procedureName,
+            category: proc.category || matchedSvc?.category || 'Procedure',
+            price: matchedSvc?.standardPrice ?? 0,
+            qty: 1,
+            doctorId: proc.orderedByDoctorId || p.doctorId,
+            doctorName: proc.orderedByDoctorName || p.doctorName,
+          });
+          addedCount++;
         }
       }
 
       if (addedCount > 0) {
         setLineItems(consolidateLineItems(updatedItems));
-        notify.info(`Auto-populated ${addedCount} consultation & procedure service(s) for ${p.patientName}.`);
+        if (p.isAlreadyBilled) {
+          setSelectedPatient((prev) =>
+            prev ? { ...prev, hasAddOnUnbilled: true, addOnUnbilledCount: addedCount } : prev
+          );
+          setAllowDuplicate(true);
+          notify.info(
+            `Detected ${addedCount} add-on unbilled procedure(s) for ${p.patientName}. Supplemental invoice enabled.`
+          );
+        } else {
+          notify.info(`Auto-populated ${addedCount} consultation & procedure service(s) for ${p.patientName}.`);
+        }
       }
     } catch {
       // Non-fatal if procedure lookup fails
@@ -1036,7 +1104,7 @@ export default function BillingScreen() {
         return;
       }
     } else {
-      if (selectedPatient.isAlreadyBilled && !allowDuplicate && !isRetail) {
+      if (selectedPatient.isAlreadyBilled && !allowDuplicate && !isRetail && !selectedPatient.hasAddOnUnbilled) {
         setIsProcessing(false);
         Alert.alert(
           'Duplicate invoice blocked',
@@ -1060,7 +1128,7 @@ export default function BillingScreen() {
           : isRetail
           ? `Retail POS sale via ${paymentMethod}`
           : `Settled via ${paymentMethod}`,
-        allowDuplicate: isRetail ? true : allowDuplicate,
+        allowDuplicate: isRetail ? true : (allowDuplicate || Boolean(selectedPatient.hasAddOnUnbilled)),
         lineItems: lineItems.map(l => ({
           serviceItemId: undefined,
           itemCode: l.code,
@@ -1292,7 +1360,7 @@ export default function BillingScreen() {
   );
 
   const activePatients = patientChoices.filter(
-    (p) => (!p.isAlreadyBilled || p.hasOpenSoa) && !p.isPromissory
+    (p) => (!p.isAlreadyBilled || p.hasOpenSoa || p.hasAddOnUnbilled) && !p.isPromissory
   );
   const patientsToBill = selectedPatient && !activePatients.some((p) => p.key === selectedPatient.key) && !selectedPatient.isWalkInRetail
     ? [selectedPatient, ...activePatients]
@@ -1321,14 +1389,20 @@ export default function BillingScreen() {
         <View style={styles.chipRow}>
           {patientsToBill.map(p => {
             const isSelected = selectedPatient?.key === p.key;
-            const statusTag = p.hasOpenSoa ? ' (SOA Ready)' : '';
+            const statusTag = p.hasOpenSoa
+              ? ' (SOA Ready)'
+              : p.hasAddOnUnbilled
+              ? ' (Add-on Unbilled)'
+              : '';
+            const isDv = p.isDirectVisit || p.queueNumber?.startsWith('DV-');
+            const queueLabel = p.queueNumber ? (isDv ? `Direct • ${p.queueNumber}` : p.queueNumber) : null;
             return (
               <Button
                 key={p.key}
                 size="sm"
                 variant={isSelected ? 'primary' : p.hasOpenSoa ? 'secondary' : 'outline'}
                 title={
-                  (p.queueNumber ? `${p.queueNumber} · ${p.patientName}` : p.patientName) + statusTag
+                  (queueLabel ? `${queueLabel} · ${p.patientName}` : p.patientName) + statusTag
                 }
                 onPress={() => handleSelectPatient(p)}
               />
@@ -1563,12 +1637,23 @@ export default function BillingScreen() {
         <View style={styles.soaHeaderBanner}>
           <Icon name="receipt" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
           <View style={styles.flexFill}>
-            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-              {selectedPatient?.isWalkInRetail ? 'Walk-In Retail Cart' : 'Draft Statement of Account'}
-            </ThemedText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                {selectedPatient?.isWalkInRetail
+                  ? 'Walk-In Retail Cart'
+                  : selectedPatient?.hasAddOnUnbilled
+                  ? 'Supplemental Statement of Account'
+                  : 'Draft Statement of Account'}
+              </ThemedText>
+              {selectedPatient?.hasAddOnUnbilled && (
+                <Badge label="Add-on Unbilled" variant="warning" size="sm" />
+              )}
+            </View>
             <ThemedText variant="caption" color={theme.colors.primaryDark}>
               {selectedPatient?.isWalkInRetail
                 ? `Customer: ${selectedPatient.patientName || '(Name required)'} • OTC medicines & supplies`
+                : selectedPatient?.hasAddOnUnbilled
+                ? `${selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}Add-on unbilled procedures for ${selectedPatient.queueNumber || 'this encounter'}`
                 : `${selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}Auto-populated from today's encounter & procedures`}
             </ThemedText>
           </View>
@@ -1935,25 +2020,42 @@ export default function BillingScreen() {
       )}
 
       {selectedPatient?.isAlreadyBilled && !activeInvoice && (
-        <View style={styles.duplicateWarningBox}>
-          <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
-          <View style={styles.flexFill}>
-            <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
-              Patient Already Billed & Settled
-            </ThemedText>
-            <ThemedText variant="caption" color={theme.colors.emergencyText}>
-              Invoice #{selectedPatient.existingInvoiceNumber} was already issued and paid for this encounter today.
-            </ThemedText>
-            <Pressable
-              onPress={() => setAllowDuplicate((prev) => !prev)}
-              style={styles.overrideCheck}
-            >
-              <ThemedText variant="captionBold" color={allowDuplicate ? theme.colors.emergencyText : theme.colors.primary}>
-                {allowDuplicate ? '[Authorized] Additional billing permitted' : 'Authorize additional / duplicate invoice'}
+        selectedPatient.hasAddOnUnbilled ? (
+          <View style={[styles.duplicateWarningBox, { borderColor: theme.colors.warningBorder, backgroundColor: theme.colors.warningBg }]}>
+            <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.warningText} />
+            <View style={styles.flexFill}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <ThemedText variant="bodyBold" color={theme.colors.warningText}>
+                  Add-On Unbilled Procedures
+                </ThemedText>
+                <Badge label="Add-on Unbilled" variant="warning" size="sm" />
+              </View>
+              <ThemedText variant="caption" color={theme.colors.warningText}>
+                Invoice #{selectedPatient.existingInvoiceNumber} was settled earlier. Newly ordered procedures ({selectedPatient.addOnUnbilledCount || lineItems.length}) can be billed as a supplemental invoice.
               </ThemedText>
-            </Pressable>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.duplicateWarningBox}>
+            <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+            <View style={styles.flexFill}>
+              <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+                Patient Already Billed & Settled
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                Invoice #{selectedPatient.existingInvoiceNumber} was already issued and paid for this encounter today.
+              </ThemedText>
+              <Pressable
+                onPress={() => setAllowDuplicate((prev) => !prev)}
+                style={styles.overrideCheck}
+              >
+                <ThemedText variant="captionBold" color={allowDuplicate ? theme.colors.emergencyText : theme.colors.primary}>
+                  {allowDuplicate ? '[Authorized] Additional billing permitted' : 'Authorize additional / duplicate invoice'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        )
       )}
 
       <View style={styles.settleActionRow}>
@@ -1980,7 +2082,7 @@ export default function BillingScreen() {
             (amountToCollect <= 0 && balanceDue > 0) ||
             (isPartialPayment && amountToCollect <= 0) ||
             (paymentMethod === 'PhilHealthKonsulta' && balanceDue === 0 && !referenceNumber.trim()) ||
-            (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate && !selectedPatient.isWalkInRetail)
+            (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate && !selectedPatient.hasAddOnUnbilled && !selectedPatient.isWalkInRetail)
           }
           onPress={handleSettlePayment}
           style={styles.settlePrimaryButton}
@@ -2141,6 +2243,12 @@ export default function BillingScreen() {
                   <ThemedText variant="h3" color={theme.colors.text}>
                     {selectedPatient.patientName}
                   </ThemedText>
+                  {(selectedPatient.isDirectVisit || selectedPatient.queueNumber?.startsWith('DV-')) && (
+                    <Badge label={`Direct • ${selectedPatient.queueNumber || 'DV'}`} variant="routine" size="sm" />
+                  )}
+                  {selectedPatient.hasAddOnUnbilled && (
+                    <Badge label="Add-on Unbilled" variant="warning" size="sm" />
+                  )}
                   {currentPatientProfile?.patientCode && (
                     <Badge label={`Code: ${currentPatientProfile.patientCode}`} variant="neutral" size="sm" />
                   )}

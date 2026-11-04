@@ -223,6 +223,8 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                     throw new InvalidOperationException("Failed to bulk register patients after multiple sequence allocation attempts.", ex);
                 }
 
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+
                 var newCodes = await _codeGenerator.ReserveBatchCodesAsync(
                     _clinicContext.TenantId,
                     _clinicContext.ClinicId,

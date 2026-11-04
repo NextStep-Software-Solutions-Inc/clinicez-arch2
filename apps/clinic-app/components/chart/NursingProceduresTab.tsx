@@ -56,6 +56,7 @@ export interface NursingProceduresTabProps {
   patientId?: string;
   patientName?: string;
   queueItemId?: string;
+  allowDuplicateActive?: boolean;
   procedures: ClinicalProcedureRecord[];
   onOrderProcedure?: () => void;
   onExecuteProcedure?: (procedure: ClinicalProcedureRecord) => void;
@@ -85,6 +86,7 @@ export default function NursingProceduresTab({
   patientId,
   patientName,
   queueItemId,
+  allowDuplicateActive = false,
   procedures = [],
   onOrderProcedure,
   onExecuteProcedure,
@@ -104,6 +106,7 @@ export default function NursingProceduresTab({
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [executingProc, setExecutingProc] = useState<ClinicalProcedureRecord | null>(null);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
+  const [materializedQueueItemId, setMaterializedQueueItemId] = useState<string | null>(null);
 
   const resolveOrderedByDisplay = useCallback(
     (proc: ClinicalProcedureRecord): string | null => {
@@ -176,6 +179,26 @@ export default function NursingProceduresTab({
         patientName ||
         (patient ? `${patient.firstName} ${patient.lastName}`.trim() : 'Walk-in Patient');
 
+      let effectiveQueueItemId = queueItemId || materializedQueueItemId;
+      if (!effectiveQueueItemId && targetPatId) {
+        const isDiagOrder = (order.category || '').toLowerCase().includes('diagnostic');
+        const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
+          patientId: targetPatId,
+          patientName: resolvedPatientName,
+          visitType: isDiagOrder ? 'Consultation' : 'StandaloneProcedure',
+          initialStatus: isDiagOrder ? 'InConsultation' : 'PendingProcedure',
+          doctorId: order.orderedByDoctorId,
+          doctorName: order.orderedByDoctorName,
+          allowDuplicateActive: allowDuplicateActive && !materializedQueueItemId,
+        });
+        if (visitErr || !directVisit) {
+          notify.error(visitErr?.message || 'Could not initialize direct visit for order.');
+          return;
+        }
+        effectiveQueueItemId = directVisit.id;
+        setMaterializedQueueItemId(directVisit.id);
+      }
+
       const isDiag = (order.category || '').toLowerCase().includes('diagnostic');
       if (isDiag) {
         const [, err] = await clinicService.createLabOrder({
@@ -184,6 +207,7 @@ export default function NursingProceduresTab({
           orderedByDoctorId: order.orderedByDoctorId,
           orderedByDoctorName: order.orderedByDoctorName,
           notes: order.instructions,
+          queueItemId: effectiveQueueItemId || undefined,
           items: [
             {
               testName: order.name,
@@ -204,7 +228,7 @@ export default function NursingProceduresTab({
       const [, err] = await clinicService.orderProcedure({
         patientId: targetPatId,
         patientName: resolvedPatientName,
-        queueItemId: queueItemId || undefined,
+        queueItemId: effectiveQueueItemId || undefined,
         procedureCode: order.code || undefined,
         procedureName: order.name,
         category: order.category || 'Procedure',
@@ -223,7 +247,7 @@ export default function NursingProceduresTab({
       notify.success(`${order.name} ordered successfully.`);
       onRefreshChart?.();
     },
-    [patientId, patient, patientName, queueItemId, onRefreshChart]
+    [patientId, patient, patientName, queueItemId, materializedQueueItemId, allowDuplicateActive, onRefreshChart]
   );
 
   const filteredProcedures = useMemo(() => {

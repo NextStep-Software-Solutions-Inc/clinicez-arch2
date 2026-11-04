@@ -12,10 +12,12 @@ import {
 } from '../../services/clinicService';
 import { openDocument } from '../../services/documentOpener';
 import { notify } from '../../utils/feedback';
+import IssueMedicalCertificateModal from '../patient/IssueMedicalCertificateModal';
 
 export interface AdministrativeDocumentsTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
+  queueItemId?: string | null;
   medicalCertificates?: MedicalCertificateRecord[];
   referralLetters?: ReferralLetterRecord[];
   isLoading?: boolean;
@@ -48,8 +50,9 @@ function formatDoctorName(name?: string): string {
 }
 
 export default function AdministrativeDocumentsTab({
-  patient: _patient,
+  patient,
   patientId: _patientId,
+  queueItemId,
   medicalCertificates = [],
   referralLetters = [],
   isLoading = false,
@@ -58,6 +61,7 @@ export default function AdministrativeDocumentsTab({
   const { dateFormat, timeZoneId } = useClinic();
   const [filterType, setFilterType] = useState<DocumentFilterType>('ALL');
   const [actioningDocId, setActioningDocId] = useState<string | null>(null);
+  const [issueModalVisible, setIssueModalVisible] = useState(false);
 
   const totalCerts = medicalCertificates.length;
   const totalReferrals = referralLetters.length;
@@ -355,8 +359,15 @@ export default function AdministrativeDocumentsTab({
           icon="file"
           title="No Issued Administrative Documents"
           description="Medical certificates and referral letters issued to this patient will appear here for viewing or reprinting."
-          actionTitle={onRefreshChart ? 'Refresh Chart' : undefined}
-          onAction={onRefreshChart}
+          actionTitle="Issue Medical Certificate"
+          onAction={() => setIssueModalVisible(true)}
+        />
+        <IssueMedicalCertificateModal
+          visible={issueModalVisible}
+          onClose={() => setIssueModalVisible(false)}
+          patient={patient ?? null}
+          queueItemId={queueItemId}
+          onSuccess={() => onRefreshChart?.()}
         />
       </View>
     );
@@ -375,11 +386,28 @@ export default function AdministrativeDocumentsTab({
           </ThemedText>
         </View>
 
+        <Button
+          title="Issue Certificate"
+          variant="primary"
+          size="sm"
+          icon="plus"
+          onPress={() => setIssueModalVisible(true)}
+          testID="open-issue-med-cert-btn"
+        />
+
         {/* Filter Pills */}
         {renderFilterChips()}
       </View>
 
       {renderSections()}
+
+      <IssueMedicalCertificateModal
+        visible={issueModalVisible}
+        onClose={() => setIssueModalVisible(false)}
+        patient={patient ?? null}
+        queueItemId={queueItemId}
+        onSuccess={() => onRefreshChart?.()}
+      />
     </ScrollView>
   );
 }

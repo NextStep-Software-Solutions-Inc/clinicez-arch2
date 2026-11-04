@@ -69,4 +69,5 @@ public sealed record PatientActiveQueueTicketDto(
     string? ChiefComplaint,
     Guid? DoctorId,
     string? DoctorName,
-    DateTime CheckInTime);
+    DateTime CheckInTime,
+    bool IsDirectVisit = false);

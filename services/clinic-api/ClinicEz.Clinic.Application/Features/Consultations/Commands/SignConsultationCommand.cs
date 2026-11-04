@@ -371,7 +371,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             OrderingFacilityName = clinic.Name,
             TenantId = clinic.TenantId,
             BranchId = _clinicContext.BranchId?.ToString(),
-            VisitKey = encounter.Id.ToString(),
+            VisitKey = (encounter.QueueItemId ?? encounter.Id).ToString(),
             TargetPharmacyFacilityId = pharmacy?.FacilityId.ToString(),
             TargetPharmacyTenantId = pharmacy?.TenantId,
             PrescriberDoctor = new Interop.PrescriberDoctorDto

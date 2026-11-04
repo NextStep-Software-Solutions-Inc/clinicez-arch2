@@ -104,7 +104,7 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
             else if (view.Equals("WaitingForDoctor", StringComparison.OrdinalIgnoreCase))
             {
                 // Triaged patients ready for first consult OR patients returned from procedures for re-evaluation
-                query = query.Where(q => q.Status == QueueStatus.Triaged || q.Status == QueueStatus.ReEvaluation);
+                query = query.Where(q => (q.Status == QueueStatus.Triaged || q.Status == QueueStatus.ReEvaluation) && !q.IsDirectVisit);
             }
             else if (view.Equals("Triage", StringComparison.OrdinalIgnoreCase))
             {

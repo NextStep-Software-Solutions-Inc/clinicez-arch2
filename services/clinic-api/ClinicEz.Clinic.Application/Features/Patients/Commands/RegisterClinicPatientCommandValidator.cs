@@ -42,6 +42,13 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
                 s.Equals("U", StringComparison.OrdinalIgnoreCase))
             .WithMessage("Sex must be 'Male', 'Female', 'Intersex', or 'Unknown'.");
 
+        When(x => !string.IsNullOrWhiteSpace(x.PatientCode), () =>
+        {
+            RuleFor(x => x.PatientCode!)
+                .Must(code => code.Trim().Length <= 30)
+                .WithMessage("Patient code must not exceed 30 characters.");
+        });
+
         When(x => !string.IsNullOrWhiteSpace(x.GenderIdentity), () =>
         {
             RuleFor(x => x.GenderIdentity!)

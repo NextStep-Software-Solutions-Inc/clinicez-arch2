@@ -239,6 +239,7 @@ export interface PatientQueueItem {
   handoverSummary?: string;
   divertedAt?: string;
   divertedByStaffId?: string;
+  isDirectVisit?: boolean;
 }
 
 export interface GetQueueParams {
@@ -1808,6 +1809,7 @@ export interface PatientActiveQueueTicket {
   doctorId?: string | null;
   doctorName?: string | null;
   checkInTime?: string;
+  isDirectVisit?: boolean;
 }
 
 export interface ClinicPatient {
@@ -1909,6 +1911,7 @@ export interface MedicalHistoryItemPayload {
 }
 
 export interface RegisterPatientPayload {
+  patientCode?: string;
   firstName: string;
   lastName: string;
   middleName?: string;
@@ -2517,6 +2520,23 @@ export const clinicService = {
     return clinicApiClient.post<PatientQueueItem>('/queue/check-in', payload);
   },
 
+  async ensureDirectVisit(payload: {
+    patientId: string;
+    patientName: string;
+    doctorId?: string;
+    doctorName?: string;
+    roomOrStation?: string;
+    roomId?: string;
+    visitType?: VisitType | string;
+    visitWorkflowMode?: 'Regular' | 'YakapAvailment';
+    initialStatus?: QueueStatus;
+    chiefComplaint?: string;
+    queueDate?: string;
+    allowDuplicateActive?: boolean;
+  }) {
+    return clinicApiClient.post<PatientQueueItem>('/queue/direct-visit', payload);
+  },
+
   async callQueueItem(id: string, doctorId?: string, doctorName?: string, roomOrStation?: string, roomId?: string) {
     return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/call`, { doctorId, doctorName, roomOrStation, roomId });
   },
@@ -2854,6 +2874,9 @@ export const clinicService = {
     clinicalDiagnosis?: string;
     notes?: string;
     items?: Array<{ testName: string; category: string; instructions?: string }>;
+    targetFacilityId?: string;
+    targetTenantId?: string;
+    queueItemId?: string;
   }) {
     return clinicApiClient.post<ClinicLabOrderRecord>('/lab-orders', payload);
   },

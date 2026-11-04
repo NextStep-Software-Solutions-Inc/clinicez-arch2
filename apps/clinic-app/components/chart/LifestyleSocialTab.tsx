@@ -534,8 +534,6 @@ export default function LifestyleSocialTab({
                 size="sm"
                 icon={autoSaveStatus === 'saved' ? 'checkCircle' : 'check'}
               />
-            ) : canWritePatients ? (
-              <Badge label="Auto-save active" variant="routine" size="sm" icon="check" />
             ) : null}
           </View>
         </View>
