@@ -11,6 +11,7 @@ import { Alert, notify } from '../../utils/feedback';
 import { ThemedText, Icon, ValidatedDateInput, validateDateString, Modal } from '../ui';
 import { theme } from '../../constants/theme';
 import { useStaff } from '../../context/StaffContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   clinicService,
   type ClinicPatient,
@@ -18,6 +19,41 @@ import {
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { shouldQueueOffline } from '../../services/outboxPolicy';
+
+const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isPlaceholderStaffName(name?: string | null): boolean {
+  if (!name || !name.trim()) return true;
+  const normalized = name.trim().toLowerCase();
+  return normalized === 'clinic staff' || normalized === 'clinicstaff';
+}
+
+export function normalizeAttachmentStaffAttribution(
+  att: ClinicRecordAttachmentRecord,
+  actorName?: string | null,
+  actorId?: string | null
+): ClinicRecordAttachmentRecord {
+  const cleanActorName = actorName?.trim();
+  const cleanActorId = actorId && GUID_REGEX.test(actorId) ? actorId : undefined;
+  if (!cleanActorName) return att;
+
+  const uploadedByStaffName = isPlaceholderStaffName(att.uploadedByStaffName)
+    ? cleanActorName
+    : att.uploadedByStaffName;
+  const isVerified = att.verificationStatus === 'Verified';
+  const verifiedByStaffName =
+    isVerified && isPlaceholderStaffName(att.verifiedByStaffName)
+      ? cleanActorName
+      : att.verifiedByStaffName;
+
+  return {
+    ...att,
+    uploadedByStaffId: att.uploadedByStaffId || cleanActorId || undefined,
+    uploadedByStaffName,
+    verifiedByStaffId: isVerified ? (att.verifiedByStaffId || cleanActorId || undefined) : att.verifiedByStaffId,
+    verifiedByStaffName,
+  };
+}
 
 export interface AttachExternalDocumentModalProps {
   visible: boolean;
@@ -34,7 +70,11 @@ export default function AttachExternalDocumentModal({
   onClose,
   onAttachmentUploaded,
 }: AttachExternalDocumentModalProps) {
-  const { currentName } = useStaff();
+  const { current: currentStaff, currentName } = useStaff();
+  const { user: authUser } = useAuth();
+  const actorStaffName = (currentName || authUser?.name || authUser?.email || '').trim();
+  const rawActorStaffId = currentStaff?.id || authUser?.id || '';
+  const actorStaffId = GUID_REGEX.test(rawActorStaffId) ? rawActorStaffId : undefined;
 
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docTitle, setDocTitle] = useState('');
@@ -122,6 +162,8 @@ export default function AttachExternalDocumentModal({
         formData.append('Title', docTitle.trim());
         if (docNotes.trim()) formData.append('Notes', docNotes.trim());
         formData.append('DocumentDate', strictlyFormattedDocDate);
+        if (actorStaffId) formData.append('UploadedByStaffId', actorStaffId);
+        if (actorStaffName) formData.append('UploadedByStaffName', actorStaffName);
 
         if (pickedDocFile.file) {
           formData.append('File', pickedDocFile.file);
@@ -137,8 +179,9 @@ export default function AttachExternalDocumentModal({
         setUploadingDoc(false);
 
         if (newAtt) {
+          const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
           notify.success('Document attached to the patient record.');
-          onAttachmentUploaded?.(newAtt);
+          onAttachmentUploaded?.(attributedAtt);
           onClose();
           return;
         } else if (err) {
@@ -165,7 +208,8 @@ export default function AttachExternalDocumentModal({
       storageUri: `tenants/${tenantId}/clinics/${clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
       documentDate: strictlyFormattedDocDate,
       notes: docNotes.trim() || undefined,
-      uploadedByStaffName: currentName || undefined,
+      uploadedByStaffId: actorStaffId,
+      uploadedByStaffName: actorStaffName || undefined,
       encryptionAlgorithm: 'AES-256-GCM',
       encryptionKeyId: 'cmk-v1',
     };
@@ -174,13 +218,14 @@ export default function AttachExternalDocumentModal({
     setUploadingDoc(false);
 
     if (newAtt) {
+      const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
       notify.success('Document attached to the patient record.');
-      onAttachmentUploaded?.(newAtt);
+      onAttachmentUploaded?.(attributedAtt);
       onClose();
     } else if (!shouldQueueOffline(err?.status ?? 0)) {
       notify.error(err?.message || 'The server rejected this document.');
     } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
+      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, actorStaffName || undefined);
       notify.success('Document queued offline.');
       Alert.alert('Saved on this device', 'The document is queued and will upload automatically once the connection is back.');
       onAttachmentUploaded?.(queuedAtt as any);

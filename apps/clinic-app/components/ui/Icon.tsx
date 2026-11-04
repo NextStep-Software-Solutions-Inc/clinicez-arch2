@@ -350,15 +350,17 @@ function SpinningIconGlyph({
 
   useEffect(() => {
     if (isWeb && typeof document !== 'undefined') {
-      if (!document.getElementById('clinicez-spin-style')) {
+      const styleId = 'clinicez-spin-style-v2';
+      if (!document.getElementById(styleId)) {
         const styleEl = document.createElement('style');
-        styleEl.id = 'clinicez-spin-style';
+        styleEl.id = styleId;
         styleEl.textContent = `
           @keyframes clinicez-spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
           }
-          .clinicez-spin-glyph {
+          .clinicez-spin-glyph,
+          [data-clinicez-spin="true"] {
             animation: clinicez-spin 0.85s linear infinite !important;
             transform-origin: center center !important;
             display: inline-flex !important;
@@ -374,7 +376,9 @@ function SpinningIconGlyph({
   return (
     <Animated.View
       accessibilityRole="image"
-      // @ts-ignore React Native Web supports className
+      // @ts-ignore React Native Web forwards dataSet to data-* DOM attributes
+      dataSet={isWeb ? { clinicezSpin: 'true' } : undefined}
+      // @ts-ignore React Native Web className fallback
       className={isWeb ? 'clinicez-spin-glyph' : undefined}
       style={[
         {
@@ -385,10 +389,7 @@ function SpinningIconGlyph({
           transform: isWeb ? undefined : [{ rotate: rotation }],
         },
         isWeb && ({
-          animationKeyframes: {
-            '0%': { transform: [{ rotate: '0deg' }] },
-            '100%': { transform: [{ rotate: '360deg' }] },
-          },
+          animationName: 'clinicez-spin',
           animationDuration: '0.85s',
           animationIterationCount: 'infinite',
           animationTimingFunction: 'linear',

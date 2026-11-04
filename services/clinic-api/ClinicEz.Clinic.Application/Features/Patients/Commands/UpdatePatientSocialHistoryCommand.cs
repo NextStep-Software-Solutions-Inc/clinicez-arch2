@@ -227,6 +227,7 @@ public sealed class UpdatePatientSocialHistoryCommandHandler : IRequestHandler<U
             entry.DietaryHabits,
             entry.Remarks,
             entry.SmokingStatus,
-            entry.AlcoholStatus);
+            entry.AlcoholStatus,
+            entry.UpdatedAt ?? entry.CreatedAt);
     }
 }

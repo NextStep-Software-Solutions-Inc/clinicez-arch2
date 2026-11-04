@@ -24,7 +24,8 @@ public sealed record PatientSocialHistoryDto(
     string? DietaryHabits,
     string? Remarks,
     string? SmokingStatus = null,
-    string? AlcoholStatus = null);
+    string? AlcoholStatus = null,
+    DateTime? UpdatedAt = null);
 
 public sealed record UpdatePatientSocialHistoryRequest(
     bool IsSmoker,

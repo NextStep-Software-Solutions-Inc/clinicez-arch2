@@ -1,25 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState, SegmentedControl } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState } from '../ui';
 import RejectionReasonModal from './RejectionReasonModal';
-import AdministrativeDocumentsTab from './AdministrativeDocumentsTab';
 import type {
   ClinicPatient,
   ClinicRecordAttachmentRecord,
-  MedicalCertificateRecord,
-  ReferralLetterRecord,
 } from '../../services/clinicService';
-
-export type VaultType = 'EXTERNAL' | 'INTERNAL';
 
 export interface ExternalDocumentVaultTabProps {
   patient?: ClinicPatient | null;
   patientId?: string;
   attachments?: ClinicRecordAttachmentRecord[];
-  medicalCertificates?: MedicalCertificateRecord[];
-  referralLetters?: ReferralLetterRecord[];
-  initialVaultType?: VaultType;
   onUploadDocument?: () => void;
   onUploadDoc?: () => void;
   onVerifyAttachment?: (attachmentId: string, isApproved: boolean, rejectionReason?: string) => Promise<void>;
@@ -50,24 +42,18 @@ export const PHILHEALTH_CHEST_XRAY_OBSERVATIONS: Record<string, string> = {
 export type VaultStatusFilter = 'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED';
 
 export default function ExternalDocumentVaultTab({
-  patient,
-  patientId,
+  patient: _patient,
+  patientId: _patientId,
   attachments = [],
-  medicalCertificates = [],
-  referralLetters = [],
-  initialVaultType = 'EXTERNAL',
   onUploadDocument,
   onUploadDoc,
   onVerifyAttachment,
   onDownloadAttachment,
   onRefreshChart,
 }: ExternalDocumentVaultTabProps) {
-  const [vaultType, setVaultType] = useState<VaultType>(initialVaultType);
   const [statusFilter, setStatusFilter] = useState<VaultStatusFilter>('ALL');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [rejectingAttachment, setRejectingAttachment] = useState<ClinicRecordAttachmentRecord | null>(null);
-
-  const internalCount = medicalCertificates.length + referralLetters.length;
 
   const pendingCount = useMemo(() => {
     return attachments.filter((att) => {
@@ -133,43 +119,9 @@ export default function ExternalDocumentVaultTab({
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* ========================================================================= */}
-      {/* VAULT TYPE SWITCHER (EXTERNAL vs INTERNAL)                                */}
+      {/* INLINE STATUS FILTERS (LEFT, NO-WRAP SCROLL) + ATTACH BUTTON (RIGHT)      */}
       {/* ========================================================================= */}
-      <View style={styles.vaultTypeBar}>
-        <SegmentedControl<VaultType>
-          options={[
-            {
-              value: 'EXTERNAL',
-              label: 'External',
-              count: attachments.length,
-              badgeVariant: pendingCount > 0 ? 'warning' : 'primary',
-            },
-            {
-              value: 'INTERNAL',
-              label: 'Internal',
-              count: internalCount,
-            },
-          ]}
-          value={vaultType}
-          onChange={setVaultType}
-        />
-      </View>
-
-      {vaultType === 'INTERNAL' ? (
-        <AdministrativeDocumentsTab
-          embedded
-          patient={patient}
-          patientId={patientId}
-          medicalCertificates={medicalCertificates}
-          referralLetters={referralLetters}
-          onRefreshChart={onRefreshChart}
-        />
-      ) : (
-        <>
-          {/* ========================================================================= */}
-          {/* INLINE STATUS FILTERS (LEFT, NO-WRAP SCROLL) + ATTACH BUTTON (RIGHT)      */}
-          {/* ========================================================================= */}
-          <View style={styles.topBar}>
+      <View style={styles.topBar}>
             <View style={styles.filterScrollWrap}>
               <ScrollView
                 horizontal
@@ -275,7 +227,6 @@ export default function ExternalDocumentVaultTab({
                           <ThemedText variant="bodyBold" color={theme.colors.text}>
                             {att.title || att.fileName}
                           </ThemedText>
-                          <Badge label={att.recordType} variant="neutral" size="sm" />
                           {isCxr ? (
                             <Badge label="Chest X-Ray" variant="purple" size="sm" />
                           ) : null}
@@ -422,8 +373,6 @@ export default function ExternalDocumentVaultTab({
               description="Zero uploaded medical clearances, outside films, or scanned certificates for this patient."
             />
           )}
-        </>
-      )}
 
       {/* Rejection Reason Modal */}
       <RejectionReasonModal
@@ -444,13 +393,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingBottom: theme.spacing.lg,
-  },
-  vaultTypeBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.sm,
-    width: '100%',
-    minWidth: 0,
   },
   topBar: {
     flexDirection: 'row',

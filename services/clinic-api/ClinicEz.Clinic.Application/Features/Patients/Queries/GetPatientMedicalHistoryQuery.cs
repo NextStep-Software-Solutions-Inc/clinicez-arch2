@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
@@ -50,8 +52,43 @@ public sealed class GetPatientMedicalHistoryQueryHandler : IRequestHandler<GetPa
             e.OnsetDate,
             e.Status == ProblemStatus.Resolved,
             e.ClinicalNotes,
-            e.CreatedAt)).ToList();
+            e.UpdatedAt ?? e.CreatedAt)).ToList();
 
-        return new PatientMedicalHistoryResultDto(dtos, null);
+        string? savedNotes = ReadCustomString(patient, "personal_medical_history_notes");
+        DateTime? customUpdatedAt = ReadCustomTimestamp(patient, "personal_medical_history_updated_at");
+        DateTime? maxItemUpdated = entries.Count > 0 ? entries.Max(e => e.UpdatedAt ?? e.CreatedAt) : null;
+        DateTime? resolvedUpdatedAt = customUpdatedAt.HasValue && maxItemUpdated.HasValue
+            ? (customUpdatedAt.Value > maxItemUpdated.Value ? customUpdatedAt : maxItemUpdated)
+            : (customUpdatedAt ?? maxItemUpdated);
+
+        return new PatientMedicalHistoryResultDto(
+            dtos,
+            string.IsNullOrWhiteSpace(savedNotes) ? null : savedNotes,
+            resolvedUpdatedAt);
+    }
+
+    private static string? ReadCustomString(Patient patient, string key)
+    {
+        if (patient.CustomFields == null || !patient.CustomFields.TryGetValue(key, out var raw) || raw == null)
+        {
+            return null;
+        }
+        if (raw is JsonElement je)
+        {
+            return je.ValueKind == JsonValueKind.Null ? null : je.ToString();
+        }
+        return raw.ToString();
+    }
+
+    private static DateTime? ReadCustomTimestamp(Patient patient, string key)
+    {
+        var raw = ReadCustomString(patient, key);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+        return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed
+            : null;
     }
 }

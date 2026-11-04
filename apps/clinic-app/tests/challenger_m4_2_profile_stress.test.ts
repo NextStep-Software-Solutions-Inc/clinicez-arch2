@@ -190,7 +190,7 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
           initialProfile: undefined,
         })
       );
-      expect(markup1).toContain('Past Medical History (Personal)');
+      expect(markup1).toContain('Personal Medical History');
       expect(markup1).toContain('0 Selected');
 
       const markup2 = renderToStaticMarkup(
@@ -199,7 +199,7 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
           initialProfile: null as any,
         })
       );
-      expect(markup2).toContain('Past Medical History (Personal)');
+      expect(markup2).toContain('Personal Medical History');
       expect(markup2).toContain('0 Selected');
     });
 
@@ -447,10 +447,10 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
         })
       );
 
-      // Verify HealthProfilesTab renders the active 'Surgical & Clinical' sub-tab containing ClinicalHistoryTab
-      expect(markup).toContain('Past Medical History (Personal)');
+      // Verify HealthProfilesTab renders the active 'Surgical & Clinical' sub-tab containing ClinicalHistoryTab (auto-saved, no manual Save button)
+      expect(markup).toContain('Personal Medical History');
       expect(markup).toContain('Family Medical History');
-      expect(markup).toContain('Save Medical &amp; Family History');
+      expect(markup).not.toContain('Save Medical &amp; Family History');
     });
   });
 

@@ -349,7 +349,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).not.toContain('Fallback Code 999');
   });
 
-  test('7. Renders Document Vault tab with External/Internal vault switcher, inline status filters, and upload button (without sub-filter chips)', () => {
+  test('7. Renders Doc Vault tab with inline status filters and upload button (without External/Internal sub-tabs or category sub-filter chips)', () => {
     const markup = renderToStaticMarkup(
       React.createElement(PatientChartModal, {
         visible: true,
@@ -360,12 +360,14 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('External');
-    expect(markup).toContain('Internal');
+    expect(markup).toContain('Doc Vault');
+    expect(markup).toContain('Admin Vault');
     expect(markup).toContain('Pending Review');
     expect(markup).toContain('Verified');
     expect(markup).toContain('Rejected');
     expect(markup).toContain('Attach External Document');
+    expect(markup).not.toContain('>External<');
+    expect(markup).not.toContain('>Internal<');
     expect(markup).not.toContain('All Records');
     expect(markup).not.toContain('Cert of Registration (COR)');
     expect(markup).not.toContain('Outside Labs');
@@ -624,11 +626,11 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('Administer Vaccine');
-    expect(markup).toContain('Add Historical Vaccine');
+    expect(markup).toContain('Administer Vax');
+    expect(markup).toContain('Log Vax History');
     expect(markup).not.toContain('+ +');
-    expect(markup).not.toContain('+ Administer Vaccine');
-    expect(markup).not.toContain('+ Add Historical Vaccine');
+    expect(markup).not.toContain('+ Administer Vax');
+    expect(markup).not.toContain('+ Log Vax History');
   });
 
   test('21. PatientChartModal renders all 7 longitudinal tabs seamlessly across all 3 workstation layouts', () => {

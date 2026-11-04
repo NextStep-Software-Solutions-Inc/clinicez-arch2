@@ -43,6 +43,7 @@ import {
   StatutoryImmunizationsTab,
   HealthProfilesTab,
   ExternalDocumentVaultTab,
+  AdministrativeDocumentsTab,
   AttachExternalDocumentModal,
   DentalChartTab,
   CHART_TAB_LABELS,
@@ -402,6 +403,7 @@ export default function ConsultationsScreen() {
     | 'immunizations'
     | 'profiles'
     | 'vault'
+    | 'documents'
     | 'dental';
   const CHART_TAB_DESCRIPTIONS: Record<ChartReviewTab, string> = {
     summary: 'Executive clinical summary, problems, and vital trends',
@@ -411,11 +413,12 @@ export default function ConsultationsScreen() {
     immunizations: 'Statutory immunizations, schedules, and adverse events (AEFI)',
     profiles: 'Past medical history, surgical, social, and NCD risk profiles',
     vault: 'External document vault, outside imaging films, and clearances',
+    documents: 'Issued medical certificates and referral letters',
     dental: 'Odontogram findings, tooth condition, surfaces, and dental procedures',
   };
   const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>(() => {
     const saved = getSessionItem('clinicez_consultations_active_chart_tab') as ChartReviewTab | null;
-    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'dental'].includes(saved)) {
+    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'documents', 'dental'].includes(saved)) {
       return saved;
     }
     return 'summary';
@@ -709,6 +712,7 @@ export default function ConsultationsScreen() {
       'immunizations',
       'profiles',
       'vault',
+      'documents',
       ...(isDentalEnabled ? (['dental'] as ChartReviewTab[]) : []),
     ],
     [isDentalEnabled],
@@ -3383,10 +3387,28 @@ export default function ConsultationsScreen() {
     isApproved: boolean,
     userRejectionReason?: string
   ) => {
+    const verifierName = (
+      (current ? formatStaffName(current) : '') ||
+      signerName ||
+      authUser?.name ||
+      authUser?.email ||
+      ''
+    ).trim();
+    const rawVerifierId = current?.id || signer?.id || authUser?.id || '';
+    const verifierId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawVerifierId)
+      ? rawVerifierId
+      : undefined;
+
     const rejectionReason = !isApproved
       ? (userRejectionReason?.trim() || 'Document illegible or missing official physician signature/stamp.')
       : undefined;
-    const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    const [, verifyErr] = await clinicService.verifyRecordAttachment(
+      attachmentId,
+      isApproved,
+      rejectionReason,
+      verifierName || undefined,
+      verifierId
+    );
     if (verifyErr) {
       notify.error(verifyErr.message || 'Could not update the document.');
       return;
@@ -3403,7 +3425,8 @@ export default function ConsultationsScreen() {
                 verificationStatus: isApproved ? 'Verified' : 'Rejected',
                 rejectionReason,
                 verifiedAt: new Date().toISOString(),
-                verifiedByStaffName: signerName || 'Attending Physician',
+                verifiedByStaffId: verifierId || att.verifiedByStaffId,
+                verifiedByStaffName: verifierName || att.verifiedByStaffName || undefined,
               }
             : att
         ),
@@ -3422,9 +3445,23 @@ export default function ConsultationsScreen() {
     }
   };
 
+  const refreshChartContextRef = useRef({
+    selectedPatientId: selectedPatient?.patientId,
+    patientRecord,
+    dentalChart,
+    signedConsultationId,
+  });
+  refreshChartContextRef.current = {
+    selectedPatientId: selectedPatient?.patientId,
+    patientRecord,
+    dentalChart,
+    signedConsultationId,
+  };
+
   // Dedicated lightweight chart refresh that does not re-initialize encounter state or trigger skeleton states
   const refreshPatientChart = useCallback(async (explicitPatientId?: string) => {
-    const patientId = explicitPatientId || selectedPatient?.patientId || patientRecord?.id;
+    const ctx = refreshChartContextRef.current;
+    const patientId = explicitPatientId || ctx.selectedPatientId || ctx.patientRecord?.id;
     if (!patientId) return;
     const [chartRes, labRes, recordRes] = await Promise.all([
       clinicService.getPatientChart(patientId),
@@ -3434,7 +3471,8 @@ export default function ConsultationsScreen() {
     const [chartData, chartErr] = chartRes;
     const [labData, labErr] = labRes;
     const [freshRecord, recordErr] = recordRes;
-    const effectiveRecord = !recordErr && freshRecord ? freshRecord : patientRecord;
+    const latestCtx = refreshChartContextRef.current;
+    const effectiveRecord = !recordErr && freshRecord ? freshRecord : latestCtx.patientRecord;
     if (!recordErr && freshRecord) {
       setPatientRecord(freshRecord);
     }
@@ -3452,16 +3490,22 @@ export default function ConsultationsScreen() {
       setPatientChart(
         effectiveRecord ? reconcileChartWithPatient(chartData, effectiveRecord) : chartData,
       );
-      if (chartData.dentalTeeth && chartData.dentalTeeth.length > 0 && Object.keys(dentalChart).length === 0) {
+      if (
+        chartData.dentalTeeth &&
+        chartData.dentalTeeth.length > 0 &&
+        Object.keys(latestCtx.dentalChart).length === 0
+      ) {
         const taggedTeeth = chartData.dentalTeeth.map((t) => ({
           ...t,
-          isCurrentEncounter: Boolean(signedConsultationId && t.consultationId === signedConsultationId),
+          isCurrentEncounter: Boolean(
+            latestCtx.signedConsultationId && t.consultationId === latestCtx.signedConsultationId
+          ),
         }));
         const multiMap = normalizeTeethToMultiRecord(taggedTeeth);
         setDentalChart(multiMap);
       }
     }
-  }, [selectedPatient?.patientId, patientRecord, dentalChart, signedConsultationId]);
+  }, []);
 
   const handleVoidDentalCondition = useCallback(
     async (toothNumber: number, recordId: string, reason?: string) => {
@@ -3575,7 +3619,8 @@ export default function ConsultationsScreen() {
             { id: 'procedures', label: 'Procedures', icon: 'activity' },
             { id: 'immunizations', label: 'Immunizations', icon: 'shield' },
             { id: 'profiles', label: 'Profiles', icon: 'user' },
-            { id: 'vault', label: 'Vault', icon: 'folder' },
+            { id: 'vault', label: 'Doc Vault', icon: 'folder' },
+            { id: 'documents', label: 'Admin Vault', icon: 'scroll' },
             ...(isDentalEnabled ? [{ id: 'dental', label: 'Dental', icon: 'medical' }] : []),
           ].map((tab) => {
             const isActive = activeChartTab === tab.id;
@@ -3711,11 +3756,18 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
           attachments={patientChart?.attachments || []}
-          medicalCertificates={patientChart?.medicalCertificates || []}
-          referralLetters={patientChart?.referralLetters || []}
           onUploadDocument={() => setUploadDocModalVisible(true)}
           onVerifyAttachment={handleVerifyAttachment}
           onDownloadAttachment={handleDownloadAttachment}
+          onRefreshChart={refreshPatientChart}
+        />
+      )}
+      {activeChartTab === 'documents' && (
+        <AdministrativeDocumentsTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId}
+          medicalCertificates={patientChart?.medicalCertificates || []}
+          referralLetters={patientChart?.referralLetters || []}
           onRefreshChart={refreshPatientChart}
         />
       )}
@@ -5225,8 +5277,9 @@ export default function ConsultationsScreen() {
                 onPress={() => handleOpenCallModal()}
               />
               <Button
-                title="Refresh"
                 icon="refresh"
+                iconOnly
+                accessibilityLabel="Refresh queue"
                 variant="ghost"
                 size="sm"
                 loading={queueLoading}

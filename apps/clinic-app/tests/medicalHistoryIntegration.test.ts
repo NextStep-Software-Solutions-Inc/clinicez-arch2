@@ -119,7 +119,7 @@ mock.module('../services/apiClient', () => ({
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
-const { clinicService } = await import('../services/clinicService');
+const { clinicService, setClinicRegionalConfig } = await import('../services/clinicService');
 type ClinicPatient = import('../services/clinicService').ClinicPatient;
 type PhilHealthPatientProfile = import('../services/clinicService').PhilHealthPatientProfile;
 type PhilHealthConditionEntry = import('../services/clinicService').PhilHealthConditionEntry;
@@ -127,6 +127,12 @@ type PhilHealthConditionEntry = import('../services/clinicService').PhilHealthCo
 const {
   default: ClinicalHistoryTab,
   PHILHEALTH_MDISEASES_CONDITIONS,
+  ALLERGY_CATEGORY_OPTIONS,
+  ALLERGY_SEVERITY_OPTIONS,
+  humanizeAllergySeverity,
+  matchProblemToPersonalHistoryCondition,
+  mergeOtherConditionDescriptions,
+  reconcilePersonalHistoryWithClinicalRecords,
   defaultPhilHealthProfile,
 } = await import('../components/chart/ClinicalHistoryTab');
 
@@ -224,18 +230,30 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
   // 2. COMPONENT RENDERING & DESIGN TOKENS CONFORMANCE
   // =========================================================================
   describe('2. Component Structure and Markup', () => {
-    test('2.1 ClinicalHistoryTab renders personal and family medical history sections', () => {
+    test('2.1 ClinicalHistoryTab renders personal and family medical history sections with auto-save last-saved badges and no manual Save button', () => {
       const markup = renderToStaticMarkup(
         React.createElement(ClinicalHistoryTab, {
           patient: mockPatient,
-          initialProfile: sampleProfile,
+          initialProfile: {
+            ...sampleProfile,
+            lastUpdatedAt: '2026-11-04T01:20:00Z',
+          },
         })
       );
 
       // Section titles
-      expect(markup).toContain('Past Medical History (Personal)');
+      expect(markup).toContain('Personal Medical History');
       expect(markup).toContain('Family Medical History');
-      expect(markup).toContain('Save Medical &amp; Family History');
+      // Manual Save button removed in favor of auto-save
+      expect(markup).not.toContain('Save Medical &amp; Family History');
+      // Inline Last saved badges rendered on both Personal and Family Medical History
+      const lastSavedMatches = markup.match(/Last saved /g) || [];
+      expect(lastSavedMatches.length).toBeGreaterThanOrEqual(2);
+
+      // Surgical empty banner is clean of statutory transmittal jargon
+      expect(markup).toContain('No Past Surgical Procedures Documented');
+      expect(markup).not.toContain('pSurgDesc=');
+      expect(markup).not.toContain('eKAS / eSER');
 
       // Badges
       expect(markup).toContain('3 Selected');
@@ -454,6 +472,151 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       const familyMatches = markup.match(/aria-label="Toggle family /g) || [];
       expect(personalMatches.length).toBe(19);
       expect(familyMatches.length).toBe(19);
+    });
+
+    test('5.6 Structured problem auto-syncs matching condition or toggles Others with specific description', () => {
+      // Predefined matches
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'I10',
+          problemTitle: 'Essential (primary) hypertension',
+        })
+      ).toEqual({ matchedCode: '011' });
+
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'E11.9',
+          problemTitle: 'Type 2 diabetes mellitus without complications',
+        })
+      ).toEqual({ matchedCode: '006' });
+
+      // Non-predefined conditions fall back to 998 Others with title
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'A09.9',
+          problemTitle: 'Diarrhea',
+        })
+      ).toEqual({ matchedCode: '998', otherDescription: 'Diarrhea' });
+
+      expect(
+        matchProblemToPersonalHistoryCondition({
+          icd10Code: 'M10.9',
+          problemTitle: 'Gout, unspecified',
+        })
+      ).toEqual({ matchedCode: '998', otherDescription: 'Gout, unspecified' });
+
+      const reconciled = reconcilePersonalHistoryWithClinicalRecords({
+        selectedCodes: ['011'],
+        otherDesc: 'Gastro-esophageal reflux disease without esophagitis',
+        problems: [
+          { icd10Code: 'A09.9', problemTitle: 'Diarrhea' },
+          { icd10Code: 'M10.9', problemTitle: 'Gout, unspecified' },
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus without complications' },
+        ],
+        allergies: [{ allergen: 'Peanuts' }],
+      });
+
+      expect(reconciled.changed).toBe(true);
+      expect(reconciled.codes.has('001')).toBe(true); // Allergy toggled from documented allergy
+      expect(reconciled.codes.has('011')).toBe(true); // Existing Hypertension preserved
+      expect(reconciled.codes.has('006')).toBe(true); // Diabetes Mellitus matched
+      expect(reconciled.codes.has('998')).toBe(true); // Others toggled for Diarrhea & Gout
+      expect(reconciled.otherDesc).toBe(
+        'Gastro-esophageal reflux disease without esophagitis, Diarrhea, Gout, unspecified'
+      );
+
+      // Deduplication check
+      expect(
+        mergeOtherConditionDescriptions('Diarrhea, Gout, unspecified', ['diarrhea', 'None'])
+      ).toBe('Diarrhea, Gout, unspecified');
+    });
+
+    test('5.7 None (999) entries are filtered out and surgical dates respect clinic dateFormat', () => {
+      setClinicRegionalConfig({ dateFormat: 'dd/MM/yyyy', timeZoneId: 'Asia/Manila' });
+      try {
+        const markup = renderToStaticMarkup(
+          React.createElement(ClinicalHistoryTab, {
+            patient: { ...mockPatient, chronicConditions: undefined },
+            initialProfile: {
+              ...defaultPhilHealthProfile,
+              medicalHistories: [{ code: '999', specificDesc: 'None' }],
+              familyHistories: [{ code: '999', specificDesc: 'None' }],
+            },
+            initialSurgicalHistories: [
+              {
+                id: 'surg-1',
+                clinicId: 'clinic-1',
+                patientId: mockPatient.id,
+                procedureName: 'Appendectomy',
+                surgeryDate: '2025-10-07',
+                createdAt: '2025-10-07T08:00:00Z',
+              },
+            ],
+          })
+        );
+
+        expect(markup).toContain('0 Selected');
+        expect(markup).not.toContain('Toggle personal None');
+        expect(markup).toContain('07/10/2025');
+      } finally {
+        setClinicRegionalConfig({ dateFormat: 'MMM d, yyyy', timeZoneId: 'Asia/Manila' });
+      }
+    });
+
+    test('5.8 Allergy category and severity options are dynamic and humanized', () => {
+      expect(ALLERGY_CATEGORY_OPTIONS.map((o) => o.value)).toEqual([
+        'Medication',
+        'Food',
+        'Environmental',
+        'Biologic',
+        'Other',
+      ]);
+      expect(ALLERGY_SEVERITY_OPTIONS.map((o) => o.value)).toEqual([
+        'Mild',
+        'Moderate',
+        'Severe',
+        'LifeThreatening',
+      ]);
+      expect(humanizeAllergySeverity('LifeThreatening')).toBe('Life-Threatening');
+      expect(humanizeAllergySeverity('Moderate')).toBe('Moderate');
+    });
+
+    test('5.9 StructuredAllergyIntakeModal renders structured intake dialog for ClinicalHistoryTab', async () => {
+      const { default: StructuredAllergyIntakeModal } = await import(
+        '../components/patient/StructuredAllergyIntakeModal'
+      );
+
+      const modalMarkup = renderToStaticMarkup(
+        React.createElement(StructuredAllergyIntakeModal, {
+          visible: true,
+          onClose: () => {},
+          existingAllergies: [
+            {
+              category: 'Food',
+              allergen: 'Peanuts',
+              severity: 'Moderate',
+              reactionManifestation: 'Facial Swelling',
+              isAnaphylactic: false,
+            },
+          ],
+          onAddAllergy: async () => true,
+        })
+      );
+
+      expect(modalMarkup).toContain('Structured Allergy Intake');
+      expect(modalMarkup).toContain('PATIENT ALLERGY LIST (1)');
+      expect(modalMarkup).toContain('Add New Allergy / Sensitivity');
+      expect(modalMarkup).toContain('Peanuts');
+      expect(modalMarkup).toContain('+ Add Allergy to Record');
+      expect(modalMarkup).toContain('Done &amp; Close');
+
+      const tabMarkup = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: defaultPhilHealthProfile,
+        })
+      );
+      expect(tabMarkup).not.toContain('Document Allergy / Adverse Sensitivity');
     });
   });
 });

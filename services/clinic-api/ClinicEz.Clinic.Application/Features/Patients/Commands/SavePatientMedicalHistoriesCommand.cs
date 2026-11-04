@@ -125,6 +125,13 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
             }
         }
 
+        var nowUtc = DateTime.UtcNow;
+        var cleanNotes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        patient.CustomFields ??= new Dictionary<string, object?>();
+        patient.CustomFields["personal_medical_history_notes"] = cleanNotes;
+        patient.CustomFields["personal_medical_history_updated_at"] = nowUtc.ToString("O");
+        _patientRepo.Update(patient);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Fetch refreshed active items
@@ -142,8 +149,8 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
             e.OnsetDate,
             e.Status == ProblemStatus.Resolved,
             e.ClinicalNotes,
-            e.CreatedAt)).ToList();
+            e.UpdatedAt ?? e.CreatedAt)).ToList();
 
-        return new PatientMedicalHistoryResultDto(dtos, request.Notes?.Trim());
+        return new PatientMedicalHistoryResultDto(dtos, cleanNotes, nowUtc);
     }
 }

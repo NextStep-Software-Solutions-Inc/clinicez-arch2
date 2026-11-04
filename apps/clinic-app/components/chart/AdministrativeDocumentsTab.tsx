@@ -2,8 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
+import { useClinic } from '../../context/ClinicContext';
 import {
   clinicService,
+  formatClinicDate,
   type ClinicPatient,
   type MedicalCertificateRecord,
   type ReferralLetterRecord,
@@ -18,20 +20,42 @@ export interface AdministrativeDocumentsTabProps {
   referralLetters?: ReferralLetterRecord[];
   isLoading?: boolean;
   onRefreshChart?: () => void;
-  embedded?: boolean;
 }
 
 export type DocumentFilterType = 'ALL' | 'CERTIFICATES' | 'REFERRALS';
 
+const FITNESS_STATUS_LABELS: Record<string, string> = {
+  FitToWork: 'Fit to work',
+  UnfitToWork: 'Unfit to work',
+  FitToSchool: 'Fit to school',
+  UnfitToSchool: 'Unfit to school',
+  LightDuty: 'Light duty',
+};
+
+export function formatFitnessStatus(status?: string): string {
+  if (!status) return 'Fit to work';
+  if (FITNESS_STATUS_LABELS[status]) return FITNESS_STATUS_LABELS[status];
+  return status
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .trim();
+}
+
+function formatDoctorName(name?: string): string {
+  if (!name) return '';
+  const trimmed = name.trim();
+  return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
+}
+
 export default function AdministrativeDocumentsTab({
-  patient,
-  patientId,
+  patient: _patient,
+  patientId: _patientId,
   medicalCertificates = [],
   referralLetters = [],
   isLoading = false,
   onRefreshChart,
-  embedded = false,
 }: AdministrativeDocumentsTabProps) {
+  const { dateFormat, timeZoneId } = useClinic();
   const [filterType, setFilterType] = useState<DocumentFilterType>('ALL');
   const [actioningDocId, setActioningDocId] = useState<string | null>(null);
 
@@ -145,7 +169,6 @@ export default function AdministrativeDocumentsTab({
           </View>
 
           {filteredCerts.map((cert) => {
-            const hasDigest = Boolean(cert.securityDigest);
             const isActioning = actioningDocId === cert.id;
 
             return (
@@ -153,25 +176,16 @@ export default function AdministrativeDocumentsTab({
                 <View style={styles.cardTop}>
                   <View style={styles.cardTitleCol}>
                     <View style={styles.titleWithBadge}>
-                      <ThemedText variant="title" color={theme.colors.text}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {cert.certificateNumber}
                       </ThemedText>
-                      {cert.isSigned ? (
-                        <Badge label="Physician Signed" variant="success" size="sm" icon="check" />
-                      ) : (
-                        <Badge label="Draft / Unsigned" variant="warning" size="sm" icon="clock" />
-                      )}
-                      {hasDigest ? (
-                        <Badge
-                          label="SHA-256 Sealed"
-                          variant="outline"
-                          size="sm"
-                          icon="shield"
-                        />
+                      {cert.isSigned === false ? (
+                        <Badge label="Draft" variant="warning" size="sm" icon="clock" />
                       ) : null}
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Issued on {cert.issueDate} • Attending: Dr. {cert.doctorName} (PRC #{cert.prcLicenseNumber})
+                      Issued on {formatClinicDate(cert.issueDate, { dateFormat, timeZoneId, fallback: cert.issueDate })} • Attending: {formatDoctorName(cert.doctorName)}
+                      {cert.prcLicenseNumber ? ` (PRC #${cert.prcLicenseNumber})` : ''}
                     </ThemedText>
                   </View>
 
@@ -193,7 +207,7 @@ export default function AdministrativeDocumentsTab({
                     <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.detailLabel}>
                       Fitness Status:
                     </ThemedText>
-                    <Badge label={cert.fitnessStatus || 'FitToWork'} variant="info" size="sm" />
+                    <Badge label={formatFitnessStatus(cert.fitnessStatus)} variant="info" size="sm" />
                     {cert.recommendedRestDays ? (
                       <ThemedText variant="caption" color={theme.colors.text} style={styles.detailValue}>
                         • {cert.recommendedRestDays} rest day(s) recommended
@@ -231,15 +245,6 @@ export default function AdministrativeDocumentsTab({
                       </ThemedText>
                     </View>
                   ) : null}
-
-                  {hasDigest ? (
-                    <View style={styles.digestRow}>
-                      <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.successText} />
-                      <ThemedText variant="code" color={theme.colors.textMuted} style={styles.digestText}>
-                        Seal Digest: {cert.securityDigest}
-                      </ThemedText>
-                    </View>
-                  ) : null}
                 </View>
               </View>
             );
@@ -258,7 +263,6 @@ export default function AdministrativeDocumentsTab({
           </View>
 
           {filteredReferrals.map((letter) => {
-            const hasDigest = Boolean(letter.securityDigest);
             const isActioning = actioningDocId === letter.id;
 
             return (
@@ -266,30 +270,20 @@ export default function AdministrativeDocumentsTab({
                 <View style={styles.cardTop}>
                   <View style={styles.cardTitleCol}>
                     <View style={styles.titleWithBadge}>
-                      <ThemedText variant="title" color={theme.colors.text}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {letter.referralNumber}
                       </ThemedText>
-                      {letter.isSigned ? (
-                        <Badge label="Physician Signed" variant="success" size="sm" icon="check" />
-                      ) : (
-                        <Badge label="Draft / Unsigned" variant="warning" size="sm" icon="clock" />
-                      )}
+                      {letter.isSigned === false ? (
+                        <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                      ) : null}
                       <Badge
                         label={letter.urgency || 'Routine'}
                         variant={letter.urgency === 'Emergency' ? 'emergency' : letter.urgency === 'Urgent' ? 'warning' : 'neutral'}
                         size="sm"
                       />
-                      {hasDigest ? (
-                        <Badge
-                          label="SHA-256 Sealed"
-                          variant="outline"
-                          size="sm"
-                          icon="shield"
-                        />
-                      ) : null}
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Referred on {letter.referralDate} • Referring: Dr. {letter.referringDoctorName}
+                      Referred on {formatClinicDate(letter.referralDate, { dateFormat, timeZoneId, fallback: letter.referralDate })} • Referring: {formatDoctorName(letter.referringDoctorName)}
                     </ThemedText>
                   </View>
 
@@ -313,7 +307,7 @@ export default function AdministrativeDocumentsTab({
                     </ThemedText>
                     <ThemedText variant="body" color={theme.colors.text} style={styles.detailValue}>
                       {letter.referredToFacility} ({letter.referredDepartment})
-                      {letter.referredToDoctor ? ` • Attn: Dr. ${letter.referredToDoctor}` : ''}
+                      {letter.referredToDoctor ? ` • Attn: ${formatDoctorName(letter.referredToDoctor)}` : ''}
                     </ThemedText>
                   </View>
 
@@ -345,15 +339,6 @@ export default function AdministrativeDocumentsTab({
                       </ThemedText>
                     </View>
                   ) : null}
-
-                  {hasDigest ? (
-                    <View style={styles.digestRow}>
-                      <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.successText} />
-                      <ThemedText variant="code" color={theme.colors.textMuted} style={styles.digestText}>
-                        Seal Digest: {letter.securityDigest}
-                      </ThemedText>
-                    </View>
-                  ) : null}
                 </View>
               </View>
             );
@@ -363,31 +348,13 @@ export default function AdministrativeDocumentsTab({
     </>
   );
 
-  if (embedded) {
-    const hasVisibleInternal = filteredCerts.length > 0 || filteredReferrals.length > 0;
-    return (
-      <View style={styles.embeddedContainer}>
-        <View style={styles.embeddedTopBar}>{renderFilterChips()}</View>
-        {hasVisibleInternal ? (
-          renderSections()
-        ) : (
-          <EmptyState
-            icon="file"
-            title="No internal documents in vault"
-            description="Official signed medical certificates and formal hospital referral letters issued to this patient will appear here."
-          />
-        )}
-      </View>
-    );
-  }
-
   if (totalDocuments === 0) {
     return (
       <View style={styles.emptyContainer}>
         <EmptyState
           icon="file"
           title="No Issued Administrative Documents"
-          description="Official signed medical certificates and formal hospital referral letters issued to this patient will appear here for 1-click reprinting."
+          description="Medical certificates and referral letters issued to this patient will appear here for viewing or reprinting."
           actionTitle={onRefreshChart ? 'Refresh Chart' : undefined}
           onAction={onRefreshChart}
         />
@@ -404,7 +371,7 @@ export default function AdministrativeDocumentsTab({
             Administrative Certificate Vault
           </ThemedText>
           <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            Secure cryptographic registry of issued medical certificates and referral letters
+            Issued medical certificates and referral letters available to view or reprint
           </ThemedText>
         </View>
 
@@ -422,19 +389,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
     gap: theme.spacing.lg,
-  },
-  embeddedContainer: {
-    gap: theme.spacing.md,
-  },
-  embeddedTopBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'nowrap',
-    width: '100%',
-    minWidth: 0,
   },
   loadingContainer: {
     padding: theme.spacing.xl,
@@ -445,7 +401,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   emptyContainer: {
-    padding: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
   },
   headerStrip: {
     backgroundColor: theme.colors.surface,
@@ -552,17 +508,5 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     flex: 1,
-  },
-  digestRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
-    paddingTop: theme.spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  digestText: {
-    letterSpacing: 0.2,
   },
 });

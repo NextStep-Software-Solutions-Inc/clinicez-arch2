@@ -332,5 +332,42 @@ describe('Milestone M3: Document Vault Upload & DateOnly Contract (Features 15 &
       expect(err?.status).toBe(413);
       expect(err?.message).toBe('Payload Too Large');
     });
+
+    test('normalizeAttachmentStaffAttribution replaces generic Clinic Staff placeholders with authenticated actor name', async () => {
+      const { normalizeAttachmentStaffAttribution } = await import(
+        '../components/chart/AttachExternalDocumentModal'
+      );
+      const rawAtt: any = {
+        id: 'att-attr-1',
+        patientId: 'pat-01',
+        recordType: 'OutsideChestXRay',
+        title: 'Chest X-Ray',
+        fileName: 'cxr.png',
+        contentType: 'image/png',
+        fileSizeBytes: 51200,
+        storageUri: 'tenants/t1/records/att-attr-1.cez',
+        documentDate: '2026-11-03',
+        verificationStatus: 'Verified',
+        uploadedByStaffName: 'Clinic Staff',
+        verifiedByStaffName: 'Clinic Staff',
+      };
+
+      const attributed = normalizeAttachmentStaffAttribution(
+        rawAtt,
+        'Dr. Jose Rizal',
+        '11111111-2222-3333-4444-555555555555'
+      );
+      expect(attributed.uploadedByStaffName).toBe('Dr. Jose Rizal');
+      expect(attributed.verifiedByStaffName).toBe('Dr. Jose Rizal');
+      expect(attributed.uploadedByStaffId).toBe('11111111-2222-3333-4444-555555555555');
+      expect(attributed.verifiedByStaffId).toBe('11111111-2222-3333-4444-555555555555');
+
+      const alreadyNamed = normalizeAttachmentStaffAttribution(
+        { ...rawAtt, uploadedByStaffName: 'Nurse Clara Garcia', verifiedByStaffName: 'Dr. Maria Santos' },
+        'Dr. Jose Rizal'
+      );
+      expect(alreadyNamed.uploadedByStaffName).toBe('Nurse Clara Garcia');
+      expect(alreadyNamed.verifiedByStaffName).toBe('Dr. Maria Santos');
+    });
   });
 });

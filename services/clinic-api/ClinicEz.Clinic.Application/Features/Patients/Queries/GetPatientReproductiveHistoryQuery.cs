@@ -51,6 +51,7 @@ public sealed class GetPatientReproductiveHistoryQueryHandler : IRequestHandler<
             entry.DeliveryType,
             entry.HadPreEclampsiaHypertension,
             entry.ReceivedFamilyPlanningCounseling,
-            entry.Remarks);
+            entry.Remarks,
+            entry.UpdatedAt ?? entry.CreatedAt);
     }
 }

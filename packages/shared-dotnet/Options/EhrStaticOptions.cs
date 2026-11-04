@@ -147,6 +147,140 @@ public static class EhrStaticOptions
             new EhrOptionDescriptor { Code = "NONE", Label = "None / Incomplete", PhilHealthCode = "04", PhilHealthLibrary = "lib_immunization_summary" }
         });
 
+        // Immunization Cohort Categories (drives StatutoryImmunizationsTab & Vaccine Modals)
+        Add("immunization_cohort", new[]
+        {
+            new EhrOptionDescriptor
+            {
+                Code = "lib_immchild",
+                Label = "Child Schedule (0–17y)",
+                PhilHealthLibrary = "lib_immchild",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["modalLabel"] = "Child (0–17y)",
+                    ["badgeLabel"] = "Childhood",
+                    ["maxAge"] = "17"
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "lib_immyoungw",
+                Label = "Young Women (HPV)",
+                PhilHealthLibrary = "lib_immyoungw",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["modalLabel"] = "Young Women",
+                    ["badgeLabel"] = "Young Women",
+                    ["sex"] = "female",
+                    ["minAge"] = "9",
+                    ["maxAge"] = "49"
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "lib_immpregw",
+                Label = "Maternal (Td / Tdap)",
+                PhilHealthLibrary = "lib_immpregw",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["modalLabel"] = "Maternal (Td)",
+                    ["badgeLabel"] = "Maternal",
+                    ["sex"] = "female",
+                    ["minAge"] = "9",
+                    ["maxAge"] = "49"
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "lib_immelderly",
+                Label = "Senior Citizens (60+)",
+                PhilHealthLibrary = "lib_immelderly",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["modalLabel"] = "Senior (60+)",
+                    ["badgeLabel"] = "Senior Citizen",
+                    ["minAge"] = "60"
+                }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "OtherImm",
+                Label = "Adult / Other",
+                PhilHealthLibrary = "OtherImm",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["modalLabel"] = "Adult / Other",
+                    ["badgeLabel"] = "Adult / Other",
+                    ["optionSet"] = "adult_other_vaccine",
+                    ["minAge"] = "18",
+                    ["maxAge"] = "59"
+                }
+            }
+        });
+
+        // Adult & General Catch-Up / Booster Vaccines (OtherImm)
+        Add("adult_other_vaccine", new[]
+        {
+            new EhrOptionDescriptor { Code = "O01", Label = "Tetanus Toxoid / Td / Tdap Booster", PhilHealthCode = "O01", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O02", Label = "Anti-Rabies Vaccine (PVRV / PCECV)", PhilHealthCode = "O02", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O03", Label = "Seasonal Influenza Vaccine (Adult)", PhilHealthCode = "O03", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O04", Label = "Hepatitis B Vaccine (Adult)", PhilHealthCode = "O04", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O05", Label = "COVID-19 Vaccine", PhilHealthCode = "O05", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O06", Label = "Pneumococcal Vaccine (Adult)", PhilHealthCode = "O06", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O07", Label = "Typhoid Vaccine", PhilHealthCode = "O07", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O08", Label = "Varicella (Chickenpox) Vaccine", PhilHealthCode = "O08", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O09", Label = "Hepatitis A Vaccine", PhilHealthCode = "O09", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O10", Label = "MMR Vaccine (Adult)", PhilHealthCode = "O10", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "O11", Label = "Meningococcal Vaccine", PhilHealthCode = "O11", PhilHealthLibrary = "OtherImm" },
+            new EhrOptionDescriptor { Code = "OTH", Label = "Other / Unlisted Vaccine", PhilHealthCode = "OTH", PhilHealthLibrary = "OtherImm", RequiresSpecifyText = true }
+        });
+
+        // Vaccine Administration Routes
+        Add("vaccine_route", new[]
+        {
+            new EhrOptionDescriptor
+            {
+                Code = "INTRAMUSCULAR",
+                Label = "Intramuscular (IM)",
+                PhilHealthCode = "IM",
+                PhilHealthLibrary = "lib_medicine_route",
+                Metadata = new Dictionary<string, string> { ["requiresInjectionSite"] = "true" }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "SUBCUTANEOUS",
+                Label = "Subcutaneous (SC)",
+                PhilHealthCode = "SC",
+                PhilHealthLibrary = "lib_medicine_route",
+                Metadata = new Dictionary<string, string> { ["requiresInjectionSite"] = "true" }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "INTRADERMAL",
+                Label = "Intradermal (ID)",
+                PhilHealthCode = "ID",
+                PhilHealthLibrary = "lib_medicine_route",
+                Metadata = new Dictionary<string, string> { ["requiresInjectionSite"] = "true" }
+            },
+            new EhrOptionDescriptor
+            {
+                Code = "ORAL",
+                Label = "Oral (PO)",
+                PhilHealthCode = "PO",
+                PhilHealthLibrary = "lib_medicine_route",
+                Metadata = new Dictionary<string, string> { ["requiresInjectionSite"] = "false" }
+            }
+        });
+
+        // Vaccine Anatomical Injection Sites (parenteral routes only)
+        Add("vaccine_injection_site", new[]
+        {
+            new EhrOptionDescriptor { Code = "LEFT_DELTOID", Label = "Left Deltoid" },
+            new EhrOptionDescriptor { Code = "RIGHT_DELTOID", Label = "Right Deltoid" },
+            new EhrOptionDescriptor { Code = "LEFT_THIGH", Label = "Left Anterolateral Thigh" },
+            new EhrOptionDescriptor { Code = "RIGHT_THIGH", Label = "Right Anterolateral Thigh" }
+        });
+
         // LIB-012: Smoking Status
         Add("smoking_status", new[]
         {
@@ -180,6 +314,15 @@ public static class EhrStaticOptions
             new EhrOptionDescriptor { Code = "FORMER_DRINKER", Label = "Former Drinker (Quit)", PhilHealthCode = "02", PhilHealthLibrary = "lib_alcohol_drinker" },
             new EhrOptionDescriptor { Code = "CURRENT_OCCASIONAL", Label = "Current Occasional Drinker", PhilHealthCode = "03", PhilHealthLibrary = "lib_alcohol_drinker" },
             new EhrOptionDescriptor { Code = "CURRENT_REGULAR", Label = "Current Regular / Heavy Drinker", PhilHealthCode = "04", PhilHealthLibrary = "lib_alcohol_drinker" }
+        });
+
+        // LIB-016: Physical Activity Level
+        Add("physical_activity", new[]
+        {
+            new EhrOptionDescriptor { Code = "SEDENTARY", Label = "Sedentary (<30 mins/week)", PhilHealthCode = "01", PhilHealthLibrary = "lib_physical_activity" },
+            new EhrOptionDescriptor { Code = "LIGHT", Label = "Light Activity (30–149 mins/week)", PhilHealthCode = "02", PhilHealthLibrary = "lib_physical_activity" },
+            new EhrOptionDescriptor { Code = "MODERATE", Label = "Moderate Activity (≥150 mins/week)", PhilHealthCode = "03", PhilHealthLibrary = "lib_physical_activity" },
+            new EhrOptionDescriptor { Code = "VIGOROUS", Label = "Vigorous / Highly Active", PhilHealthCode = "04", PhilHealthLibrary = "lib_physical_activity" }
         });
 
         // LIB-017: Alcohol Type
@@ -884,6 +1027,15 @@ public static class EhrStaticOptions
             new EhrOptionDescriptor { Code = "S", Label = "Spouse (S)", PhilHealthCode = "S", PhilHealthLibrary = "lib_relationship" },
             new EhrOptionDescriptor { Code = "P", Label = "Parent (P)", PhilHealthCode = "P", PhilHealthLibrary = "lib_relationship" },
             new EhrOptionDescriptor { Code = "D", Label = "Disabled Dependent (D)", PhilHealthCode = "D", PhilHealthLibrary = "lib_relationship" }
+        });
+
+        // Sleep Quality / Pattern
+        Add("sleep_pattern", new[]
+        {
+            new EhrOptionDescriptor { Code = "RESTFUL", Label = "Restful / Adequate (7–9 hrs/night)" },
+            new EhrOptionDescriptor { Code = "IRREGULAR", Label = "Irregular / Shift Work Schedule" },
+            new EhrOptionDescriptor { Code = "SHORT_DURATION", Label = "Short Duration (<6 hrs/night)" },
+            new EhrOptionDescriptor { Code = "INSOMNIA_DISTURBED", Label = "Disturbed / Difficulty Sleeping" }
         });
 
         Registry = dict;

@@ -41,7 +41,8 @@ import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { PERMISSIONS } from '@constants/permissions';
-import { usePermission } from '@context/AuthContext';
+import { useAuth, usePermission } from '@context/AuthContext';
+import { normalizeAttachmentStaffAttribution } from '../../components/chart/AttachExternalDocumentModal';
 import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
@@ -207,6 +208,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { letterhead, rooms = [], accreditationNumber } = useClinic();
   const hasPhilHealthAccreditation = Boolean(accreditationNumber && accreditationNumber.trim());
   const { currentName, staff: staffList, current: currentStaff } = useStaff();
+  const { user: authUser } = useAuth();
+  const actorStaffName = (currentName || authUser?.name || authUser?.email || '').trim();
+  const rawActorStaffId = currentStaff?.id || authUser?.id || '';
+  const actorStaffId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawActorStaffId)
+    ? rawActorStaffId
+    : undefined;
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
   const [totalCounts, setTotalCounts] = useState<PatientDirectoryCounts | null>(null);
   const [patientsError, setPatientsError] = useState<string | null>(null);
@@ -1341,7 +1348,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const rejectionReason = !isApproved
       ? (userRejectionReason?.trim() || 'Document illegible or missing official physician signature/stamp.')
       : undefined;
-    const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    const [, verifyErr] = await clinicService.verifyRecordAttachment(
+      attachmentId,
+      isApproved,
+      rejectionReason,
+      actorStaffName || undefined,
+      actorStaffId
+    );
     setVerifyingAttachmentId(null);
     if (verifyErr) {
       notify.error(verifyErr.message || 'Could not update the document.');
@@ -1356,7 +1369,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               verificationStatus: isApproved ? 'Verified' : 'Rejected',
               rejectionReason,
               verifiedAt: new Date().toISOString(),
-              verifiedByStaffName: currentName || undefined,
+              verifiedByStaffId: actorStaffId || att.verifiedByStaffId,
+              verifiedByStaffName: actorStaffName || att.verifiedByStaffName || undefined,
             }
           : att
       )
@@ -1429,6 +1443,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         formData.append('Title', docTitle.trim());
         if (docNotes.trim()) formData.append('Notes', docNotes.trim());
         formData.append('DocumentDate', strictlyFormattedDocDate);
+        if (actorStaffId) formData.append('UploadedByStaffId', actorStaffId);
+        if (actorStaffName) formData.append('UploadedByStaffName', actorStaffName);
 
         if (pickedDocFile.file) {
           formData.append('File', pickedDocFile.file);
@@ -1444,7 +1460,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         setUploadingDoc(false);
 
         if (newAtt) {
-          setPatientAttachments((prev) => [newAtt, ...prev]);
+          const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
+          setPatientAttachments((prev) => [attributedAtt, ...prev]);
           setUploadDocModalVisible(false);
           setPickedDocFile(null);
           setDocTitle('');
@@ -1473,7 +1490,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
       documentDate: strictlyFormattedDocDate,
       notes: docNotes.trim() || undefined,
-      uploadedByStaffName: currentName || undefined,
+      uploadedByStaffId: actorStaffId,
+      uploadedByStaffName: actorStaffName || undefined,
       encryptionAlgorithm: 'AES-256-GCM',
       encryptionKeyId: 'cmk-v1',
     };
@@ -1482,7 +1500,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setUploadingDoc(false);
 
     if (newAtt) {
-      setPatientAttachments((prev) => [newAtt, ...prev]);
+      const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
+      setPatientAttachments((prev) => [attributedAtt, ...prev]);
       setUploadDocModalVisible(false);
       setPickedDocFile(null);
       setDocTitle('');
@@ -1492,7 +1511,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     } else if (!shouldQueueOffline(err?.status ?? 0)) {
       notify.error(err?.message || 'The server rejected this document.');
     } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
+      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, actorStaffName || undefined);
       setPatientAttachments((prev) => [queuedAtt, ...prev]);
       setUploadDocModalVisible(false);
       setPickedDocFile(null);

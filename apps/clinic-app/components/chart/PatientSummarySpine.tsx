@@ -1180,30 +1180,21 @@ export default function PatientSummarySpine({
           </View>
 
           {/* ========================================================================= */}
-          {/* ZONE 6: ACTIVE CHRONIC PROBLEM PILLS (ICD-10) & ONGOING ACTIVE MEDICATIONS */}
+          {/* ZONE 6: ACTIVE CHRONIC PROBLEM PILLS & ONGOING ACTIVE MEDICATIONS         */}
           {/* ========================================================================= */}
           <View style={styles.chronicAndMedsRow}>
             {/* Active Problems */}
             <View style={styles.halfPane}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
-                Active Chronic Problems (ICD-10)
+                Active Chronic Problems
               </ThemedText>
               <View style={styles.pillsWrap}>
                 {activeProblems.length > 0 ? (
                   activeProblems.map((prob) => (
                     <View key={prob.id} style={styles.problemPill}>
-                      {prob.icd10Code ? (
-                        <ThemedText
-                          variant="captionBold"
-                          color={theme.colors.primaryDark}
-                          style={styles.pillFixedToken}
-                        >
-                          {prob.icd10Code}
-                        </ThemedText>
-                      ) : null}
                       <ThemedText
-                        variant="caption"
-                        color={theme.colors.text}
+                        variant="captionBold"
+                        color={theme.colors.primaryDark}
                         numberOfLines={1}
                         style={styles.pillTruncateText}
                       >

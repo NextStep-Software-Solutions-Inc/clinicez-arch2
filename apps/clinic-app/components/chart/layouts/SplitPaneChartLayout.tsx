@@ -55,9 +55,16 @@ const SPLIT_NAV_ITEMS: readonly NavItemMeta[] = [
   { tab: 'profiles', label: 'Health Profiles', icon: 'clipboard' },
   {
     tab: 'vault',
-    label: 'Document Vault',
+    label: 'Doc Vault',
     icon: 'folder',
     getCount: (_, attachments) => attachments?.length,
+  },
+  {
+    tab: 'documents',
+    label: 'Admin Vault',
+    icon: 'scroll',
+    getCount: (chart) =>
+      ((chart?.medicalCertificates?.length ?? 0) + (chart?.referralLetters?.length ?? 0)) || undefined,
   },
 ] as const;
 

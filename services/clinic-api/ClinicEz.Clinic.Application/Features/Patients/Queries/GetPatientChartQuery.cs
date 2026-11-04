@@ -706,7 +706,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             p.TargetRoomId,
             p.TargetRoomName,
             p.ToothNumber,
-            p.ToothSurface
+            p.ToothSurface,
+            string.IsNullOrWhiteSpace(p.CreatedBy) ? null : p.CreatedBy
         )).ToList();
 
         var labOrderDtos = labOrders.Select(o => CreateClinicLabOrderCommandHandler.MapToDto(o)).ToList();
@@ -784,7 +785,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                     social.AlcoholDrinksPerWeek, social.AlcoholBottlesPerDay, social.AlcoholFrequency, social.UsesIllicitDrugs,
                     social.SubstanceUseHistory, social.DrugTypes, social.IsSexuallyActive, social.CoitarcheAge,
                     social.PhysicalActivityFrequency, social.DietaryHabits, social.Remarks,
-                    social.SmokingStatus, social.AlcoholStatus);
+                    social.SmokingStatus, social.AlcoholStatus, social.UpdatedAt ?? social.CreatedAt);
             }
 
         }
@@ -799,7 +800,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                     repro.PeriodDurationDays, repro.CycleIntervalDays, repro.PadsPerDay, repro.IsMenopausal, repro.MenopauseAge,
                     repro.ContraceptiveMethod, repro.Gravidity, repro.Parity, repro.TermBirths, repro.PretermBirths,
                     repro.Abortions, repro.LivingChildren, repro.DeliveryType, repro.HadPreEclampsiaHypertension,
-                    repro.ReceivedFamilyPlanningCounseling, repro.Remarks);
+                    repro.ReceivedFamilyPlanningCounseling, repro.Remarks, repro.UpdatedAt ?? repro.CreatedAt);
             }
         }
 

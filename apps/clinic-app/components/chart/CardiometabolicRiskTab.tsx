@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
 import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, Modal } from '@ui';
@@ -8,8 +8,10 @@ import {
   ClinicPatient,
   NcdRiskAssessment,
   SaveNcdRiskAssessmentPayload,
+  formatClinicDateTime,
 } from '../../services/clinicService';
 import { useAuth, usePermission } from '../../context/AuthContext';
+import { useClinic } from '../../context/ClinicContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import { useStaff } from '../../context/StaffContext';
 import {
@@ -18,6 +20,258 @@ import {
   RISK_BAND_MIDPOINTS,
   type RiskBandType,
 } from '../../utils/philpenCalculator';
+
+export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+export interface NcdFormSnapshot {
+  riskBand: RiskBandType;
+  riskScorePercent: string;
+  assessmentDate: string;
+  assessedByStaffId?: string;
+  assessedByStaffName: string;
+  authedClinicianName: string;
+  remarks: string;
+  eatsProcessedFoodWeekly: boolean | null;
+  threeServingsVegetablesDaily: boolean | null;
+  twoToThreeServingsFruitDaily: boolean | null;
+  physicalActivityAtLeast150MinsWeekly: boolean | null;
+  diagnosedDiabetes: boolean | null;
+  diabetesMedicationStatus: 'Y' | 'N' | null;
+  hasPolyphagia: boolean | null;
+  hasPolydipsia: boolean | null;
+  hasPolyuria: boolean | null;
+  hasRaisedBloodGlucose: boolean | null;
+  fastingBloodSugarMgDl: string;
+  fastingBloodSugarDate: string;
+  hasRaisedBloodLipids: boolean | null;
+  totalCholesterolMgDl: string;
+  totalCholesterolDate: string;
+  urineKetonesPresent: boolean | null;
+  urineKetonesValue: string;
+  urineKetonesDate: string;
+  urineProteinPresent: boolean | null;
+  urineProteinValue: string;
+  urineProteinDate: string;
+  hasChestPain: boolean | null;
+  painInCenterOfChestOrLeftArm: boolean | null;
+  painWhenWalkingUphill: boolean | null;
+  slowsDownWhenPainOccurs: boolean | null;
+  painRelievedWithin10Mins: boolean | null;
+  painRelievedByNitrates: boolean | null;
+  severeChestPainOver30Mins: boolean | null;
+  transientNeurologicalDeficits: boolean | null;
+  hasHistoryAnginaHeartAttack: boolean | null;
+  hasHistoryStrokeOrTia: boolean | null;
+}
+
+function sanitizeAutoSaveDate(raw: string, label: string): {
+  value?: string;
+  isMidTyping: boolean;
+  error: string | null;
+} {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { value: undefined, isMidTyping: false, error: null };
+  }
+  if (trimmed.length < 10) {
+    return { value: undefined, isMidTyping: true, error: null };
+  }
+  const check = validateDateString(trimmed, { boundaryMode: 'pastOrToday' });
+  if (!check.isValid) {
+    return {
+      value: undefined,
+      isMidTyping: false,
+      error: check.errorMessage || `Invalid ${label}`,
+    };
+  }
+  return { value: trimmed, isMidTyping: false, error: null };
+}
+
+/**
+ * Builds a progressive-save payload for NCD Risk Assessment without assuming or defaulting
+ * any unanswered (`null`) screening questions.
+ */
+export function buildNcdAssessmentPayload(snap: NcdFormSnapshot): {
+  payload: SaveNcdRiskAssessmentPayload;
+  isMidTypingDate: boolean;
+  validationError: string | null;
+} {
+  const assessmentDateRes = sanitizeAutoSaveDate(snap.assessmentDate, 'assessment date');
+  const fbsDateRes = snap.hasRaisedBloodGlucose === true
+    ? sanitizeAutoSaveDate(snap.fastingBloodSugarDate, 'FBS test date')
+    : { value: undefined, isMidTyping: false, error: null };
+  const cholDateRes = snap.hasRaisedBloodLipids === true
+    ? sanitizeAutoSaveDate(snap.totalCholesterolDate, 'cholesterol test date')
+    : { value: undefined, isMidTyping: false, error: null };
+  const ketonesDateRes = snap.urineKetonesPresent === true
+    ? sanitizeAutoSaveDate(snap.urineKetonesDate, 'ketones test date')
+    : { value: undefined, isMidTyping: false, error: null };
+  const proteinDateRes = snap.urineProteinPresent === true
+    ? sanitizeAutoSaveDate(snap.urineProteinDate, 'protein test date')
+    : { value: undefined, isMidTyping: false, error: null };
+
+  const isMidTypingDate =
+    assessmentDateRes.isMidTyping ||
+    fbsDateRes.isMidTyping ||
+    cholDateRes.isMidTyping ||
+    ketonesDateRes.isMidTyping ||
+    proteinDateRes.isMidTyping;
+
+  const validationError =
+    assessmentDateRes.error ||
+    fbsDateRes.error ||
+    cholDateRes.error ||
+    ketonesDateRes.error ||
+    proteinDateRes.error;
+
+  const clinicianSnapshot = snap.assessedByStaffName.trim() || snap.authedClinicianName || 'Clinician';
+  const effectiveAssessmentDate = assessmentDateRes.value
+    ? new Date(assessmentDateRes.value).toISOString()
+    : new Date().toISOString();
+
+  const parsedFbs = parseFloat(snap.fastingBloodSugarMgDl);
+  const hasValidFbs = !isNaN(parsedFbs) && parsedFbs > 0;
+  const parsedChol = parseFloat(snap.totalCholesterolMgDl);
+  const hasValidChol = !isNaN(parsedChol) && parsedChol > 0;
+  const parsedRiskPct = parseFloat(snap.riskScorePercent);
+
+  const effectiveRaisedGlucose =
+    snap.hasRaisedBloodGlucose !== null
+      ? snap.hasRaisedBloodGlucose || (hasValidFbs && parsedFbs >= 126)
+      : hasValidFbs && parsedFbs >= 126
+        ? true
+        : undefined;
+
+  const effectiveRaisedLipids =
+    snap.hasRaisedBloodLipids !== null
+      ? snap.hasRaisedBloodLipids || (hasValidChol && parsedChol >= 200)
+      : hasValidChol && parsedChol >= 200
+        ? true
+        : undefined;
+
+  const payload: SaveNcdRiskAssessmentPayload = {
+    riskBand: snap.riskBand,
+    calculatedRiskScorePercent: !isNaN(parsedRiskPct) ? parsedRiskPct : undefined,
+    assessmentDate: effectiveAssessmentDate,
+    assessedByStaffId: snap.assessedByStaffId,
+    assessedByStaffName: clinicianSnapshot,
+    remarks: snap.remarks.trim() || undefined,
+
+    eatsProcessedFoodWeekly: snap.eatsProcessedFoodWeekly ?? undefined,
+    threeServingsVegetablesDaily: snap.threeServingsVegetablesDaily ?? undefined,
+    twoToThreeServingsFruitDaily: snap.twoToThreeServingsFruitDaily ?? undefined,
+    physicalActivityAtLeast150MinsWeekly: snap.physicalActivityAtLeast150MinsWeekly ?? undefined,
+
+    diagnosedDiabetes: snap.diagnosedDiabetes === null ? undefined : snap.diagnosedDiabetes ? 'Y' : 'N',
+    hasPolyphagia: snap.hasPolyphagia ?? undefined,
+    hasPolydipsia: snap.hasPolydipsia ?? undefined,
+    hasPolyuria: snap.hasPolyuria ?? undefined,
+    diabetesMedicationStatus:
+      snap.diagnosedDiabetes === true ? (snap.diabetesMedicationStatus ?? undefined) : undefined,
+
+    hasRaisedBloodGlucose: effectiveRaisedGlucose,
+    fastingBloodSugarMgDl:
+      (snap.hasRaisedBloodGlucose === true || hasValidFbs) && hasValidFbs ? parsedFbs : undefined,
+    fastingBloodSugarDate: snap.hasRaisedBloodGlucose === true ? fbsDateRes.value : undefined,
+
+    hasRaisedBloodLipids: effectiveRaisedLipids,
+    totalCholesterolMgDl:
+      (snap.hasRaisedBloodLipids === true || hasValidChol) && hasValidChol ? parsedChol : undefined,
+    totalCholesterolDate: snap.hasRaisedBloodLipids === true ? cholDateRes.value : undefined,
+
+    urineKetonesPresent: snap.urineKetonesPresent ?? undefined,
+    urineKetonesValue:
+      snap.urineKetonesPresent === true && snap.urineKetonesValue.trim()
+        ? snap.urineKetonesValue.trim()
+        : undefined,
+    urineKetonesDate: snap.urineKetonesPresent === true ? ketonesDateRes.value : undefined,
+
+    urineProteinPresent: snap.urineProteinPresent ?? undefined,
+    urineProteinValue:
+      snap.urineProteinPresent === true && snap.urineProteinValue.trim()
+        ? snap.urineProteinValue.trim()
+        : undefined,
+    urineProteinDate: snap.urineProteinPresent === true ? proteinDateRes.value : undefined,
+
+    hasChestPain: snap.hasChestPain ?? undefined,
+    painInCenterOfChestOrLeftArm:
+      snap.hasChestPain === true ? (snap.painInCenterOfChestOrLeftArm ?? undefined) : undefined,
+    painWhenWalkingUphill:
+      snap.hasChestPain === true ? (snap.painWhenWalkingUphill ?? undefined) : undefined,
+    slowsDownWhenPainOccurs:
+      snap.hasChestPain === true && snap.painWhenWalkingUphill === true
+        ? (snap.slowsDownWhenPainOccurs ?? undefined)
+        : undefined,
+    painRelievedWithin10Mins:
+      snap.hasChestPain === true && snap.painWhenWalkingUphill === true
+        ? (snap.painRelievedWithin10Mins ?? undefined)
+        : undefined,
+    painRelievedByNitrates:
+      snap.hasChestPain === true && snap.painWhenWalkingUphill === true
+        ? (snap.painRelievedByNitrates ?? undefined)
+        : undefined,
+
+    severeChestPainOver30Mins: snap.severeChestPainOver30Mins ?? undefined,
+    transientNeurologicalDeficits: snap.transientNeurologicalDeficits ?? undefined,
+    hasHistoryAnginaHeartAttack: snap.hasHistoryAnginaHeartAttack ?? undefined,
+    hasHistoryStrokeOrTia: snap.hasHistoryStrokeOrTia ?? undefined,
+  };
+
+  return { payload, isMidTypingDate, validationError };
+}
+
+export function countNcdQuestionProgress(snap: NcdFormSnapshot): {
+  answeredCount: number;
+  totalRequiredCount: number;
+} {
+  const checks: boolean[] = [
+    snap.eatsProcessedFoodWeekly !== null,
+    snap.threeServingsVegetablesDaily !== null,
+    snap.twoToThreeServingsFruitDaily !== null,
+    snap.physicalActivityAtLeast150MinsWeekly !== null,
+    snap.diagnosedDiabetes !== null,
+    snap.hasPolyphagia !== null,
+    snap.hasPolydipsia !== null,
+    snap.hasPolyuria !== null,
+    snap.hasRaisedBloodGlucose !== null,
+    snap.hasRaisedBloodLipids !== null,
+    snap.urineKetonesPresent !== null,
+    snap.urineProteinPresent !== null,
+    snap.hasChestPain !== null,
+    snap.severeChestPainOver30Mins !== null,
+    snap.transientNeurologicalDeficits !== null,
+    snap.hasHistoryAnginaHeartAttack !== null,
+    snap.hasHistoryStrokeOrTia !== null,
+  ];
+  if (snap.diagnosedDiabetes === true) {
+    checks.push(snap.diabetesMedicationStatus !== null);
+  }
+  if (snap.hasRaisedBloodGlucose === true) {
+    checks.push(snap.fastingBloodSugarMgDl.trim().length > 0);
+  }
+  if (snap.hasRaisedBloodLipids === true) {
+    checks.push(snap.totalCholesterolMgDl.trim().length > 0);
+  }
+  if (snap.urineKetonesPresent === true) {
+    checks.push(snap.urineKetonesValue.trim().length > 0);
+  }
+  if (snap.urineProteinPresent === true) {
+    checks.push(snap.urineProteinValue.trim().length > 0);
+  }
+  if (snap.hasChestPain === true) {
+    checks.push(snap.painInCenterOfChestOrLeftArm !== null);
+    checks.push(snap.painWhenWalkingUphill !== null);
+    if (snap.painWhenWalkingUphill === true) {
+      checks.push(snap.slowsDownWhenPainOccurs !== null);
+      checks.push(snap.painRelievedWithin10Mins !== null);
+      checks.push(snap.painRelievedByNitrates !== null);
+    }
+  }
+  return {
+    answeredCount: checks.filter(Boolean).length,
+    totalRequiredCount: checks.length,
+  };
+}
 
 const VOID_REASONS = [
   'Duplicate entry',
@@ -53,13 +307,50 @@ export default function CardiometabolicRiskTab({
   const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
   const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
   const { current: currentStaff, currentName } = useStaff();
+  const { settings } = useClinic();
+  const dateFormat = settings?.dateFormat ?? 'MM/DD/YYYY';
+  const timeFormat = settings?.timeFormat ?? '12h';
+  const timeZoneId = settings?.timeZoneId ?? 'Asia/Manila';
   const authedClinicianName = currentName || (user?.name ?? '').trim();
   const authedStaffId = currentStaff?.id || user?.id;
 
   const [assessments, setAssessments] = useState<NcdRiskAssessment[]>([]);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>('idle');
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
+  const [userEditVersion, setUserEditVersion] = useState(0);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(
+    () => initialLatestAssessment?.updatedAt ?? initialLatestAssessment?.createdAt ?? null
+  );
+  const lastSavedAtRef = useRef<string | null>(lastSavedAt);
+  lastSavedAtRef.current = lastSavedAt;
+
+  const lastEditKindRef = useRef<'discrete' | 'text'>('discrete');
+  const sessionAssessmentIdRef = useRef<string | null>(null);
+  const inFlightSaveRef = useRef(false);
+  const pendingResaveRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userEditVersionRef = useRef(0);
+  userEditVersionRef.current = userEditVersion;
+  const lastSavedEditVersionRef = useRef(0);
+  const lastSavedPayloadJsonRef = useRef<string | null>(null);
+  const onRefreshChartRef = useRef(onRefreshChart);
+  onRefreshChartRef.current = onRefreshChart;
+
+  const resetAutoSaveTracking = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pendingResaveRef.current = false;
+    userEditVersionRef.current = 0;
+    lastSavedEditVersionRef.current = 0;
+    lastSavedPayloadJsonRef.current = null;
+    setUserEditVersion(0);
+    setAutoSaveStatus('idle');
+    setAutoSaveError(null);
+  }, []);
 
   // Editing & Voiding State
   const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
@@ -126,6 +417,14 @@ export default function CardiometabolicRiskTab({
   const [hasHistoryAnginaHeartAttack, setHasHistoryAnginaHeartAttack] = useState<boolean | null>(null);
   const [hasHistoryStrokeOrTia, setHasHistoryStrokeOrTia] = useState<boolean | null>(null);
 
+  const markUserEdited = useCallback((kind: 'discrete' | 'text') => {
+    if (!canWritePatients) return;
+    lastEditKindRef.current = kind;
+    setAutoSaveStatus('saving');
+    setAutoSaveError(null);
+    setUserEditVersion((v) => v + 1);
+  }, [canWritePatients]);
+
   // Extract vitals and smoking status for clinical CVD calculation
   const pAny = patient as any;
   const latestVitals = pAny.vitalsHistory && pAny.vitalsHistory.length > 0 ? pAny.vitalsHistory[0] : null;
@@ -164,6 +463,16 @@ export default function CardiometabolicRiskTab({
     transientNeurologicalDeficits,
   ]);
 
+  const effectiveRiskBand: RiskBandType = cvdCalc.crisisOverrideApplied
+    ? 'BandE'
+    : !isManuallyOverridden
+      ? cvdCalc.riskBand
+      : riskBand;
+
+  const effectiveRiskScorePercent: string = !isManuallyOverridden
+    ? String(cvdCalc.calculatedScorePercent)
+    : riskScorePercent;
+
   // Real-time typing sync: typing "15" immediately converts to Band B (10-<20%)
   const handleRiskPercentageChange = (txt: string) => {
     setRiskScorePercent(txt);
@@ -173,6 +482,7 @@ export default function CardiometabolicRiskTab({
       const derivedBand = percentageToRiskBand(parsed);
       setRiskBand(derivedBand);
     }
+    markUserEdited('text');
   };
 
   // Clicking a risk band chip syncs riskBand and representative midpoint percentage
@@ -183,6 +493,7 @@ export default function CardiometabolicRiskTab({
     if (isNaN(parsed) || percentageToRiskBand(parsed) !== bandKey) {
       setRiskScorePercent(String(RISK_BAND_MIDPOINTS[bandKey]));
     }
+    markUserEdited('discrete');
   };
 
   // One-click apply from calculated clinical risk score
@@ -190,6 +501,18 @@ export default function CardiometabolicRiskTab({
     setIsManuallyOverridden(false);
     setRiskBand(cvdCalc.riskBand);
     setRiskScorePercent(String(cvdCalc.calculatedScorePercent));
+    markUserEdited('discrete');
+  };
+
+  const syncTodaySessionId = (active: NcdRiskAssessment[]) => {
+    if (active.length === 0) {
+      sessionAssessmentIdRef.current = null;
+      return;
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    const latest = active[0];
+    const latestDate = (latest.assessmentDate || latest.createdAt || '').split('T')[0];
+    sessionAssessmentIdRef.current = latestDate === todayStr ? latest.id : null;
   };
 
   const populateLatest = (data: NcdRiskAssessment) => {
@@ -209,6 +532,10 @@ export default function CardiometabolicRiskTab({
     const recDate = data.assessmentDate || data.createdAt;
     if (recDate) {
       setAssessmentDate(recDate.split('T')[0]);
+    }
+    const recSavedTimestamp = data.updatedAt || data.createdAt || null;
+    if (recSavedTimestamp) {
+      setLastSavedAt(recSavedTimestamp);
     }
 
     setRemarks(data.remarks || '');
@@ -289,6 +616,8 @@ export default function CardiometabolicRiskTab({
   // Pure clean reset: NO DEFAULTING, NO ASSUMPTIONS (all start as null)
   const resetToDefaultForm = () => {
     setEditingAssessmentId(null);
+    sessionAssessmentIdRef.current = null;
+    lastSavedPayloadJsonRef.current = null;
     setRiskBand(cvdCalc.riskBand);
     setRiskScorePercent(String(cvdCalc.calculatedScorePercent));
     setIsManuallyOverridden(false);
@@ -340,13 +669,16 @@ export default function CardiometabolicRiskTab({
 
   const handleStartEdit = (assessment: NcdRiskAssessment) => {
     if (!canWritePatients) return;
+    resetAutoSaveTracking();
     setEditingAssessmentId(assessment.id);
     populateLatest(assessment);
   };
 
   const handleCancelEdit = () => {
+    resetAutoSaveTracking();
     setEditingAssessmentId(null);
     if (activeAssessments.length > 0) {
+      syncTodaySessionId(activeAssessments);
       populateLatest(activeAssessments[0]);
     } else {
       resetToDefaultForm();
@@ -384,8 +716,12 @@ export default function CardiometabolicRiskTab({
         if (editingAssessmentId === voidingAssessment.id) {
           setEditingAssessmentId(null);
         }
+        if (sessionAssessmentIdRef.current === voidingAssessment.id) {
+          sessionAssessmentIdRef.current = null;
+        }
+        resetAutoSaveTracking();
         await fetchAssessments();
-        onRefreshChart?.();
+        onRefreshChartRef.current?.();
       }
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Unexpected error voiding assessment.');
@@ -402,6 +738,7 @@ export default function CardiometabolicRiskTab({
       if (data) {
         setAssessments(data);
         const active = data.filter((a) => !a.isDeleted);
+        syncTodaySessionId(active);
         if (active.length > 0) {
           if (!editingAssessmentId) {
             populateLatest(active[0]);
@@ -420,8 +757,15 @@ export default function CardiometabolicRiskTab({
   };
 
   useEffect(() => {
+    resetAutoSaveTracking();
+    sessionAssessmentIdRef.current = null;
+    setLastSavedAt(
+      initialLatestAssessment?.updatedAt ?? initialLatestAssessment?.createdAt ?? null
+    );
+
     if (initialLatestAssessment) {
       setAssessments([initialLatestAssessment]);
+      syncTodaySessionId(initialLatestAssessment.isDeleted ? [] : [initialLatestAssessment]);
       populateLatest(initialLatestAssessment);
     } else {
       fetchAssessments();
@@ -429,13 +773,13 @@ export default function CardiometabolicRiskTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id]);
 
-  // If no prior assessment is recorded, auto-seed risk band with clinical baseline calculation
+  // Keep risk band synchronized with live computation whenever not manually overridden
   useEffect(() => {
-    if (activeAssessments.length === 0 && !initialLatestAssessment && !isManuallyOverridden) {
+    if (!isManuallyOverridden) {
       setRiskBand(cvdCalc.riskBand);
       setRiskScorePercent(String(cvdCalc.calculatedScorePercent));
     }
-  }, [activeAssessments.length, initialLatestAssessment, isManuallyOverridden, cvdCalc.riskBand, cvdCalc.calculatedScorePercent]);
+  }, [isManuallyOverridden, cvdCalc.riskBand, cvdCalc.calculatedScorePercent]);
 
   // When a crisis override occurs (established CVD / stroke / emergency), auto-elevate to Band E
   useEffect(() => {
@@ -447,248 +791,242 @@ export default function CardiometabolicRiskTab({
     }
   }, [cvdCalc.crisisOverrideApplied, cvdCalc.calculatedScorePercent, isManuallyOverridden, riskScorePercent]);
 
-  const handleSaveAssessment = async () => {
-    if (!canWritePatients) {
-      Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
+  const currentSnapshot: NcdFormSnapshot = {
+    riskBand: effectiveRiskBand,
+    riskScorePercent: effectiveRiskScorePercent,
+    assessmentDate,
+    assessedByStaffId: authedStaffId,
+    assessedByStaffName,
+    authedClinicianName,
+    remarks,
+    eatsProcessedFoodWeekly,
+    threeServingsVegetablesDaily,
+    twoToThreeServingsFruitDaily,
+    physicalActivityAtLeast150MinsWeekly,
+    diagnosedDiabetes,
+    diabetesMedicationStatus,
+    hasPolyphagia,
+    hasPolydipsia,
+    hasPolyuria,
+    hasRaisedBloodGlucose,
+    fastingBloodSugarMgDl,
+    fastingBloodSugarDate,
+    hasRaisedBloodLipids,
+    totalCholesterolMgDl,
+    totalCholesterolDate,
+    urineKetonesPresent,
+    urineKetonesValue,
+    urineKetonesDate,
+    urineProteinPresent,
+    urineProteinValue,
+    urineProteinDate,
+    hasChestPain,
+    painInCenterOfChestOrLeftArm,
+    painWhenWalkingUphill,
+    slowsDownWhenPainOccurs,
+    painRelievedWithin10Mins,
+    painRelievedByNitrates,
+    severeChestPainOver30Mins,
+    transientNeurologicalDeficits,
+    hasHistoryAnginaHeartAttack,
+    hasHistoryStrokeOrTia,
+  };
+
+  const latestSnapshotRef = useRef<NcdFormSnapshot>(currentSnapshot);
+  latestSnapshotRef.current = currentSnapshot;
+  const editingAssessmentIdRef = useRef<string | null>(editingAssessmentId);
+  editingAssessmentIdRef.current = editingAssessmentId;
+
+  const questionProgress = useMemo(
+    () => countNcdQuestionProgress(currentSnapshot),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      eatsProcessedFoodWeekly,
+      threeServingsVegetablesDaily,
+      twoToThreeServingsFruitDaily,
+      physicalActivityAtLeast150MinsWeekly,
+      diagnosedDiabetes,
+      diabetesMedicationStatus,
+      hasPolyphagia,
+      hasPolydipsia,
+      hasPolyuria,
+      hasRaisedBloodGlucose,
+      fastingBloodSugarMgDl,
+      hasRaisedBloodLipids,
+      totalCholesterolMgDl,
+      urineKetonesPresent,
+      urineKetonesValue,
+      urineProteinPresent,
+      urineProteinValue,
+      hasChestPain,
+      painInCenterOfChestOrLeftArm,
+      painWhenWalkingUphill,
+      slowsDownWhenPainOccurs,
+      painRelievedWithin10Mins,
+      painRelievedByNitrates,
+      severeChestPainOver30Mins,
+      transientNeurologicalDeficits,
+      hasHistoryAnginaHeartAttack,
+      hasHistoryStrokeOrTia,
+    ]
+  );
+
+  const performAutoSave = useCallback(async () => {
+    if (!canWritePatients) return;
+
+    const { payload, isMidTypingDate, validationError } = buildNcdAssessmentPayload(
+      latestSnapshotRef.current
+    );
+
+    if (isMidTypingDate) {
       return;
     }
-    // Explicit Answering Validation: ALL questions must be explicitly answered (no assuming nor defaulting)
-    const unanswered: string[] = [];
 
-    // Section 1: Dietary Fat & Sodium Intake
-    if (eatsProcessedFoodWeekly === null) {
-      unanswered.push('Dietary Fat & Sodium Intake (processed/canned food consumption)');
-    }
-
-    // Section 2: Dietary Fiber & Nutrition
-    if (threeServingsVegetablesDaily === null) {
-      unanswered.push('Vegetable Intake (at least 3 servings daily)');
-    }
-    if (twoToThreeServingsFruitDaily === null) {
-      unanswered.push('Fruit Intake (2 to 3 servings daily)');
+    if (validationError) {
+      setAutoSaveStatus('error');
+      setAutoSaveError(validationError);
+      return;
     }
 
-    // Section 3: Physical Activity
-    if (physicalActivityAtLeast150MinsWeekly === null) {
-      unanswered.push('Physical Activity (at least 150 minutes weekly)');
-    }
+    const targetId = editingAssessmentIdRef.current || sessionAssessmentIdRef.current;
+    const savingEditVersion = userEditVersionRef.current;
+    const payloadKey = JSON.stringify({ targetId: targetId || null, payload });
 
-    // Section 4: Diabetes & Metabolic Assessment
-    if (diagnosedDiabetes === null) {
-      unanswered.push('Diagnosed Diabetes Mellitus status');
-    }
-    if (diagnosedDiabetes === true && diabetesMedicationStatus === null) {
-      unanswered.push('Current Diabetes Pharmacotherapy status');
-    }
-    if (hasPolyphagia === null) {
-      unanswered.push('Symptoms of Polyphagia (excessive hunger)');
-    }
-    if (hasPolydipsia === null) {
-      unanswered.push('Symptoms of Polydipsia (excessive thirst)');
-    }
-    if (hasPolyuria === null) {
-      unanswered.push('Symptoms of Polyuria (frequent urination)');
-    }
-    if (hasRaisedBloodGlucose === null) {
-      unanswered.push('Elevated Blood Glucose screening status');
-    }
-    if (hasRaisedBloodGlucose === true && !fastingBloodSugarMgDl.trim()) {
-      unanswered.push('Fasting Blood Sugar (FBS) lab value');
-    }
-    if (hasRaisedBloodLipids === null) {
-      unanswered.push('Elevated Blood Lipids (Cholesterol) status');
-    }
-    if (hasRaisedBloodLipids === true && !totalCholesterolMgDl.trim()) {
-      unanswered.push('Total Cholesterol lab value');
-    }
-    if (urineKetonesPresent === null) {
-      unanswered.push('Urinalysis: Urine Ketones status');
-    }
-    if (urineKetonesPresent === true && !urineKetonesValue.trim()) {
-      unanswered.push('Urine Ketones test result');
-    }
-    if (urineProteinPresent === null) {
-      unanswered.push('Urinalysis: Proteinuria status');
-    }
-    if (urineProteinPresent === true && !urineProteinValue.trim()) {
-      unanswered.push('Urine Protein test result');
-    }
-
-    // Section 5: Cardiovascular & Cerebrovascular Symptoms
-    if (hasChestPain === null) {
-      unanswered.push('Chest Pain / Heaviness symptom status');
-    }
-    if (hasChestPain === true) {
-      if (painInCenterOfChestOrLeftArm === null) {
-        unanswered.push('Chest Pain: Central chest / radiating to left arm');
-      }
-      if (painWhenWalkingUphill === null) {
-        unanswered.push('Chest Pain: Provoked by walking uphill or hurrying');
-      }
-      if (painWhenWalkingUphill === true) {
-        if (slowsDownWhenPainOccurs === null) {
-          unanswered.push('Chest Pain: Forces patient to stop or slow down');
-        }
-        if (painRelievedWithin10Mins === null) {
-          unanswered.push('Chest Pain: Resolves completely within 10 minutes');
-        }
-        if (painRelievedByNitrates === null) {
-          unanswered.push('Chest Pain: Relieved by rest or sublingual nitroglycerin');
-        }
-      }
-    }
-    if (severeChestPainOver30Mins === null) {
-      unanswered.push('Severe persistent chest pain lasting > 30 minutes');
-    }
-    if (transientNeurologicalDeficits === null) {
-      unanswered.push('Transient focal neurological deficits / TIA symptoms');
-    }
-    if (hasHistoryAnginaHeartAttack === null) {
-      unanswered.push('Documented medical history of Angina / Heart Attack');
-    }
-    if (hasHistoryStrokeOrTia === null) {
-      unanswered.push('Documented medical history of Stroke / TIA');
-    }
-
-    if (unanswered.length > 0) {
-      const displayCount = Math.min(unanswered.length, 5);
-      const items = unanswered.slice(0, displayCount).map((u) => `• ${u}`).join('\n');
-      const more = unanswered.length > displayCount ? `\n...and ${unanswered.length - displayCount} more question(s)` : '';
-      Alert.alert(
-        'All Questions Must Be Explicitly Answered',
-        `Clinical governance requires all screening questions to be explicitly evaluated. No answers may be assumed or defaulted.\n\nPlease complete the following:\n\n${items}${more}`
+    if (payloadKey === lastSavedPayloadJsonRef.current) {
+      lastSavedEditVersionRef.current = Math.max(
+        lastSavedEditVersionRef.current,
+        savingEditVersion
       );
+      if (!lastSavedAtRef.current) {
+        setLastSavedAt(new Date().toISOString());
+      }
+      setAutoSaveStatus('saved');
+      setAutoSaveError(null);
       return;
     }
 
-    if (assessmentDate && assessmentDate.trim()) {
-      const dateCheck = validateDateString(assessmentDate, { boundaryMode: 'pastOrToday' });
-      if (!dateCheck.isValid) {
-        Alert.alert('Invalid Assessment Date', dateCheck.errorMessage || 'Please enter a valid assessment date not in the future.');
-        return;
-      }
+    if (inFlightSaveRef.current) {
+      pendingResaveRef.current = true;
+      return;
     }
-    if (fastingBloodSugarDate && fastingBloodSugarDate.trim()) {
-      const fbsCheck = validateDateString(fastingBloodSugarDate, { boundaryMode: 'pastOrToday' });
-      if (!fbsCheck.isValid) {
-        Alert.alert('Invalid FBS Test Date', fbsCheck.errorMessage || 'Please enter a valid FBS test date not in the future.');
-        return;
-      }
-    }
-    if (totalCholesterolDate && totalCholesterolDate.trim()) {
-      const cholCheck = validateDateString(totalCholesterolDate, { boundaryMode: 'pastOrToday' });
-      if (!cholCheck.isValid) {
-        Alert.alert('Invalid Cholesterol Test Date', cholCheck.errorMessage || 'Please enter a valid cholesterol test date not in the future.');
-        return;
-      }
-    }
-    setSaving(true);
+
+    inFlightSaveRef.current = true;
+    setAutoSaveStatus('saving');
+    setAutoSaveError(null);
+
     try {
-      const clinicianSnapshot = assessedByStaffName.trim() || authedClinicianName || 'Clinician';
-      const effectiveAssessmentDate = assessmentDate && assessmentDate.trim()
-        ? new Date(assessmentDate).toISOString()
-        : new Date().toISOString();
-
-      // Progressive disclosure skip logic: child fields are undefined when parent question is not affirmative
-      const payload: SaveNcdRiskAssessmentPayload = {
-        riskBand,
-        calculatedRiskScorePercent: parseFloat(riskScorePercent) || undefined,
-        assessmentDate: effectiveAssessmentDate,
-        assessedByStaffId: authedStaffId,
-        assessedByStaffName: clinicianSnapshot,
-        remarks: remarks.trim() || undefined,
-
-        // Section 1: Dietary Fat & Sodium Intake
-        eatsProcessedFoodWeekly,
-
-        // Section 2: Dietary Fiber & Nutrition
-        threeServingsVegetablesDaily,
-        twoToThreeServingsFruitDaily,
-
-        // Section 3: Physical Activity
-        physicalActivityAtLeast150MinsWeekly,
-
-        // Section 4: Diabetes & Metabolic Screening
-        diagnosedDiabetes: diagnosedDiabetes ? 'Y' : 'N',
-        hasPolyphagia,
-        hasPolydipsia,
-        hasPolyuria,
-        // Only ask follow-up medication question if diagnosed with diabetes
-        diabetesMedicationStatus: diagnosedDiabetes ? (diabetesMedicationStatus || 'N') : undefined,
-        hasRaisedBloodGlucose: hasRaisedBloodGlucose || (parseFloat(fastingBloodSugarMgDl) >= 126),
-        fastingBloodSugarMgDl: (hasRaisedBloodGlucose || parseFloat(fastingBloodSugarMgDl) > 0)
-          ? (parseFloat(fastingBloodSugarMgDl) || undefined)
-          : undefined,
-        fastingBloodSugarDate: (hasRaisedBloodGlucose && fastingBloodSugarDate.trim())
-          ? fastingBloodSugarDate.trim()
-          : undefined,
-
-        hasRaisedBloodLipids: hasRaisedBloodLipids || (parseFloat(totalCholesterolMgDl) >= 200),
-        totalCholesterolMgDl: (hasRaisedBloodLipids || parseFloat(totalCholesterolMgDl) > 0)
-          ? (parseFloat(totalCholesterolMgDl) || undefined)
-          : undefined,
-        totalCholesterolDate: (hasRaisedBloodLipids && totalCholesterolDate.trim())
-          ? totalCholesterolDate.trim()
-          : undefined,
-
-        urineKetonesPresent,
-        urineKetonesValue: urineKetonesPresent ? urineKetonesValue.trim() : undefined,
-        urineKetonesDate: (urineKetonesPresent && urineKetonesDate.trim()) ? urineKetonesDate.trim() : undefined,
-
-        urineProteinPresent,
-        urineProteinValue: urineProteinPresent ? urineProteinValue.trim() : undefined,
-        urineProteinDate: (urineProteinPresent && urineProteinDate.trim()) ? urineProteinDate.trim() : undefined,
-
-        // Section 5: Cardiovascular & Cerebrovascular Symptoms
-        hasChestPain,
-        // Skip logic: only provide sub-answers if hasChestPain is positive
-        painInCenterOfChestOrLeftArm: hasChestPain ? painInCenterOfChestOrLeftArm : undefined,
-        painWhenWalkingUphill: hasChestPain ? painWhenWalkingUphill : undefined,
-        slowsDownWhenPainOccurs: (hasChestPain && painWhenWalkingUphill) ? slowsDownWhenPainOccurs : undefined,
-        painRelievedWithin10Mins: (hasChestPain && painWhenWalkingUphill) ? painRelievedWithin10Mins : undefined,
-        painRelievedByNitrates: (hasChestPain && painWhenWalkingUphill) ? painRelievedByNitrates : undefined,
-
-        severeChestPainOver30Mins,
-        transientNeurologicalDeficits,
-        hasHistoryAnginaHeartAttack,
-        hasHistoryStrokeOrTia,
-      };
-
-      if (editingAssessmentId) {
+      if (targetId) {
         const [updated, err] = await clinicService.updateNcdRiskAssessment(
           patient.id,
-          editingAssessmentId,
+          targetId,
           payload
         );
         if (err) {
-          Alert.alert('Error', err.message || 'Failed to update cardiometabolic risk assessment.');
+          setAutoSaveStatus('error');
+          setAutoSaveError(err.message || 'Failed to save changes.');
         } else {
-          Alert.alert('Success', 'Cardiometabolic risk assessment updated successfully.');
-          setEditingAssessmentId(null);
-          await fetchAssessments();
-          onRefreshChart?.();
+          if (updated) {
+            setAssessments((prev) =>
+              prev.some((a) => a.id === updated.id)
+                ? prev.map((a) => (a.id === updated.id ? updated : a))
+                : [updated, ...prev]
+            );
+          }
+          const savedIso = updated?.updatedAt || new Date().toISOString();
+          setLastSavedAt(savedIso);
+          lastSavedPayloadJsonRef.current = JSON.stringify({ targetId, payload });
+          lastSavedEditVersionRef.current = Math.max(
+            lastSavedEditVersionRef.current,
+            savingEditVersion
+          );
+          setAutoSaveStatus('saved');
+          onRefreshChartRef.current?.();
         }
       } else {
         const [created, err] = await clinicService.saveNcdRiskAssessment(patient.id, payload);
         if (err) {
-          Alert.alert('Error', err.message || 'Failed to record cardiometabolic risk assessment.');
+          setAutoSaveStatus('error');
+          setAutoSaveError(err.message || 'Failed to save changes.');
         } else {
-          Alert.alert('Success', 'Cardiometabolic risk assessment saved successfully.');
+          const savedId = created?.id || null;
           if (created) {
-            setAssessments((prev) => [created, ...prev]);
-            populateLatest(created);
+            sessionAssessmentIdRef.current = created.id;
+            setAssessments((prev) => [created, ...prev.filter((a) => a.id !== created.id)]);
           }
-          onRefreshChart?.();
+          const savedIso = created?.updatedAt || created?.createdAt || new Date().toISOString();
+          setLastSavedAt(savedIso);
+          lastSavedPayloadJsonRef.current = JSON.stringify({ targetId: savedId, payload });
+          lastSavedEditVersionRef.current = Math.max(
+            lastSavedEditVersionRef.current,
+            savingEditVersion
+          );
+          setAutoSaveStatus('saved');
+          onRefreshChartRef.current?.();
         }
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Unexpected error saving assessment.');
+      setAutoSaveStatus('error');
+      setAutoSaveError(e?.message || 'Unexpected error saving changes.');
     } finally {
-      setSaving(false);
+      inFlightSaveRef.current = false;
+      const shouldResave =
+        pendingResaveRef.current && userEditVersionRef.current > savingEditVersion;
+      pendingResaveRef.current = false;
+      if (shouldResave) {
+        void performAutoSaveRef.current();
+      }
     }
-  };
+  }, [canWritePatients, patient.id]);
 
-  const currentMeta = RISK_BAND_META[riskBand];
+  const performAutoSaveRef = useRef(performAutoSave);
+  performAutoSaveRef.current = performAutoSave;
+
+  useEffect(() => {
+    if (
+      userEditVersion === 0 ||
+      userEditVersion <= lastSavedEditVersionRef.current ||
+      !canWritePatients
+    ) {
+      return;
+    }
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const delayMs = lastEditKindRef.current === 'discrete' ? 250 : 600;
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      void performAutoSaveRef.current();
+    }, delayMs);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+    // Trigger auto-save strictly when userEditVersion increments from an explicit user edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userEditVersion]);
+
+  const currentMeta = RISK_BAND_META[effectiveRiskBand];
+
+  const formatLastSavedBadge = useCallback(
+    (iso?: string | null): string | null => {
+      if (!iso) return null;
+      const formatted = formatClinicDateTime(iso, {
+        dateFormat,
+        timeFormat,
+        timeZoneId,
+        fallback: '',
+      });
+      return formatted ? `Last saved ${formatted}` : null;
+    },
+    [dateFormat, timeFormat, timeZoneId]
+  );
+
+  const lastSavedBadgeLabel = formatLastSavedBadge(lastSavedAt);
 
   if (loading) {
     return (
@@ -710,6 +1048,34 @@ export default function CardiometabolicRiskTab({
     );
   }
 
+  const renderSaveStatusBadge = () => {
+    if (!canWritePatients && !lastSavedBadgeLabel) return null;
+    if (autoSaveStatus === 'saving') {
+      return <Badge label="Saving changes…" variant="warning" size="sm" icon="clock" />;
+    }
+    if (autoSaveStatus === 'saved') {
+      return (
+        <Badge
+          label={lastSavedBadgeLabel || 'All changes saved'}
+          variant="success"
+          size="sm"
+          icon="checkCircle"
+        />
+      );
+    }
+    if (autoSaveStatus === 'error') {
+      return (
+        <Pressable onPress={() => void performAutoSave()} accessibilityRole="button" accessibilityLabel="Retry saving changes">
+          <Badge label="Autosave failed • Retry" variant="emergency" size="sm" icon="alertCircle" />
+        </Pressable>
+      );
+    }
+    if (lastSavedBadgeLabel) {
+      return <Badge label={lastSavedBadgeLabel} variant="routine" size="sm" icon="checkCircle" />;
+    }
+    return <Badge label="Auto-save active" variant="routine" size="sm" icon="check" />;
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {!canWritePatients ? (
@@ -721,13 +1087,42 @@ export default function CardiometabolicRiskTab({
         </View>
       ) : null}
 
-      {/* Explicit Clinical Governance Notice */}
+      {/* Explicit Clinical Governance & Auto-Save Status Bar */}
       <View style={styles.explicitNoticeBanner}>
-        <Icon name="info" size={16} color={theme.colors.primaryDark} />
-        <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={{ flex: 1 }}>
-          All questions must be explicitly answered. No answers are assumed or defaulted.
-        </ThemedText>
+        <View style={styles.noticeLeftRow}>
+          <Icon name="info" size={16} color={theme.colors.primaryDark} />
+          <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={{ flex: 1 }}>
+            All questions must be explicitly answered. No answers are assumed or defaulted.
+          </ThemedText>
+        </View>
+        <View style={styles.noticeStatusRow}>
+          <Badge
+            label={`${questionProgress.answeredCount}/${questionProgress.totalRequiredCount} Answered`}
+            variant={
+              questionProgress.answeredCount === questionProgress.totalRequiredCount
+                ? 'success'
+                : 'neutral'
+            }
+            size="sm"
+          />
+          {renderSaveStatusBadge()}
+        </View>
       </View>
+
+      {autoSaveStatus === 'error' && autoSaveError ? (
+        <View style={styles.autoSaveErrorBanner} accessibilityRole="alert">
+          <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+          <ThemedText variant="small" color={theme.colors.emergencyText} style={{ flex: 1 }}>
+            {autoSaveError}
+          </ThemedText>
+          <Button
+            title="Retry"
+            variant="outline"
+            size="sm"
+            onPress={() => void performAutoSave()}
+          />
+        </View>
+      ) : null}
 
       {/* Editing Banner */}
       {editingAssessmentId && (
@@ -739,12 +1134,12 @@ export default function CardiometabolicRiskTab({
                 Editing Prior Assessment ({assessmentDate || 'Recorded'})
               </ThemedText>
               <ThemedText variant="small" color={theme.colors.textSecondary}>
-                Changes will update this existing record rather than creating a duplicate.
+                Changes auto-save directly to this existing record rather than creating a duplicate.
               </ThemedText>
             </View>
           </View>
           <Button
-            title="Cancel Editing"
+            title="Done Editing"
             variant="ghost"
             size="sm"
             onPress={handleCancelEdit}
@@ -762,16 +1157,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, eatsProcessedFoodWeekly === false && styles.toggleBtnActive]}
-              onPress={() => setEatsProcessedFoodWeekly(eatsProcessedFoodWeekly === false ? null : false)}
+              onPress={() => {
+                setEatsProcessedFoodWeekly(eatsProcessedFoodWeekly === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={eatsProcessedFoodWeekly === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, eatsProcessedFoodWeekly === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setEatsProcessedFoodWeekly(eatsProcessedFoodWeekly === true ? null : true)}
+              onPress={() => {
+                setEatsProcessedFoodWeekly(eatsProcessedFoodWeekly === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={eatsProcessedFoodWeekly === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -791,16 +1194,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, threeServingsVegetablesDaily === false && styles.toggleBtnActiveWarning]}
-              onPress={() => setThreeServingsVegetablesDaily(threeServingsVegetablesDaily === false ? null : false)}
+              onPress={() => {
+                setThreeServingsVegetablesDaily(threeServingsVegetablesDaily === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={threeServingsVegetablesDaily === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, threeServingsVegetablesDaily === true && styles.toggleBtnActive]}
-              onPress={() => setThreeServingsVegetablesDaily(threeServingsVegetablesDaily === true ? null : true)}
+              onPress={() => {
+                setThreeServingsVegetablesDaily(threeServingsVegetablesDaily === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={threeServingsVegetablesDaily === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -815,16 +1226,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, twoToThreeServingsFruitDaily === false && styles.toggleBtnActiveWarning]}
-              onPress={() => setTwoToThreeServingsFruitDaily(twoToThreeServingsFruitDaily === false ? null : false)}
+              onPress={() => {
+                setTwoToThreeServingsFruitDaily(twoToThreeServingsFruitDaily === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={twoToThreeServingsFruitDaily === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, twoToThreeServingsFruitDaily === true && styles.toggleBtnActive]}
-              onPress={() => setTwoToThreeServingsFruitDaily(twoToThreeServingsFruitDaily === true ? null : true)}
+              onPress={() => {
+                setTwoToThreeServingsFruitDaily(twoToThreeServingsFruitDaily === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={twoToThreeServingsFruitDaily === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -844,16 +1263,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, physicalActivityAtLeast150MinsWeekly === false && styles.toggleBtnActiveWarning]}
-              onPress={() => setPhysicalActivityAtLeast150MinsWeekly(physicalActivityAtLeast150MinsWeekly === false ? null : false)}
+              onPress={() => {
+                setPhysicalActivityAtLeast150MinsWeekly(physicalActivityAtLeast150MinsWeekly === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={physicalActivityAtLeast150MinsWeekly === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, physicalActivityAtLeast150MinsWeekly === true && styles.toggleBtnActive]}
-              onPress={() => setPhysicalActivityAtLeast150MinsWeekly(physicalActivityAtLeast150MinsWeekly === true ? null : true)}
+              onPress={() => {
+                setPhysicalActivityAtLeast150MinsWeekly(physicalActivityAtLeast150MinsWeekly === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={physicalActivityAtLeast150MinsWeekly === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -874,10 +1301,12 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, diagnosedDiabetes === false && styles.toggleBtnActive]}
               onPress={() => {
                 setDiagnosedDiabetes(diagnosedDiabetes === false ? null : false);
                 setDiabetesMedicationStatus(null);
+                markUserEdited('discrete');
               }}
             >
               <ThemedText variant="smallBold" color={diagnosedDiabetes === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
@@ -885,8 +1314,12 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, diagnosedDiabetes === true && styles.toggleBtnActiveEmergency]}
-              onPress={() => setDiagnosedDiabetes(diagnosedDiabetes === true ? null : true)}
+              onPress={() => {
+                setDiagnosedDiabetes(diagnosedDiabetes === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={diagnosedDiabetes === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -904,16 +1337,24 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
               <View style={styles.toggleRow}>
                 <Pressable
+                  disabled={!canWritePatients}
                   style={[styles.toggleBtn, diabetesMedicationStatus === 'N' && styles.toggleBtnActive]}
-                  onPress={() => setDiabetesMedicationStatus(diabetesMedicationStatus === 'N' ? null : 'N')}
+                  onPress={() => {
+                    setDiabetesMedicationStatus(diabetesMedicationStatus === 'N' ? null : 'N');
+                    markUserEdited('discrete');
+                  }}
                 >
                   <ThemedText variant="smallBold" color={diabetesMedicationStatus === 'N' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     No
                   </ThemedText>
                 </Pressable>
                 <Pressable
+                  disabled={!canWritePatients}
                   style={[styles.toggleBtn, diabetesMedicationStatus === 'Y' && styles.toggleBtnActive]}
-                  onPress={() => setDiabetesMedicationStatus(diabetesMedicationStatus === 'Y' ? null : 'Y')}
+                  onPress={() => {
+                    setDiabetesMedicationStatus(diabetesMedicationStatus === 'Y' ? null : 'Y');
+                    markUserEdited('discrete');
+                  }}
                 >
                   <ThemedText variant="smallBold" color={diabetesMedicationStatus === 'Y' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     Yes
@@ -931,16 +1372,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasPolyphagia === false && styles.toggleBtnActive]}
-              onPress={() => setHasPolyphagia(hasPolyphagia === false ? null : false)}
+              onPress={() => {
+                setHasPolyphagia(hasPolyphagia === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasPolyphagia === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasPolyphagia === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setHasPolyphagia(hasPolyphagia === true ? null : true)}
+              onPress={() => {
+                setHasPolyphagia(hasPolyphagia === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasPolyphagia === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -955,16 +1404,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasPolydipsia === false && styles.toggleBtnActive]}
-              onPress={() => setHasPolydipsia(hasPolydipsia === false ? null : false)}
+              onPress={() => {
+                setHasPolydipsia(hasPolydipsia === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasPolydipsia === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasPolydipsia === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setHasPolydipsia(hasPolydipsia === true ? null : true)}
+              onPress={() => {
+                setHasPolydipsia(hasPolydipsia === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasPolydipsia === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -979,16 +1436,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasPolyuria === false && styles.toggleBtnActive]}
-              onPress={() => setHasPolyuria(hasPolyuria === false ? null : false)}
+              onPress={() => {
+                setHasPolyuria(hasPolyuria === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasPolyuria === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasPolyuria === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setHasPolyuria(hasPolyuria === true ? null : true)}
+              onPress={() => {
+                setHasPolyuria(hasPolyuria === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasPolyuria === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1004,11 +1469,13 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasRaisedBloodGlucose === false && styles.toggleBtnActive]}
               onPress={() => {
                 setHasRaisedBloodGlucose(hasRaisedBloodGlucose === false ? null : false);
                 setFastingBloodSugarMgDl('');
                 setFastingBloodSugarDate('');
+                markUserEdited('discrete');
               }}
             >
               <ThemedText variant="smallBold" color={hasRaisedBloodGlucose === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
@@ -1016,8 +1483,12 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasRaisedBloodGlucose === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setHasRaisedBloodGlucose(hasRaisedBloodGlucose === true ? null : true)}
+              onPress={() => {
+                setHasRaisedBloodGlucose(hasRaisedBloodGlucose === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasRaisedBloodGlucose === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1035,7 +1506,11 @@ export default function CardiometabolicRiskTab({
                   label="Fasting Blood Sugar (mg/dL)"
                   placeholder="e.g. 105"
                   value={fastingBloodSugarMgDl}
-                  onChangeText={setFastingBloodSugarMgDl}
+                  editable={canWritePatients}
+                  onChangeText={(txt) => {
+                    setFastingBloodSugarMgDl(txt);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                 />
               </View>
@@ -1044,7 +1519,11 @@ export default function CardiometabolicRiskTab({
                   label="FBS Test Date"
                   placeholder="YYYY-MM-DD"
                   value={fastingBloodSugarDate}
-                  onChangeText={setFastingBloodSugarDate}
+                  disabled={!canWritePatients}
+                  onChangeText={(txt) => {
+                    setFastingBloodSugarDate(txt);
+                    markUserEdited('text');
+                  }}
                   boundaryMode="pastOrToday"
                 />
               </View>
@@ -1059,11 +1538,13 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasRaisedBloodLipids === false && styles.toggleBtnActive]}
               onPress={() => {
                 setHasRaisedBloodLipids(hasRaisedBloodLipids === false ? null : false);
                 setTotalCholesterolMgDl('');
                 setTotalCholesterolDate('');
+                markUserEdited('discrete');
               }}
             >
               <ThemedText variant="smallBold" color={hasRaisedBloodLipids === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
@@ -1071,8 +1552,12 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasRaisedBloodLipids === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setHasRaisedBloodLipids(hasRaisedBloodLipids === true ? null : true)}
+              onPress={() => {
+                setHasRaisedBloodLipids(hasRaisedBloodLipids === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasRaisedBloodLipids === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1090,7 +1575,11 @@ export default function CardiometabolicRiskTab({
                   label="Total Cholesterol (mg/dL)"
                   placeholder="e.g. 195"
                   value={totalCholesterolMgDl}
-                  onChangeText={setTotalCholesterolMgDl}
+                  editable={canWritePatients}
+                  onChangeText={(txt) => {
+                    setTotalCholesterolMgDl(txt);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                 />
               </View>
@@ -1099,7 +1588,11 @@ export default function CardiometabolicRiskTab({
                   label="Cholesterol Test Date"
                   placeholder="YYYY-MM-DD"
                   value={totalCholesterolDate}
-                  onChangeText={setTotalCholesterolDate}
+                  disabled={!canWritePatients}
+                  onChangeText={(txt) => {
+                    setTotalCholesterolDate(txt);
+                    markUserEdited('text');
+                  }}
                   boundaryMode="pastOrToday"
                 />
               </View>
@@ -1114,11 +1607,13 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, urineKetonesPresent === false && styles.toggleBtnActive]}
               onPress={() => {
                 setUrineKetonesPresent(urineKetonesPresent === false ? null : false);
                 setUrineKetonesValue('');
                 setUrineKetonesDate('');
+                markUserEdited('discrete');
               }}
             >
               <ThemedText variant="smallBold" color={urineKetonesPresent === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
@@ -1126,8 +1621,12 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, urineKetonesPresent === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setUrineKetonesPresent(urineKetonesPresent === true ? null : true)}
+              onPress={() => {
+                setUrineKetonesPresent(urineKetonesPresent === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={urineKetonesPresent === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1145,7 +1644,11 @@ export default function CardiometabolicRiskTab({
                   label="Urine Ketones Result"
                   placeholder="e.g. Negative, Trace, 1+, 2+"
                   value={urineKetonesValue}
-                  onChangeText={setUrineKetonesValue}
+                  editable={canWritePatients}
+                  onChangeText={(txt) => {
+                    setUrineKetonesValue(txt);
+                    markUserEdited('text');
+                  }}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -1153,7 +1656,11 @@ export default function CardiometabolicRiskTab({
                   label="Ketones Test Date"
                   placeholder="YYYY-MM-DD"
                   value={urineKetonesDate}
-                  onChangeText={setUrineKetonesDate}
+                  disabled={!canWritePatients}
+                  onChangeText={(txt) => {
+                    setUrineKetonesDate(txt);
+                    markUserEdited('text');
+                  }}
                   boundaryMode="pastOrToday"
                 />
               </View>
@@ -1168,11 +1675,13 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, urineProteinPresent === false && styles.toggleBtnActive]}
               onPress={() => {
                 setUrineProteinPresent(urineProteinPresent === false ? null : false);
                 setUrineProteinValue('');
                 setUrineProteinDate('');
+                markUserEdited('discrete');
               }}
             >
               <ThemedText variant="smallBold" color={urineProteinPresent === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
@@ -1180,8 +1689,12 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, urineProteinPresent === true && styles.toggleBtnActiveWarning]}
-              onPress={() => setUrineProteinPresent(urineProteinPresent === true ? null : true)}
+              onPress={() => {
+                setUrineProteinPresent(urineProteinPresent === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={urineProteinPresent === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1199,7 +1712,11 @@ export default function CardiometabolicRiskTab({
                   label="Urine Protein Result"
                   placeholder="e.g. Negative, Trace, 1+, 2+"
                   value={urineProteinValue}
-                  onChangeText={setUrineProteinValue}
+                  editable={canWritePatients}
+                  onChangeText={(txt) => {
+                    setUrineProteinValue(txt);
+                    markUserEdited('text');
+                  }}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -1207,7 +1724,11 @@ export default function CardiometabolicRiskTab({
                   label="Protein Test Date"
                   placeholder="YYYY-MM-DD"
                   value={urineProteinDate}
-                  onChangeText={setUrineProteinDate}
+                  disabled={!canWritePatients}
+                  onChangeText={(txt) => {
+                    setUrineProteinDate(txt);
+                    markUserEdited('text');
+                  }}
                   boundaryMode="pastOrToday"
                 />
               </View>
@@ -1227,6 +1748,7 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasChestPain === false && styles.toggleBtnActive]}
               onPress={() => {
                 setHasChestPain(hasChestPain === false ? null : false);
@@ -1235,6 +1757,7 @@ export default function CardiometabolicRiskTab({
                 setSlowsDownWhenPainOccurs(null);
                 setPainRelievedWithin10Mins(null);
                 setPainRelievedByNitrates(null);
+                markUserEdited('discrete');
               }}
             >
               <ThemedText variant="smallBold" color={hasChestPain === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
@@ -1242,8 +1765,12 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasChestPain === true && styles.toggleBtnActiveEmergency]}
-              onPress={() => setHasChestPain(hasChestPain === true ? null : true)}
+              onPress={() => {
+                setHasChestPain(hasChestPain === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasChestPain === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1261,16 +1788,24 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
               <View style={styles.toggleRow}>
                 <Pressable
+                  disabled={!canWritePatients}
                   style={[styles.toggleBtn, painInCenterOfChestOrLeftArm === false && styles.toggleBtnActive]}
-                  onPress={() => setPainInCenterOfChestOrLeftArm(painInCenterOfChestOrLeftArm === false ? null : false)}
+                  onPress={() => {
+                    setPainInCenterOfChestOrLeftArm(painInCenterOfChestOrLeftArm === false ? null : false);
+                    markUserEdited('discrete');
+                  }}
                 >
                   <ThemedText variant="smallBold" color={painInCenterOfChestOrLeftArm === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     No
                   </ThemedText>
                 </Pressable>
                 <Pressable
+                  disabled={!canWritePatients}
                   style={[styles.toggleBtn, painInCenterOfChestOrLeftArm === true && styles.toggleBtnActiveEmergency]}
-                  onPress={() => setPainInCenterOfChestOrLeftArm(painInCenterOfChestOrLeftArm === true ? null : true)}
+                  onPress={() => {
+                    setPainInCenterOfChestOrLeftArm(painInCenterOfChestOrLeftArm === true ? null : true);
+                    markUserEdited('discrete');
+                  }}
                 >
                   <ThemedText variant="smallBold" color={painInCenterOfChestOrLeftArm === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     Yes
@@ -1286,12 +1821,14 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
               <View style={styles.toggleRow}>
                 <Pressable
+                  disabled={!canWritePatients}
                   style={[styles.toggleBtn, painWhenWalkingUphill === false && styles.toggleBtnActive]}
                   onPress={() => {
                     setPainWhenWalkingUphill(painWhenWalkingUphill === false ? null : false);
                     setSlowsDownWhenPainOccurs(null);
                     setPainRelievedWithin10Mins(null);
                     setPainRelievedByNitrates(null);
+                    markUserEdited('discrete');
                   }}
                 >
                   <ThemedText variant="smallBold" color={painWhenWalkingUphill === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
@@ -1299,8 +1836,12 @@ export default function CardiometabolicRiskTab({
                   </ThemedText>
                 </Pressable>
                 <Pressable
+                  disabled={!canWritePatients}
                   style={[styles.toggleBtn, painWhenWalkingUphill === true && styles.toggleBtnActiveEmergency]}
-                  onPress={() => setPainWhenWalkingUphill(painWhenWalkingUphill === true ? null : true)}
+                  onPress={() => {
+                    setPainWhenWalkingUphill(painWhenWalkingUphill === true ? null : true);
+                    markUserEdited('discrete');
+                  }}
                 >
                   <ThemedText variant="smallBold" color={painWhenWalkingUphill === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     Yes
@@ -1318,16 +1859,24 @@ export default function CardiometabolicRiskTab({
                   </ThemedText>
                   <View style={styles.toggleRow}>
                     <Pressable
+                      disabled={!canWritePatients}
                       style={[styles.toggleBtn, slowsDownWhenPainOccurs === false && styles.toggleBtnActive]}
-                      onPress={() => setSlowsDownWhenPainOccurs(slowsDownWhenPainOccurs === false ? null : false)}
+                      onPress={() => {
+                        setSlowsDownWhenPainOccurs(slowsDownWhenPainOccurs === false ? null : false);
+                        markUserEdited('discrete');
+                      }}
                     >
                       <ThemedText variant="smallBold" color={slowsDownWhenPainOccurs === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                         No
                       </ThemedText>
                     </Pressable>
                     <Pressable
+                      disabled={!canWritePatients}
                       style={[styles.toggleBtn, slowsDownWhenPainOccurs === true && styles.toggleBtnActiveEmergency]}
-                      onPress={() => setSlowsDownWhenPainOccurs(slowsDownWhenPainOccurs === true ? null : true)}
+                      onPress={() => {
+                        setSlowsDownWhenPainOccurs(slowsDownWhenPainOccurs === true ? null : true);
+                        markUserEdited('discrete');
+                      }}
                     >
                       <ThemedText variant="smallBold" color={slowsDownWhenPainOccurs === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                         Yes
@@ -1342,16 +1891,24 @@ export default function CardiometabolicRiskTab({
                   </ThemedText>
                   <View style={styles.toggleRow}>
                     <Pressable
+                      disabled={!canWritePatients}
                       style={[styles.toggleBtn, painRelievedWithin10Mins === false && styles.toggleBtnActive]}
-                      onPress={() => setPainRelievedWithin10Mins(painRelievedWithin10Mins === false ? null : false)}
+                      onPress={() => {
+                        setPainRelievedWithin10Mins(painRelievedWithin10Mins === false ? null : false);
+                        markUserEdited('discrete');
+                      }}
                     >
                       <ThemedText variant="smallBold" color={painRelievedWithin10Mins === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                         No
                       </ThemedText>
                     </Pressable>
                     <Pressable
+                      disabled={!canWritePatients}
                       style={[styles.toggleBtn, painRelievedWithin10Mins === true && styles.toggleBtnActive]}
-                      onPress={() => setPainRelievedWithin10Mins(painRelievedWithin10Mins === true ? null : true)}
+                      onPress={() => {
+                        setPainRelievedWithin10Mins(painRelievedWithin10Mins === true ? null : true);
+                        markUserEdited('discrete');
+                      }}
                     >
                       <ThemedText variant="smallBold" color={painRelievedWithin10Mins === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                         Yes
@@ -1366,16 +1923,24 @@ export default function CardiometabolicRiskTab({
                   </ThemedText>
                   <View style={styles.toggleRow}>
                     <Pressable
+                      disabled={!canWritePatients}
                       style={[styles.toggleBtn, painRelievedByNitrates === false && styles.toggleBtnActive]}
-                      onPress={() => setPainRelievedByNitrates(painRelievedByNitrates === false ? null : false)}
+                      onPress={() => {
+                        setPainRelievedByNitrates(painRelievedByNitrates === false ? null : false);
+                        markUserEdited('discrete');
+                      }}
                     >
                       <ThemedText variant="smallBold" color={painRelievedByNitrates === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                         No
                       </ThemedText>
                     </Pressable>
                     <Pressable
+                      disabled={!canWritePatients}
                       style={[styles.toggleBtn, painRelievedByNitrates === true && styles.toggleBtnActive]}
-                      onPress={() => setPainRelievedByNitrates(painRelievedByNitrates === true ? null : true)}
+                      onPress={() => {
+                        setPainRelievedByNitrates(painRelievedByNitrates === true ? null : true);
+                        markUserEdited('discrete');
+                      }}
                     >
                       <ThemedText variant="smallBold" color={painRelievedByNitrates === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                         Yes
@@ -1395,16 +1960,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, severeChestPainOver30Mins === false && styles.toggleBtnActive]}
-              onPress={() => setSevereChestPainOver30Mins(severeChestPainOver30Mins === false ? null : false)}
+              onPress={() => {
+                setSevereChestPainOver30Mins(severeChestPainOver30Mins === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={severeChestPainOver30Mins === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, severeChestPainOver30Mins === true && styles.toggleBtnActiveEmergency]}
-              onPress={() => setSevereChestPainOver30Mins(severeChestPainOver30Mins === true ? null : true)}
+              onPress={() => {
+                setSevereChestPainOver30Mins(severeChestPainOver30Mins === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={severeChestPainOver30Mins === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1420,16 +1993,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, transientNeurologicalDeficits === false && styles.toggleBtnActive]}
-              onPress={() => setTransientNeurologicalDeficits(transientNeurologicalDeficits === false ? null : false)}
+              onPress={() => {
+                setTransientNeurologicalDeficits(transientNeurologicalDeficits === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={transientNeurologicalDeficits === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, transientNeurologicalDeficits === true && styles.toggleBtnActiveEmergency]}
-              onPress={() => setTransientNeurologicalDeficits(transientNeurologicalDeficits === true ? null : true)}
+              onPress={() => {
+                setTransientNeurologicalDeficits(transientNeurologicalDeficits === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={transientNeurologicalDeficits === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1445,16 +2026,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasHistoryAnginaHeartAttack === false && styles.toggleBtnActive]}
-              onPress={() => setHasHistoryAnginaHeartAttack(hasHistoryAnginaHeartAttack === false ? null : false)}
+              onPress={() => {
+                setHasHistoryAnginaHeartAttack(hasHistoryAnginaHeartAttack === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasHistoryAnginaHeartAttack === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasHistoryAnginaHeartAttack === true && styles.toggleBtnActiveEmergency]}
-              onPress={() => setHasHistoryAnginaHeartAttack(hasHistoryAnginaHeartAttack === true ? null : true)}
+              onPress={() => {
+                setHasHistoryAnginaHeartAttack(hasHistoryAnginaHeartAttack === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasHistoryAnginaHeartAttack === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1470,16 +2059,24 @@ export default function CardiometabolicRiskTab({
           </ThemedText>
           <View style={styles.toggleRow}>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasHistoryStrokeOrTia === false && styles.toggleBtnActive]}
-              onPress={() => setHasHistoryStrokeOrTia(hasHistoryStrokeOrTia === false ? null : false)}
+              onPress={() => {
+                setHasHistoryStrokeOrTia(hasHistoryStrokeOrTia === false ? null : false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasHistoryStrokeOrTia === false ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
               </ThemedText>
             </Pressable>
             <Pressable
+              disabled={!canWritePatients}
               style={[styles.toggleBtn, hasHistoryStrokeOrTia === true && styles.toggleBtnActiveEmergency]}
-              onPress={() => setHasHistoryStrokeOrTia(hasHistoryStrokeOrTia === true ? null : true)}
+              onPress={() => {
+                setHasHistoryStrokeOrTia(hasHistoryStrokeOrTia === true ? null : true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hasHistoryStrokeOrTia === true ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -1491,25 +2088,28 @@ export default function CardiometabolicRiskTab({
 
       {/* SECTION 6: 10-Year Cardiovascular Disease Risk Stratification */}
       <View style={styles.sectionCard}>
-        <ThemedText variant="h3">10-Year Cardiovascular Disease Risk Stratification</ThemedText>
+        <View style={styles.sectionHeaderRow}>
+          <ThemedText variant="h3">10-Year Cardiovascular Disease Risk Stratification</ThemedText>
+          {renderSaveStatusBadge()}
+        </View>
 
-        {/* Prominent CVD Risk Band Hero Card */}
+        {/* Compact CVD Risk Band Card (scaled to match workstation typography) */}
         <View style={[styles.riskBandHeroCard, { backgroundColor: currentMeta.bg }]}>
           <View style={styles.riskBandHeroRow}>
             <View style={{ flex: 1 }}>
               <ThemedText variant="captionBold" color={currentMeta.color}>
                 WHO / ISH CARDIOMETABOLIC RISK STRATIFICATION
               </ThemedText>
-              <ThemedText variant="display" color={currentMeta.color} style={{ marginVertical: theme.spacing.xs }}>
+              <ThemedText variant="title" color={currentMeta.color} style={{ marginTop: 2 }}>
                 {currentMeta.label}
               </ThemedText>
-              <ThemedText variant="bodyBold" color={currentMeta.color}>
+              <ThemedText variant="captionBold" color={currentMeta.color}>
                 {currentMeta.desc}
               </ThemedText>
             </View>
             <View style={[styles.bandScoreChip, { borderColor: currentMeta.color }]}>
-              <ThemedText variant="smallBold" color={currentMeta.color}>
-                {riskScorePercent ? `${riskScorePercent}%` : 'Risk Band'}
+              <ThemedText variant="captionBold" color={currentMeta.color}>
+                {effectiveRiskScorePercent ? `${effectiveRiskScorePercent}%` : 'Risk Band'}
               </ThemedText>
             </View>
           </View>
@@ -1518,10 +2118,11 @@ export default function CardiometabolicRiskTab({
           <View style={styles.bandSelectorWrap}>
             {(Object.keys(RISK_BAND_META) as RiskBandType[]).map((bandKey) => {
               const meta = RISK_BAND_META[bandKey];
-              const isSelected = riskBand === bandKey;
+              const isSelected = effectiveRiskBand === bandKey;
               return (
                 <Pressable
                   key={bandKey}
+                  disabled={!canWritePatients}
                   style={[
                     styles.bandChipBtn,
                     isSelected && { backgroundColor: meta.color },
@@ -1529,7 +2130,7 @@ export default function CardiometabolicRiskTab({
                   onPress={() => handleBandSelect(bandKey)}
                 >
                   <ThemedText
-                    variant="smallBold"
+                    variant="captionBold"
                     color={isSelected ? theme.colors.onPrimary : theme.colors.textSecondary}
                   >
                     {bandKey.replace('Band', 'Band ')}
@@ -1566,7 +2167,11 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </View>
             {isManuallyOverridden && (
-              <Pressable style={styles.autoSyncBtn} onPress={handleApplyCalculatedRisk}>
+              <Pressable
+                style={styles.autoSyncBtn}
+                disabled={!canWritePatients}
+                onPress={handleApplyCalculatedRisk}
+              >
                 <Icon name="refresh" size={12} color={theme.colors.primary} />
                 <ThemedText variant="captionBold" color={theme.colors.primary}>
                   Auto-Calculate
@@ -1583,7 +2188,11 @@ export default function CardiometabolicRiskTab({
               label="Assessed By (Staff / Clinician Name)"
               placeholder="e.g. Dr. Santos / Nurse Joy"
               value={assessedByStaffName}
-              onChangeText={setAssessedByStaffName}
+              editable={canWritePatients}
+              onChangeText={(txt) => {
+                setAssessedByStaffName(txt);
+                markUserEdited('text');
+              }}
             />
           </View>
           <View style={styles.gridItem}>
@@ -1591,7 +2200,11 @@ export default function CardiometabolicRiskTab({
               label="Assessment Date"
               placeholder="YYYY-MM-DD"
               value={assessmentDate}
-              onChangeText={setAssessmentDate}
+              disabled={!canWritePatients}
+              onChangeText={(txt) => {
+                setAssessmentDate(txt);
+                markUserEdited('text');
+              }}
               boundaryMode="pastOrToday"
             />
           </View>
@@ -1599,7 +2212,8 @@ export default function CardiometabolicRiskTab({
             <Input
               label="Specific Risk Percentage (%)"
               placeholder="e.g. 15"
-              value={riskScorePercent}
+              value={effectiveRiskScorePercent}
+              editable={canWritePatients}
               onChangeText={handleRiskPercentageChange}
               keyboardType="numeric"
             />
@@ -1611,37 +2225,76 @@ export default function CardiometabolicRiskTab({
           label="Clinical Remarks / Physician Assessment Notes"
           placeholder="Cardiometabolic recommendations, lifestyle interventions, or referral plans"
           value={remarks}
-          onChangeText={setRemarks}
+          editable={canWritePatients}
+          onChangeText={(txt) => {
+            setRemarks(txt);
+            markUserEdited('text');
+          }}
         />
       </View>
 
-      {/* Save / Update Button */}
-      <View style={styles.actionFooter}>
-        <View style={styles.actionFooterRow}>
-          {editingAssessmentId && (
-            <Button
-              title="Cancel Editing"
-              variant="ghost"
-              size="lg"
-              disabled={saving}
-              onPress={handleCancelEdit}
+      {/* Auto-Save Footer Bar */}
+      {canWritePatients ? (
+        <View style={styles.autoSaveFooterBar} accessibilityLiveRegion="polite">
+          <View style={styles.autoSaveFooterLeft}>
+            <Icon
+              name={
+                autoSaveStatus === 'saving'
+                  ? 'clock'
+                  : autoSaveStatus === 'error'
+                    ? 'alertCircle'
+                    : 'checkCircle'
+              }
+              size={theme.sizes.iconSm}
+              color={
+                autoSaveStatus === 'saving'
+                  ? theme.colors.warningText
+                  : autoSaveStatus === 'error'
+                    ? theme.colors.emergencyText
+                    : theme.colors.successText
+              }
             />
-          )}
-          <Button
-            title={
-              editingAssessmentId
-                ? (saving ? 'Updating Assessment…' : 'Update Cardiometabolic Assessment')
-                : (saving ? 'Saving Assessment…' : 'Record Cardiometabolic Assessment')
-            }
-            variant="primary"
-            size="lg"
-            icon="check"
-            loading={saving}
-            disabled={saving || !canWritePatients}
-            onPress={handleSaveAssessment}
-          />
+            <ThemedText
+              variant="small"
+              color={
+                autoSaveStatus === 'error'
+                  ? theme.colors.emergencyText
+                  : theme.colors.textSecondary
+              }
+            >
+              {autoSaveStatus === 'saving'
+                ? 'Saving changes…'
+                : autoSaveStatus === 'saved'
+                  ? lastSavedBadgeLabel
+                    ? `All changes saved • ${lastSavedBadgeLabel}`
+                    : 'All changes saved automatically'
+                  : autoSaveStatus === 'error'
+                    ? autoSaveError || 'Autosave failed — tap Retry to save'
+                    : lastSavedBadgeLabel
+                      ? `${lastSavedBadgeLabel} — changes save automatically as you answer`
+                      : 'Auto-save active — changes save automatically as you answer'}
+            </ThemedText>
+          </View>
+          <View style={styles.actionFooterRow}>
+            {autoSaveStatus === 'error' && (
+              <Button
+                title="Retry"
+                variant="outline"
+                size="sm"
+                onPress={() => void performAutoSave()}
+              />
+            )}
+            {editingAssessmentId && (
+              <Button
+                title="Done Editing"
+                variant="ghost"
+                size="sm"
+                onPress={handleCancelEdit}
+              />
+            )}
+          </View>
         </View>
-      </View>
+      ) : null}
 
       {/* Assessment History */}
       {(activeAssessments.length > 0 || voidedAssessments.length > 0) && (
@@ -1881,6 +2534,8 @@ const styles = StyleSheet.create({
   explicitNoticeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: 1,
@@ -1889,10 +2544,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
+  noticeLeftRow: {
+    flex: 1,
+    minWidth: 220,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  noticeStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  autoSaveErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderColor: theme.colors.emergencyBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
   riskBandHeroCard: {
-    borderRadius: theme.radii.lg,
-    padding: theme.spacing.lg,
-    gap: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
@@ -1900,24 +2586,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: theme.spacing.sm,
   },
   bandScoreChip: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderRadius: theme.radii.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
     backgroundColor: theme.colors.surface,
   },
   bandSelectorWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.xs,
-    paddingTop: theme.spacing.xs,
   },
   bandChipBtn: {
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.md,
+    paddingVertical: 4,
+    borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
@@ -2030,9 +2716,25 @@ const styles = StyleSheet.create({
   gridItem: {
     flex: 1,
   },
-  actionFooter: {
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
+  autoSaveFooterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  autoSaveFooterLeft: {
+    flex: 1,
+    minWidth: 200,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   actionFooterRow: {
     flexDirection: 'row',

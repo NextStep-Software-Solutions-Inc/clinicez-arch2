@@ -27,7 +27,7 @@ public sealed record AdministerVaccineCommand(
     int DoseSequence,
     bool IsSeriesCompleted,
     string Route,
-    string InjectionSite,
+    string? InjectionSite,
     DateTime AdministeredAtUtc,
     Guid AdministeredByStaffId,
     string AdministeredByStaffName,
@@ -39,6 +39,32 @@ public sealed record AdministerVaccineCommand(
 
 public sealed class AdministerVaccineValidator : AbstractValidator<AdministerVaccineCommand>
 {
+    public static bool RequiresInjectionSite(string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return true;
+
+        var trimmed = route.Trim();
+        if (trimmed.Contains("Oral", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "PO", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("(PO)", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("Nasal", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("Intranasal", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static string? NormalizeInjectionSite(string? route, string? injectionSite)
+    {
+        if (!RequiresInjectionSite(route))
+            return null;
+
+        return string.IsNullOrWhiteSpace(injectionSite) ? null : injectionSite.Trim();
+    }
+
     public AdministerVaccineValidator()
     {
         RuleFor(x => x.PatientId).NotEmpty();
@@ -47,7 +73,14 @@ public sealed class AdministerVaccineValidator : AbstractValidator<AdministerVac
         RuleFor(x => x.VaccineName).NotEmpty();
         RuleFor(x => x.LotBatchNumber).NotEmpty();
         RuleFor(x => x.Route).NotEmpty();
-        RuleFor(x => x.InjectionSite).NotEmpty();
+        RuleFor(x => x.InjectionSite)
+            .NotEmpty()
+            .When(x => RequiresInjectionSite(x.Route))
+            .WithMessage("Injection site is required for parenteral vaccine administration.");
+        RuleFor(x => x.InjectionSite)
+            .Must(site => !string.Equals(site?.Trim(), "Oral", StringComparison.OrdinalIgnoreCase))
+            .When(x => RequiresInjectionSite(x.Route) && !string.IsNullOrWhiteSpace(x.InjectionSite))
+            .WithMessage("Oral is not a valid anatomical injection site.");
         RuleFor(x => x.DoseSequence).GreaterThanOrEqualTo(1);
         RuleFor(x => x.AdministeredByStaffName).NotEmpty();
 
@@ -112,8 +145,8 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
             ExpirationDate = request.ExpirationDate,
             DoseSequence = request.DoseSequence,
             IsSeriesCompleted = request.IsSeriesCompleted,
-            Route = request.Route,
-            InjectionSite = request.InjectionSite,
+            Route = request.Route.Trim(),
+            InjectionSite = AdministerVaccineValidator.NormalizeInjectionSite(request.Route, request.InjectionSite),
             AdministeredAtUtc = request.AdministeredAtUtc == default ? DateTime.UtcNow : request.AdministeredAtUtc,
             AdministeredByStaffId = request.AdministeredByStaffId,
             AdministeredByStaffName = request.AdministeredByStaffName,

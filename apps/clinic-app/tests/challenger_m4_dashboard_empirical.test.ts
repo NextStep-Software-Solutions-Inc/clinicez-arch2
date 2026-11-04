@@ -565,18 +565,18 @@ describe('Milestone 4 Challenger Empirical Suite — Dashboard.screen.tsx', () =
       expect(dashboardContent).toContain('gap: theme.spacing.sm');
     });
 
-    test('5.2 Dashboard.screen.tsx defines actionCluster with semantic tokens', () => {
+    test('5.2 Dashboard.screen.tsx defines unboxed actionCluster and vertical actionClusterSeparator with semantic tokens', () => {
       expect(dashboardContent).toContain('actionCluster: {');
-      expect(dashboardContent).toContain('backgroundColor: theme.colors.surfaceSubtle');
-      expect(dashboardContent).toContain('borderColor: theme.colors.border');
-      expect(dashboardContent).toContain('borderRadius: theme.radii.sm');
-      expect(dashboardContent).toContain('borderWidth: theme.sizes.borderWidth');
+      expect(dashboardContent).toContain('gap: theme.spacing.xs');
+      expect(dashboardContent).toContain('actionClusterSeparator: {');
+      expect(dashboardContent).toContain('width: theme.sizes.borderWidth');
+      expect(dashboardContent).toContain('backgroundColor: theme.colors.border');
     });
 
-    test('5.3 Dashboard.screen.tsx defines emergencyCluster with emergency tokens', () => {
+    test('5.3 Dashboard.screen.tsx groups clusters via separators without boxed parent sub-cards', () => {
       expect(dashboardContent).toContain('emergencyCluster: {');
-      expect(dashboardContent).toContain('backgroundColor: theme.colors.emergencyBg');
-      expect(dashboardContent).toContain('borderColor: theme.colors.emergencyBorder');
+      expect(dashboardContent).toContain('testID="care-flow-separator"');
+      expect(dashboardContent).toContain('testID="exceptions-emergency-separator"');
     });
 
     test('5.4 Zero raw hex colors present in Dashboard.screen.tsx styles', () => {

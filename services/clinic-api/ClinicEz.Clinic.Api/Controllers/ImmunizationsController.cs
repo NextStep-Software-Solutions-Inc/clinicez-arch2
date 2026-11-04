@@ -124,7 +124,7 @@ public sealed record AdministerVaccineRequest(
     int DoseSequence,
     bool IsSeriesCompleted,
     string Route,
-    string InjectionSite,
+    string? InjectionSite,
     DateTime AdministeredAtUtc,
     Guid? AdministeredByStaffId,
     string AdministeredByStaffName,

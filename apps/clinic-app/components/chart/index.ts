@@ -46,7 +46,10 @@ export type { DiagnosticLabTabProps } from './DiagnosticLabTab';
 export { default as NursingProceduresTab, lookupStatutoryManagementCode, STATUTORY_MANAGEMENT_CODES } from './NursingProceduresTab';
 export type { NursingProceduresTabProps } from './NursingProceduresTab';
 
-export { default as StatutoryImmunizationsTab, PHILHEALTH_STATUTORY_VACCINES } from './StatutoryImmunizationsTab';
+export {
+  default as StatutoryImmunizationsTab,
+  resolveCohortCategoryLabel,
+} from './StatutoryImmunizationsTab';
 export type { StatutoryImmunizationsTabProps } from './StatutoryImmunizationsTab';
 
 export { default as HealthProfilesTab } from './HealthProfilesTab';
@@ -54,6 +57,9 @@ export type { HealthProfilesTabProps, ProfileSubTab } from './HealthProfilesTab'
 
 export { default as ExternalDocumentVaultTab, PHILHEALTH_CHEST_XRAY_FINDINGS, PHILHEALTH_CHEST_XRAY_OBSERVATIONS } from './ExternalDocumentVaultTab';
 export type { ExternalDocumentVaultTabProps } from './ExternalDocumentVaultTab';
+
+export { default as AdministrativeDocumentsTab } from './AdministrativeDocumentsTab';
+export type { AdministrativeDocumentsTabProps } from './AdministrativeDocumentsTab';
 
 export {
   default as DentalChartTab,
@@ -63,7 +69,6 @@ export {
 } from './DentalChartTab';
 export type { DentalChartTabProps } from './DentalChartTab';
 
-// Preserved for backward-compatibility
 export { default as ClinicalHistoryTab } from './ClinicalHistoryTab';
 export { default as LifestyleSocialTab } from './LifestyleSocialTab';
 export { default as ReproductiveHealthTab } from './ReproductiveHealthTab';

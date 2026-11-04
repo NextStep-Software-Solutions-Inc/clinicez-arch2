@@ -1129,169 +1129,191 @@ export default function DashboardScreen() {
                     </View>
                   ) : null}
 
-                  <View style={styles.actionClustersWrap}>
-                    {hasCareActions ? (
-                      <View style={styles.actionCluster} testID="care-encounter-cluster">
-                        {canCall ? (
-                          <Button
-                            title="Call patient"
-                            variant="primary"
-                            size="sm"
-                            icon="arrowRight"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleCallPatient(item)}
-                          />
-                        ) : null}
-                        {canExamine ? (
-                          <Button
-                            title="Examine"
-                            variant="secondary"
-                            size="sm"
-                            icon="consultations"
-                            onPress={() =>
-                              navigation.navigate('Consultations', {
-                                patientId: item.patientId,
-                                patientName: item.patientName,
-                                queueId: item.id,
-                              })
-                            }
-                          />
-                        ) : null}
-                        {canTriage ? (
-                          <Button
-                            title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
-                            variant="outline"
-                            size="sm"
-                            icon="activity"
-                            onPress={() => {
-                              if (item.hasVitals) {
-                                handleOpenEditVitals(item);
-                              } else {
-                                handleOpenTriage(item);
-                              }
-                            }}
-                          />
-                        ) : null}
-                        {canAssignOrReassign ? (
-                          item.doctorName ? (
-                            <Button
-                              title="Reassign"
-                              variant="ghost"
-                              size="sm"
-                              icon="refresh"
-                              onPress={() => handleOpenReassign(item)}
-                            />
-                          ) : (
-                            <Button
-                              title="Assign doctor"
-                              variant="outline"
-                              size="sm"
-                              icon="userCheck"
-                              onPress={() => handleOpenReassign(item)}
-                            />
-                          )
-                        ) : null}
-                      </View>
-                    ) : null}
+                  {hasCareActions || hasFlowActions || hasExceptionActions || hasEmergencyActions ? (
+                    <View style={styles.actionClustersWrap}>
+                      {hasCareActions || hasFlowActions ? (
+                        <View style={styles.primaryActionGroup}>
+                          {hasCareActions ? (
+                            <View style={styles.actionCluster} testID="care-encounter-cluster">
+                              {canCall ? (
+                                <Button
+                                  title="Call patient"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="arrowRight"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleCallPatient(item)}
+                                />
+                              ) : null}
+                              {canExamine ? (
+                                <Button
+                                  title="Examine"
+                                  variant={isInConsult && !canCall ? 'primary' : 'secondary'}
+                                  size="sm"
+                                  icon="consultations"
+                                  onPress={() =>
+                                    navigation.navigate('Consultations', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                      queueId: item.id,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {canTriage ? (
+                                <Button
+                                  title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
+                                  variant="outline"
+                                  size="sm"
+                                  icon="activity"
+                                  onPress={() => {
+                                    if (item.hasVitals) {
+                                      handleOpenEditVitals(item);
+                                    } else {
+                                      handleOpenTriage(item);
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              {canAssignOrReassign ? (
+                                item.doctorName ? (
+                                  <Button
+                                    title="Reassign"
+                                    variant="ghost"
+                                    size="sm"
+                                    icon="refresh"
+                                    onPress={() => handleOpenReassign(item)}
+                                  />
+                                ) : (
+                                  <Button
+                                    title="Assign doctor"
+                                    variant="outline"
+                                    size="sm"
+                                    icon="userCheck"
+                                    onPress={() => handleOpenReassign(item)}
+                                  />
+                                )
+                              ) : null}
+                            </View>
+                          ) : null}
 
-                    {hasFlowActions ? (
-                      <View style={styles.actionCluster} testID="flow-completion-cluster">
-                        {canHold ? (
-                          <Button
-                            title="Put on hold"
-                            variant="outline"
-                            size="sm"
-                            icon="clock"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handlePutOnHold(item)}
-                          />
-                        ) : null}
-                        {canReactivate ? (
-                          <Button
-                            title="Re-activate"
-                            variant="primary"
-                            size="sm"
-                            icon="refresh"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleReactivate(item)}
-                          />
-                        ) : null}
-                        {canDischarge ? (
-                          <Button
-                            title="Discharge visit"
-                            variant="outline"
-                            size="sm"
-                            icon="check"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => {
-                              setDischargeModalItem(item);
-                              setDischargeRemarks('');
-                            }}
-                          />
-                        ) : null}
-                        {isCompleted ? (
-                          <Button
-                            title="Bill visit"
-                            variant="success"
-                            size="sm"
-                            icon="billing"
-                            onPress={() =>
-                              navigation.navigate('Billing', {
-                                patientId: item.patientId,
-                                patientName: item.patientName,
-                              })
-                            }
-                          />
-                        ) : null}
-                      </View>
-                    ) : null}
+                          {hasCareActions && hasFlowActions ? (
+                            <View style={styles.actionClusterSeparator} testID="care-flow-separator" />
+                          ) : null}
 
-                    {hasExceptionActions ? (
-                      <View style={styles.actionCluster} testID="exceptions-cluster">
-                        {canNoShow ? (
-                          <Button
-                            title="No-show"
-                            variant="outline"
-                            size="sm"
-                            icon="alertCircle"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleMarkNoShow(item)}
-                          />
-                        ) : null}
-                        {canCancel ? (
-                          <Button
-                            title="Cancel visit"
-                            variant="ghost"
-                            size="sm"
-                            icon="trash"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleCancelVisit(item)}
-                          />
-                        ) : null}
-                      </View>
-                    ) : null}
+                          {hasFlowActions ? (
+                            <View style={styles.actionCluster} testID="flow-completion-cluster">
+                              {canHold ? (
+                                <Button
+                                  title="Put on hold"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="clock"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handlePutOnHold(item)}
+                                />
+                              ) : null}
+                              {canReactivate ? (
+                                <Button
+                                  title="Re-activate"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="refresh"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleReactivate(item)}
+                                />
+                              ) : null}
+                              {canDischarge ? (
+                                <Button
+                                  title="Discharge visit"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="check"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => {
+                                    setDischargeModalItem(item);
+                                    setDischargeRemarks('');
+                                  }}
+                                />
+                              ) : null}
+                              {isCompleted ? (
+                                <Button
+                                  title="Bill visit"
+                                  variant="success"
+                                  size="sm"
+                                  icon="billing"
+                                  onPress={() =>
+                                    navigation.navigate('Billing', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
 
-                    {hasEmergencyActions ? (
-                      <View style={[styles.actionCluster, styles.emergencyCluster]} testID="emergency-cluster">
-                        <Button
-                          title="Divert to ER"
-                          variant="danger"
-                          size="sm"
-                          icon="alert"
-                          testID="divert-emergency-button"
-                          loading={isActioning}
-                          disabled={isActioning}
-                          onPress={() => setDivertModalItem(item)}
-                        />
-                      </View>
-                    ) : null}
-                  </View>
+                      {hasExceptionActions || hasEmergencyActions ? (
+                        <View style={styles.trailingActionGroup}>
+                          {hasCareActions || hasFlowActions ? (
+                            <View style={styles.actionClusterSeparator} testID="workflow-exceptions-separator" />
+                          ) : null}
+
+                          {hasExceptionActions ? (
+                            <View style={styles.actionCluster} testID="exceptions-cluster">
+                              {canNoShow ? (
+                                <Button
+                                  title="No-show"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="alertCircle"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleMarkNoShow(item)}
+                                />
+                              ) : null}
+                              {canCancel ? (
+                                <Button
+                                  title="Cancel visit"
+                                  variant="ghost"
+                                  size="sm"
+                                  icon="trash"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleCancelVisit(item)}
+                                />
+                              ) : null}
+                            </View>
+                          ) : null}
+
+                          {hasExceptionActions && hasEmergencyActions ? (
+                            <View style={styles.actionClusterSeparator} testID="exceptions-emergency-separator" />
+                          ) : null}
+
+                          {hasEmergencyActions ? (
+                            <View style={[styles.actionCluster, styles.emergencyCluster]} testID="emergency-cluster">
+                              <Button
+                                title="Divert to ER"
+                                variant="danger"
+                                size="sm"
+                                icon="alert"
+                                testID="divert-emergency-button"
+                                loading={isActioning}
+                                disabled={isActioning}
+                                onPress={() => setDivertModalItem(item)}
+                              />
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </CardContent>
               </Card>
             );
@@ -2626,26 +2648,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
+  },
+  primaryActionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  trailingActionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginLeft: 'auto',
   },
   actionCluster: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.xs,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.sm,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
   },
   emergencyCluster: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderColor: theme.colors.emergencyBorder,
+    alignItems: 'center',
+  },
+  actionClusterSeparator: {
+    width: theme.sizes.borderWidth,
+    height: theme.sizes.iconMd,
+    backgroundColor: theme.colors.border,
+    alignSelf: 'center',
   },
   listGap: {
     gap: theme.spacing.md,

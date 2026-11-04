@@ -97,6 +97,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
         <NursingProceduresTab
           patient={patient}
           patientId={patient?.id}
+          queueItemId={props.queueItemId ?? undefined}
           procedures={patientChart?.proceduresHistory || []}
           onOrderProcedure={onOrderProcedure}
           onRefreshChart={onRefreshChart}
@@ -130,8 +131,6 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           patient={patient}
           patientId={patient?.id}
           attachments={patientChart?.attachments || patientAttachments}
-          medicalCertificates={patientChart?.medicalCertificates || []}
-          referralLetters={patientChart?.referralLetters || []}
           onUploadDocument={onUploadDocument}
           onVerifyAttachment={onVerifyAttachment}
           onDownloadAttachment={onDownloadAttachment}

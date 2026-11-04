@@ -32,7 +32,8 @@ public record ClinicalProcedureDto(
     Guid? TargetRoomId = null,
     string? TargetRoomName = null,
     int? ToothNumber = null,
-    string? ToothSurface = null
+    string? ToothSurface = null,
+    string? CreatedBy = null
 );
 
 public record OrderProcedureRequest(

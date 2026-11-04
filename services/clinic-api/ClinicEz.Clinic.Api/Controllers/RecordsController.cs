@@ -52,7 +52,14 @@ public sealed class RecordsController : ControllerBase
         [FromBody] VerifyAttachmentRequest request,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new VerifyRecordAttachmentCommand(id, request.IsApproved, request.RejectionReason), ct);
+        var result = await _sender.Send(
+            new VerifyRecordAttachmentCommand(
+                id,
+                request.IsApproved,
+                request.RejectionReason,
+                request.VerifiedByStaffId,
+                request.VerifiedByStaffName),
+            ct);
         return Ok(ApiResponse<ClinicRecordAttachmentDto>.Success(result, "Attachment verification updated."));
     }
 
@@ -78,7 +85,10 @@ public sealed class RecordsController : ControllerBase
             FileName: form.File.FileName,
             ContentType: string.IsNullOrWhiteSpace(form.File.ContentType) ? "application/octet-stream" : form.File.ContentType,
             FileBytes: memoryStream.ToArray(),
-            Notes: form.Notes
+            Notes: form.Notes,
+            UploadedByStaffId: form.UploadedByStaffId,
+            UploadedByStaffName: form.UploadedByStaffName,
+            DocumentDate: form.DocumentDate
         );
 
         var result = await _sender.Send(command, ct);
@@ -132,7 +142,11 @@ public sealed class RecordsController : ControllerBase
     }
 }
 
-public sealed record VerifyAttachmentRequest(bool IsApproved, string? RejectionReason = null);
+public sealed record VerifyAttachmentRequest(
+    bool IsApproved,
+    string? RejectionReason = null,
+    Guid? VerifiedByStaffId = null,
+    string? VerifiedByStaffName = null);
 
 public sealed class UploadRecordAttachmentForm
 {
@@ -141,6 +155,9 @@ public sealed class UploadRecordAttachmentForm
     public string? RecordType { get; set; }
     public string? Title { get; set; }
     public string? Notes { get; set; }
+    public DateOnly? DocumentDate { get; set; }
+    public Guid? UploadedByStaffId { get; set; }
+    public string? UploadedByStaffName { get; set; }
     public Microsoft.AspNetCore.Http.IFormFile File { get; set; } = null!;
 }
 

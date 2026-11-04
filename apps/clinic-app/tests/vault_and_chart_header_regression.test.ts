@@ -82,6 +82,9 @@ mock.module('../constants/fonts', () => ({
 
 const { CardHeader } = await import('../components/ui/Card');
 const { default: ExternalDocumentVaultTab } = await import('../components/chart/ExternalDocumentVaultTab');
+const { default: AdministrativeDocumentsTab } = await import('../components/chart/AdministrativeDocumentsTab');
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ClinicPatient, ClinicRecordAttachmentRecord } from '../services/clinicService';
 
 describe('Consultation Chart Header & Vault Regression Tests', () => {
@@ -121,7 +124,7 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(element.props.truncateSubtitle).toBe(true);
   });
 
-  test('2. ExternalDocumentVaultTab renders External/Internal vault types, inline no-wrap filter chips + right Attach button, and removes sub-filter chips', () => {
+  test('2. ExternalDocumentVaultTab (Doc Vault) renders inline no-wrap filter chips + right Attach button without extra External/Internal sub-tabs or category sub-filter chips', () => {
     const sampleAttachments: ClinicRecordAttachmentRecord[] = [
       {
         id: 'att-1',
@@ -159,9 +162,9 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
       })
     );
 
-    // Verify 2 vault types (External, Internal) are rendered
-    expect(markup).toContain('External');
-    expect(markup).toContain('Internal');
+    // Verify extra External/Internal sub-tabs are absent
+    expect(markup).not.toContain('>External<');
+    expect(markup).not.toContain('>Internal<');
 
     // Verify all status filter chips are rendered
     expect(markup).toContain('All (2)');
@@ -169,32 +172,41 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(markup).toContain('Verified (1)');
     expect(markup).toContain('Rejected (0)');
 
-    // Verify removed sub-filter chips are absent
+    // Verify removed sub-filter chips and raw recordType badge are absent
     expect(markup).not.toContain('All Records');
     expect(markup).not.toContain('Cert of Registration (COR)');
     expect(markup).not.toContain('Outside Labs');
+    expect(markup).not.toContain('OutsideChestXRay');
 
     // Verify Attach External Document button is rendered
     expect(markup).toContain('Attach External Document');
   });
 
-  test('2b. ExternalDocumentVaultTab INTERNAL vault mode renders clinic-issued certificates and referrals with no-wrap chips', () => {
-    const internalMarkup = renderToStaticMarkup(
-      React.createElement(ExternalDocumentVaultTab, {
+  test('2b. Consultations inline Patient Chart exposes Doc Vault + Admin Vault tabs, and AdministrativeDocumentsTab renders humanized, jargon-free certificates and referrals', () => {
+    const consultationsSource = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx'),
+      'utf8',
+    );
+    expect(consultationsSource).toContain("{ id: 'vault', label: 'Doc Vault', icon: 'folder' }");
+    expect(consultationsSource).toContain("{ id: 'documents', label: 'Admin Vault', icon: 'scroll' }");
+    expect(consultationsSource).toContain("activeChartTab === 'documents'");
+    expect(consultationsSource).toContain('<AdministrativeDocumentsTab');
+
+    const adminVaultMarkup = renderToStaticMarkup(
+      React.createElement(AdministrativeDocumentsTab, {
         patient: mockPatient,
-        attachments: [],
-        initialVaultType: 'INTERNAL',
         medicalCertificates: [
           {
             id: 'mc-1',
             certificateNumber: 'MC-2026-0001',
             patientId: mockPatient.id,
             patientName: mockPatient.fullName,
-            doctorName: 'Rizal',
+            doctorName: 'Dr. Jose Rizal',
             prcLicenseNumber: '0123456',
             issueDate: '2026-10-20',
             diagnosis: 'Upper Respiratory Tract Infection',
-            fitnessStatus: 'FitToWork',
+            fitnessStatus: 'UnfitToWork',
+            securityDigest: 'SEC-SHA256-E15C389998570234',
             isSigned: true,
             createdAt: '2026-10-20T09:00:00Z',
           } as any,
@@ -211,6 +223,7 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
             referredDepartment: 'Pulmonology',
             provisionalDiagnosis: 'Community-Acquired Pneumonia',
             reasonForReferral: 'Specialist evaluation',
+            securityDigest: 'SEC-SHA256-F00BAA1122334455',
             isSigned: true,
             createdAt: '2026-10-21T09:00:00Z',
           } as any,
@@ -218,14 +231,23 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
       })
     );
 
-    expect(internalMarkup).toContain('External');
-    expect(internalMarkup).toContain('Internal');
-    expect(internalMarkup).toContain('All (2)');
-    expect(internalMarkup).toContain('Certificates (1)');
-    expect(internalMarkup).toContain('Referrals (1)');
-    expect(internalMarkup).toContain('MC-2026-0001');
-    expect(internalMarkup).toContain('REF-2026-0001');
-    expect(internalMarkup).not.toContain('Attach External Document');
+    expect(adminVaultMarkup).toContain('Administrative Certificate Vault');
+    expect(adminVaultMarkup).toContain('Issued medical certificates and referral letters available to view or reprint');
+    expect(adminVaultMarkup).not.toContain('Secure cryptographic registry');
+    expect(adminVaultMarkup).not.toContain('Physician Signed');
+    expect(adminVaultMarkup).not.toContain('SHA-256 Sealed');
+    expect(adminVaultMarkup).not.toContain('Seal Digest');
+    expect(adminVaultMarkup).not.toContain('UnfitToWork');
+    expect(adminVaultMarkup).toContain('Unfit to work');
+    expect(adminVaultMarkup).not.toContain('Dr. Dr.');
+    expect(adminVaultMarkup).toContain('Dr. Jose Rizal');
+    expect(adminVaultMarkup).toContain('Dr. Rizal');
+    expect(adminVaultMarkup).toContain('All (2)');
+    expect(adminVaultMarkup).toContain('Certificates (1)');
+    expect(adminVaultMarkup).toContain('Referrals (1)');
+    expect(adminVaultMarkup).toContain('MC-2026-0001');
+    expect(adminVaultMarkup).toContain('REF-2026-0001');
+    expect(adminVaultMarkup).not.toContain('Attach External Document');
   });
 
   test('3. ExternalDocumentVaultTab invokes onUploadDocument when Attach External Document is clicked', () => {

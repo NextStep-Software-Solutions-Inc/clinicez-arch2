@@ -765,6 +765,7 @@ export interface ClinicalProcedureRecord {
   targetRoomName?: string | null;
   toothNumber?: number | null;
   toothSurface?: string | null;
+  createdBy?: string;
 }
 
 export interface ClinicLabOrderItem {
@@ -1276,6 +1277,7 @@ export interface PatientPastMedicalHistory {
 export interface PatientMedicalHistoryResponse {
   items: PatientPastMedicalHistory[];
   personalMedicalHistoryNotes?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface MedicalHistoryEntryItem {
@@ -1290,7 +1292,7 @@ export interface MedicalHistoryEntryItem {
 
 export interface SavePatientMedicalHistoriesPayload {
   items: MedicalHistoryEntryItem[];
-  personalMedicalHistoryNotes?: string | null;
+  notes?: string | null;
 }
 
 export interface PatientFamilyHistory {
@@ -1308,6 +1310,7 @@ export interface PatientFamilyHistory {
 export interface PatientFamilyHistoryResponse {
   items: PatientFamilyHistory[];
   familyMedicalHistoryNotes?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface FamilyHistoryEntryItem {
@@ -1321,7 +1324,7 @@ export interface FamilyHistoryEntryItem {
 
 export interface SavePatientFamilyHistoriesPayload {
   items: FamilyHistoryEntryItem[];
-  familyMedicalHistoryNotes?: string | null;
+  notes?: string | null;
 }
 
 export interface PatientSocialHistory {
@@ -1349,6 +1352,7 @@ export interface PatientSocialHistory {
   dietaryHabits?: string;
   remarks?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface UpdatePatientSocialHistoryPayload {
@@ -1398,6 +1402,7 @@ export interface PatientReproductiveHistory {
   receivedFamilyPlanningCounseling: boolean;
   remarks?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface UpdatePatientReproductiveHistoryPayload {
@@ -1615,7 +1620,7 @@ export interface PatientImmunizationRecord {
   doseSequence: number;
   isSeriesCompleted: boolean;
   route: string;
-  injectionSite: string;
+  injectionSite?: string | null;
   administeredAtUtc: string; // ISO
   administeredByStaffId: string;
   administeredByStaffName: string;
@@ -1643,7 +1648,7 @@ export interface AdministerVaccinePayload {
   doseSequence: number;
   isSeriesCompleted: boolean;
   route: string;
-  injectionSite: string;
+  injectionSite?: string | null;
   administeredAtUtc: string; // ISO
   administeredByStaffId: string;
   administeredByStaffName: string;
@@ -3547,10 +3552,18 @@ export const clinicService = {
     return clinicApiClient.get<ClinicRecordAttachmentRecord[]>(`/records/patients/${patientId}${qs}`);
   },
 
-  async verifyRecordAttachment(attachmentId: string, isApproved: boolean, rejectionReason?: string) {
+  async verifyRecordAttachment(
+    attachmentId: string,
+    isApproved: boolean,
+    rejectionReason?: string,
+    verifiedByStaffName?: string,
+    verifiedByStaffId?: string,
+  ) {
     return clinicApiClient.post<ClinicRecordAttachmentRecord>(`/records/attachments/${attachmentId}/verify`, {
       isApproved,
-      rejectionReason
+      rejectionReason,
+      verifiedByStaffName: verifiedByStaffName || undefined,
+      verifiedByStaffId: verifiedByStaffId || undefined,
     });
   },
 

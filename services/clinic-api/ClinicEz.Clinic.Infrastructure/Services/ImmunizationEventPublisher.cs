@@ -37,6 +37,11 @@ public sealed class ImmunizationEventPublisher : IImmunizationEventPublisher
             return false;
         }
 
+        var resolvedRoute = immunization.Route ?? "IM";
+        var isNonParenteral = resolvedRoute.Contains("Oral", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(resolvedRoute.Trim(), "PO", StringComparison.OrdinalIgnoreCase)
+            || resolvedRoute.Contains("(PO)", StringComparison.OrdinalIgnoreCase);
+
         var payload = new ClinicalImmunizationAdministeredPayload(
             ImmunizationId: immunization.Id,
             PatientId: address.SyncPatientId,
@@ -49,8 +54,8 @@ public sealed class ImmunizationEventPublisher : IImmunizationEventPublisher
             ExpirationDate: immunization.ExpirationDate ?? DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
             DoseSequence: immunization.DoseSequence,
             IsSeriesCompleted: immunization.IsSeriesCompleted,
-            Route: immunization.Route ?? "IM",
-            InjectionSite: immunization.InjectionSite ?? "Arm",
+            Route: resolvedRoute,
+            InjectionSite: immunization.InjectionSite ?? (isNonParenteral ? "N/A" : "Arm"),
             AdministeredAtUtc: immunization.AdministeredAtUtc,
             AdministeredByStaffId: immunization.AdministeredByStaffId ?? Guid.Empty,
             AdministeredByStaffName: immunization.AdministeredByStaffName ?? "Clinic Staff",
