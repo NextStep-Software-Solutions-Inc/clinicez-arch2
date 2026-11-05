@@ -6,6 +6,7 @@ using ClinicEz.Shared.Security;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Persistence;
 using ClinicEz.Patient.Application.Features.Appointments.Interop;
 using ClinicEz.Patient.Application.Features.Documents.Interop;
 using ClinicEz.Patient.Application.Features.Sharing;
@@ -161,6 +162,7 @@ public static class DependencyInjection
         {
             using var scope = services.BuildServiceProvider().CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            dbContext.EnsureDevelopmentDatabaseCreated(env);
             dbContext.Database.Migrate();
             if (env.IsDevelopment())
             {

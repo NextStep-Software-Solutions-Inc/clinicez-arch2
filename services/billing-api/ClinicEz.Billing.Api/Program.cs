@@ -7,6 +7,7 @@ using ClinicEz.Billing.Infrastructure.Persistence;
 using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Middlewares;
+using ClinicEz.Shared.Persistence;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -52,7 +53,8 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
-    scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.Migrate();
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    dbContext.EnsureDevelopmentDatabaseCreatedAndMigrated(app.Environment);
 
     app.MapOpenApi().AllowAnonymous();
     app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Billing (Cashiering) API")).AllowAnonymous();

@@ -2,6 +2,8 @@ using ClinicEz.Comms.Application;
 using ClinicEz.Comms.Infrastructure;
 using ClinicEz.Comms.Infrastructure.Hubs;
 using ClinicEz.Comms.Infrastructure.Middleware;
+using ClinicEz.Comms.Infrastructure.Persistence;
+using ClinicEz.Shared.Persistence;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +36,10 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<CommsDbContext>();
+    dbContext.EnsureDevelopmentDatabaseCreatedAndMigrated(app.Environment);
+
     app.MapOpenApi().AllowAnonymous();
     app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Communications API")).AllowAnonymous();
 }

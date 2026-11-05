@@ -8,6 +8,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Persistence;
 using ClinicEz.Shared.Workspace;
 using ClinicEz.Shared.Security;
 using Hangfire;
@@ -96,7 +97,7 @@ public static class DependencyInjection
             {
                 using var scope = services.BuildServiceProvider().CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                dbContext.Database.Migrate();
+                dbContext.EnsureDevelopmentDatabaseCreatedAndMigrated(env);
             }
             catch (Exception ex)
             {

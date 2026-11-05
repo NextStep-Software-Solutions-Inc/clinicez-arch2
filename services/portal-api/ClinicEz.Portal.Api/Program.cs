@@ -1,5 +1,6 @@
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Middlewares;
+using ClinicEz.Shared.Persistence;
 using ClinicEz.Portal.Api;
 using ClinicEz.Portal.Application;
 using ClinicEz.Portal.Infrastructure;
@@ -114,6 +115,7 @@ using (var scope = app.Services.CreateScope())
 
     if (dbContext.Database.IsRelational() && !app.Environment.IsEnvironment("Testing"))
     {
+        dbContext.EnsureDevelopmentDatabaseCreated(app.Environment);
         dbContext.Database.Migrate();
     }
 
