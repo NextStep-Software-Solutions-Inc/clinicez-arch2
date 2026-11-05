@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ViewStyle, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Icon, { IconName } from '../ui/Icon';
@@ -10,8 +10,10 @@ import { theme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useSafeInsets } from '../../utils/useSafeInsets';
 import { useUiDensity } from '../../context/UiDensityContext';
-import { CommsContext, useConversations } from '@clinicez/comms-sdk/react';
+import { CommsContext, useConversations, useTriageQueue, useCommsContext } from '@clinicez/comms-sdk/react';
 import { useClinicComms } from '../../context/ClinicCommsContext';
+import { useAuth } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 
 export interface HeaderAction {
   id: string;
@@ -43,6 +45,21 @@ export interface ClinicHeaderBarProps {
 function CommsChatButtonContent() {
   const { toggleChatDrawer } = useClinicComms();
   const { unreadCount } = useConversations();
+  const { user, can } = useAuth();
+  const { facilityId } = useCommsContext();
+
+  const canViewTriage = can(PERMISSIONS.triageRead) || can('messaging:triage') || user?.role === 'Admin';
+  const { pendingCount, urgentCount } = useTriageQueue(facilityId);
+
+  const triageCount = canViewTriage ? pendingCount : 0;
+  const hasUrgent = canViewTriage && urgentCount > 0;
+
+  const a11yLabel = useMemo(() => {
+    const parts = ['Communications'];
+    if (unreadCount > 0) parts.push(`${unreadCount} unread`);
+    if (triageCount > 0) parts.push(`${triageCount} pending triage${hasUrgent ? ' (urgent)' : ''}`);
+    return parts.join(', ');
+  }, [unreadCount, triageCount, hasUrgent]);
 
   return (
     <Pressable
@@ -53,9 +70,17 @@ function CommsChatButtonContent() {
       ]}
       hitSlop={theme.spacing.xs}
       accessibilityRole="button"
-      accessibilityLabel={`Communications (${unreadCount} unread)`}
+      accessibilityLabel={a11yLabel}
     >
       <Icon name="message" size={theme.sizes.iconMd} color={theme.colors.text} />
+      {triageCount > 0 ? (
+        <View
+          style={[
+            styles.triagePip,
+            hasUrgent ? styles.triagePipUrgent : styles.triagePipRoutine,
+          ]}
+        />
+      ) : null}
       {unreadCount > 0 ? (
         <View style={styles.badgePill}>
           <ThemedText variant="badge" color={theme.colors.onPrimary}>
@@ -444,6 +469,22 @@ const styles = StyleSheet.create({
   },
   badgePillStat: {
     backgroundColor: theme.colors.emergency,
+  },
+  triagePip: {
+    position: 'absolute',
+    top: -3,
+    left: -3,
+    width: 10,
+    height: 10,
+    borderRadius: theme.radii.full,
+    borderWidth: 1.5,
+    borderColor: theme.colors.surface,
+  },
+  triagePipUrgent: {
+    backgroundColor: theme.colors.emergency,
+  },
+  triagePipRoutine: {
+    backgroundColor: theme.colors.urgent,
   },
   searchTriggerPill: {
     flexDirection: 'row',

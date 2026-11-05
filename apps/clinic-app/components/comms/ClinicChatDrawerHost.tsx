@@ -1,24 +1,32 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Platform, Modal } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import {
   useComms,
   useConversations,
   useConversation,
   useSendMessage,
+  useTriageQueue,
 } from '@clinicez/comms-sdk/react';
 import {
   ChatDrawer,
   MessageThread,
+  TriageQueueView,
 } from '@clinicez/comms-sdk/native-ui';
 import type {
   ChatDrawerItem,
   ConversationScopeFilter,
   ThreadMessage,
+  TriageDispositionPayload,
+  TriageQueueItem,
 } from '@clinicez/comms-sdk/native-ui';
 import { useClinicComms } from '../../context/ClinicCommsContext';
 import { useAuth } from '../../context/AuthContext';
+import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { theme } from '../../constants/theme';
+import { PERMISSIONS } from '../../constants/permissions';
+import { notify } from '../../utils/feedback';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 
@@ -116,16 +124,52 @@ function ClinicActiveThread({ conversationId, onBack, currentUserId }: ClinicAct
 
 export default function ClinicChatDrawerHost() {
   const { isChatDrawerOpen, closeChatDrawer, activeConversationId, setActiveConversationId } = useClinicComms();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const { facilityName, license } = useClinic();
   const { isWorkstation } = useBreakpoint();
   const { status } = useComms();
+  const navigation = useNavigation<any>();
+
+  const facilityId = license?.clinicId || user?.clinicId || '';
+  const canViewTriage = can(PERMISSIONS.triageRead) || can('messaging:triage') || user?.role === 'Admin';
+
+  const [drawerTab, setDrawerTab] = useState<'conversations' | 'triage'>('conversations');
+  const [triageFilter, setTriageFilter] = useState<'All' | 'Emergency' | 'Urgent' | 'Routine'>('All');
+
+  // Reset tab to conversations whenever drawer is opened/closed
+  useEffect(() => {
+    if (!isChatDrawerOpen) {
+      setDrawerTab('conversations');
+    }
+  }, [isChatDrawerOpen]);
+
+  // If user cannot view triage, ensure drawerTab stays on conversations
+  useEffect(() => {
+    if (!canViewTriage && drawerTab === 'triage') {
+      setDrawerTab('conversations');
+    }
+  }, [canViewTriage, drawerTab]);
 
   const {
     conversations,
+    unreadCount,
     isLoading,
     error,
     createConversation,
   } = useConversations();
+
+  const {
+    items: triageItems,
+    pendingCount: pendingTriageCount,
+    urgentCount: urgentTriageCount,
+    isLoading: isTriageLoading,
+    error: triageError,
+    refresh: refreshTriage,
+    answerRequest,
+    requestVisit,
+    declineRequest,
+    routeToStaff,
+  } = useTriageQueue(facilityId);
 
   const [selectedScope, setSelectedScope] = useState<ConversationScopeFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -156,6 +200,68 @@ export default function ClinicChatDrawerHost() {
       }));
   }, [conversations, selectedScope, searchQuery, activeConversationId]);
 
+  const mappedTriageItems: TriageQueueItem[] = useMemo(() => {
+    return triageItems.map((i) => ({
+      conversationId: i.id,
+      requestId: i.id,
+      patientId: i.contextId || i.id,
+      patientNameMasked: i.patientFullName || i.title || 'Patient Inquiry',
+      patientDobMasked: '',
+      patientAgeGender: `${i.patientAge || 'Adult'} • ${i.patientSex || 'Patient'}`,
+      category: i.category || 'General',
+      contentText: i.lastMessageSnippet || 'Patient inquiry pending triage review.',
+      priority: (i.priority as 'Emergency' | 'Urgent' | 'Routine') || 'Routine',
+      status: (i.status as 'Submitted' | 'WithTriage' | 'Routed') || 'Submitted',
+      submittedAtUtc: i.createdAtUtc,
+      triageDueAtUtc: i.triageDueAtUtc || i.createdAtUtc,
+      isOffHours: false,
+      slaBreached: i.isSlaBreached,
+      slaTimeRemainingSeconds: i.slaTimeRemainingSeconds,
+      isEmergencyConfirmed: i.isEmergencyConfirmed ?? false,
+      assignedStaffId: i.assignedStaffId ?? undefined,
+      assignedStaffName: i.assignedStaffName ?? undefined,
+    }));
+  }, [triageItems]);
+
+  const handleExecuteDisposition = useCallback(
+    async (payload: TriageDispositionPayload) => {
+      try {
+        if (payload.disposition === 'Answered') {
+          await answerRequest(
+            payload.conversationId,
+            payload.replyText || 'Inquiry answered by clinic staff.',
+          );
+          notify.success('Inquiry disposition recorded: Answered.');
+        } else if (payload.disposition === 'NeedsVisit') {
+          await requestVisit(
+            payload.conversationId,
+            payload.replyText || 'In-clinic consultation recommended for patient evaluation.',
+          );
+          notify.success('Inquiry disposition recorded: In-Clinic Visit Requested.');
+        } else if (payload.disposition === 'Declined') {
+          await declineRequest(
+            payload.conversationId,
+            payload.declineReasonCode || 'OTHER',
+            payload.declineNotes || 'Request could not be processed.',
+          );
+          notify.success('Inquiry disposition recorded: Declined.');
+        } else if (payload.disposition === 'Routed') {
+          await routeToStaff(
+            payload.conversationId,
+            payload.routedStaffId || user?.id || 'staff',
+            'Attending Clinician',
+            payload.routedPriority || 'Routine',
+            payload.replyText,
+          );
+          notify.success('Inquiry routed to attending clinician.');
+        }
+      } catch (err: any) {
+        notify.error(err?.message || 'Failed to record triage disposition.');
+      }
+    },
+    [answerRequest, requestVisit, declineRequest, routeToStaff, user?.id],
+  );
+
   const connectionStateDisplay =
     status === 'connected'
       ? 'Connected'
@@ -175,33 +281,124 @@ export default function ClinicChatDrawerHost() {
     }
   }, [createConversation, setActiveConversationId]);
 
+  const handleExpandFullscreen = useCallback(() => {
+    closeChatDrawer();
+    navigation.navigate('Triage');
+  }, [closeChatDrawer, navigation]);
+
   if (!isChatDrawerOpen) {
     return null;
   }
 
   const drawerContent = (
     <View style={styles.drawerPane}>
+      {/* Top Header Control Row */}
       <View style={styles.topControlRow}>
         <ThemedText variant="title" color={theme.colors.text}>
           Clinic Communications
         </ThemedText>
-        <Pressable
-          onPress={closeChatDrawer}
-          style={styles.closeBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Close communications panel"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-        </Pressable>
+        <View style={styles.headerActionsGroup}>
+          <Pressable
+            onPress={handleExpandFullscreen}
+            style={styles.headerIconButton}
+            accessibilityRole="button"
+            accessibilityLabel="Expand to full screen"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="maximize" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+          </Pressable>
+          <Pressable
+            onPress={closeChatDrawer}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Close communications panel"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+          </Pressable>
+        </View>
       </View>
 
+      {/* Segmented Dual-Tab Bar (rendered when no active thread and staff has triage permission) */}
+      {!activeConversationId && canViewTriage && (
+        <View style={styles.tabSegmentBar}>
+          <Pressable
+            onPress={() => setDrawerTab('conversations')}
+            style={[
+              styles.tabButton,
+              drawerTab === 'conversations' && styles.tabButtonActive,
+            ]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: drawerTab === 'conversations' }}
+          >
+            <View style={styles.tabBadgeRow}>
+              <ThemedText
+                variant="smallBold"
+                color={drawerTab === 'conversations' ? theme.colors.primary : theme.colors.textSecondary}
+              >
+                Conversations
+              </ThemedText>
+              {unreadCount > 0 ? (
+                <View style={styles.tabUnreadBadge}>
+                  <ThemedText variant="badge" color={theme.colors.onPrimary}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setDrawerTab('triage')}
+            style={[
+              styles.tabButton,
+              drawerTab === 'triage' && styles.tabButtonActive,
+            ]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: drawerTab === 'triage' }}
+          >
+            <View style={styles.tabBadgeRow}>
+              <ThemedText
+                variant="smallBold"
+                color={drawerTab === 'triage' ? theme.colors.primary : theme.colors.textSecondary}
+              >
+                Triage Requests
+              </ThemedText>
+              {pendingTriageCount > 0 ? (
+                <View
+                  style={[
+                    styles.triageCountPill,
+                    urgentTriageCount > 0 && styles.triageCountPillUrgent,
+                  ]}
+                >
+                  <ThemedText variant="badge" color={theme.colors.onPrimary}>
+                    {pendingTriageCount > 99 ? '99+' : pendingTriageCount}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Main Drawer Body */}
       <View style={styles.drawerBody}>
         {activeConversationId ? (
           <ClinicActiveThread
             conversationId={activeConversationId}
             onBack={() => setActiveConversationId(undefined)}
             currentUserId={user?.id || ''}
+          />
+        ) : drawerTab === 'triage' && canViewTriage ? (
+          <TriageQueueView
+            items={mappedTriageItems}
+            facilityName={facilityName || 'Clinic EZ'}
+            onExecuteDisposition={handleExecuteDisposition}
+            onRefresh={refreshTriage}
+            isLoading={isTriageLoading}
+            error={triageError ? triageError.message : null}
+            activeFilter={triageFilter}
+            onFilterChange={setTriageFilter}
           />
         ) : (
           <ChatDrawer
@@ -263,7 +460,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.overlay,
   },
   dockedPanel: {
-    width: 440,
+    width: 460,
     height: '100%',
     backgroundColor: theme.colors.surface,
     borderLeftWidth: theme.sizes.borderWidth,
@@ -300,15 +497,83 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSubtle,
   },
-  closeBtn: {
-    minWidth: theme.sizes.touchTarget,
-    minHeight: theme.sizes.touchTarget,
+  headerActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  headerIconButton: {
+    width: theme.sizes.controlSm,
+    height: theme.sizes.controlSm,
     borderRadius: theme.radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+  },
+  closeBtn: {
+    width: theme.sizes.controlSm,
+    height: theme.sizes.controlSm,
+    borderRadius: theme.radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  tabSegmentBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.border,
+    gap: theme.spacing.xs,
+  },
+  tabButton: {
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.transparent,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.transparent,
+  },
+  tabButtonActive: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  tabBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  tabUnreadBadge: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 5,
+    minWidth: 16,
+    height: 16,
+    borderRadius: theme.radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  triageCountPill: {
+    backgroundColor: theme.colors.urgent,
+    paddingHorizontal: 5,
+    minWidth: 16,
+    height: 16,
+    borderRadius: theme.radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  triageCountPillUrgent: {
+    backgroundColor: theme.colors.emergency,
   },
   drawerBody: {
     flex: 1,
