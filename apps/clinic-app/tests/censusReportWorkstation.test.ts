@@ -1668,6 +1668,149 @@ describe('Clinic Census Report Workstation E2E & Integration Suite', () => {
         expect(checkExportAllowed('DAILY_EOD', { items: [] }, false)).toBe(false);
       });
     });
+
+    // -------------------------------------------------------------------------
+    // 5.8 Classifications & Custom Fields Compact Display & 'See more' Expansion
+    // -------------------------------------------------------------------------
+    describe('5.8 Classifications & Custom Fields Compact Display & "See more" Expansion', () => {
+      const resolveCustomItemsDisplay = (
+        classifications: string[],
+        customFields: Record<string, any> | string | null | undefined,
+        isExpanded: boolean
+      ) => {
+        const customPills = CensusOracle.formatCustomFieldPills(customFields);
+        const allCustomItems = [
+          ...classifications.map((c, i) => ({
+            key: `cls-${i}`,
+            label: c,
+            variant: 'outline' as const,
+          })),
+          ...customPills.map((p, i) => ({
+            key: `cp-${i}`,
+            label: p,
+            variant: 'neutral' as const,
+          })),
+        ];
+
+        const visibleItems =
+          isExpanded || allCustomItems.length <= 2
+            ? allCustomItems
+            : allCustomItems.slice(0, 2);
+        const hiddenCount = allCustomItems.length - 2;
+        const hasToggle = allCustomItems.length > 2;
+        const toggleLabel = isExpanded ? 'See less' : `+${hiddenCount} more`;
+
+        return {
+          totalCount: allCustomItems.length,
+          visibleItems,
+          hasToggle,
+          toggleLabel,
+          hiddenCount,
+        };
+      };
+
+      test('5.8.1 <= 2 items render fully without "+N more" toggle button', () => {
+        const res0 = resolveCustomItemsDisplay([], null, false);
+        expect(res0.totalCount).toBe(0);
+        expect(res0.visibleItems.length).toBe(0);
+        expect(res0.hasToggle).toBe(false);
+
+        const res1 = resolveCustomItemsDisplay(['Senior'], null, false);
+        expect(res1.totalCount).toBe(1);
+        expect(res1.visibleItems.length).toBe(1);
+        expect(res1.hasToggle).toBe(false);
+
+        const res2 = resolveCustomItemsDisplay(['Senior', 'PhilHealth'], null, false);
+        expect(res2.totalCount).toBe(2);
+        expect(res2.visibleItems.length).toBe(2);
+        expect(res2.hasToggle).toBe(false);
+      });
+
+      test('5.8.2 > 2 items collapse to first 2 pills and "+N more" badge in default collapsed state', () => {
+        // Patient from screenshot: 2 classifications + 13 custom fields = 15 total items
+        const classifications = ['Senior', 'PhilHealth'];
+        const customFields = {
+          category: 'Retiree',
+          workplace: 'Taguig City',
+          member_type: 'MM',
+          primary_city: 'Taguig City',
+          seeded_batch: 'scale_test_1000',
+          classification: 'General',
+          primary_barangay: 'Fort Bonifacio',
+          primary_province: 'Metro Manila',
+          primary_address_line: '12 BGC High Street',
+          emergency_contact_name: 'Dee, Roberto',
+          emergency_contact_phone: '0918-672-3884',
+          emergency_contact_relationship: 'Spouse',
+          personal_medical_history_notes: 'Maintained on prescription therapy.',
+        };
+
+        const collapsed = resolveCustomItemsDisplay(classifications, customFields, false);
+        expect(collapsed.totalCount).toBe(15);
+        expect(collapsed.hasToggle).toBe(true);
+        expect(collapsed.visibleItems.length).toBe(2);
+        expect(collapsed.visibleItems[0].label).toBe('Senior');
+        expect(collapsed.visibleItems[1].label).toBe('PhilHealth');
+        expect(collapsed.hiddenCount).toBe(13);
+        expect(collapsed.toggleLabel).toBe('+13 more');
+      });
+
+      test('5.8.3 Expanded state reveals all 15 items and changes toggle button to "See less"', () => {
+        const classifications = ['Senior', 'PhilHealth'];
+        const customFields = {
+          category: 'Retiree',
+          workplace: 'Taguig City',
+          member_type: 'MM',
+          primary_city: 'Taguig City',
+          seeded_batch: 'scale_test_1000',
+          classification: 'General',
+          primary_barangay: 'Fort Bonifacio',
+          primary_province: 'Metro Manila',
+          primary_address_line: '12 BGC High Street',
+          emergency_contact_name: 'Dee, Roberto',
+          emergency_contact_phone: '0918-672-3884',
+          emergency_contact_relationship: 'Spouse',
+          personal_medical_history_notes: 'Maintained on prescription therapy.',
+        };
+
+        const expanded = resolveCustomItemsDisplay(classifications, customFields, true);
+        expect(expanded.totalCount).toBe(15);
+        expect(expanded.hasToggle).toBe(true);
+        expect(expanded.visibleItems.length).toBe(15);
+        expect(expanded.toggleLabel).toBe('See less');
+      });
+
+      test('5.8.4 Interactive row toggle dictionary toggles individual row without mutating adjacent rows', () => {
+        let expandedState: Record<string, boolean> = {};
+        const toggleRow = (rowKey: string) => {
+          expandedState = {
+            ...expandedState,
+            [rowKey]: !expandedState[rowKey],
+          };
+        };
+
+        const rowKey1 = 'census-row-SQ-001';
+        const rowKey2 = 'census-row-DV-001';
+
+        expect(expandedState[rowKey1]).toBeFalsy();
+        expect(expandedState[rowKey2]).toBeFalsy();
+
+        // Expand row 1
+        toggleRow(rowKey1);
+        expect(expandedState[rowKey1]).toBe(true);
+        expect(expandedState[rowKey2]).toBeFalsy();
+
+        // Expand row 2
+        toggleRow(rowKey2);
+        expect(expandedState[rowKey1]).toBe(true);
+        expect(expandedState[rowKey2]).toBe(true);
+
+        // Collapse row 1
+        toggleRow(rowKey1);
+        expect(expandedState[rowKey1]).toBe(false);
+        expect(expandedState[rowKey2]).toBe(true);
+      });
+    });
   });
 });
 

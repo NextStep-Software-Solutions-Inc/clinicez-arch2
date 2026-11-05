@@ -321,6 +321,13 @@ export default function DashboardScreen() {
   const [censusSearchQuery, setCensusSearchQuery] = useState('');
   const [censusAcuityFilter, setCensusAcuityFilter] = useState<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>('ALL');
   const [censusVisitTypeFilter, setCensusVisitTypeFilter] = useState<string>('ALL');
+  const [expandedCustomRows, setExpandedCustomRows] = useState<Record<string, boolean>>({});
+  const toggleCustomRow = useCallback((rowKey: string) => {
+    setExpandedCustomRows((prev) => ({
+      ...prev,
+      [rowKey]: !prev[rowKey],
+    }));
+  }, []);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsStartDate, setAnalyticsStartDate] = useState('');
   const [analyticsEndDate, setAnalyticsEndDate] = useState('');
@@ -2240,19 +2247,63 @@ export default function DashboardScreen() {
 
                         {/* 3. Classifications & Custom Fields */}
                         <View style={styles.colCustom}>
-                          <View style={styles.badgeWrapRow}>
-                            {classifications.map((c, i) => (
-                              <Badge key={`cls-${i}`} label={c} variant="outline" size="xs" />
-                            ))}
-                            {customPills.map((p, i) => (
-                              <Badge key={`cp-${i}`} label={p} variant="neutral" size="xs" />
-                            ))}
-                            {classifications.length === 0 && customPills.length === 0 && (
-                              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                                None
-                              </ThemedText>
-                            )}
-                          </View>
+                          {(() => {
+                            const allCustomItems = [
+                              ...classifications.map((c, i) => ({
+                                key: `cls-${i}`,
+                                label: c,
+                                variant: 'outline' as const,
+                              })),
+                              ...customPills.map((p, i) => ({
+                                key: `cp-${i}`,
+                                label: p,
+                                variant: 'neutral' as const,
+                              })),
+                            ];
+                            const isExpanded = !!expandedCustomRows[rowKey];
+                            const visibleItems =
+                              isExpanded || allCustomItems.length <= 2
+                                ? allCustomItems
+                                : allCustomItems.slice(0, 2);
+                            const hiddenCount = allCustomItems.length - 2;
+
+                            return (
+                              <View style={styles.badgeWrapRow}>
+                                {allCustomItems.length === 0 ? (
+                                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                    None
+                                  </ThemedText>
+                                ) : (
+                                  <>
+                                    {visibleItems.map((ci) => (
+                                      <Badge
+                                        key={ci.key}
+                                        label={ci.label}
+                                        variant={ci.variant}
+                                        size="xs"
+                                      />
+                                    ))}
+                                    {allCustomItems.length > 2 && (
+                                      <Pressable
+                                        onPress={() => toggleCustomRow(rowKey)}
+                                        style={styles.seeMorePill}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={
+                                          isExpanded
+                                            ? 'Collapse custom fields'
+                                            : `Show ${hiddenCount} more custom fields`
+                                        }
+                                      >
+                                        <ThemedText style={styles.seeMoreText}>
+                                          {isExpanded ? 'See less' : `+${hiddenCount} more`}
+                                        </ThemedText>
+                                      </Pressable>
+                                    )}
+                                  </>
+                                )}
+                              </View>
+                            );
+                          })()}
                         </View>
 
                         {/* 4. Attending Staff */}
@@ -3614,5 +3665,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.xs,
+  },
+  seeMorePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 1,
+    paddingHorizontal: theme.spacing.xs + 2,
+    borderRadius: theme.radii.xs,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    alignSelf: 'flex-start',
+  },
+  seeMoreText: {
+    fontSize: theme.fontSizes.xs - 2,
+    fontWeight: '700',
+    color: theme.colors.primaryDark,
+    lineHeight: 12,
+    letterSpacing: 0.4,
   },
 });
