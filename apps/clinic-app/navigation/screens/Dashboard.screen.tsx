@@ -62,7 +62,7 @@ import { EditVitalsModal } from '../../components/consultation';
 
 type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
 type ReportType = 'DAILY_EOD' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
-type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'OnHold' | 'NoShow' | 'Completed';
+type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'PendingProcedure' | 'OnHold' | 'NoShow' | 'Completed';
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
@@ -843,6 +843,7 @@ export default function DashboardScreen() {
       Waiting: count('Waiting'),
       Triaged: count('Triaged'),
       InConsultation: count('InConsultation'),
+      PendingProcedure: count('PendingProcedure'),
       OnHold: count('OnHold'),
       NoShow: count('NoShow'),
       Completed: items.filter((q) => q.status === 'Completed' || q.status === 'DischargedNonDoctor').length,
@@ -1004,6 +1005,7 @@ export default function DashboardScreen() {
                 { value: 'Waiting', label: 'Waiting', count: queueCounts.Waiting },
                 { value: 'Triaged', label: 'Triaged', count: queueCounts.Triaged },
                 { value: 'InConsultation', label: 'In consultation', count: queueCounts.InConsultation },
+                { value: 'PendingProcedure', label: 'Procedure bay', count: queueCounts.PendingProcedure },
                 { value: 'OnHold', label: 'On hold', count: queueCounts.OnHold },
                 { value: 'NoShow', label: 'No show', count: queueCounts.NoShow },
                 { value: 'Completed', label: 'Completed', count: queueCounts.Completed },
@@ -1061,8 +1063,9 @@ export default function DashboardScreen() {
             const canCancel = !isTerminal;
             const canReactivate = isOnHold || item.status === 'NoShow';
             const canAssignOrReassign = !isTerminal;
+            const canExecuteProcedure = item.status === 'PendingProcedure';
 
-            const hasCareActions = canCall || canExamine || canTriage || canAssignOrReassign;
+            const hasCareActions = canCall || canExamine || canTriage || canAssignOrReassign || canExecuteProcedure;
             const hasFlowActions = canHold || canReactivate || canDischarge || isCompleted;
             const hasExceptionActions = canNoShow || canCancel;
             const hasEmergencyActions = canDivert;
@@ -1157,6 +1160,22 @@ export default function DashboardScreen() {
                                       patientId: item.patientId,
                                       patientName: item.patientName,
                                       queueId: item.id,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {canExecuteProcedure ? (
+                                <Button
+                                  title="Perform procedure"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="syringe"
+                                  onPress={() =>
+                                    navigation.navigate('Consultations', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                      queueId: item.id,
+                                      initialChartTab: 'procedures',
                                     })
                                   }
                                 />

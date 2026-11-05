@@ -262,11 +262,18 @@ public sealed class PatientCodeGenerator : IPatientCodeGenerator
             var unsavedAddedIds = _dbContext.ChangeTracker.Entries<Patient>()
                 .Where(e => e.State == EntityState.Added)
                 .Select(e => e.Entity.Id)
-                .ToHashSet();
+                .ToList();
 
-            var existingCodes = await _dbContext.Patients
+            var query = _dbContext.Patients
                 .IgnoreQueryFilters()
-                .Where(p => p.ClinicId == clinicId && !unsavedAddedIds.Contains(p.Id) && p.PatientCode != null && p.PatientCode.StartsWith(prefix))
+                .Where(p => p.ClinicId == clinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix));
+
+            if (unsavedAddedIds.Count > 0)
+            {
+                query = query.Where(p => !unsavedAddedIds.Contains(p.Id));
+            }
+
+            var existingCodes = await query
                 .Select(p => p.PatientCode)
                 .ToListAsync(ct);
 

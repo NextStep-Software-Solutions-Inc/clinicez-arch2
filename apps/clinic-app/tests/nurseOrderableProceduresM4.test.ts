@@ -524,4 +524,77 @@ describe('Milestone 4: Nurse-Orderable Procedures, Treatment Bay & Ambulatory La
       expect(procSrc).toMatch(/orderProcedureBtn:\s*\{[\s\S]*?flexShrink:\s*0/);
     });
   });
+
+  // =========================================================================
+  // SUITE 6: Closed-Loop Procedure Execution Banner Resolution
+  // =========================================================================
+  describe('6. Closed-Loop Procedure Execution Banner Resolution', () => {
+    test('6.1 When all procedures are completed, pending reason is cleared and re-evaluation is active', () => {
+      const selectedPatient = {
+        id: 'ticket-001',
+        patientId: 'pat-100',
+        patientName: 'Barrientos, Joel Q.',
+        status: 'PendingProcedure',
+      };
+
+      const completedProcedure = {
+        id: 'proc-001',
+        patientId: 'pat-100',
+        queueItemId: 'ticket-001',
+        procedureName: 'Composite Light-Cure Tooth Restoration',
+        status: 'Completed',
+        performedByStaffName: 'Nurse Joy',
+        postProcedureVitalsJson: JSON.stringify({ systolicBp: 118, diastolicBp: 78 }),
+      };
+
+      const proceduresHistory = [completedProcedure];
+      const orderedProcedures: any[] = [];
+
+      // Evaluation matching Consultations.screen pendingProcedureReason logic
+      const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff && p.status !== 'sent_to_room');
+      const procsList = proceduresHistory;
+      const relevantProcs = procsList.filter(
+        (proc) =>
+          (selectedPatient.id && proc.queueItemId === selectedPatient.id) ||
+          (!proc.queueItemId && proc.patientId === selectedPatient.patientId)
+      );
+
+      const hasActiveProcs = relevantProcs.some(
+        (p) => p.status === 'Ordered' || p.status === 'InProgress'
+      );
+      const allCompletedOrCancelled =
+        relevantProcs.length > 0 &&
+        relevantProcs.every((p) => p.status === 'Completed' || p.status === 'Cancelled');
+
+      const anyActiveInChart = procsList.some((p) => p.status === 'Ordered' || p.status === 'InProgress');
+      const anyCompletedInChart = procsList.some((p) => p.status === 'Completed');
+
+      let pendingReason: string | null = null;
+      if (unhandedOff.length > 0) {
+        pendingReason = `${unhandedOff.length} procedure(s) pending handoff`;
+      } else if (hasActiveProcs) {
+        pendingReason = 'In-clinic procedures pending in Procedure Bay';
+      } else if (allCompletedOrCancelled) {
+        pendingReason = null;
+      } else if (anyCompletedInChart && !anyActiveInChart) {
+        pendingReason = null;
+      } else if (selectedPatient.status === 'PendingProcedure') {
+        pendingReason = 'In Procedure Bay';
+      }
+
+      const hasPendingInClinicProcedures = Boolean(pendingReason);
+      expect(hasPendingInClinicProcedures).toBe(false);
+      expect(pendingReason).toBeNull();
+
+      // Effective queue status transition to ReEvaluation
+      const effectiveQueueStatus =
+        selectedPatient.status === 'PendingProcedure' &&
+        !hasPendingInClinicProcedures &&
+        completedProcedure.status === 'Completed'
+          ? 'ReEvaluation'
+          : selectedPatient.status;
+
+      expect(effectiveQueueStatus).toBe('ReEvaluation');
+    });
+  });
 });

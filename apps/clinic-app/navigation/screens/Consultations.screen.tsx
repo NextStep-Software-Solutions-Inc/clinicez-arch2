@@ -667,6 +667,7 @@ export default function ConsultationsScreen() {
   // SOAP Inputs
   const [subjective, setSubjective] = useState('');
   const [objective, setObjective] = useState('');
+  const [importedProcedureIds, setImportedProcedureIds] = useState<string[]>([]);
   const [assessment, setAssessment] = useState('');
   const [plan, setPlan] = useState('');
   const [homeInstructions, setHomeInstructions] = useState('');
@@ -1567,6 +1568,7 @@ export default function ConsultationsScreen() {
     setBanner(null);
     setSubjective(p.chiefComplaint ? `Patient presents with: ${p.chiefComplaint}.` : '');
     setObjective('');
+    setImportedProcedureIds([]);
     setAssessment('');
     setPlan('');
     setHomeInstructions('');
@@ -1684,6 +1686,7 @@ export default function ConsultationsScreen() {
     setBanner(null);
     setSubjective(selectedPatient.chiefComplaint ? `Follow-up: ${selectedPatient.chiefComplaint}.` : '');
     setObjective('');
+    setImportedProcedureIds([]);
     setAssessment('');
     setPlan('');
     setHomeInstructions('');
@@ -1705,9 +1708,14 @@ export default function ConsultationsScreen() {
     setPrescriptionSlip(null);
   };
 
-  const handleSelectPatient = (p: PatientQueueItem) => {
-    if (p.id === selectedPatient?.id) return;
+  const handleSelectPatient = (p: PatientQueueItem, explicitTab?: ChartReviewTab) => {
+    if (p.id === selectedPatient?.id && !explicitTab) return;
     setSelectedPatient(p);
+    if (explicitTab) {
+      setActiveChartTab(explicitTab);
+    } else if (p.status === 'PendingProcedure') {
+      setActiveChartTab('procedures');
+    }
     resetEncounter(p);
     loadPatientContext(p);
   };
@@ -1721,6 +1729,7 @@ export default function ConsultationsScreen() {
           patientName?: string;
           directVisitMode?: 'regular' | 'yakap';
           forceSeparateVisit?: boolean;
+          initialChartTab?: ChartReviewTab;
         }
       | undefined;
     const targetQueueId = params?.queueId ?? params?.queueItemId;
@@ -1748,7 +1757,7 @@ export default function ConsultationsScreen() {
       if (params?.directVisitMode === 'yakap') {
         setPhilHealthAtc('WALKEDIN');
       }
-      handleSelectPatient(target);
+      handleSelectPatient(target, params?.initialChartTab);
       return;
     }
 
@@ -1768,7 +1777,7 @@ export default function ConsultationsScreen() {
             fetchedTarget,
             ...(prev || []).filter((p) => p.id !== fetchedTarget.id),
           ]);
-          handleSelectPatient(fetchedTarget);
+          handleSelectPatient(fetchedTarget, params?.initialChartTab);
           return;
         }
       }
@@ -1799,7 +1808,7 @@ export default function ConsultationsScreen() {
             ephemeralPatient,
             ...(prev || []).filter((p) => p.id !== ephemeralPatient.id),
           ]);
-          handleSelectPatient(ephemeralPatient);
+          handleSelectPatient(ephemeralPatient, params?.initialChartTab);
           if (forceSeparate) {
             setIsFollowUpEncounter(true);
           }
@@ -2448,6 +2457,16 @@ export default function ConsultationsScreen() {
     const doctor = requireSigner();
     if (!doctor) return;
 
+    if (hasPendingInClinicProcedures) {
+      const msg = `Encounter signing is locked: ${pendingProcedureReason ?? 'In-clinic procedures are pending in the Procedure Bay'}. All ordered procedures must be executed or cancelled before signing.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
+    }
+
     // Clinical Decision Support (CDS) Critical Override Gate
     const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
     if (criticalAlerts.length > 0 && (!cdsOverrideReason.trim() || !overrideConfirmed)) {
@@ -2750,44 +2769,17 @@ export default function ConsultationsScreen() {
       }
     }
 
-    // Step 4: Auto-order in-clinic procedures for the nursing/treatment station BEFORE signing
-    const targetTreatmentRoom =
-      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
-    for (const proc of orderedProcedures) {
-      if (!proc.isHandedOff) {
-        const procInfo = procedureCatalog.find(
-          (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
-        );
-        const [, procErr] = await clinicService.orderProcedure({
-          patientId: activeVisit.patientId,
-          patientName: activeVisit.patientName,
-          queueItemId: activeVisit.id,
-          consultationId,
-          procedureCode: proc.code || procInfo?.code,
-          procedureName: proc.name,
-          category: proc.category || procInfo?.category || 'Procedure',
-          orderedByDoctorId: doctor.id,
-          orderedByDoctorName: doctor.name,
-          targetRoomId: proc.targetRoomId || targetTreatmentRoom?.id,
-          targetRoomName: proc.targetRoomName || targetTreatmentRoom?.name,
-          toothNumber: proc.toothNumber,
-          toothSurface: proc.toothSurface,
-          clinicalNotes: proc.instructions
-            ? `${proc.instructions} (Assessment: ${assessment || 'Evaluation'})`
-            : `Ordered during encounter for ${assessment || 'Evaluation'}`,
-        });
-        if (procErr) {
-          setIsSigning(false);
-          const reason = procErr.message || `Unable to order procedure "${proc.name}"`;
-          const msg = `Cannot sign encounter — Step failed: Procedure Order (${proc.name}: ${reason}). Encounter was not signed.`;
-          setBanner({
-            text: msg,
-            isError: true,
-          });
-          notify.error(msg, { traceId: procErr.traceId });
-          return;
-        }
-      }
+    // Step 4: Verify that no in-clinic procedures remain pending execution or handoff
+    const unhandedOffProcs = orderedProcedures.filter((p) => !p.isHandedOff && p.status !== 'sent_to_room');
+    if (unhandedOffProcs.length > 0) {
+      setIsSigning(false);
+      const msg = `Cannot sign encounter — ${unhandedOffProcs.length} in-clinic procedure(s) have not been handed off or executed in the Procedure Bay.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
     }
 
     // Step 5: Sign Consultation ONLY after all pre-sign steps succeeded
@@ -2950,6 +2942,16 @@ export default function ConsultationsScreen() {
 
     const doctor = requireSigner();
     if (!doctor) return;
+
+    if (hasPendingInClinicProcedures) {
+      const msg = `Encounter signing is locked: ${pendingProcedureReason ?? 'In-clinic procedures are pending in the Procedure Bay'}. All ordered procedures must be executed or cancelled before signing.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
+    }
 
     // Clinical Decision Support (CDS) Critical Override Gate
     const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
@@ -3162,10 +3164,78 @@ export default function ConsultationsScreen() {
     ? (serverReadiness ? serverReadiness.isReady : localEvaluation.isReady)
     : true;
 
+  const pendingProcedureReason = useMemo(() => {
+    if (!selectedPatient) return null;
+
+    // 1. Unhanded-off procedures drafted in workstation
+    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff && p.status !== 'sent_to_room');
+    if (unhandedOff.length > 0) {
+      return `${unhandedOff.length} procedure(s) pending handoff`;
+    }
+
+    const procsList = patientChart?.proceduresHistory || [];
+    // 2. Active procedures in chart for this patient/visit
+    const relevantProcs = procsList.filter(
+      (proc) =>
+        (selectedPatient.id && proc.queueItemId === selectedPatient.id) ||
+        (signedConsultationId && proc.consultationId === signedConsultationId) ||
+        (!proc.queueItemId && selectedPatient.patientId && proc.patientId === selectedPatient.patientId)
+    );
+
+    const hasActiveProcs = relevantProcs.some(
+      (p) => p.status === 'Ordered' || p.status === 'InProgress'
+    );
+    if (hasActiveProcs) {
+      return 'In-clinic procedures pending in Procedure Bay';
+    }
+
+    // If there are procedures for this visit/patient and all are Completed/Cancelled, NO procedures are pending!
+    if (relevantProcs.length > 0 && relevantProcs.every((p) => p.status === 'Completed' || p.status === 'Cancelled')) {
+      return null;
+    }
+
+    // Check if the patient chart as a whole has completed procedures and NO active ones
+    const anyActiveInChart = procsList.some((p) => p.status === 'Ordered' || p.status === 'InProgress');
+    const anyCompletedInChart = procsList.some((p) => p.status === 'Completed');
+    if (anyCompletedInChart && !anyActiveInChart) {
+      return null;
+    }
+
+    // 3. Fallback: If queue status is PendingProcedure and there are no completed procedures to contradict it
+    if (selectedPatient.status === 'PendingProcedure') {
+      return 'In Procedure Bay';
+    }
+
+    return null;
+  }, [selectedPatient, patientChart?.proceduresHistory, signedConsultationId, orderedProcedures]);
+
+  const hasPendingInClinicProcedures = Boolean(pendingProcedureReason);
+
   const latestExecutedProcedure = useMemo(() => {
     const list = patientChart?.proceduresHistory || [];
-    return list.find((p) => p.status === 'Completed') || list[0] || null;
+    return list.find((p) => p.status === 'Completed') || null;
   }, [patientChart?.proceduresHistory]);
+
+  // Automatically sync patient status to ReEvaluation when procedures are completed
+  useEffect(() => {
+    if (
+      selectedPatient?.status === 'PendingProcedure' &&
+      !hasPendingInClinicProcedures &&
+      latestExecutedProcedure?.status === 'Completed'
+    ) {
+      setSelectedPatient((prev) =>
+        prev && prev.status === 'PendingProcedure' ? { ...prev, status: 'ReEvaluation' } : prev
+      );
+      setPatients((prev) =>
+        prev.map((item) =>
+          item.id === selectedPatient?.id && item.status === 'PendingProcedure'
+            ? { ...item, status: 'ReEvaluation' }
+            : item
+        )
+      );
+      loadQueue().catch(() => {});
+    }
+  }, [selectedPatient?.id, selectedPatient?.status, hasPendingInClinicProcedures, latestExecutedProcedure?.status, loadQueue]);
 
   const formatProcedureVitals = (jsonStr?: string) => {
     if (!jsonStr) return 'Not recorded';
@@ -3183,10 +3253,28 @@ export default function ConsultationsScreen() {
     }
   };
 
+  const isPostProcedureVitalsImported = useMemo(() => {
+    if (!latestExecutedProcedure) return false;
+    if (importedProcedureIds.includes(latestExecutedProcedure.id)) return true;
+    if (!objective) return false;
+    const marker = `Post-${latestExecutedProcedure.procedureName} Vitals:`;
+    return objective.includes(marker);
+  }, [latestExecutedProcedure, importedProcedureIds, objective]);
+
   const handleImportPostProcedureVitals = (proc?: ClinicalProcedureRecord | null) => {
     if (!proc) return;
+    const marker = `Post-${proc.procedureName} Vitals:`;
+    if (objective.includes(marker) || importedProcedureIds.includes(proc.id)) {
+      notify.info('Post-procedure findings are already included in Objective notes.');
+      return;
+    }
     const postStr = `\nPost-${proc.procedureName} Vitals: ${formatProcedureVitals(proc.postProcedureVitalsJson)}. Nurse Notes: ${proc.clinicalNotes || 'Tolerated well'}. Complications: ${proc.complications || 'None'}.`;
-    setObjective((prev) => (prev ? `${prev.trim()}${postStr}` : postStr.trim()));
+    setObjective((prev) => {
+      if (!prev) return postStr.trim();
+      if (prev.includes(marker)) return prev;
+      return `${prev.trim()}${postStr}`;
+    });
+    setImportedProcedureIds((prev) => (prev.includes(proc.id) ? prev : [...prev, proc.id]));
     notify.success('Imported post-procedure findings into Objective notes.');
   };
 
@@ -3721,6 +3809,29 @@ export default function ConsultationsScreen() {
     if (!labErr && labData) setLabOrders(labData);
   }, [selectedPatient?.patientId, patientRecord]);
 
+  // Specialized refresh for Procedures tab that reloads chart + syncs queue and patient status
+  const refreshProceduresTab = useCallback(async () => {
+    const patientId = selectedPatient?.patientId || patientRecord?.id;
+    if (patientId) {
+      await refreshPatientChart(patientId).catch(() => {});
+    }
+    await loadQueue().catch(() => {});
+    setSelectedPatient((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        status: prev.status === 'PendingProcedure' ? 'ReEvaluation' : prev.status,
+      };
+    });
+    setPatients((prev) =>
+      prev.map((item) =>
+        item.id === selectedPatient?.id && item.status === 'PendingProcedure'
+          ? { ...item, status: 'ReEvaluation' }
+          : item
+      )
+    );
+  }, [selectedPatient?.patientId, selectedPatient?.id, patientRecord?.id, refreshPatientChart, loadQueue]);
+
   const handleOpenOrderProcedureModal = () => {
     setOrderSearchInitialCategory('Procedure');
     setOrderSearchModalVisible(true);
@@ -3845,8 +3956,10 @@ export default function ConsultationsScreen() {
         <NursingProceduresTab
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
+          patientName={selectedPatient?.patientName}
+          queueItemId={selectedPatient?.id}
           procedures={patientChart?.proceduresHistory || []}
-          onRefreshChart={refreshPatientChart}
+          onRefreshChart={refreshProceduresTab}
           onOrderProcedure={handleOpenOrderProcedureModal}
         />
       )}
@@ -5328,15 +5441,17 @@ export default function ConsultationsScreen() {
             ) : (
               <Button
                 title={
-                  isYakapEligible && !isYakapReady
+                  hasPendingInClinicProcedures
+                    ? `Signing locked (${pendingProcedureReason ?? 'In Procedure Bay'})`
+                    : isYakapEligible && !isYakapReady
                     ? `Signing locked (${(serverReadiness || localEvaluation).missingFields.length} requirements pending)`
                     : 'Sign & sync encounter'
                 }
-                icon={isYakapEligible && !isYakapReady ? 'lock' : 'check'}
+                icon={hasPendingInClinicProcedures || (isYakapEligible && !isYakapReady) ? 'lock' : 'check'}
                 size="lg"
-                variant={isYakapEligible && !isYakapReady ? 'outline' : 'primary'}
+                variant={hasPendingInClinicProcedures || (isYakapEligible && !isYakapReady) ? 'outline' : 'primary'}
                 loading={isSigning}
-                disabled={isSigning || (isYakapEligible && !isYakapReady)}
+                disabled={isSigning || hasPendingInClinicProcedures || (isYakapEligible && !isYakapReady)}
                 onPress={handleInitiateSignAndReviewChargeSlip}
               />
             )}
@@ -5510,7 +5625,18 @@ export default function ConsultationsScreen() {
                 const isSelected = selectedPatient?.id === p.id;
                 const isEmergency = p.priority === 'Emergency';
                 const isUrgent = p.priority === 'Urgent';
-                const roomTag = p.roomOrStation ? ` · ${p.roomOrStation}` : '';
+                const effectiveQueueStatus: QueueStatus =
+                  p.status === 'PendingProcedure' &&
+                  p.id === selectedPatient?.id &&
+                  !hasPendingInClinicProcedures &&
+                  latestExecutedProcedure?.status === 'Completed'
+                    ? 'ReEvaluation'
+                    : p.status;
+
+                const roomTag =
+                  p.roomOrStation && !(effectiveQueueStatus === 'ReEvaluation' && p.roomOrStation === 'Treatment Room')
+                    ? ` · ${p.roomOrStation}`
+                    : '';
 
                 const getStatusInfo = (status: QueueStatus): { label: string; variant: BadgeVariant } | null => {
                   switch (status) {
@@ -5529,7 +5655,7 @@ export default function ConsultationsScreen() {
                   }
                 };
 
-                const statusInfo = getStatusInfo(p.status);
+                const statusInfo = getStatusInfo(effectiveQueueStatus);
 
                 return (
                   <Pressable
@@ -5647,8 +5773,37 @@ export default function ConsultationsScreen() {
               />
             </View>
 
+            {/* Procedure Bay In-Flight Alert Banner */}
+            {hasPendingInClinicProcedures && !isSigned && (
+              <Card style={styles.procedureBayBanner}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.row}>
+                    <Icon name="clock" size={theme.sizes.iconMd} color={theme.colors.warningText} />
+                    <View style={{ flex: 1 }}>
+                      <ThemedText variant="bodyBold" color={theme.colors.warningText}>
+                        Patient is in Procedure Bay (Pending Execution)
+                      </ThemedText>
+                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                        In-clinic procedures have been ordered and are pending execution at the treatment station. Encounter signing is locked until procedures are completed or cancelled.
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <Badge label="Procedure Bay" variant="warning" size="sm" />
+                </View>
+                <View style={[styles.actionRow, { marginTop: 8 }]}>
+                  <Button
+                    title="Perform In-Clinic Procedure"
+                    icon="syringe"
+                    variant="primary"
+                    size="sm"
+                    onPress={() => handleSelectChartTab('procedures')}
+                  />
+                </View>
+              </Card>
+            )}
+
             {/* Doctor Re-Evaluation Alert Banner (Closed-Loop In-Clinic Procedures Feature 20) */}
-            {(selectedPatient.status === 'ReEvaluation' || latestExecutedProcedure?.status === 'Completed') ? (
+            {(!hasPendingInClinicProcedures && (selectedPatient.status === 'ReEvaluation' || latestExecutedProcedure?.status === 'Completed')) ? (
               <Card style={styles.reEvalBanner}>
                 <View style={styles.rowBetween}>
                   <View style={styles.row}>
@@ -5705,10 +5860,15 @@ export default function ConsultationsScreen() {
 
                 <View style={styles.actionRow}>
                   <Button
-                    title="Import Post-Procedure Vitals into Objective"
-                    icon="plus"
-                    variant="primary"
+                    title={
+                      isPostProcedureVitalsImported
+                        ? 'Imported into Objective'
+                        : 'Import Post-Procedure Vitals into Objective'
+                    }
+                    icon={isPostProcedureVitalsImported ? 'check' : 'plus'}
+                    variant={isPostProcedureVitalsImported ? 'outline' : 'primary'}
                     size="sm"
+                    disabled={isPostProcedureVitalsImported}
                     onPress={() => handleImportPostProcedureVitals(latestExecutedProcedure)}
                   />
                 </View>
@@ -7390,6 +7550,14 @@ const styles = StyleSheet.create({
   queuePatientChipUrgent: {
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.urgent,
+  },
+  procedureBayBanner: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   reEvalBanner: {
     backgroundColor: theme.colors.infoBg,

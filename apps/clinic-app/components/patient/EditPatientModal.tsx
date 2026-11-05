@@ -36,6 +36,21 @@ import GuardianSection, {
 
 export { parseChronicConditionsStringToStructured };
 
+export const VERIFICATION_STATUS_OPTIONS = [
+  {
+    value: 'Verified',
+    label: 'Verified',
+  },
+  {
+    value: 'PendingVerification',
+    label: 'Pending Verification',
+  },
+  {
+    value: 'Unverified',
+    label: 'Unverified',
+  },
+] as const;
+
 export const LEGACY_PRIMARY_ADDRESS_FIELD_KEYS = new Set([
   'primary_address_line',
   'primary_barangay',
@@ -286,6 +301,9 @@ export function EditPatientModal({
   const [sex, setSex] = useState<string>('Male');
   const [genderIdentity, setGenderIdentity] = useState<string>('');
   const [civilStatus, setCivilStatus] = useState<string>('Single');
+  const [verificationStatus, setVerificationStatus] = useState<string>(
+    patient?.verificationStatus || 'Verified'
+  );
   const [sexOptions, setSexOptions] = useState<string[]>([]);
   const [genderIdentityOptions, setGenderIdentityOptions] = useState<SelectOption[]>([]);
   const [civilStatusOptions, setCivilStatusOptions] = useState<string[]>([]);
@@ -511,6 +529,7 @@ export function EditPatientModal({
     setSex(source.sex || 'Male');
     setGenderIdentity(source.genderIdentity || '');
     setCivilStatus(source.civilStatus || 'Single');
+    setVerificationStatus(source.verificationStatus || 'Verified');
     setContactNumber(source.contactNumber || '');
     setEmail(source.email || '');
     setPhilHealthNumber(source.philHealthNumber || '');
@@ -789,7 +808,7 @@ export function EditPatientModal({
       chronicConditions: formatMedicalHistoriesSummary(structuredMedicalHistories) || undefined,
       alerts: hasFullClinicalContext ? alerts.trim() : alerts.trim() || undefined,
       customFields: Object.keys(mergedCustomFields).length > 0 ? mergedCustomFields : undefined,
-      verificationStatus: effectivePatient.verificationStatus || 'Verified',
+      verificationStatus: verificationStatus || effectivePatient.verificationStatus || 'Verified',
       medicalHistories: hasFullClinicalContext
         ? structuredMedicalHistories
         : structuredMedicalHistories.length > 0
@@ -1058,6 +1077,41 @@ export function EditPatientModal({
                         color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
                       >
                         {item}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Verification Status Quick Chips */}
+            <View style={{ gap: theme.spacing.xs }}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                Verification Status
+              </ThemedText>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.pillScroll}
+                contentContainerStyle={styles.pillScrollRow}
+              >
+                {VERIFICATION_STATUS_OPTIONS.map((opt) => {
+                  const isSelected = verificationStatus.toLowerCase() === opt.value.toLowerCase();
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`Verification Status: ${opt.label}`}
+                      style={[styles.scrollablePill, isSelected && styles.pillActive]}
+                      onPress={() => setVerificationStatus(opt.value)}
+                    >
+                      <ThemedText
+                        variant="smallBold"
+                        numberOfLines={1}
+                        color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                      >
+                        {opt.label}
                       </ThemedText>
                     </Pressable>
                   );

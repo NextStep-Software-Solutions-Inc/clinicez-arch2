@@ -198,8 +198,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { isWorkstation, isDesktop } = useBreakpoint();
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
   const routeParams = route?.params;
-  const openPatientId = routeParams?.openPatientId || routeParams?.patientId;
-  const openRegister = routeParams?.openRegister;
+  const openRegister = Boolean(routeParams?.openRegister);
+  const rawOpenPatientId = routeParams?.openPatientId || routeParams?.patientId;
+  const openPatientId =
+    openRegister || rawOpenPatientId === 'quick-action-register'
+      ? undefined
+      : rawOpenPatientId;
   const routeTab = routeParams?.tab as ChartTab | undefined;
   const rawRouteTooth = routeParams?.toothNumber ?? routeParams?.tooth;
   const routeToothNumber = useMemo(() => {

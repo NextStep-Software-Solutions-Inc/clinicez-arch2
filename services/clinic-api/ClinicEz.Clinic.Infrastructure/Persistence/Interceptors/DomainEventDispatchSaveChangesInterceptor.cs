@@ -10,6 +10,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Persistence.Interceptors;
 
@@ -88,7 +89,15 @@ public sealed class DomainEventDispatchSaveChangesInterceptor : SaveChangesInter
 
         foreach (var domainEvent in eventsToDispatch)
         {
-            await publisher.Publish(domainEvent, cancellationToken);
+            try
+            {
+                await publisher.Publish((object)domainEvent, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                var logger = _serviceProvider.GetService<ILogger<DomainEventDispatchSaveChangesInterceptor>>();
+                logger?.LogWarning(ex, "Domain event {EventType} dispatch failed: {Message}", domainEvent.GetType().Name, ex.Message);
+            }
         }
     }
 

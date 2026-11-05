@@ -1,6 +1,7 @@
 // token-guard:ignore-file
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 (globalThis as any).__DEV__ = true;
 
@@ -267,6 +268,22 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     expect(element.props.patient.firstName).toBe('Maria');
     expect(element.props.patient.sex).toBe('Female');
     expect(element.props.patient.civilStatus).toBe('Married');
+  });
+
+  test('F2: Verification status quick chips render and include Verified, Pending Verification, and Unverified', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(EditPatientModal, {
+        visible: true,
+        patient: { ...samplePatient, verificationStatus: 'PendingVerification' },
+        onClose: () => {},
+        onSaved: () => {},
+      })
+    );
+
+    expect(markup).toContain('Verification Status');
+    expect(markup).toContain('aria-label="Verification Status: Verified"');
+    expect(markup).toContain('aria-label="Verification Status: Pending Verification"');
+    expect(markup).toContain('aria-label="Verification Status: Unverified"');
   });
 
   test('F3 & F6: Demographic formatting shows long age and verified identity', () => {

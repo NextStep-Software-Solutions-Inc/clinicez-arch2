@@ -60,8 +60,7 @@ import {
 export type LineItemForm = BillingLineItem;
 export { consolidateLineItems };
 
-export type BillingMode = 'queue' | 'registry' | 'retail';
-type BillingTab = 'active' | 'unsettled' | 'paid';
+export type BillingMode = 'queue' | 'unsettled' | 'paid' | 'registry' | 'retail';
 
 /** The patient being billed: either a queue entry or a patient opened from another screen. */
 interface BillingPatient {
@@ -170,7 +169,6 @@ export default function BillingScreen() {
   const { current: currentStaff, currentName } = useStaff();
 
   const [billingMode, setBillingMode] = useState<BillingMode>('queue');
-  const [activeTab, setActiveTab] = useState<BillingTab>('active');
   const [walkInCustomerName, setWalkInCustomerName] = useState('');
   const [walkInCustomerTouched, setWalkInCustomerTouched] = useState(false);
   const [registrySearch, setRegistrySearch] = useState('');
@@ -597,7 +595,7 @@ export default function BillingScreen() {
       isPromissory,
     };
     handleSelectPatient(p);
-    setActiveTab('active');
+    setBillingMode('queue');
   }, [handleSelectPatient]);
 
   useEffect(() => {
@@ -671,7 +669,7 @@ export default function BillingScreen() {
   const changeDue = paymentMethod === 'Cash' ? Math.max(0, tenderedVal - amountToCollect) : 0;
 
   const patientChoices =
-    selectedPatient && !patients.some((p) => p.key === selectedPatient.key)
+    selectedPatient && !selectedPatient.isWalkInRetail && !patients.some((p) => p.key === selectedPatient.key)
       ? [selectedPatient, ...patients]
       : patients;
 
@@ -851,7 +849,7 @@ export default function BillingScreen() {
       setActiveInvoice(null);
       setLineItems([]);
       await loadInitialData();
-      setActiveTab('unsettled');
+      setBillingMode('unsettled');
     } catch (err: any) {
       Alert.alert('Promissory note failed', err?.message || 'Unable to log promissory note.');
     } finally {
@@ -1360,7 +1358,7 @@ export default function BillingScreen() {
   );
 
   const activePatients = patientChoices.filter(
-    (p) => (!p.isAlreadyBilled || p.hasOpenSoa || p.hasAddOnUnbilled) && !p.isPromissory
+    (p) => !p.isWalkInRetail && (!p.isAlreadyBilled || p.hasOpenSoa || p.hasAddOnUnbilled) && !p.isPromissory
   );
   const patientsToBill = selectedPatient && !activePatients.some((p) => p.key === selectedPatient.key) && !selectedPatient.isWalkInRetail
     ? [selectedPatient, ...activePatients]
@@ -1765,15 +1763,24 @@ export default function BillingScreen() {
           />
         ) : (
           <View style={styles.chipRow}>
-            {services.map(svc => (
-              <Button
+            {services.map((svc) => (
+              <Pressable
                 key={svc.id}
-                size="sm"
-                variant="outline"
-                icon="plus"
-                title={`${svc.name} · ${formatPeso(svc.standardPrice)}`}
+                style={styles.servicePriceChip}
                 onPress={() => handleAddService(svc)}
-              />
+                accessibilityRole="button"
+                accessibilityLabel={`Add service ${svc.name} for ${formatPeso(svc.standardPrice)}`}
+              >
+                <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  {svc.name}
+                </ThemedText>
+                <View style={styles.servicePriceBadge}>
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                    {formatPeso(svc.standardPrice)}
+                  </ThemedText>
+                </View>
+              </Pressable>
             ))}
           </View>
         )}
@@ -2144,6 +2151,73 @@ export default function BillingScreen() {
         >
           Today's Queue
         </ThemedText>
+        <Badge
+          label={`${activePatients.length}`}
+          variant={billingMode === 'queue' ? 'primary' : 'neutral'}
+          size="sm"
+        />
+      </Pressable>
+
+      <Pressable
+        style={[styles.modeTab, billingMode === 'unsettled' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('unsettled');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: billingMode === 'unsettled' }}
+      >
+        <Icon
+          name="alertCircle"
+          size={theme.sizes.iconSm}
+          color={billingMode === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={billingMode === 'unsettled' ? 'bodyBold' : 'body'}
+          color={billingMode === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
+        >
+          Unsettled / Promissory
+        </ThemedText>
+        <Badge
+          label={`${unsettledInvoices.length}`}
+          variant={billingMode === 'unsettled' ? 'emergency' : 'neutral'}
+          size="sm"
+        />
+      </Pressable>
+
+      <Pressable
+        style={[styles.modeTab, billingMode === 'paid' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('paid');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: billingMode === 'paid' }}
+      >
+        <Icon
+          name="checkCircle"
+          size={theme.sizes.iconSm}
+          color={billingMode === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={billingMode === 'paid' ? 'bodyBold' : 'body'}
+          color={billingMode === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
+        >
+          Billed & Paid Today
+        </ThemedText>
+        <Badge
+          label={`${paidInvoicesToday.length}`}
+          variant={billingMode === 'paid' ? 'success' : 'neutral'}
+          size="sm"
+        />
       </Pressable>
 
       <Pressable
@@ -2393,81 +2467,6 @@ export default function BillingScreen() {
     );
   };
 
-  const renderTabBar = () => (
-    <View style={styles.tabBar}>
-      <Pressable
-        style={[styles.tabButton, activeTab === 'active' && styles.tabButtonActive]}
-        onPress={() => setActiveTab('active')}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'active' }}
-      >
-        <Icon
-          name="clock"
-          size={theme.sizes.iconSm}
-          color={activeTab === 'active' ? theme.colors.primary : theme.colors.textSecondary}
-        />
-        <ThemedText
-          variant={activeTab === 'active' ? 'bodyBold' : 'body'}
-          color={activeTab === 'active' ? theme.colors.primary : theme.colors.textSecondary}
-        >
-          Active Queue
-        </ThemedText>
-        <Badge
-          label={`${activePatients.length}`}
-          variant={activeTab === 'active' ? 'primary' : 'neutral'}
-          size="sm"
-        />
-      </Pressable>
-
-      <Pressable
-        style={[styles.tabButton, activeTab === 'unsettled' && styles.tabButtonActive]}
-        onPress={() => setActiveTab('unsettled')}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'unsettled' }}
-      >
-        <Icon
-          name="alertCircle"
-          size={theme.sizes.iconSm}
-          color={activeTab === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
-        />
-        <ThemedText
-          variant={activeTab === 'unsettled' ? 'bodyBold' : 'body'}
-          color={activeTab === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
-        >
-          Unsettled / Promissory
-        </ThemedText>
-        <Badge
-          label={`${unsettledInvoices.length}`}
-          variant={activeTab === 'unsettled' ? 'emergency' : 'neutral'}
-          size="sm"
-        />
-      </Pressable>
-
-      <Pressable
-        style={[styles.tabButton, activeTab === 'paid' && styles.tabButtonActive]}
-        onPress={() => setActiveTab('paid')}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'paid' }}
-      >
-        <Icon
-          name="checkCircle"
-          size={theme.sizes.iconSm}
-          color={activeTab === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
-        />
-        <ThemedText
-          variant={activeTab === 'paid' ? 'bodyBold' : 'body'}
-          color={activeTab === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
-        >
-          Billed & Paid Today
-        </ThemedText>
-        <Badge
-          label={`${paidInvoicesToday.length}`}
-          variant={activeTab === 'paid' ? 'success' : 'neutral'}
-          size="sm"
-        />
-      </Pressable>
-    </View>
-  );
 
   const renderUnsettledPromissory = () => (
     <Card>
@@ -2662,43 +2661,37 @@ export default function BillingScreen() {
         {renderModeSwitcher()}
 
         {billingMode === 'queue' && (
-          <>
-            {renderTabBar()}
+          <View style={[styles.columns, isWide && styles.columnsWide]}>
+            <View style={[styles.column, isWide && styles.mainColumn]}>
+              {renderPatientSelector()}
+              {renderInvoiceItems()}
+              {renderDiscounts()}
+            </View>
+            <View style={[styles.column, isWide && styles.sideColumn]}>
+              {renderPayment()}
+              {renderTotalsAndSettle()}
+            </View>
+          </View>
+        )}
 
-            {activeTab === 'active' && (
-              <View style={[styles.columns, isWide && styles.columnsWide]}>
-                <View style={[styles.column, isWide && styles.mainColumn]}>
-                  {renderPatientSelector()}
-                  {renderInvoiceItems()}
-                  {renderDiscounts()}
-                </View>
-                <View style={[styles.column, isWide && styles.sideColumn]}>
-                  {renderPayment()}
-                  {renderTotalsAndSettle()}
-                </View>
+        {billingMode === 'unsettled' && (
+          <View style={[styles.columns, isWide && styles.columnsWide]}>
+            <View style={[styles.column, isWide && styles.mainColumn]}>
+              {renderUnsettledPromissory()}
+            </View>
+            {selectedPatient && (
+              <View style={[styles.column, isWide && styles.sideColumn]}>
+                {renderPayment()}
+                {renderTotalsAndSettle()}
               </View>
             )}
+          </View>
+        )}
 
-            {activeTab === 'unsettled' && (
-              <View style={[styles.columns, isWide && styles.columnsWide]}>
-                <View style={[styles.column, isWide && styles.mainColumn]}>
-                  {renderUnsettledPromissory()}
-                </View>
-                {selectedPatient && (
-                  <View style={[styles.column, isWide && styles.sideColumn]}>
-                    {renderPayment()}
-                    {renderTotalsAndSettle()}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {activeTab === 'paid' && (
-              <View style={styles.columns}>
-                {renderBilledAndPaidToday()}
-              </View>
-            )}
-          </>
+        {billingMode === 'paid' && (
+          <View style={styles.columns}>
+            {renderBilledAndPaidToday()}
+          </View>
         )}
 
         {billingMode === 'registry' && (
@@ -3063,8 +3056,28 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'center',
   },
+  servicePriceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+  },
+  servicePriceBadge: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 1,
+    borderRadius: theme.radii.xs,
+  },
   modeSegment: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
@@ -3073,11 +3086,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   modeTab: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.sm,
