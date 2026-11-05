@@ -64,54 +64,62 @@ public class CommsTicketAuthenticationHandler : AuthenticationHandler<CommsTicke
         // 3. Validate ticket
         CommsTicketValidationResult validationResult;
 
-        var keyClient = Context.RequestServices.GetService<IHubKeyClient>();
-        if (keyClient != null)
+        try
         {
-            validationResult = await CommsTicketValidator.ValidateAsync(
-                ticket,
-                keyClient,
-                Options.ExpectedTenantId,
-                Options.ExpectedFacilityId,
-                ct: Context.RequestAborted);
-        }
-        else if (!string.IsNullOrWhiteSpace(Options.StaticPublicKeyPem))
-        {
-            validationResult = CommsTicketValidator.Validate(
-                ticket,
-                Options.StaticPublicKeyPem,
-                Options.ExpectedTenantId,
-                Options.ExpectedFacilityId);
-        }
-        else
-        {
-            // Fallback decode for development/test environments without registered Hub key service
-            var parts = ticket.Split('.');
-            if (parts.Length != 2)
+            var keyClient = Context.RequestServices.GetService<IHubKeyClient>();
+            if (keyClient != null)
             {
-                return AuthenticateResult.Fail("Malformed ticket structure: expected {payload}.{signature}.");
+                validationResult = await CommsTicketValidator.ValidateAsync(
+                    ticket,
+                    keyClient,
+                    Options.ExpectedTenantId,
+                    Options.ExpectedFacilityId,
+                    ct: Context.RequestAborted);
             }
-
-            try
+            else if (!string.IsNullOrWhiteSpace(Options.StaticPublicKeyPem))
             {
-                var payloadBytes = Base64UrlHelper.Decode(parts[0]);
-                var payload = System.Text.Json.JsonSerializer.Deserialize<CommsTicketPayload>(payloadBytes, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (payload == null)
+                validationResult = CommsTicketValidator.Validate(
+                    ticket,
+                    Options.StaticPublicKeyPem,
+                    Options.ExpectedTenantId,
+                    Options.ExpectedFacilityId);
+            }
+            else
+            {
+                // Fallback decode for development/test environments without registered Hub key service
+                var parts = ticket.Split('.');
+                if (parts.Length != 2)
                 {
-                    return AuthenticateResult.Fail("Null ticket payload.");
+                    return AuthenticateResult.Fail("Malformed ticket structure: expected {payload}.{signature}.");
                 }
 
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                if (payload.Exp < now - 30)
+                try
                 {
-                    return AuthenticateResult.Fail("Ticket expired.");
-                }
+                    var payloadBytes = Base64UrlHelper.Decode(parts[0]);
+                    var payload = System.Text.Json.JsonSerializer.Deserialize<CommsTicketPayload>(payloadBytes, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (payload == null)
+                    {
+                        return AuthenticateResult.Fail("Null ticket payload.");
+                    }
 
-                validationResult = CommsTicketValidationResult.Success(payload);
+                    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    if (payload.Exp < now - 30)
+                    {
+                        return AuthenticateResult.Fail("Ticket expired.");
+                    }
+
+                    validationResult = CommsTicketValidationResult.Success(payload);
+                }
+                catch (Exception ex)
+                {
+                    return AuthenticateResult.Fail($"Failed to decode ticket: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                return AuthenticateResult.Fail($"Failed to decode ticket: {ex.Message}");
-            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Comms ticket validation threw exception: {Message}", ex.Message);
+            return AuthenticateResult.Fail($"Ticket validation exception: {ex.Message}");
         }
 
         if (!validationResult.IsValid || validationResult.Payload == null)
