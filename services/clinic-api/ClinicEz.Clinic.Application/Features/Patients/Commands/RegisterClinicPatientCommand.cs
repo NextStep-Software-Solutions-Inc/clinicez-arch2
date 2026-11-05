@@ -320,7 +320,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
 
                 var allergy = new PatientAllergy
                 {
-                    Id = Guid.NewGuid(),
+                    Id = _allergyRepo != null ? Guid.NewGuid() : Guid.Empty,
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
@@ -351,7 +351,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             {
                 var allergy = new PatientAllergy
                 {
-                    Id = Guid.NewGuid(),
+                    Id = _allergyRepo != null ? Guid.NewGuid() : Guid.Empty,
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
@@ -378,7 +378,6 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             {
                 var alert = new PatientAlert
                 {
-                    Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,
@@ -390,9 +389,10 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 };
                 patient.Alerts.Add(alert);
             }
+            patient.HasActiveSafetyAlert = alertTitles.Length > 0;
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ChronicConditions))
+        if ((request.MedicalHistories == null || request.MedicalHistories.Count == 0) && !string.IsNullOrWhiteSpace(request.ChronicConditions))
         {
             var split = request.ChronicConditions.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var cond in split)
@@ -401,7 +401,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 {
                     var hist = new PatientMedicalHistory
                     {
-                        Id = Guid.NewGuid(),
+                        Id = _medicalRepo != null ? Guid.NewGuid() : Guid.Empty,
                         TenantId = _clinicContext.TenantId,
                         ClinicId = _clinicContext.ClinicId,
                         PatientId = patient.Id,
@@ -627,6 +627,26 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 m.ClinicalNotes,
                 m.CreatedAt)).ToList();
 
+        var structuredAllergiesDto = p.Allergies?
+            .Where(a => !a.IsDeleted && a.Status == AllergyStatus.Active)
+            .OrderByDescending(a => a.IsAnaphylactic)
+            .ThenBy(a => a.Allergen)
+            .Select(a => new PatientAllergyDto(
+                a.Id,
+                a.ClinicId,
+                a.PatientId,
+                a.Category.ToString(),
+                a.Allergen,
+                a.AllergenDrugCode,
+                a.Severity.ToString(),
+                a.ReactionManifestation,
+                a.IsAnaphylactic,
+                a.Status.ToString(),
+                a.OnsetDate,
+                a.Notes,
+                a.CreatedAt))
+            .ToList();
+
         var allergiesText = allergiesOverride ?? (p.Allergies != null && p.Allergies.Count > 0
             ? string.Join(", ", p.Allergies.Where(a => !a.IsDeleted && a.Status == AllergyStatus.Active).Select(a => a.Allergen))
             : null);
@@ -635,6 +655,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         var chronicConditions = p.MedicalHistories != null && p.MedicalHistories.Count > 0
             ? string.Join(", ", p.MedicalHistories.Where(m => !m.IsDeleted).Select(m => (!string.IsNullOrWhiteSpace(m.SpecificDescription) && (string.Equals(m.ConditionTitle, "Others", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(m.ConditionTitle))) ? m.SpecificDescription.Trim() : m.ConditionTitle.Trim()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase))
             : null;
+        if (string.IsNullOrWhiteSpace(chronicConditions)) chronicConditions = null;
 
         var alertsText = p.Alerts != null && p.Alerts.Count > 0
             ? string.Join(", ", p.Alerts.Where(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active).Select(a => a.Title))
@@ -684,7 +705,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             SyncPatientId: p.CloudPatientId,
             GenderIdentity: p.GenderIdentity,
             Addresses: addressesDto,
-            Guardians: guardiansDto);
+            Guardians: guardiansDto,
+            StructuredAllergies: structuredAllergiesDto);
     }
 
     public static List<PatientAddressDto>? MapAddresses(IEnumerable<PatientAddress>? addresses)

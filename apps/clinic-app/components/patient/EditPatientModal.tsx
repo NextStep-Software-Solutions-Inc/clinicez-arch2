@@ -490,87 +490,96 @@ export function EditPatientModal({
   );
 
   const [saving, setSaving] = useState(false);
+  const [hydratingPatient, setHydratingPatient] = useState(false);
+  const [hydratedPatient, setHydratedPatient] = useState<ClinicPatient | null>(null);
+  const [hasFullClinicalContext, setHasFullClinicalContext] = useState(false);
   const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    if (visible) {
-      clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
-        if (fields && fields.length > 0) {
-          setTenantCustomFields(fields);
-        }
-      });
-    }
-  }, [visible]);
+  const applyPatientToForm = (source: ClinicPatient) => {
+    const isFullRecord =
+      Array.isArray(source.pastMedicalHistories) ||
+      Array.isArray(source.structuredAllergies) ||
+      (source.allergies !== undefined && source.allergies !== null) ||
+      (source.chronicConditions !== undefined && source.chronicConditions !== null);
 
-  useEffect(() => {
-    if (!patient) return;
-
-    setFirstName(patient.firstName || '');
-    setMiddleName(patient.middleName || '');
-    setLastName(patient.lastName || '');
-    setSuffix(patient.suffix || '');
-    setDateOfBirth(patient.dateOfBirth || '');
-    setSex(
-      patient.sex || 'Male'
-    );
-    setGenderIdentity(
-      patient.genderIdentity || ''
-    );
-    setCivilStatus(
-      patient.civilStatus || 'Single'
-    );
-    setContactNumber(patient.contactNumber || '');
-    setEmail(patient.email || '');
-    setPhilHealthNumber(patient.philHealthNumber || '');
-    const pProfile = extractPhilHealthProfileData(patient.customFields, patient);
+    setHasFullClinicalContext(isFullRecord);
+    setFirstName(source.firstName || '');
+    setMiddleName(source.middleName || '');
+    setLastName(source.lastName || '');
+    setSuffix(source.suffix || '');
+    setDateOfBirth(source.dateOfBirth || '');
+    setSex(source.sex || 'Male');
+    setGenderIdentity(source.genderIdentity || '');
+    setCivilStatus(source.civilStatus || 'Single');
+    setContactNumber(source.contactNumber || '');
+    setEmail(source.email || '');
+    setPhilHealthNumber(source.philHealthNumber || '');
+    const pProfile = extractPhilHealthProfileData(source.customFields, source);
     setMemberType(pProfile.memberType);
     setPrincipalMemberPin(pProfile.principalPin);
     setPrincipalFullName(pProfile.principalFullName);
     setPrincipalRelationship(pProfile.principalRelationship);
     setPrincipalDob(pProfile.principalDob);
     setIsPrincipalPinValid(null);
-    setSeniorCitizenId(patient.seniorCitizenId || '');
-    setPwdId(patient.pwdId || '');
-    setBloodType(patient.bloodType || '');
-    const initialAllergies = (patient as any)?.structuredAllergies && Array.isArray((patient as any).structuredAllergies) && (patient as any).structuredAllergies.length > 0
-      ? (patient as any).structuredAllergies
-      : parseAllergiesStringToStructured(patient.allergies);
-    setStructuredAllergies(initialAllergies);
-    const initialConditions: MedicalHistoryItem[] =
-      (patient as any)?.pastMedicalHistories &&
-      Array.isArray((patient as any).pastMedicalHistories) &&
-      (patient as any).pastMedicalHistories.length > 0
-        ? (patient as any).pastMedicalHistories
-        : parseChronicConditionsStringToStructured(patient.chronicConditions);
-    setStructuredMedicalHistories(initialConditions);
-    setAlerts(patient.alerts || '');
+    setSeniorCitizenId(source.seniorCitizenId || '');
+    setPwdId(source.pwdId || '');
+    setBloodType(source.bloodType || '');
 
-    const cf = patient.customFields || {};
-    const existingPerm = (patient.addresses && patient.addresses.length > 0)
-      ? patient.addresses.find((a) => a.addressType === 'Permanent') || patient.addresses[0]
+    const initialAllergies: CreateAllergyRequest[] = Array.isArray(source.structuredAllergies)
+      ? source.structuredAllergies.map((item) => ({
+          category: (['Medication', 'Food', 'Environmental', 'Biologic', 'Other'].includes(item.category)
+            ? item.category
+            : 'Other') as CreateAllergyRequest['category'],
+          allergen: item.allergen,
+          allergenDrugCode: item.allergenDrugCode ?? null,
+          severity: (['Mild', 'Moderate', 'Severe', 'LifeThreatening'].includes(item.severity)
+            ? item.severity
+            : 'Moderate') as CreateAllergyRequest['severity'],
+          reactionManifestation: item.reactionManifestation ?? null,
+          isAnaphylactic: Boolean(item.isAnaphylactic),
+          onsetDate: item.onsetDate ?? null,
+          notes: item.notes ?? null,
+        }))
+      : parseAllergiesStringToStructured(source.allergies);
+    setStructuredAllergies(initialAllergies);
+
+    const initialConditions: MedicalHistoryItem[] = Array.isArray(source.pastMedicalHistories)
+      ? (source.pastMedicalHistories as MedicalHistoryItem[])
+      : parseChronicConditionsStringToStructured(source.chronicConditions);
+    setStructuredMedicalHistories(initialConditions);
+
+    const normalizedAlerts =
+      !isFullRecord && source.alerts === 'Active Safety Alert'
+        ? ''
+        : source.alerts || '';
+    setAlerts(normalizedAlerts);
+
+    const cf = source.customFields || {};
+    const existingPerm = (source.addresses && source.addresses.length > 0)
+      ? source.addresses.find((a) => a.addressType === 'Permanent') || source.addresses[0]
       : null;
     setPermanentAddress({
       addressType: 'Permanent',
       isSameAsPermanent: false,
-      regionPsgc: existingPerm?.regionPsgc ?? patient.regionPsgc ?? null,
-      provincePsgc: existingPerm?.provincePsgc ?? patient.provincePsgc ?? null,
-      cityMunicipalityPsgc: existingPerm?.cityMunicipalityPsgc ?? patient.cityMunicipalityPsgc ?? null,
-      barangayPsgc: existingPerm?.barangayPsgc ?? patient.barangayPsgc ?? null,
+      regionPsgc: existingPerm?.regionPsgc ?? source.regionPsgc ?? null,
+      provincePsgc: existingPerm?.provincePsgc ?? source.provincePsgc ?? null,
+      cityMunicipalityPsgc: existingPerm?.cityMunicipalityPsgc ?? source.cityMunicipalityPsgc ?? null,
+      barangayPsgc: existingPerm?.barangayPsgc ?? source.barangayPsgc ?? null,
       regionName: existingPerm?.regionName ?? null,
-      provinceName: existingPerm?.provinceName ?? cf['primary_province'] ?? (patient as any).province ?? null,
-      cityMunicipalityName: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (patient as any).city ?? null,
-      barangayName: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (patient as any).barangay ?? null,
-      streetAddress: existingPerm?.streetAddress ?? (patient as any).addressLine ?? cf['primary_address_line'] ?? '',
-      zipCode: existingPerm?.zipCode ?? patient.zipCode ?? null,
+      provinceName: existingPerm?.provinceName ?? cf['primary_province'] ?? (source as any).province ?? null,
+      cityMunicipalityName: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (source as any).city ?? null,
+      barangayName: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (source as any).barangay ?? null,
+      streetAddress: existingPerm?.streetAddress ?? (source as any).addressLine ?? cf['primary_address_line'] ?? '',
+      zipCode: existingPerm?.zipCode ?? source.zipCode ?? null,
     });
-    setGuardian(extractInitialGuardianFromPatient(patient));
+    setGuardian(extractInitialGuardianFromPatient(source));
     setGuardianErrors({});
     setIsGuardianPinValid(null);
     setCustomFieldValues({
       ...cf,
-      emergency_contact_name: cf['emergency_contact_name'] ?? (patient as any).emergencyContactName ?? '',
-      emergency_contact_phone: cf['emergency_contact_phone'] ?? (patient as any).emergencyContactPhone ?? '',
-      emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (patient as any).emergencyContactRelationship ?? '',
+      emergency_contact_name: cf['emergency_contact_name'] ?? (source as any).emergencyContactName ?? '',
+      emergency_contact_phone: cf['emergency_contact_phone'] ?? (source as any).emergencyContactPhone ?? '',
+      emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (source as any).emergencyContactRelationship ?? '',
     });
     setCustomFieldErrors({});
     setFieldErrors({});
@@ -600,7 +609,51 @@ export function EditPatientModal({
       setEmployeeId('');
       setDepartment('');
     }
+  };
+
+  useEffect(() => {
+    if (visible) {
+      clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
+        if (fields && fields.length > 0) {
+          setTenantCustomFields(fields);
+        }
+      });
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (!patient) {
+      setHydratedPatient(null);
+      setHasFullClinicalContext(false);
+      return;
+    }
+    setHydratedPatient(patient);
+    applyPatientToForm(patient);
   }, [patient]);
+
+  useEffect(() => {
+    if (!visible || !patient?.id || typeof clinicService.getPatientById !== 'function') {
+      return;
+    }
+
+    let cancelled = false;
+    setHydratingPatient(true);
+    clinicService.getPatientById(patient.id)
+      .then(([fullPatient]) => {
+        if (cancelled || !fullPatient) return;
+        setHydratedPatient(fullPatient);
+        applyPatientToForm(fullPatient);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHydratingPatient(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, patient?.id]);
 
   const handleSave = async () => {
     if (!patient) return;
@@ -678,8 +731,10 @@ export function EditPatientModal({
       }
     }
 
+    const effectivePatient = hydratedPatient || patient;
+
     const mergedCustomFields = mergePatientCustomFields({
-      patient,
+      patient: effectivePatient,
       effectiveCustomFields: renderedCustomFields,
       customFieldValues,
       staticValues,
@@ -708,6 +763,7 @@ export function EditPatientModal({
       : undefined;
 
     const normalizedGuardian = normalizeGuardianPayload(guardian);
+    const hasAddressInput = Boolean(permanentAddress.regionPsgc || permanentAddress.streetAddress?.trim());
 
     const payload: RegisterPatientPayload = {
       firstName: firstName.trim(),
@@ -724,17 +780,29 @@ export function EditPatientModal({
       seniorCitizenId: seniorCitizenId.trim() || undefined,
       pwdId: pwdId.trim() || undefined,
       bloodType: bloodType.trim() || undefined,
-      allergies: allergiesSummary,
-      structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
+      allergies: hasFullClinicalContext ? (allergiesSummary ?? '') : allergiesSummary,
+      structuredAllergies: hasFullClinicalContext
+        ? structuredAllergies
+        : structuredAllergies.length > 0
+          ? structuredAllergies
+          : undefined,
       chronicConditions: formatMedicalHistoriesSummary(structuredMedicalHistories) || undefined,
-      alerts: alerts.trim() || undefined,
+      alerts: hasFullClinicalContext ? alerts.trim() : alerts.trim() || undefined,
       customFields: Object.keys(mergedCustomFields).length > 0 ? mergedCustomFields : undefined,
-      verificationStatus: patient.verificationStatus || 'Verified',
-      medicalHistories: structuredMedicalHistories,
-      addresses: permanentAddress.regionPsgc || permanentAddress.streetAddress ? [permanentAddress] : undefined,
+      verificationStatus: effectivePatient.verificationStatus || 'Verified',
+      medicalHistories: hasFullClinicalContext
+        ? structuredMedicalHistories
+        : structuredMedicalHistories.length > 0
+          ? structuredMedicalHistories
+          : undefined,
+      addresses: hasAddressInput
+        ? [permanentAddress]
+        : effectivePatient.addresses && effectivePatient.addresses.length > 0
+          ? []
+          : undefined,
       guardians: normalizedGuardian
         ? [normalizedGuardian]
-        : patient.guardians && patient.guardians.length > 0
+        : effectivePatient.guardians && effectivePatient.guardians.length > 0
           ? []
           : undefined,
       regionPsgc: permanentAddress.regionPsgc || undefined,
@@ -1241,7 +1309,7 @@ export function EditPatientModal({
               icon="save"
               loading={saving}
               onPress={handleSave}
-              disabled={saving}
+              disabled={saving || (hydratingPatient && !hasFullClinicalContext)}
             />
           </View>
         </View>

@@ -202,9 +202,17 @@ export function reconcileChartWithPatient(
         }
       : existingMembership;
 
+  const hasAuthoritativeAlerts = 'alerts' in patient && patient.alerts !== undefined;
+  const resolvedAlerts = hasAuthoritativeAlerts
+    ? patient.alerts || undefined
+    : chart.demographics?.alerts;
+
+  const hasAuthoritativeAllergies = Array.isArray(patient.structuredAllergies);
+
   return {
     ...chart,
     patientName: patient.fullName || chart.patientName,
+    ...(hasAuthoritativeAllergies ? { allergies: patient.structuredAllergies } : {}),
     ...(syncedMembership !== undefined ? { philHealthMembership: syncedMembership } : {}),
     demographics: {
       ...chart.demographics,
@@ -223,7 +231,7 @@ export function reconcileChartWithPatient(
       isSenior: Boolean(resolvedSeniorId) || (patient.age ?? chart.demographics?.age ?? 0) >= 60,
       pwdId: resolvedPwdId,
       isPwd: Boolean(resolvedPwdId),
-      alerts: patient.alerts ?? chart.demographics?.alerts,
+      alerts: resolvedAlerts,
     },
   };
 }

@@ -1854,6 +1854,7 @@ export interface ClinicPatient {
   activeQueueItemId?: string | null;
   activeQueueTickets?: PatientActiveQueueTicket[] | null;
   pastMedicalHistories?: MedicalHistoryItemPayload[];
+  structuredAllergies?: PatientAllergyRecord[];
   addresses?: PatientAddressDto[];
   guardians?: PatientGuardianDto[];
   regionPsgc?: string | null;

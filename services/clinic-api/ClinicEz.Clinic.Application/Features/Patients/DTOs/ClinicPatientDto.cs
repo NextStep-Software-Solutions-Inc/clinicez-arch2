@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 
 namespace ClinicEz.Clinic.Application.Features.Patients.DTOs;
 
@@ -58,7 +59,8 @@ public sealed record ClinicPatientDto(
     string? GenderIdentity = null,
     List<PatientAddressDto>? Addresses = null,
     List<PatientGuardianDto>? Guardians = null,
-    List<PatientActiveQueueTicketDto>? ActiveQueueTickets = null
+    List<PatientActiveQueueTicketDto>? ActiveQueueTickets = null,
+    List<PatientAllergyDto>? StructuredAllergies = null
 );
 
 public sealed record PatientActiveQueueTicketDto(

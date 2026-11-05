@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
@@ -162,7 +163,8 @@ public sealed class PatientsController : ControllerBase
             request.MedicalHistories,
             request.GenderIdentity,
             request.Addresses,
-            request.Guardians);
+            request.Guardians,
+            request.StructuredAllergies);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicPatientDto>.Success(result, "Patient profile updated successfully."));
@@ -624,4 +626,5 @@ public sealed record UpdatePatientRequest(
     List<MedicalHistoryEntryDto>? MedicalHistories = null,
     string? GenderIdentity = null,
     List<PatientAddressDto>? Addresses = null,
-    List<PatientGuardianDto>? Guardians = null);
+    List<PatientGuardianDto>? Guardians = null,
+    List<CreateAllergyRequest>? StructuredAllergies = null);

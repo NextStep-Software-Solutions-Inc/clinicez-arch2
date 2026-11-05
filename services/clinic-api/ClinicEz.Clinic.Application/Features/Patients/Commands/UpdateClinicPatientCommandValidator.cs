@@ -65,5 +65,15 @@ public sealed class UpdateClinicPatientCommandValidator : AbstractValidator<Upda
             RuleFor(x => x.Email!)
                 .MaximumLength(255).WithMessage("Email must not exceed 255 characters.");
         });
+
+        When(x => x.StructuredAllergies != null && x.StructuredAllergies.Count > 0, () =>
+        {
+            RuleForEach(x => x.StructuredAllergies!).ChildRules(allergy =>
+            {
+                allergy.RuleFor(a => a.Allergen)
+                    .NotEmpty().WithMessage("Allergen name is required when submitting structured allergy.")
+                    .MaximumLength(150).WithMessage("Allergen name cannot exceed 150 characters.");
+            });
+        });
     }
 }
