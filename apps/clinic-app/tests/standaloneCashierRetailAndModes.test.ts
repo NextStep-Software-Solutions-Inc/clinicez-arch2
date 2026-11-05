@@ -5,10 +5,12 @@ import type { ClinicServiceItem } from '../services/clinicService';
 
 describe('Milestone 3: Standalone Cashier, Retail POS & Interop Suite', () => {
   describe('Feature 14: 3-Mode Workstation Segmented Control State', () => {
-    test('14.1 Valid billing modes cover queue, registry, and retail', () => {
-      const modes: BillingMode[] = ['queue', 'registry', 'retail'];
-      expect(modes).toHaveLength(3);
+    test('14.1 Valid billing modes cover queue, unsettled, paid, registry, and retail', () => {
+      const modes: BillingMode[] = ['queue', 'unsettled', 'paid', 'registry', 'retail'];
+      expect(modes).toHaveLength(5);
       expect(modes).toContain('queue');
+      expect(modes).toContain('unsettled');
+      expect(modes).toContain('paid');
       expect(modes).toContain('registry');
       expect(modes).toContain('retail');
     });
@@ -35,6 +37,43 @@ describe('Milestone 3: Standalone Cashier, Retail POS & Interop Suite', () => {
         'Surgical Gloves',
         'Medical Certificate',
       ]);
+    });
+
+    test('14.3 Walk-in retail selected patient does not inflate Today\'s Queue activePatients count', () => {
+      const mockQueuePatients = [
+        { key: 'p1', patientId: 'pat-1', patientName: 'Patient One' },
+        { key: 'p2', patientId: 'pat-2', patientName: 'Patient Two' },
+        { key: 'p3', patientId: 'pat-3', patientName: 'Patient Three' },
+      ];
+
+      // In queue mode, selected patient is one of the queue patients
+      const selectedQueuePatient = mockQueuePatients[0];
+      const patientChoicesQueue =
+        selectedQueuePatient && !selectedQueuePatient.isWalkInRetail && !mockQueuePatients.some((p) => p.key === selectedQueuePatient.key)
+          ? [selectedQueuePatient, ...mockQueuePatients]
+          : mockQueuePatients;
+      const activeQueue = patientChoicesQueue.filter(
+        (p: any) => !p.isWalkInRetail && (!p.isAlreadyBilled || p.hasOpenSoa || p.hasAddOnUnbilled) && !p.isPromissory
+      );
+      expect(activeQueue).toHaveLength(3);
+
+      // In retail mode, selectedPatient is set to retail-walk-in
+      const selectedRetailPatient = {
+        key: 'retail-walk-in',
+        patientId: '',
+        patientName: 'Retail Walk-In Customer',
+        isWalkInRetail: true,
+      };
+      const patientChoicesRetail =
+        selectedRetailPatient && !selectedRetailPatient.isWalkInRetail && !mockQueuePatients.some((p) => p.key === selectedRetailPatient.key)
+          ? [selectedRetailPatient, ...mockQueuePatients]
+          : mockQueuePatients;
+      const activeRetail = patientChoicesRetail.filter(
+        (p: any) => !p.isWalkInRetail && (!p.isAlreadyBilled || p.hasOpenSoa || p.hasAddOnUnbilled) && !p.isPromissory
+      );
+
+      // Today's queue count must strictly stay at 3, never jump to 4!
+      expect(activeRetail).toHaveLength(3);
     });
   });
 

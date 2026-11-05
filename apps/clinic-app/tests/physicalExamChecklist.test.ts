@@ -1,22 +1,41 @@
 import { describe, expect, test, mock } from 'bun:test';
+import React from 'react';
+
+const createMockComponent = (name: string) => {
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, testID, ..._props }: any) =>
+    React.createElement(
+      'div',
+      {
+        'data-component': name,
+        ...(testID ? { 'data-testid': testID } : {}),
+        ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
+        ...(accessibilityRole ? { role: accessibilityRole } : {}),
+        ...(placeholder ? { 'data-placeholder': placeholder } : {}),
+      },
+      placeholder,
+      children
+    );
+  Comp.displayName = name;
+  return Comp;
+};
 
 mock.module('react-native', () => ({
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
-  View: 'View',
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  TextInput: 'TextInput',
-  Text: 'Text',
-  ActivityIndicator: 'ActivityIndicator',
-  Modal: 'Modal',
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  FlatList: 'FlatList',
-  SectionList: 'SectionList',
-  Switch: 'Switch',
-  TouchableOpacity: 'TouchableOpacity',
-  TouchableHighlight: 'TouchableHighlight',
-  Image: 'Image',
-  RefreshControl: 'RefreshControl',
+  View: createMockComponent('View'),
+  Pressable: createMockComponent('Pressable'),
+  ScrollView: createMockComponent('ScrollView'),
+  TextInput: createMockComponent('TextInput'),
+  Text: createMockComponent('Text'),
+  ActivityIndicator: createMockComponent('ActivityIndicator'),
+  Modal: createMockComponent('Modal'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  FlatList: createMockComponent('FlatList'),
+  SectionList: createMockComponent('SectionList'),
+  Switch: createMockComponent('Switch'),
+  TouchableOpacity: createMockComponent('TouchableOpacity'),
+  TouchableHighlight: createMockComponent('TouchableHighlight'),
+  Image: createMockComponent('Image'),
+  RefreshControl: createMockComponent('RefreshControl'),
   Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
   AppState: { addEventListener: () => ({ remove: () => {} }) },
   Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
@@ -44,12 +63,12 @@ mock.module('react-native', () => ({
 }));
 
 mock.module('react-native-svg', () => ({
-  Svg: 'Svg',
-  Path: 'Path',
-  Circle: 'Circle',
-  Rect: 'Rect',
-  Line: 'Line',
-  default: 'Svg',
+  Svg: createMockComponent('svg'),
+  Path: createMockComponent('path'),
+  Circle: createMockComponent('circle'),
+  Rect: createMockComponent('rect'),
+  Line: createMockComponent('line'),
+  default: createMockComponent('svg'),
   Defs: ({ children }: any) => children,
   LinearGradient: ({ children }: any) => children,
   Stop: () => null,
@@ -64,6 +83,7 @@ mock.module('../constants/fonts', () => ({
 }));
 
 const {
+  InlinePhysicalExamCard,
   DEFAULT_PHYSICAL_EXAM_NORMAL,
 } = await import('../components/consultation/InlinePhysicalExamCard');
 const { extractPhilHealthProfileData } = await import('../components/patient/memberType');
@@ -294,5 +314,116 @@ describe('Milestone 3 Physical Exam Checklist Adversarial Tests', () => {
   test('Default ATC code must be "WALKEDIN"', () => {
     const defaultAtc = 'WALKEDIN';
     expect(defaultAtc).toBe('WALKEDIN');
+  });
+
+  test('InlinePhysicalExamCard dynamically renders system count matching rendered systems and avoids hardcoded finding literals', async () => {
+    const React = await import('react');
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const threeSystemHtml = renderToStaticMarkup(
+      React.createElement(InlinePhysicalExamCard, {
+        findings: DEFAULT_PHYSICAL_EXAM_NORMAL,
+        onChange: () => {},
+        embedded: true,
+        systems: [
+          {
+            key: 'generalSurvey',
+            remarksKey: 'generalSurveyRemarks',
+            codeKey: 'generalSurveyId',
+            label: 'General Survey',
+            normalDescription: 'Conscious, coherent',
+            normalCode: '1',
+            placeholder: 'Describe...',
+            options: [{ code: '1', description: 'Normal survey', isNormal: true }],
+          },
+          {
+            key: 'chest',
+            remarksKey: 'chestRemarks',
+            codeKey: 'chestId',
+            label: 'Chest & Lungs',
+            normalDescription: 'Clear breath sounds',
+            normalCode: '6',
+            placeholder: 'Describe...',
+            options: [{ code: '6', description: 'Essentially normal', isNormal: true }],
+          },
+          {
+            key: 'heart',
+            remarksKey: 'heartRemarks',
+            codeKey: 'heartId',
+            label: 'Heart & CVS',
+            normalDescription: 'Regular rhythm',
+            normalCode: '5',
+            placeholder: 'Describe...',
+            options: [{ code: '5', description: 'Essentially normal', isNormal: true }],
+          },
+        ],
+      })
+    );
+
+    expect(threeSystemHtml).toContain('3-system organ examination checklist');
+    expect(threeSystemHtml).not.toContain('10-system organ examination checklist');
+    expect(threeSystemHtml).not.toContain('Set All Normal');
+    expect(threeSystemHtml).not.toContain('All Essentially Normal');
+    expect(threeSystemHtml).not.toContain('set-all-normal-btn');
+
+    const collapsedByDefaultHtml = renderToStaticMarkup(
+      React.createElement(InlinePhysicalExamCard, {
+        findings: DEFAULT_PHYSICAL_EXAM_NORMAL,
+        onChange: () => {},
+        embedded: true,
+        collapsible: true,
+      })
+    );
+    expect(collapsedByDefaultHtml).toContain('Show systems');
+    expect(collapsedByDefaultHtml).not.toContain('Collapse');
+    expect(collapsedByDefaultHtml).not.toContain('Set Abnormal');
+
+    const peCardSource = fs.readFileSync(
+      path.resolve(__dirname, '../components/consultation/InlinePhysicalExamCard.tsx'),
+      'utf8'
+    );
+    expect(peCardSource).toContain("useEhrOptions('physical_exam_system'");
+    expect(peCardSource).toContain('usePhilHealthCatalog(');
+    expect(peCardSource).not.toContain('sys.icon');
+    expect(peCardSource).not.toContain('meta.icon');
+    expect(peCardSource).not.toContain('Flagged Abnormal');
+    expect(peCardSource).not.toContain('Rashes/Petechiae');
+    expect(peCardSource).not.toContain('Pale conjunctivae');
+    expect(peCardSource).not.toContain('Enlarge Prospate');
+
+    const abnormalSystemHtml = renderToStaticMarkup(
+      React.createElement(InlinePhysicalExamCard, {
+        findings: {
+          ...DEFAULT_PHYSICAL_EXAM_NORMAL,
+          generalSurvey: 'Abnormal',
+          generalSurveyRemarks: 'Awake, alert, mild distress',
+        },
+        onChange: () => {},
+        embedded: true,
+        collapsible: false,
+        systems: [
+          {
+            key: 'generalSurvey',
+            remarksKey: 'generalSurveyRemarks',
+            codeKey: 'generalSurveyId',
+            label: 'General Survey',
+            normalDescription: 'Conscious, coherent',
+            normalCode: '1',
+            placeholder: 'Describe...',
+            options: [
+              { code: '1', description: 'Normal survey', isNormal: true },
+              { code: '2', description: 'Altered sensorium', isNormal: false },
+            ],
+          },
+        ],
+      })
+    );
+    expect(abnormalSystemHtml).toContain('Set Normal');
+    expect(abnormalSystemHtml).toContain('Set All Normal');
+    expect(abnormalSystemHtml).toContain('set-all-normal-btn');
+    expect(abnormalSystemHtml).not.toContain('All Essentially Normal');
+    expect(abnormalSystemHtml).not.toContain('Flagged Abnormal');
   });
 });

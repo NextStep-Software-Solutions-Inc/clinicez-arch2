@@ -45,15 +45,18 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
     private readonly IRepository<Patient> _patientRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
     private readonly IRepository<ConsultationEncounter>? _encounterRepo;
+    private readonly IRepository<Invoice>? _invoiceRepo;
 
     public GetClinicPatientsQueryHandler(
         IRepository<Patient> patientRepo,
         IRepository<QueueItem>? queueRepo = null,
-        IRepository<ConsultationEncounter>? encounterRepo = null)
+        IRepository<ConsultationEncounter>? encounterRepo = null,
+        IRepository<Invoice>? invoiceRepo = null)
     {
         _patientRepo = patientRepo;
         _queueRepo = queueRepo;
         _encounterRepo = encounterRepo;
+        _invoiceRepo = invoiceRepo;
     }
 
     public async Task<IReadOnlyList<ClinicPatientDto>> Handle(GetClinicPatientsQuery request, CancellationToken ct)
@@ -117,7 +120,8 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                                 q.Status != QueueStatus.Completed &&
                                 q.Status != QueueStatus.Cancelled &&
                                 q.Status != QueueStatus.NoShow &&
-                                q.Status != QueueStatus.DischargedNonDoctor)
+                                q.Status != QueueStatus.DischargedNonDoctor &&
+                                q.Status != QueueStatus.Diverted)
                     .Select(q => q.PatientId)
                     .Distinct()
                     .ToListAsync(ct)
@@ -159,7 +163,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 }
             }
 
-            return await ExecuteProjectedQuery(pgQuery, request, _queueRepo, ct);
+            return await ExecuteProjectedQuery(pgQuery, request, _queueRepo, _encounterRepo, _invoiceRepo, ct);
         }
         catch
         {
@@ -230,7 +234,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 memQuery = memQuery.Where(p => empIds.Contains(p.Id));
             }
 
-            return await ExecuteProjectedQuery(memQuery, request, _queueRepo, ct);
+            return await ExecuteProjectedQuery(memQuery, request, _queueRepo, _encounterRepo, _invoiceRepo, ct);
         }
 
     }
@@ -239,6 +243,8 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
         IQueryable<Patient> query,
         GetClinicPatientsQuery request,
         IRepository<QueueItem>? queueRepo,
+        IRepository<ConsultationEncounter>? encounterRepo,
+        IRepository<Invoice>? invoiceRepo,
         CancellationToken ct)
     {
         var pageSize = Math.Max(1, request.PageSize);
@@ -369,14 +375,18 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
         if (queueRepo != null && projected.Count > 0)
         {
             var pIds = projected.Select(p => p.Id).ToList();
-            var activeTickets = await queueRepo.Query()
+            var rawActiveTickets = await queueRepo.Query()
                 .AsNoTracking()
                 .Where(q => pIds.Contains(q.PatientId) &&
                             q.QueueDate == localToday &&
+                            q.VisitType != VisitType.RetailPurchase &&
+                            q.VisitType != VisitType.CashierSettlement &&
+                            q.VisitType != VisitType.LaboratorySpecimen &&
                             q.Status != QueueStatus.Completed &&
                             q.Status != QueueStatus.Cancelled &&
                             q.Status != QueueStatus.NoShow &&
-                            q.Status != QueueStatus.DischargedNonDoctor)
+                            q.Status != QueueStatus.DischargedNonDoctor &&
+                            q.Status != QueueStatus.Diverted)
                 .OrderBy(q => q.CheckInTime)
                 .Select(q => new
                 {
@@ -388,24 +398,52 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                     q.Status,
                     q.VisitType,
                     q.ChiefComplaint,
-                    q.CheckInTime
+                    q.CheckInTime,
+                    q.IsDirectVisit
                 })
                 .ToListAsync(ct);
 
-            activeTicketGroupMap = activeTickets
-                .GroupBy(t => t.PatientId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Select(t => new PatientActiveQueueTicketDto(
-                        t.Id,
-                        t.QueueNumber,
-                        t.Status.ToString(),
-                        t.VisitType.ToString(),
-                        t.ChiefComplaint,
-                        t.DoctorId,
-                        t.DoctorName,
-                        t.CheckInTime
-                    )).ToList());
+            if (rawActiveTickets.Count > 0)
+            {
+                var candidateIds = rawActiveTickets.Select(t => t.Id).ToList();
+                var signedQueueIds = encounterRepo != null
+                    ? (await encounterRepo.Query()
+                        .AsNoTracking()
+                        .Where(e => e.QueueItemId.HasValue && candidateIds.Contains(e.QueueItemId.Value) && e.IsSigned)
+                        .Select(e => e.QueueItemId!.Value)
+                        .ToListAsync(ct))
+                        .ToHashSet()
+                    : new HashSet<Guid>();
+
+                var paidQueueIds = invoiceRepo != null
+                    ? (await invoiceRepo.Query()
+                        .AsNoTracking()
+                        .Where(i => i.QueueItemId.HasValue && candidateIds.Contains(i.QueueItemId.Value) && i.Status == InvoiceStatus.Paid && !i.IsDeleted)
+                        .Select(i => i.QueueItemId!.Value)
+                        .ToListAsync(ct))
+                        .ToHashSet()
+                    : new HashSet<Guid>();
+
+                var eligibleTickets = rawActiveTickets
+                    .Where(t => !signedQueueIds.Contains(t.Id) && !paidQueueIds.Contains(t.Id))
+                    .ToList();
+
+                activeTicketGroupMap = eligibleTickets
+                    .GroupBy(t => t.PatientId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(t => new PatientActiveQueueTicketDto(
+                            t.Id,
+                            t.QueueNumber,
+                            t.Status.ToString(),
+                            t.VisitType.ToString(),
+                            t.ChiefComplaint,
+                            t.DoctorId,
+                            t.DoctorName,
+                            t.CheckInTime,
+                            t.IsDirectVisit
+                        )).ToList());
+            }
         }
 
         var today = localToday;

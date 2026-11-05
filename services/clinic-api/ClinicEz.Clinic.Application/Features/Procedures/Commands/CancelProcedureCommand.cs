@@ -66,6 +66,56 @@ public class CancelProcedureCommandHandler : IRequestHandler<CancelProcedureComm
             return OrderProcedureCommandHandler.MapToDto(proc, _clinicContext.TenantId);
         }
 
+        bool isAdmin = string.Equals(_clinicContext.StaffRole, "Admin", StringComparison.OrdinalIgnoreCase)
+            || _clinicContext.HasPermission("staff:manage")
+            || _clinicContext.HasPermission("settings:manage");
+
+        if (!isAdmin && _staffRepo != null && _clinicContext.StaffId.HasValue)
+        {
+            var callerStaff = await _staffRepo
+                .Query(s => s.Id == _clinicContext.StaffId.Value && s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (callerStaff != null && callerStaff.Role == StaffRole.Admin)
+            {
+                isAdmin = true;
+            }
+        }
+
+        bool isOrderingUser = false;
+        if (_clinicContext.StaffId.HasValue)
+        {
+            if (proc.OrderedByDoctorId.HasValue && proc.OrderedByDoctorId.Value == _clinicContext.StaffId.Value)
+            {
+                isOrderingUser = true;
+            }
+            else if (!string.IsNullOrWhiteSpace(proc.CreatedBy) &&
+                     Guid.TryParse(proc.CreatedBy, out var createdByGuid) &&
+                     createdByGuid == _clinicContext.StaffId.Value)
+            {
+                isOrderingUser = true;
+            }
+        }
+
+        if (!isOrderingUser && !string.IsNullOrWhiteSpace(_clinicContext.StaffName))
+        {
+            var normCaller = NormalizeClinicianName(_clinicContext.StaffName);
+            if (!string.IsNullOrWhiteSpace(proc.CreatedBy) &&
+                NormalizeClinicianName(proc.CreatedBy) == normCaller)
+            {
+                isOrderingUser = true;
+            }
+            else if (!string.IsNullOrWhiteSpace(proc.OrderedByDoctorName) &&
+                     NormalizeClinicianName(proc.OrderedByDoctorName) == normCaller)
+            {
+                isOrderingUser = true;
+            }
+        }
+
+        if (!isAdmin && !isOrderingUser)
+        {
+            throw new ForbiddenException("Only an administrator or the user who ordered this procedure can cancel it.");
+        }
+
         proc.Status = ProcedureStatus.Cancelled;
         if (!string.IsNullOrWhiteSpace(request.Reason))
         {
@@ -126,5 +176,19 @@ public class CancelProcedureCommandHandler : IRequestHandler<CancelProcedureComm
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return OrderProcedureCommandHandler.MapToDto(proc, _clinicContext.TenantId);
+    }
+
+    private static string NormalizeClinicianName(string raw)
+    {
+        var trimmed = raw.Trim();
+        if (trimmed.StartsWith("Dr.", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[3..].Trim();
+        }
+        else if (trimmed.StartsWith("Dr ", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[3..].Trim();
+        }
+        return trimmed.ToLowerInvariant();
     }
 }

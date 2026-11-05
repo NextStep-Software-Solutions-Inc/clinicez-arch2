@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState } from '../ui';
+import { useClinic } from '../../context/ClinicContext';
 import {
   type ClinicPatient,
   type ConsultationRecord,
@@ -27,6 +28,7 @@ export default function EncountersTimelineTab({
   onOpenExternalDispense,
   onRefreshChart,
 }: EncountersTimelineTabProps) {
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
   const [encounterTypeFilter, setEncounterTypeFilter] = useState<'ALL' | 'YAKAP' | 'STANDARD'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -165,7 +167,7 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'YAKAP' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'YAKAP' ? '700' : '500' }}
             >
-              PhilHealth Konsulta Only
+              YAKAP
             </ThemedText>
           </Pressable>
           <Pressable
@@ -177,7 +179,7 @@ export default function EncountersTimelineTab({
               color={encounterTypeFilter === 'STANDARD' ? theme.colors.primaryDark : theme.colors.textSecondary}
               style={{ fontWeight: encounterTypeFilter === 'STANDARD' ? '700' : '500' }}
             >
-              Private / Cash
+              Standard
             </ThemedText>
           </Pressable>
         </View>
@@ -190,7 +192,9 @@ export default function EncountersTimelineTab({
         <View style={styles.timelineList}>
           {filteredConsultations.map((enc, idx) => {
             const isExpanded = Boolean(expandedEncounterIds[enc.id]);
-            const primaryDiag = (enc.diagnoses || []).find((d) => d.isPrimary) || (enc.diagnoses || [])[0];
+            const orderedDiagnoses = [...(enc.diagnoses || [])]
+              .filter((d) => Boolean(d.description?.trim()))
+              .sort((a, b) => Number(Boolean(b.isPrimary)) - Number(Boolean(a.isPrimary)));
 
             return (
               <View key={enc.id} style={styles.timelineItem}>
@@ -212,7 +216,8 @@ export default function EncountersTimelineTab({
                     <View style={styles.cardHeaderLeft}>
                       <View style={styles.dateAndDoctorRow}>
                         <ThemedText variant="captionBold" color={theme.colors.text}>
-                          {formatClinicDate(enc.encounterDate)} • {formatClinicTime(enc.encounterDate)}
+                          {formatClinicDate(enc.encounterDate, { dateFormat, timeZoneId })} •{' '}
+                          {formatClinicTime(enc.encounterDate, { timeFormat, timeZoneId })}
                         </ThemedText>
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
                           {enc.doctorName}
@@ -222,21 +227,37 @@ export default function EncountersTimelineTab({
                         ) : null}
                       </View>
 
-                      {primaryDiag ? (
+                      {orderedDiagnoses.length > 0 ? (
                         <View style={styles.diagRow}>
-                          <Badge label={primaryDiag.icd10Code} variant="routine" size="sm" />
-                          <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={1}>
-                            {primaryDiag.description}
-                          </ThemedText>
+                          {orderedDiagnoses.map((diag, diagIdx) => {
+                            const isPrimaryPill = Boolean(diag.isPrimary) || diagIdx === 0;
+                            return (
+                              <View
+                                key={diag.id || `${enc.id}-hdr-diag-${diagIdx}`}
+                                style={[
+                                  styles.headerDiagPill,
+                                  !isPrimaryPill && styles.headerDiagPill_secondary,
+                                ]}
+                              >
+                                <ThemedText
+                                  variant="captionBold"
+                                  color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
+                                  numberOfLines={1}
+                                >
+                                  {diag.description}
+                                </ThemedText>
+                              </View>
+                            );
+                          })}
                         </View>
                       ) : null}
                     </View>
 
                     <View style={styles.cardHeaderRight}>
                       {enc.isYakapEligible ? (
-                        <Badge label="PhilHealth Konsulta" variant="purple" size="sm" icon="yakap" />
+                        <Badge label="YAKAP" variant="purple" size="sm" />
                       ) : (
-                        <Badge label="Standard Encounter" variant="neutral" size="sm" />
+                        <Badge label="Standard" variant="neutral" size="sm" />
                       )}
                       {enc.isSigned ? (
                         <Badge label="Signed" variant="success" size="sm" icon="checkCircle" />
@@ -283,10 +304,9 @@ export default function EncountersTimelineTab({
                         <ThemedText variant="body" color={theme.colors.text}>
                           {enc.subjective || 'No subjective narrative documented.'}
                         </ThemedText>
-                        {enc.philHealthSignSympCode ? (
+                        {enc.philHealthPainSite ? (
                           <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                            PhilHealth Symptom Code: {enc.philHealthSignSympCode}
-                            {enc.philHealthPainSite ? ` • Pain Site: ${enc.philHealthPainSite}` : ''}
+                            Pain Site: {enc.philHealthPainSite}
                           </ThemedText>
                         ) : null}
                       </View>
@@ -309,16 +329,24 @@ export default function EncountersTimelineTab({
                         <ThemedText variant="body" color={theme.colors.text}>
                           {enc.assessment || 'No narrative assessment documented.'}
                         </ThemedText>
-                        {(enc.diagnoses || []).length > 0 ? (
+                        {orderedDiagnoses.length > 0 ? (
                           <View style={styles.diagPillsRow}>
-                            {enc.diagnoses.map((d) => (
-                              <View key={d.id || d.icd10Code} style={styles.diagPill}>
-                                <Badge label={d.icd10Code} variant={d.isPrimary ? 'routine' : 'neutral'} size="sm" />
-                                <ThemedText variant="caption" color={theme.colors.text}>
-                                  {d.description}
-                                </ThemedText>
-                              </View>
-                            ))}
+                            {orderedDiagnoses.map((d, diagIdx) => {
+                              const isPrimaryPill = Boolean(d.isPrimary) || diagIdx === 0;
+                              return (
+                                <View
+                                  key={d.id || `${enc.id}-soap-diag-${diagIdx}`}
+                                  style={[styles.diagPill, isPrimaryPill && styles.diagPill_primary]}
+                                >
+                                  <ThemedText
+                                    variant="captionBold"
+                                    color={isPrimaryPill ? theme.colors.primaryDark : theme.colors.infoText}
+                                  >
+                                    {d.description}
+                                  </ThemedText>
+                                </View>
+                              );
+                            })}
                           </View>
                         ) : null}
                       </View>
@@ -445,7 +473,7 @@ export default function EncountersTimelineTab({
                         </ThemedText>
                         {enc.signedAt ? (
                           <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            Signed at: {formatClinicDateTime(enc.signedAt)}
+                            Signed at: {formatClinicDateTime(enc.signedAt, { dateFormat, timeFormat, timeZoneId })}
                           </ThemedText>
                         ) : null}
                       </View>
@@ -604,7 +632,23 @@ const styles = StyleSheet.create({
   diagRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
+  },
+  headerDiagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+  },
+  headerDiagPill_secondary: {
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
   },
   statutoryStrip: {
     flexDirection: 'row',
@@ -633,13 +677,17 @@ const styles = StyleSheet.create({
   diagPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.surfaceSubtle,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.xs,
+    gap: 5,
+    backgroundColor: theme.colors.infoBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    borderColor: theme.colors.infoBorder,
+  },
+  diagPill_primary: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
   },
   prescriptionsBlock: {
     padding: theme.spacing.sm,

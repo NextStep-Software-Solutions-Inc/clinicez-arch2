@@ -6,12 +6,34 @@ import {
   Badge,
   Icon,
   Input,
+  Select,
+  type SelectOption,
   SegmentedControl,
 } from '../ui';
 import Button from '../ui/Button';
 import { theme } from '../../constants/theme';
-import type { ClinicServiceItem, ClinicRoom } from '../../services/clinicService';
+import { PERMISSIONS } from '../../constants/permissions';
+import {
+  clinicService,
+  type ClinicServiceItem,
+  type ClinicRoom,
+  type StaffMember,
+} from '../../services/clinicService';
+import { useAuth, usePermission } from '../../context/AuthContext';
 import { useClinic } from '../../context/ClinicContext';
+import { useStaff } from '../../context/StaffContext';
+
+function formatStaffDisplayName(
+  staff?: Pick<StaffMember, 'title' | 'firstName' | 'lastName' | 'role'> | null
+): string {
+  if (!staff) return '';
+  const raw = [staff.title, staff.firstName, staff.lastName].filter(Boolean).join(' ').trim();
+  if (!raw) return '';
+  if (staff.role === 'Doctor' && !/^dr\.?\s/i.test(raw)) {
+    return `Dr. ${raw}`;
+  }
+  return raw;
+}
 
 export interface OrderCatalogItemPayload {
   serviceItemId: string;
@@ -19,6 +41,7 @@ export interface OrderCatalogItemPayload {
   name: string;
   category: string;
   standardPrice: number;
+  isNurseOrderable?: boolean;
   philHealthCode?: string;
   philHealthDescription?: string;
   isPhilHealthFormulary?: boolean;
@@ -30,6 +53,8 @@ export interface OrderCatalogItemPayload {
   roomName?: string;
   targetRoomId?: string;
   targetRoomName?: string;
+  orderedByDoctorId?: string;
+  orderedByDoctorName?: string;
 }
 
 export interface ExistingOrderItemContext {
@@ -118,7 +143,7 @@ function getHeuristicFulfillmentMode(item: ClinicServiceItem): FulfillmentMode {
 export function OrderCatalogSearchModal({
   visible,
   onClose,
-  catalog = [],
+  catalog,
   rooms,
   initialRoomId,
   initialCategory = 'All',
@@ -133,6 +158,88 @@ export function OrderCatalogSearchModal({
   testID = 'order-catalog-search-modal',
 }: OrderCatalogSearchModalProps) {
   const clinic = useClinic();
+  const { user } = useAuth();
+  const hasLabOrdersWrite = usePermission(PERMISSIONS.labOrdersWrite);
+  const hasProceduresWrite = usePermission(PERMISSIONS.proceduresWrite);
+  const { current: currentStaff, staff = [], currentName } = useStaff();
+
+  const isUnmountedTestHarness = !user;
+  const isAdmin = user?.role === 'Admin' || currentStaff?.role === 'Admin';
+  const isCurrentStaffDoctor = Boolean(
+    (currentStaff && (currentStaff.role === 'Doctor' || Boolean(currentStaff.prcLicenseNumber))) ||
+      user?.role === 'Doctor'
+  );
+  const isDoctorMissingPrc = Boolean(
+    currentStaff?.role === 'Doctor' && !currentStaff?.prcLicenseNumber?.trim()
+  );
+
+  const canOrderDiagnostics =
+    isUnmountedTestHarness || isAdmin || (hasLabOrdersWrite && !isDoctorMissingPrc);
+  const canOrderProcedures = isUnmountedTestHarness || isAdmin || hasProceduresWrite;
+
+  const availableCategoryTabs = useMemo(() => {
+    if (isUnmountedTestHarness) return CATEGORY_TABS;
+    return CATEGORY_TABS.filter((tab) => {
+      if (tab.value === 'All') return canOrderDiagnostics && canOrderProcedures;
+      if (tab.value === 'Diagnostic') return canOrderDiagnostics;
+      if (tab.value === 'Procedure' || tab.value === 'Dental') return canOrderProcedures;
+      return true;
+    });
+  }, [isUnmountedTestHarness, canOrderDiagnostics, canOrderProcedures]);
+
+  const resolvedInitialCategory = useMemo<CategoryTab>(() => {
+    if (availableCategoryTabs.some((t) => t.value === initialCategory)) {
+      return initialCategory;
+    }
+    return availableCategoryTabs[0]?.value ?? initialCategory;
+  }, [availableCategoryTabs, initialCategory]);
+
+  const [fetchedCatalog, setFetchedCatalog] = useState<ClinicServiceItem[]>([]);
+  useEffect(() => {
+    if (!visible || catalog !== undefined) return;
+    let cancelled = false;
+    clinicService.getServices(undefined, true).then(([data, err]) => {
+      if (cancelled) return;
+      if (!err && data) {
+        setFetchedCatalog(data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, catalog]);
+
+  const effectiveCatalog = catalog !== undefined ? catalog : fetchedCatalog;
+
+  const activeDoctors = useMemo(
+    () =>
+      staff.filter(
+        (s) => s.isActive && (s.role === 'Doctor' || Boolean(s.prcLicenseNumber))
+      ),
+    [staff]
+  );
+
+  const doctorSelectOptions = useMemo<SelectOption[]>(() => {
+    const opts: SelectOption[] = [
+      {
+        label: 'None / Protocol (Nurse Order)',
+        value: '',
+        description: 'Order initiated under standing clinic nursing protocol',
+      },
+    ];
+    activeDoctors.forEach((doc) => {
+      opts.push({
+        label: formatStaffDisplayName(doc) || `Dr. ${doc.firstName} ${doc.lastName}`,
+        value: doc.id,
+        description:
+          doc.specialty ||
+          (doc.prcLicenseNumber ? `PRC #${doc.prcLicenseNumber}` : 'Licensed Physician'),
+        badge: doc.prcLicenseNumber ? 'PRC Verified' : undefined,
+      });
+    });
+    return opts;
+  }, [activeDoctors]);
+
   const targetRooms = useMemo(() => {
     if (rooms && rooms.length > 0) return rooms;
     if (clinic?.rooms && clinic.rooms.length > 0) {
@@ -143,12 +250,13 @@ export function OrderCatalogSearchModal({
   }, [rooms, clinic?.rooms]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<CategoryTab>(initialCategory);
+  const [selectedCategory, setSelectedCategory] = useState<CategoryTab>(resolvedInitialCategory);
   const [selectedItem, setSelectedItem] = useState<ClinicServiceItem | null>(() => initialSelectedItem ?? null);
   const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>(() =>
     initialSelectedItem ? getHeuristicFulfillmentMode(initialSelectedItem) : 'in_house'
   );
   const [instructions, setInstructions] = useState('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [selectedRoomId, setSelectedRoomId] = useState<string>(() => {
     return initialRoomId || (targetRooms[0]?.id ?? '');
   });
@@ -157,8 +265,9 @@ export function OrderCatalogSearchModal({
   useEffect(() => {
     if (visible) {
       setSearchQuery('');
-      setSelectedCategory(initialCategory);
+      setSelectedCategory(resolvedInitialCategory);
       setSelectedItem(initialSelectedItem ?? null);
+      setSelectedDoctorId('');
       if (initialSelectedItem) {
         setFulfillmentMode(getHeuristicFulfillmentMode(initialSelectedItem));
         const existing = existingOrders?.find(
@@ -187,18 +296,30 @@ export function OrderCatalogSearchModal({
         setInstructions('');
       }
     }
-  }, [visible, initialCategory, initialToothNumber, initialToothSurface, initialRoomId, targetRooms, initialSelectedItem, existingOrders]);
+  }, [visible, resolvedInitialCategory, initialToothNumber, initialToothSurface, initialRoomId, targetRooms, initialSelectedItem, existingOrders]);
 
   const filteredCatalog = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return catalog.filter((item) => {
+    return effectiveCatalog.filter((item) => {
       if (item.isActive === false) return false;
 
       const catLower = (item.category || '').toLowerCase();
+      const itemIsDiag = catLower.includes('diagnostic');
+
+      if (!isUnmountedTestHarness) {
+        if (itemIsDiag) {
+          if (!canOrderDiagnostics && !(item.isNurseOrderable && canOrderProcedures)) {
+            return false;
+          }
+        } else if (!canOrderProcedures) {
+          return false;
+        }
+      }
+
       if (selectedCategory === 'Diagnostic') {
-        if (!catLower.includes('diagnostic')) return false;
+        if (!itemIsDiag) return false;
       } else if (selectedCategory === 'Procedure') {
-        if (!catLower.includes('procedure') && !catLower.includes('nursing') && !catLower.includes('dental')) return false;
+        if (!catLower.includes('procedure') && !catLower.includes('nursing') && !catLower.includes('dental') && !catLower.includes('surgery')) return false;
       } else if (selectedCategory === 'Dental') {
         if (!catLower.includes('dental')) return false;
       }
@@ -216,7 +337,7 @@ export function OrderCatalogSearchModal({
 
       return true;
     });
-  }, [catalog, searchQuery, selectedCategory]);
+  }, [effectiveCatalog, searchQuery, selectedCategory, isUnmountedTestHarness, canOrderDiagnostics, canOrderProcedures]);
 
   const handleSelectItem = (item: ClinicServiceItem) => {
     const isOrdered =
@@ -282,10 +403,45 @@ export function OrderCatalogSearchModal({
     (fulfillmentMode === 'in_house' || !isDiagnostic)
   );
 
+  const selectedIsNurseOrderable = Boolean(selectedItem?.isNurseOrderable);
+  const requiresAttendingDoctor = Boolean(
+    selectedItem &&
+      !isDiagnostic &&
+      !isUnmountedTestHarness &&
+      !isCurrentStaffDoctor &&
+      !selectedIsNurseOrderable
+  );
+  const canSubmitSelected = Boolean(
+    selectedItem &&
+      (canOrderDiagnostics || canOrderProcedures) &&
+      (!requiresAttendingDoctor || Boolean(selectedDoctorId))
+  );
+
   const handleSubmit = () => {
-    if (!selectedItem) return;
+    if (!selectedItem || !canSubmitSelected) return;
 
     const resolvedRoom = targetRooms.find((r) => r.id === selectedRoomId) ?? targetRooms[0];
+
+    let orderedByDoctorId: string | undefined;
+    let orderedByDoctorName: string | undefined;
+
+    if (!isUnmountedTestHarness) {
+      if (isCurrentStaffDoctor) {
+        orderedByDoctorId = currentStaff?.id || user?.id;
+        orderedByDoctorName =
+          formatStaffDisplayName(currentStaff) || currentName || user?.name || undefined;
+      } else if (selectedDoctorId) {
+        const selectedDoc = activeDoctors.find((d) => d.id === selectedDoctorId);
+        orderedByDoctorId = selectedDoctorId;
+        orderedByDoctorName = selectedDoc
+          ? formatStaffDisplayName(selectedDoc)
+          : undefined;
+      } else {
+        orderedByDoctorId = undefined;
+        orderedByDoctorName =
+          formatStaffDisplayName(currentStaff) || currentName || user?.name || undefined;
+      }
+    }
 
     const payload: OrderCatalogItemPayload = {
       serviceItemId: selectedItem.id,
@@ -293,6 +449,7 @@ export function OrderCatalogSearchModal({
       name: selectedItem.name,
       category: selectedItem.category,
       standardPrice: selectedItem.standardPrice,
+      isNurseOrderable: selectedItem.isNurseOrderable,
       philHealthCode: selectedItem.philHealthCode,
       philHealthDescription: selectedItem.philHealthDescription,
       isPhilHealthFormulary: selectedItem.isPhilHealthFormulary,
@@ -304,6 +461,8 @@ export function OrderCatalogSearchModal({
       roomName: !isDiagnostic && resolvedRoom ? resolvedRoom.name : undefined,
       targetRoomId: !isDiagnostic && resolvedRoom ? resolvedRoom.id : undefined,
       targetRoomName: !isDiagnostic && resolvedRoom ? resolvedRoom.name : undefined,
+      orderedByDoctorId,
+      orderedByDoctorName,
     };
 
     onSelectOrder(payload);
@@ -322,7 +481,7 @@ export function OrderCatalogSearchModal({
         title={isSelectedAlreadyOrdered ? 'Update Order' : 'Add to Order'}
         variant="primary"
         icon={isSelectedAlreadyOrdered ? 'check' : 'plus'}
-        disabled={!selectedItem}
+        disabled={!canSubmitSelected}
         onPress={handleSubmit}
         testID={`${testID}-submit-btn`}
       />
@@ -344,6 +503,14 @@ export function OrderCatalogSearchModal({
       testID={testID}
     >
       <View style={styles.container}>
+        {!canOrderDiagnostics && !canOrderProcedures ? (
+          <View style={styles.permissionWarningBanner} accessibilityRole="alert">
+            <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+            <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flexText}>
+              You do not have permission to order diagnostic tests or clinical procedures.
+            </ThemedText>
+          </View>
+        ) : null}
         {initialToothNumber ? (
           <View style={styles.targetToothBanner}>
             <Badge
@@ -363,16 +530,18 @@ export function OrderCatalogSearchModal({
         />
 
         {/* Category Tabs */}
-        <View style={styles.filterRow}>
-          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-            Filter Category:
-          </ThemedText>
-          <SegmentedControl<CategoryTab>
-            options={CATEGORY_TABS}
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-          />
-        </View>
+        {availableCategoryTabs.length > 0 ? (
+          <View style={styles.filterRow}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Filter Category:
+            </ThemedText>
+            <SegmentedControl<CategoryTab>
+              options={availableCategoryTabs}
+              value={selectedCategory}
+              onChange={setSelectedCategory}
+            />
+          </View>
+        ) : null}
 
         {/* Catalog Items List */}
         <View style={styles.listHeaderRow}>
@@ -462,6 +631,9 @@ export function OrderCatalogSearchModal({
                       />
                       {(item.isPhilHealthFormulary || item.philHealthCode) && (
                         <Badge label="PhilHealth" variant="success" size="sm" />
+                      )}
+                      {!isItemDiag && item.isNurseOrderable && (
+                        <Badge label="Nurse-Orderable" variant="success" size="sm" />
                       )}
                       {isItemOrdered && (
                         <Badge label="Already Ordered - In Order (Edit)" variant="warning" size="sm" />
@@ -565,6 +737,33 @@ export function OrderCatalogSearchModal({
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   Select which treatment room or dental operatory to assign this procedure to.
                 </ThemedText>
+              </View>
+            ) : null}
+
+            {/* Attending Physician Authorization for Non-Doctor Procedure Orders */}
+            {!isDiagnostic && !isUnmountedTestHarness && !isCurrentStaffDoctor && (requiresAttendingDoctor || activeDoctors.length > 0) ? (
+              <View style={styles.configFieldSection}>
+                <Select
+                  label={
+                    requiresAttendingDoctor
+                      ? 'Attending Physician (Doctor Order) *'
+                      : 'Attending Physician (Optional)'
+                  }
+                  value={selectedDoctorId}
+                  options={doctorSelectOptions}
+                  onSelect={setSelectedDoctorId}
+                  placeholder="Select ordering physician..."
+                  modalTitle="Select Ordering Physician"
+                  modalSubtitle="Choose the physician authorizing this procedure order"
+                />
+                {requiresAttendingDoctor && !selectedDoctorId ? (
+                  <View style={styles.permissionWarningBanner} accessibilityRole="alert">
+                    <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                    <ThemedText variant="caption" color={theme.colors.warningText} style={styles.flexText}>
+                      Doctor order required: select the authorizing physician above to order this procedure.
+                    </ThemedText>
+                  </View>
+                ) : null}
               </View>
             ) : null}
 
@@ -827,5 +1026,18 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  permissionWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.warningBorder,
+    backgroundColor: theme.colors.warningBg,
+  },
+  flexText: {
+    flex: 1,
   },
 });

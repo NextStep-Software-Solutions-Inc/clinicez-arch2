@@ -1,12 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
-import { Alert } from '@utils/feedback';
+import {
+  ThemedText,
+  Button,
+  Input,
+  Icon,
+  Badge,
+  ErrorState,
+  SkeletonList,
+  ValidatedDateInput,
+  validateDateString,
+} from '@ui';
+import { useClinic } from '../../context/ClinicContext';
 import { useAuth, usePermission } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
+  formatClinicDateTime,
   ClinicPatient,
   PatientSocialHistory,
   UpdatePatientSocialHistoryPayload,
@@ -20,12 +31,24 @@ interface LifestyleSocialTabProps {
   readOnly?: boolean;
 }
 
+type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+export function isPhysicalActivityOptionSelected(currentVal: string, optLabel: string): boolean {
+  const cleanCur = currentVal.trim().toLowerCase();
+  const cleanOpt = optLabel.trim().toLowerCase();
+  if (!cleanCur || !cleanOpt) return false;
+  if (cleanCur === cleanOpt) return true;
+  const optFirstWord = cleanOpt.split(/[\s(/]+/)[0];
+  return cleanOpt.includes(cleanCur) || (optFirstWord.length >= 4 && cleanCur.startsWith(optFirstWord));
+}
+
 export default function LifestyleSocialTab({
   patient,
   initialSocialHistory,
   onRefreshChart,
   readOnly,
 }: LifestyleSocialTabProps) {
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
   const { user, state, permissions } = useAuth();
   const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
   const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
@@ -34,10 +57,28 @@ export default function LifestyleSocialTab({
   const isPediatric = (patient.age ?? 0) < 18;
 
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { options: dynamicActivityOptions } = useEhrOptions('physical_activity');
+  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>('idle');
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(
+    () => initialSocialHistory?.updatedAt ?? initialSocialHistory?.createdAt ?? null
+  );
+  const [userEditVersion, setUserEditVersion] = useState(0);
+
+  const lastEditKindRef = useRef<'discrete' | 'text'>('discrete');
+  const inFlightSaveRef = useRef(false);
+  const pendingResaveRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userEditVersionRef = useRef(0);
+  userEditVersionRef.current = userEditVersion;
+  const lastSavedEditVersionRef = useRef(0);
+  const lastSavedPayloadJsonRef = useRef<string | null>(null);
+  const onRefreshChartRef = useRef(onRefreshChart);
+  onRefreshChartRef.current = onRefreshChart;
+
+  const { options: dynamicActivityOptions, loading: activityOptionsLoading } =
+    useEhrOptions('physical_activity');
   const { options: dynamicDietaryOptions } = useEhrOptions('dietary_intake');
   const { options: dynamicAlcoholOptions } = useEhrOptions('alcohol_type');
 
@@ -71,8 +112,60 @@ export default function LifestyleSocialTab({
   const [selectedDietaryHabits, setSelectedDietaryHabits] = useState<string[]>([]);
   const [remarks, setRemarks] = useState('');
 
+  // Dynamic Pack-Years calculation: packsPerDay * yearsSmoking
+  const calcPacks = parseFloat(packsPerDay) || 0;
+  const calcYears = parseFloat(yearsSmoking) || 0;
+  const packYears = calcPacks > 0 && calcYears > 0 ? (calcPacks * calcYears).toFixed(1) : '0';
+
+  const formSnapshotRef = useRef({
+    smokingStatus,
+    packsPerDay,
+    yearsSmoking,
+    smokingStoppedDate,
+    alcoholStatus,
+    alcoholDrinksPerWeek,
+    alcoholBottlesPerDay,
+    alcoholFrequency,
+    usesIllicitDrugs,
+    drugTypes,
+    substanceUseHistory,
+    isSexuallyActive,
+    coitarcheAge,
+    physicalActivityFrequency,
+    selectedDietaryHabits,
+    remarks,
+  });
+  formSnapshotRef.current = {
+    smokingStatus,
+    packsPerDay,
+    yearsSmoking,
+    smokingStoppedDate,
+    alcoholStatus,
+    alcoholDrinksPerWeek,
+    alcoholBottlesPerDay,
+    alcoholFrequency,
+    usesIllicitDrugs,
+    drugTypes,
+    substanceUseHistory,
+    isSexuallyActive,
+    coitarcheAge,
+    physicalActivityFrequency,
+    selectedDietaryHabits,
+    remarks,
+  };
+
+  const markUserEdited = useCallback(
+    (kind: 'discrete' | 'text') => {
+      if (!canWritePatients) return;
+      lastEditKindRef.current = kind;
+      setAutoSaveStatus('saving');
+      setAutoSaveError(null);
+      setUserEditVersion((v) => v + 1);
+    },
+    [canWritePatients]
+  );
+
   const populateForm = (data: PatientSocialHistory) => {
-    // Smoking Tri-State resolution
     let smk: 'never' | 'current' | 'quit' = 'never';
     const statusVal = data.smokingStatus?.toLowerCase();
     if (statusVal === 'current' || statusVal === 'y') {
@@ -87,7 +180,6 @@ export default function LifestyleSocialTab({
     setYearsSmoking(data.yearsSmoking != null ? String(data.yearsSmoking) : '');
     setSmokingStoppedDate(data.smokingStoppedDate ? data.smokingStoppedDate.split('T')[0] : '');
 
-    // Alcohol Tri-State resolution
     let alc: 'never' | 'current' | 'quit' = 'never';
     const alcVal = data.alcoholStatus?.toLowerCase();
     const freqVal = data.alcoholFrequency?.trim().toLowerCase();
@@ -101,7 +193,11 @@ export default function LifestyleSocialTab({
     setAlcoholStatus(alc);
     setAlcoholDrinksPerWeek(data.alcoholDrinksPerWeek != null ? String(data.alcoholDrinksPerWeek) : '');
     setAlcoholBottlesPerDay(data.alcoholBottlesPerDay != null ? String(data.alcoholBottlesPerDay) : '');
-    setAlcoholFrequency(data.alcoholFrequency && data.alcoholFrequency.toLowerCase() !== 'quit' ? data.alcoholFrequency : 'Occasional / Social');
+    setAlcoholFrequency(
+      data.alcoholFrequency && data.alcoholFrequency.toLowerCase() !== 'quit'
+        ? data.alcoholFrequency
+        : 'Occasional / Social'
+    );
 
     setUsesIllicitDrugs(data.usesIllicitDrugs);
     setDrugTypes(data.drugTypes || '');
@@ -110,18 +206,15 @@ export default function LifestyleSocialTab({
     setIsSexuallyActive(data.isSexuallyActive);
     setCoitarcheAge(data.coitarcheAge != null ? String(data.coitarcheAge) : '');
 
-    // Standardized Physical Activity resolution
     if (data.physicalActivityFrequency && data.physicalActivityFrequency.trim()) {
       const match = activityOptions.find((opt) =>
-        opt.toLowerCase().includes(data.physicalActivityFrequency!.trim().toLowerCase()) ||
-        data.physicalActivityFrequency!.trim().toLowerCase().includes(opt.split(' ')[0].toLowerCase())
+        isPhysicalActivityOptionSelected(data.physicalActivityFrequency!, opt)
       );
       setPhysicalActivityFrequency(match || data.physicalActivityFrequency);
     } else {
       setPhysicalActivityFrequency('');
     }
 
-    // Standardized Dietary Habits resolution
     if (data.dietaryHabits && data.dietaryHabits.trim()) {
       const habits = data.dietaryHabits
         .split(',')
@@ -144,6 +237,11 @@ export default function LifestyleSocialTab({
     }
 
     setRemarks(data.remarks || '');
+
+    const savedTimestamp = data.updatedAt || data.createdAt || null;
+    if (savedTimestamp) {
+      setLastSavedAt(savedTimestamp);
+    }
   };
 
   const fetchSocialHistory = async () => {
@@ -164,6 +262,18 @@ export default function LifestyleSocialTab({
   };
 
   useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pendingResaveRef.current = false;
+    userEditVersionRef.current = 0;
+    lastSavedEditVersionRef.current = 0;
+    lastSavedPayloadJsonRef.current = null;
+    setUserEditVersion(0);
+    setAutoSaveStatus('idle');
+    setAutoSaveError(null);
+    setLastSavedAt(initialSocialHistory?.updatedAt ?? initialSocialHistory?.createdAt ?? null);
     if (initialSocialHistory) {
       populateForm(initialSocialHistory);
     } else {
@@ -172,85 +282,198 @@ export default function LifestyleSocialTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id]);
 
-  // Dynamic Pack-Years calculation: packsPerDay * yearsSmoking
-  const calcPacks = parseFloat(packsPerDay) || 0;
-  const calcYears = parseFloat(yearsSmoking) || 0;
-  const packYears = calcPacks > 0 && calcYears > 0 ? (calcPacks * calcYears).toFixed(1) : '0';
-
   const toggleDietaryHabit = (habit: string) => {
     if (!canWritePatients) return;
     if (selectedDietaryHabits.includes(habit)) {
-      if (selectedDietaryHabits.length > 1) {
-        setSelectedDietaryHabits(selectedDietaryHabits.filter((h) => h !== habit));
-      }
+      setSelectedDietaryHabits(selectedDietaryHabits.filter((h) => h !== habit));
     } else {
       setSelectedDietaryHabits([...selectedDietaryHabits, habit]);
     }
+    markUserEdited('discrete');
   };
 
-  const handleSave = async () => {
-    if (!canWritePatients) {
-      Alert.alert(
-        'Insufficient Permissions',
-        "Required permission 'patients:write' is not granted for this clinic role."
-      );
-      return;
-    }
-    if (smokingStatus === 'quit' && smokingStoppedDate && smokingStoppedDate.trim()) {
-      const stopDateValidation = validateDateString(smokingStoppedDate, { boundaryMode: 'pastOrToday' });
+  const performAutoSave = useCallback(async () => {
+    if (!canWritePatients) return;
+
+    const snap = formSnapshotRef.current;
+    const trimmedStopDate = snap.smokingStoppedDate.trim();
+
+    if (snap.smokingStatus === 'quit' && trimmedStopDate.length > 0) {
+      if (trimmedStopDate.length < 10) {
+        setAutoSaveStatus('idle');
+        return;
+      }
+      const stopDateValidation = validateDateString(trimmedStopDate, { boundaryMode: 'pastOrToday' });
       if (!stopDateValidation.isValid) {
-        Alert.alert('Invalid Date Stopped', stopDateValidation.errorMessage || 'Please enter a valid smoking cessation date not in the future.');
+        setAutoSaveStatus('error');
+        setAutoSaveError(
+          stopDateValidation.errorMessage || 'Please enter a valid smoking cessation date not in the future.'
+        );
         return;
       }
     }
-    setSaving(true);
+
+    const snapPacks = parseFloat(snap.packsPerDay) || 0;
+    const snapYears = parseFloat(snap.yearsSmoking) || 0;
+    const snapPackYears = snapPacks > 0 && snapYears > 0 ? parseFloat((snapPacks * snapYears).toFixed(1)) : 0;
+    const isSmoker = snap.smokingStatus === 'current';
+    const isAlcoholDrinker = snap.alcoholStatus === 'current';
+
+    const payload: UpdatePatientSocialHistoryPayload = {
+      isSmoker,
+      smokingStatus: snap.smokingStatus,
+      packsPerDay:
+        (snap.smokingStatus === 'current' || snap.smokingStatus === 'quit') && snapPacks > 0
+          ? snapPacks
+          : undefined,
+      cigarettesPerDay:
+        (snap.smokingStatus === 'current' || snap.smokingStatus === 'quit') && snapPacks > 0
+          ? Math.round(snapPacks * 20)
+          : undefined,
+      yearsSmoking:
+        (snap.smokingStatus === 'current' || snap.smokingStatus === 'quit') && snapYears > 0
+          ? Math.round(snapYears)
+          : undefined,
+      smokingPackYears:
+        (snap.smokingStatus === 'current' || snap.smokingStatus === 'quit') && snapPackYears > 0
+          ? snapPackYears
+          : undefined,
+      smokingStoppedDate:
+        snap.smokingStatus === 'quit' && trimmedStopDate ? trimmedStopDate : undefined,
+
+      isAlcoholDrinker,
+      alcoholStatus: snap.alcoholStatus,
+      alcoholDrinksPerWeek:
+        isAlcoholDrinker && parseFloat(snap.alcoholDrinksPerWeek)
+          ? parseFloat(snap.alcoholDrinksPerWeek)
+          : undefined,
+      alcoholBottlesPerDay:
+        isAlcoholDrinker && parseFloat(snap.alcoholBottlesPerDay)
+          ? parseFloat(snap.alcoholBottlesPerDay)
+          : undefined,
+      alcoholFrequency:
+        snap.alcoholStatus === 'quit'
+          ? 'Quit'
+          : isAlcoholDrinker
+            ? snap.alcoholFrequency
+            : undefined,
+
+      usesIllicitDrugs: snap.usesIllicitDrugs,
+      drugTypes: snap.usesIllicitDrugs && snap.drugTypes.trim() ? snap.drugTypes.trim() : undefined,
+      substanceUseHistory:
+        snap.usesIllicitDrugs && snap.substanceUseHistory.trim()
+          ? snap.substanceUseHistory.trim()
+          : undefined,
+
+      isSexuallyActive: snap.isSexuallyActive,
+      coitarcheAge:
+        snap.isSexuallyActive && parseInt(snap.coitarcheAge, 10)
+          ? parseInt(snap.coitarcheAge, 10)
+          : undefined,
+
+      physicalActivityFrequency: snap.physicalActivityFrequency.trim() || undefined,
+      dietaryHabits: snap.selectedDietaryHabits.join(', ') || undefined,
+      remarks: snap.remarks.trim() || undefined,
+    };
+
+    const savingEditVersion = userEditVersionRef.current;
+    const payloadKey = JSON.stringify(payload);
+    if (payloadKey === lastSavedPayloadJsonRef.current) {
+      lastSavedEditVersionRef.current = Math.max(
+        lastSavedEditVersionRef.current,
+        savingEditVersion
+      );
+      setAutoSaveStatus('saved');
+      setAutoSaveError(null);
+      return;
+    }
+
+    if (inFlightSaveRef.current) {
+      pendingResaveRef.current = true;
+      return;
+    }
+
+    inFlightSaveRef.current = true;
+    setAutoSaveStatus('saving');
+    setAutoSaveError(null);
+
     try {
-      const isSmoker = smokingStatus === 'current';
-      const isAlcoholDrinker = alcoholStatus === 'current';
-
-      const payload: UpdatePatientSocialHistoryPayload = {
-        isSmoker,
-        smokingStatus,
-        packsPerDay: (smokingStatus === 'current' || smokingStatus === 'quit') && calcPacks > 0 ? calcPacks : undefined,
-        cigarettesPerDay: (smokingStatus === 'current' || smokingStatus === 'quit') && calcPacks > 0 ? Math.round(calcPacks * 20) : undefined,
-        yearsSmoking: (smokingStatus === 'current' || smokingStatus === 'quit') && calcYears > 0 ? Math.round(calcYears) : undefined,
-        smokingPackYears: (smokingStatus === 'current' || smokingStatus === 'quit') && parseFloat(packYears) > 0 ? parseFloat(packYears) : undefined,
-        smokingStoppedDate: smokingStatus === 'quit' && smokingStoppedDate.trim() ? smokingStoppedDate.trim() : undefined,
-
-        isAlcoholDrinker,
-        alcoholStatus,
-        alcoholDrinksPerWeek: isAlcoholDrinker && parseFloat(alcoholDrinksPerWeek) ? parseFloat(alcoholDrinksPerWeek) : undefined,
-        alcoholBottlesPerDay: isAlcoholDrinker && parseFloat(alcoholBottlesPerDay) ? parseFloat(alcoholBottlesPerDay) : undefined,
-        alcoholFrequency: alcoholStatus === 'quit' ? 'Quit' : (isAlcoholDrinker ? alcoholFrequency : undefined),
-
-        usesIllicitDrugs,
-        drugTypes: usesIllicitDrugs && drugTypes.trim() ? drugTypes.trim() : undefined,
-        substanceUseHistory: usesIllicitDrugs && substanceUseHistory.trim() ? substanceUseHistory.trim() : undefined,
-
-        isSexuallyActive,
-        coitarcheAge: isSexuallyActive && parseInt(coitarcheAge, 10) ? parseInt(coitarcheAge, 10) : undefined,
-
-        physicalActivityFrequency: physicalActivityFrequency.trim() || undefined,
-        dietaryHabits: selectedDietaryHabits.join(', ') || undefined,
-        remarks: remarks.trim() || undefined,
-      };
-
       const [updated, err] = await clinicService.updateSocialHistory(patient.id, payload);
       if (err) {
-        Alert.alert('Error', err.message || 'Failed to save lifestyle and social profile.');
+        setAutoSaveStatus('error');
+        setAutoSaveError(err.message || 'Failed to auto-save lifestyle and social profile.');
       } else {
-        Alert.alert('Success', 'Social and lifestyle profile updated successfully.');
-        if (updated) {
-          populateForm(updated);
-        }
-        onRefreshChart?.();
+        lastSavedPayloadJsonRef.current = payloadKey;
+        lastSavedEditVersionRef.current = Math.max(
+          lastSavedEditVersionRef.current,
+          savingEditVersion
+        );
+        const savedIso = updated?.updatedAt || new Date().toISOString();
+        setLastSavedAt(savedIso);
+        setAutoSaveStatus('saved');
+        onRefreshChartRef.current?.();
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Unexpected error while saving.');
+      setAutoSaveStatus('error');
+      setAutoSaveError(e?.message || 'Unexpected error while saving lifestyle profile.');
     } finally {
-      setSaving(false);
+      inFlightSaveRef.current = false;
+      const shouldResave =
+        pendingResaveRef.current && userEditVersionRef.current > savingEditVersion;
+      pendingResaveRef.current = false;
+      if (shouldResave) {
+        void performAutoSaveRef.current();
+      }
     }
-  };
+  }, [canWritePatients, patient.id]);
+
+  const performAutoSaveRef = useRef(performAutoSave);
+  performAutoSaveRef.current = performAutoSave;
+
+  useEffect(() => {
+    if (
+      userEditVersion === 0 ||
+      userEditVersion <= lastSavedEditVersionRef.current ||
+      !canWritePatients
+    ) {
+      return;
+    }
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const delayMs = lastEditKindRef.current === 'discrete' ? 300 : 650;
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      void performAutoSaveRef.current();
+    }, delayMs);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+    // Trigger auto-save strictly when userEditVersion increments from an explicit user edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userEditVersion]);
+
+  const formatLastSavedBadge = useCallback(
+    (iso?: string | null): string | null => {
+      if (!iso) return null;
+      const formatted = formatClinicDateTime(iso, {
+        dateFormat,
+        timeFormat,
+        timeZoneId,
+        fallback: '',
+      });
+      return formatted ? `Last saved ${formatted}` : null;
+    },
+    [dateFormat, timeFormat, timeZoneId]
+  );
+
+  const lastSavedBadgeLabel = formatLastSavedBadge(lastSavedAt);
 
   if (loading) {
     return (
@@ -283,6 +506,54 @@ export default function LifestyleSocialTab({
         </View>
       ) : null}
 
+      {(canWritePatients || lastSavedBadgeLabel) ? (
+        <View style={styles.autoSaveBar}>
+          <View style={styles.autoSaveLeftRow}>
+            <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+            <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ flex: 1 }}>
+              {canWritePatients
+                ? 'Changes to lifestyle and social history are saved automatically.'
+                : 'Lifestyle and social history record'}
+            </ThemedText>
+          </View>
+          <View style={styles.autoSaveRightRow}>
+            {canWritePatients && autoSaveStatus === 'saving' ? (
+              <Badge label="Saving changes…" variant="warning" size="sm" icon="clock" />
+            ) : canWritePatients && autoSaveStatus === 'error' ? (
+              <Pressable
+                onPress={() => void performAutoSave()}
+                accessibilityRole="button"
+                accessibilityLabel="Retry saving lifestyle changes"
+              >
+                <Badge label="Autosave failed • Retry" variant="emergency" size="sm" icon="alertCircle" />
+              </Pressable>
+            ) : lastSavedBadgeLabel ? (
+              <Badge
+                label={lastSavedBadgeLabel}
+                variant={autoSaveStatus === 'saved' ? 'success' : 'routine'}
+                size="sm"
+                icon={autoSaveStatus === 'saved' ? 'checkCircle' : 'check'}
+              />
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
+      {autoSaveStatus === 'error' && autoSaveError ? (
+        <View style={styles.autoSaveErrorBanner} accessibilityRole="alert">
+          <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+          <ThemedText variant="small" color={theme.colors.emergencyText} style={{ flex: 1 }}>
+            {autoSaveError}
+          </ThemedText>
+          <Button
+            title="Retry"
+            variant="outline"
+            size="sm"
+            onPress={() => void performAutoSave()}
+          />
+        </View>
+      ) : null}
+
       {isPediatric && (
         <View style={styles.pediatricBanner}>
           <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.infoText} />
@@ -291,7 +562,7 @@ export default function LifestyleSocialTab({
               Pediatric Patient Protocol ({patient.age} years)
             </ThemedText>
             <ThemedText variant="small" color={theme.colors.infoText}>
-              Under-18 patient: behavioral factors (smoking, alcohol, illicit substance use) default to non-user per PhilHealth Konsulta guidelines.
+              Under-18 patient: behavioral factors (smoking, alcohol, illicit substance use) default to non-user per PhilHealth YAKAP guidelines.
             </ThemedText>
           </View>
         </View>
@@ -315,7 +586,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.segmentBtn, smokingStatus === 'never' && styles.segmentBtnActive]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setSmokingStatus('never')}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setSmokingStatus('never');
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={smokingStatus === 'never' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Non-Smoker
@@ -324,7 +599,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.segmentBtn, smokingStatus === 'current' && styles.segmentBtnActiveWarning]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setSmokingStatus('current')}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setSmokingStatus('current');
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={smokingStatus === 'current' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Current Smoker
@@ -333,7 +612,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.segmentBtn, smokingStatus === 'quit' && styles.segmentBtnActiveQuit]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setSmokingStatus('quit')}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setSmokingStatus('quit');
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={smokingStatus === 'quit' ? theme.colors.primaryDark : theme.colors.textSecondary}>
                 Former Smoker (Quit)
@@ -350,7 +633,10 @@ export default function LifestyleSocialTab({
                   label="Packs per Day"
                   placeholder="e.g. 0.5 or 1"
                   value={packsPerDay}
-                  onChangeText={setPacksPerDay}
+                  onChangeText={(val) => {
+                    setPacksPerDay(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -360,7 +646,10 @@ export default function LifestyleSocialTab({
                   label="Years Smoking"
                   placeholder="e.g. 10"
                   value={yearsSmoking}
-                  onChangeText={setYearsSmoking}
+                  onChangeText={(val) => {
+                    setYearsSmoking(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -382,8 +671,13 @@ export default function LifestyleSocialTab({
               label="Date Stopped (Smoking Cessation Date)"
               placeholder="YYYY-MM-DD"
               value={smokingStoppedDate}
-              onChangeText={setSmokingStoppedDate}
+              onChangeText={(val) => {
+                setSmokingStoppedDate(val);
+                markUserEdited('text');
+              }}
               boundaryMode="pastOrToday"
+              disabled={!canWritePatients}
+              editable={canWritePatients}
             />
             <View style={styles.formGrid}>
               <View style={styles.gridItem}>
@@ -391,7 +685,10 @@ export default function LifestyleSocialTab({
                   label="Prior Packs per Day (optional)"
                   placeholder="e.g. 1"
                   value={packsPerDay}
-                  onChangeText={setPacksPerDay}
+                  onChangeText={(val) => {
+                    setPacksPerDay(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -401,7 +698,10 @@ export default function LifestyleSocialTab({
                   label="Prior Years Smoking (optional)"
                   placeholder="e.g. 5"
                   value={yearsSmoking}
-                  onChangeText={setYearsSmoking}
+                  onChangeText={(val) => {
+                    setYearsSmoking(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -437,7 +737,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.segmentBtn, alcoholStatus === 'never' && styles.segmentBtnActive]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setAlcoholStatus('never')}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setAlcoholStatus('never');
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={alcoholStatus === 'never' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Non-Drinker
@@ -446,7 +750,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.segmentBtn, alcoholStatus === 'current' && styles.segmentBtnActiveWarning]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setAlcoholStatus('current')}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setAlcoholStatus('current');
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={alcoholStatus === 'current' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Current Drinker
@@ -455,7 +763,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.segmentBtn, alcoholStatus === 'quit' && styles.segmentBtnActiveQuit]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setAlcoholStatus('quit')}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setAlcoholStatus('quit');
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={alcoholStatus === 'quit' ? theme.colors.primaryDark : theme.colors.textSecondary}>
                 Former Drinker (Quit)
@@ -472,7 +784,10 @@ export default function LifestyleSocialTab({
                   label="Drinks per Week"
                   placeholder="e.g. 3"
                   value={alcoholDrinksPerWeek}
-                  onChangeText={setAlcoholDrinksPerWeek}
+                  onChangeText={(val) => {
+                    setAlcoholDrinksPerWeek(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -482,7 +797,10 @@ export default function LifestyleSocialTab({
                   label="Bottles per Day"
                   placeholder="e.g. 1"
                   value={alcoholBottlesPerDay}
-                  onChangeText={setAlcoholBottlesPerDay}
+                  onChangeText={(val) => {
+                    setAlcoholBottlesPerDay(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -491,7 +809,7 @@ export default function LifestyleSocialTab({
 
             <View style={styles.fieldBlock}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Drinking Frequency
+                Drinking Frequency / Beverage Type
               </ThemedText>
               <View style={styles.chipsWrap}>
                 {alcoholFrequencyOptions.map((freq) => {
@@ -501,7 +819,11 @@ export default function LifestyleSocialTab({
                       key={freq}
                       style={[styles.chip, active && styles.chipActive]}
                       disabled={!canWritePatients}
-                      onPress={() => canWritePatients && setAlcoholFrequency(freq)}
+                      onPress={() => {
+                        if (!canWritePatients) return;
+                        setAlcoholFrequency(freq);
+                        markUserEdited('discrete');
+                      }}
                     >
                       <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
                         {freq}
@@ -544,7 +866,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.toggleBtn, !usesIllicitDrugs && styles.toggleBtnActive]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setUsesIllicitDrugs(false)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setUsesIllicitDrugs(false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={!usesIllicitDrugs ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -553,7 +879,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.toggleBtn, usesIllicitDrugs && styles.toggleBtnActiveEmergency]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setUsesIllicitDrugs(true)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setUsesIllicitDrugs(true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={usesIllicitDrugs ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -568,14 +898,20 @@ export default function LifestyleSocialTab({
               label="Substance Types"
               placeholder="e.g. Methamphetamine, Cannabis, Opioids"
               value={drugTypes}
-              onChangeText={setDrugTypes}
+              onChangeText={(val) => {
+                setDrugTypes(val);
+                markUserEdited('text');
+              }}
               editable={canWritePatients}
             />
             <Input
               label="Substance Use History / Treatment"
               placeholder="e.g. Past user, completed rehabilitation 2020"
               value={substanceUseHistory}
-              onChangeText={setSubstanceUseHistory}
+              onChangeText={(val) => {
+                setSubstanceUseHistory(val);
+                markUserEdited('text');
+              }}
               editable={canWritePatients}
             />
           </View>
@@ -600,7 +936,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.toggleBtn, !isSexuallyActive && styles.toggleBtnActive]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setIsSexuallyActive(false)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setIsSexuallyActive(false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={!isSexuallyActive ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -609,7 +949,11 @@ export default function LifestyleSocialTab({
             <Pressable
               style={[styles.toggleBtn, isSexuallyActive && styles.toggleBtnActivePrimary]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setIsSexuallyActive(true)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setIsSexuallyActive(true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={isSexuallyActive ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -624,7 +968,10 @@ export default function LifestyleSocialTab({
               label="Age at Coitarche (First Intercourse)"
               placeholder="e.g. 18"
               value={coitarcheAge}
-              onChangeText={setCoitarcheAge}
+              onChangeText={(val) => {
+                setCoitarcheAge(val);
+                markUserEdited('text');
+              }}
               keyboardType="numeric"
               editable={canWritePatients}
             />
@@ -643,24 +990,51 @@ export default function LifestyleSocialTab({
           <ThemedText variant="small" color={theme.colors.textMuted}>
             Select standard cardiovascular and metabolic activity level
           </ThemedText>
-          <View style={styles.chipsWrap}>
-            {activityOptions.map((opt) => {
-              const active = physicalActivityFrequency === opt;
-              return (
-                <Pressable
-                  key={opt}
-                  style={[styles.chip, active && styles.chipActive]}
-                  disabled={!canWritePatients}
-                  onPress={() => canWritePatients && setPhysicalActivityFrequency(opt)}
-                >
-                  {active && <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.primary} />}
-                  <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
-                    {opt}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          {activityOptions.length > 0 ? (
+            <View style={styles.chipsWrap}>
+              {activityOptions.map((opt) => {
+                const active = isPhysicalActivityOptionSelected(physicalActivityFrequency, opt);
+                return (
+                  <Pressable
+                    key={opt}
+                    style={[styles.chip, active && styles.chipActive]}
+                    disabled={!canWritePatients}
+                    onPress={() => {
+                      if (!canWritePatients) return;
+                      setPhysicalActivityFrequency(active ? '' : opt);
+                      markUserEdited('discrete');
+                    }}
+                  >
+                    <Icon
+                      name={active ? 'check' : 'plus'}
+                      size={theme.sizes.iconSm}
+                      color={active ? theme.colors.primary : theme.colors.textMuted}
+                    />
+                    <ThemedText
+                      variant={active ? 'smallBold' : 'small'}
+                      color={active ? theme.colors.primary : theme.colors.textSecondary}
+                    >
+                      {opt}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : activityOptionsLoading ? (
+            <ThemedText variant="small" color={theme.colors.textMuted} style={styles.inlineLoadingNote}>
+              Loading physical activity options…
+            </ThemedText>
+          ) : (
+            <Input
+              placeholder="e.g. Sedentary (<30 mins/week), Light, Moderate (≥150 mins/week), or Vigorous"
+              value={physicalActivityFrequency}
+              onChangeText={(val) => {
+                setPhysicalActivityFrequency(val);
+                markUserEdited('text');
+              }}
+              editable={canWritePatients}
+            />
+          )}
         </View>
 
         <View style={styles.fieldBlock}>
@@ -680,8 +1054,15 @@ export default function LifestyleSocialTab({
                   disabled={!canWritePatients}
                   onPress={() => toggleDietaryHabit(opt)}
                 >
-                  <Icon name={active ? 'check' : 'plus'} size={theme.sizes.iconSm} color={active ? theme.colors.primary : theme.colors.textMuted} />
-                  <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
+                  <Icon
+                    name={active ? 'check' : 'plus'}
+                    size={theme.sizes.iconSm}
+                    color={active ? theme.colors.primary : theme.colors.textMuted}
+                  />
+                  <ThemedText
+                    variant={active ? 'smallBold' : 'small'}
+                    color={active ? theme.colors.primary : theme.colors.textSecondary}
+                  >
                     {opt}
                   </ThemedText>
                 </Pressable>
@@ -694,20 +1075,11 @@ export default function LifestyleSocialTab({
           label="Clinical Remarks / Lifestyle Notes"
           placeholder="Additional dietary restrictions or clinical remarks"
           value={remarks}
-          onChangeText={setRemarks}
+          onChangeText={(val) => {
+            setRemarks(val);
+            markUserEdited('text');
+          }}
           editable={canWritePatients}
-        />
-      </View>
-
-      <View style={styles.actionFooter}>
-        <Button
-          title={saving ? 'Saving Changes…' : 'Save Lifestyle Profile'}
-          variant="primary"
-          size="lg"
-          icon="check"
-          loading={saving}
-          disabled={saving || !canWritePatients}
-          onPress={handleSave}
         />
       </View>
     </ScrollView>
@@ -728,6 +1100,40 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     backgroundColor: theme.colors.warningBg,
     borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+  },
+  autoSaveBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  autoSaveLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flex: 1,
+  },
+  autoSaveRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  autoSaveErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
     borderWidth: 1,
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,
@@ -758,6 +1164,9 @@ const styles = StyleSheet.create({
   },
   fieldBlock: {
     gap: theme.spacing.xs,
+  },
+  inlineLoadingNote: {
+    marginTop: theme.spacing.xs,
   },
   switchRow: {
     flexDirection: 'row',
@@ -866,9 +1275,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,
-  },
-  actionFooter: {
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
   },
 });

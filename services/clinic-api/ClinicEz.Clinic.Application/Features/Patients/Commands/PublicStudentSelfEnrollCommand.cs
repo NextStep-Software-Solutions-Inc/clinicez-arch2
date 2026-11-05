@@ -211,6 +211,8 @@ public sealed class PublicStudentSelfEnrollCommandHandler
                     throw new InvalidOperationException("Failed to self-enroll student after multiple sequence allocation attempts.", ex);
                 }
 
+                await _codeGenerator.SynchronizeTrackerWithMaxExistingAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+
                 var newReservation = await _codeGenerator.ReserveNextAsync(
                     _clinicContext.TenantId,
                     _clinicContext.ClinicId,

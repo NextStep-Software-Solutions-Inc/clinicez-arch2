@@ -18,6 +18,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
 import {
   PatientSummarySpine,
+  reconcileChartWithPatient,
   PatientChartModal,
   CHART_TABS,
   type ChartTab,
@@ -40,7 +41,8 @@ import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { PERMISSIONS } from '@constants/permissions';
-import { usePermission } from '@context/AuthContext';
+import { useAuth, usePermission } from '@context/AuthContext';
+import { normalizeAttachmentStaffAttribution } from '../../components/chart/AttachExternalDocumentModal';
 import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
@@ -80,6 +82,7 @@ import ServiceCheckInModal, {
 } from '../../components/patient/ServiceCheckInModal';
 import ConsultationTypeModal from '../../components/patient/ConsultationTypeModal';
 import QueueTicketPickerModal from '../../components/patient/QueueTicketPickerModal';
+import IssueMedicalCertificateModal from '../../components/patient/IssueMedicalCertificateModal';
 import { RecordVitalsModal } from '../../components/consultation';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
@@ -100,6 +103,7 @@ import {
   getManilaTodayStr,
   ClinicPatient,
   PatientQueueItem,
+  PatientActiveQueueTicket,
   PatientDirectoryCounts,
   StaffMember,
   RegisterPatientPayload,
@@ -194,8 +198,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { isWorkstation, isDesktop } = useBreakpoint();
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
   const routeParams = route?.params;
-  const openPatientId = routeParams?.openPatientId || routeParams?.patientId;
-  const openRegister = routeParams?.openRegister;
+  const openRegister = Boolean(routeParams?.openRegister);
+  const rawOpenPatientId = routeParams?.openPatientId || routeParams?.patientId;
+  const openPatientId =
+    openRegister || rawOpenPatientId === 'quick-action-register'
+      ? undefined
+      : rawOpenPatientId;
   const routeTab = routeParams?.tab as ChartTab | undefined;
   const rawRouteTooth = routeParams?.toothNumber ?? routeParams?.tooth;
   const routeToothNumber = useMemo(() => {
@@ -206,6 +214,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { letterhead, rooms = [], accreditationNumber } = useClinic();
   const hasPhilHealthAccreditation = Boolean(accreditationNumber && accreditationNumber.trim());
   const { currentName, staff: staffList, current: currentStaff } = useStaff();
+  const { user: authUser } = useAuth();
+  const actorStaffName = (currentName || authUser?.name || authUser?.email || '').trim();
+  const rawActorStaffId = currentStaff?.id || authUser?.id || '';
+  const actorStaffId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawActorStaffId)
+    ? rawActorStaffId
+    : undefined;
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
   const [totalCounts, setTotalCounts] = useState<PatientDirectoryCounts | null>(null);
   const [patientsError, setPatientsError] = useState<string | null>(null);
@@ -521,12 +535,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     error?: any;
     patientName?: string;
   } | null>(null);
+  const [chartQueueItemId, setChartQueueItemId] = useState<string | null>(null);
+  const [chartForceSeparateVisit, setChartForceSeparateVisit] = useState(false);
+  const [medCertModalVisible, setMedCertModalVisible] = useState(false);
+  const [medCertPatient, setMedCertPatient] = useState<ClinicPatient | null>(null);
+  const [medCertQueueItemId, setMedCertQueueItemId] = useState<string | null>(null);
+  const [medCertForceSeparateVisit, setMedCertForceSeparateVisit] = useState(false);
   const [ticketPickerState, setTicketPickerState] = useState<{
     visible: boolean;
     patient: ClinicPatient;
-    tickets: PatientQueueItem[];
+    tickets: Array<PatientQueueItem | PatientActiveQueueTicket>;
     serviceTitle: string;
-    onSelect: (ticket: PatientQueueItem) => void;
+    onSelect: (ticket: PatientQueueItem | PatientActiveQueueTicket) => void;
     onCreateNew?: () => void;
   } | null>(null);
 
@@ -557,6 +577,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [vitalsModalVisible, setVitalsModalVisible] = useState(false);
   const [vitalsPatient, setVitalsPatient] = useState<ClinicPatient | null>(null);
   const [vitalsQueueItemId, setVitalsQueueItemId] = useState<string | null>(null);
+  const [vitalsForceSeparateVisit, setVitalsForceSeparateVisit] = useState(false);
 
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
@@ -919,7 +940,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           ? activeRooms.find((r) => r.id === formTriageRoomId)?.name
           : undefined,
       queueDate: sendToTriage ? getManilaTodayStr() : undefined,
-      ...(formPatientCode.trim() ? ({ patientCode: formPatientCode.trim() } as any) : {}),
+      patientCode: formPatientCode.trim() || undefined,
     };
 
     const [newPat, err] = await clinicService.registerPatient(payload);
@@ -951,7 +972,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           Object.assign(fieldErrorsMap, err.getFieldErrorsMap());
         }
         const pcErr = err.getFieldError?.('patientCode');
-        if (pcErr) fieldErrorsMap.patientCode = pcErr;
+        if (formPatientCode.trim()) {
+          if (pcErr) fieldErrorsMap.patientCode = pcErr;
+        } else {
+          delete fieldErrorsMap.patientCode;
+        }
 
         const fnErr = err.getFieldError?.('firstName');
         if (fnErr) fieldErrorsMap.firstName = fnErr;
@@ -1114,7 +1139,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const handleOpenChart = async (patient: ClinicPatient, tabToOpen?: ChartTab, toothToFocus?: number) => {
+  const handleOpenChart = async (
+    patient: ClinicPatient,
+    tabToOpen?: ChartTab,
+    toothToFocus?: number,
+    queueItemId?: string | null,
+    forceSeparateVisit: boolean = false
+  ) => {
+    setChartQueueItemId(queueItemId ?? null);
+    setChartForceSeparateVisit(forceSeparateVisit);
     setSelectedPatient(patient);
     const targetTab = tabToOpen ?? activeChartTab ?? getInitialChartTab();
     setActiveChartTab(targetTab);
@@ -1141,7 +1174,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       setPatientChart(null);
       setPatientAttachments([]);
     }
-    const [chartData, chartErr] = await clinicService.getPatientChart(patient.id);
+    const [[chartData, chartErr], [freshPatient]] = await Promise.all([
+      clinicService.getPatientChart(patient.id),
+      typeof clinicService.getPatientById === 'function'
+        ? clinicService.getPatientById(patient.id)
+        : Promise.resolve([null, null] as const),
+    ]);
+    const authoritativePatient = freshPatient || patient;
+    if (freshPatient) {
+      setSelectedPatient(freshPatient);
+      setPatients((prev) =>
+        prev ? prev.map((p) => (p.id === freshPatient.id ? freshPatient : p)) : prev,
+      );
+    }
     if (chartData) {
       if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
         const [dentalData] = await clinicService.getPatientDentalChart(patient.id);
@@ -1150,7 +1195,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           chartData.dentalChart = dentalData;
         }
       }
-      setPatientChart(chartData);
+      setPatientChart(reconcileChartWithPatient(chartData, authoritativePatient));
       setChartError(null);
       if (chartData.attachments && chartData.attachments.length > 0) {
         setPatientAttachments(chartData.attachments);
@@ -1176,6 +1221,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const handleCloseChart = () => {
     setChartVisible(false);
     setSelectedPatient(null);
+    setChartQueueItemId(null);
     setFocusToothNumber(undefined);
     setSessionItem('clinicez_active_patient_id', null);
     if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
@@ -1312,6 +1358,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     if (selectedPatient?.id === updated.id) {
       setSelectedPatient(updated);
     }
+    setPatientChart((prev) =>
+      prev && prev.patientId === updated.id
+        ? reconcileChartWithPatient(prev, updated)
+        : prev
+    );
   };
 
   const handleVerifyAttachment = async (
@@ -1323,7 +1374,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const rejectionReason = !isApproved
       ? (userRejectionReason?.trim() || 'Document illegible or missing official physician signature/stamp.')
       : undefined;
-    const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    const [, verifyErr] = await clinicService.verifyRecordAttachment(
+      attachmentId,
+      isApproved,
+      rejectionReason,
+      actorStaffName || undefined,
+      actorStaffId
+    );
     setVerifyingAttachmentId(null);
     if (verifyErr) {
       notify.error(verifyErr.message || 'Could not update the document.');
@@ -1338,7 +1395,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               verificationStatus: isApproved ? 'Verified' : 'Rejected',
               rejectionReason,
               verifiedAt: new Date().toISOString(),
-              verifiedByStaffName: currentName || undefined,
+              verifiedByStaffId: actorStaffId || att.verifiedByStaffId,
+              verifiedByStaffName: actorStaffName || att.verifiedByStaffName || undefined,
             }
           : att
       )
@@ -1411,6 +1469,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         formData.append('Title', docTitle.trim());
         if (docNotes.trim()) formData.append('Notes', docNotes.trim());
         formData.append('DocumentDate', strictlyFormattedDocDate);
+        if (actorStaffId) formData.append('UploadedByStaffId', actorStaffId);
+        if (actorStaffName) formData.append('UploadedByStaffName', actorStaffName);
 
         if (pickedDocFile.file) {
           formData.append('File', pickedDocFile.file);
@@ -1426,7 +1486,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         setUploadingDoc(false);
 
         if (newAtt) {
-          setPatientAttachments((prev) => [newAtt, ...prev]);
+          const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
+          setPatientAttachments((prev) => [attributedAtt, ...prev]);
           setUploadDocModalVisible(false);
           setPickedDocFile(null);
           setDocTitle('');
@@ -1455,7 +1516,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
       documentDate: strictlyFormattedDocDate,
       notes: docNotes.trim() || undefined,
-      uploadedByStaffName: currentName || undefined,
+      uploadedByStaffId: actorStaffId,
+      uploadedByStaffName: actorStaffName || undefined,
       encryptionAlgorithm: 'AES-256-GCM',
       encryptionKeyId: 'cmk-v1',
     };
@@ -1464,7 +1526,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setUploadingDoc(false);
 
     if (newAtt) {
-      setPatientAttachments((prev) => [newAtt, ...prev]);
+      const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
+      setPatientAttachments((prev) => [attributedAtt, ...prev]);
       setUploadDocModalVisible(false);
       setPickedDocFile(null);
       setDocTitle('');
@@ -1474,7 +1537,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     } else if (!shouldQueueOffline(err?.status ?? 0)) {
       notify.error(err?.message || 'The server rejected this document.');
     } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
+      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, actorStaffName || undefined);
       setPatientAttachments((prev) => [queuedAtt, ...prev]);
       setUploadDocModalVisible(false);
       setPickedDocFile(null);
@@ -1626,140 +1689,43 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const ensureEncounterQueueItem = async (
+  const resolveActiveVisitForAction = (
     patient: ClinicPatient,
-    service: {
-      visitType: VisitType;
-      chiefComplaint: string;
-      seriesPrefix?: string;
-    },
-    forceNew: boolean = false
-  ): Promise<{ queueItem: PatientQueueItem; isExisting: boolean; multipleOptions?: PatientQueueItem[] } | null> => {
-    try {
-      const todayStr = getManilaTodayStr();
-      const [queueRes] = await clinicService.getQueue({ date: todayStr });
-      const activeItems = (queueRes || []).filter(
-        (item) =>
-          item.patientId === patient.id &&
-          !['Completed', 'Cancelled', 'NoShow', 'DischargedNonDoctor'].includes(item.status)
-      );
-
-      // Check matching active items for this specific service visitType
-      const matchingItems = activeItems.filter(
-        (item) =>
-          item.visitType === service.visitType ||
-          (service.visitType === 'Consultation' && item.status === 'InConsultation')
-      );
-
-      if (!forceNew && matchingItems.length >= 2) {
-        return { queueItem: matchingItems[0], isExisting: true, multipleOptions: matchingItems };
-      }
-
-      if (!forceNew && matchingItems.length === 1) {
-        return { queueItem: matchingItems[0], isExisting: true };
-      }
-
-      const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-      const prefix = service.seriesPrefix || (isSeniorOrPwd ? 'SQ' : 'Q');
-
-      const [newQueueItem, err] = await clinicService.checkInPatient({
-        patientId: patient.id,
-        patientName: patient.fullName,
-        doctorId: currentStaff?.role === 'Doctor' ? currentStaff.id : undefined,
-        doctorName: currentStaff?.role === 'Doctor' ? currentName : undefined,
-        priority: 'Routine',
-        visitType: service.visitType,
-        chiefComplaint: service.chiefComplaint,
-        seriesPrefix: prefix,
-        queueDate: todayStr,
-        allowDuplicateActive: true,
-      });
-
-      if (err || !newQueueItem) {
-        throw err || new Error((err as any)?.message || 'Failed to create encounter queue ticket');
-      }
-
-      setPatients((prev) =>
-        (prev || []).map((p) =>
-          p.id === patient.id ? { ...p, activeQueueTicket: newQueueItem.queueNumber } : p
-        )
-      );
-
-      return { queueItem: newQueueItem, isExisting: false };
-    } catch (e: any) {
-      notify.error(e?.message || 'Failed to initialize encounter ticket');
-      return null;
-    }
-  };
-
-  const startConsultationWithQueueItem = async (
-    patient: ClinicPatient,
-    queueItem: PatientQueueItem,
-    isExisting: boolean
+    serviceTitle: string,
+    onProceed: (queueItemId: string | null, forceSeparateVisit?: boolean) => void
   ) => {
-    const currentDoctorId = currentStaff?.role === 'Doctor' ? currentStaff.id : undefined;
-    const currentDoctorName = currentStaff?.role === 'Doctor' ? currentName : undefined;
-    const currentRoom = currentStaff?.assignedRoomName || (rooms.length > 0 ? rooms[0].name : undefined);
-    const currentRoomId = currentStaff?.assignedRoomId || (rooms.length > 0 ? rooms[0].id : undefined);
+    const activeTickets = (patient.activeQueueTickets || []).filter(
+      (t) => !['Completed', 'Cancelled', 'NoShow', 'DischargedNonDoctor', 'Diverted'].includes(t.status)
+    );
 
-    if (isExisting && queueItem.status === 'InConsultation') {
-      if (queueItem.doctorId && currentDoctorId && queueItem.doctorId !== currentDoctorId) {
-        Alert.alert(
-          'Active Consultation in Progress',
-          `${patient.fullName} is currently in consultation with ${queueItem.doctorName || 'another doctor'}. Would you like to take over this session?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Take Over',
-              onPress: async () => {
-                await clinicService.callQueueItem(
-                  queueItem.id,
-                  currentDoctorId,
-                  currentDoctorName,
-                  currentRoom,
-                  currentRoomId
-                );
-                navigation.navigate('Consultations', {
-                  queueId: queueItem.id,
-                  queueItemId: queueItem.id,
-                  patientId: patient.id,
-                  patientName: patient.fullName,
-                });
-                notify.success(`Consultation resumed (${queueItem.queueNumber})`);
-              },
-            },
-          ]
-        );
-        return;
-      }
-      navigation.navigate('Consultations', {
-        queueId: queueItem.id,
-        queueItemId: queueItem.id,
-        patientId: patient.id,
-        patientName: patient.fullName,
-      });
-      notify.info(`Resuming active consultation (${queueItem.queueNumber})`);
+    if (activeTickets.length === 0) {
+      onProceed(null, false);
       return;
     }
 
-    await clinicService.callQueueItem(
-      queueItem.id,
-      currentDoctorId,
-      currentDoctorName,
-      currentRoom,
-      currentRoomId
-    );
+    if (activeTickets.length === 1) {
+      onProceed(activeTickets[0].id, false);
+      return;
+    }
 
-    navigation.navigate('Consultations', {
-      queueId: queueItem.id,
-      queueItemId: queueItem.id,
-      patientId: patient.id,
-      patientName: patient.fullName,
+    // >= 2 active tickets
+    setTicketPickerState({
+      visible: true,
+      patient,
+      tickets: activeTickets,
+      serviceTitle,
+      onSelect: (chosenTicket) => {
+        setTicketPickerState(null);
+        onProceed(chosenTicket.id, false);
+      },
+      onCreateNew: () => {
+        setTicketPickerState(null);
+        onProceed(null, true);
+      },
     });
-    notify.success(`Consultation started (${queueItem.queueNumber})`);
   };
 
-  const handleStartConsultationAction = async (
+  const handleStartConsultationAction = (
     patient: ClinicPatient,
     forcedProgram?: 'regular' | 'yakap'
   ) => {
@@ -1770,191 +1736,55 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setConsultationChoicePatient(null);
 
     const isYakap = forcedProgram === 'yakap';
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
-    const visitType: VisitType = 'Consultation';
-    const chiefComplaint = isYakap ? 'PhilHealth Yakap Consultation' : 'General Consultation';
-
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType,
-      chiefComplaint,
-      seriesPrefix,
-    });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Doctor Consultation',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          startConsultationWithQueueItem(patient, chosenTicket, true);
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType, chiefComplaint, seriesPrefix },
-            true
-          );
-          if (newEncounter) {
-            startConsultationWithQueueItem(patient, newEncounter.queueItem, false);
-          }
-        },
+    resolveActiveVisitForAction(patient, 'Doctor Consultation', (queueItemId, forceSeparateVisit) => {
+      navigation.navigate('Consultations', {
+        queueId: queueItemId || undefined,
+        queueItemId: queueItemId || undefined,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        directVisitMode: isYakap ? 'yakap' : 'regular',
+        forceSeparateVisit: Boolean(forceSeparateVisit),
       });
-      return;
-    }
-
-    await startConsultationWithQueueItem(patient, encounter.queueItem, encounter.isExisting);
+      if (queueItemId) {
+        notify.info('Resuming encounter in consultation workstation');
+      }
+    });
   };
 
-  const handleStartProfilingAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SQ' : 'Q';
-    await ensureEncounterQueueItem(patient, {
-      visitType: 'Consultation',
-      chiefComplaint: 'Patient Profiling (Yakap FPE)',
-      seriesPrefix,
-    });
+  const handleStartProfilingAction = (patient: ClinicPatient) => {
+    // Health screening (profiling / Yakap FPE) is purely longitudinal profiling and NEVER creates a visit on click.
     handleOpenPhilHealthProfile(patient);
   };
 
-  const handleRecordVitalsAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SV' : 'V';
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'VitalsCheckOnly',
-      chiefComplaint: 'Vitals Check',
-      seriesPrefix,
+  const handleRecordVitalsAction = (patient: ClinicPatient) => {
+    resolveActiveVisitForAction(patient, 'Vitals Check', (queueItemId, forceSeparateVisit) => {
+      setVitalsPatient(patient);
+      setVitalsQueueItemId(queueItemId);
+      setVitalsForceSeparateVisit(Boolean(forceSeparateVisit));
+      setVitalsModalVisible(true);
     });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Vitals Check',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          setVitalsPatient(patient);
-          setVitalsQueueItemId(chosenTicket.id);
-          setVitalsModalVisible(true);
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType: 'VitalsCheckOnly', chiefComplaint: 'Vitals Check', seriesPrefix },
-            true
-          );
-          if (newEncounter) {
-            setVitalsPatient(patient);
-            setVitalsQueueItemId(newEncounter.queueItem.id);
-            setVitalsModalVisible(true);
-          }
-        },
-      });
-      return;
-    }
-
-    setVitalsPatient(patient);
-    setVitalsQueueItemId(encounter.queueItem.id);
-    setVitalsModalVisible(true);
   };
 
-  const handlePerformProcedureAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SP' : 'P';
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'StandaloneProcedure',
-      chiefComplaint: 'Clinical Procedure',
-      seriesPrefix,
+  const handlePerformProcedureAction = (patient: ClinicPatient) => {
+    resolveActiveVisitForAction(patient, 'Clinical Procedure', (queueItemId, forceSeparateVisit) => {
+      handleOpenChart(patient, 'procedures', undefined, queueItemId, Boolean(forceSeparateVisit));
     });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Clinical Procedure',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          notify.success(`Procedure encounter selected (${chosenTicket.queueNumber})`);
-          handleOpenChart(patient, 'procedures');
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType: 'StandaloneProcedure', chiefComplaint: 'Clinical Procedure', seriesPrefix },
-            true
-          );
-          if (newEncounter?.queueItem?.queueNumber) {
-            notify.success(`Procedure encounter logged (${newEncounter.queueItem.queueNumber})`);
-          }
-          handleOpenChart(patient, 'procedures');
-        },
-      });
-      return;
-    }
-
-    if (encounter?.queueItem?.queueNumber) {
-      notify.success(`Procedure encounter logged (${encounter.queueItem.queueNumber})`);
-    }
-    handleOpenChart(patient, 'procedures');
   };
 
-  const handleIssueClearanceAction = async (patient: ClinicPatient) => {
-    const isSeniorOrPwd = isSeniorOrPwdEligible(patient);
-    const seriesPrefix = isSeniorOrPwd ? 'SA' : 'A';
-    const encounter = await ensureEncounterQueueItem(patient, {
-      visitType: 'AdministrativeDocument',
-      chiefComplaint: 'Administrative & Clearance',
-      seriesPrefix,
+  const handleIssueClearanceAction = (patient: ClinicPatient) => {
+    resolveActiveVisitForAction(patient, 'Medical Certificate', (queueItemId, forceSeparateVisit) => {
+      setMedCertPatient(patient);
+      setMedCertQueueItemId(queueItemId);
+      setMedCertForceSeparateVisit(Boolean(forceSeparateVisit));
+      setMedCertModalVisible(true);
     });
-    if (!encounter) return;
-
-    if (encounter.multipleOptions && encounter.multipleOptions.length >= 2) {
-      setTicketPickerState({
-        visible: true,
-        patient,
-        tickets: encounter.multipleOptions,
-        serviceTitle: 'Administrative Document',
-        onSelect: (chosenTicket) => {
-          setTicketPickerState(null);
-          notify.success(`Administrative encounter selected (${chosenTicket.queueNumber})`);
-          handleOpenChart(patient, 'documents');
-        },
-        onCreateNew: async () => {
-          setTicketPickerState(null);
-          const newEncounter = await ensureEncounterQueueItem(
-            patient,
-            { visitType: 'AdministrativeDocument', chiefComplaint: 'Administrative & Clearance', seriesPrefix },
-            true
-          );
-          if (newEncounter?.queueItem?.queueNumber) {
-            notify.success(`Administrative encounter logged (${newEncounter.queueItem.queueNumber})`);
-          }
-          handleOpenChart(patient, 'documents');
-        },
-      });
-      return;
-    }
-
-    if (encounter?.queueItem?.queueNumber) {
-      notify.success(`Administrative encounter logged (${encounter.queueItem.queueNumber})`);
-    }
-    handleOpenChart(patient, 'documents');
   };
 
   const handleVitalsRecorded = () => {
     setVitalsModalVisible(false);
     setVitalsPatient(null);
     setVitalsQueueItemId(null);
+    setVitalsForceSeparateVisit(false);
     notify.success('Vitals recorded successfully');
     fetchPatients();
   };
@@ -2201,24 +2031,25 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
       {/* Filters & Workstation View Switcher Toolbar */}
       <View style={styles.toolbarRow}>
-        <SegmentedControl<PatientFilter>
-          value={filterMode}
-          onChange={handleFilterModeChange}
-          options={[
-            { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
-            { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
-            { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
-            { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
-            {
-              value: 'ALERTS',
-              label: 'Alerts & allergies',
-              count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
-              badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
-            },
-            { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
-          ]}
-        />
-
+        <View style={styles.toolbarTabs}>
+          <SegmentedControl<PatientFilter>
+            value={filterMode}
+            onChange={handleFilterModeChange}
+            options={[
+              { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
+              { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
+              { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
+              { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
+              {
+                value: 'ALERTS',
+                label: 'Alerts & allergies',
+                count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
+                badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
+              },
+              { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
+            ]}
+          />
+        </View>
 
         {isWorkstation ? (
           <View style={styles.toolbarRight}>
@@ -2226,8 +2057,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               value={viewMode}
               onChange={handleViewModeChange}
               options={[
-                { value: 'cards', label: 'Cards' },
-                { value: 'table', label: 'Compact Table' },
+                { value: 'cards', label: 'Cards view', icon: 'grid', iconOnly: true },
+                { value: 'table', label: 'Compact table view', icon: 'list', iconOnly: true },
               ]}
             />
           </View>
@@ -2260,7 +2091,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         <Card style={styles.tableCard}>
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator={false}
+            showsHorizontalScrollIndicator
             contentContainerStyle={styles.tableScrollContent}
           >
             <View
@@ -2717,7 +2548,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
                         Principal Member Details
                       </ThemedText>
-                      <Badge label="Dependent Coverage" variant="info" size="sm" />
                     </View>
                     <Button
                       title={formGuardianSponsor ? formGuardianSponsor.buttonLabel : 'Use Legal Guardian'}
@@ -2727,9 +2557,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       onPress={handleApplyFormGuardianAsSponsor}
                     />
                   </View>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Required when claiming PhilHealth benefits under a principal member.
-                  </ThemedText>
 
                   <Input
                     label="Principal Member Full Name *"
@@ -3033,6 +2860,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       <PatientChartModal
         visible={chartVisible}
         patient={selectedPatient}
+        queueItemId={chartQueueItemId}
+        allowDuplicateActive={chartForceSeparateVisit}
         patientChart={patientChart}
         loadingChart={loadingChart}
         chartError={chartError}
@@ -3042,7 +2871,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         focusToothNumber={focusToothNumber}
         onTabChange={handleChartTabChange}
         onClose={handleCloseChart}
-        onRefreshChart={() => (selectedPatient ? handleOpenChart(selectedPatient, activeChartTab) : Promise.resolve())}
+        onRefreshChart={() =>
+          selectedPatient
+            ? handleOpenChart(selectedPatient, activeChartTab, undefined, chartQueueItemId, chartForceSeparateVisit)
+            : Promise.resolve()
+        }
         onViewPrescriptionSlip={handleViewPrescriptionSlip}
         onOpenExternalDispense={handleOpenExternalDispense}
         onViewLabSlip={handleViewSlip}
@@ -3535,12 +3368,35 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           setVitalsModalVisible(false);
           setVitalsPatient(null);
           setVitalsQueueItemId(null);
+          setVitalsForceSeparateVisit(false);
         }}
         patient={vitalsPatient}
         queueItemId={vitalsQueueItemId}
+        allowDuplicateActive={vitalsForceSeparateVisit}
         currentStaffId={currentStaff?.id}
         currentStaffName={currentStaff ? formatStaffName(currentStaff) : currentName}
         onSuccess={handleVitalsRecorded}
+      />
+
+      {/* Issue Medical Certificate Modal */}
+      <IssueMedicalCertificateModal
+        visible={medCertModalVisible}
+        patient={medCertPatient}
+        queueItemId={medCertQueueItemId}
+        allowDuplicateActive={medCertForceSeparateVisit}
+        onClose={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+          setMedCertForceSeparateVisit(false);
+        }}
+        onSuccess={() => {
+          setMedCertModalVisible(false);
+          setMedCertPatient(null);
+          setMedCertQueueItemId(null);
+          setMedCertForceSeparateVisit(false);
+          fetchPatients();
+        }}
       />
 
       {/* Multi-Service Queueing Modal */}
@@ -3588,7 +3444,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         patient={ticketPickerState?.patient || null}
         tickets={ticketPickerState?.tickets || []}
         serviceTitle={ticketPickerState?.serviceTitle}
-        onSelectTicket={(t) => ticketPickerState?.onSelect(t as PatientQueueItem)}
+        onSelectTicket={(t) => ticketPickerState?.onSelect(t)}
         onCreateNewTicket={ticketPickerState?.onCreateNew}
         onClose={() => setTicketPickerState(null)}
       />
@@ -3658,14 +3514,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
+  },
+  toolbarTabs: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
   },
   toolbarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    flexShrink: 0,
+    gap: theme.spacing.sm,
   },
   infiniteScrollFooter: {
     paddingVertical: theme.spacing.xl,
@@ -3718,10 +3581,12 @@ const styles = StyleSheet.create({
   },
   tableScrollContent: {
     flexGrow: 1,
+    minWidth: '100%',
   },
   tableInner: {
+    flex: 1,
     width: '100%',
-    minWidth: 920,
+    minWidth: 1080,
   },
   modalOverlay: {
     flex: 1,

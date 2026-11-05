@@ -264,7 +264,7 @@ export default function GlobalSearchModal({
         <View style={styles.dialogContainer}>
           {/* 1. Combobox Search Input Bar */}
           <View style={styles.inputHeader}>
-            <Icon name="search" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
+            <Icon name="search" size={theme.sizes.iconLg} color={theme.colors.textMuted} />
             <TextInput
               ref={inputRef}
               role="combobox"
@@ -349,6 +349,7 @@ export default function GlobalSearchModal({
                   {...({ role: 'listbox' } as any)}
                   aria-label="Quick Actions"
                   style={styles.resultsList}
+                  contentContainerStyle={styles.resultsListContent}
                   keyboardShouldPersistTaps="handled"
                 >
                   {quickActions.map((item, index) => (
@@ -370,6 +371,7 @@ export default function GlobalSearchModal({
                 {...({ role: 'listbox' } as any)}
                 aria-label="Search results"
                 style={styles.resultsList}
+                contentContainerStyle={styles.activeResultsListContent}
                 keyboardShouldPersistTaps="handled"
               >
                 {displayedItems.map((item, index) => (
@@ -458,18 +460,18 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.overlay,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: theme.spacing['3xl'],
-    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing['4xl'] + theme.spacing.xl,
+    paddingHorizontal: theme.spacing['2xl'],
   },
   backdropPressable: {
     ...StyleSheet.absoluteFill,
   },
   dialogContainer: {
     width: '100%',
-    maxWidth: 680,
+    maxWidth: 760,
     maxHeight: '85%',
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.xl,
+    borderRadius: theme.radii['2xl'],
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     overflow: 'hidden',
@@ -479,9 +481,9 @@ const styles = StyleSheet.create({
   inputHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.lg,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingVertical: theme.spacing.xl,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
@@ -489,23 +491,24 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: theme.colors.text,
-    fontSize: theme.fontSizes.md,
-    paddingVertical: 0,
+    fontSize: theme.fontSizes.lg,
+    minHeight: theme.sizes.controlSm,
+    paddingVertical: theme.spacing.xs,
   },
   clearButton: {
     padding: theme.spacing.xs,
   },
   escBadge: {
-    paddingHorizontal: theme.spacing.xs + 2,
-    paddingVertical: 2,
-    borderRadius: theme.radii.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
   },
   bodyContainer: {
-    maxHeight: 460,
-    minHeight: 120,
+    maxHeight: 540,
+    minHeight: 160,
     flexShrink: 1,
   },
   resultsWrapper: {
@@ -514,29 +517,41 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.xs,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
   },
   resultsList: {
     flex: 1,
   },
+  resultsListContent: {
+    paddingHorizontal: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  activeResultsListContent: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
   skeletonContainer: {
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
   skeletonRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderLight,
   },
   skeletonIcon: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
+    width: theme.sizes.controlMd,
+    height: theme.sizes.controlMd,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surfaceMuted,
   },
@@ -557,17 +572,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
   },
   skeletonBadge: {
-    width: 50,
-    height: 18,
+    width: 56,
+    height: 20,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceMuted,
   },
   emptyCard: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: theme.spacing['2xl'],
-    paddingHorizontal: theme.spacing.xl,
-    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing['4xl'],
+    paddingHorizontal: theme.spacing['2xl'],
+    gap: theme.spacing.md,
   },
   emptyIconCircle: {
     width: theme.sizes.controlLg,
@@ -586,8 +601,8 @@ const styles = StyleSheet.create({
   },
   resetCategoryButton: {
     marginTop: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs + 2,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primary,
@@ -600,8 +615,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingVertical: theme.spacing.md,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSubtle,
@@ -609,12 +626,12 @@ const styles = StyleSheet.create({
   keyboardLegend: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs + 2,
+    gap: theme.spacing.sm,
   },
   legendKey: {
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 1,
-    borderRadius: theme.radii.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,

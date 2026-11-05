@@ -143,6 +143,46 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
 
         resolvedRoomName ??= "Treatment Room";
 
+        string? resolvedOrderedByName = string.IsNullOrWhiteSpace(request.OrderedByDoctorName)
+            ? null
+            : request.OrderedByDoctorName.Trim();
+
+        if (string.IsNullOrWhiteSpace(resolvedOrderedByName) && _staffRepo != null)
+        {
+            var lookupStaffId = (request.OrderedByDoctorId.HasValue && request.OrderedByDoctorId.Value != Guid.Empty)
+                ? request.OrderedByDoctorId
+                : _clinicContext.StaffId;
+            if (lookupStaffId.HasValue && lookupStaffId.Value != Guid.Empty)
+            {
+                var orderingStaff = await _staffRepo
+                    .Query(s => s.Id == lookupStaffId.Value && s.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (orderingStaff != null)
+                {
+                    var fullName = $"{orderingStaff.FirstName} {orderingStaff.LastName}".Trim();
+                    if (!string.IsNullOrWhiteSpace(fullName))
+                    {
+                        resolvedOrderedByName = orderingStaff.Role == StaffRole.Doctor &&
+                            !fullName.StartsWith("Dr.", StringComparison.OrdinalIgnoreCase) &&
+                            !fullName.StartsWith("Dr ", StringComparison.OrdinalIgnoreCase)
+                            ? $"Dr. {fullName}"
+                            : fullName;
+                    }
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(resolvedOrderedByName) && !string.IsNullOrWhiteSpace(_clinicContext.StaffName))
+        {
+            resolvedOrderedByName = _clinicContext.StaffName.Trim();
+        }
+
+        var createdByActor = _clinicContext.StaffId?.ToString()
+            ?? (!string.IsNullOrWhiteSpace(_clinicContext.StaffName) ? _clinicContext.StaffName.Trim() : null)
+            ?? request.OrderedByDoctorId?.ToString()
+            ?? resolvedOrderedByName
+            ?? string.Empty;
+
         var procedure = new Procedure
         {
             TenantId = _clinicContext.TenantId,
@@ -155,7 +195,8 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
             ProcedureName = string.IsNullOrWhiteSpace(request.ProcedureName) ? "Nebulization Therapy" : request.ProcedureName.Trim(),
             Category = string.IsNullOrWhiteSpace(request.Category) ? "Procedure" : request.Category.Trim(),
             OrderedByDoctorId = request.OrderedByDoctorId,
-            OrderedByDoctorName = request.OrderedByDoctorName?.Trim(),
+            OrderedByDoctorName = resolvedOrderedByName,
+            CreatedBy = createdByActor,
             ScheduledAt = DateTime.UtcNow,
             Status = ProcedureStatus.Ordered,
             ClinicalNotes = request.ClinicalNotes?.Trim(),
@@ -215,6 +256,7 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
         p.TargetRoomId,
         p.TargetRoomName,
         p.ToothNumber,
-        p.ToothSurface
+        p.ToothSurface,
+        string.IsNullOrWhiteSpace(p.CreatedBy) ? null : p.CreatedBy
     );
 }

@@ -140,6 +140,7 @@ public sealed class PhilHealthProfileImmunizationSyncTests
             MemberFirstName = "Marco",
             YoungWomanImmunizations = ["Y01"], // HPV
             ChildImmunizations = ["C03"],      // OPV 2
+            OtherImmunizations = ["O02"],      // Anti-Rabies Vaccine
             MedicalHistories = [],
             FamilyHistories = []
         };
@@ -149,8 +150,9 @@ public sealed class PhilHealthProfileImmunizationSyncTests
         okResult.Should().NotBeNull();
 
         var inDb = immRepo.Query(i => i.PatientId == patientId).ToList();
-        inDb.Should().HaveCount(2);
+        inDb.Should().HaveCount(3);
         inDb.Should().Contain(i => i.PhilHealthLibrary == "lib_immyoungw" && i.PhilHealthCode == "Y01");
         inDb.Should().Contain(i => i.PhilHealthLibrary == "lib_immchild" && i.PhilHealthCode == "C03");
+        inDb.Should().Contain(i => i.PhilHealthLibrary == "OtherImm" && i.PhilHealthCode == "O02" && i.VaccineName.Contains("Anti-Rabies"));
     }
 }

@@ -62,6 +62,12 @@ public sealed class QueueItem : ClinicScopedEntity
     public bool ApproachingNotificationSent { get; set; } = false;
 
     /// <summary>
+    /// Indicates whether this visit was created directly at a clinical workstation/modal
+    /// without a front-desk check-in ticket (e.g. "DV-001"), bypassing lobby TV and pure lobby call queues.
+    /// </summary>
+    public bool IsDirectVisit { get; set; } = false;
+
+    /// <summary>
     /// Indicates whether a called-to-room alert notification has already been sent to the patient.
     /// </summary>
     public bool CalledNotificationSent { get; set; } = false;

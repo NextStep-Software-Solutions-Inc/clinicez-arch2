@@ -27,7 +27,7 @@ import { useClinic } from '@context/ClinicContext';
 import { useStaff, formatStaffName } from '@context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { Alert, notify } from '@utils/feedback';
-import { openDocument } from '../../services/documentOpener';
+import { openDocument, downloadDocument } from '../../services/documentOpener';
 import {
   TrendLineChart,
   TenderDonutChart,
@@ -53,16 +53,24 @@ import {
   MorbidityReport,
   TaxDiscountAuditReport,
   DoctorSharesReport,
+  ClinicCensusReport,
+  CensusSummary,
+  CensusDemographicsBreakdown,
+  CensusAcuityBreakdown,
+  CensusProviderBreakdown,
+  CensusItem,
+  CensusFilterOptions,
   VisitType,
   getManilaTodayStr,
+  formatClinicDate,
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
 import { EditVitalsModal } from '../../components/consultation';
 
 type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
-type ReportType = 'DAILY_EOD' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
-type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'OnHold' | 'NoShow' | 'Completed';
+type ReportType = 'DAILY_EOD' | 'CENSUS' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
+type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'PendingProcedure' | 'OnHold' | 'NoShow' | 'Completed';
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
@@ -216,6 +224,18 @@ function LoadingBlock({ rows = 4 }: { rows?: number }) {
 }
 
 
+function formatTimeOnly(timeStr?: string | null): string {
+  if (!timeStr) return '—';
+  try {
+    const d = new Date(timeStr);
+    if (Number.isNaN(d.getTime())) return timeStr;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return timeStr;
+  }
+}
+
 function formatDateRangeLabel(start?: string, end?: string): string {
   if (!start && !end) return 'Select Date Range';
   if (start && !end) return `From ${start}`;
@@ -224,13 +244,18 @@ function formatDateRangeLabel(start?: string, end?: string): string {
   return `${start} to ${end}`;
 }
 
-function computeDatePresetRange(preset: 'today' | '7d' | '30d' | 'ytd'): { start: string; end: string } {
+function computeDatePresetRange(preset: 'today' | 'yesterday' | '7d' | '30d' | 'ytd'): { start: string; end: string } {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
   if (preset === 'today') {
     return { start: todayStr, end: todayStr };
+  }
+  if (preset === 'yesterday') {
+    const d = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const yStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return { start: yStr, end: yStr };
   }
   if (preset === '7d') {
     const d = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
@@ -287,11 +312,23 @@ export default function DashboardScreen() {
   // Clinic reports and analytics state
   const [reportType, setReportType] = useState<ReportType>('DAILY_EOD');
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
+  const [censusReport, setCensusReport] = useState<ClinicCensusReport | null>(null);
   const [morbidityReport, setMorbidityReport] = useState<MorbidityReport | null>(null);
   const [taxReport, setTaxReport] = useState<TaxDiscountAuditReport | null>(null);
   const [doctorSharesReport, setDoctorSharesReport] = useState<DoctorSharesReport | null>(null);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [censusSearchQuery, setCensusSearchQuery] = useState('');
+  const [censusAcuityFilter, setCensusAcuityFilter] = useState<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>('ALL');
+  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = useState<string>('ALL');
+  const [expandedCustomRows, setExpandedCustomRows] = useState<Record<string, boolean>>({});
+  const toggleCustomRow = useCallback((rowKey: string) => {
+    setExpandedCustomRows((prev) => ({
+      ...prev,
+      [rowKey]: !prev[rowKey],
+    }));
+  }, []);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsStartDate, setAnalyticsStartDate] = useState('');
   const [analyticsEndDate, setAnalyticsEndDate] = useState('');
@@ -309,6 +346,7 @@ export default function DashboardScreen() {
       [queueData, queueErr],
       [analyticsData, analyticsErr],
       [eodData, eodErr],
+      [censusData, censusErr],
       [morbidityData, morbidityErr],
       [taxData, taxErr],
       [sharesData, sharesErr],
@@ -317,6 +355,7 @@ export default function DashboardScreen() {
       clinicService.getQueue({ date: todayStr, view: 'All' }),
       clinicService.getClinicAnalytics(),
       clinicService.getDailyEodReport(todayStr),
+      clinicService.getCensusReport(todayStr, todayStr),
       clinicService.getMorbidityReport(),
       clinicService.getTaxDiscountAuditReport(),
       clinicService.getDoctorSharesReport(),
@@ -330,10 +369,11 @@ export default function DashboardScreen() {
     setAnalyticsError(analyticsErr ? analyticsErr.message : null);
 
     setEodReport(eodData ?? null);
+    setCensusReport(censusData ?? null);
     setMorbidityReport(morbidityData ?? null);
     setTaxReport(taxData ?? null);
     setDoctorSharesReport(sharesData ?? null);
-    const reportErr = eodErr ?? morbidityErr ?? taxErr ?? sharesErr;
+    const reportErr = eodErr ?? censusErr ?? morbidityErr ?? taxErr ?? sharesErr;
     setReportsError(reportErr ? reportErr.message : null);
   }, []);
 
@@ -358,6 +398,10 @@ export default function DashboardScreen() {
     if (type === 'DAILY_EOD') {
       const [data, err] = await clinicService.getDailyEodReport(date || getManilaTodayStr());
       setEodReport(data ?? null);
+      if (err) setReportsError(err.message);
+    } else if (type === 'CENSUS') {
+      const [data, err] = await clinicService.getCensusReport(start || undefined, end || undefined);
+      setCensusReport(data ?? null);
       if (err) setReportsError(err.message);
     } else if (type === 'MORBIDITY') {
       const [data, err] = await clinicService.getMorbidityReport(start || undefined, end || undefined);
@@ -843,6 +887,7 @@ export default function DashboardScreen() {
       Waiting: count('Waiting'),
       Triaged: count('Triaged'),
       InConsultation: count('InConsultation'),
+      PendingProcedure: count('PendingProcedure'),
       OnHold: count('OnHold'),
       NoShow: count('NoShow'),
       Completed: items.filter((q) => q.status === 'Completed' || q.status === 'DischargedNonDoctor').length,
@@ -883,6 +928,7 @@ export default function DashboardScreen() {
 
   const reportTitle: Record<ReportType, string> = {
     DAILY_EOD: 'Daily end-of-day report',
+    CENSUS: 'Clinic census report',
     MORBIDITY: 'Morbidity report',
     TAX_DISCOUNT: 'Senior / PWD discount audit',
     DOCTOR_SHARES: 'Doctor shares',
@@ -892,6 +938,11 @@ export default function DashboardScreen() {
     switch (reportType) {
       case 'DAILY_EOD':
         return clinicService.getDailyEodPdfUrl(eodDate || eodReport?.reportDate);
+      case 'CENSUS':
+        return clinicService.getCensusPdfUrl(
+          reportsStartDate || censusReport?.startDate,
+          reportsEndDate || censusReport?.endDate
+        );
       case 'MORBIDITY':
         return clinicService.getMorbidityPdfUrl(
           reportsStartDate || morbidityReport?.startDate,
@@ -908,7 +959,7 @@ export default function DashboardScreen() {
           reportsEndDate || doctorSharesReport?.endDate
         );
     }
-  }, [reportType, eodDate, eodReport, reportsStartDate, reportsEndDate, morbidityReport, taxReport, doctorSharesReport]);
+  }, [reportType, eodDate, eodReport, reportsStartDate, reportsEndDate, censusReport, morbidityReport, taxReport, doctorSharesReport]);
 
   const handleExportReportPdf = useCallback(async (customUrl?: string) => {
     if (isExportingPdf) return;
@@ -926,6 +977,25 @@ export default function DashboardScreen() {
     }
   }, [isExportingPdf, getCurrentReportPdfUrl]);
 
+  const handleExportCensusExcel = useCallback(async () => {
+    if (isExportingExcel) return;
+    setIsExportingExcel(true);
+    const start = reportsStartDate || censusReport?.startDate || getManilaTodayStr();
+    const end = reportsEndDate || censusReport?.endDate || getManilaTodayStr();
+    const url = clinicService.getCensusExcelUrl(start, end);
+    const filename = `ClinicCensusReport-${start}-${end}.xlsx`;
+    try {
+      const downloaded = await downloadDocument(url, filename);
+      if (!downloaded) {
+        notify.error('Failed to download Excel file. Please try again.');
+      }
+    } catch (err: any) {
+      notify.error(err?.message ?? 'Failed to download Excel file.');
+    } finally {
+      setIsExportingExcel(false);
+    }
+  }, [isExportingExcel, reportsStartDate, reportsEndDate, censusReport]);
+
   const handleExportAnalyticsPdf = useCallback(async () => {
     const url = clinicService.getAnalyticsPdfUrl(
       analyticsStartDate || undefined,
@@ -936,6 +1006,7 @@ export default function DashboardScreen() {
 
   const currentReportReady =
     (reportType === 'DAILY_EOD' && !!eodReport) ||
+    (reportType === 'CENSUS' && !!censusReport) ||
     (reportType === 'MORBIDITY' && !!morbidityReport) ||
     (reportType === 'TAX_DISCOUNT' && !!taxReport) ||
     (reportType === 'DOCTOR_SHARES' && !!doctorSharesReport);
@@ -1004,6 +1075,7 @@ export default function DashboardScreen() {
                 { value: 'Waiting', label: 'Waiting', count: queueCounts.Waiting },
                 { value: 'Triaged', label: 'Triaged', count: queueCounts.Triaged },
                 { value: 'InConsultation', label: 'In consultation', count: queueCounts.InConsultation },
+                { value: 'PendingProcedure', label: 'Procedure bay', count: queueCounts.PendingProcedure },
                 { value: 'OnHold', label: 'On hold', count: queueCounts.OnHold },
                 { value: 'NoShow', label: 'No show', count: queueCounts.NoShow },
                 { value: 'Completed', label: 'Completed', count: queueCounts.Completed },
@@ -1061,8 +1133,9 @@ export default function DashboardScreen() {
             const canCancel = !isTerminal;
             const canReactivate = isOnHold || item.status === 'NoShow';
             const canAssignOrReassign = !isTerminal;
+            const canExecuteProcedure = item.status === 'PendingProcedure';
 
-            const hasCareActions = canCall || canExamine || canTriage || canAssignOrReassign;
+            const hasCareActions = canCall || canExamine || canTriage || canAssignOrReassign || canExecuteProcedure;
             const hasFlowActions = canHold || canReactivate || canDischarge || isCompleted;
             const hasExceptionActions = canNoShow || canCancel;
             const hasEmergencyActions = canDivert;
@@ -1129,169 +1202,207 @@ export default function DashboardScreen() {
                     </View>
                   ) : null}
 
-                  <View style={styles.actionClustersWrap}>
-                    {hasCareActions ? (
-                      <View style={styles.actionCluster} testID="care-encounter-cluster">
-                        {canCall ? (
-                          <Button
-                            title="Call patient"
-                            variant="primary"
-                            size="sm"
-                            icon="arrowRight"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleCallPatient(item)}
-                          />
-                        ) : null}
-                        {canExamine ? (
-                          <Button
-                            title="Examine"
-                            variant="secondary"
-                            size="sm"
-                            icon="consultations"
-                            onPress={() =>
-                              navigation.navigate('Consultations', {
-                                patientId: item.patientId,
-                                patientName: item.patientName,
-                                queueId: item.id,
-                              })
-                            }
-                          />
-                        ) : null}
-                        {canTriage ? (
-                          <Button
-                            title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
-                            variant="outline"
-                            size="sm"
-                            icon="activity"
-                            onPress={() => {
-                              if (item.hasVitals) {
-                                handleOpenEditVitals(item);
-                              } else {
-                                handleOpenTriage(item);
-                              }
-                            }}
-                          />
-                        ) : null}
-                        {canAssignOrReassign ? (
-                          item.doctorName ? (
-                            <Button
-                              title="Reassign"
-                              variant="ghost"
-                              size="sm"
-                              icon="refresh"
-                              onPress={() => handleOpenReassign(item)}
-                            />
-                          ) : (
-                            <Button
-                              title="Assign doctor"
-                              variant="outline"
-                              size="sm"
-                              icon="userCheck"
-                              onPress={() => handleOpenReassign(item)}
-                            />
-                          )
-                        ) : null}
-                      </View>
-                    ) : null}
+                  {hasCareActions || hasFlowActions || hasExceptionActions || hasEmergencyActions ? (
+                    <View style={styles.actionClustersWrap}>
+                      {hasCareActions || hasFlowActions ? (
+                        <View style={styles.primaryActionGroup}>
+                          {hasCareActions ? (
+                            <View style={styles.actionCluster} testID="care-encounter-cluster">
+                              {canCall ? (
+                                <Button
+                                  title="Call patient"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="arrowRight"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleCallPatient(item)}
+                                />
+                              ) : null}
+                              {canExamine ? (
+                                <Button
+                                  title="Examine"
+                                  variant={isInConsult && !canCall ? 'primary' : 'secondary'}
+                                  size="sm"
+                                  icon="consultations"
+                                  onPress={() =>
+                                    navigation.navigate('Consultations', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                      queueId: item.id,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {canExecuteProcedure ? (
+                                <Button
+                                  title="Perform procedure"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="syringe"
+                                  onPress={() =>
+                                    navigation.navigate('Consultations', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                      queueId: item.id,
+                                      initialChartTab: 'procedures',
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {canTriage ? (
+                                <Button
+                                  title={item.hasVitals ? 'Update vitals' : 'Record vitals'}
+                                  variant="outline"
+                                  size="sm"
+                                  icon="activity"
+                                  onPress={() => {
+                                    if (item.hasVitals) {
+                                      handleOpenEditVitals(item);
+                                    } else {
+                                      handleOpenTriage(item);
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              {canAssignOrReassign ? (
+                                item.doctorName ? (
+                                  <Button
+                                    title="Reassign"
+                                    variant="ghost"
+                                    size="sm"
+                                    icon="refresh"
+                                    onPress={() => handleOpenReassign(item)}
+                                  />
+                                ) : (
+                                  <Button
+                                    title="Assign doctor"
+                                    variant="outline"
+                                    size="sm"
+                                    icon="userCheck"
+                                    onPress={() => handleOpenReassign(item)}
+                                  />
+                                )
+                              ) : null}
+                            </View>
+                          ) : null}
 
-                    {hasFlowActions ? (
-                      <View style={styles.actionCluster} testID="flow-completion-cluster">
-                        {canHold ? (
-                          <Button
-                            title="Put on hold"
-                            variant="outline"
-                            size="sm"
-                            icon="clock"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handlePutOnHold(item)}
-                          />
-                        ) : null}
-                        {canReactivate ? (
-                          <Button
-                            title="Re-activate"
-                            variant="primary"
-                            size="sm"
-                            icon="refresh"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleReactivate(item)}
-                          />
-                        ) : null}
-                        {canDischarge ? (
-                          <Button
-                            title="Discharge visit"
-                            variant="outline"
-                            size="sm"
-                            icon="check"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => {
-                              setDischargeModalItem(item);
-                              setDischargeRemarks('');
-                            }}
-                          />
-                        ) : null}
-                        {isCompleted ? (
-                          <Button
-                            title="Bill visit"
-                            variant="success"
-                            size="sm"
-                            icon="billing"
-                            onPress={() =>
-                              navigation.navigate('Billing', {
-                                patientId: item.patientId,
-                                patientName: item.patientName,
-                              })
-                            }
-                          />
-                        ) : null}
-                      </View>
-                    ) : null}
+                          {hasCareActions && hasFlowActions ? (
+                            <View style={styles.actionClusterSeparator} testID="care-flow-separator" />
+                          ) : null}
 
-                    {hasExceptionActions ? (
-                      <View style={styles.actionCluster} testID="exceptions-cluster">
-                        {canNoShow ? (
-                          <Button
-                            title="No-show"
-                            variant="outline"
-                            size="sm"
-                            icon="alertCircle"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleMarkNoShow(item)}
-                          />
-                        ) : null}
-                        {canCancel ? (
-                          <Button
-                            title="Cancel visit"
-                            variant="ghost"
-                            size="sm"
-                            icon="trash"
-                            loading={isActioning}
-                            disabled={isActioning}
-                            onPress={() => handleCancelVisit(item)}
-                          />
-                        ) : null}
-                      </View>
-                    ) : null}
+                          {hasFlowActions ? (
+                            <View style={styles.actionCluster} testID="flow-completion-cluster">
+                              {canHold ? (
+                                <Button
+                                  title="Put on hold"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="clock"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handlePutOnHold(item)}
+                                />
+                              ) : null}
+                              {canReactivate ? (
+                                <Button
+                                  title="Re-activate"
+                                  variant="primary"
+                                  size="sm"
+                                  icon="refresh"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleReactivate(item)}
+                                />
+                              ) : null}
+                              {canDischarge ? (
+                                <Button
+                                  title="Discharge visit"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="check"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => {
+                                    setDischargeModalItem(item);
+                                    setDischargeRemarks('');
+                                  }}
+                                />
+                              ) : null}
+                              {isCompleted ? (
+                                <Button
+                                  title="Bill visit"
+                                  variant="success"
+                                  size="sm"
+                                  icon="billing"
+                                  onPress={() =>
+                                    navigation.navigate('Billing', {
+                                      patientId: item.patientId,
+                                      patientName: item.patientName,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
 
-                    {hasEmergencyActions ? (
-                      <View style={[styles.actionCluster, styles.emergencyCluster]} testID="emergency-cluster">
-                        <Button
-                          title="Divert to ER"
-                          variant="danger"
-                          size="sm"
-                          icon="alert"
-                          testID="divert-emergency-button"
-                          loading={isActioning}
-                          disabled={isActioning}
-                          onPress={() => setDivertModalItem(item)}
-                        />
-                      </View>
-                    ) : null}
-                  </View>
+                      {hasExceptionActions || hasEmergencyActions ? (
+                        <View style={styles.trailingActionGroup}>
+                          {hasCareActions || hasFlowActions ? (
+                            <View style={styles.actionClusterSeparator} testID="workflow-exceptions-separator" />
+                          ) : null}
+
+                          {hasExceptionActions ? (
+                            <View style={styles.actionCluster} testID="exceptions-cluster">
+                              {canNoShow ? (
+                                <Button
+                                  title="No-show"
+                                  variant="outline"
+                                  size="sm"
+                                  icon="alertCircle"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleMarkNoShow(item)}
+                                />
+                              ) : null}
+                              {canCancel ? (
+                                <Button
+                                  title="Cancel visit"
+                                  variant="ghost"
+                                  size="sm"
+                                  icon="trash"
+                                  loading={isActioning}
+                                  disabled={isActioning}
+                                  onPress={() => handleCancelVisit(item)}
+                                />
+                              ) : null}
+                            </View>
+                          ) : null}
+
+                          {hasExceptionActions && hasEmergencyActions ? (
+                            <View style={styles.actionClusterSeparator} testID="exceptions-emergency-separator" />
+                          ) : null}
+
+                          {hasEmergencyActions ? (
+                            <View style={[styles.actionCluster, styles.emergencyCluster]} testID="emergency-cluster">
+                              <Button
+                                title="Divert to ER"
+                                variant="danger"
+                                size="sm"
+                                icon="alert"
+                                testID="divert-emergency-button"
+                                loading={isActioning}
+                                disabled={isActioning}
+                                onPress={() => setDivertModalItem(item)}
+                              />
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </CardContent>
               </Card>
             );
@@ -1753,6 +1864,548 @@ export default function DashboardScreen() {
       );
     }
 
+    if (reportType === 'CENSUS' && censusReport) {
+      const formatCustomFieldPills = (customFields?: Record<string, any> | string | null): string[] => {
+        if (!customFields) return [];
+        let parsed: any = {};
+        if (typeof customFields === 'string') {
+          try {
+            parsed = JSON.parse(customFields);
+          } catch {
+            return [customFields];
+          }
+        } else if (typeof customFields === 'object') {
+          parsed = customFields;
+        }
+
+        // Defensive guard: handle "null", primitives, or arrays returned by JSON.parse
+        if (!parsed || typeof parsed !== 'object') {
+          return typeof parsed === 'string' && parsed !== '' ? [parsed] : [];
+        }
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item));
+        }
+
+        const pills: string[] = [];
+        for (const [key, val] of Object.entries(parsed)) {
+          if (val !== null && val !== undefined && val !== '') {
+            const cleanKey = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            pills.push(`${cleanKey}: ${String(val)}`);
+          }
+        }
+        return pills;
+      };
+
+      const formatTurnaroundBadge = (mins?: number | null): string => {
+        if (mins === null || mins === undefined) return '—';
+        return `${mins}m`;
+      };
+
+      const getAcuityVariant = (acuity?: string): BadgeVariant => {
+        const norm = (acuity || '').toLowerCase();
+        if (norm === 'emergency' || norm === 'stat') return 'emergency';
+        if (norm === 'urgent') return 'urgent';
+        return 'routine';
+      };
+
+      const q = censusSearchQuery.trim().toLowerCase();
+      const filteredItems = (censusReport.items || []).filter((item) => {
+        if (censusAcuityFilter !== 'ALL' && (item.acuity || '').toLowerCase() !== censusAcuityFilter.toLowerCase()) {
+          return false;
+        }
+        if (censusVisitTypeFilter !== 'ALL' && (item.visitType || '').toLowerCase() !== censusVisitTypeFilter.toLowerCase()) {
+          return false;
+        }
+        if (!q) return true;
+
+        const pills = formatCustomFieldPills(item.customFields).join(' ').toLowerCase();
+        const searchableBlob = [
+          item.patientName,
+          item.patientCode,
+          item.queueNumber,
+          item.doctorDiagnosis ?? '',
+          item.clinicalAssessment ?? '',
+          item.nurseImpression ?? item.nurseAssessment ?? '',
+          item.attendingDoctor ?? '',
+          item.attendingNurse ?? '',
+          item.chiefComplaint ?? '',
+          item.systemsReviewed ?? '',
+          item.proceduresPerformed ?? '',
+          pills,
+        ]
+          .join(' ')
+          .toLowerCase();
+
+        return searchableBlob.includes(q);
+      });
+
+      return (
+        <View style={styles.listGap}>
+          {/* Summary Telemetry KPI Cards */}
+          <View style={styles.statRow}>
+            <StatCard
+              style={styles.statItem}
+              label="Total Census"
+              value={censusReport.summary.totalCensus}
+              subtext={`${censusReport.summary.newPatients} New • ${censusReport.summary.returningPatients} Returning`}
+              icon="patients"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Consultations"
+              value={censusReport.summary.consultations ?? censusReport.summary.consultationCount ?? 0}
+              subtext={`${censusReport.summary.standaloneProcedures ?? censusReport.summary.procedureCount ?? 0} Procedures • ${censusReport.summary.diagnosticsOrLab ?? censusReport.summary.vitalsCheckOnlyCount ?? 0} Diag/Vitals`}
+              icon="stethoscope"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Avg Turnaround"
+              value={`${(censusReport.summary.averageTurnaroundMinutes ?? 0).toFixed(1)} min`}
+              subtext={`${censusReport.summary.completedVisits ?? censusReport.summary.completedCount ?? 0} Completed • ${censusReport.summary.divertedVisits ?? censusReport.summary.divertedCount ?? 0} Diverted`}
+              icon="timer"
+            />
+          </View>
+
+          <View style={styles.statRow}>
+            <Card style={styles.statItem}>
+              <CardContent style={styles.demographicsCardContent}>
+                <View style={styles.cardHeaderSmall}>
+                  <Icon name="activity" size={16} color={theme.colors.primary} />
+                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                    Demographics
+                  </ThemedText>
+                </View>
+                <View style={styles.badgeWrapRow}>
+                  <Badge
+                    label={`Pedia: ${censusReport.demographics?.pediatricCount ?? censusReport.summary?.pediatricCount ?? 0}`}
+                    variant="neutral"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Adult: ${censusReport.demographics?.adultCount ?? censusReport.summary?.adultCount ?? 0}`}
+                    variant="neutral"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Senior: ${censusReport.demographics?.seniorCount ?? censusReport.summary?.seniorCount ?? 0}`}
+                    variant="neutral"
+                    size="sm"
+                  />
+                  {(censusReport.demographics?.pwdCount ?? censusReport.summary?.pwdCount ?? 0) > 0 && (
+                    <Badge
+                      label={`PWD: ${censusReport.demographics?.pwdCount ?? censusReport.summary?.pwdCount ?? 0}`}
+                      variant="purple"
+                      size="sm"
+                    />
+                  )}
+                  {(censusReport.demographics?.philHealthCount ?? censusReport.summary?.philHealthCount ?? 0) > 0 && (
+                    <Badge
+                      label={`PhilHealth: ${censusReport.demographics?.philHealthCount ?? censusReport.summary?.philHealthCount ?? 0}`}
+                      variant="info"
+                      size="sm"
+                    />
+                  )}
+                </View>
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statItem}>
+              <CardContent style={styles.demographicsCardContent}>
+                <View style={styles.cardHeaderSmall}>
+                  <Icon name="heartPulse" size={16} color={theme.colors.primary} />
+                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                    Clinical Acuity
+                  </ThemedText>
+                </View>
+                <View style={styles.badgeWrapRow}>
+                  <Badge
+                    label={`Routine: ${censusReport.acuity?.routineCount ?? censusReport.summary.routineCount ?? 0}`}
+                    variant="routine"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Urgent: ${censusReport.acuity?.urgentCount ?? censusReport.summary.urgentCount ?? 0}`}
+                    variant="urgent"
+                    size="sm"
+                  />
+                  <Badge
+                    label={`Emergency: ${censusReport.acuity?.emergencyCount ?? censusReport.summary.emergencyCount ?? 0}`}
+                    variant="emergency"
+                    size="sm"
+                  />
+                </View>
+              </CardContent>
+            </Card>
+          </View>
+
+          {/* Interactive Search & Filter Controls */}
+          <Card>
+            <CardContent style={styles.censusFilterCardContent}>
+              <View style={styles.censusSearchRow}>
+                <View style={styles.flexFill}>
+                  <Input
+                    label="Search Census Register"
+                    placeholder="Search by patient name, code, ticket, doctor, nurse, diagnosis, impression, custom fields..."
+                    value={censusSearchQuery}
+                    onChangeText={setCensusSearchQuery}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.censusFilterPillsRow}>
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Acuity:
+                  </ThemedText>
+                  {(['ALL', 'Routine', 'Urgent', 'Emergency'] as const).map((acuity) => {
+                    const active = censusAcuityFilter === acuity;
+                    return (
+                      <Pressable
+                        key={acuity}
+                        style={[styles.filterChip, active && styles.filterChipActive]}
+                        onPress={() => setCensusAcuityFilter(acuity)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Filter census acuity ${acuity}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={active ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {acuity}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Visit:
+                  </ThemedText>
+                  {(['ALL', 'Consultation', 'StandaloneProcedure', 'VitalsCheckOnly', 'AdministrativeDocument'] as const).map((vt) => {
+                    const active = censusVisitTypeFilter === vt;
+                    const label = vt === 'ALL' ? 'ALL' : vt === 'StandaloneProcedure' ? 'Procedure' : vt === 'VitalsCheckOnly' ? 'Vitals' : vt === 'AdministrativeDocument' ? 'Admin' : 'Consult';
+                    return (
+                      <Pressable
+                        key={vt}
+                        style={[styles.filterChip, active && styles.filterChipActive]}
+                        onPress={() => setCensusVisitTypeFilter(vt)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Filter census visit type ${vt}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={active ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {label}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+
+          {/* Searchable 25-Column Patient Census Register Table */}
+          <Card style={styles.censusTableCard}>
+            <CardHeader
+              title="Census Register"
+              subtitle={`Showing ${filteredItems.length} of ${censusReport.items?.length ?? 0} encounters • ${formatDateRangeLabel(reportsStartDate || censusReport.startDate, reportsEndDate || censusReport.endDate)}`}
+              rightAction={
+                <View style={styles.censusHeaderActions}>
+                  <Button
+                    title="Export Excel (.xlsx)"
+                    variant="outline"
+                    size="sm"
+                    icon="download"
+                    disabled={isExportingExcel}
+                    onPress={handleExportCensusExcel}
+                    accessibilityLabel="Export census spreadsheet Excel"
+                  />
+                  <Button
+                    title="Export PDF"
+                    variant="outline"
+                    size="sm"
+                    icon="download"
+                    disabled={isExportingPdf}
+                    onPress={() =>
+                      handleExportReportPdf(
+                        clinicService.getCensusPdfUrl(
+                          reportsStartDate || censusReport.startDate,
+                          reportsEndDate || censusReport.endDate
+                        )
+                      )
+                    }
+                    accessibilityLabel="Export report vector PDF"
+                  />
+                </View>
+              }
+            />
+            {filteredItems.length === 0 ? (
+              <EmptyState
+                icon="search"
+                title="No census encounters match"
+                description="Try clearing search or adjusting date and acuity filters."
+              />
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator
+                contentContainerStyle={styles.tableScrollContent}
+              >
+                <View style={styles.censusTableInner}>
+                  {/* Table Column Headers */}
+                  <View style={styles.censusTableHeaderRow}>
+                    <View style={styles.colTicket}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Ticket, Date & Time
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colPatient}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Patient & Demographics
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colCustom}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Classifications & Custom Fields
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colStaff}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Attending Staff
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colNurse}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Triage & Nurse Assessment
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colDoctor}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Doctor Diagnosis & Systems
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colOutcome}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Procedures & Outcome
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colBilling}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Billing & Payment
+                      </ThemedText>
+                    </View>
+                  </View>
+
+                  {/* Table Data Rows */}
+                  {filteredItems.map((item, idx) => {
+                    const customPills = formatCustomFieldPills(item.customFields);
+                    const classifications = item.classifications || (item.classification ? [item.classification] : []);
+                    const rowKey = item.id || `census-row-${item.queueNumber}-${idx}`;
+                    const isEven = idx % 2 === 0;
+
+                    return (
+                      <View
+                        key={rowKey}
+                        style={[
+                          styles.censusTableRow,
+                          !isEven && styles.censusTableRowAlt,
+                        ]}
+                      >
+                        {/* 1. Ticket & Timestamps */}
+                        <View style={styles.colTicket}>
+                          <View style={styles.rowBetween}>
+                            <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                              {item.queueNumber}
+                            </ThemedText>
+                            <Badge
+                              label={formatTurnaroundBadge(item.turnaroundMinutes)}
+                              variant="neutral"
+                              size="xs"
+                            />
+                          </View>
+                          <ThemedText variant="captionBold" color={theme.colors.text}>
+                            {formatClinicDate(item.checkInTime)}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {item.visitType}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            In: {formatTimeOnly(item.checkInTime)}
+                            {item.completedTime ? ` • Out: ${formatTimeOnly(item.completedTime)}` : ''}
+                          </ThemedText>
+                        </View>
+
+                        {/* 2. Patient & Demographics */}
+                        <View style={styles.colPatient}>
+                          <ThemedText variant="bodyBold" color={theme.colors.text}>
+                            {item.patientName}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {item.patientCode} • {item.age} yo • {item.sex}
+                            {item.civilStatus ? ` • ${item.civilStatus}` : ''}
+                          </ThemedText>
+                        </View>
+
+                        {/* 3. Classifications & Custom Fields */}
+                        <View style={styles.colCustom}>
+                          {(() => {
+                            const allCustomItems = [
+                              ...classifications.map((c, i) => ({
+                                key: `cls-${i}`,
+                                label: c,
+                                variant: 'outline' as const,
+                              })),
+                              ...customPills.map((p, i) => ({
+                                key: `cp-${i}`,
+                                label: p,
+                                variant: 'neutral' as const,
+                              })),
+                            ];
+                            const isExpanded = !!expandedCustomRows[rowKey];
+                            const visibleItems =
+                              isExpanded || allCustomItems.length <= 2
+                                ? allCustomItems
+                                : allCustomItems.slice(0, 2);
+                            const hiddenCount = allCustomItems.length - 2;
+
+                            return (
+                              <View style={styles.badgeWrapRow}>
+                                {allCustomItems.length === 0 ? (
+                                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                    None
+                                  </ThemedText>
+                                ) : (
+                                  <>
+                                    {visibleItems.map((ci) => (
+                                      <Badge
+                                        key={ci.key}
+                                        label={ci.label}
+                                        variant={ci.variant}
+                                        size="xs"
+                                      />
+                                    ))}
+                                    {allCustomItems.length > 2 && (
+                                      <Pressable
+                                        onPress={() => toggleCustomRow(rowKey)}
+                                        style={styles.seeMorePill}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={
+                                          isExpanded
+                                            ? 'Collapse custom fields'
+                                            : `Show ${hiddenCount} more custom fields`
+                                        }
+                                      >
+                                        <ThemedText style={styles.seeMoreText}>
+                                          {isExpanded ? 'See less' : `+${hiddenCount} more`}
+                                        </ThemedText>
+                                      </Pressable>
+                                    )}
+                                  </>
+                                )}
+                              </View>
+                            );
+                          })()}
+                        </View>
+
+                        {/* 4. Attending Staff */}
+                        <View style={styles.colStaff}>
+                          <ThemedText variant="captionBold" color={theme.colors.text}>
+                            MD: {item.attendingDoctor || '—'}
+                          </ThemedText>
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            RN: {item.attendingNurse || '—'}
+                          </ThemedText>
+                        </View>
+
+                        {/* 5. Triage & Nurse Assessment */}
+                        <View style={styles.colNurse}>
+                          {item.chiefComplaint ? (
+                            <ThemedText variant="caption" color={theme.colors.text}>
+                              CC: {item.chiefComplaint}
+                            </ThemedText>
+                          ) : null}
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            Impression: {item.nurseImpression || item.nurseAssessment || '—'}
+                          </ThemedText>
+                          {item.vitalsSnapshot ? (
+                            <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                              Vitals: {item.vitalsSnapshot}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+
+                        {/* 6. Doctor Diagnosis & Systems */}
+                        <View style={styles.colDoctor}>
+                          <ThemedText variant="captionBold" color={theme.colors.text}>
+                            {item.doctorDiagnosis || '—'}
+                          </ThemedText>
+                          {item.clinicalAssessment ? (
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              {item.clinicalAssessment}
+                            </ThemedText>
+                          ) : null}
+                          {item.systemsReviewed ? (
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              ROS: {item.systemsReviewed}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+
+                        {/* 7. Procedures & Outcome */}
+                        <View style={styles.colOutcome}>
+                          <View style={styles.rowBetween}>
+                            <Badge
+                              label={item.acuity || 'Routine'}
+                              variant={getAcuityVariant(item.acuity)}
+                              size="xs"
+                            />
+                            {item.disposition ? (
+                              <Badge
+                                label={item.disposition}
+                                variant={item.disposition.includes('Transfer') ? 'emergency' : 'outline'}
+                                size="xs"
+                              />
+                            ) : null}
+                          </View>
+                          {item.proceduresPerformed ? (
+                            <ThemedText variant="caption" color={theme.colors.text}>
+                              Proc: {item.proceduresPerformed}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+
+                        {/* 8. Billing & Payment */}
+                        <View style={styles.colBilling}>
+                          <View style={styles.rowBetween}>
+                            <Badge
+                              label={item.billingStatus || 'Unbilled'}
+                              variant={item.billingStatus === 'Paid' ? 'success' : 'neutral'}
+                              size="xs"
+                            />
+                            <ThemedText variant="smallBold" color={theme.colors.text}>
+                              {peso(item.amountPaid)}
+                            </ThemedText>
+                          </View>
+                          {item.officialReceiptNumber ? (
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              {item.officialReceiptNumber}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
+          </Card>
+        </View>
+      );
+    }
+
     if (reportType === 'MORBIDITY' && morbidityReport) {
       return (
         <Card>
@@ -1930,6 +2583,7 @@ export default function DashboardScreen() {
             onChange={setReportType}
             options={[
               { value: 'DAILY_EOD', label: 'End of day' },
+              { value: 'CENSUS', label: 'Clinic census' },
               { value: 'MORBIDITY', label: 'Morbidity' },
               { value: 'TAX_DISCOUNT', label: 'Discount audit' },
               { value: 'DOCTOR_SHARES', label: 'Doctor shares' },
@@ -1937,6 +2591,17 @@ export default function DashboardScreen() {
           />
         </View>
         <View style={styles.reportActionsRow}>
+          {reportType === 'CENSUS' && (
+            <Button
+              title={isExportingExcel ? 'Exporting...' : 'Export Excel (.xlsx)'}
+              variant="outline"
+              size="sm"
+              icon="download"
+              disabled={!currentReportReady || isExportingExcel}
+              onPress={() => handleExportCensusExcel()}
+              accessibilityLabel="Export census spreadsheet Excel"
+            />
+          )}
           <Button
             title={isExportingPdf ? 'Exporting...' : 'Export PDF'}
             variant="outline"
@@ -2031,9 +2696,10 @@ export default function DashboardScreen() {
             </Pressable>
 
             <View style={styles.presetChipsRow}>
-              {(['today', '7d', '30d'] as const).map((preset) => {
+              {(['today', 'yesterday', '7d', '30d'] as const).map((preset) => {
                 const labelMap = {
                   today: 'Today',
+                  yesterday: 'Yesterday',
                   '7d': 'Last 7 Days',
                   '30d': 'This Month',
                 };
@@ -2626,26 +3292,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
+  },
+  primaryActionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  trailingActionGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginLeft: 'auto',
   },
   actionCluster: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.xs,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.sm,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
   },
   emergencyCluster: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderColor: theme.colors.emergencyBorder,
+    alignItems: 'center',
+  },
+  actionClusterSeparator: {
+    width: theme.sizes.borderWidth,
+    height: theme.sizes.iconMd,
+    backgroundColor: theme.colors.border,
+    alignSelf: 'center',
   },
   listGap: {
     gap: theme.spacing.md,
@@ -2867,5 +3547,145 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     padding: theme.spacing.md,
     gap: theme.spacing.xs,
+  },
+  censusFilterCardContent: {
+    gap: theme.spacing.sm,
+  },
+  censusSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  censusFilterPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  censusFilterPillsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  filterChip: {
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primaryDark,
+  },
+  censusTableCard: {
+    overflow: 'hidden',
+  },
+  censusHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  tableScrollContent: {
+    flexGrow: 1,
+    minWidth: '100%',
+  },
+  censusTableInner: {
+    width: '100%',
+    minWidth: 1550,
+  },
+  censusTableHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primaryDark,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.border,
+  },
+  censusTableRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surface,
+  },
+  censusTableRowAlt: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  colTicket: {
+    width: 150,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colPatient: {
+    width: 220,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colCustom: {
+    width: 220,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colStaff: {
+    width: 180,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colNurse: {
+    width: 240,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colDoctor: {
+    width: 240,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colOutcome: {
+    width: 180,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colBilling: {
+    width: 120,
+    gap: theme.spacing.xs,
+  },
+  demographicsCardContent: {
+    gap: theme.spacing.sm,
+  },
+  cardHeaderSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  badgeWrapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  seeMorePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 1,
+    paddingHorizontal: theme.spacing.xs + 2,
+    borderRadius: theme.radii.xs,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    alignSelf: 'flex-start',
+  },
+  seeMoreText: {
+    fontSize: theme.fontSizes.xs - 2,
+    fontWeight: '700',
+    color: theme.colors.primaryDark,
+    lineHeight: 12,
+    letterSpacing: 0.4,
   },
 });

@@ -19,6 +19,7 @@ import {
   EmptyState,
   ErrorState,
   SkeletonList,
+  formatPhilHealthPin,
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -235,9 +236,11 @@ export default function YakapScreen() {
             placeholder="XX-XXXXXXXXX-X"
             value={pinToCheck}
             onChangeText={(val) => {
-              setPinToCheck(val);
+              setPinToCheck(formatPhilHealthPin(val));
               setPinValidationResult(null);
             }}
+            keyboardType="numeric"
+            maxLength={14}
             autoCapitalize="none"
           />
         </View>
@@ -285,9 +288,11 @@ export default function YakapScreen() {
         <View style={styles.inputRow}>
           <View style={styles.flexFill}>
             <Input
-              placeholder="Enter 12-digit PhilHealth PIN"
+              placeholder="XX-XXXXXXXXX-X"
               value={searchPin}
-              onChangeText={setSearchPin}
+              onChangeText={(val) => setSearchPin(formatPhilHealthPin(val))}
+              keyboardType="numeric"
+              maxLength={14}
               onSubmitEditing={handleSearchLedger}
             />
           </View>

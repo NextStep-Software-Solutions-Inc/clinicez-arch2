@@ -82,6 +82,9 @@ mock.module('../constants/fonts', () => ({
 
 const { CardHeader } = await import('../components/ui/Card');
 const { default: ExternalDocumentVaultTab } = await import('../components/chart/ExternalDocumentVaultTab');
+const { default: AdministrativeDocumentsTab } = await import('../components/chart/AdministrativeDocumentsTab');
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ClinicPatient, ClinicRecordAttachmentRecord } from '../services/clinicService';
 
 describe('Consultation Chart Header & Vault Regression Tests', () => {
@@ -121,7 +124,7 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(element.props.truncateSubtitle).toBe(true);
   });
 
-  test('2. ExternalDocumentVaultTab renders filter chips with horizontal non-wrapping structure', () => {
+  test('2. ExternalDocumentVaultTab (Doc Vault) renders inline no-wrap filter chips + right Attach button without extra External/Internal sub-tabs or category sub-filter chips', () => {
     const sampleAttachments: ClinicRecordAttachmentRecord[] = [
       {
         id: 'att-1',
@@ -129,23 +132,27 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
         recordType: 'OutsideChestXRay',
         title: 'Outside Chest X-Ray Film',
         fileName: 'cxr.pdf',
+        fileSizeBytes: 204800,
+        createdAt: '2026-10-15T08:00:00Z',
         storageUri: 'tenants/1/vault/cxr.pdf.cez',
         encryptionAlgorithm: 'AES-256-GCM',
         verificationStatus: 'Pending',
         uploadedAtUtc: '2026-10-15T08:00:00Z',
-      },
+      } as any,
       {
         id: 'att-2',
         patientId: mockPatient.id,
         recordType: 'COR',
         title: 'Certificate of Registration',
         fileName: 'cor.jpg',
+        fileSizeBytes: 102400,
+        createdAt: '2026-10-14T08:00:00Z',
         storageUri: 'tenants/1/vault/cor.jpg.cez',
         encryptionAlgorithm: 'AES-256-GCM',
         verificationStatus: 'Verified',
         verifiedByStaffName: 'Dr. Santos',
         uploadedAtUtc: '2026-10-14T08:00:00Z',
-      },
+      } as any,
     ];
 
     const markup = renderToStaticMarkup(
@@ -155,20 +162,92 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
       })
     );
 
+    // Verify extra External/Internal sub-tabs are absent
+    expect(markup).not.toContain('>External<');
+    expect(markup).not.toContain('>Internal<');
+
     // Verify all status filter chips are rendered
     expect(markup).toContain('All (2)');
     expect(markup).toContain('Pending Review (1)');
     expect(markup).toContain('Verified (1)');
     expect(markup).toContain('Rejected (0)');
 
-    // Verify document type filter chips are rendered
-    expect(markup).toContain('All Records (2)');
-    expect(markup).toContain('Outside Chest X-Ray');
-    expect(markup).toContain('Cert of Registration (COR)');
-    expect(markup).toContain('Outside Labs');
+    // Verify removed sub-filter chips and raw recordType badge are absent
+    expect(markup).not.toContain('All Records');
+    expect(markup).not.toContain('Cert of Registration (COR)');
+    expect(markup).not.toContain('Outside Labs');
+    expect(markup).not.toContain('OutsideChestXRay');
 
     // Verify Attach External Document button is rendered
     expect(markup).toContain('Attach External Document');
+  });
+
+  test('2b. Consultations inline Patient Chart exposes Doc Vault + Admin Vault tabs, and AdministrativeDocumentsTab renders humanized, jargon-free certificates and referrals', () => {
+    const consultationsSource = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx'),
+      'utf8',
+    );
+    expect(consultationsSource).toContain("{ id: 'vault', label: 'Doc Vault', icon: 'folder' }");
+    expect(consultationsSource).toContain("{ id: 'documents', label: 'Admin Vault', icon: 'scroll' }");
+    expect(consultationsSource).toContain("activeChartTab === 'documents'");
+    expect(consultationsSource).toContain('<AdministrativeDocumentsTab');
+
+    const adminVaultMarkup = renderToStaticMarkup(
+      React.createElement(AdministrativeDocumentsTab, {
+        patient: mockPatient,
+        medicalCertificates: [
+          {
+            id: 'mc-1',
+            certificateNumber: 'MC-2026-0001',
+            patientId: mockPatient.id,
+            patientName: mockPatient.fullName,
+            doctorName: 'Dr. Jose Rizal',
+            prcLicenseNumber: '0123456',
+            issueDate: '2026-10-20',
+            diagnosis: 'Upper Respiratory Tract Infection',
+            fitnessStatus: 'UnfitToWork',
+            securityDigest: 'SEC-SHA256-E15C389998570234',
+            isSigned: true,
+            createdAt: '2026-10-20T09:00:00Z',
+          } as any,
+        ],
+        referralLetters: [
+          {
+            id: 'ref-1',
+            referralNumber: 'REF-2026-0001',
+            patientId: mockPatient.id,
+            patientName: mockPatient.fullName,
+            referringDoctorName: 'Rizal',
+            referralDate: '2026-10-21',
+            referredToFacility: 'PGH',
+            referredDepartment: 'Pulmonology',
+            provisionalDiagnosis: 'Community-Acquired Pneumonia',
+            reasonForReferral: 'Specialist evaluation',
+            securityDigest: 'SEC-SHA256-F00BAA1122334455',
+            isSigned: true,
+            createdAt: '2026-10-21T09:00:00Z',
+          } as any,
+        ],
+      })
+    );
+
+    expect(adminVaultMarkup).toContain('Administrative Certificate Vault');
+    expect(adminVaultMarkup).toContain('Issued medical certificates and referral letters available to view or reprint');
+    expect(adminVaultMarkup).not.toContain('Secure cryptographic registry');
+    expect(adminVaultMarkup).not.toContain('Physician Signed');
+    expect(adminVaultMarkup).not.toContain('SHA-256 Sealed');
+    expect(adminVaultMarkup).not.toContain('Seal Digest');
+    expect(adminVaultMarkup).not.toContain('UnfitToWork');
+    expect(adminVaultMarkup).toContain('Unfit to work');
+    expect(adminVaultMarkup).not.toContain('Dr. Dr.');
+    expect(adminVaultMarkup).toContain('Dr. Jose Rizal');
+    expect(adminVaultMarkup).toContain('Dr. Rizal');
+    expect(adminVaultMarkup).toContain('All (2)');
+    expect(adminVaultMarkup).toContain('Certificates (1)');
+    expect(adminVaultMarkup).toContain('Referrals (1)');
+    expect(adminVaultMarkup).toContain('MC-2026-0001');
+    expect(adminVaultMarkup).toContain('REF-2026-0001');
+    expect(adminVaultMarkup).not.toContain('Attach External Document');
   });
 
   test('3. ExternalDocumentVaultTab invokes onUploadDocument when Attach External Document is clicked', () => {

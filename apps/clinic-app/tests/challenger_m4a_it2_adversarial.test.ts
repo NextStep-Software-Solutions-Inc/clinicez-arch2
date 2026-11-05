@@ -450,8 +450,9 @@ describe('Adversarial Verification: Review of Systems (ROS) & Chips State Synchr
       })
     );
 
-    expect(html).toContain('Review of Systems (ROS)');
-    expect(html).toContain('1 Selected');
+    expect(html).toContain('Presenting Symptoms');
+    expect(html).not.toContain('Pure 1NF');
+    expect(html).toContain('1 selected');
     expect(html).toContain('Fever / Lagnat');
     expect(html).toContain('Cough / Ubo');
   });

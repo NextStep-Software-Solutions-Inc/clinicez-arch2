@@ -58,6 +58,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IPatientDocumentPublisher _documents;
     private readonly IInteropPublisher? _publisher;
     private readonly IConfiguration? _configuration;
+    private readonly IRepository<Procedure>? _procedureRepository;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -73,7 +74,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IClaimSlipService claims,
         IPatientDocumentPublisher documents,
         IInteropPublisher? publisher = null,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        IRepository<Procedure>? procedureRepository = null)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
@@ -89,6 +91,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _documents = documents;
         _publisher = publisher;
         _configuration = configuration;
+        _procedureRepository = procedureRepository;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
@@ -115,32 +118,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         var doctor = await _staffRepository.Query(s => s.Id == encounter.DoctorId && s.ClinicId == _clinicContext.ClinicId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var prcLicense = request.PrcLicenseNumber ?? doctor?.PrcLicenseNumber;
-        var ptr = request.PtrNumber ?? doctor?.PtrNumber;
-        var s2License = request.S2LicenseNumber ?? doctor?.S2LicenseNumber;
-        var pan = request.DoctorPhilHealthPan ?? encounter.DoctorPhilHealthPan ?? doctor?.PhilHealthPan;
-        var atc = request.PhilHealthAtc ?? encounter.PhilHealthAtc;
-
-        // PDEA Dangerous Drugs compliance: S2 license must be present if prescribing dangerous drugs
-        var hasDangerousDrugs = encounter.Prescriptions.Any(p => p.IsDangerousDrug);
-        if (hasDangerousDrugs && string.IsNullOrWhiteSpace(s2License))
-        {
-            throw new BadRequestException("Encounter includes PDEA controlled/dangerous drug prescriptions, but Doctor S2 License number is missing.");
-        }
-
-        encounter.Sign(prcLicense, ptr, s2License, pan, atc);
-        encounter.BranchId ??= _clinicContext.BranchId;
-
-        if (encounter.Prescriptions.Any())
-        {
-            encounter.PrescriptionNumber ??= $"RX-{encounter.EncounterDate:yyyyMMdd}-{encounter.Id.ToString("N")[..6].ToUpper()}";
-            encounter.RxPublicVerificationToken ??= $"{encounter.ClinicId:N}.{Guid.NewGuid():N}";
-            encounter.RxDispenseStatus = PrescriptionDispenseStatus.Issued;
-        }
-
-        _consultationRepository.Update(encounter);
-
-        // Update queue item to Completed
+        // Pre-resolve associated queue item to validate procedure bay status before signing
         QueueItem? queueItem = null;
         if (encounter.QueueItemId.HasValue)
         {
@@ -175,6 +153,55 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             }
         }
 
+        // Procedure Bay Guard: Patient cannot be signed while actively in the procedure bay
+        if (queueItem != null && queueItem.Status == QueueStatus.PendingProcedure)
+        {
+            throw new BadRequestException("Cannot sign consultation encounter while patient is still in the Procedure Bay (Pending Procedure). All ordered in-clinic procedures must be executed or cancelled first.");
+        }
+
+        // Procedure Bay Guard: Reject signing if any in-clinic procedures are still ordered or in-progress
+        if (_procedureRepository != null)
+        {
+            var hasPendingProcedures = await _procedureRepository.Query(p =>
+                p.ClinicId == _clinicContext.ClinicId &&
+                (p.ConsultationId == encounter.Id ||
+                 (encounter.QueueItemId.HasValue && p.QueueItemId == encounter.QueueItemId.Value) ||
+                 (queueItem != null && p.QueueItemId == queueItem.Id)) &&
+                (p.Status == ProcedureStatus.Ordered || p.Status == ProcedureStatus.InProgress)
+            ).AnyAsync(cancellationToken);
+
+            if (hasPendingProcedures)
+            {
+                throw new BadRequestException("Cannot sign consultation encounter while in-clinic procedures are still pending in the Procedure Bay. All ordered in-clinic procedures must be executed or cancelled first.");
+            }
+        }
+
+        var prcLicense = request.PrcLicenseNumber ?? doctor?.PrcLicenseNumber;
+        var ptr = request.PtrNumber ?? doctor?.PtrNumber;
+        var s2License = request.S2LicenseNumber ?? doctor?.S2LicenseNumber;
+        var pan = request.DoctorPhilHealthPan ?? encounter.DoctorPhilHealthPan ?? doctor?.PhilHealthPan;
+        var atc = request.PhilHealthAtc ?? encounter.PhilHealthAtc;
+
+        // PDEA Dangerous Drugs compliance: S2 license must be present if prescribing dangerous drugs
+        var hasDangerousDrugs = encounter.Prescriptions.Any(p => p.IsDangerousDrug);
+        if (hasDangerousDrugs && string.IsNullOrWhiteSpace(s2License))
+        {
+            throw new BadRequestException("Encounter includes PDEA controlled/dangerous drug prescriptions, but Doctor S2 License number is missing.");
+        }
+
+        encounter.Sign(prcLicense, ptr, s2License, pan, atc);
+        encounter.BranchId ??= _clinicContext.BranchId;
+
+        if (encounter.Prescriptions.Any())
+        {
+            encounter.PrescriptionNumber ??= $"RX-{encounter.EncounterDate:yyyyMMdd}-{encounter.Id.ToString("N")[..6].ToUpper()}";
+            encounter.RxPublicVerificationToken ??= $"{encounter.ClinicId:N}.{Guid.NewGuid():N}";
+            encounter.RxDispenseStatus = PrescriptionDispenseStatus.Issued;
+        }
+
+        _consultationRepository.Update(encounter);
+
+        // Update queue item to Completed
         if (queueItem != null)
         {
             queueItem.Status = QueueStatus.Completed;
@@ -371,7 +398,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             OrderingFacilityName = clinic.Name,
             TenantId = clinic.TenantId,
             BranchId = _clinicContext.BranchId?.ToString(),
-            VisitKey = encounter.Id.ToString(),
+            VisitKey = (encounter.QueueItemId ?? encounter.Id).ToString(),
             TargetPharmacyFacilityId = pharmacy?.FacilityId.ToString(),
             TargetPharmacyTenantId = pharmacy?.TenantId,
             PrescriberDoctor = new Interop.PrescriberDoctorDto
@@ -421,43 +448,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
 
     private static ConsultationEncounterDto MapToDto(ConsultationEncounter encounter)
     {
-        return new ConsultationEncounterDto(
-            encounter.Id,
-            encounter.TenantId,
-            encounter.ClinicId,
-            encounter.QueueItemId,
-            encounter.AppointmentId,
-            encounter.PatientId,
-            encounter.PatientName,
-            encounter.DoctorId,
-            encounter.DoctorName,
-            encounter.EncounterDate,
-            encounter.Subjective,
-            encounter.Objective,
-            encounter.Assessment,
-            encounter.Plan,
-            encounter.HomeInstructions,
-            encounter.DoctorPrcLicense,
-            encounter.DoctorPtr,
-            encounter.DoctorS2License,
-            encounter.IsSigned,
-            encounter.SignedAt,
-            encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
-            encounter.IsYakapEligible,
-            encounter.PhilHealthSignSympCode,
-            encounter.PhilHealthOtherComplaint,
-            encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
-            encounter.DoctorPhilHealthPan,
-            encounter.PhilHealthAtc,
-            encounter.PhilHealthCaseNo,
-            null,
-            encounter.PhilHealthSoapTransNo,
-            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
-            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
-            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null,
-            RxPharmacyStatusDto.From(encounter));
+        return ConsultationPlanManagementMapper.ToDto(
+            encounter,
+            rxStatus: RxPharmacyStatusDto.From(encounter));
     }
 }

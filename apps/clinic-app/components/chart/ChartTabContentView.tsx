@@ -97,6 +97,8 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
         <NursingProceduresTab
           patient={patient}
           patientId={patient?.id}
+          queueItemId={props.queueItemId ?? undefined}
+          allowDuplicateActive={props.allowDuplicateActive}
           procedures={patientChart?.proceduresHistory || []}
           onOrderProcedure={onOrderProcedure}
           onRefreshChart={onRefreshChart}
@@ -142,6 +144,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           patientId={patient?.id}
           medicalCertificates={patientChart?.medicalCertificates || []}
           referralLetters={patientChart?.referralLetters || []}
+          queueItemId={props.queueItemId}
           onRefreshChart={onRefreshChart}
         />
       )}

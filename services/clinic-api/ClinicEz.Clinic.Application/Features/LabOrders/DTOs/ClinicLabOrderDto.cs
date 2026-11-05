@@ -82,7 +82,8 @@ public record CreateClinicLabOrderRequest(
     string? Notes,
     List<CreateLabOrderItemRequest> Items,
     string? TargetFacilityId = null,
-    string? TargetTenantId = null
+    string? TargetTenantId = null,
+    Guid? QueueItemId = null
 );
 
 public record AttachExternalLabResultRequest(

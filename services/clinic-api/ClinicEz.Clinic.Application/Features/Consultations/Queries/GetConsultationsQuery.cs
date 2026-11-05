@@ -59,44 +59,7 @@ public sealed class GetConsultationsQueryHandler : IRequestHandler<GetConsultati
             .OrderByDescending(c => c.EncounterDate)
             .ToListAsync(cancellationToken);
 
-        return list.Select(encounter => new ConsultationEncounterDto(
-            encounter.Id,
-            encounter.TenantId,
-            encounter.ClinicId,
-            encounter.QueueItemId,
-            encounter.AppointmentId,
-            encounter.PatientId,
-            encounter.PatientName,
-            encounter.DoctorId,
-            encounter.DoctorName,
-            encounter.EncounterDate,
-            encounter.Subjective,
-            encounter.Objective,
-            encounter.Assessment,
-            encounter.Plan,
-            encounter.HomeInstructions,
-            encounter.DoctorPrcLicense,
-            encounter.DoctorPtr,
-            encounter.DoctorS2License,
-            encounter.IsSigned,
-            encounter.SignedAt,
-            encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
-            encounter.IsYakapEligible,
-            encounter.PhilHealthSignSympCode,
-            encounter.PhilHealthOtherComplaint,
-            encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
-            encounter.DoctorPhilHealthPan,
-            encounter.PhilHealthAtc,
-            encounter.PhilHealthCaseNo,
-            null,
-            encounter.PhilHealthSoapTransNo,
-            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
-            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
-            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null
-        )).ToList();
+        return list.Select(encounter => ConsultationPlanManagementMapper.ToDto(encounter)).ToList();
     }
 }
 
@@ -129,43 +92,8 @@ public sealed class GetConsultationByIdQueryHandler : IRequestHandler<GetConsult
             throw new NotFoundException($"Encounter '{request.Id}' was not found in this clinic.");
         }
 
-        return new ConsultationEncounterDto(
-            encounter.Id,
-            encounter.TenantId,
-            encounter.ClinicId,
-            encounter.QueueItemId,
-            encounter.AppointmentId,
-            encounter.PatientId,
-            encounter.PatientName,
-            encounter.DoctorId,
-            encounter.DoctorName,
-            encounter.EncounterDate,
-            encounter.Subjective,
-            encounter.Objective,
-            encounter.Assessment,
-            encounter.Plan,
-            encounter.HomeInstructions,
-            encounter.DoctorPrcLicense,
-            encounter.DoctorPtr,
-            encounter.DoctorS2License,
-            encounter.IsSigned,
-            encounter.SignedAt,
-            encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
-            encounter.IsYakapEligible,
-            encounter.PhilHealthSignSympCode,
-            encounter.PhilHealthOtherComplaint,
-            encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
-            encounter.DoctorPhilHealthPan,
-            encounter.PhilHealthAtc,
-            encounter.PhilHealthCaseNo,
-            null,
-            encounter.PhilHealthSoapTransNo,
-            encounter.PhysicalExams.FirstOrDefault()?.GenSurveyId,
-            encounter.PhysicalExams.FirstOrDefault()?.GeneralSurveyRemarks,
-            encounter.GetPhysicalExamFindings() != null ? System.Text.Json.JsonSerializer.Serialize(encounter.GetPhysicalExamFindings()) : null,
-            RxPharmacyStatusDto.From(encounter));
+        return ConsultationPlanManagementMapper.ToDto(
+            encounter,
+            rxStatus: RxPharmacyStatusDto.From(encounter));
     }
 }

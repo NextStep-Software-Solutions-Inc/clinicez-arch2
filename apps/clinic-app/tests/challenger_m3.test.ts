@@ -278,16 +278,16 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
   });
 
   describe('2. ActionMenu Direct Service Intents', () => {
-    test('2.1 ActionMenu contains all 4 clinical services with correct labels', () => {
+    test('2.1 ActionMenu contains all 4 clinical services with concise single-line labels', () => {
       const items = buildPatientOverflowMenuItems(youngPatient, {
         onSelectService: () => {},
       });
 
       const labels = items.map((i) => i.label);
-      expect(labels).toContain('Doctor Consultation');
-      expect(labels).toContain('Vitals Check');
-      expect(labels).toContain('Clinical Procedure');
-      expect(labels).toContain('Administrative & Clearance');
+      expect(labels).toContain('Consult');
+      expect(labels).toContain('Vitals');
+      expect(labels).toContain('Start procedure');
+      expect(labels).toContain('Medical certificate');
     });
 
     test('2.2 Invoking ActionMenu direct intents triggers onSelectService with patient and exact service key', () => {
@@ -435,7 +435,7 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
           onClose: () => {},
         })
       );
-      expect(seniorMarkup).toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
+      expect(seniorMarkup).toContain('Senior &amp; PWD priority selected automatically.');
       expect(seniorMarkup).toContain('Senior &amp; PWD Priority');
       expect(seniorMarkup).not.toContain('SQ-001');
 
@@ -446,12 +446,13 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
           onClose: () => {},
         })
       );
-      expect(youngMarkup).not.toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
-      expect(youngMarkup).toContain('Regular Series');
+      expect(youngMarkup).not.toContain('Senior &amp; PWD priority selected automatically.');
+      expect(youngMarkup).toContain('Regular');
+      expect(youngMarkup).not.toContain('Regular Series');
       expect(youngMarkup).not.toContain('Q-001');
     });
 
-    test('4.8 ServiceCheckInModal provides manual chips for Regular and Priority series', () => {
+    test('4.8 ServiceCheckInModal provides manual chips for Regular and Priority', () => {
       const markup = renderToStaticMarkup(
         React.createElement(ServiceCheckInModal, {
           visible: true,
@@ -461,7 +462,7 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
       );
       expect(markup).toContain('data-testid="series-regular-chip"');
       expect(markup).toContain('data-testid="series-priority-chip"');
-      expect(markup).toContain('Regular Queue Series');
+      expect(markup).toContain('Regular');
       expect(markup).toContain('Senior &amp; PWD Priority');
       expect(markup).not.toContain('Q-001');
       expect(markup).not.toContain('SQ-001');
@@ -521,12 +522,13 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
       expect(tableMarkup).not.toContain('Republic Act');
     });
 
-    test('5.3 buildPatientOverflowMenuItems Edit Demographics hint should not use "statutory" jargon', () => {
+    test('5.3 buildPatientOverflowMenuItems Edit info item omits long hint descriptions and jargon', () => {
       const items = buildPatientOverflowMenuItems(youngPatient, {
         onEditDemographics: () => {},
       });
       const editItem = items.find((i) => i.id === 'edit-demographics')!;
-      expect(editItem.hint).not.toContain('statutory');
+      expect(editItem.label).toBe('Edit info');
+      expect(editItem.hint).toBeUndefined();
     });
   });
 });

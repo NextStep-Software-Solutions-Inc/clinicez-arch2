@@ -97,7 +97,8 @@ public sealed class LabOrdersController : ControllerBase
             request.Notes,
             request.Items,
             request.TargetFacilityId,
-            request.TargetTenantId
+            request.TargetTenantId,
+            request.QueueItemId
         );
 
         var result = await _sender.Send(command, ct);

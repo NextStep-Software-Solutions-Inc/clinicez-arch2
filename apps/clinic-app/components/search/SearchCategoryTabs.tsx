@@ -82,8 +82,8 @@ export default function SearchCategoryTabs({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs + 2,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingVertical: theme.spacing.md,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
@@ -91,17 +91,17 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs + 2,
+    gap: theme.spacing.sm,
   },
   tab: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
-    minHeight: 30,
+    minHeight: 36,
   },
   tabActive: {
     backgroundColor: theme.colors.primary,

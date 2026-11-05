@@ -1,8 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, Select } from '@ui';
-import { Alert } from '@utils/feedback';
+import {
+  ThemedText,
+  Button,
+  Input,
+  Icon,
+  Badge,
+  ErrorState,
+  SkeletonList,
+  ValidatedDateInput,
+  validateDateString,
+  Select,
+} from '@ui';
+import { useClinic } from '../../context/ClinicContext';
 import { useAuth, usePermission } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import {
@@ -12,6 +23,7 @@ import {
 import { useEhrOptions } from '../../hooks/useEhrOptions';
 import {
   clinicService,
+  formatClinicDateTime,
   ClinicPatient,
   PatientReproductiveHistory,
   UpdatePatientReproductiveHistoryPayload,
@@ -24,6 +36,8 @@ interface ReproductiveHealthTabProps {
   readOnly?: boolean;
 }
 
+type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 export default function ReproductiveHealthTab({
   patient,
   initialReproductiveHistory,
@@ -32,6 +46,7 @@ export default function ReproductiveHealthTab({
 }: ReproductiveHealthTabProps) {
   const { selectOptions: deliveryOptions } = useEhrOptions('delivery_type');
   const { selectOptions: contraOptions } = useEhrOptions('contraceptive_method');
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
 
   const { user, state, permissions } = useAuth();
   const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
@@ -41,8 +56,25 @@ export default function ReproductiveHealthTab({
   const isFemale = patient.sex?.toLowerCase().startsWith('f') ?? false;
 
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>('idle');
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(
+    () => initialReproductiveHistory?.updatedAt ?? initialReproductiveHistory?.createdAt ?? null
+  );
+  const [userEditVersion, setUserEditVersion] = useState(0);
+
+  const lastEditKindRef = useRef<'discrete' | 'text'>('discrete');
+  const inFlightSaveRef = useRef(false);
+  const pendingResaveRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userEditVersionRef = useRef(0);
+  userEditVersionRef.current = userEditVersion;
+  const lastSavedEditVersionRef = useRef(0);
+  const lastSavedPayloadJsonRef = useRef<string | null>(null);
+  const onRefreshChartRef = useRef(onRefreshChart);
+  onRefreshChartRef.current = onRefreshChart;
 
   // Menstrual History Fields
   const [isApplicable, setIsApplicable] = useState(isFemale);
@@ -69,6 +101,60 @@ export default function ReproductiveHealthTab({
   const [hadPreEclampsiaHypertension, setHadPreEclampsiaHypertension] = useState(false);
   const [remarks, setRemarks] = useState('');
 
+  const formSnapshotRef = useRef({
+    isApplicable,
+    menarcheAge,
+    lastMenstrualPeriod,
+    periodDurationDays,
+    cycleIntervalDays,
+    padsPerDay,
+    isMenopausal,
+    menopauseAge,
+    contraceptiveMethod,
+    receivedFamilyPlanningCounseling,
+    gravidity,
+    parity,
+    termBirths,
+    pretermBirths,
+    abortions,
+    livingChildren,
+    deliveryType,
+    hadPreEclampsiaHypertension,
+    remarks,
+  });
+  formSnapshotRef.current = {
+    isApplicable,
+    menarcheAge,
+    lastMenstrualPeriod,
+    periodDurationDays,
+    cycleIntervalDays,
+    padsPerDay,
+    isMenopausal,
+    menopauseAge,
+    contraceptiveMethod,
+    receivedFamilyPlanningCounseling,
+    gravidity,
+    parity,
+    termBirths,
+    pretermBirths,
+    abortions,
+    livingChildren,
+    deliveryType,
+    hadPreEclampsiaHypertension,
+    remarks,
+  };
+
+  const markUserEdited = useCallback(
+    (kind: 'discrete' | 'text') => {
+      if (!canWritePatients || !isFemale) return;
+      lastEditKindRef.current = kind;
+      setAutoSaveStatus('saving');
+      setAutoSaveError(null);
+      setUserEditVersion((v) => v + 1);
+    },
+    [canWritePatients, isFemale]
+  );
+
   const populateForm = (data: PatientReproductiveHistory) => {
     setIsApplicable(data.isApplicable);
     setMenarcheAge(data.menarcheAge != null ? String(data.menarcheAge) : '');
@@ -91,6 +177,11 @@ export default function ReproductiveHealthTab({
     setDeliveryType(normalizeDeliveryType(data.deliveryType));
     setHadPreEclampsiaHypertension(data.hadPreEclampsiaHypertension);
     setRemarks(data.remarks || '');
+
+    const savedTimestamp = data.updatedAt || data.createdAt || null;
+    if (savedTimestamp) {
+      setLastSavedAt(savedTimestamp);
+    }
   };
 
   const fetchReproductiveHistory = async () => {
@@ -112,6 +203,20 @@ export default function ReproductiveHealthTab({
   };
 
   useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pendingResaveRef.current = false;
+    userEditVersionRef.current = 0;
+    lastSavedEditVersionRef.current = 0;
+    lastSavedPayloadJsonRef.current = null;
+    setUserEditVersion(0);
+    setAutoSaveStatus('idle');
+    setAutoSaveError(null);
+    setLastSavedAt(
+      initialReproductiveHistory?.updatedAt ?? initialReproductiveHistory?.createdAt ?? null
+    );
     if (isFemale) {
       if (initialReproductiveHistory) {
         populateForm(initialReproductiveHistory);
@@ -121,6 +226,167 @@ export default function ReproductiveHealthTab({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id, isFemale]);
+
+  const performAutoSave = useCallback(async () => {
+    if (!canWritePatients || !isFemale) return;
+
+    const snap = formSnapshotRef.current;
+    const trimmedLmp = snap.lastMenstrualPeriod.trim();
+
+    if (snap.isApplicable && trimmedLmp.length > 0) {
+      if (trimmedLmp.length < 10) {
+        setAutoSaveStatus('idle');
+        return;
+      }
+      const lmpValidation = validateDateString(trimmedLmp, { boundaryMode: 'pastOrToday' });
+      if (!lmpValidation.isValid) {
+        setAutoSaveStatus('error');
+        setAutoSaveError(
+          lmpValidation.errorMessage ||
+            'Please enter a valid Last Menstrual Period date not in the future.'
+        );
+        return;
+      }
+    }
+
+    const payload: UpdatePatientReproductiveHistoryPayload = {
+      isApplicable: snap.isApplicable,
+      menarcheAge:
+        snap.isApplicable && parseInt(snap.menarcheAge, 10)
+          ? parseInt(snap.menarcheAge, 10)
+          : undefined,
+      lastMenstrualPeriod: snap.isApplicable && trimmedLmp ? trimmedLmp : undefined,
+      periodDurationDays:
+        snap.isApplicable && parseInt(snap.periodDurationDays, 10)
+          ? parseInt(snap.periodDurationDays, 10)
+          : undefined,
+      cycleIntervalDays:
+        snap.isApplicable && parseInt(snap.cycleIntervalDays, 10)
+          ? parseInt(snap.cycleIntervalDays, 10)
+          : undefined,
+      padsPerDay:
+        snap.isApplicable && parseInt(snap.padsPerDay, 10)
+          ? parseInt(snap.padsPerDay, 10)
+          : undefined,
+      isMenopausal: snap.isApplicable ? snap.isMenopausal : false,
+      menopauseAge:
+        snap.isApplicable && snap.isMenopausal && parseInt(snap.menopauseAge, 10)
+          ? parseInt(snap.menopauseAge, 10)
+          : undefined,
+
+      contraceptiveMethod: snap.contraceptiveMethod.trim() || undefined,
+      receivedFamilyPlanningCounseling: snap.receivedFamilyPlanningCounseling,
+
+      gravidity: parseInt(snap.gravidity, 10) || 0,
+      parity: parseInt(snap.parity, 10) || 0,
+      termBirths: parseInt(snap.termBirths, 10) || 0,
+      pretermBirths: parseInt(snap.pretermBirths, 10) || 0,
+      abortions: parseInt(snap.abortions, 10) || 0,
+      livingChildren: parseInt(snap.livingChildren, 10) || 0,
+      deliveryType: snap.deliveryType.trim() || undefined,
+      hadPreEclampsiaHypertension: snap.hadPreEclampsiaHypertension,
+      remarks: snap.remarks.trim() || undefined,
+    };
+
+    const savingEditVersion = userEditVersionRef.current;
+    const payloadKey = JSON.stringify(payload);
+    if (payloadKey === lastSavedPayloadJsonRef.current) {
+      lastSavedEditVersionRef.current = Math.max(
+        lastSavedEditVersionRef.current,
+        savingEditVersion
+      );
+      setAutoSaveStatus('saved');
+      setAutoSaveError(null);
+      return;
+    }
+
+    if (inFlightSaveRef.current) {
+      pendingResaveRef.current = true;
+      return;
+    }
+
+    inFlightSaveRef.current = true;
+    setAutoSaveStatus('saving');
+    setAutoSaveError(null);
+
+    try {
+      const [updated, err] = await clinicService.updateReproductiveHistory(patient.id, payload);
+      if (err) {
+        setAutoSaveStatus('error');
+        setAutoSaveError(err.message || 'Failed to auto-save reproductive health profile.');
+      } else {
+        lastSavedPayloadJsonRef.current = payloadKey;
+        lastSavedEditVersionRef.current = Math.max(
+          lastSavedEditVersionRef.current,
+          savingEditVersion
+        );
+        const savedIso = updated?.updatedAt || new Date().toISOString();
+        setLastSavedAt(savedIso);
+        setAutoSaveStatus('saved');
+        onRefreshChartRef.current?.();
+      }
+    } catch (e: any) {
+      setAutoSaveStatus('error');
+      setAutoSaveError(e?.message || 'Unexpected error while saving reproductive health profile.');
+    } finally {
+      inFlightSaveRef.current = false;
+      const shouldResave =
+        pendingResaveRef.current && userEditVersionRef.current > savingEditVersion;
+      pendingResaveRef.current = false;
+      if (shouldResave) {
+        void performAutoSaveRef.current();
+      }
+    }
+  }, [canWritePatients, isFemale, patient.id]);
+
+  const performAutoSaveRef = useRef(performAutoSave);
+  performAutoSaveRef.current = performAutoSave;
+
+  useEffect(() => {
+    if (
+      userEditVersion === 0 ||
+      userEditVersion <= lastSavedEditVersionRef.current ||
+      !canWritePatients ||
+      !isFemale
+    ) {
+      return;
+    }
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const delayMs = lastEditKindRef.current === 'discrete' ? 300 : 650;
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      void performAutoSaveRef.current();
+    }, delayMs);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+    // Trigger auto-save strictly when userEditVersion increments from an explicit user edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userEditVersion]);
+
+  const formatLastSavedBadge = useCallback(
+    (iso?: string | null): string | null => {
+      if (!iso) return null;
+      const formatted = formatClinicDateTime(iso, {
+        dateFormat,
+        timeFormat,
+        timeZoneId,
+        fallback: '',
+      });
+      return formatted ? `Last saved ${formatted}` : null;
+    },
+    [dateFormat, timeFormat, timeZoneId]
+  );
+
+  const lastSavedBadgeLabel = formatLastSavedBadge(lastSavedAt);
 
   // If patient is male, display strict clinical guard banner
   if (!isFemale) {
@@ -134,70 +400,12 @@ export default function ReproductiveHealthTab({
           <ThemedText variant="body" color={theme.colors.textSecondary} style={{ textAlign: 'center' }}>
             Patient sex is recorded as <ThemedText variant="bodyBold" color={theme.colors.text}>{patient.sex}</ThemedText>.
             Women&apos;s reproductive health and obstetric indicators (menstrual cycles, gravidity/parity, contraception)
-            are restricted to female patients per PhilHealth Yakap statutory schemas.
+            are restricted to female patients.
           </ThemedText>
         </View>
       </View>
     );
   }
-
-  const handleSave = async () => {
-    if (!canWritePatients) {
-      Alert.alert(
-        'Insufficient Permissions',
-        "Required permission 'patients:write' is not granted for this clinic role."
-      );
-      return;
-    }
-    if (isApplicable && lastMenstrualPeriod && lastMenstrualPeriod.trim()) {
-      const lmpValidation = validateDateString(lastMenstrualPeriod, { boundaryMode: 'pastOrToday' });
-      if (!lmpValidation.isValid) {
-        Alert.alert('Invalid LMP Date', lmpValidation.errorMessage || 'Please enter a valid Last Menstrual Period date not in the future.');
-        return;
-      }
-    }
-    setSaving(true);
-    try {
-      const payload: UpdatePatientReproductiveHistoryPayload = {
-        isApplicable,
-        menarcheAge: isApplicable && parseInt(menarcheAge, 10) ? parseInt(menarcheAge, 10) : undefined,
-        lastMenstrualPeriod: isApplicable && lastMenstrualPeriod.trim() ? lastMenstrualPeriod.trim() : undefined,
-        periodDurationDays: isApplicable && parseInt(periodDurationDays, 10) ? parseInt(periodDurationDays, 10) : undefined,
-        cycleIntervalDays: isApplicable && parseInt(cycleIntervalDays, 10) ? parseInt(cycleIntervalDays, 10) : undefined,
-        padsPerDay: isApplicable && parseInt(padsPerDay, 10) ? parseInt(padsPerDay, 10) : undefined,
-        isMenopausal: isApplicable ? isMenopausal : false,
-        menopauseAge: isApplicable && isMenopausal && parseInt(menopauseAge, 10) ? parseInt(menopauseAge, 10) : undefined,
-
-        contraceptiveMethod: contraceptiveMethod.trim() || undefined,
-        receivedFamilyPlanningCounseling,
-
-        gravidity: parseInt(gravidity, 10) || 0,
-        parity: parseInt(parity, 10) || 0,
-        termBirths: parseInt(termBirths, 10) || 0,
-        pretermBirths: parseInt(pretermBirths, 10) || 0,
-        abortions: parseInt(abortions, 10) || 0,
-        livingChildren: parseInt(livingChildren, 10) || 0,
-        deliveryType: deliveryType.trim() || undefined,
-        hadPreEclampsiaHypertension,
-        remarks: remarks.trim() || undefined,
-      };
-
-      const [updated, err] = await clinicService.updateReproductiveHistory(patient.id, payload);
-      if (err) {
-        Alert.alert('Error', err.message || 'Failed to update reproductive health profile.');
-      } else {
-        Alert.alert('Success', "Women's & Reproductive health profile saved successfully.");
-        if (updated) {
-          populateForm(updated);
-        }
-        onRefreshChart?.();
-      }
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Unexpected error while saving.');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -230,6 +438,54 @@ export default function ReproductiveHealthTab({
         </View>
       ) : null}
 
+      {(canWritePatients || lastSavedBadgeLabel) ? (
+        <View style={styles.autoSaveBar}>
+          <View style={styles.autoSaveLeftRow}>
+            <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+            <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ flex: 1 }}>
+              {canWritePatients
+                ? "Changes to women's & reproductive health are saved automatically."
+                : "Women's & reproductive health record"}
+            </ThemedText>
+          </View>
+          <View style={styles.autoSaveRightRow}>
+            {canWritePatients && autoSaveStatus === 'saving' ? (
+              <Badge label="Saving changes…" variant="warning" size="sm" icon="clock" />
+            ) : canWritePatients && autoSaveStatus === 'error' ? (
+              <Pressable
+                onPress={() => void performAutoSave()}
+                accessibilityRole="button"
+                accessibilityLabel="Retry saving reproductive health changes"
+              >
+                <Badge label="Autosave failed • Retry" variant="emergency" size="sm" icon="alertCircle" />
+              </Pressable>
+            ) : lastSavedBadgeLabel ? (
+              <Badge
+                label={lastSavedBadgeLabel}
+                variant={autoSaveStatus === 'saved' ? 'success' : 'routine'}
+                size="sm"
+                icon={autoSaveStatus === 'saved' ? 'checkCircle' : 'check'}
+              />
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
+      {autoSaveStatus === 'error' && autoSaveError ? (
+        <View style={styles.autoSaveErrorBanner} accessibilityRole="alert">
+          <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+          <ThemedText variant="small" color={theme.colors.emergencyText} style={{ flex: 1 }}>
+            {autoSaveError}
+          </ThemedText>
+          <Button
+            title="Retry"
+            variant="outline"
+            size="sm"
+            onPress={() => void performAutoSave()}
+          />
+        </View>
+      ) : null}
+
       {/* SECTION 1: Menstrual History */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
@@ -248,7 +504,11 @@ export default function ReproductiveHealthTab({
             <Pressable
               style={[styles.toggleBtn, !isApplicable && styles.toggleBtnActive]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setIsApplicable(false)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setIsApplicable(false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={!isApplicable ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -257,7 +517,11 @@ export default function ReproductiveHealthTab({
             <Pressable
               style={[styles.toggleBtn, isApplicable && styles.toggleBtnActivePrimary]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setIsApplicable(true)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setIsApplicable(true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={isApplicable ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -274,7 +538,10 @@ export default function ReproductiveHealthTab({
                   label="Menarche Age"
                   placeholder="e.g. 12"
                   value={menarcheAge}
-                  onChangeText={setMenarcheAge}
+                  onChangeText={(val) => {
+                    setMenarcheAge(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -284,8 +551,13 @@ export default function ReproductiveHealthTab({
                   label="LMP (Last Menstrual Period)"
                   placeholder="YYYY-MM-DD"
                   value={lastMenstrualPeriod}
-                  onChangeText={setLastMenstrualPeriod}
+                  onChangeText={(val) => {
+                    setLastMenstrualPeriod(val);
+                    markUserEdited('text');
+                  }}
                   boundaryMode="pastOrToday"
+                  disabled={!canWritePatients}
+                  editable={canWritePatients}
                 />
               </View>
             </View>
@@ -296,7 +568,10 @@ export default function ReproductiveHealthTab({
                   label="Duration (Days)"
                   placeholder="e.g. 5"
                   value={periodDurationDays}
-                  onChangeText={setPeriodDurationDays}
+                  onChangeText={(val) => {
+                    setPeriodDurationDays(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -306,7 +581,10 @@ export default function ReproductiveHealthTab({
                   label="Cycle Interval (Days)"
                   placeholder="e.g. 28"
                   value={cycleIntervalDays}
-                  onChangeText={setCycleIntervalDays}
+                  onChangeText={(val) => {
+                    setCycleIntervalDays(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -316,7 +594,10 @@ export default function ReproductiveHealthTab({
                   label="Pads per Day"
                   placeholder="e.g. 3"
                   value={padsPerDay}
-                  onChangeText={setPadsPerDay}
+                  onChangeText={(val) => {
+                    setPadsPerDay(val);
+                    markUserEdited('text');
+                  }}
                   keyboardType="numeric"
                   editable={canWritePatients}
                 />
@@ -332,7 +613,11 @@ export default function ReproductiveHealthTab({
                 <Pressable
                   style={[styles.toggleBtn, !isMenopausal && styles.toggleBtnActive]}
                   disabled={!canWritePatients}
-                  onPress={() => canWritePatients && setIsMenopausal(false)}
+                  onPress={() => {
+                    if (!canWritePatients) return;
+                    setIsMenopausal(false);
+                    markUserEdited('discrete');
+                  }}
                 >
                   <ThemedText variant="smallBold" color={!isMenopausal ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     No
@@ -341,7 +626,11 @@ export default function ReproductiveHealthTab({
                 <Pressable
                   style={[styles.toggleBtn, isMenopausal && styles.toggleBtnActivePrimary]}
                   disabled={!canWritePatients}
-                  onPress={() => canWritePatients && setIsMenopausal(true)}
+                  onPress={() => {
+                    if (!canWritePatients) return;
+                    setIsMenopausal(true);
+                    markUserEdited('discrete');
+                  }}
                 >
                   <ThemedText variant="smallBold" color={isMenopausal ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     Yes
@@ -355,7 +644,10 @@ export default function ReproductiveHealthTab({
                 label="Age at Menopause"
                 placeholder="e.g. 50"
                 value={menopauseAge}
-                onChangeText={setMenopauseAge}
+                onChangeText={(val) => {
+                  setMenopauseAge(val);
+                  markUserEdited('text');
+                }}
                 keyboardType="numeric"
                 editable={canWritePatients}
               />
@@ -384,7 +676,10 @@ export default function ReproductiveHealthTab({
               label="Gravidity (G)"
               placeholder="0"
               value={gravidity}
-              onChangeText={setGravidity}
+              onChangeText={(val) => {
+                setGravidity(val);
+                markUserEdited('text');
+              }}
               keyboardType="numeric"
               editable={canWritePatients}
             />
@@ -394,7 +689,10 @@ export default function ReproductiveHealthTab({
               label="Parity (P)"
               placeholder="0"
               value={parity}
-              onChangeText={setParity}
+              onChangeText={(val) => {
+                setParity(val);
+                markUserEdited('text');
+              }}
               keyboardType="numeric"
               editable={canWritePatients}
             />
@@ -404,7 +702,10 @@ export default function ReproductiveHealthTab({
               label="Living (L)"
               placeholder="0"
               value={livingChildren}
-              onChangeText={setLivingChildren}
+              onChangeText={(val) => {
+                setLivingChildren(val);
+                markUserEdited('text');
+              }}
               keyboardType="numeric"
               editable={canWritePatients}
             />
@@ -417,7 +718,10 @@ export default function ReproductiveHealthTab({
               label="Term Births (T)"
               placeholder="0"
               value={termBirths}
-              onChangeText={setTermBirths}
+              onChangeText={(val) => {
+                setTermBirths(val);
+                markUserEdited('text');
+              }}
               keyboardType="numeric"
               editable={canWritePatients}
             />
@@ -427,7 +731,10 @@ export default function ReproductiveHealthTab({
               label="Preterm Births (P)"
               placeholder="0"
               value={pretermBirths}
-              onChangeText={setPretermBirths}
+              onChangeText={(val) => {
+                setPretermBirths(val);
+                markUserEdited('text');
+              }}
               keyboardType="numeric"
               editable={canWritePatients}
             />
@@ -437,7 +744,10 @@ export default function ReproductiveHealthTab({
               label="Abortions (A)"
               placeholder="0"
               value={abortions}
-              onChangeText={setAbortions}
+              onChangeText={(val) => {
+                setAbortions(val);
+                markUserEdited('text');
+              }}
               keyboardType="numeric"
               editable={canWritePatients}
             />
@@ -447,10 +757,14 @@ export default function ReproductiveHealthTab({
         <Select
           label="Most Recent Delivery Type"
           value={deliveryType}
-          onSelect={(val) => canWritePatients && setDeliveryType(val)}
+          onSelect={(val) => {
+            if (!canWritePatients) return;
+            setDeliveryType(val);
+            markUserEdited('discrete');
+          }}
           options={deliveryOptions}
           modalTitle="Select Most Recent Delivery Type"
-          modalSubtitle="PhilHealth Konsulta (pDeliveryTyp) statutory options"
+          modalSubtitle="Select standard obstetric delivery mode"
           icon="baby"
           placeholder="Select delivery type..."
           allowCustom
@@ -465,7 +779,11 @@ export default function ReproductiveHealthTab({
             <Pressable
               style={[styles.toggleBtn, !hadPreEclampsiaHypertension && styles.toggleBtnActive]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setHadPreEclampsiaHypertension(false)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setHadPreEclampsiaHypertension(false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={!hadPreEclampsiaHypertension ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -474,7 +792,11 @@ export default function ReproductiveHealthTab({
             <Pressable
               style={[styles.toggleBtn, hadPreEclampsiaHypertension && styles.toggleBtnActiveEmergency]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setHadPreEclampsiaHypertension(true)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setHadPreEclampsiaHypertension(true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={hadPreEclampsiaHypertension ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -491,10 +813,14 @@ export default function ReproductiveHealthTab({
         <Select
           label="Contraceptive Method in Use"
           value={contraceptiveMethod}
-          onSelect={(val) => canWritePatients && setContraceptiveMethod(val)}
+          onSelect={(val) => {
+            if (!canWritePatients) return;
+            setContraceptiveMethod(val);
+            markUserEdited('discrete');
+          }}
           options={contraOptions}
           modalTitle="Select Contraceptive Method"
-          modalSubtitle="DOH Family Planning Program & PhilHealth Yakap (pBirthCtrlMethod)"
+          modalSubtitle="Select current family planning or contraceptive method"
           icon="shield"
           placeholder="Select contraceptive method..."
           allowCustom
@@ -509,7 +835,11 @@ export default function ReproductiveHealthTab({
             <Pressable
               style={[styles.toggleBtn, !receivedFamilyPlanningCounseling && styles.toggleBtnActive]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setReceivedFamilyPlanningCounseling(false)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setReceivedFamilyPlanningCounseling(false);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={!receivedFamilyPlanningCounseling ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -518,7 +848,11 @@ export default function ReproductiveHealthTab({
             <Pressable
               style={[styles.toggleBtn, receivedFamilyPlanningCounseling && styles.toggleBtnActivePrimary]}
               disabled={!canWritePatients}
-              onPress={() => canWritePatients && setReceivedFamilyPlanningCounseling(true)}
+              onPress={() => {
+                if (!canWritePatients) return;
+                setReceivedFamilyPlanningCounseling(true);
+                markUserEdited('discrete');
+              }}
             >
               <ThemedText variant="smallBold" color={receivedFamilyPlanningCounseling ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -531,20 +865,11 @@ export default function ReproductiveHealthTab({
           label="Clinical Remarks / Notes"
           placeholder="Additional obstetric or gynecological remarks"
           value={remarks}
-          onChangeText={setRemarks}
+          onChangeText={(val) => {
+            setRemarks(val);
+            markUserEdited('text');
+          }}
           editable={canWritePatients}
-        />
-      </View>
-
-      <View style={styles.actionFooter}>
-        <Button
-          title={saving ? 'Saving Changes…' : 'Save Women\'s Health Profile'}
-          variant="primary"
-          size="lg"
-          icon="check"
-          loading={saving}
-          disabled={saving || !canWritePatients}
-          onPress={handleSave}
         />
       </View>
     </ScrollView>
@@ -565,6 +890,40 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     backgroundColor: theme.colors.warningBg,
     borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+  },
+  autoSaveBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  autoSaveLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flex: 1,
+  },
+  autoSaveRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  autoSaveErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
     borderWidth: 1,
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,
@@ -633,9 +992,5 @@ const styles = StyleSheet.create({
   },
   gridItem: {
     flex: 1,
-  },
-  actionFooter: {
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
   },
 });

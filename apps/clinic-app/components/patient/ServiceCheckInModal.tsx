@@ -25,14 +25,10 @@ import {
   type VisitType,
   type PatientQueueItem,
 } from '../../services/clinicService';
-import { useStaff } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { notify } from '../../utils/feedback';
 import { printThermalQueueTicket } from '../../utils/printHelper';
 import {
-  getPatientInitials,
-  hasKnownAllergies,
-  hasStatAllergy,
   formatPatientDemographicsLine,
   type ClinicalServiceType,
 } from './PatientDirectoryCard';
@@ -269,10 +265,10 @@ export function formatTicketSubtext(
     return parts.join(' • ');
   }
 
-  if (ticket.status === 'InConsultation') return 'Currently with clinician';
-  if (ticket.status === 'InTriage') return 'Currently at triage desk';
-  if (ticket.status === 'Called') return 'Called to consultation room';
-  return 'Active in today’s queue';
+  if (ticket.status === 'InConsultation') return 'With doctor';
+  if (ticket.status === 'InTriage') return 'At triage';
+  if (ticket.status === 'Called') return 'Called to room';
+  return 'Waiting in queue';
 }
 
 export const CLINICAL_SERVICES: Array<{
@@ -288,7 +284,7 @@ export const CLINICAL_SERVICES: Array<{
     type: 'Doctor Consultation',
     label: 'Doctor Consultation',
     icon: 'stethoscope',
-    hint: 'Physician evaluation, SOAP & prescription',
+    hint: 'Check-up and prescription',
     visitType: 'Consultation',
     defaultPrefixRegular: 'Q',
     defaultPrefixPriority: 'SQ',
@@ -297,7 +293,7 @@ export const CLINICAL_SERVICES: Array<{
     type: 'Vitals Check',
     label: 'Vitals Check',
     icon: 'activity',
-    hint: 'Triage BP, HR, SpO2 & physical exam',
+    hint: 'Blood pressure, weight, and temperature',
     visitType: 'VitalsCheckOnly',
     defaultPrefixRegular: 'V',
     defaultPrefixPriority: 'SV',
@@ -306,7 +302,7 @@ export const CLINICAL_SERVICES: Array<{
     type: 'Clinical Procedure',
     label: 'Clinical Procedure',
     icon: 'syringe',
-    hint: 'Minor wound care, injections & dressing',
+    hint: 'Wound care, dressing, or injection',
     visitType: 'StandaloneProcedure',
     defaultPrefixRegular: 'P',
     defaultPrefixPriority: 'SP',
@@ -315,7 +311,7 @@ export const CLINICAL_SERVICES: Array<{
     type: 'Administrative & Clearance',
     label: 'Administrative & Clearance',
     icon: 'file',
-    hint: 'Medical certificates, clearance & forms',
+    hint: 'Medical certificate or clearance',
     visitType: 'AdministrativeDocument',
     defaultPrefixRegular: 'A',
     defaultPrefixPriority: 'SA',
@@ -397,7 +393,7 @@ export default function ServiceCheckInModal({
         patientCode: patient.patientCode,
         demographics: formatPatientDemographicsLine(patient),
         serviceType: issuedTicket.serviceType,
-        priorityLabel: isPrioritySeries ? 'Senior & PWD Priority' : 'Regular Queue Series',
+        priorityLabel: isPrioritySeries ? 'Senior & PWD Priority' : 'Regular',
         issuedAt,
       },
       letterhead?.header ? letterhead : { header: facilityName || 'CLINIC EZ HEALTHCARE' }
@@ -563,81 +559,87 @@ export default function ServiceCheckInModal({
 
   if (!visible || !patient) return null;
 
-  const initials = getPatientInitials(patient);
-  const demographicsLine = formatPatientDemographicsLine(patient);
-  const hasAllergies = hasKnownAllergies(patient.allergies);
-  const isStat = hasStatAllergy(patient.allergies);
-
   // 1. Post-Queue Confirmation Dialog
   if (issuedTicket) {
+    const issuedServiceMeta = formatVisitTypeMeta(issuedTicket.serviceType);
+    const postQueueFooter = (
+      <View style={styles.postQueueFooter}>
+        <Button
+          variant="secondary"
+          icon="print"
+          iconOnly={true}
+          accessibilityLabel="Print thermal queue ticket"
+          onPress={handlePrintTicket}
+          testID="post-queue-print-button"
+        />
+        <View style={styles.postQueueFooterRight}>
+          <Button
+            title="Done"
+            variant={onNavigateToDashboard ? 'secondary' : 'primary'}
+            onPress={handleCloseAll}
+            testID="post-queue-done-button"
+          />
+          {onNavigateToDashboard ? (
+            <Button
+              title="View on Dashboard"
+              variant="primary"
+              icon="arrowRight"
+              onPress={() => {
+                handleCloseAll();
+                onNavigateToDashboard();
+              }}
+              testID="post-queue-dashboard-button"
+            />
+          ) : null}
+        </View>
+      </View>
+    );
+
     return (
       <Modal
         visible={visible}
         onClose={handleCloseAll}
         title="Ticket Issued"
-        subtitle="Patient is waiting in queue"
+        subtitle={issuedTicket.patientName}
+        maxWidth={500}
+        footer={postQueueFooter}
         testID="post-queue-dialog"
       >
         <View style={styles.postQueueWrap}>
-          <View style={styles.postQueueSuccessBadge}>
-            <Icon name="checkCircle" size={32} color={theme.colors.routineText} />
-          </View>
-
-          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.postQueueLabel}>
-            QUEUE TICKET NUMBER
-          </ThemedText>
-          <View style={styles.postQueueTicketBox}>
-            <ThemedText variant="display" color={theme.colors.primaryDark} style={styles.postQueueTicketNumber}>
-              {issuedTicket.queueNumber}
-            </ThemedText>
-          </View>
-
-          <View style={styles.postQueuePatientDetails}>
-            <ThemedText variant="title" color={theme.colors.text}>
-              {issuedTicket.patientName}
-            </ThemedText>
-            <View style={styles.postQueueBadgeRow}>
-              <Badge label={issuedTicket.serviceType} variant="routine" size="sm" />
-              <Badge label="Waiting in queue" variant="outline" size="sm" icon="clock" />
+          <View style={styles.postQueueTicketCard}>
+            <View style={styles.postQueueSuccessBadge}>
+              <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.successText} />
             </View>
-          </View>
 
-          <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.postQueueHint}>
-            The patient has been added to the workstation queue. You can view their progress on the dashboard.
-          </ThemedText>
+            <View style={styles.postQueueNumberGroup}>
+              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.postQueueLabel}>
+                TICKET NUMBER
+              </ThemedText>
+              <ThemedText variant="display" color={theme.colors.text} style={styles.postQueueTicketNumber}>
+                {issuedTicket.queueNumber}
+              </ThemedText>
+            </View>
 
-          <View style={styles.postQueueActions}>
-            <Button
-              title="Done"
-              variant="outline"
-              size="lg"
-              onPress={handleCloseAll}
-              style={styles.postQueueButton}
-              testID="post-queue-done-button"
-            />
-            <Button
-              variant="outline"
-              size="lg"
-              icon="print"
-              iconOnly={true}
-              accessibilityLabel="Print thermal queue ticket"
-              onPress={handlePrintTicket}
-              testID="post-queue-print-button"
-            />
-            {onNavigateToDashboard ? (
-              <Button
-                title="View on Dashboard"
-                variant="primary"
-                size="lg"
-                icon="arrowRight"
-                onPress={() => {
-                  handleCloseAll();
-                  onNavigateToDashboard();
-                }}
-                style={styles.postQueueButton}
-                testID="post-queue-dashboard-button"
+            <View style={styles.postQueueBadgeRow}>
+              <Badge
+                label={issuedTicket.serviceType}
+                variant="neutral"
+                size="md"
+                icon={issuedServiceMeta.icon}
+                style={styles.postQueueServiceBadge}
               />
-            ) : null}
+              {isPrioritySeries ? (
+                <Badge
+                  label="Senior & PWD Priority"
+                  variant="warning"
+                  size="md"
+                />
+              ) : null}
+            </View>
+
+            <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.postQueueHint}>
+              Added to today’s queue.
+            </ThemedText>
           </View>
         </View>
       </Modal>
@@ -664,23 +666,18 @@ export default function ServiceCheckInModal({
     const pendingSeriesPrefix = (conflictWarning.payload.seriesPrefix || currentPrefix).toUpperCase();
     const isPendingPriority = pendingSeriesPrefix.startsWith('S') && pendingSeriesPrefix.length > 1;
 
-    const conflictSubtitle =
-      resolvedTickets.length > 1
-        ? `${conflictWarning.patientName} already has ${resolvedTickets.length} active visits today`
-        : `${conflictWarning.patientName} already has an active visit today`;
-
     const conflictFooter = (
       <View style={styles.modalFooter}>
         <Button
           title="Go back"
-          variant="outline"
+          variant="secondary"
           icon="arrowLeft"
           onPress={() => setConflictWarning(null)}
           disabled={submitting}
           testID="conflict-go-back-button"
         />
         <Button
-          title="Issue additional ticket"
+          title="Yes, add new ticket"
           variant="primary"
           icon="ticket"
           loading={submitting}
@@ -695,13 +692,13 @@ export default function ServiceCheckInModal({
         visible={visible}
         onClose={() => setConflictWarning(null)}
         title="Patient Already in Queue"
-        subtitle={conflictSubtitle}
-        maxWidth={520}
+        subtitle={conflictWarning.patientName}
+        maxWidth={500}
         footer={conflictFooter}
         testID="active-queue-warning-dialog"
       >
         <View style={styles.conflictWrap}>
-          {/* 1. Slim Warning Callout Banner */}
+          {/* 1. Conversational Warning Question Banner */}
           <View style={styles.conflictAlertBanner}>
             <View style={styles.conflictAlertIconWrap}>
               <Icon name="alert" size={theme.sizes.iconMd} color={theme.colors.warningText} />
@@ -709,23 +706,22 @@ export default function ServiceCheckInModal({
             <View style={styles.conflictAlertTextCol}>
               <ThemedText variant="smallBold" color={theme.colors.warningText}>
                 {resolvedTickets.length > 1
-                  ? `${resolvedTickets.length} Active Queue Tickets Found`
-                  : 'Active Queue Ticket Found'}
+                  ? `This patient already has ${resolvedTickets.length} active tickets today.`
+                  : 'This patient already has an active ticket today.'}
               </ThemedText>
               <ThemedText variant="small" color={theme.colors.text} style={styles.conflictAlertBody}>
-                Most visits only require a single queue ticket. Review today’s active queue below before issuing another ticket.
+                {`Do you want to continue and add a new ${pendingServiceMeta.label} ticket${
+                  isPendingPriority ? ' (Senior & PWD Priority)' : ''
+                }?`}
               </ThemedText>
             </View>
           </View>
 
           {/* 2. Clean Active Queue Ticket Cards */}
           <View style={styles.conflictTicketsSection}>
-            <View style={styles.sectionHeaderRow}>
-              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                TODAY’S ACTIVE QUEUE
-              </ThemedText>
-              <Badge label={`${resolvedTickets.length} active`} variant="neutral" size="xs" />
-            </View>
+            <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+              {resolvedTickets.length > 1 ? 'Active tickets' : 'Active ticket'}
+            </ThemedText>
 
             <View style={styles.conflictTicketsList} testID="conflict-tickets-list">
               {resolvedTickets.map((t, idx) => {
@@ -766,28 +762,6 @@ export default function ServiceCheckInModal({
               })}
             </View>
           </View>
-
-          {/* 3. Pending New Ticket Request Summary */}
-          <View style={styles.conflictNewRequestCard} testID="conflict-new-request-summary">
-            <View style={styles.conflictNewRequestLeft}>
-              <View style={styles.conflictNewRequestIconWrap}>
-                <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
-              </View>
-              <View style={styles.conflictTicketMetaCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-                  NEW TICKET TO ISSUE
-                </ThemedText>
-                <ThemedText variant="smallBold" color={theme.colors.text} numberOfLines={1}>
-                  {pendingServiceMeta.label}
-                </ThemedText>
-              </View>
-            </View>
-            <Badge
-              label={isPendingPriority ? `Priority (${pendingSeriesPrefix})` : `Regular (${pendingSeriesPrefix})`}
-              variant="outline"
-              size="sm"
-            />
-          </View>
         </View>
       </Modal>
     );
@@ -819,64 +793,16 @@ export default function ServiceCheckInModal({
       visible={visible}
       onClose={onClose}
       title="Queue Patient"
-      subtitle="Select clinical service and ticket series"
+      subtitle={patient.fullName}
+      maxWidth={500}
       footer={modalFooter}
       testID="service-checkin-modal"
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Patient Identity Banner */}
-        <View style={styles.patientBanner}>
-          <View style={styles.avatarWrap}>
-            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-              {initials}
-            </ThemedText>
-          </View>
-          <View style={styles.patientInfoCol}>
-            <View style={styles.nameRow}>
-              <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.patientName}>
-                {patient.fullName}
-              </ThemedText>
-              <Badge label={patient.patientCode} variant="outline" size="sm" />
-            </View>
-            <ThemedText variant="small" color={theme.colors.textSecondary}>
-              {demographicsLine}
-            </ThemedText>
-
-            {hasAllergies || patient.alerts ? (
-              <View style={styles.alertStripsRow}>
-                {hasAllergies ? (
-                  <View style={[styles.compactNoticeStrip, isStat ? styles.statStrip : styles.allergyStrip]}>
-                    <Icon
-                      name="alert"
-                      size={theme.sizes.iconSm}
-                      color={isStat ? theme.colors.emergencyText : theme.colors.urgentText}
-                    />
-                    <ThemedText
-                      variant="captionBold"
-                      color={isStat ? theme.colors.emergencyText : theme.colors.urgentText}
-                      numberOfLines={1}
-                    >
-                      {patient.allergies}
-                    </ThemedText>
-                  </View>
-                ) : null}
-                {patient.alerts ? (
-                  <View style={[styles.compactNoticeStrip, styles.alertStrip]}>
-                    <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
-                    <ThemedText variant="captionBold" color={theme.colors.warningText} numberOfLines={1}>
-                      {patient.alerts}
-                    </ThemedText>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-        {/* 1. Service Intent Selector */}
+        {/* 1. Service Selector */}
         <View style={styles.formSection}>
-          <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-            SELECT CLINICAL SERVICE
+          <ThemedText variant="bodyBold" color={theme.colors.text}>
+            What service would the patient like to avail?
           </ThemedText>
           <View style={styles.serviceCardsGrid}>
             {CLINICAL_SERVICES.map((srv) => {
@@ -909,6 +835,7 @@ export default function ServiceCheckInModal({
                     <ThemedText
                       variant="smallBold"
                       color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                      style={styles.serviceCardTitle}
                     >
                       {srv.label}
                     </ThemedText>
@@ -922,24 +849,16 @@ export default function ServiceCheckInModal({
           </View>
         </View>
 
-        {/* 2. Ticket Series Selection & Preview */}
+        {/* 2. Priority Selection */}
         <View style={styles.formSection}>
-          <View style={styles.sectionHeaderRow}>
-            <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sectionHeaderLabel}>
-              QUEUE TICKET SERIES
-            </ThemedText>
-            <View style={styles.ticketPreviewBadge} testID="ticket-series-preview">
-              <Icon name="ticket" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
-              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                {isPrioritySeries ? 'Senior & PWD Priority' : 'Regular Series'}
-              </ThemedText>
-            </View>
-          </View>
+          <ThemedText variant="bodyBold" color={theme.colors.text}>
+            Does this patient need a priority lane?
+          </ThemedText>
 
           <View style={styles.chipsRow}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Regular Queue Series"
+              accessibilityLabel="Regular"
               testID="series-regular-chip"
               onPress={() => setIsPrioritySeries(false)}
               style={[
@@ -951,13 +870,13 @@ export default function ServiceCheckInModal({
                 variant="smallBold"
                 color={!isPrioritySeries ? theme.colors.primaryDark : theme.colors.text}
               >
-                Regular Queue Series
+                Regular
               </ThemedText>
             </Pressable>
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Senior & PWD Priority Series"
+              accessibilityLabel="Senior & PWD Priority"
               testID="series-priority-chip"
               onPress={() => setIsPrioritySeries(true)}
               style={[
@@ -978,7 +897,7 @@ export default function ServiceCheckInModal({
             <View style={styles.priorityBanner}>
               <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routineText} />
               <ThemedText variant="captionBold" color={theme.colors.routineText}>
-                Senior & PWD Priority Series auto-selected for this patient.
+                Senior & PWD priority selected automatically.
               </ThemedText>
             </View>
           ) : null}
@@ -990,7 +909,6 @@ export default function ServiceCheckInModal({
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingBottom: theme.spacing.lg,
     gap: theme.spacing.lg,
   },
   modalFooter: {
@@ -999,79 +917,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: theme.spacing.md,
   },
-  patientBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
-  avatarWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  patientInfoCol: {
-    flex: 1,
-    gap: 2,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  patientName: {
-    fontSize: theme.typography.body.fontSize,
-  },
-  alertStripsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-    marginTop: 4,
-  },
-  compactNoticeStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: theme.radii.sm,
-  },
-  allergyStrip: {
-    backgroundColor: theme.colors.urgentBg,
-  },
-  statStrip: {
-    backgroundColor: theme.colors.emergencyBg,
-  },
-  alertStrip: {
-    backgroundColor: theme.colors.warningBg,
-  },
   formSection: {
     gap: theme.spacing.sm,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionHeaderLabel: {
-    letterSpacing: 0.5,
-  },
-  ticketPreviewBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: theme.colors.primaryLight,
-    borderRadius: theme.radii.sm,
   },
   serviceCardsGrid: {
     flexDirection: 'row',
@@ -1079,12 +926,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   serviceCard: {
-    flex: 1,
-    minWidth: 140,
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 180,
     padding: theme.spacing.md,
     borderRadius: theme.radii.md,
     borderWidth: 1.5,
-    gap: 4,
+    gap: theme.spacing.xs,
   },
   serviceCardSelected: {
     borderColor: theme.colors.primaryDark,
@@ -1097,7 +945,10 @@ const styles = StyleSheet.create({
   serviceCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
+  },
+  serviceCardTitle: {
+    flex: 1,
   },
   serviceIconWrap: {
     width: 28,
@@ -1105,6 +956,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   serviceIconWrapSelected: {
     backgroundColor: theme.colors.surface,
@@ -1138,64 +990,73 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     backgroundColor: theme.colors.routineBg,
     borderRadius: theme.radii.sm,
-    marginTop: 4,
+    marginTop: theme.spacing.xs,
   },
   postQueueWrap: {
+    width: '100%',
     alignItems: 'center',
-    paddingVertical: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.md,
+  },
+  postQueueTicketCard: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: theme.spacing['2xl'],
+    paddingHorizontal: theme.spacing.xl,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
     gap: theme.spacing.md,
   },
   postQueueSuccessBadge: {
-    width: 64,
-    height: 64,
+    width: theme.sizes.controlLg,
+    height: theme.sizes.controlLg,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.routineBg,
+    backgroundColor: theme.colors.successBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.successBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: theme.spacing.xs,
   },
-  postQueueLabel: {
-    letterSpacing: 1,
-  },
-  postQueueTicketBox: {
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xl,
-    backgroundColor: theme.colors.primaryLight,
-    borderRadius: theme.radii.lg,
-    borderWidth: 2,
-    borderColor: theme.colors.primaryDark,
-  },
-  postQueueTicketNumber: {
-    fontSize: theme.fontSizes['4xl'],
-    fontWeight: '800',
-    letterSpacing: 2,
-    textAlign: 'center',
-  },
-  postQueuePatientDetails: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  postQueueBadgeRow: {
-    flexDirection: 'row',
+  postQueueNumberGroup: {
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
+  postQueueLabel: {
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  postQueueTicketNumber: {
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  postQueueBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  postQueueServiceBadge: {
+    alignSelf: 'center',
+    backgroundColor: theme.colors.surface,
+  },
   postQueueHint: {
     textAlign: 'center',
-    maxWidth: 380,
-    marginTop: theme.spacing.xs,
   },
-  postQueueActions: {
+  postQueueFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: theme.spacing.md,
-    marginTop: theme.spacing.lg,
     width: '100%',
-    justifyContent: 'center',
   },
-  postQueueButton: {
-    minWidth: 140,
+  postQueueFooterRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginLeft: 'auto',
   },
   conflictWrap: {
     gap: theme.spacing.lg,
@@ -1262,31 +1123,5 @@ const styles = StyleSheet.create({
   conflictTicketMetaCol: {
     flex: 1,
     gap: 2,
-  },
-  conflictNewRequestCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
-  conflictNewRequestLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    flex: 1,
-  },
-  conflictNewRequestIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
 });

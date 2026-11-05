@@ -503,13 +503,13 @@ describe('Adversarial Medical Chart Workstation Layouts Refinement (Round 1)', (
       );
 
       // Clean titles
-      expect(markup).toContain('Administer Vaccine');
-      expect(markup).toContain('Add Historical Vaccine');
+      expect(markup).toContain('Administer Vax');
+      expect(markup).toContain('Log Vax History');
 
       // No double plus or literal plus prefix
       expect(markup).not.toContain('+ +');
-      expect(markup).not.toContain('+ Administer Vaccine');
-      expect(markup).not.toContain('+ Add Historical Vaccine');
+      expect(markup).not.toContain('+ Administer Vax');
+      expect(markup).not.toContain('+ Log Vax History');
     });
 
     test('ADV-R4-1: Immunization documentation status banner renders when zero vaccines are recorded', () => {

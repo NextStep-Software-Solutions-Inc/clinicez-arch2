@@ -91,7 +91,24 @@ public sealed class ConsultationsController : ControllerBase
             request.SoapTransNo,
             request.GeneralSurveyId,
             request.GeneralSurveyRemarks,
-            request.PhysicalExamFindingsJson);
+            request.PhysicalExamFindingsJson,
+            request.CounselingCodes,
+            request.RoutineVaccineName,
+            request.RoutineVaccineDate,
+            request.AdultsRoutineScreeningCode,
+            request.PediatricRoutineScreeningCode,
+            request.PrenatalScreeningServicesCode,
+            request.CancerScreeningCodes,
+            request.DiagnosticServicesOption,
+            request.HasMedicationPrescription,
+            request.HasReferral,
+            request.OtherMedicalAdviceSpec,
+            request.HasFollowUp,
+            request.FollowUpDate,
+            request.FollowUpScheduleText,
+            request.FollowUpReason,
+            request.FollowUpVaccineName,
+            request.FollowUpVaccineNextDate);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ConsultationEncounterDto>.Success(result, "Consultation updated successfully."));
@@ -138,7 +155,24 @@ public sealed record UpdateConsultationRequest(
     string? SoapTransNo = null,
     string? GeneralSurveyId = null,
     string? GeneralSurveyRemarks = null,
-    string? PhysicalExamFindingsJson = null);
+    string? PhysicalExamFindingsJson = null,
+    string? CounselingCodes = null,
+    string? RoutineVaccineName = null,
+    string? RoutineVaccineDate = null,
+    string? AdultsRoutineScreeningCode = null,
+    string? PediatricRoutineScreeningCode = null,
+    string? PrenatalScreeningServicesCode = null,
+    string? CancerScreeningCodes = null,
+    string? DiagnosticServicesOption = null,
+    bool? HasMedicationPrescription = null,
+    bool? HasReferral = null,
+    string? OtherMedicalAdviceSpec = null,
+    bool? HasFollowUp = null,
+    string? FollowUpDate = null,
+    string? FollowUpScheduleText = null,
+    string? FollowUpReason = null,
+    string? FollowUpVaccineName = null,
+    string? FollowUpVaccineNextDate = null);
 
 public sealed record SignConsultationRequest(
     string? PrcLicenseNumber,

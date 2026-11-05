@@ -7,8 +7,10 @@ import {
   type OrganSystemDef,
 } from './OrganSystemsExamSection';
 import { usePhilHealthCatalog } from '../../utils/usePhilHealthCatalog';
+import { useClinic } from '../../context/ClinicContext';
 import {
   clinicService,
+  formatClinicDate,
   type ClinicPatient,
   type PatientChart,
   type PatientProblemRecord,
@@ -87,6 +89,7 @@ export default function ExecutiveSummaryTab({
   onOpenAddProblemModal,
   onOpenAddAllergyModal,
 }: ExecutiveSummaryTabProps) {
+  const { dateFormat, timeZoneId } = useClinic();
   const chart = chartProp || patientChart;
 
   // PhilHealth Patient Profile & Organ Systems Examination findings
@@ -275,28 +278,32 @@ export default function ExecutiveSummaryTab({
               activeProblems.map((prob) => (
                 <View key={prob.id} style={styles.problemItem}>
                   <View style={styles.problemItemTop}>
-                    <Badge label={prob.icd10Code} variant="routine" size="sm" />
                     {prob.isChronicNcd ? (
                       <Badge label="Chronic NCD" variant="info" size="sm" />
                     ) : null}
-                    <Badge
-                      label={prob.severity}
-                      variant={
-                        prob.severity === 'Severe'
-                          ? 'emergency'
-                          : prob.severity === 'Moderate'
-                          ? 'warning'
-                          : 'success'
-                      }
-                      size="sm"
-                    />
+                    {prob.severity ? (
+                      <Badge
+                        label={prob.severity}
+                        variant={
+                          prob.severity === 'Severe'
+                            ? 'emergency'
+                            : prob.severity === 'Moderate'
+                            ? 'warning'
+                            : 'success'
+                        }
+                        size="sm"
+                      />
+                    ) : null}
+                    {!prob.isChronicNcd && !prob.severity ? (
+                      <Badge label="Active" variant="routine" size="sm" />
+                    ) : null}
                   </View>
                   <ThemedText variant="bodyBold" color={theme.colors.text} style={{ marginTop: 4 }}>
                     {prob.problemTitle}
                   </ThemedText>
                   {prob.onsetDate ? (
                     <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Onset: {prob.onsetDate}
+                      Onset: {formatClinicDate(prob.onsetDate, { dateFormat, timeZoneId, fallback: prob.onsetDate })}
                     </ThemedText>
                   ) : null}
                 </View>

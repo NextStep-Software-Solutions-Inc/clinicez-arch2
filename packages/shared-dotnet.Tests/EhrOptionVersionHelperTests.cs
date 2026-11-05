@@ -85,7 +85,7 @@ public class EhrOptionVersionHelperTests
             "secondhand_smoke_exposure", "vape_device", "alcohol_drinker_subtype", "alcohol_type",
             "dietary_intake", "breastfeeding_status", "dental_checkup_status", "mental_health_event",
             "sexual_consent_status", "sexual_risk_behavior", "contraceptive_use_status", "contraceptive_method",
-            "prenatal_checkup_count", "pe_general_survey", "consultation_reason", "visual_acuity_chart",
+            "prenatal_checkup_count", "pe_general_survey", "pe_musculoskeletal", "physical_exam_system", "consultation_reason", "visual_acuity_chart",
             "specific_diagnosis", "counseling_topic", "diagnostic_plan_option", "routine_immunization_status",
             "vaccination_status", "milestone_visit_age", "smr_result", "headsss_education_status",
             "headsss_relationship_status", "headsss_living_arrangement", "bp_location", "recommendation_consent",

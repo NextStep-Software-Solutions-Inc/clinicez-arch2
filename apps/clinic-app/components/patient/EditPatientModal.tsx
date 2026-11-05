@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
 import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl, PsgcAddressSelector, Select, type SelectOption } from '../ui';
 import { theme } from '../../constants/theme';
@@ -22,19 +21,12 @@ import {
   mergePatientCustomFields,
   hasPreviousValue,
 } from './patientCustomFieldsMerger';
-import StructuredAllergyIntakeModal, {
-  AllergyPillList,
-  CreateAllergyRequest,
-} from './StructuredAllergyIntakeModal';
-import StructuredMedicalHistoryModal, {
-  MedicalHistoryPillList,
-  MedicalHistoryItem,
-  PHILHEALTH_QUICK_CONDITIONS,
+import type { CreateAllergyRequest } from './StructuredAllergyIntakeModal';
+import {
+  type MedicalHistoryItem,
   formatMedicalHistoriesSummary,
   parseChronicConditionsStringToStructured,
 } from './StructuredMedicalHistoryModal';
-import ClinicalAlertsSection from './ClinicalAlertsSection';
-import YakapEnlistmentSection from './YakapEnlistmentSection';
 import GuardianSection, {
   createEmptyGuardianDraft,
   isMinorFromDob,
@@ -43,6 +35,21 @@ import GuardianSection, {
 } from './GuardianSection';
 
 export { parseChronicConditionsStringToStructured };
+
+export const VERIFICATION_STATUS_OPTIONS = [
+  {
+    value: 'Verified',
+    label: 'Verified',
+  },
+  {
+    value: 'PendingVerification',
+    label: 'Pending Verification',
+  },
+  {
+    value: 'Unverified',
+    label: 'Unverified',
+  },
+] as const;
 
 export const LEGACY_PRIMARY_ADDRESS_FIELD_KEYS = new Set([
   'primary_address_line',
@@ -294,6 +301,9 @@ export function EditPatientModal({
   const [sex, setSex] = useState<string>('Male');
   const [genderIdentity, setGenderIdentity] = useState<string>('');
   const [civilStatus, setCivilStatus] = useState<string>('Single');
+  const [verificationStatus, setVerificationStatus] = useState<string>(
+    patient?.verificationStatus || 'Verified'
+  );
   const [sexOptions, setSexOptions] = useState<string[]>([]);
   const [genderIdentityOptions, setGenderIdentityOptions] = useState<SelectOption[]>([]);
   const [civilStatusOptions, setCivilStatusOptions] = useState<string[]>([]);
@@ -360,43 +370,8 @@ export function EditPatientModal({
   const [pwdId, setPwdId] = useState(patient?.pwdId || '');
   const [bloodType, setBloodType] = useState('');
   const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
-  const [allergyModalVisible, setAllergyModalVisible] = useState(false);
-  const [chronicConditions, setChronicConditions] = useState('');
   const [structuredMedicalHistories, setStructuredMedicalHistories] = useState<MedicalHistoryItem[]>([]);
-  const [medicalHistoryModalVisible, setMedicalHistoryModalVisible] = useState(false);
   const [alerts, setAlerts] = useState('');
-
-  const toggleQuickCondition = (code: string, title: string) => {
-    setStructuredMedicalHistories((prev) => {
-      const exists = prev.some(
-        (c) =>
-          c.philHealthMdiseaseCode === code ||
-          c.conditionTitle.trim().toLowerCase() === title.trim().toLowerCase()
-      );
-      if (exists) {
-        return prev.filter(
-          (c) =>
-            c.philHealthMdiseaseCode !== code &&
-            c.conditionTitle.trim().toLowerCase() !== title.trim().toLowerCase()
-        );
-      } else {
-        return [...prev, { conditionTitle: title, philHealthMdiseaseCode: code }];
-      }
-    });
-  };
-
-  const quickCodesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.code)), []);
-  const quickTitlesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.title.toLowerCase())), []);
-
-  const additionalConditions = useMemo(() => {
-    return structuredMedicalHistories.filter(
-      (c) =>
-        (!(c.philHealthMdiseaseCode && quickCodesSet.has(c.philHealthMdiseaseCode)) &&
-         !quickTitlesSet.has(c.conditionTitle.trim().toLowerCase())) ||
-        Boolean(c.clinicalNotes?.trim()) ||
-        Boolean(c.icd10Code?.trim())
-    );
-  }, [structuredMedicalHistories, quickCodesSet, quickTitlesSet]);
 
   // Institutional classification
   const [classification, setClassification] = useState<'General' | 'Student' | 'Employee'>('General');
@@ -513,11 +488,9 @@ export function EditPatientModal({
     return effectiveCustomFields.filter((f) => f.category === 'Emergency Contacts');
   }, [effectiveCustomFields]);
 
-  const additionalCustomFields = useMemo(() => {
-    return effectiveCustomFields.filter(
-      (f) => f.category !== 'Address' && f.category !== 'Emergency Contacts'
-    );
-  }, [effectiveCustomFields]);
+  const renderedCustomFields = useMemo(() => {
+    return [...addressFields, ...emergencyFields];
+  }, [addressFields, emergencyFields]);
 
   const handleCustomFieldChange = (key: string, val: any) => {
     setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
@@ -535,88 +508,97 @@ export function EditPatientModal({
   );
 
   const [saving, setSaving] = useState(false);
+  const [hydratingPatient, setHydratingPatient] = useState(false);
+  const [hydratedPatient, setHydratedPatient] = useState<ClinicPatient | null>(null);
+  const [hasFullClinicalContext, setHasFullClinicalContext] = useState(false);
   const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    if (visible) {
-      clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
-        if (fields && fields.length > 0) {
-          setTenantCustomFields(fields);
-        }
-      });
-    }
-  }, [visible]);
+  const applyPatientToForm = (source: ClinicPatient) => {
+    const isFullRecord =
+      Array.isArray(source.pastMedicalHistories) ||
+      Array.isArray(source.structuredAllergies) ||
+      (source.allergies !== undefined && source.allergies !== null) ||
+      (source.chronicConditions !== undefined && source.chronicConditions !== null);
 
-  useEffect(() => {
-    if (!patient) return;
-
-    setFirstName(patient.firstName || '');
-    setMiddleName(patient.middleName || '');
-    setLastName(patient.lastName || '');
-    setSuffix(patient.suffix || '');
-    setDateOfBirth(patient.dateOfBirth || '');
-    setSex(
-      patient.sex || 'Male'
-    );
-    setGenderIdentity(
-      patient.genderIdentity || ''
-    );
-    setCivilStatus(
-      patient.civilStatus || 'Single'
-    );
-    setContactNumber(patient.contactNumber || '');
-    setEmail(patient.email || '');
-    setPhilHealthNumber(patient.philHealthNumber || '');
-    const pProfile = extractPhilHealthProfileData(patient.customFields, patient);
+    setHasFullClinicalContext(isFullRecord);
+    setFirstName(source.firstName || '');
+    setMiddleName(source.middleName || '');
+    setLastName(source.lastName || '');
+    setSuffix(source.suffix || '');
+    setDateOfBirth(source.dateOfBirth || '');
+    setSex(source.sex || 'Male');
+    setGenderIdentity(source.genderIdentity || '');
+    setCivilStatus(source.civilStatus || 'Single');
+    setVerificationStatus(source.verificationStatus || 'Verified');
+    setContactNumber(source.contactNumber || '');
+    setEmail(source.email || '');
+    setPhilHealthNumber(source.philHealthNumber || '');
+    const pProfile = extractPhilHealthProfileData(source.customFields, source);
     setMemberType(pProfile.memberType);
     setPrincipalMemberPin(pProfile.principalPin);
     setPrincipalFullName(pProfile.principalFullName);
     setPrincipalRelationship(pProfile.principalRelationship);
     setPrincipalDob(pProfile.principalDob);
     setIsPrincipalPinValid(null);
-    setSeniorCitizenId(patient.seniorCitizenId || '');
-    setPwdId(patient.pwdId || '');
-    setBloodType(patient.bloodType || '');
-    const initialAllergies = (patient as any)?.structuredAllergies && Array.isArray((patient as any).structuredAllergies) && (patient as any).structuredAllergies.length > 0
-      ? (patient as any).structuredAllergies
-      : parseAllergiesStringToStructured(patient.allergies);
-    setStructuredAllergies(initialAllergies);
-    const initialConditions: MedicalHistoryItem[] =
-      (patient as any)?.pastMedicalHistories &&
-      Array.isArray((patient as any).pastMedicalHistories) &&
-      (patient as any).pastMedicalHistories.length > 0
-        ? (patient as any).pastMedicalHistories
-        : parseChronicConditionsStringToStructured(patient.chronicConditions);
-    setStructuredMedicalHistories(initialConditions);
-    setChronicConditions(patient.chronicConditions || '');
-    setAlerts(patient.alerts || '');
+    setSeniorCitizenId(source.seniorCitizenId || '');
+    setPwdId(source.pwdId || '');
+    setBloodType(source.bloodType || '');
 
-    const cf = patient.customFields || {};
-    const existingPerm = (patient.addresses && patient.addresses.length > 0)
-      ? patient.addresses.find((a) => a.addressType === 'Permanent') || patient.addresses[0]
+    const initialAllergies: CreateAllergyRequest[] = Array.isArray(source.structuredAllergies)
+      ? source.structuredAllergies.map((item) => ({
+          category: (['Medication', 'Food', 'Environmental', 'Biologic', 'Other'].includes(item.category)
+            ? item.category
+            : 'Other') as CreateAllergyRequest['category'],
+          allergen: item.allergen,
+          allergenDrugCode: item.allergenDrugCode ?? null,
+          severity: (['Mild', 'Moderate', 'Severe', 'LifeThreatening'].includes(item.severity)
+            ? item.severity
+            : 'Moderate') as CreateAllergyRequest['severity'],
+          reactionManifestation: item.reactionManifestation ?? null,
+          isAnaphylactic: Boolean(item.isAnaphylactic),
+          onsetDate: item.onsetDate ?? null,
+          notes: item.notes ?? null,
+        }))
+      : parseAllergiesStringToStructured(source.allergies);
+    setStructuredAllergies(initialAllergies);
+
+    const initialConditions: MedicalHistoryItem[] = Array.isArray(source.pastMedicalHistories)
+      ? (source.pastMedicalHistories as MedicalHistoryItem[])
+      : parseChronicConditionsStringToStructured(source.chronicConditions);
+    setStructuredMedicalHistories(initialConditions);
+
+    const normalizedAlerts =
+      !isFullRecord && source.alerts === 'Active Safety Alert'
+        ? ''
+        : source.alerts || '';
+    setAlerts(normalizedAlerts);
+
+    const cf = source.customFields || {};
+    const existingPerm = (source.addresses && source.addresses.length > 0)
+      ? source.addresses.find((a) => a.addressType === 'Permanent') || source.addresses[0]
       : null;
     setPermanentAddress({
       addressType: 'Permanent',
       isSameAsPermanent: false,
-      regionPsgc: existingPerm?.regionPsgc ?? patient.regionPsgc ?? null,
-      provincePsgc: existingPerm?.provincePsgc ?? patient.provincePsgc ?? null,
-      cityMunicipalityPsgc: existingPerm?.cityMunicipalityPsgc ?? patient.cityMunicipalityPsgc ?? null,
-      barangayPsgc: existingPerm?.barangayPsgc ?? patient.barangayPsgc ?? null,
+      regionPsgc: existingPerm?.regionPsgc ?? source.regionPsgc ?? null,
+      provincePsgc: existingPerm?.provincePsgc ?? source.provincePsgc ?? null,
+      cityMunicipalityPsgc: existingPerm?.cityMunicipalityPsgc ?? source.cityMunicipalityPsgc ?? null,
+      barangayPsgc: existingPerm?.barangayPsgc ?? source.barangayPsgc ?? null,
       regionName: existingPerm?.regionName ?? null,
-      provinceName: existingPerm?.provinceName ?? cf['primary_province'] ?? (patient as any).province ?? null,
-      cityMunicipalityName: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (patient as any).city ?? null,
-      barangayName: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (patient as any).barangay ?? null,
-      streetAddress: existingPerm?.streetAddress ?? (patient as any).addressLine ?? cf['primary_address_line'] ?? '',
-      zipCode: existingPerm?.zipCode ?? patient.zipCode ?? null,
+      provinceName: existingPerm?.provinceName ?? cf['primary_province'] ?? (source as any).province ?? null,
+      cityMunicipalityName: existingPerm?.cityMunicipalityName ?? cf['primary_city'] ?? (source as any).city ?? null,
+      barangayName: existingPerm?.barangayName ?? cf['primary_barangay'] ?? (source as any).barangay ?? null,
+      streetAddress: existingPerm?.streetAddress ?? (source as any).addressLine ?? cf['primary_address_line'] ?? '',
+      zipCode: existingPerm?.zipCode ?? source.zipCode ?? null,
     });
-    setGuardian(extractInitialGuardianFromPatient(patient));
+    setGuardian(extractInitialGuardianFromPatient(source));
     setGuardianErrors({});
     setIsGuardianPinValid(null);
     setCustomFieldValues({
       ...cf,
-      emergency_contact_name: cf['emergency_contact_name'] ?? (patient as any).emergencyContactName ?? '',
-      emergency_contact_phone: cf['emergency_contact_phone'] ?? (patient as any).emergencyContactPhone ?? '',
-      emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (patient as any).emergencyContactRelationship ?? '',
+      emergency_contact_name: cf['emergency_contact_name'] ?? (source as any).emergencyContactName ?? '',
+      emergency_contact_phone: cf['emergency_contact_phone'] ?? (source as any).emergencyContactPhone ?? '',
+      emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (source as any).emergencyContactRelationship ?? '',
     });
     setCustomFieldErrors({});
     setFieldErrors({});
@@ -646,7 +628,51 @@ export function EditPatientModal({
       setEmployeeId('');
       setDepartment('');
     }
+  };
+
+  useEffect(() => {
+    if (visible) {
+      clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
+        if (fields && fields.length > 0) {
+          setTenantCustomFields(fields);
+        }
+      });
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (!patient) {
+      setHydratedPatient(null);
+      setHasFullClinicalContext(false);
+      return;
+    }
+    setHydratedPatient(patient);
+    applyPatientToForm(patient);
   }, [patient]);
+
+  useEffect(() => {
+    if (!visible || !patient?.id || typeof clinicService.getPatientById !== 'function') {
+      return;
+    }
+
+    let cancelled = false;
+    setHydratingPatient(true);
+    clinicService.getPatientById(patient.id)
+      .then(([fullPatient]) => {
+        if (cancelled || !fullPatient) return;
+        setHydratedPatient(fullPatient);
+        applyPatientToForm(fullPatient);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHydratingPatient(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, patient?.id]);
 
   const handleSave = async () => {
     if (!patient) return;
@@ -687,9 +713,9 @@ export function EditPatientModal({
       return;
     }
 
-    // Defensive validation for dynamic custom fields
-    if (effectiveCustomFields.length > 0) {
-      const { isValid, errors } = validateCustomFields(effectiveCustomFields, customFieldValues, staticValues);
+    // Defensive validation for rendered demographic custom fields
+    if (renderedCustomFields.length > 0) {
+      const { isValid, errors } = validateCustomFields(renderedCustomFields, customFieldValues, staticValues);
       if (!isValid) {
         setCustomFieldErrors(errors);
         const errorMessages = Object.values(errors);
@@ -724,9 +750,11 @@ export function EditPatientModal({
       }
     }
 
+    const effectivePatient = hydratedPatient || patient;
+
     const mergedCustomFields = mergePatientCustomFields({
-      patient,
-      effectiveCustomFields,
+      patient: effectivePatient,
+      effectiveCustomFields: renderedCustomFields,
       customFieldValues,
       staticValues,
       tenantCustomFieldsCount: tenantCustomFields.length,
@@ -754,6 +782,7 @@ export function EditPatientModal({
       : undefined;
 
     const normalizedGuardian = normalizeGuardianPayload(guardian);
+    const hasAddressInput = Boolean(permanentAddress.regionPsgc || permanentAddress.streetAddress?.trim());
 
     const payload: RegisterPatientPayload = {
       firstName: firstName.trim(),
@@ -770,17 +799,29 @@ export function EditPatientModal({
       seniorCitizenId: seniorCitizenId.trim() || undefined,
       pwdId: pwdId.trim() || undefined,
       bloodType: bloodType.trim() || undefined,
-      allergies: allergiesSummary,
-      structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
+      allergies: hasFullClinicalContext ? (allergiesSummary ?? '') : allergiesSummary,
+      structuredAllergies: hasFullClinicalContext
+        ? structuredAllergies
+        : structuredAllergies.length > 0
+          ? structuredAllergies
+          : undefined,
       chronicConditions: formatMedicalHistoriesSummary(structuredMedicalHistories) || undefined,
-      alerts: alerts.trim() || undefined,
+      alerts: hasFullClinicalContext ? alerts.trim() : alerts.trim() || undefined,
       customFields: Object.keys(mergedCustomFields).length > 0 ? mergedCustomFields : undefined,
-      verificationStatus: patient.verificationStatus || 'Verified',
-      medicalHistories: structuredMedicalHistories,
-      addresses: permanentAddress.regionPsgc || permanentAddress.streetAddress ? [permanentAddress] : undefined,
+      verificationStatus: verificationStatus || effectivePatient.verificationStatus || 'Verified',
+      medicalHistories: hasFullClinicalContext
+        ? structuredMedicalHistories
+        : structuredMedicalHistories.length > 0
+          ? structuredMedicalHistories
+          : undefined,
+      addresses: hasAddressInput
+        ? [permanentAddress]
+        : effectivePatient.addresses && effectivePatient.addresses.length > 0
+          ? []
+          : undefined,
       guardians: normalizedGuardian
         ? [normalizedGuardian]
-        : patient.guardians && patient.guardians.length > 0
+        : effectivePatient.guardians && effectivePatient.guardians.length > 0
           ? []
           : undefined,
       regionPsgc: permanentAddress.regionPsgc || undefined,
@@ -839,8 +880,7 @@ export function EditPatientModal({
   };
 
   return (
-    <>
-      <Modal raw visible={visible} animationType="slide" transparent onClose={onClose}>
+    <Modal raw visible={visible} animationType="slide" transparent onClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}
@@ -1044,6 +1084,41 @@ export function EditPatientModal({
               </ScrollView>
             </View>
 
+            {/* Verification Status Quick Chips */}
+            <View style={{ gap: theme.spacing.xs }}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                Verification Status
+              </ThemedText>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.pillScroll}
+                contentContainerStyle={styles.pillScrollRow}
+              >
+                {VERIFICATION_STATUS_OPTIONS.map((opt) => {
+                  const isSelected = verificationStatus.toLowerCase() === opt.value.toLowerCase();
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`Verification Status: ${opt.label}`}
+                      style={[styles.scrollablePill, isSelected && styles.pillActive]}
+                      onPress={() => setVerificationStatus(opt.value)}
+                    >
+                      <ThemedText
+                        variant="smallBold"
+                        numberOfLines={1}
+                        color={isSelected ? theme.colors.textInverted : theme.colors.textSecondary}
+                      >
+                        {opt.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
             {/* Contact & Address Section */}
             <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
               Contact & Address
@@ -1168,7 +1243,6 @@ export function EditPatientModal({
                     <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
                       Principal Member Details
                     </ThemedText>
-                    <Badge label="Dependent Coverage" variant="info" size="sm" />
                   </View>
                   <Button
                     title={guardianSponsor ? guardianSponsor.buttonLabel : 'Use Legal Guardian'}
@@ -1178,9 +1252,6 @@ export function EditPatientModal({
                     onPress={handleApplyGuardianAsSponsor}
                   />
                 </View>
-                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  Required when claiming PhilHealth benefits under a principal member.
-                </ThemedText>
 
                 <Input
                   label="Principal Member Full Name *"
@@ -1274,131 +1345,6 @@ export function EditPatientModal({
                 />
               </View>
             </View>
-
-            {/* PhilHealth YAKAP Annual Enlistment Lifecycle Section */}
-            <YakapEnlistmentSection
-              customFields={customFieldValues}
-              onCustomFieldsChange={(next) => setCustomFieldValues(next)}
-            />
-
-            {/* Additional Details */}
-            {additionalCustomFields.length > 0 && (
-              <>
-                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-                  Additional Details
-                </ThemedText>
-                <DynamicCustomFieldsRenderer
-                  fields={additionalCustomFields}
-                  values={customFieldValues}
-                  onChange={handleCustomFieldChange}
-                  errors={customFieldErrors}
-                  staticValues={staticValues}
-                />
-              </>
-            )}
-
-            {/* Clinical Summary & Alerts */}
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Clinical Summary & Alerts
-            </ThemedText>
-
-            {/* Embedded Structured Allergy Section */}
-            <View style={styles.allergySectionCard}>
-              <View style={styles.allergySectionHeader}>
-                <View style={styles.allergySectionTitleRow}>
-                  <Icon name="emergency" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Known Allergies
-                  </ThemedText>
-                </View>
-                <Button
-                  title="+ Add Allergy"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => setAllergyModalVisible(true)}
-                />
-              </View>
-
-              <AllergyPillList
-                allergies={structuredAllergies}
-                onRemove={(index) => {
-                  setStructuredAllergies((prev) => prev.filter((_, i) => i !== index));
-                }}
-              />
-            </View>
-
-            {/* Section 1: Past Medical History & Chronic Conditions */}
-            <View style={styles.formSectionBox}>
-              <View style={styles.sectionHeaderBetween}>
-                <View style={styles.sectionHeaderLeft}>
-                  <Icon name="medical" size={16} color={theme.colors.primary} />
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                    Past Medical History & Chronic Conditions
-                  </ThemedText>
-                </View>
-                <Button
-                  title="+ Add / Select Condition"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => setMedicalHistoryModalVisible(true)}
-                />
-              </View>
-
-              {/* Quick Chips Row */}
-              <View style={styles.quickChipsRow}>
-                {PHILHEALTH_QUICK_CONDITIONS.map((qc) => {
-                  const isSelected = structuredMedicalHistories.some(
-                    (c) =>
-                      c.philHealthMdiseaseCode === qc.code ||
-                      c.conditionTitle.trim().toLowerCase() === qc.title.trim().toLowerCase()
-                  );
-                  return (
-                    <Pressable
-                      key={qc.code}
-                      style={[styles.quickChip, isSelected && styles.quickChipActive]}
-                      onPress={() => toggleQuickCondition(qc.code, qc.title)}
-                    >
-                      <ThemedText
-                        variant={isSelected ? 'captionBold' : 'caption'}
-                        color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
-                      >
-                        {qc.label}
-                      </ThemedText>
-                      {isSelected ? (
-                        <Icon name="check" size={12} color={theme.colors.primary} />
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {additionalConditions.length > 0 && (
-                <View style={styles.additionalConditionsWrap}>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 6 }}>
-                    Additional Documented Conditions:
-                  </ThemedText>
-                  <MedicalHistoryPillList
-                    items={additionalConditions}
-                    onRemove={(index) => {
-                      const target = additionalConditions[index];
-                      setStructuredMedicalHistories((prev) => prev.filter((item) => item !== target));
-                    }}
-                  />
-                </View>
-              )}
-
-              {structuredMedicalHistories.length === 0 && (
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
-                  No chronic conditions recorded.
-                </ThemedText>
-              )}
-            </View>
-
-            {/* Section 2: Dedicated Clinical & Safety Alerts */}
-            <ClinicalAlertsSection
-              alerts={alerts}
-              onChangeAlerts={setAlerts}
-            />
           </ScrollView>
 
           {/* Action Footer */}
@@ -1417,29 +1363,12 @@ export function EditPatientModal({
               icon="save"
               loading={saving}
               onPress={handleSave}
-              disabled={saving}
+              disabled={saving || (hydratingPatient && !hasFullClinicalContext)}
             />
           </View>
         </View>
       </View>
     </Modal>
-
-    {/* Structured Allergy Intake Sub-Modal */}
-    <StructuredAllergyIntakeModal
-      visible={visible && allergyModalVisible}
-      onClose={() => setAllergyModalVisible(false)}
-      allergies={structuredAllergies}
-      onChange={setStructuredAllergies}
-    />
-
-    {/* Structured Medical History Intake Sub-Modal */}
-    <StructuredMedicalHistoryModal
-      visible={visible && medicalHistoryModalVisible}
-      onClose={() => setMedicalHistoryModalVisible(false)}
-      conditions={structuredMedicalHistories}
-      onChange={setStructuredMedicalHistories}
-    />
-  </>
   );
 }
 
@@ -1570,63 +1499,6 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
     paddingTop: theme.spacing.md,
-  },
-  allergySectionCard: {
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm + 4,
-    backgroundColor: theme.colors.surfaceMuted,
-    gap: theme.spacing.xs,
-  },
-  allergySectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xs,
-  },
-  allergySectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  formSectionBox: {
-    gap: theme.spacing.xs,
-  },
-  sectionHeaderBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  additionalConditionsWrap: {
-    marginTop: theme.spacing.xs,
-  },
-  quickChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 6,
-  },
-  quickChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.border,
-    borderWidth: 1,
-    borderRadius: theme.radii.full || 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  quickChipActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
   },
   sponsorCard: {
     backgroundColor: theme.colors.surfaceSubtle,

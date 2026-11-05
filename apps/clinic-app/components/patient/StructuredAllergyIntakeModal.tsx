@@ -35,7 +35,11 @@ export interface StructuredAllergyIntakeModalProps {
   onClose: () => void;
   allergies?: CreateAllergyRequest[];
   onChange?: (allergies: CreateAllergyRequest[]) => void;
-  onAddAllergy?: (allergy: CreateAllergyRequest) => void;
+  onAddAllergy?: (allergy: CreateAllergyRequest) => void | boolean | Promise<void | boolean>;
+  onRemoveAllergy?: (index: number, allergy: CreateAllergyRequest) => void | Promise<void>;
+  saving?: boolean;
+  externalError?: string | null;
+  onClearExternalError?: () => void;
   existingAllergies?: CreateAllergyRequest[];
   title?: string;
   testID?: string;
@@ -191,6 +195,10 @@ export default function StructuredAllergyIntakeModal({
   allergies: controlledAllergies,
   onChange,
   onAddAllergy,
+  onRemoveAllergy,
+  saving = false,
+  externalError = null,
+  onClearExternalError,
   existingAllergies,
   title = 'Structured Allergy Intake',
   testID = 'structured-allergy-modal',
@@ -209,6 +217,11 @@ export default function StructuredAllergyIntakeModal({
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
+  const clearErrors = () => {
+    if (formError) setFormError(null);
+    onClearExternalError?.();
+  };
+
   const resetDraft = () => {
     setCategory('Medication');
     setAllergen('');
@@ -219,6 +232,7 @@ export default function StructuredAllergyIntakeModal({
     setOnsetDate('');
     setNotes('');
     setFormError(null);
+    onClearExternalError?.();
   };
 
   const handleSelectSeverity = (sev: AllergySeverity) => {
@@ -238,16 +252,16 @@ export default function StructuredAllergyIntakeModal({
     }
   };
 
-  const handleAddAllergy = () => {
+  const validateAndBuildAllergy = (): CreateAllergyRequest | null => {
     const trimmed = allergen.trim();
     if (!trimmed) {
       setFormError('Allergen name is required (e.g. Penicillin, Peanuts).');
-      return;
+      return null;
     }
 
     if (trimmed.length > 150) {
       setFormError('Allergen name must not exceed 150 characters.');
-      return;
+      return null;
     }
 
     // Check duplicate allergen in list
@@ -256,18 +270,18 @@ export default function StructuredAllergyIntakeModal({
     );
     if (isDup) {
       setFormError(`"${trimmed}" is already documented in this patient's allergy list.`);
-      return;
+      return null;
     }
 
     if (onsetDate && onsetDate.trim()) {
       const onsetValidation = validateDateString(onsetDate, { boundaryMode: 'pastOrToday' });
       if (!onsetValidation.isValid) {
         setFormError(onsetValidation.errorMessage || 'Invalid onset date (must be past or today).');
-        return;
+        return null;
       }
     }
 
-    const newAllergy: CreateAllergyRequest = {
+    return {
       category,
       allergen: trimmed,
       allergenDrugCode: allergenDrugCode.trim() || undefined,
@@ -277,22 +291,56 @@ export default function StructuredAllergyIntakeModal({
       onsetDate: onsetDate.trim() || undefined,
       notes: notes.trim() || undefined,
     };
+  };
 
-    onAddAllergy?.(newAllergy);
+  const handleAddAllergy = async () => {
+    if (saving) return;
+    clearErrors();
+    const newAllergy = validateAndBuildAllergy();
+    if (!newAllergy) return;
+
+    const addResult = await onAddAllergy?.(newAllergy);
+    if (addResult === false) return;
+
     onChange?.([...activeAllergies, newAllergy]);
     resetDraft();
   };
 
+  const handleDoneAndClose = async () => {
+    if (saving) return;
+    if (allergen.trim().length > 0) {
+      clearErrors();
+      const newAllergy = validateAndBuildAllergy();
+      if (!newAllergy) return;
+      const addResult = await onAddAllergy?.(newAllergy);
+      if (addResult === false) return;
+      onChange?.([...activeAllergies, newAllergy]);
+    }
+    resetDraft();
+    onClose();
+  };
+
+  const handleCloseModal = () => {
+    if (saving) return;
+    resetDraft();
+    onClose();
+  };
+
   const handleRemove = (index: number) => {
+    const target = activeAllergies[index];
+    if (onRemoveAllergy && target) {
+      void onRemoveAllergy(index, target);
+    }
     onChange?.(activeAllergies.filter((_, i) => i !== index));
   };
 
   const isAnaphylaxisActive = isAnaphylactic || severity === 'LifeThreatening';
+  const activeError = formError || externalError;
 
   return (
     <Modal
       visible={visible}
-      onClose={onClose}
+      onClose={handleCloseModal}
       title={title}
       subtitle="Document structured drug, food, and environmental hypersensitivities"
       maxWidth={620}
@@ -305,7 +353,11 @@ export default function StructuredAllergyIntakeModal({
             title="Done & Close"
             variant="primary"
             size="md"
-            onPress={onClose}
+            loading={saving}
+            disabled={saving}
+            onPress={() => {
+              void handleDoneAndClose();
+            }}
           />
         </View>
       }
@@ -318,7 +370,10 @@ export default function StructuredAllergyIntakeModal({
               PATIENT ALLERGY LIST ({activeAllergies.length})
             </ThemedText>
           </View>
-          <AllergyPillList allergies={activeAllergies} onRemove={onChange ? handleRemove : undefined} />
+          <AllergyPillList
+            allergies={activeAllergies}
+            onRemove={onChange || onRemoveAllergy ? handleRemove : undefined}
+          />
         </View>
 
         {/* Divider */}
@@ -330,11 +385,11 @@ export default function StructuredAllergyIntakeModal({
             Add New Allergy / Sensitivity
           </ThemedText>
 
-          {formError ? (
+          {activeError ? (
             <View style={styles.errorBanner}>
               <IconSlot value="alertCircle" size={theme.fontSizes.xs} color={theme.colors.emergencyText} />
               <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                {formError}
+                {activeError}
               </ThemedText>
             </View>
           ) : null}
@@ -356,7 +411,7 @@ export default function StructuredAllergyIntakeModal({
                     ]}
                     onPress={() => {
                       setCategory(cat);
-                      setFormError(null);
+                      clearErrors();
                     }}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: isSelected }}
@@ -384,7 +439,7 @@ export default function StructuredAllergyIntakeModal({
                     style={styles.quickPickBadge}
                     onPress={() => {
                       setAllergen(pick);
-                      setFormError(null);
+                      clearErrors();
                     }}
                   >
                     <ThemedText variant="caption" color={theme.colors.primaryDark}>
@@ -403,7 +458,7 @@ export default function StructuredAllergyIntakeModal({
             value={allergen}
             onChangeText={(txt) => {
               setAllergen(txt);
-              if (formError) setFormError(null);
+              clearErrors();
             }}
             placeholder={
               category === 'Medication'
@@ -561,10 +616,14 @@ export default function StructuredAllergyIntakeModal({
           {/* Action to Add */}
           <View style={styles.addBtnContainer}>
             <Button
-              title="+ Add Allergy to Record"
+              title={saving ? 'Saving…' : '+ Add Allergy to Record'}
               variant="secondary"
               size="md"
-              onPress={handleAddAllergy}
+              loading={saving}
+              disabled={saving}
+              onPress={() => {
+                void handleAddAllergy();
+              }}
             />
           </View>
         </View>

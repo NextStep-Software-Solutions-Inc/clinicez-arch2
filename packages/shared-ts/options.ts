@@ -4,6 +4,8 @@ export interface EhrOptionDescriptor {
   philHealthCode?: string | null;
   philHealthLibrary?: string | null;
   requiresSpecifyText?: boolean;
+  isActive?: boolean;
+  metadata?: Record<string, string> | null;
 }
 
 export interface OptionsManifestResponse {

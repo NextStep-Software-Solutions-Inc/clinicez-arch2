@@ -184,7 +184,10 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
         {
             var http = Http;
             if (http is null || !IsStaff(http.User)) return null;
-            return http.User.FindFirst(ClinicClaimTypes.Name)?.Value ?? http.User.Identity?.Name;
+            return http.User.FindFirst(ClinicClaimTypes.Name)?.Value
+                ?? http.User.FindFirst(ClaimTypes.Name)?.Value
+                ?? http.User.Identity?.Name
+                ?? http.User.FindFirst(ClaimTypes.Email)?.Value;
         }
     }
 

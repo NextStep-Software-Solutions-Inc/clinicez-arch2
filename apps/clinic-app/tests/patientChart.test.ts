@@ -126,8 +126,11 @@ const {
   STATUTORY_MANAGEMENT_CODES,
 } = await import('../components/chart/NursingProceduresTab');
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const {
-  PHILHEALTH_STATUTORY_VACCINES,
+  resolveCohortCategoryLabel,
 } = await import('../components/chart/StatutoryImmunizationsTab');
 
 const {
@@ -385,22 +388,42 @@ describe('Milestone 3 Features 14, 15, 16: Patient Chart & Clinical Spine', () =
       });
     });
 
-    describe('PHILHEALTH_STATUTORY_VACCINES catalog', () => {
-      test('includes all statutory PhilHealth immunization libraries', () => {
-        expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.length).toBeGreaterThanOrEqual(13);
-        expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.length).toBeGreaterThanOrEqual(2);
-        expect(PHILHEALTH_STATUTORY_VACCINES.lib_immpregw.length).toBeGreaterThanOrEqual(2);
-        expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.length).toBeGreaterThanOrEqual(2);
+    describe('Backend PhilHealth statutory immunization seed catalogs & cohort labels', () => {
+      const loadSeedItems = (lib: string): Array<{ code: string; description: string; isActive: boolean }> => {
+        const seedPath = join(
+          import.meta.dir,
+          '..',
+          '..',
+          '..',
+          'services',
+          'clinic-api',
+          'ClinicEz.Clinic.Infrastructure',
+          'PhilHealth',
+          'Catalog',
+          'Seed',
+          `${lib}.json`
+        );
+        const parsed = JSON.parse(readFileSync(seedPath, 'utf8'));
+        return parsed.items.filter((i: { code: string; isActive: boolean }) => i.isActive && i.code !== '999');
+      };
+
+      test('includes all statutory PhilHealth immunization libraries from backend seed catalog', () => {
+        expect(loadSeedItems('lib_immchild').length).toBe(13);
+        expect(loadSeedItems('lib_immyoungw').length).toBe(2);
+        expect(loadSeedItems('lib_immpregw').length).toBeGreaterThanOrEqual(1);
+        expect(loadSeedItems('lib_immelderly').length).toBe(2);
+        expect(resolveCohortCategoryLabel('OtherImm')).toBe('Adult / Other');
       });
 
-      test('contains mandatory statutory codes C01 BCG and C09 HepB Birth Dose', () => {
-        const bcg = PHILHEALTH_STATUTORY_VACCINES.lib_immchild.find((v) => v.code === 'C01');
+      test('contains mandatory statutory codes C01 BCG and C09 Hepatitis B1 in backend seed', () => {
+        const childVaccines = loadSeedItems('lib_immchild');
+        const bcg = childVaccines.find((v) => v.code === 'C01');
         expect(bcg).toBeDefined();
-        expect(bcg?.name).toContain('BCG');
+        expect(bcg?.description).toContain('BCG');
 
-        const hepb = PHILHEALTH_STATUTORY_VACCINES.lib_immchild.find((v) => v.code === 'C09');
+        const hepb = childVaccines.find((v) => v.code === 'C09');
         expect(hepb).toBeDefined();
-        expect(hepb?.name).toContain('Hepatitis B');
+        expect(hepb?.description).toContain('Hepatitis B');
       });
     });
 

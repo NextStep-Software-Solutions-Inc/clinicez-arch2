@@ -121,7 +121,7 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
         // 2. Fetch queue items for this clinic on the target date
         var queueItems = await _queueRepo.IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(q => !q.IsDeleted && q.ClinicId == clinic.ClinicId && q.QueueDate == targetDate)
+            .Where(q => !q.IsDeleted && q.ClinicId == clinic.ClinicId && q.QueueDate == targetDate && !q.IsDirectVisit)
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.SequenceNumber)
             .ToListAsync(ct);

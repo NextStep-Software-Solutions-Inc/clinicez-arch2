@@ -22,8 +22,18 @@ import {
   TriageQueueViewProps
 } from './types';
 
+export function isItemSlaBreached(item: TriageQueueItem): boolean {
+  if (item.slaBreached || item.isSlaBreached) return true;
+  if (typeof item.slaTimeRemainingSeconds === 'number') return item.slaTimeRemainingSeconds <= 0;
+  if (item.triageDueAtUtc) {
+    const dueTime = new Date(item.triageDueAtUtc).getTime();
+    if (!isNaN(dueTime)) return dueTime <= Date.now();
+  }
+  return false;
+}
+
 function formatSlaCountdown(item: TriageQueueItem): string {
-  if (item.slaBreached || item.isSlaBreached) {
+  if (isItemSlaBreached(item)) {
     return 'SLA Breached';
   }
 
@@ -195,23 +205,85 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
 
       {/* Content States */}
       {isLoading ? (
-        <View style={styles.stateContainer}>
-          <ActivityIndicator size="small" color={lightColors.primary} />
-          <Text style={styles.stateText}>Loading triage queue...</Text>
-        </View>
+        <ScrollView style={styles.list} scrollEnabled={false}>
+          {[0, 1, 2].map((key) => (
+            <View key={key} style={styles.skeletonCard}>
+              <View style={styles.cardTopRow}>
+                <View style={styles.badgesRow}>
+                  <View style={styles.skeletonBadge} />
+                  <View style={styles.skeletonCategory} />
+                </View>
+                <View style={styles.skeletonSlaPill} />
+              </View>
+              <View style={styles.skeletonPatientRow}>
+                <View style={styles.skeletonPatientName} />
+              </View>
+              <View style={styles.skeletonContentLine1} />
+              <View style={styles.skeletonContentLine2} />
+              <View style={styles.actionBar}>
+                <View style={styles.skeletonButton} />
+                <View style={styles.skeletonButton} />
+                <View style={styles.skeletonButton} />
+                <View style={styles.skeletonButton} />
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       ) : error ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.errorIcon}>!</Text>
-          <Text style={styles.errorTitle}>Error Loading Triage</Text>
-          <Text style={styles.errorSubtitle}>{error}</Text>
+          <View style={styles.errorAlertContainer}>
+            <View style={styles.errorIconContainer}>
+              <Text style={styles.errorIconGlyph}>!</Text>
+            </View>
+            <Text style={styles.errorAlertTitle}>Triage Connection Error</Text>
+            <Text style={styles.errorAlertSubtitle}>{error}</Text>
+            <TouchableOpacity
+              style={styles.errorRetryButton}
+              onPress={onRefresh}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading triage queue"
+            >
+              <Text style={styles.errorRetryButtonText}>Retry Connection</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : filteredItems.length === 0 ? (
-        <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>OK</Text>
-          <Text style={styles.emptyTitle}>Triage Queue Clear</Text>
+        <View style={styles.emptyContainer}>
+          {/* Stylized Check-Shield Icon Container */}
+          <View style={styles.shieldIconContainer}>
+            <View style={styles.checkmarkGlyph} />
+          </View>
+
+          <Text style={styles.emptyTitle}>Queue Clear - All caught up!</Text>
           <Text style={styles.emptySubtitle}>
-            No patient inquiries require triage disposition at this time.
+            Inbound patient inquiries from Nextstep OPD will appear here with live SLA countdowns.
           </Text>
+
+          {/* SLA Metric Ribbon */}
+          <View style={styles.emptyMetricsStrip}>
+            <View style={styles.emptyMetricCard}>
+              <Text style={styles.emptyMetricValue}>0</Text>
+              <Text style={styles.emptyMetricLabel}>Pending</Text>
+            </View>
+            <View style={styles.emptyMetricCard}>
+              <Text style={[styles.emptyMetricValue, styles.metricSuccess]}>100%</Text>
+              <Text style={styles.emptyMetricLabel}>SLA Met</Text>
+            </View>
+            <View style={styles.emptyMetricCard}>
+              <Text style={styles.emptyMetricValue}>&lt; 5m</Text>
+              <Text style={styles.emptyMetricLabel}>Avg Response</Text>
+            </View>
+          </View>
+
+          {/* Actionable Refresh CTA */}
+          <TouchableOpacity
+            style={styles.emptyRefreshButton}
+            onPress={onRefresh}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh triage queue"
+          >
+            <Text style={styles.emptyRefreshButtonText}>Refresh Queue</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <ScrollView style={styles.list}>
@@ -246,7 +318,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                   <View
                     style={[
                       styles.slaPill,
-                      item.slaBreached || (typeof item.slaTimeRemainingSeconds === 'number' && item.slaTimeRemainingSeconds <= 0)
+                      isItemSlaBreached(item)
                         ? styles.slaPillBreached
                         : item.triageDueAtUtc || item.slaTimeRemainingSeconds !== undefined
                           ? styles.slaPillWarning
@@ -256,7 +328,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                     <Text
                       style={[
                         styles.slaPillText,
-                        item.slaBreached || (typeof item.slaTimeRemainingSeconds === 'number' && item.slaTimeRemainingSeconds <= 0)
+                        isItemSlaBreached(item)
                           ? styles.slaPillTextBreached
                           : item.triageDueAtUtc || item.slaTimeRemainingSeconds !== undefined
                             ? styles.slaPillTextWarning
@@ -615,6 +687,8 @@ const styles = StyleSheet.create({
     gap: spaceScale.xs
   },
   answerButton: {
+    flexGrow: 1,
+    minWidth: 80,
     minHeight: sizes.touchTarget,
     paddingHorizontal: spaceScale.md,
     backgroundColor: lightColors.primary,
@@ -628,6 +702,8 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.xs
   },
   visitButton: {
+    flexGrow: 1,
+    minWidth: 80,
     minHeight: sizes.touchTarget,
     paddingHorizontal: spaceScale.md,
     backgroundColor: lightColors.surfaceSubtle,
@@ -643,6 +719,8 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.xs
   },
   routeButton: {
+    flexGrow: 1,
+    minWidth: 80,
     minHeight: sizes.touchTarget,
     paddingHorizontal: spaceScale.md,
     backgroundColor: lightColors.surfaceSubtle,
@@ -656,6 +734,8 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.xs
   },
   declineButton: {
+    flexGrow: 1,
+    minWidth: 80,
     minHeight: sizes.touchTarget,
     paddingHorizontal: spaceScale.md,
     backgroundColor: lightColors.emergencyBg,
@@ -783,34 +863,203 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.sm,
     color: lightColors.textMuted
   },
-  emptyIcon: {
-    fontSize: fontSizeScale['3xl'],
+  // Skeleton Loaders
+  skeletonCard: {
+    backgroundColor: lightColors.surface,
+    borderColor: lightColors.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.md,
+    padding: spaceScale.md,
+    marginBottom: spaceScale.md
+  },
+  skeletonBadge: {
+    width: 48,
+    height: 20,
+    borderRadius: radiusScale.xs,
+    backgroundColor: lightColors.skeletonBase
+  },
+  skeletonCategory: {
+    width: 72,
+    height: 20,
+    borderRadius: radiusScale.xs,
+    backgroundColor: lightColors.skeletonHighlight
+  },
+  skeletonSlaPill: {
+    width: 110,
+    height: 20,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.skeletonBase
+  },
+  skeletonPatientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: spaceScale.sm
+  },
+  skeletonPatientName: {
+    width: 150,
+    height: 18,
+    borderRadius: radiusScale.xs,
+    backgroundColor: lightColors.skeletonBase
+  },
+  skeletonContentLine1: {
+    width: '100%',
+    height: 14,
+    borderRadius: radiusScale.xs,
+    backgroundColor: lightColors.skeletonHighlight,
+    marginBottom: spaceScale.xs
+  },
+  skeletonContentLine2: {
+    width: '75%',
+    height: 14,
+    borderRadius: radiusScale.xs,
+    backgroundColor: lightColors.skeletonHighlight,
+    marginBottom: spaceScale.md
+  },
+  skeletonButton: {
+    flexGrow: 1,
+    minWidth: 80,
+    minHeight: sizes.touchTarget,
+    borderRadius: radiusScale.sm,
+    backgroundColor: lightColors.skeletonBase
+  },
+
+  // Structured Error Alert
+  errorAlertContainer: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: lightColors.emergencySubtle,
+    borderColor: lightColors.emergencyBorder,
+    borderWidth: 1,
+    borderRadius: radiusScale.md,
+    padding: spaceScale.lg,
+    alignItems: 'center'
+  },
+  errorIconContainer: {
+    width: sizes.controlLg,
+    height: sizes.controlLg,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.emergencyBg,
+    borderColor: lightColors.emergencyBorder,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spaceScale.sm
+  },
+  errorIconGlyph: {
+    fontSize: fontSizeScale.xl,
+    fontWeight: '700',
+    color: lightColors.emergencyText
+  },
+  errorAlertTitle: {
+    fontSize: fontSizeScale.md,
+    fontWeight: '700',
+    color: lightColors.emergencyText,
+    marginBottom: spaceScale.xs,
+    textAlign: 'center'
+  },
+  errorAlertSubtitle: {
+    fontSize: fontSizeScale.sm,
+    color: lightColors.textMuted,
+    textAlign: 'center',
+    marginBottom: spaceScale.md
+  },
+  errorRetryButton: {
+    minHeight: sizes.touchTarget,
+    paddingHorizontal: spaceScale.xl,
+    backgroundColor: lightColors.emergency,
+    borderRadius: radiusScale.sm,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  errorRetryButtonText: {
+    color: lightColors.onPrimary,
+    fontWeight: '600',
+    fontSize: fontSizeScale.sm
+  },
+
+  // Actionable Empty State
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spaceScale.xl
+  },
+  shieldIconContainer: {
+    width: sizes.avatarLg,
+    height: sizes.avatarLg,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.primarySubtle,
+    borderColor: lightColors.primaryBorder,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spaceScale.md
+  },
+  checkmarkGlyph: {
+    width: 14,
+    height: 24,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderColor: lightColors.primary,
+    transform: [{ rotate: '45deg' }],
+    marginBottom: spaceScale.xs
   },
   emptyTitle: {
     fontSize: fontSizeScale.lg,
-    fontWeight: '600',
+    fontWeight: '700',
     color: lightColors.text,
-    marginBottom: spaceScale.xs
+    marginBottom: spaceScale.xs,
+    textAlign: 'center'
   },
   emptySubtitle: {
     fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
-    textAlign: 'center'
+    textAlign: 'center',
+    maxWidth: 340,
+    marginBottom: spaceScale.lg
   },
-  errorIcon: {
-    fontSize: fontSizeScale['3xl'],
-    marginBottom: spaceScale.sm
+  emptyMetricsStrip: {
+    flexDirection: 'row',
+    gap: spaceScale.sm,
+    width: '100%',
+    maxWidth: 360,
+    marginBottom: spaceScale.lg
   },
-  errorTitle: {
+  emptyMetricCard: {
+    flex: 1,
+    backgroundColor: lightColors.surfaceSubtle,
+    borderColor: lightColors.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.md,
+    paddingVertical: spaceScale.sm,
+    paddingHorizontal: spaceScale.xs,
+    alignItems: 'center'
+  },
+  emptyMetricValue: {
     fontSize: fontSizeScale.lg,
-    fontWeight: '600',
-    color: lightColors.emergencyText,
-    marginBottom: spaceScale.xs
+    fontWeight: '700',
+    color: lightColors.text,
+    marginBottom: spaceScale.xxs
   },
-  errorSubtitle: {
-    fontSize: fontSizeScale.sm,
+  metricSuccess: {
+    color: lightColors.successText
+  },
+  emptyMetricLabel: {
+    fontSize: fontSizeScale.xs,
     color: lightColors.textMuted,
-    textAlign: 'center'
+    fontWeight: '500'
+  },
+  emptyRefreshButton: {
+    minHeight: sizes.touchTarget,
+    paddingHorizontal: spaceScale.xl,
+    backgroundColor: lightColors.primary,
+    borderRadius: radiusScale.sm,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  emptyRefreshButtonText: {
+    color: lightColors.onPrimary,
+    fontWeight: '600',
+    fontSize: fontSizeScale.sm
   }
 });

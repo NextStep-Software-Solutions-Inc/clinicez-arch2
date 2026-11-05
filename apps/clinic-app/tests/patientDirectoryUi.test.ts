@@ -219,7 +219,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(line).toContain('Blood type B+');
   });
 
-  test('4. buildPatientOverflowMenuItems includes Edit Demographics and PhilHealth Profile in the ActionMenu', () => {
+  test('4. buildPatientOverflowMenuItems includes Edit info and PhilHealth info in the ActionMenu without subtext', () => {
     let editedId = '';
     let philHealthId = '';
     let chartId = '';
@@ -242,7 +242,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     const ids = items.map((i) => i.id);
     expect(ids).toEqual(['edit-demographics', 'philhealth-profile', 'view-chart', 'schedule-visit']);
-    expect(items[3].label).toBe('Schedule visit');
+    expect(items.map((i) => i.label)).toEqual(['Edit info', 'PhilHealth info', 'View chart', 'Schedule visit']);
+    expect(items.every((i) => i.hint === undefined)).toBe(true);
 
     items[0].onPress();
     expect(editedId).toBe('pat-cassandra');
@@ -399,7 +400,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
 
-    expect(markup).toContain('In Queue • Q-014');
+    expect(markup).not.toContain('In Queue • Q-014');
     expect(markup).toContain('Queued (Q-014)');
   });
 
@@ -866,7 +867,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(isMyPatient(patDocAssigned, undefined)).toBe(false);
   });
 
-  test('18. ScheduleVisitModal renders preselected patient identity banner, quick dates, and visit purposes', () => {
+  test('18. ScheduleVisitModal renders patient name subtitle without demographic bloat, quick dates, and visit purposes', () => {
     const markup = renderToStaticMarkup(
       React.createElement(ScheduleVisitModal, {
         visible: true,
@@ -877,11 +878,11 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
 
-    // Patient Identity Banner
+    // Concise patient subtitle without demographic detail banner
     expect(markup).toContain('Ambray, Cassandra');
-    expect(markup).toContain('PAT-20261013-3EFFEA');
-    expect(markup).toContain('PhilHealth PIN 12-121212121-7');
-    expect(markup).toContain('STAT Allergy: Amoxicillin');
+    expect(markup).not.toContain('PAT-20261013-3EFFEA');
+    expect(markup).not.toContain('PhilHealth PIN 12-121212121-7');
+    expect(markup).not.toContain('Direct clinic appointment setup');
 
     // Title and quick date options
     expect(markup).toContain('Schedule visit');
@@ -953,10 +954,11 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
 
     const itemLabels = items.map((i) => i.label);
-    expect(itemLabels).toContain('Doctor Consultation');
-    expect(itemLabels).toContain('Vitals Check');
-    expect(itemLabels).toContain('Clinical Procedure');
-    expect(itemLabels).toContain('Administrative & Clearance');
+    expect(itemLabels).toContain('Consult');
+    expect(itemLabels).toContain('Vitals');
+    expect(itemLabels).toContain('Start procedure');
+    expect(itemLabels).toContain('Medical certificate');
+    expect(items.every((i) => i.hint === undefined)).toBe(true);
 
     const consultItem = items.find((i) => i.id === 'service-consultation')!;
     consultItem.onPress();
@@ -976,7 +978,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(selectedService).toBe('Administrative & Clearance');
   });
 
-  test('22. ServiceCheckInModal renders preselected patient identity banner, service selector tabs, and ticket preview', () => {
+  test('22. ServiceCheckInModal renders concise patient subtitle, plain-language service cards, and omits patient banner & series badge', () => {
     const markup = renderToStaticMarkup(
       React.createElement(ServiceCheckInModal, {
         visible: true,
@@ -985,10 +987,17 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
 
-    // Patient Banner Info
+    // Patient name in subtitle without demographic banner or series badge
     expect(markup).toContain('Ambray, Cassandra');
-    expect(markup).toContain('PAT-20261013-3EFFEA');
-    expect(markup).toContain('AC');
+    expect(markup).not.toContain('PAT-20261013-3EFFEA');
+    expect(markup).not.toContain('data-testid="ticket-series-preview"');
+    expect(markup).not.toContain('Regular Series');
+    expect(markup).not.toContain('SOAP');
+    expect(markup).not.toContain('SpO2');
+
+    // Conversational question prompts
+    expect(markup).toContain('What service would the patient like to avail?');
+    expect(markup).toContain('Does this patient need a priority lane?');
 
     // 4 Clinical Services
     expect(markup).toContain('Doctor Consultation');
@@ -996,15 +1005,12 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('Clinical Procedure');
     expect(markup).toContain('Administrative &amp; Clearance');
 
-    // Ticket Preview
-    expect(markup).toContain('data-testid="ticket-series-preview"');
-
     // Footer actions
     expect(markup).toContain('Continue');
     expect(markup).toContain('Cancel');
   });
 
-  test('23. ServiceCheckInModal auto-selects Senior & PWD Priority series when patient is senior or PWD', () => {
+  test('23. ServiceCheckInModal auto-selects Senior & PWD Priority when patient is senior or PWD', () => {
     const seniorPatient: ClinicPatient = {
       ...basePatient,
       id: 'pat-senior',
@@ -1026,7 +1032,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     };
     expect(isSeniorOrPwdEligible(youngPatient)).toBe(false);
 
-    // Markup for senior patient shows priority series banner
+    // Markup for senior patient shows plain-language priority note
     const seniorMarkup = renderToStaticMarkup(
       React.createElement(ServiceCheckInModal, {
         visible: true,
@@ -1034,11 +1040,11 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onClose: () => {},
       })
     );
-    expect(seniorMarkup).toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
+    expect(seniorMarkup).toContain('Senior &amp; PWD priority selected automatically.');
     expect(seniorMarkup).toContain('Senior &amp; PWD Priority');
     expect(seniorMarkup).not.toContain('SQ-001');
 
-    // Markup for young patient defaults to regular queue series without pre-submission queue number
+    // Markup for young patient defaults to Regular without pre-submission queue number
     const youngMarkup = renderToStaticMarkup(
       React.createElement(ServiceCheckInModal, {
         visible: true,
@@ -1046,9 +1052,9 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         onClose: () => {},
       })
     );
-    expect(youngMarkup).toContain('Regular Queue Series');
+    expect(youngMarkup).toContain('Regular');
     expect(youngMarkup).not.toContain('Q-001');
-    expect(youngMarkup).not.toContain('Senior &amp; PWD Priority Series auto-selected for this patient.');
+    expect(youngMarkup).not.toContain('Senior &amp; PWD priority selected automatically.');
   });
 
   test('24. resolveTicketPrefix and formatQueueTicketNumber produce accurate regular and priority ticket numbers', () => {
@@ -1097,7 +1103,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenCode).toContain('onConfirm={handleConfirmServiceCheckIn}');
   });
 
-  test('26. ServiceCheckInModal displays series selection without speculative pre-submission queue numbers', () => {
+  test('26. ServiceCheckInModal displays priority selection without speculative pre-submission queue numbers or series badge', () => {
     const patientWithActive: ClinicPatient = {
       ...basePatient,
       activeQueueTicket: 'P-001',
@@ -1112,13 +1118,12 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
 
-    // Initial render displays clean series choices without showing speculative pre-submission queue numbers
-    expect(markup).toContain('Regular Queue Series');
+    // Initial render displays clean priority choices without speculative queue numbers or series badge
+    expect(markup).toContain('Regular');
     expect(markup).toContain('Senior &amp; PWD Priority');
     expect(markup).not.toContain('Preview: P-001');
     expect(markup).not.toContain('Preview: Q-001');
-    expect(markup).not.toContain('Regular Queue Series (');
-    expect(markup).not.toContain('Senior &amp; PWD Priority (');
+    expect(markup).not.toContain('Regular Series');
   });
 
   test('27. buildThermalQueueTicketHtml generates compliant POS 80mm roll HTML with prominent queue number', async () => {
@@ -1203,11 +1208,12 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
 
     const labels = items.map((i) => i.label);
-    expect(labels).toContain('Doctor Consultation');
-    expect(labels).toContain('Start Patient Profiling (Yakap FPE)');
-    expect(labels).toContain('Vitals Check');
-    expect(labels).toContain('Clinical Procedure');
-    expect(labels).toContain('Administrative & Clearance');
+    expect(labels).toContain('Consult');
+    expect(labels).toContain('Health screening');
+    expect(labels).toContain('Vitals');
+    expect(labels).toContain('Start procedure');
+    expect(labels).toContain('Medical certificate');
+    expect(items.every((i) => i.hint === undefined)).toBe(true);
 
     items.find((i) => i.id === 'service-consultation')!.onPress();
     expect(consultationTriggered).toBe(true);
@@ -1237,11 +1243,11 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
 
     const labels = items.map((i) => i.label);
-    expect(labels).toContain('Doctor Consultation');
-    expect(labels).not.toContain('Start Patient Profiling (Yakap FPE)');
+    expect(labels).toContain('Consult');
+    expect(labels).not.toContain('Health screening');
   });
 
-  test('32. ConsultationTypeModal renders patient identity, PhilHealth PIN status, and choice cards', async () => {
+  test('32. ConsultationTypeModal renders concise patient subtitle and plain-language choice cards without demographic banner or jargon', async () => {
     const { default: ConsultationTypeModal } = await import('../components/patient/ConsultationTypeModal');
     let selectedProgram: string | null = null;
     let closed = false;
@@ -1261,11 +1267,14 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     );
 
     expect(markup).toContain('Start Consultation');
-    expect(markup).toContain('Select consultation program for this encounter');
     expect(markup).toContain(patientWithPin.fullName);
-    expect(markup).toContain('PhilHealth PIN: 11-578958036-9');
+    expect(markup).toContain('Which consultation would the patient like to avail?');
+    expect(markup).not.toContain('PAT-20261013-3EFFEA');
+    expect(markup).not.toContain('PhilHealth PIN: 11-578958036-9');
+    expect(markup).not.toContain('Standard Care');
+    expect(markup).not.toContain('statutory');
+    expect(markup).not.toContain('SOAP');
     expect(markup).toContain('Regular Consultation');
-    expect(markup).toContain('Standard Care');
     expect(markup).toContain('PhilHealth Yakap Consultation');
     expect(markup).toContain('Cancel');
   });
@@ -1275,8 +1284,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     const { join } = await import('path');
     const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
 
-    // Handlers and headless encounter tracking for clinic census
-    expect(code).toContain('ensureEncounterQueueItem');
+    // Handlers and zero-write active visit resolution
+    expect(code).toContain('resolveActiveVisitForAction');
     expect(code).toContain('handleStartConsultationAction');
     expect(code).toContain('handleStartProfilingAction');
     expect(code).toContain('handleRecordVitalsAction');
@@ -1291,29 +1300,25 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     // Modals rendered
     expect(code).toContain('<ConsultationTypeModal');
     expect(code).toContain('<RecordVitalsModal');
+    expect(code).toContain('<IssueMedicalCertificateModal');
   });
 
-  test('34. Patients.screen.tsx strictly uses canonical VisitType enum values in headless check-in', async () => {
+  test('34. Patients.screen.tsx strictly uses canonical zero-write navigation without eager lobby queue mutations', async () => {
     const { readFileSync } = await import('fs');
     const { join } = await import('path');
     const code = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
 
-    // ensureEncounterQueueItem parameter is strongly typed to VisitType
-    expect(code).toContain('visitType: VisitType;');
+    // Zero-write active visit resolution
+    expect(code).toContain('resolveActiveVisitForAction');
 
-    // Direct actions strictly use backend-supported VisitType enum strings
-    expect(code).toContain("const visitType: VisitType = 'Consultation';");
-    expect(code).toContain("visitType: 'VitalsCheckOnly'");
-    expect(code).toContain("visitType: 'StandaloneProcedure'");
-    expect(code).toContain("visitType: 'AdministrativeDocument'");
+    // Direct actions resolve active visits with canonical service titles
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Doctor Consultation'");
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Vitals Check'");
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Clinical Procedure'");
+    expect(code).toContain("resolveActiveVisitForAction(patient, 'Medical Certificate'");
 
-    // Must not use unmapped domain names as visitType
-    expect(code).not.toContain("visitType: 'WalkInConsultation'");
-    expect(code).not.toContain("visitType = 'WalkInConsultation'");
-    expect(code).not.toContain("visitType: 'PhilHealthKonsulta'");
-    expect(code).not.toContain("visitType: 'VitalsCheck'");
-    expect(code).not.toContain("visitType: 'ClinicalProcedure'");
-    expect(code).not.toContain("visitType: 'Administrative'");
+    // Eager check-in routine has been eliminated
+    expect(code).not.toContain('ensureEncounterQueueItem');
   });
 
   test('35. ServiceCheckInModal forces allowDuplicateActive=true on conflict confirmation', async () => {
@@ -1352,8 +1357,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       })
     );
 
-    // Multi-ticket queue badge indicator (+1)
-    expect(markup).toContain('In Queue • Q-001 (+1)');
+    // Redundant queue badge removed because primary action button already shows ticket status
+    expect(markup).not.toContain('In Queue • Q-001 (+1)');
 
     // Multi-ticket primary action button indicator (+1)
     expect(markup).toContain('Queued (Q-001 +1)');
@@ -1392,23 +1397,23 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     );
 
     expect(markup).toContain('Patient Already in Queue');
-    expect(markup).toContain('2 Active Queue Tickets Found');
+    expect(markup).toContain('This patient already has 2 active tickets today.');
+    expect(markup).toContain('Do you want to continue and add a new Doctor Consultation ticket?');
     expect(markup).toContain('conflict-tickets-list');
     expect(markup).toContain('Q-001');
     expect(markup).toContain('Q-004');
     // Human-readable clinical status badge instead of raw PascalCase InConsultation
     expect(markup).toContain('In Consultation');
     expect(markup).not.toContain('InConsultation');
-    expect(markup).toContain('Currently with clinician');
+    expect(markup).toContain('With doctor');
     expect(markup).toContain('Fever and cough');
-    // New ticket request summary
-    expect(markup).toContain('NEW TICKET TO ISSUE');
-    expect(markup).toContain('Regular (Q)');
-    expect(markup).toContain('Issue additional ticket');
+    // Direct question-driven confirmation CTA without series code badge or duplicate box
+    expect(markup).not.toContain('Regular (Q)');
+    expect(markup).toContain('Yes, add new ticket');
     expect(markup).toContain('Go back');
   });
 
-  test('38. QueueTicketPickerModal renders patient banner, active ticket list, and action buttons', () => {
+  test('38. QueueTicketPickerModal renders concise patient subtitle, active ticket list, and action buttons without demographic banner', () => {
     let selectedTicket: any = null;
     let newTicketClicked = false;
     let closed = false;
@@ -1431,15 +1436,16 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     );
 
     expect(markup).toContain('Select Queue Ticket');
-    expect(markup).toContain('has 2 active tickets');
-    expect(markup).toContain('ACTIVE TICKETS AVAILABLE (2)');
+    expect(markup).toContain('Ambray, Cassandra');
+    expect(markup).not.toContain('PAT-20261013-3EFFEA');
+    expect(markup).toContain('This patient has 2 active tickets. Which ticket would you like to use?');
     expect(markup).toContain('Q-001');
     expect(markup).toContain('Q-004');
     expect(markup).toContain('In Consultation');
     expect(markup).not.toContain('InConsultation');
     expect(markup).toContain('Cough and colds');
     expect(markup).toContain('Hypertension follow-up');
-    expect(markup).toContain('Issue new ticket instead');
+    expect(markup).toContain('+ Start Separate Direct Visit');
     expect(markup).toContain('Cancel');
   });
 
@@ -1453,12 +1459,9 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(code).toContain('ticketPickerState');
     expect(code).toContain('<QueueTicketPickerModal');
 
-    // Matching items filtering logic
-    expect(code).toContain('matchingItems.length >= 2');
-    expect(code).toContain('multipleOptions: matchingItems');
-
-    // Action handlers using picker for ≥2 tickets
-    expect(code).toContain('startConsultationWithQueueItem');
+    // Active tickets filtering & picker trigger in resolveActiveVisitForAction
+    expect(code).toContain('resolveActiveVisitForAction');
+    expect(code).toContain('activeTickets.length === 1');
     expect(code).toContain('setTicketPickerState');
   });
 
@@ -1486,7 +1489,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
         { visitType: 'Consultation', chiefComplaint: 'Doctor Consultation', status: 'InConsultation' },
         'Doctor Consultation'
       )
-    ).toBe('Currently with clinician');
+    ).toBe('With doctor');
 
     // Preserves distinct clinical chief complaint and assigned clinician
     expect(
@@ -1496,5 +1499,88 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       )
     ).toBe('Acute migraine • Dr. Maria Santos');
   });
+
+  test('41. Compact Table header and rows enforce strict zero-basis flex columns and fixed-width actions column for exact column alignment', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const cardSrc = fs.readFileSync(
+      path.resolve(__dirname, '../components/patient/PatientDirectoryCard.tsx'),
+      'utf8'
+    );
+    // Data columns 1-4 must use flexBasis: 0 and minWidth: 0 so intrinsic content never shifts column boundaries
+    expect(cardSrc).toMatch(/tableColIdentity:\s*\{[\s\S]*?flexBasis:\s*0[\s\S]*?minWidth:\s*0/);
+    expect(cardSrc).toMatch(/tableColDemographics:\s*\{[\s\S]*?flexBasis:\s*0[\s\S]*?minWidth:\s*0/);
+    expect(cardSrc).toMatch(/tableColContact:\s*\{[\s\S]*?flexBasis:\s*0[\s\S]*?minWidth:\s*0/);
+    expect(cardSrc).toMatch(/tableColAlerts:\s*\{[\s\S]*?flexBasis:\s*0[\s\S]*?minWidth:\s*0/);
+    // Actions column must use identical fixed width in header and rows
+    expect(cardSrc).toMatch(/tableColActions:\s*\{[\s\S]*?width:\s*396[\s\S]*?flexGrow:\s*0[\s\S]*?flexShrink:\s*0/);
+  });
+
+  test('42. Patient Directory toolbar keeps single-row no-wrap scrollable filter tabs and icon-only Cards/Table switcher', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const { default: SegmentedControl } = await import('../components/ui/SegmentedControl');
+
+    const screenSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+    const segmentedSrc = fs.readFileSync(
+      path.resolve(__dirname, '../components/ui/SegmentedControl.tsx'),
+      'utf8'
+    );
+
+    // Toolbar row must never wrap view toggle below tabs; tabs container shrinks & scrolls horizontally
+    expect(screenSrc).toMatch(/toolbarRow:\s*\{[\s\S]*?flexWrap:\s*'nowrap'[\s\S]*?minWidth:\s*0/);
+    expect(screenSrc).toMatch(/toolbarTabs:\s*\{[\s\S]*?flex:\s*1[\s\S]*?minWidth:\s*0/);
+    expect(screenSrc).toMatch(/toolbarRight:\s*\{[\s\S]*?flexShrink:\s*0/);
+
+    // SegmentedControl scroll + group + segment enforce no-wrap horizontal overflow
+    expect(segmentedSrc).toMatch(/scroll:\s*\{[\s\S]*?flexShrink:\s*1[\s\S]*?minWidth:\s*0[\s\S]*?maxWidth:\s*'100%'/);
+    expect(segmentedSrc).toMatch(/group:\s*\{[\s\S]*?flexWrap:\s*'nowrap'[\s\S]*?flexShrink:\s*0/);
+    expect(segmentedSrc).toMatch(/segment:\s*\{[\s\S]*?flexWrap:\s*'nowrap'[\s\S]*?flexShrink:\s*0/);
+
+    // View mode switcher uses icon-only options (grid & list) without visible text labels
+    expect(screenSrc).toMatch(/value:\s*'cards',\s*label:\s*'Cards view',\s*icon:\s*'grid',\s*iconOnly:\s*true/);
+    expect(screenSrc).toMatch(/value:\s*'table',\s*label:\s*'Compact table view',\s*icon:\s*'list',\s*iconOnly:\s*true/);
+    expect(screenSrc).not.toContain("{ value: 'table', label: 'Compact Table' }");
+
+    // SSR markup renders SVG icons & accessible labels while omitting visible label text when iconOnly is true
+    const toggleMarkup = renderToStaticMarkup(
+      React.createElement(SegmentedControl, {
+        value: 'table',
+        onChange: () => {},
+        options: [
+          { value: 'cards', label: 'Cards view', icon: 'grid', iconOnly: true },
+          { value: 'table', label: 'Compact table view', icon: 'list', iconOnly: true },
+        ],
+      })
+    );
+    expect(toggleMarkup).toContain('lucide-layout-grid');
+    expect(toggleMarkup).toContain('lucide-list');
+    expect(toggleMarkup).toContain('aria-label="Cards view"');
+    expect(toggleMarkup).toContain('aria-label="Compact table view"');
+    expect(toggleMarkup).not.toContain('>Cards view<');
+    expect(toggleMarkup).not.toContain('>Compact table view<');
+  });
+
+  test('43. Register Patient modal sends typed patientCode and avoids binding patientCode error when left blank for auto-generation', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const screenSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+    const serviceSrc = fs.readFileSync(
+      path.resolve(__dirname, '../services/clinicService.ts'),
+      'utf8'
+    );
+
+    expect(serviceSrc).toMatch(/export interface RegisterPatientPayload\s*\{[\s\S]*?patientCode\?:\s*string;/);
+    expect(screenSrc).toContain('patientCode: formPatientCode.trim() || undefined,');
+    expect(screenSrc).toMatch(/if\s*\(formPatientCode\.trim\(\)\)\s*\{\s*if\s*\(pcErr\)\s*fieldErrorsMap\.patientCode\s*=\s*pcErr;\s*\}\s*else\s*\{\s*delete\s*fieldErrorsMap\.patientCode;\s*\}/);
+  });
 });
+
 

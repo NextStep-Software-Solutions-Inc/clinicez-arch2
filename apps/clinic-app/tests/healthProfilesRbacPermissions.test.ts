@@ -210,9 +210,16 @@ mock.module('../services/apiClient', () => ({
 const { clinicService } = await import('../services/clinicService');
 const { default: HealthProfilesTab } = await import('../components/chart/HealthProfilesTab');
 const { default: ClinicalHistoryTab, defaultPhilHealthProfile } = await import('../components/chart/ClinicalHistoryTab');
-const { default: LifestyleSocialTab } = await import('../components/chart/LifestyleSocialTab');
+const {
+  default: LifestyleSocialTab,
+  isPhysicalActivityOptionSelected,
+} = await import('../components/chart/LifestyleSocialTab');
 const { default: ReproductiveHealthTab } = await import('../components/chart/ReproductiveHealthTab');
-const { default: CardiometabolicRiskTab } = await import('../components/chart/CardiometabolicRiskTab');
+const {
+  default: CardiometabolicRiskTab,
+  buildNcdAssessmentPayload,
+  countNcdQuestionProgress,
+} = await import('../components/chart/CardiometabolicRiskTab');
 
 type ClinicPatient = import('../services/clinicService').ClinicPatient;
 
@@ -276,7 +283,9 @@ describe('Issue #52 — Consultations Patient Chart Profile RBAC & Doctor Permis
       );
       expect(surgicalMarkup).not.toContain('Read-Only Clinical Profile View');
       expect(surgicalMarkup).not.toContain("Read-only mode: 'patients:write' permission is required");
-      expect(surgicalMarkup).toContain('Save Medical & Family History');
+      expect(surgicalMarkup).toContain('Personal Medical History');
+      expect(surgicalMarkup).toContain('Family Medical History');
+      expect(surgicalMarkup).not.toContain('Save Medical & Family History');
 
       const lifestyleMarkup = renderHtml(
         React.createElement(LifestyleSocialTab, {
@@ -284,7 +293,34 @@ describe('Issue #52 — Consultations Patient Chart Profile RBAC & Doctor Permis
         })
       );
       expect(lifestyleMarkup).not.toContain("Read-only mode: 'patients:write' permission is required");
-      expect(lifestyleMarkup).toContain('Save Lifestyle Profile');
+      expect(lifestyleMarkup).not.toContain('Save Lifestyle Profile');
+      expect(lifestyleMarkup).not.toContain('Auto-save active');
+      expect(lifestyleMarkup).toContain('Changes to lifestyle and social history are saved automatically.');
+
+      const lifestyleSavedMarkup = renderHtml(
+        React.createElement(LifestyleSocialTab, {
+          patient: femalePatient,
+          initialSocialHistory: {
+            id: 'soc-1',
+            clinicId: 'clinic-1',
+            patientId: femalePatient.id,
+            isSmoker: false,
+            isAlcoholDrinker: false,
+            usesIllicitDrugs: false,
+            isSexuallyActive: false,
+            physicalActivityFrequency: 'Moderate Activity (≥150 mins/week)',
+            createdAt: '2026-11-04T02:00:00Z',
+            updatedAt: '2026-11-04T02:15:00Z',
+          },
+        })
+      );
+      expect(lifestyleSavedMarkup).toContain('Last saved');
+      expect(lifestyleSavedMarkup).not.toContain('Save Lifestyle Profile');
+
+      expect(isPhysicalActivityOptionSelected('Sedentary', 'Sedentary (<30 mins/week)')).toBe(true);
+      expect(isPhysicalActivityOptionSelected('Light (1-2x/week)', 'Light Activity (30–149 mins/week)')).toBe(true);
+      expect(isPhysicalActivityOptionSelected('Moderate (3-5x/week)', 'Moderate Activity (≥150 mins/week)')).toBe(true);
+      expect(isPhysicalActivityOptionSelected('Sedentary', 'Vigorous / Highly Active')).toBe(false);
 
       const reproductiveMarkup = renderHtml(
         React.createElement(ReproductiveHealthTab, {
@@ -292,7 +328,28 @@ describe('Issue #52 — Consultations Patient Chart Profile RBAC & Doctor Permis
         })
       );
       expect(reproductiveMarkup).not.toContain("Read-only mode: 'patients:write' permission is required");
-      expect(reproductiveMarkup).toContain("Save Women's Health Profile");
+      expect(reproductiveMarkup).not.toContain("Save Women's Health Profile");
+      expect(reproductiveMarkup).not.toContain('Auto-save active');
+      expect(reproductiveMarkup).toContain("Changes to women's & reproductive health are saved automatically.");
+
+      const reproductiveSavedMarkup = renderHtml(
+        React.createElement(ReproductiveHealthTab, {
+          patient: femalePatient,
+          initialReproductiveHistory: {
+            id: 'rep-1',
+            clinicId: 'clinic-1',
+            patientId: femalePatient.id,
+            isApplicable: true,
+            isMenopausal: false,
+            hadPreEclampsiaHypertension: false,
+            receivedFamilyPlanningCounseling: true,
+            createdAt: '2026-11-04T02:00:00Z',
+            updatedAt: '2026-11-04T02:20:00Z',
+          },
+        })
+      );
+      expect(reproductiveSavedMarkup).toContain('Last saved');
+      expect(reproductiveSavedMarkup).not.toContain("Save Women's Health Profile");
 
       const cardiometabolicMarkup = renderHtml(
         React.createElement(CardiometabolicRiskTab, {
@@ -300,7 +357,79 @@ describe('Issue #52 — Consultations Patient Chart Profile RBAC & Doctor Permis
         })
       );
       expect(cardiometabolicMarkup).not.toContain("Read-only mode: 'patients:write' permission is required");
-      expect(cardiometabolicMarkup).toContain('Record Cardiometabolic Assessment');
+      expect(cardiometabolicMarkup).toContain('Auto-save active');
+      expect(cardiometabolicMarkup).toContain('Auto-save active — changes save automatically as you answer');
+
+      // Pediatric Lifestyle banner uses PhilHealth YAKAP guidelines
+      const pediatricMarkup = renderHtml(
+        React.createElement(LifestyleSocialTab, {
+          patient: { ...femalePatient, age: 12 },
+        })
+      );
+      expect(pediatricMarkup).toContain('per PhilHealth YAKAP guidelines.');
+      expect(pediatricMarkup).not.toContain('per PhilHealth Konsulta guidelines.');
+
+      // Male Reproductive guard omits PhilHealth Yakap statutory schemas mention
+      const maleReproductiveMarkup = renderHtml(
+        React.createElement(ReproductiveHealthTab, {
+          patient: { ...femalePatient, sex: 'Male' },
+        })
+      );
+      expect(maleReproductiveMarkup).toContain('are restricted to female patients.');
+      expect(maleReproductiveMarkup).not.toContain('PhilHealth Yakap');
+
+      // Progressive auto-save payload preserves unanswered nulls without false assumptions
+      const partialSnap = {
+        riskBand: 'BandA' as const,
+        riskScorePercent: '5',
+        assessmentDate: '2026-10-16',
+        assessedByStaffId: 'staff-1',
+        assessedByStaffName: 'Dr. Santos',
+        authedClinicianName: 'Dr. Santos',
+        remarks: 'Partial screening',
+        eatsProcessedFoodWeekly: true,
+        threeServingsVegetablesDaily: null,
+        twoToThreeServingsFruitDaily: null,
+        physicalActivityAtLeast150MinsWeekly: null,
+        diagnosedDiabetes: null,
+        diabetesMedicationStatus: null,
+        hasPolyphagia: null,
+        hasPolydipsia: null,
+        hasPolyuria: null,
+        hasRaisedBloodGlucose: null,
+        fastingBloodSugarMgDl: '',
+        fastingBloodSugarDate: '',
+        hasRaisedBloodLipids: null,
+        totalCholesterolMgDl: '',
+        totalCholesterolDate: '',
+        urineKetonesPresent: null,
+        urineKetonesValue: '',
+        urineKetonesDate: '',
+        urineProteinPresent: null,
+        urineProteinValue: '',
+        urineProteinDate: '',
+        hasChestPain: null,
+        painInCenterOfChestOrLeftArm: null,
+        painWhenWalkingUphill: null,
+        slowsDownWhenPainOccurs: null,
+        painRelievedWithin10Mins: null,
+        painRelievedByNitrates: null,
+        severeChestPainOver30Mins: null,
+        transientNeurologicalDeficits: null,
+        hasHistoryAnginaHeartAttack: null,
+        hasHistoryStrokeOrTia: null,
+      };
+      const built = buildNcdAssessmentPayload(partialSnap);
+      expect(built.isMidTypingDate).toBe(false);
+      expect(built.validationError).toBeNull();
+      expect(built.payload.eatsProcessedFoodWeekly).toBe(true);
+      expect(built.payload.diagnosedDiabetes).toBeUndefined();
+      expect(built.payload.hasRaisedBloodGlucose).toBeUndefined();
+      expect(built.payload.hasRaisedBloodLipids).toBeUndefined();
+      expect(countNcdQuestionProgress(partialSnap)).toEqual({
+        answeredCount: 1,
+        totalRequiredCount: 17,
+      });
     });
 
     test('1.2 Doctor role successfully saves records across all 4 Patient Chart Profile sections', async () => {

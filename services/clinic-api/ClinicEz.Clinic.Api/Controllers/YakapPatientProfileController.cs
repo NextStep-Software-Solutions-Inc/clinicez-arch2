@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using Microsoft.AspNetCore.Mvc;
@@ -86,7 +87,7 @@ public sealed class YakapPatientProfileController : ControllerBase
         }
 
         // Load relational medical histories and family histories
-        var relMedHistories = await _medicalRepo.Query(m => m.PatientId == patientId)
+        var relMedHistories = await _medicalRepo.Query(m => m.PatientId == patientId && m.Category == MedicalHistoryCategory.MedicalHistory)
             .OrderBy(m => m.ConditionTitle)
             .ToListAsync(ct);
 
@@ -518,10 +519,10 @@ public sealed class YakapPatientProfileController : ControllerBase
             _socialRepo.Update(existingSocial);
         }
 
-        // Sync medical histories to relational table
+        // Sync medical histories to relational table (strictly scoped to Past Medical History so ProblemListItem rows are preserved)
         if (updatedProfile.MedicalHistories != null)
         {
-            var existingMeds = await _medicalRepo.Query(m => m.PatientId == patientId).ToListAsync(ct);
+            var existingMeds = await _medicalRepo.Query(m => m.PatientId == patientId && m.Category == MedicalHistoryCategory.MedicalHistory).ToListAsync(ct);
             var incomingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var item in updatedProfile.MedicalHistories)
@@ -552,6 +553,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                         TenantId = patient.TenantId ?? _clinicContext.TenantId,
                         ClinicId = clinicId,
                         PatientId = patientId,
+                        Category = MedicalHistoryCategory.MedicalHistory,
                         ConditionTitle = desc,
                         PhilHealthMdiseaseCode = code,
                         SpecificDescription = code == "998" ? desc : null,
@@ -649,8 +651,7 @@ public sealed class YakapPatientProfileController : ControllerBase
 
                 if (!exists)
                 {
-                    var vaccineName = _catalogLookup.Find(library, code)?.Description
-                        ?? ResolveStatutoryVaccineName(library, code);
+                    var vaccineName = ResolveVaccineName(library, code);
 
                     var newImm = new PatientImmunization
                     {
@@ -706,6 +707,48 @@ public sealed class YakapPatientProfileController : ControllerBase
         await SyncCohort(updatedProfile.YoungWomanImmunizations, "lib_immyoungw", (updateIsFemale && updateAgeYears >= 9 && updateAgeYears <= 49) || (updatedProfile.YoungWomanImmunizations != null && updatedProfile.YoungWomanImmunizations.Count > 0));
         await SyncCohort(updatedProfile.PregnantWomanImmunizations, "lib_immpregw", (updateIsFemale && updateAgeYears >= 9 && updateAgeYears <= 49) || (updatedProfile.PregnantWomanImmunizations != null && updatedProfile.PregnantWomanImmunizations.Count > 0));
         await SyncCohort(updatedProfile.ElderlyImmunizations, "lib_immelderly", updateIsSenior || (updatedProfile.ElderlyImmunizations != null && updatedProfile.ElderlyImmunizations.Count > 0));
+        if (updatedProfile.OtherImmunizations is { Count: > 0 })
+        {
+            foreach (var rawCode in updatedProfile.OtherImmunizations
+                .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("999", StringComparison.OrdinalIgnoreCase))
+                .Select(c => c.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var exists = existingImms.Any(i =>
+                    string.Equals(i.PhilHealthLibrary, "OtherImm", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(i.PhilHealthCode, rawCode, StringComparison.OrdinalIgnoreCase));
+
+                if (!exists)
+                {
+                    var newOtherImm = new PatientImmunization
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = patient.TenantId ?? _clinicContext.TenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        PatientName = $"{patient.FirstName} {patient.LastName}".Trim(),
+                        PhilHealthLibrary = "OtherImm",
+                        PhilHealthCode = rawCode,
+                        VaccineName = ResolveVaccineName("OtherImm", rawCode),
+                        LotBatchNumber = "HISTORICAL",
+                        ExpirationDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                        DoseSequence = 1,
+                        IsSeriesCompleted = true,
+                        Route = "Intramuscular",
+                        InjectionSite = "Left Deltoid",
+                        AdministeredAtUtc = DateTime.UtcNow,
+                        AdministeredByStaffId = _clinicContext.StaffId ?? Guid.Empty,
+                        AdministeredByStaffName = updatedProfile.UpdatedBy ?? "ClinicStaff",
+                        IsHistorical = true,
+                        HistoricalFacilityName = "Patient Profile / Historical",
+                        Remarks = "Recorded via PhilHealth patient profile",
+                        HasAdverseReaction = false,
+                        AdverseReactionSeverity = "None"
+                    };
+                    await _immunizationRepo.AddAsync(newOtherImm, ct);
+                }
+            }
+        }
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -717,55 +760,35 @@ public sealed class YakapPatientProfileController : ControllerBase
             .FirstOrDefault(r => r.IsActive && r.Description.StartsWith("Essentially normal", StringComparison.OrdinalIgnoreCase))
             ?.Code ?? "1";
 
-    private static string ResolveStatutoryVaccineName(string library, string code)
+    private string ResolveVaccineName(string library, string code)
     {
-        var lib = (library ?? string.Empty).ToLowerInvariant();
-        var c = (code ?? string.Empty).Trim().ToUpperInvariant();
-
-        if (lib.Contains("child"))
+        var trimmedCode = (code ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmedCode))
         {
-            return c switch
-            {
-                "C01" => "BCG (Bacillus Calmette-Guérin)",
-                "C02" => "OPV 1 (Oral Polio Vaccine 1)",
-                "C03" => "OPV 2 (Oral Polio Vaccine 2)",
-                "C04" => "OPV 3 (Oral Polio Vaccine 3)",
-                "C05" => "DPT-HepB-Hib 1 (Pentavalent 1)",
-                "C06" => "DPT-HepB-Hib 2 (Pentavalent 2)",
-                "C07" => "DPT-HepB-Hib 3 (Pentavalent 3)",
-                "C08" => "Measles Vaccine (MCV1)",
-                "C09" => "Hepatitis B (Birth Dose)",
-                "C10" => "Rotavirus Vaccine 1",
-                "C11" => "Rotavirus Vaccine 2",
-                "C12" => "Inactivated Polio Vaccine (IPV)",
-                "C13" => "MMR 1 (Measles, Mumps, Rubella)",
-                _ => $"Child Vaccine ({code})"
-            };
+            return "Vaccine";
         }
 
-        if (lib.Contains("preg"))
+        if (!string.IsNullOrWhiteSpace(library))
         {
-            return c switch
+            var catalogEntry = _catalogLookup.Find(library, trimmedCode);
+            if (!string.IsNullOrWhiteSpace(catalogEntry?.Description))
             {
-                "P01" => "Tetanus Toxoid / Td 1",
-                "P02" => "Tetanus Toxoid / Td 2",
-                "P03" => "Tetanus Toxoid / Td 3",
-                "P04" => "Tetanus Toxoid / Td 4",
-                "P05" => "Tetanus Toxoid / Td 5",
-                _ => $"Maternal Vaccine ({code})"
-            };
+                return catalogEntry.Description;
+            }
         }
 
-        if (lib.Contains("elderly"))
+        if (ClinicEz.Shared.Options.EhrStaticOptions.TryGetOption("adult_other_vaccine", trimmedCode, out var adultOption) &&
+            !string.IsNullOrWhiteSpace(adultOption?.Label))
         {
-            return c switch
-            {
-                "E01" => "Pneumococcal Polysaccharide Vaccine (PPSV23 / PCV13)",
-                "E02" => "Seasonal Influenza Vaccine (Quadrivalent)",
-                _ => $"Senior Citizen Vaccine ({code})"
-            };
+            return adultOption.Label;
         }
 
-        return $"Vaccine ({code})";
+        var genericEntry = _catalogLookup.Find("lib_medicine_generic", trimmedCode);
+        if (!string.IsNullOrWhiteSpace(genericEntry?.Description))
+        {
+            return genericEntry.Description;
+        }
+
+        return $"Vaccine ({trimmedCode})";
     }
 }

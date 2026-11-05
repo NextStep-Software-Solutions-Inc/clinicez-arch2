@@ -39,6 +39,16 @@ public sealed class QueueController : ControllerBase
         return CreatedAtAction(nameof(GetQueue), new { id = result.Id }, ApiResponse<QueueItemDto>.Success(result, "Patient checked in successfully."));
     }
 
+    [HttpPost("direct-visit")]
+    [HasPermission(ClinicPermissions.QueueRead)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> EnsureDirectVisit(
+        [FromBody] EnsureDirectVisitCommand command,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Direct visit ensured successfully."));
+    }
+
     [HttpGet]
     [HasPermission(ClinicPermissions.QueueRead)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<QueueItemDto>>>> GetQueue(

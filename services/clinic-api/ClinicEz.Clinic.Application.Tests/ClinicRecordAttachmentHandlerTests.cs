@@ -88,6 +88,57 @@ public class RecordAttachmentHandlerTests
         dbEntity.Should().NotBeNull();
         dbEntity!.VerificationStatus.Should().Be("Verified");
         dbEntity.UploadedByStaffName.Should().Be("Nurse Joy");
+        dbEntity.VerifiedByStaffName.Should().Be("Nurse Joy");
+    }
+
+    [Fact]
+    public async Task UploadAndEncryptRecordAttachment_FallsBackToAuthenticatedClinicContextStaffName()
+    {
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(staffId);
+        clinicContext.StaffName.Returns("Dr. Jose Rizal");
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var repo = TestDbHelper.CreateRepository<RecordAttachment>(context, sieve);
+        var encryptionService = Substitute.For<IClinicEncryptionService>();
+        var storageService = Substitute.For<IClinicStorageService>();
+
+        var rawFileBytes = Encoding.UTF8.GetBytes("Chest X-Ray normal");
+        encryptionService.EncryptAsync(rawFileBytes, tenantId, clinicId, Arg.Any<CancellationToken>())
+            .Returns(new ClinicEncryptedPayload(
+                Ciphertext: new byte[] { 0xCA, 0xFE },
+                IvBase64: "dGVzdEl2MTIzNA==",
+                TagBase64: "dGVzdFRhZzEyMzQ1Njc4OQ==",
+                EncryptedHash: "sha256hash456",
+                EncryptedSizeBytes: 2,
+                WrappedKeyJson: "{\"key\":\"wrapped\"}",
+                EncryptionAlgorithm: "AES-256-GCM"
+            ));
+
+        var handler = new UploadAndEncryptRecordAttachmentCommandHandler(repo, uow, clinicContext, encryptionService, storageService);
+        var result = await handler.Handle(new UploadAndEncryptRecordAttachmentCommand(
+            PatientId: patientId,
+            ConsultationId: null,
+            RecordType: "OutsideChestXRay",
+            Title: "Outside Film",
+            FileName: "cxr.png",
+            ContentType: "image/png",
+            FileBytes: rawFileBytes,
+            DocumentDate: new DateOnly(2026, 11, 3)
+        ), CancellationToken.None);
+
+        result.UploadedByStaffId.Should().Be(staffId);
+        result.UploadedByStaffName.Should().Be("Dr. Jose Rizal");
+        result.VerifiedByStaffId.Should().Be(staffId);
+        result.VerifiedByStaffName.Should().Be("Dr. Jose Rizal");
+        result.DocumentDate.Should().Be(new DateOnly(2026, 11, 3));
     }
 
     [Fact]

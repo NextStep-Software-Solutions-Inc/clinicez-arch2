@@ -2228,6 +2228,241 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
+    public byte[] GenerateClinicCensusReportPdf(ClinicCensusReportDto report, FacilitySettings settings, string? preparedByName = null)
+    {
+        var config = MapToReportTenantConfig(settings);
+        var primaryColor = config.GetSafePrimaryColorHex();
+
+        var issuedAt = DateTime.UtcNow;
+        var docNumber = $"CEN-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}";
+        var (preparedBy, preparedTitle, approverName, approverTitle) = ResolveReportSignatories(
+            settings, "ClinicCensus", "Clinic Nurse / Medical Records Officer", "Medical Director / Supervising Officer", preparedByName);
+        var staffPrc = preparedBy;
+        var digest = _securityService.ComputeDocumentDigest(
+            report.TenantId,
+            "CLINIC-CENSUS",
+            docNumber,
+            null,
+            staffPrc,
+            issuedAt);
+
+        var verifyUrl = _securityService.GenerateVerificationUrl(
+            _verificationBaseUrl,
+            "clinic-census",
+            docNumber,
+            digest);
+
+        var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
+
+        var doc = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                var pageSize = config.PaperSize switch
+                {
+                    DocumentPaperSize.A4 => PageSizes.A4,
+                    DocumentPaperSize.A5 => PageSizes.A5,
+                    _ => PageSizes.Letter
+                };
+                page.Size(pageSize.Landscape());
+
+                page.Margin(config.PageMarginMm, Unit.Millimetre);
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(8f).FontColor("#1F2937"));
+
+                page.Header().Component(new TenantLetterheadComponent(config));
+
+                page.Content().PaddingTop(4).Column(col =>
+                {
+                    // Banner
+                    ComposeReportBanner(col, "OFFICIAL OUTPATIENT CLINIC CENSUS REPORT", primaryColor,
+                        $"Reporting Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {preparedBy}");
+
+                    // Telemetry KPI Cards
+                    ComposeSectionTitle(col, "OPERATIONAL CENSUS TELEMETRY & ENCOUNTER SUMMARY", primaryColor);
+                    col.Item().Row(row =>
+                    {
+                        ComposeKpiCell(row, "TOTAL CENSUS", report.Summary.TotalCensus.ToString());
+                        ComposeKpiCell(row, "NEW PATIENTS", report.Summary.NewPatients.ToString(), $"Returning: {report.Summary.ReturningPatients}");
+                        ComposeKpiCell(row, "CONSULTATIONS", report.Summary.Consultations.ToString());
+                        ComposeKpiCell(row, "PROCEDURES", report.Summary.StandaloneProcedures.ToString());
+                        ComposeKpiCell(row, "SENIOR / PWD", (report.Demographics.SeniorCount + report.Demographics.PwdCount).ToString(), $"PhilHealth: {report.Demographics.PhilHealthCount}");
+                        ComposeKpiCell(row, "URGENT / EMERG", (report.Acuity.UrgentCount + report.Acuity.EmergencyCount).ToString());
+                    });
+
+                    // Demographics & Acuity Summary Grid
+                    col.Item().PaddingTop(4).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(4).Row(dRow =>
+                    {
+                        dRow.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("AGE DISTRIBUTION").FontSize(6.5f).SemiBold().FontColor("#64748B");
+                            c.Item().Text($"Pediatric (<18): {report.Demographics.PediatricCount} ({report.Demographics.PediatricPercentage:0.0}%) | Adult (18-59): {report.Demographics.AdultCount} ({report.Demographics.AdultPercentage:0.0}%) | Senior (60+): {report.Demographics.SeniorCount} ({report.Demographics.SeniorPercentage:0.0}%)")
+                                .FontSize(7f).FontColor("#1E293B");
+                        });
+
+                        dRow.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("SEX & SPECIAL CATEGORIES").FontSize(6.5f).SemiBold().FontColor("#64748B");
+                            c.Item().Text($"Male: {report.Demographics.MaleCount} | Female: {report.Demographics.FemaleCount} | PWD: {report.Demographics.PwdCount} | PhilHealth: {report.Demographics.PhilHealthCount}")
+                                .FontSize(7f).FontColor("#1E293B");
+                        });
+
+                        dRow.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("TRIAGE ACUITY").FontSize(6.5f).SemiBold().FontColor("#64748B");
+                            c.Item().Text($"Routine: {report.Acuity.RoutineCount} | Urgent: {report.Acuity.UrgentCount} | Emergency: {report.Acuity.EmergencyCount}")
+                                .FontSize(7f).FontColor("#1E293B");
+                        });
+                    });
+
+                    // Patient Encounter Census Register (Landscape Table)
+                    ComposeSectionTitle(col, "PATIENT ENCOUNTER CENSUS REGISTER", primaryColor);
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(22);   // 1. #
+                            columns.ConstantColumn(60);   // 2. Ticket, Date & Times
+                            columns.RelativeColumn(2.0f); // 3. Patient & Demographics
+                            columns.RelativeColumn(1.8f); // 4. Attending Staff
+                            columns.RelativeColumn(2.2f); // 5. Nurse Impression & Vitals
+                            columns.RelativeColumn(3.0f); // 6. Doctor Dx & Assessment
+                            columns.RelativeColumn(1.8f); // 7. Systems & Physical Findings
+                            columns.RelativeColumn(1.6f); // 8. Procedures & Disposition
+                            columns.RelativeColumn(1.4f); // 9. Status & Billing
+                        });
+
+                        table.Header(h =>
+                        {
+                            TableHeaderCell(h.Cell(), "#");
+                            TableHeaderCell(h.Cell(), "TICKET / DATE / TIME");
+                            TableHeaderCell(h.Cell(), "PATIENT & DEMOGRAPHICS");
+                            TableHeaderCell(h.Cell(), "ATTENDING STAFF");
+                            TableHeaderCell(h.Cell(), "NURSE IMPRESSION & VITALS");
+                            TableHeaderCell(h.Cell(), "DOCTOR DX & ASSESSMENT");
+                            TableHeaderCell(h.Cell(), "SYSTEMS & FINDINGS");
+                            TableHeaderCell(h.Cell(), "PROCEDURES & DISP");
+                            TableHeaderCell(h.Cell(), "STATUS / BILLING");
+                        });
+
+                        if (report.Items.Count == 0)
+                        {
+                            table.Cell().ColumnSpan(9).BorderBottom(0.5f).BorderColor("#E2E8F0").Padding(12).AlignCenter()
+                                .Text("No patient encounters recorded in this reporting period").Italic().FontSize(8.5f).FontColor("#6B7280");
+                        }
+                        else
+                        {
+                            int idx = 0;
+                            foreach (var item in report.Items)
+                            {
+                                var rowBg = (idx++ % 2 == 1) ? "#F8FAFC" : "#FFFFFF";
+
+                                IContainer CellContainer(IContainer c) => c.Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(3f).PaddingHorizontal(3f);
+
+                                // 1. Seq #
+                                CellContainer(table.Cell()).AlignCenter().Text(item.SequenceNumber.ToString()).FontSize(7f).FontColor("#64748B");
+
+                                // 2. Ticket & Times
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text(item.QueueNumber).FontSize(7.5f).Bold().FontColor("#0F172A");
+                                    c.Item().Text(item.CheckInTime.ToString("yyyy-MM-dd")).FontSize(6f).SemiBold().FontColor("#475569");
+                                    c.Item().Text($"In: {item.CheckInTime:HH:mm}").FontSize(6.5f).FontColor("#64748B");
+                                    if (item.CompletedTime.HasValue)
+                                    {
+                                        c.Item().Text($"Out: {item.CompletedTime.Value:HH:mm}").FontSize(6.5f).FontColor("#64748B");
+                                        c.Item().Text($"{item.TurnaroundMinutes ?? 0}m stay").FontSize(6f).SemiBold().FontColor("#0284C7");
+                                    }
+                                });
+
+                                // 3. Patient & Demographics
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text(item.PatientName).FontSize(7.5f).Bold().FontColor("#0F172A");
+                                    c.Item().Text($"{item.PatientCode} • {item.Age}y/{item.Sex}").FontSize(6.5f).FontColor("#475569");
+                                    c.Item().Text(item.Classification).FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                                    if (!string.IsNullOrWhiteSpace(item.CustomFieldsSummary) && item.CustomFieldsSummary != "None")
+                                    {
+                                        c.Item().Text(item.CustomFieldsSummary).FontSize(6f).Italic().FontColor("#64748B");
+                                    }
+                                });
+
+                                // 4. Attending Staff
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text($"MD: {item.AttendingDoctor ?? "—"}").FontSize(6.5f).SemiBold().FontColor("#1E293B");
+                                    c.Item().Text($"RN: {item.AttendingNurse ?? "—"}").FontSize(6.5f).FontColor("#475569");
+                                    c.Item().Text($"Type: {item.VisitType}").FontSize(6f).FontColor("#64748B");
+                                });
+
+                                // 5. Nurse Impression & Vitals
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text(item.NurseAssessment ?? "—").FontSize(6.5f).FontColor("#1E293B");
+                                    c.Item().Text(item.VitalsSnapshot ?? "—").FontSize(6f).SemiBold().FontColor("#0369A1");
+                                });
+
+                                // 6. Doctor Dx & Assessment
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text(item.DoctorDiagnosis ?? "—").FontSize(6.5f).Bold().FontColor("#0F172A");
+                                    if (!string.IsNullOrWhiteSpace(item.ClinicalAssessment) && item.ClinicalAssessment != "—")
+                                    {
+                                        c.Item().Text(item.ClinicalAssessment).FontSize(6f).FontColor("#475569");
+                                    }
+                                });
+
+                                // 7. Systems & Physical Findings
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    c.Item().Text(item.SystemsReviewed ?? "—").FontSize(6.5f).FontColor("#334155");
+                                });
+
+                                // 8. Procedures & Disposition
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    if (!string.IsNullOrWhiteSpace(item.ProceduresPerformed) && item.ProceduresPerformed != "None")
+                                    {
+                                        c.Item().Text($"Proc: {item.ProceduresPerformed}").FontSize(6.5f).SemiBold().FontColor("#4338CA");
+                                    }
+                                    c.Item().Text(item.Disposition).FontSize(6.5f).FontColor("#1E293B");
+                                });
+
+                                // 9. Status & Billing
+                                CellContainer(table.Cell()).Column(c =>
+                                {
+                                    var (acuityColor, acuityBg) = item.Acuity.ToLowerInvariant() switch
+                                    {
+                                        "emergency" => ("#DC2626", "#FEE2E2"),
+                                        "urgent" => ("#D97706", "#FEF3C7"),
+                                        _ => ("#16A34A", "#DCFCE7")
+                                    };
+                                    c.Item().Background(acuityBg).PaddingHorizontal(3).PaddingVertical(1).Text(item.Acuity.ToUpperInvariant()).FontSize(5.5f).Bold().FontColor(acuityColor);
+                                    c.Item().PaddingTop(1).Text(item.BillingStatus).FontSize(6.5f).SemiBold().FontColor("#0F172A");
+                                    c.Item().Text($"₱{item.AmountPaid:N2}").FontSize(6.5f).FontColor("#475569");
+                                    if (!string.IsNullOrWhiteSpace(item.OfficialReceiptNumber))
+                                    {
+                                        c.Item().Text($"OR: {item.OfficialReceiptNumber}").FontSize(5.5f).FontColor("#64748B");
+                                    }
+                                });
+                            }
+                        }
+                    });
+
+                    // Statutory Attestation Note
+                    col.Item().PaddingTop(6).Text("This official outpatient clinic census report is an authentic record of clinical encounters maintained pursuant to DOH Administrative Orders and statutory regulations. All patient entries reflect recorded triage, physician encounters, diagnoses, procedures, and cashier collections.")
+                        .FontSize(6.5f).Italic().FontColor("#64748B");
+
+                    // Sign-off
+                    ComposeSignOffBlock(col, preparedBy, preparedTitle, approverName, approverTitle);
+                });
+
+                page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
+            });
+        });
+
+        return doc.GeneratePdf();
+    }
+
     // ==========================================
     // REPORT STYLING & COMPONENT HELPERS
     // ==========================================

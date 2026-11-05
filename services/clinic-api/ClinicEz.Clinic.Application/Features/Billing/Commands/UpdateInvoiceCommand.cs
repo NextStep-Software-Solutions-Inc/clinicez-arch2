@@ -203,16 +203,16 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
     {
         if (invoice.PatientId == Guid.Empty || (invoice.NetAmount <= 0m && !invoice.BillingRequestedAt.HasValue)) return;
 
-        var visitKey = invoice.ConsultationId;
-        if (visitKey is null && invoice.QueueItemId.HasValue)
+        Guid? resolvedQueueItemId = invoice.QueueItemId;
+        if (!resolvedQueueItemId.HasValue && invoice.ConsultationId.HasValue && _encounterRepo != null)
         {
-            var queueItemId = invoice.QueueItemId.Value;
-            var encounterId = await _encounterRepo
-                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.QueueItemId == queueItemId)
-                .Select(e => (Guid?)e.Id)
+            var consultationId = invoice.ConsultationId.Value;
+            resolvedQueueItemId = await _encounterRepo
+                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.Id == consultationId)
+                .Select(e => e.QueueItemId)
                 .FirstOrDefaultAsync(ct);
-            visitKey = encounterId ?? queueItemId;
         }
+        var visitKey = resolvedQueueItemId ?? invoice.ConsultationId;
 
         var syncPatientId = await _patientRepo
             .Query(p => p.ClinicId == _clinicContext.ClinicId && p.Id == invoice.PatientId)

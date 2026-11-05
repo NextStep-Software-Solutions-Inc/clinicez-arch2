@@ -89,7 +89,8 @@ public sealed class YakapConsultationWireBuilder : IYakapWireBuilder<YakapConsul
                 ["pIcdCode"] = d.Icd10Code?.Trim() ?? string.Empty,
                 ["pDescription"] = d.Description?.Trim() ?? string.Empty,
                 ["pIsPrimary"] = d.IsPrimary
-            }).ToList()
+            }).ToList(),
+            ["management"] = BuildManagementPayload(enc)
         };
 
         if (v != null)
@@ -124,6 +125,37 @@ public sealed class YakapConsultationWireBuilder : IYakapWireBuilder<YakapConsul
 
         var encrypted = encryptor.EncryptJson(buildResult.Value!, cipherKey);
         return Result<PhilHealthEncryptedPayload>.Success(encrypted);
+    }
+
+    private static Dictionary<string, object?> BuildManagementPayload(ConsultationEncounter enc)
+    {
+        var cancerCodes = !string.IsNullOrWhiteSpace(enc.PhilHealthManagementCodes) && enc.PhilHealthManagementCodes.Trim() != "N"
+            ? enc.PhilHealthManagementCodes.Trim()
+            : null;
+        var hasPrescription = enc.HasMedicationPrescription || (enc.Prescriptions != null && enc.Prescriptions.Count > 0);
+        var followUpOn = enc.FollowUpDate?.ToString("MM/dd/yyyy")
+            ?? (!string.IsNullOrWhiteSpace(enc.FollowUpScheduleText) ? enc.FollowUpScheduleText.Trim() : null);
+
+        return new Dictionary<string, object?>
+        {
+            ["counseling_health_education"] = enc.CounselingCodes?.Trim() ?? string.Empty,
+            ["routine_vaccine_name"] = enc.RoutineVaccineName?.Trim(),
+            ["routine_vaccine_date"] = enc.RoutineVaccineDate?.ToString("MM/dd/yyyy"),
+            ["adults_routine_screening"] = !string.IsNullOrWhiteSpace(enc.AdultsRoutineScreeningCode) ? enc.AdultsRoutineScreeningCode.Trim() : "0",
+            ["pediatric_routine_screening"] = !string.IsNullOrWhiteSpace(enc.PediatricRoutineScreeningCode) ? enc.PediatricRoutineScreeningCode.Trim() : "0",
+            ["prenatal_screening_services"] = !string.IsNullOrWhiteSpace(enc.PrenatalScreeningServicesCode) ? enc.PrenatalScreeningServicesCode.Trim() : "0",
+            ["cancer_screening_flag"] = cancerCodes != null ? "Y" : "N",
+            ["cancer_screening_selected"] = cancerCodes,
+            ["diagnostic_services_flag"] = !string.IsNullOrWhiteSpace(enc.DiagnosticServicesOption) ? enc.DiagnosticServicesOption.Trim() : "N",
+            ["medication_prescription_flag"] = hasPrescription ? "Y" : "N",
+            ["referral_flag"] = enc.HasReferral ? "Y" : "N",
+            ["other_medical_advice_spec"] = enc.OtherMedicalAdviceSpec?.Trim(),
+            ["follow_up_flag"] = enc.HasFollowUp ? "Y" : "N",
+            ["follow_up_on"] = enc.HasFollowUp ? followUpOn : null,
+            ["follow_up_reason"] = enc.HasFollowUp ? enc.FollowUpReason?.Trim() : null,
+            ["follow_up_vaccine_name"] = enc.HasFollowUp ? enc.FollowUpVaccineName?.Trim() : null,
+            ["follow_up_next_vaccine_date"] = enc.HasFollowUp ? enc.FollowUpVaccineNextDate?.ToString("MM/dd/yyyy") : null
+        };
     }
 
     private static string? ResolvePatientPin(Patient patient)

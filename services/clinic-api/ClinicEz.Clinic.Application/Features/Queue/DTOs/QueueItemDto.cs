@@ -36,7 +36,8 @@ public sealed record QueueItemDto(
     string? ParamedicOrEscortName = null,
     string? HandoverSummary = null,
     DateTime? DivertedAt = null,
-    Guid? DivertedByStaffId = null);
+    Guid? DivertedByStaffId = null,
+    bool IsDirectVisit = false);
 
 public static class QueueItemMappingExtensions
 {
@@ -108,7 +109,8 @@ public static class QueueItemMappingExtensions
             item.ParamedicOrEscortName,
             item.HandoverSummary,
             item.DivertedAt,
-            item.DivertedByStaffId);
+            item.DivertedByStaffId,
+            item.IsDirectVisit);
     }
 }
 

@@ -635,9 +635,7 @@ export function InlineDentalChartCard({
                 label={`${abnormalCount} Finding${abnormalCount === 1 ? '' : 's'}`}
                 variant="warning"
               />
-            ) : (
-              <Badge label="All Teeth Healthy" variant="success" />
-            )}
+            ) : null}
             <SegmentedControl<DentitionMode>
               options={DENTITION_OPTIONS}
               value={dentitionMode}
@@ -652,7 +650,13 @@ export function InlineDentalChartCard({
         </ThemedText>
 
         {/* Odontogram Grid Viewport */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gridScroll}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.gridScrollViewport}
+          contentContainerStyle={styles.gridScroll}
+          testID="odontogram-scroll-viewport"
+        >
           <View style={styles.odontogramContainer}>
             {/* Maxillary Upper Arch */}
             <View style={styles.archLabelRow}>
@@ -740,11 +744,11 @@ export function InlineDentalChartCard({
                     size={96}
                     testID="inspector-tooth-surface-diagram"
                   />
-                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.diagramHint}>
-                    {isWholeToothStaged
-                      ? `Whole tooth status (${getToothStatusLabel(stagedStatus)}) — surfaces disabled`
-                      : 'Tap trapezoid zones or chips to toggle surfaces'}
-                  </ThemedText>
+                  {isWholeToothStaged ? (
+                    <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.diagramHint}>
+                      {`Whole tooth status (${getToothStatusLabel(stagedStatus)}) — surfaces disabled`}
+                    </ThemedText>
+                  ) : null}
                 </View>
               </View>
 
@@ -755,7 +759,12 @@ export function InlineDentalChartCard({
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
                     Condition Status:
                   </ThemedText>
-                  <View style={styles.pillsRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.pillsScroll}
+                    contentContainerStyle={styles.pillsRow}
+                  >
                     {SELECTABLE_TOOTH_STATUS_OPTIONS.map((status) => {
                       const isStatusSelected = stagedStatus === status;
                       const check = canApplyConditionToTooth(
@@ -799,7 +808,7 @@ export function InlineDentalChartCard({
                         </Pressable>
                       );
                     })}
-                  </View>
+                  </ScrollView>
                 </View>
 
                 {/* Tooth Surface Chips */}
@@ -818,7 +827,13 @@ export function InlineDentalChartCard({
                       </ThemedText>
                     ) : null}
                   </View>
-                  <View style={styles.chipsRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.surfacesScroll}
+                    contentContainerStyle={styles.chipsRow}
+                    testID="surfaces-chips-scroll"
+                  >
                     {CANONICAL_SURFACES.map((code) => {
                       const isSelected = !isWholeToothStaged && stagedSurfaces.includes(code);
                       const isSurfaceLockedInEncounter = lockState.lockedSurfaces.has(code);
@@ -862,7 +877,7 @@ export function InlineDentalChartCard({
                         </Pressable>
                       );
                     })}
-                  </View>
+                  </ScrollView>
                   {!disabled && !lockState.isWholeToothLocked && !saveCheck.allowed && saveCheck.reason ? (
                     <ThemedText
                       variant="caption"
@@ -1044,7 +1059,12 @@ const styles = StyleSheet.create({
   hint: {
     marginBottom: theme.spacing.xs,
   },
+  gridScrollViewport: {
+    width: '100%',
+  },
   gridScroll: {
+    flexGrow: 1,
+    minWidth: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: theme.spacing.xs,
@@ -1169,7 +1189,10 @@ const styles = StyleSheet.create({
   },
   controlsColumn: {
     flex: 1,
+    flexBasis: 240,
     minWidth: 240,
+    maxWidth: '100%',
+    overflow: 'hidden',
     gap: theme.spacing.sm,
   },
   actionButtonsRow: {
@@ -1243,10 +1266,15 @@ const styles = StyleSheet.create({
   diagramHint: {
     textAlign: 'center',
   },
+  pillsScroll: {
+    width: '100%',
+    flexGrow: 0,
+  },
   pillsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: theme.spacing.xs,
+    paddingVertical: 2,
   },
   statusPill: {
     paddingHorizontal: theme.spacing.sm,
@@ -1287,10 +1315,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  surfacesScroll: {
+    width: '100%',
+    flexGrow: 0,
+  },
   chipsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: theme.spacing.xs,
+    paddingVertical: 2,
   },
   surfaceChip: {
     paddingHorizontal: theme.spacing.sm,

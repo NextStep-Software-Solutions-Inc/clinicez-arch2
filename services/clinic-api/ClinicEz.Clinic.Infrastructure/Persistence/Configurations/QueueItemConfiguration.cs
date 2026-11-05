@@ -29,6 +29,7 @@ public sealed class QueueItemConfiguration : IEntityTypeConfiguration<QueueItem>
             entity.Property(e => e.RoomOrStation).HasMaxLength(100);
             entity.Property(e => e.ApproachingNotificationSent).HasDefaultValue(false);
             entity.Property(e => e.CalledNotificationSent).HasDefaultValue(false);
+            entity.Property(e => e.IsDirectVisit).HasDefaultValue(false);
 
             entity.Property(e => e.VisitWorkflowMode).IsRequired().HasConversion<string>().HasMaxLength(50);
             entity.Property(e => e.VisitType)

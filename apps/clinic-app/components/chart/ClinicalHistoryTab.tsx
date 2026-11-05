@@ -1,13 +1,28 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, EmptyState, ErrorState, SkeletonList, Modal, Badge, ValidatedDateInput, Icd10AutocompleteInput, validateDateString } from '@ui';
+import {
+  ThemedText,
+  Button,
+  Input,
+  Icon,
+  ErrorState,
+  SkeletonList,
+  Modal,
+  Badge,
+  ValidatedDateInput,
+  Icd10AutocompleteInput,
+  validateDateString,
+} from '@ui';
 import { Alert } from '@utils/feedback';
 import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
+import { useClinic } from '../../context/ClinicContext';
 import { useAuth, usePermission } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
+  formatClinicDate,
+  formatClinicDateTime,
   ClinicPatient,
   PatientSurgicalHistory,
   UpsertPatientSurgicalHistoryPayload,
@@ -16,13 +31,17 @@ import {
   PatientAllergyRecord,
   CreatePatientAllergyPayload,
   PhilHealthPatientProfile,
-  PhilHealthConditionEntry,
+  MedicalHistoryEntryItem,
+  FamilyHistoryEntryItem,
 } from '../../services/clinicService';
 import OrganSystemsExamSection, {
   DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
   type OrganSystemsExamValues,
   type OrganSystemDef,
 } from './OrganSystemsExamSection';
+import StructuredAllergyIntakeModal, {
+  type CreateAllergyRequest,
+} from '../patient/StructuredAllergyIntakeModal';
 
 export const PHILHEALTH_MDISEASES_CONDITIONS: { code: string; description: string }[] = [
   { code: '001', description: 'Allergy' },
@@ -45,6 +64,223 @@ export const PHILHEALTH_MDISEASES_CONDITIONS: { code: string; description: strin
   { code: '018', description: 'Mental Illness' },
   { code: '998', description: 'Others' },
 ];
+
+export type AllergyCategoryOption = 'Medication' | 'Food' | 'Environmental' | 'Biologic' | 'Other';
+export type AllergySeverityOption = 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
+
+export const ALLERGY_CATEGORY_OPTIONS: { value: AllergyCategoryOption; label: string }[] = [
+  { value: 'Medication', label: 'Medication' },
+  { value: 'Food', label: 'Food' },
+  { value: 'Environmental', label: 'Environmental' },
+  { value: 'Biologic', label: 'Biologic' },
+  { value: 'Other', label: 'Other' },
+];
+
+export const ALLERGY_SEVERITY_OPTIONS: { value: AllergySeverityOption; label: string }[] = [
+  { value: 'Mild', label: 'Mild' },
+  { value: 'Moderate', label: 'Moderate' },
+  { value: 'Severe', label: 'Severe' },
+  { value: 'LifeThreatening', label: 'Life-Threatening' },
+];
+
+export function humanizeAllergySeverity(severity?: string | null): string {
+  if (!severity) return '';
+  if (severity === 'LifeThreatening') return 'Life-Threatening';
+  return severity;
+}
+
+export function isNoneHistoryEntry(code?: string | null, description?: string | null): boolean {
+  const cleanCode = code?.trim() || '';
+  const cleanDesc = description?.trim().toLowerCase() || '';
+  return cleanCode === '999' || cleanDesc === 'none';
+}
+
+const ICD10_TO_MDISEASE_RULES: { pattern: RegExp; code: string }[] = [
+  { pattern: /^(T78\.4|J30|L23|L50\.0)/i, code: '001' }, // Allergy
+  { pattern: /^J4[56]/i, code: '002' }, // Asthma
+  { pattern: /^C[0-9]{2}/i, code: '003' }, // Cancer (Malignant neoplasms)
+  { pattern: /^(I6[0-9]|G45)/i, code: '004' }, // Cerebrovascular Disease
+  { pattern: /^I2[0-5]/i, code: '005' }, // Coronary Artery Disease
+  { pattern: /^(E1[0-4]|O24)/i, code: '006' }, // Diabetes Mellitus
+  { pattern: /^J43/i, code: '007' }, // Emphysema
+  { pattern: /^(G4[01]|R56)/i, code: '008' }, // Epilepsy/Seizure Disorder
+  { pattern: /^(B1[5-9]|K73|K75\.4)/i, code: '009' }, // Hepatitis
+  { pattern: /^E78/i, code: '010' }, // Hyperlipidemia
+  { pattern: /^I1[0-5]/i, code: '011' }, // Hypertension
+  { pattern: /^K2[5-8]/i, code: '012' }, // Peptic Ulcer
+  { pattern: /^J1[2-8]/i, code: '013' }, // Pneumonia
+  { pattern: /^E0[0-7]/i, code: '014' }, // Thyroid Disease
+  { pattern: /^A1[56]/i, code: '015' }, // Pulmonary Tuberculosis
+  { pattern: /^A1[7-9]/i, code: '016' }, // Extrapulmonary Tuberculosis
+  { pattern: /^(N39\.0|N30)/i, code: '017' }, // Urinary Tract Infection
+  { pattern: /^F([02-9][0-9]|1[0-689])/i, code: '018' }, // Mental Illness (excluding F17 nicotine)
+];
+
+const TITLE_SYNONYM_TO_MDISEASE_RULES: { pattern: RegExp; code: string }[] = [
+  { pattern: /\bextrapulmonary\s+tuberculosis\b/i, code: '016' },
+  { pattern: /\b(pulmonary\s+tuberculosis|ptb)\b/i, code: '015' },
+  { pattern: /\b(hypertension|hypertensive)\b/i, code: '011' },
+  { pattern: /\bdiabetes\b/i, code: '006' },
+  { pattern: /\basthma\b/i, code: '002' },
+  { pattern: /\b(cancer|carcinoma|malignant\s+neoplasm|lymphoma|leukemia|sarcoma)\b/i, code: '003' },
+  { pattern: /\b(cerebrovascular|stroke|cerebral\s+infarction|transient\s+ischemic\s+attack)\b/i, code: '004' },
+  { pattern: /\b(coronary\s+artery|ischemic\s+heart|ischaemic\s+heart|angina\s+pectoris|myocardial\s+infarction)\b/i, code: '005' },
+  { pattern: /\bemphysema\b/i, code: '007' },
+  { pattern: /\b(epilepsy|seizure)\b/i, code: '008' },
+  { pattern: /\bhepatitis\b/i, code: '009' },
+  { pattern: /\b(hyperlipidemia|dyslipidemia|hypercholesterolemia|hypertriglyceridemia)\b/i, code: '010' },
+  { pattern: /\b(peptic\s+ulcer|gastric\s+ulcer|duodenal\s+ulcer|gastrojejunal\s+ulcer)\b/i, code: '012' },
+  { pattern: /\bpneumonia\b/i, code: '013' },
+  { pattern: /\b(thyroid|hypothyroidism|hyperthyroidism|thyrotoxicosis|goiter)\b/i, code: '014' },
+  { pattern: /\b(urinary\s+tract\s+infection|acute\s+cystitis)\b/i, code: '017' },
+  { pattern: /\b(mental\s+illness|depressive|depression|schizophrenia|bipolar|anxiety\s+disorder|psychosis)\b/i, code: '018' },
+  { pattern: /\b(allergy|allergic|anaphylaxis)\b/i, code: '001' },
+];
+
+/**
+ * Matches a Structured Problem to a Personal Medical History item (`001`–`018`).
+ * If it does not match any predefined condition, falls back to `'998'` (`Others`)
+ * with `otherDescription` set to the problem title.
+ */
+export function matchProblemToPersonalHistoryCondition(
+  problem: {
+    icd10Code?: string | null;
+    problemTitle: string;
+    philHealthMdiseaseCode?: string | null;
+  },
+  catalogConditions: { code: string; description: string }[] = PHILHEALTH_MDISEASES_CONDITIONS
+): { matchedCode: string; otherDescription?: string } {
+  const validSpecificCatalog = catalogConditions.filter(
+    (c) => c.code !== '998' && !isNoneHistoryEntry(c.code, c.description)
+  );
+  const validCodes = new Set(validSpecificCatalog.map((c) => c.code));
+
+  const explicitCode = problem.philHealthMdiseaseCode?.trim();
+  if (explicitCode && validCodes.has(explicitCode)) {
+    return { matchedCode: explicitCode };
+  }
+
+  const cleanTitle = problem.problemTitle.trim();
+  const lowerTitle = cleanTitle.toLowerCase();
+
+  // Direct catalog description match
+  const exactOrContainedCatalog = validSpecificCatalog.find((c) => {
+    const d = c.description.trim().toLowerCase();
+    return d.length > 0 && (lowerTitle === d || lowerTitle.includes(d));
+  });
+  if (exactOrContainedCatalog) {
+    return { matchedCode: exactOrContainedCatalog.code };
+  }
+
+  // ICD-10 prefix match
+  const cleanIcd = problem.icd10Code?.trim() || '';
+  if (cleanIcd) {
+    for (const rule of ICD10_TO_MDISEASE_RULES) {
+      if (rule.pattern.test(cleanIcd) && validCodes.has(rule.code)) {
+        return { matchedCode: rule.code };
+      }
+    }
+  }
+
+  // Clinical title keyword/synonym match
+  for (const rule of TITLE_SYNONYM_TO_MDISEASE_RULES) {
+    if (rule.pattern.test(cleanTitle) && validCodes.has(rule.code)) {
+      return { matchedCode: rule.code };
+    }
+  }
+
+  return {
+    matchedCode: '998',
+    otherDescription: cleanTitle,
+  };
+}
+
+/**
+ * Deduplicates and appends non-catalog condition descriptions for `'998'` (`Others`).
+ */
+export function mergeOtherConditionDescriptions(existingDesc: string, additions: string[]): string {
+  const tokens: string[] = [];
+  const seen = new Set<string>();
+
+  const pushToken = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const lower = trimmed.toLowerCase();
+    if (lower === 'none' || lower === 'others') return;
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      tokens.push(trimmed);
+    }
+  };
+
+  for (const part of existingDesc.split(',')) {
+    pushToken(part);
+  }
+  for (const add of additions) {
+    pushToken(add);
+  }
+
+  return tokens.join(', ');
+}
+
+/**
+ * Reconciles Personal Medical History codes and Others description against
+ * documented Structured Problems and Documented Allergies.
+ */
+export function reconcilePersonalHistoryWithClinicalRecords(params: {
+  selectedCodes: Iterable<string>;
+  otherDesc: string;
+  problems: Pick<PatientProblemRecord, 'icd10Code' | 'problemTitle' | 'philHealthMdiseaseCode'>[];
+  allergies: Pick<PatientAllergyRecord, 'allergen'>[];
+  catalogConditions?: { code: string; description: string }[];
+}): { codes: Set<string>; otherDesc: string; changed: boolean } {
+  const catalog = params.catalogConditions || PHILHEALTH_MDISEASES_CONDITIONS;
+  const prevCleanCodes = new Set<string>();
+  for (const code of params.selectedCodes) {
+    if (!isNoneHistoryEntry(code, null)) {
+      prevCleanCodes.add(code);
+    }
+  }
+  const prevCleanOther = isNoneHistoryEntry(null, params.otherDesc) ? '' : params.otherDesc.trim();
+
+  const nextCodes = new Set(prevCleanCodes);
+  const otherAdditions: string[] = [];
+
+  if (params.allergies.length > 0) {
+    nextCodes.add('001');
+  }
+
+  for (const prob of params.problems) {
+    if (!prob.problemTitle?.trim()) continue;
+    const match = matchProblemToPersonalHistoryCondition(prob, catalog);
+    nextCodes.add(match.matchedCode);
+    if (match.matchedCode === '998' && match.otherDescription) {
+      otherAdditions.push(match.otherDescription);
+    }
+  }
+
+  const nextOtherDesc = nextCodes.has('998')
+    ? otherAdditions.length > 0
+      ? mergeOtherConditionDescriptions(prevCleanOther, otherAdditions)
+      : prevCleanOther
+    : '';
+
+  let changed = nextCodes.size !== prevCleanCodes.size || nextOtherDesc !== prevCleanOther;
+  if (!changed) {
+    for (const c of nextCodes) {
+      if (!prevCleanCodes.has(c)) {
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  return {
+    codes: nextCodes,
+    otherDesc: nextOtherDesc,
+    changed,
+  };
+}
 
 export const defaultPhilHealthProfile: PhilHealthPatientProfile = {
   medicalHistories: [],
@@ -82,6 +318,20 @@ export const defaultPhilHealthProfile: PhilHealthPatientProfile = {
   ncdAnswers: {},
 };
 
+const EMPTY_GUID = '00000000-0000-0000-0000-000000000000';
+
+function parseChronicConditionsFallback(chronicConditions?: string | null): Set<string> {
+  const codes = new Set<string>();
+  if (!chronicConditions) return codes;
+  const parsed = chronicConditions.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
+    if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
+      codes.add(item.code);
+    }
+  }
+  return codes;
+}
+
 export interface ClinicalHistoryTabProps {
   patient: ClinicPatient;
   initialSurgicalHistories?: PatientSurgicalHistory[];
@@ -97,10 +347,12 @@ export default function ClinicalHistoryTab({
   onRefreshChart,
   readOnly,
 }: ClinicalHistoryTabProps) {
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
   const { user, state, permissions } = useAuth();
   const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
   const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
   const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
+
   // Surgical History State
   const [surgicalHistories, setSurgicalHistories] = useState<PatientSurgicalHistory[]>(
     initialSurgicalHistories || []
@@ -137,62 +389,83 @@ export default function ClinicalHistoryTab({
   const [problemNotes, setProblemNotes] = useState('');
   const [problemFormError, setProblemFormError] = useState<string | null>(null);
 
-  // Allergies State
+  // Allergies State (managed via StructuredAllergyIntakeModal)
   const [allergies, setAllergies] = useState<PatientAllergyRecord[]>([]);
   const [loadingAllergies, setLoadingAllergies] = useState(false);
   const [allergyModalVisible, setAllergyModalVisible] = useState(false);
   const [savingAllergy, setSavingAllergy] = useState(false);
-  const [allergyCategory, setAllergyCategory] = useState<'Medication' | 'Food' | 'Environmental'>('Medication');
-  const [allergen, setAllergen] = useState('');
-  const [allergySeverity, setAllergySeverity] = useState<'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening'>('Moderate');
-  const [allergyReaction, setAllergyReaction] = useState('');
-  const [isAnaphylactic, setIsAnaphylactic] = useState(false);
-  const [allergyNotes, setAllergyNotes] = useState('');
   const [allergyFormError, setAllergyFormError] = useState<string | null>(null);
 
-  // PhilHealth Profile & Statutory Medical/Family History State
-  const [profile, setProfile] = useState<PhilHealthPatientProfile | null>(initialProfile || null);
-  const [loadingProfile, setLoadingProfile] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileSuccess, setProfileSuccess] = useState(false);
+  const structuredExistingAllergies = useMemo<CreateAllergyRequest[]>(
+    () =>
+      allergies.map((a) => ({
+        category: a.category || 'Other',
+        allergen: a.allergen,
+        allergenDrugCode: a.allergenDrugCode || undefined,
+        severity: a.severity || 'Moderate',
+        reactionManifestation: a.reactionManifestation || undefined,
+        isAnaphylactic: Boolean(a.isAnaphylactic),
+        onsetDate: a.onsetDate || undefined,
+        notes: a.notes || undefined,
+      })),
+    [allergies]
+  );
 
-  // Personal Medical History
+  // Personal Medical History State
   const [selectedMedicalCodes, setSelectedMedicalCodes] = useState<Set<string>>(() => {
     if (initialProfile?.medicalHistories?.length) {
-      return new Set(initialProfile.medicalHistories.map((m) => m.code));
+      return new Set(
+        initialProfile.medicalHistories
+          .filter((m) => !isNoneHistoryEntry(m.code, m.specificDesc))
+          .map((m) => m.code)
+      );
     }
-    if (patient.chronicConditions) {
-      const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
-      const codes = new Set<string>();
-      for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
-        if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
-          codes.add(item.code);
-        }
-      }
-      return codes;
+    if (initialProfile === undefined && patient.chronicConditions) {
+      return parseChronicConditionsFallback(patient.chronicConditions);
     }
     return new Set();
   });
   const [medicalOtherDesc, setMedicalOtherDesc] = useState(() => {
-    return initialProfile?.medicalHistories?.find((m) => m.code === '998')?.specificDesc || '';
+    const raw = initialProfile?.medicalHistories?.find((m) => m.code === '998')?.specificDesc || '';
+    return isNoneHistoryEntry(null, raw) ? '' : raw;
   });
-  const [personalNotes, setPersonalNotes] = useState(() => {
-    return initialProfile?.medicalHistoryNotes || '';
+  const [personalNotes, setPersonalNotes] = useState(
+    () => initialProfile?.medicalHistoryNotes || ''
+  );
+  const [personalSavingStatus, setPersonalSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [personalSaveError, setPersonalSaveError] = useState<string | null>(null);
+  const [personalLastSavedAt, setPersonalLastSavedAt] = useState<string | null>(() => {
+    if (initialProfile?.medicalHistories?.length && initialProfile.lastUpdatedAt) {
+      return initialProfile.lastUpdatedAt;
+    }
+    return null;
   });
 
-  // Family Medical History
+  // Family Medical History State
   const [selectedFamilyCodes, setSelectedFamilyCodes] = useState<Set<string>>(() => {
     if (initialProfile?.familyHistories?.length) {
-      return new Set(initialProfile.familyHistories.map((f) => f.code));
+      return new Set(
+        initialProfile.familyHistories
+          .filter((f) => !isNoneHistoryEntry(f.code, f.specificDesc))
+          .map((f) => f.code)
+      );
     }
     return new Set();
   });
   const [familyOtherDesc, setFamilyOtherDesc] = useState(() => {
-    return initialProfile?.familyHistories?.find((f) => f.code === '998')?.specificDesc || '';
+    const raw = initialProfile?.familyHistories?.find((f) => f.code === '998')?.specificDesc || '';
+    return isNoneHistoryEntry(null, raw) ? '' : raw;
   });
-  const [familyNotes, setFamilyNotes] = useState(() => {
-    return initialProfile?.familyHistoryNotes || '';
+  const [familyNotes, setFamilyNotes] = useState(
+    () => initialProfile?.familyHistoryNotes || ''
+  );
+  const [familySavingStatus, setFamilySavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [familySaveError, setFamilySaveError] = useState<string | null>(null);
+  const [familyLastSavedAt, setFamilyLastSavedAt] = useState<string | null>(() => {
+    if (initialProfile?.familyHistories?.length && initialProfile.lastUpdatedAt) {
+      return initialProfile.lastUpdatedAt;
+    }
+    return null;
   });
 
   // Organ Systems Examination State
@@ -220,100 +493,211 @@ export default function ClinicalHistoryTab({
   // Physical Exam Autosave & State
   const [physicalExamSavingStatus, setPhysicalExamSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [physicalExamError, setPhysicalExamError] = useState<string | null>(null);
+  const [physicalExamLastSavedAt, setPhysicalExamLastSavedAt] = useState<string | null>(null);
   const remarksDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const personalDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const familyDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const organSystemsRef = useRef(organSystems);
   organSystemsRef.current = organSystems;
 
-  // Catalog for past medical conditions (lib_mdiseases)
+  const personalSnapshotRef = useRef({
+    codes: selectedMedicalCodes,
+    otherDesc: medicalOtherDesc,
+    notes: personalNotes,
+  });
+  personalSnapshotRef.current = {
+    codes: selectedMedicalCodes,
+    otherDesc: medicalOtherDesc,
+    notes: personalNotes,
+  };
+
+  const familySnapshotRef = useRef({
+    codes: selectedFamilyCodes,
+    otherDesc: familyOtherDesc,
+    notes: familyNotes,
+  });
+  familySnapshotRef.current = {
+    codes: selectedFamilyCodes,
+    otherDesc: familyOtherDesc,
+    notes: familyNotes,
+  };
+
+  // Catalog for past medical conditions (lib_mdiseases) — strictly exclude '999' / 'None'
   const { items: diseaseCatalog } = usePhilHealthCatalog('lib_mdiseases');
   const activeCatalogConditions = useMemo(() => {
     return diseaseCatalog && diseaseCatalog.length > 0
       ? diseaseCatalog
-          .filter((item) => item.code !== '999' && item.description.toLowerCase() !== 'none')
+          .filter((item) => !isNoneHistoryEntry(item.code, item.description))
           .map((item) => ({ code: item.code, description: item.description }))
       : PHILHEALTH_MDISEASES_CONDITIONS;
   }, [diseaseCatalog]);
   const availableConditions = activeCatalogConditions;
 
-  const seedFromProfile = useCallback((data: PhilHealthPatientProfile) => {
-    if (data.medicalHistories && Array.isArray(data.medicalHistories)) {
-      const medCodes = new Set(data.medicalHistories.map((m) => m.code));
-      setSelectedMedicalCodes(medCodes);
-      const otherMed = data.medicalHistories.find((m) => m.code === '998');
-      if (otherMed?.specificDesc) {
-        setMedicalOtherDesc(otherMed.specificDesc);
-      } else {
-        setMedicalOtherDesc('');
-      }
-    } else if (patient.chronicConditions) {
-      const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
-      const codes = new Set<string>();
-      for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
-        if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
-          codes.add(item.code);
-        }
-      }
-      if (codes.size > 0) {
-        setSelectedMedicalCodes(codes);
-      }
-    }
+  const formatClinicalCalendarDate = useCallback(
+    (raw?: string | null): string => {
+      if (!raw) return '—';
+      const trimmed = raw.trim();
+      if (!trimmed) return '—';
+      const ymd = trimmed.includes('T') ? trimmed.split('T')[0] : trimmed;
+      return formatClinicDate(ymd, { dateFormat, timeZoneId, fallback: '—' });
+    },
+    [dateFormat, timeZoneId]
+  );
 
-    if (data.familyHistories && Array.isArray(data.familyHistories)) {
-      const famCodes = new Set(data.familyHistories.map((f) => f.code));
-      setSelectedFamilyCodes(famCodes);
-      const otherFam = data.familyHistories.find((f) => f.code === '998');
-      if (otherFam?.specificDesc) {
-        setFamilyOtherDesc(otherFam.specificDesc);
-      } else {
-        setFamilyOtherDesc('');
-      }
-    }
+  const formatLastSavedBadge = useCallback(
+    (iso?: string | null): string | null => {
+      if (!iso) return null;
+      const formatted = formatClinicDateTime(iso, {
+        dateFormat,
+        timeFormat,
+        timeZoneId,
+        fallback: '',
+      });
+      return formatted ? `Last saved ${formatted}` : null;
+    },
+    [dateFormat, timeFormat, timeZoneId]
+  );
 
-    if (data.medicalHistoryNotes) {
-      setPersonalNotes(data.medicalHistoryNotes);
-    }
-    if (data.familyHistoryNotes) {
-      setFamilyNotes(data.familyHistoryNotes);
-    }
-  }, [patient.chronicConditions]);
+  const buildPersonalMedicalItems = useCallback(
+    (codes: Iterable<string>, otherDesc: string, notes: string): MedicalHistoryEntryItem[] => {
+      const cleanNotes = notes.trim() || null;
+      const entries: MedicalHistoryEntryItem[] = [];
+      for (const code of codes) {
+        if (isNoneHistoryEntry(code, null)) continue;
+        const match = activeCatalogConditions.find((c) => c.code === code);
+        const conditionTitle =
+          code === '998' ? otherDesc.trim() || 'Others' : match?.description || code;
+        entries.push({
+          conditionTitle,
+          philHealthMdiseaseCode: code,
+          specificDescription: code === '998' ? otherDesc.trim() || 'Others' : null,
+          clinicalNotes: cleanNotes,
+        });
+      }
+      return entries;
+    },
+    [activeCatalogConditions]
+  );
 
-  const fetchProfile = useCallback(async () => {
-    setLoadingProfile(true);
-    setProfileError(null);
-    try {
-      const [data] = await clinicService.getPhilHealthPatientProfile(patient.id);
-      if (data) {
-        setProfile(data);
-        seedFromProfile(data);
-      } else if (patient.chronicConditions) {
-        const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
-        const codes = new Set<string>();
-        for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
-          if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
-            codes.add(item.code);
-          }
-        }
-        if (codes.size > 0) {
-          setSelectedMedicalCodes(codes);
-        }
+  const buildFamilyMedicalItems = useCallback(
+    (codes: Iterable<string>, otherDesc: string, notes: string): FamilyHistoryEntryItem[] => {
+      const cleanNotes = notes.trim() || null;
+      const entries: FamilyHistoryEntryItem[] = [];
+      for (const code of codes) {
+        if (isNoneHistoryEntry(code, null)) continue;
+        const match = activeCatalogConditions.find((c) => c.code === code);
+        const conditionTitle =
+          code === '998' ? otherDesc.trim() || 'Others' : match?.description || code;
+        entries.push({
+          conditionTitle,
+          philHealthMdiseaseCode: code,
+          specificDescription: code === '998' ? otherDesc.trim() || 'Others' : null,
+          clinicalNotes: cleanNotes,
+        });
       }
-    } catch {
-      if (patient.chronicConditions) {
-        const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
-        const codes = new Set<string>();
-        for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
-          if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
-            codes.add(item.code);
-          }
+      return entries;
+    },
+    [activeCatalogConditions]
+  );
+
+  const savePersonalMedicalHistory = useCallback(
+    async (snapshot?: { codes: Set<string>; otherDesc: string; notes: string }) => {
+      if (!canWritePatients) return;
+      const target = snapshot || personalSnapshotRef.current;
+      setPersonalSavingStatus('saving');
+      setPersonalSaveError(null);
+
+      const cleanNotes = target.notes.trim() || null;
+      const items = buildPersonalMedicalItems(target.codes, target.otherDesc, target.notes);
+
+      try {
+        const [saved, err] = await clinicService.savePastMedicalHistories(patient.id, {
+          items,
+          notes: cleanNotes,
+        });
+
+        if (err) {
+          setPersonalSavingStatus('error');
+          setPersonalSaveError(err.message || 'Failed to auto-save personal medical history.');
+        } else {
+          setPersonalLastSavedAt(saved?.updatedAt || new Date().toISOString());
+          setPersonalSavingStatus('saved');
+          onRefreshChart?.();
         }
-        if (codes.size > 0) {
-          setSelectedMedicalCodes(codes);
-        }
+      } catch (e: any) {
+        setPersonalSavingStatus('error');
+        setPersonalSaveError(e.message || 'Failed to auto-save personal medical history.');
       }
-    } finally {
-      setLoadingProfile(false);
-    }
-  }, [patient.id, patient.chronicConditions, seedFromProfile]);
+    },
+    [canWritePatients, patient.id, buildPersonalMedicalItems, onRefreshChart]
+  );
+
+  const saveFamilyMedicalHistory = useCallback(
+    async (snapshot?: { codes: Set<string>; otherDesc: string; notes: string }) => {
+      if (!canWritePatients) return;
+      const target = snapshot || familySnapshotRef.current;
+      setFamilySavingStatus('saving');
+      setFamilySaveError(null);
+
+      const cleanNotes = target.notes.trim() || null;
+      const items = buildFamilyMedicalItems(target.codes, target.otherDesc, target.notes);
+
+      try {
+        const [saved, err] = await clinicService.saveFamilyHistories(patient.id, {
+          items,
+          notes: cleanNotes,
+        });
+
+        if (err) {
+          setFamilySavingStatus('error');
+          setFamilySaveError(err.message || 'Failed to auto-save family medical history.');
+        } else {
+          setFamilyLastSavedAt(saved?.updatedAt || new Date().toISOString());
+          setFamilySavingStatus('saved');
+          onRefreshChart?.();
+        }
+      } catch (e: any) {
+        setFamilySavingStatus('error');
+        setFamilySaveError(e.message || 'Failed to auto-save family medical history.');
+      }
+    },
+    [canWritePatients, patient.id, buildFamilyMedicalItems, onRefreshChart]
+  );
+
+  const schedulePersonalAutoSave = useCallback(
+    (nextSnapshot: { codes: Set<string>; otherDesc: string; notes: string }, delayMs: number) => {
+      if (!canWritePatients) return;
+      personalSnapshotRef.current = nextSnapshot;
+      if (personalDebounceTimerRef.current) {
+        clearTimeout(personalDebounceTimerRef.current);
+      }
+      setPersonalSavingStatus('saving');
+      setPersonalSaveError(null);
+      personalDebounceTimerRef.current = setTimeout(() => {
+        personalDebounceTimerRef.current = null;
+        void savePersonalMedicalHistory(nextSnapshot);
+      }, delayMs);
+    },
+    [canWritePatients, savePersonalMedicalHistory]
+  );
+
+  const scheduleFamilyAutoSave = useCallback(
+    (nextSnapshot: { codes: Set<string>; otherDesc: string; notes: string }, delayMs: number) => {
+      if (!canWritePatients) return;
+      familySnapshotRef.current = nextSnapshot;
+      if (familyDebounceTimerRef.current) {
+        clearTimeout(familyDebounceTimerRef.current);
+      }
+      setFamilySavingStatus('saving');
+      setFamilySaveError(null);
+      familyDebounceTimerRef.current = setTimeout(() => {
+        familyDebounceTimerRef.current = null;
+        void saveFamilyMedicalHistory(nextSnapshot);
+      }, delayMs);
+    },
+    [canWritePatients, saveFamilyMedicalHistory]
+  );
 
   const fetchPhysicalExam = useCallback(async () => {
     try {
@@ -341,29 +725,220 @@ export default function ClinicalHistoryTab({
         };
         setOrganSystems(nextExam);
         organSystemsRef.current = nextExam;
+        if (data.id && data.id !== EMPTY_GUID) {
+          setPhysicalExamLastSavedAt(data.updatedAt || data.createdAt || null);
+        } else {
+          setPhysicalExamLastSavedAt(null);
+        }
       }
     } catch {
       // Non-blocking fallback
     }
   }, [patient.id]);
 
+  const fetchSurgicalHistories = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [data, err] = await clinicService.getSurgicalHistories(patient.id);
+      if (data) {
+        setSurgicalHistories(data);
+      } else if (err) {
+        setError(err.message || 'Unable to load surgical procedures.');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to fetch surgical procedures.');
+    } finally {
+      setLoading(false);
+    }
+  }, [patient.id]);
+
+  const loadClinicalHistoryAndReconcile = useCallback(async () => {
+    setLoadingProblems(true);
+    setLoadingAllergies(true);
+    try {
+      const [medResTuple, famResTuple, probsTuple, allergiesTuple] = await Promise.all([
+        clinicService.getPastMedicalHistories(patient.id).catch(() => [null, null] as const),
+        clinicService.getFamilyHistories(patient.id).catch(() => [null, null] as const),
+        clinicService.getPatientProblems(patient.id).catch(() => [null, null] as const),
+        clinicService.getPatientAllergies(patient.id).catch(() => [null, null] as const),
+      ]);
+
+      const medData = medResTuple?.[0];
+      const famData = famResTuple?.[0];
+      const loadedProblems = Array.isArray(probsTuple?.[0]) ? probsTuple[0] : [];
+      const loadedAllergies = Array.isArray(allergiesTuple?.[0]) ? allergiesTuple[0] : [];
+
+      setProblems(loadedProblems);
+      setAllergies(loadedAllergies);
+
+      // Resolve baseline Personal Medical History
+      let baseCodes = new Set<string>();
+      let baseOtherDesc = '';
+      let basePersonalNotes = initialProfile?.medicalHistoryNotes || '';
+      let latestPersonalTimestamp: string | null = medData?.updatedAt ?? null;
+
+      if (medData && Array.isArray(medData.items)) {
+        for (const item of medData.items) {
+          const resolvedCode =
+            item.philHealthMdiseaseCode?.trim() ||
+            activeCatalogConditions.find(
+              (c) => c.description.toLowerCase() === item.conditionTitle?.trim().toLowerCase()
+            )?.code ||
+            '998';
+          if (isNoneHistoryEntry(resolvedCode, item.conditionTitle)) continue;
+          baseCodes.add(resolvedCode);
+          if (resolvedCode === '998') {
+            const descCandidate = item.specificDescription || item.conditionTitle || '';
+            if (!isNoneHistoryEntry(null, descCandidate)) {
+              baseOtherDesc = mergeOtherConditionDescriptions(baseOtherDesc, [descCandidate]);
+            }
+          }
+          if (item.clinicalNotes && !medData.personalMedicalHistoryNotes) {
+            basePersonalNotes = item.clinicalNotes;
+          }
+          if (item.createdAt && (!latestPersonalTimestamp || item.createdAt > latestPersonalTimestamp)) {
+            latestPersonalTimestamp = item.createdAt;
+          }
+        }
+        if (medData.personalMedicalHistoryNotes) {
+          basePersonalNotes = medData.personalMedicalHistoryNotes;
+        }
+      } else if (initialProfile?.medicalHistories?.length) {
+        baseCodes = new Set(
+          initialProfile.medicalHistories
+            .filter((m) => !isNoneHistoryEntry(m.code, m.specificDesc))
+            .map((m) => m.code)
+        );
+        const otherEntry = initialProfile.medicalHistories.find((m) => m.code === '998');
+        if (otherEntry?.specificDesc && !isNoneHistoryEntry(null, otherEntry.specificDesc)) {
+          baseOtherDesc = otherEntry.specificDesc;
+        }
+        if (initialProfile.lastUpdatedAt && !latestPersonalTimestamp) {
+          latestPersonalTimestamp = initialProfile.lastUpdatedAt;
+        }
+      } else if (initialProfile === undefined && patient.chronicConditions) {
+        baseCodes = parseChronicConditionsFallback(patient.chronicConditions);
+      }
+
+      // Reconcile Structured Problems & Documented Allergies into Personal Medical History
+      const reconciled = reconcilePersonalHistoryWithClinicalRecords({
+        selectedCodes: baseCodes,
+        otherDesc: baseOtherDesc,
+        problems: loadedProblems,
+        allergies: loadedAllergies,
+        catalogConditions: activeCatalogConditions,
+      });
+
+      setSelectedMedicalCodes(reconciled.codes);
+      setMedicalOtherDesc(reconciled.otherDesc);
+      setPersonalNotes(basePersonalNotes);
+      setPersonalLastSavedAt(latestPersonalTimestamp);
+      personalSnapshotRef.current = {
+        codes: reconciled.codes,
+        otherDesc: reconciled.otherDesc,
+        notes: basePersonalNotes,
+      };
+
+      if (reconciled.changed && canWritePatients) {
+        void savePersonalMedicalHistory({
+          codes: reconciled.codes,
+          otherDesc: reconciled.otherDesc,
+          notes: basePersonalNotes,
+        });
+      }
+
+      // Resolve Family Medical History
+      let famCodes = new Set<string>();
+      let famOther = '';
+      let famNotesVal = initialProfile?.familyHistoryNotes || '';
+      let latestFamilyTimestamp: string | null = famData?.updatedAt ?? null;
+
+      if (famData && Array.isArray(famData.items)) {
+        for (const item of famData.items) {
+          const resolvedCode =
+            item.philHealthMdiseaseCode?.trim() ||
+            activeCatalogConditions.find(
+              (c) => c.description.toLowerCase() === item.conditionTitle?.trim().toLowerCase()
+            )?.code ||
+            '998';
+          if (isNoneHistoryEntry(resolvedCode, item.conditionTitle)) continue;
+          famCodes.add(resolvedCode);
+          if (resolvedCode === '998') {
+            const descCandidate = item.specificDescription || item.conditionTitle || '';
+            if (!isNoneHistoryEntry(null, descCandidate)) {
+              famOther = mergeOtherConditionDescriptions(famOther, [descCandidate]);
+            }
+          }
+          if (item.clinicalNotes && !famData.familyMedicalHistoryNotes) {
+            famNotesVal = item.clinicalNotes;
+          }
+          if (item.createdAt && (!latestFamilyTimestamp || item.createdAt > latestFamilyTimestamp)) {
+            latestFamilyTimestamp = item.createdAt;
+          }
+        }
+        if (famData.familyMedicalHistoryNotes) {
+          famNotesVal = famData.familyMedicalHistoryNotes;
+        }
+      } else if (initialProfile?.familyHistories?.length) {
+        famCodes = new Set(
+          initialProfile.familyHistories
+            .filter((f) => !isNoneHistoryEntry(f.code, f.specificDesc))
+            .map((f) => f.code)
+        );
+        const otherFam = initialProfile.familyHistories.find((f) => f.code === '998');
+        if (otherFam?.specificDesc && !isNoneHistoryEntry(null, otherFam.specificDesc)) {
+          famOther = otherFam.specificDesc;
+        }
+        if (initialProfile.lastUpdatedAt && !latestFamilyTimestamp) {
+          latestFamilyTimestamp = initialProfile.lastUpdatedAt;
+        }
+      }
+
+      setSelectedFamilyCodes(famCodes);
+      setFamilyOtherDesc(famOther);
+      setFamilyNotes(famNotesVal);
+      setFamilyLastSavedAt(latestFamilyTimestamp);
+      familySnapshotRef.current = {
+        codes: famCodes,
+        otherDesc: famOther,
+        notes: famNotesVal,
+      };
+    } finally {
+      setLoadingProblems(false);
+      setLoadingAllergies(false);
+    }
+  }, [
+    patient.id,
+    patient.chronicConditions,
+    initialProfile,
+    activeCatalogConditions,
+    canWritePatients,
+    savePersonalMedicalHistory,
+  ]);
+
   const isInitializedRef = useRef(false);
   const prevPatientIdRef = useRef(patient.id);
-  const prevInitialProfileRef = useRef(initialProfile);
 
   useEffect(() => {
     const patientChanged = prevPatientIdRef.current !== patient.id;
-    const initialProfileChanged = prevInitialProfileRef.current !== initialProfile;
 
-    if (!isInitializedRef.current || patientChanged || initialProfileChanged) {
+    if (!isInitializedRef.current || patientChanged) {
       isInitializedRef.current = true;
       prevPatientIdRef.current = patient.id;
-      prevInitialProfileRef.current = initialProfile;
 
       if (patientChanged) {
         if (remarksDebounceTimerRef.current) {
           clearTimeout(remarksDebounceTimerRef.current);
           remarksDebounceTimerRef.current = null;
+        }
+        if (personalDebounceTimerRef.current) {
+          clearTimeout(personalDebounceTimerRef.current);
+          personalDebounceTimerRef.current = null;
+        }
+        if (familyDebounceTimerRef.current) {
+          clearTimeout(familyDebounceTimerRef.current);
+          familyDebounceTimerRef.current = null;
         }
         setOrganSystems({
           genSurveyId: '1',
@@ -379,56 +954,73 @@ export default function ClinicalHistoryTab({
           rectalRemarks: '',
         });
         setPhysicalExamSavingStatus('idle');
+        setPhysicalExamLastSavedAt(null);
+        setPersonalSavingStatus('idle');
+        setPersonalSaveError(null);
+        setFamilySavingStatus('idle');
+        setFamilySaveError(null);
       }
 
-      fetchPhysicalExam();
-      if (initialProfile) {
-        setProfile(initialProfile);
-        seedFromProfile(initialProfile);
+      void fetchPhysicalExam();
+      void loadClinicalHistoryAndReconcile();
+      if (!initialSurgicalHistories || initialSurgicalHistories.length === 0) {
+        void fetchSurgicalHistories();
       } else {
-        fetchProfile();
+        setSurgicalHistories(initialSurgicalHistories);
       }
     }
-  }, [patient.id, initialProfile, fetchProfile, fetchPhysicalExam, seedFromProfile]);
+  }, [
+    patient.id,
+    fetchPhysicalExam,
+    loadClinicalHistoryAndReconcile,
+    fetchSurgicalHistories,
+    initialSurgicalHistories,
+  ]);
 
-  const savePhysicalExam = useCallback(async (valuesToSave: OrganSystemsExamValues) => {
-    if (!canWritePatients) return;
-    setPhysicalExamSavingStatus('saving');
-    setPhysicalExamError(null);
-    try {
-      const [, err] = await clinicService.updatePatientPhysicalExam(patient.id, {
-        genSurveyId: valuesToSave.genSurveyId,
-        genSurveyRemarks: valuesToSave.genSurveyRemarks,
-        skinId: valuesToSave.skinId,
-        skinRemarks: valuesToSave.skinRemarks,
-        heentId: valuesToSave.heentId,
-        heentRemarks: valuesToSave.heentRemarks,
-        chestId: valuesToSave.chestId,
-        chestRemarks: valuesToSave.chestRemarks,
-        heartId: valuesToSave.heartId,
-        heartRemarks: valuesToSave.heartRemarks,
-        abdomenId: valuesToSave.abdomenId,
-        abdomenRemarks: valuesToSave.abdomenRemarks,
-        neuroId: valuesToSave.neuroId,
-        neuroRemarks: valuesToSave.neuroRemarks,
-        guId: valuesToSave.guId,
-        guRemarks: valuesToSave.guRemarks,
-        rectalId: valuesToSave.rectalId,
-        rectalRemarks: valuesToSave.rectalRemarks,
-      });
+  const savePhysicalExam = useCallback(
+    async (valuesToSave: OrganSystemsExamValues) => {
+      if (!canWritePatients) return;
+      setPhysicalExamSavingStatus('saving');
+      setPhysicalExamError(null);
+      try {
+        const [savedExam, err] = await clinicService.updatePatientPhysicalExam(patient.id, {
+          genSurveyId: valuesToSave.genSurveyId,
+          genSurveyRemarks: valuesToSave.genSurveyRemarks,
+          skinId: valuesToSave.skinId,
+          skinRemarks: valuesToSave.skinRemarks,
+          heentId: valuesToSave.heentId,
+          heentRemarks: valuesToSave.heentRemarks,
+          chestId: valuesToSave.chestId,
+          chestRemarks: valuesToSave.chestRemarks,
+          heartId: valuesToSave.heartId,
+          heartRemarks: valuesToSave.heartRemarks,
+          abdomenId: valuesToSave.abdomenId,
+          abdomenRemarks: valuesToSave.abdomenRemarks,
+          neuroId: valuesToSave.neuroId,
+          neuroRemarks: valuesToSave.neuroRemarks,
+          guId: valuesToSave.guId,
+          guRemarks: valuesToSave.guRemarks,
+          rectalId: valuesToSave.rectalId,
+          rectalRemarks: valuesToSave.rectalRemarks,
+        });
 
-      if (err) {
+        if (err) {
+          setPhysicalExamSavingStatus('error');
+          setPhysicalExamError(err.message || 'Failed to save physical exam findings.');
+        } else {
+          setPhysicalExamLastSavedAt(
+            savedExam?.updatedAt || savedExam?.createdAt || new Date().toISOString()
+          );
+          setPhysicalExamSavingStatus('saved');
+          onRefreshChart?.();
+        }
+      } catch (e: any) {
         setPhysicalExamSavingStatus('error');
-        setPhysicalExamError(err.message || 'Failed to save physical exam findings.');
-      } else {
-        setPhysicalExamSavingStatus('saved');
-        onRefreshChart?.();
+        setPhysicalExamError(e.message || 'Failed to save physical exam findings.');
       }
-    } catch (e: any) {
-      setPhysicalExamSavingStatus('error');
-      setPhysicalExamError(e.message || 'Failed to save physical exam findings.');
-    }
-  }, [patient.id, onRefreshChart, canWritePatients]);
+    },
+    [patient.id, onRefreshChart, canWritePatients]
+  );
 
   const handleOrganSystemOptionChange = (key: OrganSystemDef['key'], code: string) => {
     const updated = { ...organSystemsRef.current, [key]: code };
@@ -438,7 +1030,7 @@ export default function ClinicalHistoryTab({
       clearTimeout(remarksDebounceTimerRef.current);
       remarksDebounceTimerRef.current = null;
     }
-    savePhysicalExam(updated);
+    void savePhysicalExam(updated);
   };
 
   const handleSetAllNormal = () => {
@@ -460,7 +1052,7 @@ export default function ClinicalHistoryTab({
       clearTimeout(remarksDebounceTimerRef.current);
       remarksDebounceTimerRef.current = null;
     }
-    savePhysicalExam(updated);
+    void savePhysicalExam(updated);
   };
 
   const handleOrganSystemRemarksChange = (remarksKey: keyof OrganSystemsExamValues, text: string) => {
@@ -473,180 +1065,164 @@ export default function ClinicalHistoryTab({
     }
     setPhysicalExamSavingStatus('saving');
     remarksDebounceTimerRef.current = setTimeout(() => {
-      savePhysicalExam(updated);
+      void savePhysicalExam(updated);
       remarksDebounceTimerRef.current = null;
     }, 600);
   };
 
+  // Flush pending auto-saves on unmount
   useEffect(() => {
     return () => {
       if (remarksDebounceTimerRef.current) {
         clearTimeout(remarksDebounceTimerRef.current);
         remarksDebounceTimerRef.current = null;
-        clinicService.updatePatientPhysicalExam(patient.id, {
-          genSurveyId: organSystemsRef.current.genSurveyId,
-          genSurveyRemarks: organSystemsRef.current.genSurveyRemarks,
-          skinId: organSystemsRef.current.skinId,
-          skinRemarks: organSystemsRef.current.skinRemarks,
-          heentId: organSystemsRef.current.heentId,
-          heentRemarks: organSystemsRef.current.heentRemarks,
-          chestId: organSystemsRef.current.chestId,
-          chestRemarks: organSystemsRef.current.chestRemarks,
-          heartId: organSystemsRef.current.heartId,
-          heartRemarks: organSystemsRef.current.heartRemarks,
-          abdomenId: organSystemsRef.current.abdomenId,
-          abdomenRemarks: organSystemsRef.current.abdomenRemarks,
-          neuroId: organSystemsRef.current.neuroId,
-          neuroRemarks: organSystemsRef.current.neuroRemarks,
-          guId: organSystemsRef.current.guId,
-          guRemarks: organSystemsRef.current.guRemarks,
-          rectalId: organSystemsRef.current.rectalId,
-          rectalRemarks: organSystemsRef.current.rectalRemarks,
-        }).catch(() => {});
+        clinicService
+          .updatePatientPhysicalExam(patient.id, {
+            genSurveyId: organSystemsRef.current.genSurveyId,
+            genSurveyRemarks: organSystemsRef.current.genSurveyRemarks,
+            skinId: organSystemsRef.current.skinId,
+            skinRemarks: organSystemsRef.current.skinRemarks,
+            heentId: organSystemsRef.current.heentId,
+            heentRemarks: organSystemsRef.current.heentRemarks,
+            chestId: organSystemsRef.current.chestId,
+            chestRemarks: organSystemsRef.current.chestRemarks,
+            heartId: organSystemsRef.current.heartId,
+            heartRemarks: organSystemsRef.current.heartRemarks,
+            abdomenId: organSystemsRef.current.abdomenId,
+            abdomenRemarks: organSystemsRef.current.abdomenRemarks,
+            neuroId: organSystemsRef.current.neuroId,
+            neuroRemarks: organSystemsRef.current.neuroRemarks,
+            guId: organSystemsRef.current.guId,
+            guRemarks: organSystemsRef.current.guRemarks,
+            rectalId: organSystemsRef.current.rectalId,
+            rectalRemarks: organSystemsRef.current.rectalRemarks,
+          })
+          .catch(() => {});
+      }
+      if (personalDebounceTimerRef.current) {
+        clearTimeout(personalDebounceTimerRef.current);
+        personalDebounceTimerRef.current = null;
+        const snap = personalSnapshotRef.current;
+        const cleanNotes = snap.notes.trim() || null;
+        clinicService
+          .savePastMedicalHistories(patient.id, {
+            items: buildPersonalMedicalItems(snap.codes, snap.otherDesc, snap.notes),
+            notes: cleanNotes,
+          })
+          .catch(() => {});
+      }
+      if (familyDebounceTimerRef.current) {
+        clearTimeout(familyDebounceTimerRef.current);
+        familyDebounceTimerRef.current = null;
+        const snap = familySnapshotRef.current;
+        const cleanNotes = snap.notes.trim() || null;
+        clinicService
+          .saveFamilyHistories(patient.id, {
+            items: buildFamilyMedicalItems(snap.codes, snap.otherDesc, snap.notes),
+            notes: cleanNotes,
+          })
+          .catch(() => {});
       }
     };
-  }, [patient.id]);
+  }, [patient.id, buildPersonalMedicalItems, buildFamilyMedicalItems]);
 
   const toggleMedicalCondition = (code: string) => {
     if (!canWritePatients) return;
-    setSelectedMedicalCodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) {
-        next.delete(code);
-        if (code === '998') {
-          setMedicalOtherDesc('');
-        }
-      } else {
-        next.add(code);
+    const prev = personalSnapshotRef.current;
+    const nextCodes = new Set(prev.codes);
+    let nextOtherDesc = prev.otherDesc;
+
+    if (nextCodes.has(code)) {
+      nextCodes.delete(code);
+      if (code === '998') {
+        nextOtherDesc = '';
       }
-      return next;
-    });
-    setProfileSuccess(false);
+    } else {
+      nextCodes.add(code);
+    }
+
+    setSelectedMedicalCodes(nextCodes);
+    setMedicalOtherDesc(nextOtherDesc);
+    schedulePersonalAutoSave(
+      { codes: nextCodes, otherDesc: nextOtherDesc, notes: prev.notes },
+      250
+    );
+  };
+
+  const handleMedicalOtherDescChange = (text: string) => {
+    if (!canWritePatients) return;
+    setMedicalOtherDesc(text);
+    schedulePersonalAutoSave(
+      {
+        codes: personalSnapshotRef.current.codes,
+        otherDesc: text,
+        notes: personalSnapshotRef.current.notes,
+      },
+      600
+    );
+  };
+
+  const handlePersonalNotesChange = (text: string) => {
+    if (!canWritePatients) return;
+    setPersonalNotes(text);
+    schedulePersonalAutoSave(
+      {
+        codes: personalSnapshotRef.current.codes,
+        otherDesc: personalSnapshotRef.current.otherDesc,
+        notes: text,
+      },
+      600
+    );
   };
 
   const toggleFamilyCondition = (code: string) => {
     if (!canWritePatients) return;
-    setSelectedFamilyCodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) {
-        next.delete(code);
-        if (code === '998') {
-          setFamilyOtherDesc('');
-        }
-      } else {
-        next.add(code);
+    const prev = familySnapshotRef.current;
+    const nextCodes = new Set(prev.codes);
+    let nextOtherDesc = prev.otherDesc;
+
+    if (nextCodes.has(code)) {
+      nextCodes.delete(code);
+      if (code === '998') {
+        nextOtherDesc = '';
       }
-      return next;
-    });
-    setProfileSuccess(false);
-  };
-
-  const handleSaveMedicalAndFamilyHistory = async () => {
-    if (!canWritePatients) {
-      Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
-      return;
-    }
-    setSavingProfile(true);
-    setProfileError(null);
-    setProfileSuccess(false);
-
-    const medicalHistories: PhilHealthConditionEntry[] = Array.from(selectedMedicalCodes).map((code) => {
-      const match = activeCatalogConditions.find((c) => c.code === code);
-      const desc = code === '998' ? (medicalOtherDesc.trim() || 'Others') : (match?.description || code);
-      return {
-        code,
-        specificDesc: desc,
-      };
-    });
-
-    const familyHistories: PhilHealthConditionEntry[] = Array.from(selectedFamilyCodes).map((code) => {
-      const match = activeCatalogConditions.find((c) => c.code === code);
-      const desc = code === '998' ? (familyOtherDesc.trim() || 'Others') : (match?.description || code);
-      return {
-        code,
-        specificDesc: desc,
-      };
-    });
-
-    const updatedProfile: PhilHealthPatientProfile = {
-      ...(profile || defaultPhilHealthProfile),
-      medicalHistories,
-      familyHistories,
-      medicalHistoryNotes: personalNotes.trim() || undefined,
-      familyHistoryNotes: familyNotes.trim() || undefined,
-    };
-
-    try {
-      const [saved, err] = await clinicService.updatePhilHealthPatientProfile(patient.id, updatedProfile);
-      if (err) {
-        setProfileError(err.message || 'Failed to save medical & family history.');
-        Alert.alert('Error', err.message || 'Failed to save medical & family history.');
-      } else {
-        if (saved) {
-          setProfile(saved);
-        }
-        setProfileSuccess(true);
-        Alert.alert('Success', 'Medical & family history saved successfully.');
-        onRefreshChart?.();
-      }
-    } catch (e: any) {
-      setProfileError(e.message || 'An unexpected error occurred while saving.');
-      Alert.alert('Error', e.message || 'An unexpected error occurred while saving.');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
-  const fetchSurgicalHistories = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [data, err] = await clinicService.getSurgicalHistories(patient.id);
-      if (data) {
-        setSurgicalHistories(data);
-      } else if (err) {
-        setError(err.message || 'Unable to load surgical procedures.');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to fetch surgical procedures.');
-    } finally {
-      setLoading(false);
-    }
-  }, [patient.id]);
-
-  const fetchProblems = useCallback(async () => {
-    setLoadingProblems(true);
-    try {
-      const [data] = await clinicService.getPatientProblems(patient.id);
-      if (data) setProblems(data);
-    } catch {
-      // ignore
-    } finally {
-      setLoadingProblems(false);
-    }
-  }, [patient.id]);
-
-  const fetchAllergies = useCallback(async () => {
-    setLoadingAllergies(true);
-    try {
-      const [data] = await clinicService.getPatientAllergies(patient.id);
-      if (data) setAllergies(data);
-    } catch {
-      // ignore
-    } finally {
-      setLoadingAllergies(false);
-    }
-  }, [patient.id]);
-
-  useEffect(() => {
-    if (!initialSurgicalHistories || initialSurgicalHistories.length === 0) {
-      fetchSurgicalHistories();
     } else {
-      setSurgicalHistories(initialSurgicalHistories);
+      nextCodes.add(code);
     }
-    fetchProblems();
-    fetchAllergies();
-  }, [fetchSurgicalHistories, fetchProblems, fetchAllergies, initialSurgicalHistories]);
+
+    setSelectedFamilyCodes(nextCodes);
+    setFamilyOtherDesc(nextOtherDesc);
+    scheduleFamilyAutoSave(
+      { codes: nextCodes, otherDesc: nextOtherDesc, notes: prev.notes },
+      250
+    );
+  };
+
+  const handleFamilyOtherDescChange = (text: string) => {
+    if (!canWritePatients) return;
+    setFamilyOtherDesc(text);
+    scheduleFamilyAutoSave(
+      {
+        codes: familySnapshotRef.current.codes,
+        otherDesc: text,
+        notes: familySnapshotRef.current.notes,
+      },
+      600
+    );
+  };
+
+  const handleFamilyNotesChange = (text: string) => {
+    if (!canWritePatients) return;
+    setFamilyNotes(text);
+    scheduleFamilyAutoSave(
+      {
+        codes: familySnapshotRef.current.codes,
+        otherDesc: familySnapshotRef.current.otherDesc,
+        notes: text,
+      },
+      600
+    );
+  };
 
   // Surgical Modals
   const openAddModal = () => {
@@ -774,14 +1350,14 @@ export default function ClinicalHistoryTab({
     );
   };
 
-  // Problem Handling
+  // Problem Handling (auto-syncs to Personal Medical History)
   const handleSaveProblem = async () => {
     if (!canWritePatients) {
       Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
       return;
     }
     if (!problemIcd10.trim()) {
-      setProblemFormError('ICD-10 code is required (e.g. I10, E11.9).');
+      setProblemFormError('Diagnosis selection is required.');
       return;
     }
     if (!problemTitle.trim()) {
@@ -799,9 +1375,15 @@ export default function ClinicalHistoryTab({
     setSavingProblem(true);
     setProblemFormError(null);
 
+    const match = matchProblemToPersonalHistoryCondition(
+      { icd10Code: problemIcd10.trim().toUpperCase(), problemTitle: problemTitle.trim() },
+      activeCatalogConditions
+    );
+
     const payload: CreatePatientProblemPayload = {
       icd10Code: problemIcd10.trim().toUpperCase(),
       problemTitle: problemTitle.trim(),
+      philHealthMdiseaseCode: match.matchedCode,
       status: problemStatus,
       severity: problemSeverity,
       isChronicNcd: problemIsChronic,
@@ -816,7 +1398,34 @@ export default function ClinicalHistoryTab({
       } else if (created) {
         setProblems((prev) => [created, ...prev]);
         setProblemModalVisible(false);
-        onRefreshChart?.();
+
+        // Auto-add matching condition (or toggle Others + append specific description) in Personal Medical History
+        const currentSnap = personalSnapshotRef.current;
+        const reconciled = reconcilePersonalHistoryWithClinicalRecords({
+          selectedCodes: currentSnap.codes,
+          otherDesc: currentSnap.otherDesc,
+          problems: [created],
+          allergies: [],
+          catalogConditions: activeCatalogConditions,
+        });
+
+        if (reconciled.changed) {
+          setSelectedMedicalCodes(reconciled.codes);
+          setMedicalOtherDesc(reconciled.otherDesc);
+          const nextSnap = {
+            codes: reconciled.codes,
+            otherDesc: reconciled.otherDesc,
+            notes: currentSnap.notes,
+          };
+          personalSnapshotRef.current = nextSnap;
+          if (personalDebounceTimerRef.current) {
+            clearTimeout(personalDebounceTimerRef.current);
+            personalDebounceTimerRef.current = null;
+          }
+          void savePersonalMedicalHistory(nextSnap);
+        } else {
+          onRefreshChart?.();
+        }
       }
     } catch (e: any) {
       setProblemFormError(e.message || 'Error recording problem.');
@@ -848,40 +1457,61 @@ export default function ClinicalHistoryTab({
     }
   };
 
-  // Allergy Handling
-  const handleSaveAllergy = async () => {
+  // Allergy Handling (via StructuredAllergyIntakeModal; auto-toggles "Allergy" in Personal Medical History)
+  const handleAddStructuredAllergy = async (newAllergy: CreateAllergyRequest): Promise<boolean> => {
     if (!canWritePatients) {
       Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
-      return;
-    }
-    if (!allergen.trim()) {
-      setAllergyFormError('Allergen name is required (e.g. Penicillin, Peanuts).');
-      return;
+      return false;
     }
 
     setSavingAllergy(true);
     setAllergyFormError(null);
 
     const payload: CreatePatientAllergyPayload = {
-      category: allergyCategory,
-      allergen: allergen.trim(),
-      severity: allergySeverity,
-      reactionManifestation: allergyReaction.trim() || undefined,
-      isAnaphylactic: isAnaphylactic || allergySeverity === 'LifeThreatening',
-      notes: allergyNotes.trim() || undefined,
+      category: newAllergy.category,
+      allergen: newAllergy.allergen.trim(),
+      allergenDrugCode: newAllergy.allergenDrugCode?.trim() || undefined,
+      severity: newAllergy.severity,
+      reactionManifestation: newAllergy.reactionManifestation?.trim() || undefined,
+      isAnaphylactic: Boolean(newAllergy.isAnaphylactic || newAllergy.severity === 'LifeThreatening'),
+      onsetDate: newAllergy.onsetDate?.trim() || undefined,
+      notes: newAllergy.notes?.trim() || undefined,
     };
 
     try {
       const [created, err] = await clinicService.createPatientAllergy(patient.id, payload);
       if (err) {
         setAllergyFormError(err.message || 'Failed to record allergy.');
-      } else if (created) {
-        setAllergies((prev) => [created, ...prev]);
-        setAllergyModalVisible(false);
-        onRefreshChart?.();
+        return false;
       }
+      if (created) {
+        setAllergies((prev) => [created, ...prev]);
+
+        // Any documented allergy toggles "Allergy" ('001') in Personal Medical History
+        const currentSnap = personalSnapshotRef.current;
+        if (!currentSnap.codes.has('001')) {
+          const nextCodes = new Set(currentSnap.codes);
+          nextCodes.add('001');
+          setSelectedMedicalCodes(nextCodes);
+          const nextSnap = {
+            codes: nextCodes,
+            otherDesc: currentSnap.otherDesc,
+            notes: currentSnap.notes,
+          };
+          personalSnapshotRef.current = nextSnap;
+          if (personalDebounceTimerRef.current) {
+            clearTimeout(personalDebounceTimerRef.current);
+            personalDebounceTimerRef.current = null;
+          }
+          void savePersonalMedicalHistory(nextSnap);
+        } else {
+          onRefreshChart?.();
+        }
+      }
+      return true;
     } catch (e: any) {
       setAllergyFormError(e.message || 'Error recording allergy.');
+      return false;
     } finally {
       setSavingAllergy(false);
     }
@@ -915,6 +1545,8 @@ export default function ClinicalHistoryTab({
     );
   };
 
+  const personalLastSavedBadgeLabel = formatLastSavedBadge(personalLastSavedAt);
+  const familyLastSavedBadgeLabel = formatLastSavedBadge(familyLastSavedAt);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -955,7 +1587,7 @@ export default function ClinicalHistoryTab({
         </View>
 
         <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
-          Active and resolved clinical problem list with ICD-10 coding and Drug-Disease Interaction (DDI) guardrails.
+          Active and resolved clinical diagnoses and chronic conditions.
         </ThemedText>
 
         {loadingProblems ? (
@@ -978,9 +1610,6 @@ export default function ClinicalHistoryTab({
                         label={prob.status}
                         variant={prob.status === 'Active' ? 'primary' : 'neutral'}
                       />
-                      <ThemedText variant="code" color={theme.colors.primary}>
-                        {prob.icd10Code}
-                      </ThemedText>
                       {prob.isChronicNcd ? (
                         <Badge label="Chronic NCD" variant="warning" />
                       ) : null}
@@ -989,7 +1618,8 @@ export default function ClinicalHistoryTab({
                       {prob.problemTitle}
                     </ThemedText>
                     <ThemedText variant="small" color={theme.colors.textSecondary}>
-                      Onset: {prob.onsetDate || '—'} {prob.resolvedDate ? `• Resolved: ${prob.resolvedDate}` : ''}
+                      Onset: {formatClinicalCalendarDate(prob.onsetDate)}
+                      {prob.resolvedDate ? ` • Resolved: ${formatClinicalCalendarDate(prob.resolvedDate)}` : ''}
                     </ThemedText>
                   </View>
                   <Button
@@ -1016,7 +1646,7 @@ export default function ClinicalHistoryTab({
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
             <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
-            <ThemedText variant="h3">Documented Allergies & Sensitivities</ThemedText>
+            <ThemedText variant="h3">Documented Allergies &amp; Sensitivities</ThemedText>
           </View>
           <Button
             title="Add Allergy"
@@ -1025,12 +1655,6 @@ export default function ClinicalHistoryTab({
             icon="plus"
             disabled={!canWritePatients}
             onPress={() => {
-              setAllergen('');
-              setAllergyCategory('Medication');
-              setAllergySeverity('Moderate');
-              setAllergyReaction('');
-              setIsAnaphylactic(false);
-              setAllergyNotes('');
               setAllergyFormError(null);
               setAllergyModalVisible(true);
             }}
@@ -1038,7 +1662,7 @@ export default function ClinicalHistoryTab({
         </View>
 
         <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
-          Drug, food, and environmental allergies feeding real-time CDS cross-reactivity and contraindication alerts.
+          Drug, food, and environmental allergies feeding real-time clinical allergy alerts.
         </ThemedText>
 
         {loadingAllergies ? (
@@ -1057,11 +1681,36 @@ export default function ClinicalHistoryTab({
                 <View style={styles.procedureHeader}>
                   <View style={{ flex: 1 }}>
                     <View style={styles.badgeRow}>
-                      <Badge label={allergy.category} variant="neutral" />
-                      <Badge
-                        label={allergy.severity}
-                        variant={allergy.isAnaphylactic ? 'emergency' : allergy.severity === 'Severe' ? 'warning' : 'info'}
-                      />
+                      {allergy.category ? (
+                        <Badge
+                          label={allergy.category}
+                          variant={
+                            allergy.category === 'Medication'
+                              ? 'primary'
+                              : allergy.category === 'Food'
+                                ? 'warning'
+                                : allergy.category === 'Environmental'
+                                  ? 'info'
+                                  : allergy.category === 'Biologic'
+                                    ? 'purple'
+                                    : 'neutral'
+                          }
+                        />
+                      ) : null}
+                      {allergy.severity ? (
+                        <Badge
+                          label={humanizeAllergySeverity(allergy.severity)}
+                          variant={
+                            allergy.isAnaphylactic || allergy.severity === 'LifeThreatening'
+                              ? 'emergency'
+                              : allergy.severity === 'Severe'
+                                ? 'urgent'
+                                : allergy.severity === 'Moderate'
+                                  ? 'warning'
+                                  : 'info'
+                          }
+                        />
+                      ) : null}
                       {allergy.isAnaphylactic ? (
                         <Badge label="Anaphylaxis Risk" variant="emergency" />
                       ) : null}
@@ -1074,14 +1723,26 @@ export default function ClinicalHistoryTab({
                         Reaction: {allergy.reactionManifestation}
                       </ThemedText>
                     ) : null}
+                    {allergy.onsetDate ? (
+                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                        Onset: {formatClinicDate(allergy.onsetDate, { dateFormat, timeZoneId })}
+                      </ThemedText>
+                    ) : null}
+                    {allergy.notes ? (
+                      <ThemedText variant="small" color={theme.colors.textMuted}>
+                        {allergy.notes}
+                      </ThemedText>
+                    ) : null}
                   </View>
-                  <Pressable
-                    style={styles.actionIconBtn}
-                    onPress={() => handleDeleteAllergy(allergy)}
-                    accessibilityLabel="Delete allergy"
-                  >
-                    <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                  </Pressable>
+                  {canWritePatients ? (
+                    <Pressable
+                      style={styles.actionIconBtn}
+                      onPress={() => handleDeleteAllergy(allergy)}
+                      accessibilityLabel="Delete allergy"
+                    >
+                      <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             ))}
@@ -1089,12 +1750,19 @@ export default function ClinicalHistoryTab({
         )}
       </View>
 
-      {/* SECTION 3: Interactive Personal Past Medical History */}
+      {/* SECTION 3: Interactive Personal Medical History (Auto-Saved) */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
             <Icon name="check" size={theme.sizes.iconMd} color={theme.colors.primary} />
-            <ThemedText variant="h3">Past Medical History (Personal)</ThemedText>
+            <ThemedText variant="h3">Personal Medical History</ThemedText>
+            {personalSavingStatus === 'saving' ? (
+              <Badge label="Saving..." variant="warning" size="sm" icon="clock" />
+            ) : personalSavingStatus === 'error' ? (
+              <Badge label="Autosave error" variant="emergency" size="sm" icon="alertCircle" />
+            ) : personalLastSavedBadgeLabel ? (
+              <Badge label={personalLastSavedBadgeLabel} variant="routine" size="sm" icon="check" />
+            ) : null}
           </View>
           <Badge
             label={`${selectedMedicalCodes.size} Selected`}
@@ -1106,16 +1774,32 @@ export default function ClinicalHistoryTab({
           Documented personal past and chronic medical conditions.
         </ThemedText>
 
+        {personalSaveError ? (
+          <View style={styles.formErrorBanner}>
+            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText variant="small" color={theme.colors.emergencyText} style={{ flex: 1 }}>
+              {personalSaveError}
+            </ThemedText>
+            <Button
+              title="Retry"
+              variant="outline"
+              size="sm"
+              onPress={() => void savePersonalMedicalHistory()}
+            />
+          </View>
+        ) : null}
+
         <View style={styles.chipsWrap}>
           {availableConditions.map((cond) => {
             const isSelected = selectedMedicalCodes.has(cond.code);
             return (
               <Pressable
                 key={`personal-${cond.code}`}
+                disabled={!canWritePatients}
                 onPress={() => toggleMedicalCondition(cond.code)}
                 accessibilityRole="button"
                 accessibilityLabel={`Toggle personal ${cond.description}`}
-                accessibilityState={{ selected: isSelected }}
+                accessibilityState={{ selected: isSelected, disabled: !canWritePatients }}
                 style={[
                   styles.toggleChip,
                   isSelected && styles.toggleChip_active,
@@ -1142,7 +1826,8 @@ export default function ClinicalHistoryTab({
             <Input
               label="Specific Description for Other Medical Condition *"
               value={medicalOtherDesc}
-              onChangeText={setMedicalOtherDesc}
+              editable={canWritePatients}
+              onChangeText={handleMedicalOtherDescChange}
               placeholder="e.g. Systemic Lupus Erythematosus, Chronic Kidney Disease"
             />
           </View>
@@ -1152,7 +1837,8 @@ export default function ClinicalHistoryTab({
           <Input
             label="Personal Medical History Notes"
             value={personalNotes}
-            onChangeText={setPersonalNotes}
+            editable={canWritePatients}
+            onChangeText={handlePersonalNotesChange}
             placeholder="Clinical notes, disease severity, onset context..."
             multiline
             numberOfLines={2}
@@ -1160,12 +1846,19 @@ export default function ClinicalHistoryTab({
         </View>
       </View>
 
-      {/* SECTION 4: Interactive Family Medical History */}
+      {/* SECTION 4: Interactive Family Medical History (Auto-Saved) */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
             <Icon name="heartPulse" size={theme.sizes.iconMd} color={theme.colors.primary} />
             <ThemedText variant="h3">Family Medical History</ThemedText>
+            {familySavingStatus === 'saving' ? (
+              <Badge label="Saving..." variant="warning" size="sm" icon="clock" />
+            ) : familySavingStatus === 'error' ? (
+              <Badge label="Autosave error" variant="emergency" size="sm" icon="alertCircle" />
+            ) : familyLastSavedBadgeLabel ? (
+              <Badge label={familyLastSavedBadgeLabel} variant="routine" size="sm" icon="check" />
+            ) : null}
           </View>
           <Badge
             label={`${selectedFamilyCodes.size} Selected`}
@@ -1177,16 +1870,32 @@ export default function ClinicalHistoryTab({
           Documented hereditary and familial health risk factors.
         </ThemedText>
 
+        {familySaveError ? (
+          <View style={styles.formErrorBanner}>
+            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText variant="small" color={theme.colors.emergencyText} style={{ flex: 1 }}>
+              {familySaveError}
+            </ThemedText>
+            <Button
+              title="Retry"
+              variant="outline"
+              size="sm"
+              onPress={() => void saveFamilyMedicalHistory()}
+            />
+          </View>
+        ) : null}
+
         <View style={styles.chipsWrap}>
           {availableConditions.map((cond) => {
             const isSelected = selectedFamilyCodes.has(cond.code);
             return (
               <Pressable
                 key={`family-${cond.code}`}
+                disabled={!canWritePatients}
                 onPress={() => toggleFamilyCondition(cond.code)}
                 accessibilityRole="button"
                 accessibilityLabel={`Toggle family ${cond.description}`}
-                accessibilityState={{ selected: isSelected }}
+                accessibilityState={{ selected: isSelected, disabled: !canWritePatients }}
                 style={[
                   styles.toggleChip,
                   isSelected && styles.toggleChip_active,
@@ -1213,7 +1922,8 @@ export default function ClinicalHistoryTab({
             <Input
               label="Specific Description for Other Family Condition *"
               value={familyOtherDesc}
-              onChangeText={setFamilyOtherDesc}
+              editable={canWritePatients}
+              onChangeText={handleFamilyOtherDescChange}
               placeholder="e.g. Familial Hypercholesterolemia, Polycystic Kidney Disease"
             />
           </View>
@@ -1223,7 +1933,8 @@ export default function ClinicalHistoryTab({
           <Input
             label="Family Medical History Notes"
             value={familyNotes}
-            onChangeText={setFamilyNotes}
+            editable={canWritePatients}
+            onChangeText={handleFamilyNotesChange}
             placeholder="Pedigree notes, affected 1st-degree relatives, age of onset..."
             multiline
             numberOfLines={2}
@@ -1238,7 +1949,9 @@ export default function ClinicalHistoryTab({
           onChange={handleOrganSystemOptionChange}
           onRemarksChange={handleOrganSystemRemarksChange}
           onSetAllNormal={handleSetAllNormal}
+          disabled={!canWritePatients}
           savingStatus={physicalExamSavingStatus}
+          lastSavedAt={physicalExamLastSavedAt}
         />
         {physicalExamError ? (
           <View style={styles.formErrorBanner}>
@@ -1250,45 +1963,13 @@ export default function ClinicalHistoryTab({
               title="Retry"
               variant="outline"
               size="sm"
-              onPress={() => savePhysicalExam(organSystemsRef.current)}
+              onPress={() => void savePhysicalExam(organSystemsRef.current)}
             />
           </View>
         ) : null}
       </View>
 
-      {/* SECTION 6: Save Profile Persistence Action */}
-      <View style={styles.persistenceCard}>
-        {profileError ? (
-          <View style={styles.formErrorBanner}>
-            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-            <ThemedText variant="small" color={theme.colors.emergencyText}>
-              {profileError}
-            </ThemedText>
-          </View>
-        ) : null}
-
-        {profileSuccess ? (
-          <View style={styles.successBanner}>
-            <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.successText} />
-            <ThemedText variant="small" color={theme.colors.successText}>
-              Medical &amp; family history saved successfully to PhilHealth profile.
-            </ThemedText>
-          </View>
-        ) : null}
-
-        <View style={styles.saveActionRow}>
-          <Button
-            title="Save Medical & Family History"
-            variant="primary"
-            icon="check"
-            loading={savingProfile}
-            disabled={savingProfile || !canWritePatients}
-            onPress={handleSaveMedicalAndFamilyHistory}
-          />
-        </View>
-      </View>
-
-      {/* SECTION 6: Relational Surgical Procedure History */}
+      {/* SECTION 6: Surgical Procedures History */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
@@ -1306,7 +1987,7 @@ export default function ClinicalHistoryTab({
         </View>
 
         <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
-          Structured surgical history. Relational entities enforce multi-tenant isolation and eliminate disconnected modal state.
+          Documented past surgeries, intraoperative findings, and postoperative complications.
         </ThemedText>
 
         {loading ? (
@@ -1320,14 +2001,13 @@ export default function ClinicalHistoryTab({
         ) : surgicalHistories.length === 0 ? (
           <View style={styles.statutoryEmptyBanner}>
             <View style={styles.statutoryBannerHeader}>
-              <Icon name="shield" size={theme.sizes.iconMd} color={theme.colors.infoText} />
+              <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.infoText} />
               <ThemedText variant="bodyBold" color={theme.colors.infoText}>
                 No Past Surgical Procedures Documented
               </ThemedText>
             </View>
             <ThemedText variant="small" color={theme.colors.textSecondary} style={{ marginTop: theme.spacing.xs }}>
-              Statutory declaration active: Yakap eKAS / eSER transmittal will automatically populate the required
-              PhilHealth fallback <ThemedText variant="code" color={theme.colors.textSecondary}>pSurgDesc=&quot;None&quot; pSurgDate=&quot;1900-01-01&quot;</ThemedText>.
+              No past surgical operations have been recorded for this patient.
             </ThemedText>
           </View>
         ) : (
@@ -1340,31 +2020,33 @@ export default function ClinicalHistoryTab({
                       {item.procedureName}
                     </ThemedText>
                     <ThemedText variant="small" color={theme.colors.textSecondary}>
-                      Date: {item.surgeryDate ? item.surgeryDate.split('T')[0] : '—'}
+                      Date: {formatClinicalCalendarDate(item.surgeryDate)}
                       {item.hospitalName ? ` • Facility: ${item.hospitalName}` : ''}
                     </ThemedText>
                   </View>
-                  <View style={styles.cardActions}>
-                    <Pressable
-                      style={styles.actionIconBtn}
-                      onPress={() => openEditModal(item)}
-                      accessibilityLabel="Edit procedure"
-                    >
-                      <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    </Pressable>
-                    <Pressable
-                      style={styles.actionIconBtn}
-                      onPress={() => handleDelete(item)}
-                      disabled={deletingId === item.id}
-                      accessibilityLabel="Delete procedure"
-                    >
-                      {deletingId === item.id ? (
-                        <ActivityIndicator size="small" color={theme.colors.emergencyText} />
-                      ) : (
-                        <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                      )}
-                    </Pressable>
-                  </View>
+                  {canWritePatients ? (
+                    <View style={styles.cardActions}>
+                      <Pressable
+                        style={styles.actionIconBtn}
+                        onPress={() => openEditModal(item)}
+                        accessibilityLabel="Edit procedure"
+                      >
+                        <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                      </Pressable>
+                      <Pressable
+                        style={styles.actionIconBtn}
+                        onPress={() => handleDelete(item)}
+                        disabled={deletingId === item.id}
+                        accessibilityLabel="Delete procedure"
+                      >
+                        {deletingId === item.id ? (
+                          <ActivityIndicator size="small" color={theme.colors.emergencyText} />
+                        ) : (
+                          <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                        )}
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
 
                 {item.findings ? (
@@ -1519,6 +2201,36 @@ export default function ClinicalHistoryTab({
             placeholder="YYYY-MM-DD"
           />
 
+          <View style={styles.modalFieldGroup}>
+            <ThemedText variant="smallBold" color={theme.colors.text}>
+              Condition Classification
+            </ThemedText>
+            <View style={styles.chipsWrap}>
+              <Pressable
+                onPress={() => setProblemIsChronic((prev) => !prev)}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle Chronic NCD"
+                accessibilityState={{ selected: problemIsChronic }}
+                style={[
+                  styles.toggleChip,
+                  problemIsChronic && styles.toggleChip_active,
+                ]}
+              >
+                <Icon
+                  name={problemIsChronic ? 'check' : 'plus'}
+                  size={theme.fontSizes.sm}
+                  color={problemIsChronic ? theme.colors.primaryDark : theme.colors.textSecondary}
+                />
+                <ThemedText
+                  variant="smallBold"
+                  color={problemIsChronic ? theme.colors.primaryDark : theme.colors.textSecondary}
+                >
+                  Chronic Condition / NCD
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+
           <Input
             label="Clinical Notes / Findings"
             value={problemNotes}
@@ -1548,64 +2260,25 @@ export default function ClinicalHistoryTab({
         </ScrollView>
       </Modal>
 
-      {/* Modal for Add Structured Allergy */}
-      <Modal
+      {/* Structured Allergy Intake Dialog */}
+      <StructuredAllergyIntakeModal
         visible={allergyModalVisible}
-        onClose={() => !savingAllergy && setAllergyModalVisible(false)}
-        title="Document Allergy / Adverse Sensitivity"
-      >
-        <ScrollView contentContainerStyle={styles.modalFormContent}>
-          {allergyFormError ? (
-            <View style={styles.formErrorBanner}>
-              <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-              <ThemedText variant="small" color={theme.colors.emergencyText}>
-                {allergyFormError}
-              </ThemedText>
-            </View>
-          ) : null}
-
-          <Input
-            label="Allergen Name *"
-            value={allergen}
-            onChangeText={setAllergen}
-            placeholder="e.g. Penicillin, Amoxicillin, Peanuts"
-          />
-
-          <Input
-            label="Reaction Manifestation"
-            value={allergyReaction}
-            onChangeText={setAllergyReaction}
-            placeholder="e.g. Urticaria, Facial swelling, Anaphylaxis"
-          />
-
-          <Input
-            label="Clinical Notes"
-            value={allergyNotes}
-            onChangeText={setAllergyNotes}
-            placeholder="Prior reaction history, date of onset"
-            multiline
-            numberOfLines={2}
-          />
-
-          <View style={styles.modalFooter}>
-            <Button
-              title="Cancel"
-              variant="outline"
-              size="md"
-              disabled={savingAllergy}
-              onPress={() => setAllergyModalVisible(false)}
-            />
-            <Button
-              title={savingAllergy ? 'Saving…' : 'Document Allergy'}
-              variant="primary"
-              size="md"
-              loading={savingAllergy}
-              disabled={savingAllergy}
-              onPress={handleSaveAllergy}
-            />
-          </View>
-        </ScrollView>
-      </Modal>
+        onClose={() => {
+          if (!savingAllergy) {
+            setAllergyFormError(null);
+            setAllergyModalVisible(false);
+          }
+        }}
+        existingAllergies={structuredExistingAllergies}
+        onAddAllergy={handleAddStructuredAllergy}
+        onRemoveAllergy={(index) => {
+          const target = allergies[index];
+          if (target) handleDeleteAllergy(target);
+        }}
+        saving={savingAllergy}
+        externalError={allergyFormError}
+        onClearExternalError={() => setAllergyFormError(null)}
+      />
     </ScrollView>
   );
 }
@@ -1640,15 +2313,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
   },
   iconTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.xs,
   },
   sectionDescription: {
@@ -1658,17 +2335,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.xs,
-  },
-  conditionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.primaryLight,
-    borderColor: theme.colors.primaryBorder,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.full,
   },
   toggleChip: {
     flexDirection: 'row',
@@ -1690,23 +2356,6 @@ const styles = StyleSheet.create({
   },
   notesRow: {
     marginTop: theme.spacing.xs,
-  },
-  persistenceCard: {
-    gap: theme.spacing.sm,
-  },
-  saveActionRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  successBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.successBg,
-    borderColor: theme.colors.successBorder,
-    borderWidth: 1,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
   },
   emptyNoticeStrip: {
     flexDirection: 'row',
@@ -1743,6 +2392,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: theme.spacing.sm,
   },
   cardActions: {
     flexDirection: 'row',
@@ -1758,8 +2408,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   modalFormContent: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
+  },
+  modalFieldGroup: {
+    gap: theme.spacing.xs,
   },
   formErrorBanner: {
     flexDirection: 'row',
@@ -1775,6 +2428,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
 });

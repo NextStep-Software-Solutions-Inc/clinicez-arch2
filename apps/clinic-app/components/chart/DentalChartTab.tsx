@@ -483,6 +483,7 @@ export default function DentalChartTab({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.gridScrollViewport}
           contentContainerStyle={styles.gridScrollContent}
         >
           <View style={styles.quadrantGrid} testID="odontogram-grid">
@@ -958,8 +959,12 @@ const styles = StyleSheet.create({
   dentitionSwitcher: {
     width: 220,
   },
+  gridScrollViewport: {
+    width: '100%',
+  },
   gridScrollContent: {
     flexGrow: 1,
+    minWidth: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -967,10 +972,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.radii.md,
     padding: theme.spacing.md,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    alignItems: 'center',
     gap: theme.spacing.md,
-    minWidth: '100%',
   },
   archContainer: {
     alignItems: 'center',
@@ -1003,6 +1008,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.full,
   },
   occlusalPlane: {
+    alignSelf: 'stretch',
     height: 1,
     backgroundColor: theme.colors.border,
     marginVertical: theme.spacing.xs,

@@ -138,11 +138,27 @@ export default function SlideOverDrawerChartLayout(props: ChartLayoutProps) {
         {/* TAB BAR                                                                   */}
         {/* ========================================================================= */}
         <View style={styles.tabBarContainer}>
-          <SegmentedControl
-            options={props.availableTabs || CHART_TABS}
-            value={activeTab}
-            onChange={onTabChange}
-          />
+          {props.canGoBackTab && props.onBackTab ? (
+            <Pressable
+              onPress={props.onBackTab}
+              style={({ pressed }) => [styles.backSectionBtn, pressed && styles.actionBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                props.previousTabLabel
+                  ? `Back to ${props.previousTabLabel}`
+                  : 'Back to previous section'
+              }
+            >
+              <Icon name="arrowLeft" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+            </Pressable>
+          ) : null}
+          <View style={styles.tabBarScrollWrap}>
+            <SegmentedControl
+              options={props.availableTabs || CHART_TABS}
+              value={activeTab}
+              onChange={onTabChange}
+            />
+          </View>
         </View>
 
         {/* ========================================================================= */}
@@ -261,11 +277,32 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   tabBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
+    borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surface,
+  },
+  tabBarScrollWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  backSectionBtn: {
+    minWidth: theme.sizes.controlSm,
+    minHeight: theme.sizes.controlSm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   viewport: {
     flex: 1,

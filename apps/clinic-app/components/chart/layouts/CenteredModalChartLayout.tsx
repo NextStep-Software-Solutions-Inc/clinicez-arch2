@@ -9,7 +9,7 @@ import {
 } from '../../ui';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
 import { formatLongAge } from '../../../utils/age';
-import PatientSummarySpine from '../PatientSummarySpine';
+import PatientSummarySpine, { formatBloodTypeLabel } from '../PatientSummarySpine';
 import ChartLayoutSwitcher from '../ChartLayoutSwitcher';
 import ChartTabContentView from '../ChartTabContentView';
 import { CHART_TABS, type ChartLayoutProps } from '../types';
@@ -77,8 +77,8 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
                 ) : (
                   <Badge label="Unverified" variant="warning" size="sm" icon="alert" />
                 )}
-                {patient.bloodType ? (
-                  <Badge label={patient.bloodType} variant="neutral" size="sm" icon="droplet" />
+                {formatBloodTypeLabel(patient.bloodType) ? (
+                  <Badge label={formatBloodTypeLabel(patient.bloodType)!} variant="neutral" size="sm" icon="droplet" />
                 ) : null}
               </View>
             ) : null}
@@ -166,11 +166,27 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
         {/* TAB NAVIGATION BAR                                                        */}
         {/* ========================================================================= */}
         <View style={styles.tabBarContainer}>
-          <SegmentedControl
-            options={props.availableTabs || CHART_TABS}
-            value={activeTab}
-            onChange={onTabChange}
-          />
+          {props.canGoBackTab && props.onBackTab ? (
+            <Pressable
+              onPress={props.onBackTab}
+              style={({ pressed }) => [styles.backSectionBtn, pressed && styles.actionBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                props.previousTabLabel
+                  ? `Back to ${props.previousTabLabel}`
+                  : 'Back to previous section'
+              }
+            >
+              <Icon name="arrowLeft" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+            </Pressable>
+          ) : null}
+          <View style={styles.tabBarScrollWrap}>
+            <SegmentedControl
+              options={props.availableTabs || CHART_TABS}
+              value={activeTab}
+              onChange={onTabChange}
+            />
+          </View>
         </View>
 
         {/* ========================================================================= */}
@@ -269,11 +285,32 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   tabBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.xs,
-    borderBottomWidth: 1,
+    borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surfaceSubtle,
+  },
+  tabBarScrollWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  backSectionBtn: {
+    minWidth: theme.sizes.controlSm,
+    minHeight: theme.sizes.controlSm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   viewport: {
     flex: 1,

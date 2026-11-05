@@ -227,62 +227,74 @@ export default function DiagnosticLabTab({
       {/* FILTER BUTTONS & ACTION BAR                                               */}
       {/* ========================================================================= */}
       <View style={styles.topBar}>
-        <View style={styles.filterRow}>
-          <Pressable
-            onPress={() => setSelectedFilter('ALL')}
-            style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
+        <View style={styles.filterScrollWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterRow}
           >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <Pressable
+              onPress={() => setSelectedFilter('ALL')}
+              style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
             >
-              All Orders ({labOrders.length})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('PENDING')}
-            style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                All Orders ({labOrders.length})
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('PENDING')}
+              style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
             >
-              Pending
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('COMPLETED')}
-            style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Pending
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('COMPLETED')}
+              style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
             >
-              Completed
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('EXTERNAL')}
-            style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Completed
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('EXTERNAL')}
+              style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
             >
-              External Reports
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => setSelectedFilter('PANIC')}
-            style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                External Reports
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => setSelectedFilter('PANIC')}
+              style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
             >
-              Critical / Panic ({activePanicOrders.length})
-            </ThemedText>
-          </Pressable>
+              <ThemedText
+                variant="captionBold"
+                numberOfLines={1}
+                color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
+              >
+                Critical / Panic ({activePanicOrders.length})
+              </ThemedText>
+            </Pressable>
+          </ScrollView>
         </View>
 
         {canOrderDiagnostic ? (
@@ -291,8 +303,8 @@ export default function DiagnosticLabTab({
             onPress={() => onOrderDiagnostic?.()}
             style={styles.orderDiagnosticBtn}
           >
-            <Icon name="plus" size={14} color={theme.colors.onPrimary} />
-            <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+            <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
+            <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.onPrimary}>
               Order Diagnostic
             </ThemedText>
           </Pressable>
@@ -301,8 +313,8 @@ export default function DiagnosticLabTab({
             testID="order-diagnostic-prc-required"
             style={[styles.orderDiagnosticBtn, styles.orderDiagnosticBtn_disabled]}
           >
-            <Icon name="alert" size={14} color={theme.colors.emergencyText} />
-            <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+            <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.emergencyText}>
               PRC License Required
             </ThemedText>
           </View>
@@ -567,18 +579,30 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     alignSelf: 'flex-start',
   },
+  filterScrollWrap: {
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
   filterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
   },
   filterBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    flexShrink: 0,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
   filterBtn_active: {
@@ -724,18 +748,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    flexWrap: 'nowrap',
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
+    width: '100%',
+    minWidth: 0,
   },
   orderDiagnosticBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    flexShrink: 0,
+    gap: theme.spacing.xs,
     backgroundColor: theme.colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.sm,
+    minHeight: theme.sizes.controlSm,
   },
   orderDiagnosticBtn_disabled: {
     backgroundColor: theme.colors.surfaceSubtle,

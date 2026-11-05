@@ -7,6 +7,7 @@ import { SkeletonList } from '../ui/Skeleton';
 import { theme } from '../../constants/theme';
 import {
   clinicService,
+  type RecordTriageRequest,
   type UpdateTriageRequest,
   type TriageVitals,
   type ClinicPatient,
@@ -18,13 +19,14 @@ import {
   type MeasurementPosture,
   type VitalsFormState,
   EMPTY_VITALS_FORM,
+  hydrateVitalsFormFromRecord,
   parseOptionalInt,
   parseOptionalFloat,
   resolveCohort,
   evaluateBmi,
   evaluateCentralObesity,
   formatVitalsSummary,
-  CohortBanner,
+  CohortHeaderMeta,
   StandardVitalsSection,
   AnthropometricsSection,
   VisualAcuitySection,
@@ -39,6 +41,7 @@ export interface EditVitalsModalProps {
   queueItemId: string | null;
   patient?: ClinicPatient | null;
   patientId?: string;
+  initialVitals?: TriageVitals | null;
   currentStaffId?: string;
   currentStaffName?: string;
   onSuccess: (
@@ -54,6 +57,7 @@ export default function EditVitalsModal({
   queueItemId,
   patient,
   patientId,
+  initialVitals,
   currentStaffId,
   currentStaffName,
   onSuccess,
@@ -63,16 +67,39 @@ export default function EditVitalsModal({
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [hasExistingQueueTriage, setHasExistingQueueTriage] = useState<boolean>(true);
   const [patientRecord, setPatientRecord] = useState<ClinicPatient | null>(patient ?? null);
   const [zScorePreview, setZScorePreview] = useState<PediatricZScoreResult | null>(null);
 
   // Demographic cohort resolution: age brackets and gender awareness
   const cohort = useMemo(() => resolveCohort(patientRecord), [patientRecord]);
 
+  const applyVitalsToState = useCallback(
+    (vitalsData: TriageVitals, patientCohort: ReturnType<typeof resolveCohort>) => {
+      setForm(hydrateVitalsFormFromRecord(vitalsData, patientCohort));
+      if (vitalsData.growthZScoreCategory || vitalsData.philHealthZScoreCategory) {
+        setZScorePreview({
+          ageInMonths: 0,
+          adjustedLengthHeightCm: vitalsData.heightCm ?? 0,
+          weightForAgeZScore: vitalsData.zScoreWeightForAge ?? undefined,
+          heightForAgeZScore: vitalsData.zScoreLengthForAge ?? undefined,
+          weightForHeightZScore: vitalsData.zScoreWeightForLength ?? undefined,
+          philHealthZScoreCategory: vitalsData.philHealthZScoreCategory ?? vitalsData.growthZScoreCategory ?? undefined,
+          philHealthZScoreCode: vitalsData.philHealthZScoreCode ?? vitalsData.growthZScoreCode ?? undefined,
+        });
+      } else {
+        setZScorePreview(null);
+      }
+    },
+    [],
+  );
+
   const loadVitals = useCallback(async () => {
     if (!queueItemId) return;
-    setLoading(true);
     setFetchError(null);
+    if (!initialVitals) {
+      setLoading(true);
+    }
 
     // If patient is not provided but patientId is, fetch patient details for cohort resolution
     let resolvedPatient = patient ?? null;
@@ -87,57 +114,29 @@ export default function EditVitalsModal({
     }
 
     const patientCohort = resolveCohort(resolvedPatient);
+    if (initialVitals) {
+      applyVitalsToState(initialVitals, patientCohort);
+    }
 
     const [vitalsData, err] = await clinicService.getTriage(queueItemId);
     setLoading(false);
 
-    if (err || !vitalsData) {
-      setFetchError(err?.message || 'Unable to load vitals');
+    if (!err && vitalsData) {
+      setHasExistingQueueTriage(true);
+      applyVitalsToState(vitalsData, patientCohort);
       return;
     }
 
-    setForm({
-      bpSys: vitalsData.systolicBp != null ? String(vitalsData.systolicBp) : '',
-      bpDia: vitalsData.diastolicBp != null ? String(vitalsData.diastolicBp) : '',
-      hr: vitalsData.heartRateBpm != null ? String(vitalsData.heartRateBpm) : '',
-      rr: vitalsData.respiratoryRateBreathsPerMin != null ? String(vitalsData.respiratoryRateBreathsPerMin) : '',
-      temp: vitalsData.temperatureCelsius != null ? String(vitalsData.temperatureCelsius) : '',
-      spo2: vitalsData.oxygenSaturationPercent != null ? String(vitalsData.oxygenSaturationPercent) : '',
-      pain: vitalsData.painScore != null ? String(vitalsData.painScore) : '',
-      height: vitalsData.heightCm != null ? String(vitalsData.heightCm) : '',
-      weight: vitalsData.weightKg != null ? String(vitalsData.weightKg) : '',
-      bodyLength: vitalsData.bodyLengthCm != null
-        ? String(vitalsData.bodyLengthCm)
-        : (patientCohort.isInfant && vitalsData.heightCm != null ? String(vitalsData.heightCm) : ''),
-      headCircumference: vitalsData.headCircumferenceCm != null ? String(vitalsData.headCircumferenceCm) : '',
-      midUpperArmCircumference: vitalsData.midUpperArmCircumferenceCm != null ? String(vitalsData.midUpperArmCircumferenceCm) : '',
-      skinfoldThickness: vitalsData.skinfoldThicknessMm != null ? String(vitalsData.skinfoldThicknessMm) : '',
-      limbsCircumference: vitalsData.limbsCircumferenceCm != null ? String(vitalsData.limbsCircumferenceCm) : '',
-      waistCircumference: vitalsData.waistCircumferenceCm != null ? String(vitalsData.waistCircumferenceCm) : '',
-      hipCircumference: vitalsData.hipCircumferenceCm != null ? String(vitalsData.hipCircumferenceCm) : '',
-      visualAcuityLeft: vitalsData.visualAcuityLeft || '',
-      visualAcuityRight: vitalsData.visualAcuityRight || '',
-      notes: vitalsData.notes || '',
-      posture: vitalsData.isMeasuredRecumbent || patientCohort.isInfant ? 'RECUMBENT' : 'STANDING',
-      preAssessmentNotes: vitalsData.preAssessmentNotes || '',
-      preAssessmentRemarks: vitalsData.preAssessmentRemarks || '',
-      triagePriority: (vitalsData.triageAcuityReason as any) || 'Routine',
-    });
-
-    if (vitalsData.growthZScoreCategory || vitalsData.philHealthZScoreCategory) {
-      setZScorePreview({
-        ageInMonths: 0,
-        adjustedLengthHeightCm: vitalsData.heightCm ?? 0,
-        weightForAgeZScore: vitalsData.zScoreWeightForAge ?? undefined,
-        heightForAgeZScore: vitalsData.zScoreLengthForAge ?? undefined,
-        weightForHeightZScore: vitalsData.zScoreWeightForLength ?? undefined,
-        philHealthZScoreCategory: vitalsData.philHealthZScoreCategory ?? vitalsData.growthZScoreCategory ?? undefined,
-        philHealthZScoreCode: vitalsData.philHealthZScoreCode ?? vitalsData.growthZScoreCode ?? undefined,
-      });
-    } else {
-      setZScorePreview(null);
+    if (err?.status === 404 && initialVitals) {
+      setHasExistingQueueTriage(false);
+      setFetchError(null);
+      return;
     }
-  }, [queueItemId, patient, patientId]);
+
+    if (err || !vitalsData) {
+      setFetchError(err?.message || 'Unable to load vitals');
+    }
+  }, [queueItemId, patient, patientId, initialVitals, applyVitalsToState]);
 
   useEffect(() => {
     if (visible && queueItemId) {
@@ -293,7 +292,52 @@ export default function EditVitalsModal({
     };
 
     setSaving(true);
-    const [savedVitals, err] = await clinicService.updateTriage(queueItemId, payload);
+    let savedVitals: TriageVitals | null = null;
+    let err = null;
+
+    if (hasExistingQueueTriage) {
+      [savedVitals, err] = await clinicService.updateTriage(queueItemId, payload);
+    }
+
+    if (!hasExistingQueueTriage || err?.status === 404) {
+      const createPayload: RecordTriageRequest = {
+        nurseId: currentStaffId,
+        recordedByNurseName: currentStaffName,
+        systolicBp: systolicBp ?? undefined,
+        diastolicBp: diastolicBp ?? undefined,
+        heartRateBpm: heartRateBpm ?? undefined,
+        temperatureCelsius: temperatureCelsius ?? undefined,
+        respiratoryRateBreathsPerMin: respiratoryRateBreathsPerMin ?? undefined,
+        oxygenSaturationPercent: oxygenSaturationPercent ?? undefined,
+        heightCm: heightCm ?? undefined,
+        bodyLengthCm: bodyLengthCm ?? undefined,
+        weightKg: weightKg ?? undefined,
+        painScore: painScore ?? undefined,
+        notes: form.notes.trim() || undefined,
+        visualAcuityLeft: visualAcuityLeft ?? undefined,
+        visualAcuityRight: visualAcuityRight ?? undefined,
+        headCircumferenceCm: headCircumferenceCm ?? undefined,
+        midUpperArmCircumferenceCm: midUpperArmCircumferenceCm ?? undefined,
+        skinfoldThicknessMm: skinfoldThicknessMm ?? undefined,
+        limbsCircumferenceCm: limbsCircumferenceCm ?? undefined,
+        waistCircumferenceCm: waistCircumferenceCm ?? undefined,
+        hipCircumferenceCm: hipCircumferenceCm ?? undefined,
+        isMeasuredRecumbent: cohort.isInfant || form.posture === 'RECUMBENT',
+        zScoreWeightForAge: zScorePreview?.weightForAgeZScore,
+        zScoreLengthForAge: zScorePreview?.heightForAgeZScore,
+        zScoreWeightForLength: zScorePreview?.weightForHeightZScore,
+        growthZScoreCategory: zScorePreview?.philHealthZScoreCategory,
+        growthZScoreCode: zScorePreview?.philHealthZScoreCode,
+        philHealthZScoreCategory: zScorePreview?.philHealthZScoreCategory,
+        philHealthZScoreCode: zScorePreview?.philHealthZScoreCode,
+        preAssessmentNotes: form.preAssessmentNotes.trim() || undefined,
+        preAssessmentRemarks: form.preAssessmentRemarks.trim() || undefined,
+        triageAcuityReason: form.triagePriority,
+        priority: form.triagePriority,
+      };
+      [savedVitals, err] = await clinicService.recordTriage(queueItemId, createPayload);
+    }
+
     setSaving(false);
 
     if (err || !savedVitals) {
@@ -331,9 +375,10 @@ export default function EditVitalsModal({
       title={title}
       subtitle={
         patientRecord
-          ? `${patientRecord.fullName} (${patientRecord.age}yo ${patientRecord.sex}) • Code: ${patientRecord.patientCode || 'PAT'}`
-          : 'Update patient vitals and screening'
+          ? `${patientRecord.fullName} • Code: ${patientRecord.patientCode || 'PAT'}`
+          : undefined
       }
+      headerExtra={<CohortHeaderMeta cohort={cohort} />}
       maxWidth={640}
       footer={
         <View style={styles.modalFooter}>
@@ -367,7 +412,6 @@ export default function EditVitalsModal({
         />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false}>
-          <CohortBanner cohort={cohort} />
           <StandardVitalsSection form={form} updateField={updateField} cohort={cohort} />
           <AnthropometricsSection
             form={form}

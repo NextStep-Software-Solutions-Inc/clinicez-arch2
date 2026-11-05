@@ -70,6 +70,12 @@ public sealed class PatientMedicalHistoryTests
 
         result.Items.Should().HaveCount(3);
         result.PersonalMedicalHistoryNotes.Should().Be("Patient has chronic cardiovascular and autoimmune conditions.");
+        result.UpdatedAt.Should().NotBeNull();
+
+        var queryHandler = new GetPatientMedicalHistoryQueryHandler(patientRepo, medicalRepo);
+        var reloaded = await queryHandler.Handle(new GetPatientMedicalHistoryQuery(patientId), CancellationToken.None);
+        reloaded.PersonalMedicalHistoryNotes.Should().Be("Patient has chronic cardiovascular and autoimmune conditions.");
+        reloaded.UpdatedAt.Should().NotBeNull();
 
         var savedInDb = medicalRepo.Query(m => m.PatientId == patientId).ToList();
         savedInDb.Should().HaveCount(3);
