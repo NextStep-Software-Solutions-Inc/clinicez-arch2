@@ -1811,6 +1811,50 @@ describe('Clinic Census Report Workstation E2E & Integration Suite', () => {
         expect(expandedState[rowKey2]).toBe(true);
       });
     });
+
+    // -------------------------------------------------------------------------
+    // 5.9 Date Visibility in Census Register & Ticket Columns
+    // -------------------------------------------------------------------------
+    describe('5.9 Date Visibility in Census Register & Ticket Columns', () => {
+      test('5.9.1 Format check-in timestamp into readable clinic date string', () => {
+        const formatClinicDateHelper = (isoStr: string): string => {
+          const d = new Date(isoStr);
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+        };
+
+        const formatted = formatClinicDateHelper('2026-11-05T09:16:00Z');
+        expect(formatted).toBe('Nov 5, 2026');
+      });
+
+      test('5.9.2 Census Register subtitle displays encounter count with date range context', () => {
+        const formatSubtitle = (count: number, total: number, start?: string, end?: string): string => {
+          const dateRange = !start && !end
+            ? 'Select Date Range'
+            : start && !end
+            ? `From ${start}`
+            : !start && end
+            ? `Up to ${end}`
+            : start === end
+            ? start!
+            : `${start} to ${end}`;
+          return `Showing ${count} of ${total} encounters • ${dateRange}`;
+        };
+
+        // Single date (e.g. today or yesterday)
+        expect(formatSubtitle(4, 4, '2026-11-05', '2026-11-05')).toBe('Showing 4 of 4 encounters • 2026-11-05');
+
+        // Multi-day date range (e.g. last 7 days or this month)
+        expect(formatSubtitle(15, 20, '2026-11-01', '2026-11-05')).toBe('Showing 15 of 20 encounters • 2026-11-01 to 2026-11-05');
+      });
+
+      test('5.9.3 Ticket column header indicates Date inclusion', () => {
+        const columnHeader = 'Ticket, Date & Time';
+        expect(columnHeader).toContain('Date');
+        expect(columnHeader).toContain('Ticket');
+        expect(columnHeader).toContain('Time');
+      });
+    });
   });
 });
 

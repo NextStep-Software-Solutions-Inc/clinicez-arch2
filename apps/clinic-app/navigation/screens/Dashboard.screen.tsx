@@ -62,6 +62,7 @@ import {
   CensusFilterOptions,
   VisitType,
   getManilaTodayStr,
+  formatClinicDate,
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
@@ -2110,7 +2111,7 @@ export default function DashboardScreen() {
           <Card style={styles.censusTableCard}>
             <CardHeader
               title="Census Register"
-              subtitle={`Showing ${filteredItems.length} of ${censusReport.items?.length ?? 0} encounters`}
+              subtitle={`Showing ${filteredItems.length} of ${censusReport.items?.length ?? 0} encounters • ${formatDateRangeLabel(reportsStartDate || censusReport.startDate, reportsEndDate || censusReport.endDate)}`}
               rightAction={
                 <View style={styles.censusHeaderActions}>
                   <Button
@@ -2158,7 +2159,7 @@ export default function DashboardScreen() {
                   <View style={styles.censusTableHeaderRow}>
                     <View style={styles.colTicket}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Ticket & Time
+                        Ticket, Date & Time
                       </ThemedText>
                     </View>
                     <View style={styles.colPatient}>
@@ -2225,6 +2226,9 @@ export default function DashboardScreen() {
                               size="xs"
                             />
                           </View>
+                          <ThemedText variant="captionBold" color={theme.colors.text}>
+                            {formatClinicDate(item.checkInTime)}
+                          </ThemedText>
                           <ThemedText variant="caption" color={theme.colors.textMuted}>
                             {item.visitType}
                           </ThemedText>
@@ -3591,7 +3595,7 @@ const styles = StyleSheet.create({
   },
   censusTableInner: {
     width: '100%',
-    minWidth: 1540,
+    minWidth: 1550,
   },
   censusTableHeaderRow: {
     flexDirection: 'row',
@@ -3615,7 +3619,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
   },
   colTicket: {
-    width: 140,
+    width: 150,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.xs,
   },

@@ -2321,7 +2321,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         table.ColumnsDefinition(columns =>
                         {
                             columns.ConstantColumn(22);   // 1. #
-                            columns.ConstantColumn(55);   // 2. Ticket & Times
+                            columns.ConstantColumn(60);   // 2. Ticket, Date & Times
                             columns.RelativeColumn(2.0f); // 3. Patient & Demographics
                             columns.RelativeColumn(1.8f); // 4. Attending Staff
                             columns.RelativeColumn(2.2f); // 5. Nurse Impression & Vitals
@@ -2334,7 +2334,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         table.Header(h =>
                         {
                             TableHeaderCell(h.Cell(), "#");
-                            TableHeaderCell(h.Cell(), "TICKET / TIME");
+                            TableHeaderCell(h.Cell(), "TICKET / DATE / TIME");
                             TableHeaderCell(h.Cell(), "PATIENT & DEMOGRAPHICS");
                             TableHeaderCell(h.Cell(), "ATTENDING STAFF");
                             TableHeaderCell(h.Cell(), "NURSE IMPRESSION & VITALS");
@@ -2365,6 +2365,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                 CellContainer(table.Cell()).Column(c =>
                                 {
                                     c.Item().Text(item.QueueNumber).FontSize(7.5f).Bold().FontColor("#0F172A");
+                                    c.Item().Text(item.CheckInTime.ToString("yyyy-MM-dd")).FontSize(6f).SemiBold().FontColor("#475569");
                                     c.Item().Text($"In: {item.CheckInTime:HH:mm}").FontSize(6.5f).FontColor("#64748B");
                                     if (item.CompletedTime.HasValue)
                                     {
