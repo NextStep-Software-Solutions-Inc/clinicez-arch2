@@ -105,6 +105,14 @@ services:
       - Hub__Bootstrap__Clients__6__Kind=PatientPlane
       - Hub__Bootstrap__Clients__6__PublicKey=${PATIENT_HUB_SIGNING_PUBLIC_KEY:?PATIENT_HUB_SIGNING_PUBLIC_KEY must be set}
 
+      # 7: Comms API (CloudService)
+      - Hub__Bootstrap__Clients__7__ClientId=${COMMS_HUB_CLIENT_ID:-dev-comms}
+      - Hub__Bootstrap__Clients__7__Secret=${COMMS_HUB_CLIENT_SECRET:?COMMS_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__7__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__7__Service=comms
+      - Hub__Bootstrap__Clients__7__Kind=CloudService
+      - Hub__Bootstrap__Clients__7__PublicKey=${COMMS_HUB_SIGNING_PUBLIC_KEY:?COMMS_HUB_SIGNING_PUBLIC_KEY must be set}
+
       # Verify envelope signatures on POST /v1/messages (default true outside Development). Only set false for a temporary
       # migration of clients that cannot sign yet.
       - Hub__Signing__Required=${HUB_SIGNING_REQUIRED:-true}
