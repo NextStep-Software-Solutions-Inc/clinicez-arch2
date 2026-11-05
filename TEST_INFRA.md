@@ -1,71 +1,103 @@
-# E2E Test Infra: Clinic Patient List, Dashboard UI/UX & Queue/Filter Enhancements
+# TEST_INFRA: Clinic Census Report (Interactive Workstation, QuestPDF Landscape, ClosedXML Excel)
 
-## Test Philosophy
-- **Opaque-Box & Requirement-Driven**: Tests are derived strictly from `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `clinic_patient_list_and_dashboard_ui_ux_plan.md`, validating observable contracts, user flows, state transitions, and UI component outputs.
-- **4-Tier Testing Methodology**:
-  - **Tier 1 (Feature Coverage)**: Isolated behavioral verification of all 20 features (F1 to F20) defined in `PROJECT.md § Feature Inventory`.
-  - **Tier 2 (Boundary & Corner Cases)**: Edge conditions, empty states, age boundary thresholds (59 vs 60), doctors on leave, missing contact info, multiple room assignments, and ticket sequence formatting.
-  - **Tier 3 (Cross-Feature Combinations)**: Multi-step workflows connecting directory filters, scheduling dialogs, multi-service check-in, ticket generation, and live dashboard cluster updates.
-  - **Tier 4 (Real-World Application Scenarios)**: Realistic end-to-end clinical workstation operations reflecting daily Philippine outpatient clinic routines.
+## 1. Test Philosophy & Methodology
 
----
+The Clinic Census Report test infrastructure enforces institutional-grade quality, statutory compliance, and clinical accuracy across the outpatient clinic application and API. Testing adheres to a rigorous **4-Tier Testing Methodology** that validates observable contracts, clinical workflows, data transformations, and UI component outputs without coupling to internal implementation trivia:
 
-## Feature Inventory & Test Mapping
-
-| # | Feature | Requirement Source | Tier 1 | Tier 2 | Tier 3 | Primary Test Target |
-|---|---------|---------------------|:------:|:------:|:------:|---------------------|
-| **F1** | 'My patients' Toolbar Tab | ORIGINAL_REQUEST R1, PROJECT.md F1 | ✓ | ✓ | ✓ | `Patients.screen.tsx`, `SegmentedControl.tsx` |
-| **F2** | Doctor Patient Ownership Filter | ORIGINAL_REQUEST R1, PROJECT.md F2 | ✓ | ✓ | ✓ | `Patients.screen.tsx`, `clinicService.ts` |
-| **F3** | Nurse Patient Ownership Filter | ORIGINAL_REQUEST R1, PROJECT.md F3 | ✓ | ✓ | ✓ | `Patients.screen.tsx`, `clinicService.ts` |
-| **F4** | Backend Query `MY_PATIENTS` Filter Contract | ORIGINAL_REQUEST R1, PROJECT.md F4 | ✓ | ✓ | ✓ | `GetClinicPatientsQuery.cs` |
-| **F5** | Reactive MyPatients Count | ORIGINAL_REQUEST R1, PROJECT.md F5 | ✓ | ✓ | ✓ | `GetClinicPatientCountsQuery.cs` |
-| **F6** | Relabel "Schedule visit" Button | ORIGINAL_REQUEST R2, PROJECT.md F6 | ✓ | ✓ | ✓ | `PatientDirectoryCard.tsx` (Card/Table/Menu) |
-| **F7** | In-Place `ScheduleVisitModal.tsx` | ORIGINAL_REQUEST R2, PROJECT.md F7 | ✓ | ✓ | ✓ | `ScheduleVisitModal.tsx` |
-| **F8** | Dynamic Doctor Shift Slots | ORIGINAL_REQUEST R2, PROJECT.md F8 | ✓ | ✓ | ✓ | `clinicService.getDoctorAvailableSlots` |
-| **F9** | Post-Appointment Setup Dialog (4 Actions) | ORIGINAL_REQUEST R2, PROJECT.md F9 | ✓ | ✓ | ✓ | `ScheduleVisitModal.tsx` |
-| **F10** | Relabel "Queue Patient" Button | ORIGINAL_REQUEST R3, PROJECT.md F10 | ✓ | ✓ | ✓ | `PatientDirectoryCard.tsx` |
-| **F11** | ActionMenu Direct Service Intents | ORIGINAL_REQUEST R3, PROJECT.md F11 | ✓ | ✓ | ✓ | `PatientDirectoryCard.tsx` (ActionMenu) |
-| **F12** | Dedicated `ServiceCheckInModal.tsx` (4 Views) | ORIGINAL_REQUEST R3, PROJECT.md F12 | ✓ | ✓ | ✓ | `ServiceCheckInModal.tsx` |
-| **F13** | Prefix Ticket Series System (`Q`/`SQ`, `V`/`SV`, `P`/`SP`, `A`/`SA`) | ORIGINAL_REQUEST R3, PROJECT.md F13 | ✓ | ✓ | ✓ | Ticket Series Generation Engine |
-| **F14** | Senior/PWD Priority Auto-Selection | ORIGINAL_REQUEST R3, PROJECT.md F14 | ✓ | ✓ | ✓ | Age & ID Auto-Selector Logic |
-| **F15** | Backend `SeriesPrefix` Support Contract | ORIGINAL_REQUEST R3, PROJECT.md F15 | ✓ | ✓ | ✓ | `CheckInPatientCommand.cs` |
-| **F16** | Domain Boundary Enforcement | ORIGINAL_REQUEST R3, PROJECT.md F16 | ✓ | ✓ | ✓ | Workstation Boundary Gatekeeper |
-| **F17** | Dashboard Toolbar Cleanup (Removed TV & EOD) | ORIGINAL_REQUEST R4, PROJECT.md F17 | ✓ | ✓ | ✓ | `Dashboard.screen.tsx` |
-| **F18** | 4 Semantic Clusters for Actions | ORIGINAL_REQUEST R4, PROJECT.md F18 | ✓ | ✓ | ✓ | `Dashboard.screen.tsx` Action Groups |
-| **F19** | Formatted Service Badges (Semantic Badges) | ORIGINAL_REQUEST R4, PROJECT.md F19 | ✓ | ✓ | ✓ | Badge Formatter & Token Styler |
-| **F20** | Zero Jargon Clinical UI Copy | ORIGINAL_REQUEST R5, PROJECT.md F20 | ✓ | ✓ | ✓ | UI Copy & Clinical Language Validator |
+- **Opaque-Box & Requirement-Driven**: Tests are derived strictly from `ORIGINAL_REQUEST.md`, `PROJECT.md`, `clinic_census_report_plan.md`, and Explorer surveys (`survey_backend_application.md`, `survey_backend_infrastructure.md`, `survey_frontend_workstation.md`).
+- **Mathematical & Clinical Oracles**: All expected results for metrics (turnaround minutes, new vs returning patient classification, age cohorts, triage vitals, and billing totals) are calculated using independent reference oracles.
+- **Design Token & Ergonomics Enforcement**: Workstation UI components are verified against `@clinicez/design-tokens` (teal `#0D6963` brand color, semantic acuity variants `routineBg`/`urgentBg`/`emergencyBg`, strict typography scales, and tokenized spacing/radii). Zero hardcoded hex colors, zero raw numeric font sizes, zero emojis.
+- **Clean Document Downloader Architecture**: Spreadsheets (`.xlsx`) and vector documents (`.pdf`) are validated for clean binary streaming, proper MIME types (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` and `application/pdf`), and correct download behavior without browser popup leaks or filename corruption.
 
 ---
 
-## Test Architecture
+## 2. 4-Tier Test Architecture
 
-- **Test Runner**: Bun test runner (`bun test`) executing headless React Native and TypeScript suites.
-- **Locations**:
-  - `apps/clinic-app/tests/e2e_clinicPatientWorkflows.test.ts`: Master E2E suite executing Tiers 1 through 4 across all 20 features.
-  - `apps/clinic-app/tests/patientDirectoryUi.test.ts`: Directory cards, table mode, and demographic line tests.
-  - `apps/clinic-app/tests/queueDashboardControls.test.ts`: Queue dashboard control logic and action guards.
-- **Execution Command**:
-  ```bash
-  cd apps/clinic-app && bun test tests/e2e_clinicPatientWorkflows.test.ts
-  ```
+```
+                                 ┌──────────────────────────────────────────────────────────┐
+                                 │ Tier 4: Real-World Operational Clinic Day Scenarios      │
+                                 │ (Morning Rush, Triage, Minor Procedure, Audit, EOD)      │
+                                 └────────────────────────────┬─────────────────────────────┘
+                                                              │
+                                 ┌────────────────────────────┴─────────────────────────────┐
+                                 │ Tier 3: Cross-Feature Combinations & Workflows           │
+                                 │ (Date Presets + Search + Acuity + Custom Fields + Export)│
+                                 └────────────────────────────┬─────────────────────────────┘
+                                                              │
+                                 ┌────────────────────────────┴─────────────────────────────┐
+                                 │ Tier 2: Boundary, Null & Corner Case Resilience          │
+                                 │ (0 Visits, Missing Vitals, Long Text, Extreme Times)    │
+                                 └────────────────────────────┬─────────────────────────────┘
+                                                              │
+                                 ┌────────────────────────────┴─────────────────────────────┐
+                                 │ Tier 1: Isolated Feature & Interface Contract Coverage   │
+                                 │ (SegmentedControl, Presets, Telemetry, 25-Col Table, URL)│
+                                 └──────────────────────────────────────────────────────────┘
+```
+
+1. **Tier 1 (Feature Coverage)**: Isolated functional verification of each feature in the inventory (SegmentedControl option, date presets, telemetry cards, 25-column register table, export action triggers, and API URL generators).
+2. **Tier 2 (Boundary & Corner Cases)**: Edge conditions, empty data sets (0 records), partial/missing vitals in triage, null turnaround times for in-progress visits, multi-type custom fields (string vs object vs null), and long clinical text truncation.
+3. **Tier 3 (Cross-Feature Combinations)**: Multi-dimensional interactions between date presets, real-time search queries, acuity badges, provider workload filters, and export URL generation.
+4. **Tier 4 (Real-World Application Scenarios)**: High-fidelity clinical day simulations reflecting standard Philippine outpatient operations (walk-in triage, doctor consultation with ICD-10 diagnosis, treatment bay procedures, university student ID custom fields, and statutory audit exports).
 
 ---
 
-## Real-World Application Scenarios (Tier 4)
+## 3. Feature Coverage Matrix (Tiers 1 to 4)
 
-| # | Scenario | Features Exercised | Clinical Workflow Summary | Complexity |
-|---|----------|--------------------|---------------------------|------------|
-| **S1** | **Outpatient Morning Rush: Doctor Consultation** | F1, F2, F6, F10, F11, F12, F13, F18, F19, F20 | Walk-in patient arrives with acute fever and cough. Receptionist queues patient for Dr. Santos in Consultation Room 101. Regular ticket `Q-001` is generated. Dr. Santos sees ticket in Care & Encounter cluster, calls patient, conducts examination, and completes consultation. | High |
-| **S2** | **Walk-In Vitals Triage (Nursing Bay)** | F3, F10, F12, F13, F14, F18, F19, F20 | Senior citizen (72 yo with Senior ID) arrives for routine hypertension monitoring. System automatically defaults to Senior & PWD Priority series `SV-001`. Triage nurse records vitals (BP, HR, SpO2) and completes non-doctor triage discharge without doctor presence or SOAP note. | Medium |
-| **S3** | **Minor Treatment Bay Clinical Procedure** | F3, F10, F11, F12, F13, F18, F19, F20 | Walk-in patient requires wound dressing change for arm laceration ordered by outside physician. Staff uses ActionMenu direct intent "Clinical Procedure". Ticket `P-001` is issued. Treatment bay nurse claims ticket, performs dressing change, records procedural notes, and completes visit. | High |
-| **S4** | **Administrative Fit-to-Work Clearance with Scheduled Follow-up** | F6, F7, F8, F9, F11, F12, F13, F18, F19, F20 | Employee patient requests medical fit-to-work clearance. Staff issues administrative ticket `A-001`. Patient also requires a 2-week follow-up visit. Staff clicks "Schedule visit" directly from patient card, checks doctor's dynamic shift slots, confirms visit, and triggers patient SMS notification from the 4-button post-appointment dialog. | High |
-| **S5** | **Emergency Critical Walk-in with ER Diversion** | F10, F12, F13, F18, F19, F20 | Walk-in patient presents with severe chest pain and diaphoresis. Priority escalated to Emergency. Ticket `Q-002` flagged with critical indicator. Staff triggers "Divert to ER" in Emergency cluster, capturing transport ambulance, hospital destination, escort paramedic, and clinical handover notes. Ticket status transitions to `Diverted`. | High |
+| Feature # | Feature Description | Requirement Source | Tier 1 | Tier 2 | Tier 3 | Tier 4 | Verification Target |
+|:---------:|---------------------|:------------------:|:------:|:------:|:------:|:------:|---------------------|
+| **F1.1** | Census DTO Schema & Register Contract | ORIGINAL_REQUEST R4, PROJECT.md F1.1 | ✓ | ✓ | ✓ | ✓ | `ClinicCensusReportDto.cs`, `clinicService.ts` |
+| **F1.2** | 6-Entity Correlation Query Handler | ORIGINAL_REQUEST R4, PROJECT.md F1.2 | ✓ | ✓ | ✓ | ✓ | `GetClinicCensusReportQuery.cs` |
+| **F1.3** | Turnaround Minutes Calculation | ORIGINAL_REQUEST R4, PROJECT.md F1.3 | ✓ | ✓ | ✓ | ✓ | Query Engine & Math Oracle |
+| **F1.4** | Deterministic Lifetime New vs Returning | ORIGINAL_REQUEST R4, PROJECT.md F1.4 | ✓ | ✓ | ✓ | ✓ | Query Engine & Math Oracle |
+| **F2.1** | ClosedXML Sheet 1 ("Census Register") | ORIGINAL_REQUEST R2, PROJECT.md F2.1 | ✓ | ✓ | ✓ | ✓ | `ClinicCensusExcelService.cs` |
+| **F2.2** | ClosedXML Sheet 2 ("Executive Summary") | ORIGINAL_REQUEST R2, PROJECT.md F2.2 | ✓ | ✓ | ✓ | ✓ | `ClinicCensusExcelService.cs` |
+| **F2.3** | QuestPDF Landscape Vector Document | ORIGINAL_REQUEST R3, PROJECT.md F2.3 | ✓ | ✓ | ✓ | ✓ | `ClinicDocumentPdfService.cs` |
+| **F3.1** | ReportsController Census JSON Endpoint | ORIGINAL_REQUEST R4, PROJECT.md F3.1 | ✓ | ✓ | ✓ | ✓ | `ReportsController.cs` (`/reports/census`) |
+| **F3.2** | ReportsController Census PDF Endpoint | ORIGINAL_REQUEST R4, PROJECT.md F3.2 | ✓ | ✓ | ✓ | ✓ | `ReportsController.cs` (`/reports/census/pdf`) |
+| **F3.3** | ReportsController Census Excel Endpoint | ORIGINAL_REQUEST R4, PROJECT.md F3.3 | ✓ | ✓ | ✓ | ✓ | `ReportsController.cs` (`/reports/census/excel`) |
+| **F4.1** | Frontend API Client & TypeScript Types | ORIGINAL_REQUEST R4, PROJECT.md F4.1 | ✓ | ✓ | ✓ | ✓ | `clinicService.ts` |
+| **F4.2** | Clean Binary Document Downloader | ORIGINAL_REQUEST R4, PROJECT.md F4.2 | ✓ | ✓ | ✓ | ✓ | `documentOpener.ts` (`downloadDocument`) |
+| **F4.3** | Dashboard Reports SegmentedControl Option | ORIGINAL_REQUEST R1, PROJECT.md F4.3 | ✓ | ✓ | ✓ | ✓ | `Dashboard.screen.tsx` (`CENSUS`) |
+| **F4.4** | Date Presets (Today, Yesterday, 7d, 30d) | ORIGINAL_REQUEST R1, PROJECT.md F4.4 | ✓ | ✓ | ✓ | ✓ | `computeDatePresetRange` Helper |
+| **F4.5** | Summary KPI Telemetry Cards | ORIGINAL_REQUEST R1, PROJECT.md F4.5 | ✓ | ✓ | ✓ | ✓ | Workstation Telemetry Cards |
+| **F4.6** | Searchable 25-Column Register Table | ORIGINAL_REQUEST R1, PROJECT.md F4.6 | ✓ | ✓ | ✓ | ✓ | Workstation Census Register Table |
+| **F4.7** | Workstation Export Actions (PDF, Excel) | ORIGINAL_REQUEST R1, PROJECT.md F4.7 | ✓ | ✓ | ✓ | ✓ | Export Action Buttons & Handlers |
 
 ---
 
-## Coverage Thresholds and Quality Gates
+## 4. Test Execution & Runner Commands
 
-1. **Feature Coverage**: 100% of the 20 features (F1 to F20) verified in Tier 1.
-2. **Boundary Resilience**: Zero regressions on empty lists, 59 vs 60 age boundaries, missing contact information, and off-duty doctor slot requests.
-3. **Zero Jargon Compliance**: All labels, dialog titles, buttons, and helper texts verified against plain everyday clinic copy (no statutory RA codes, no database terminology).
-4. **Design Token Adherence**: Verified compliance with `@clinicez/design-tokens` (teal `#0D6963`, semantic variants, typography scales).
+### 4.1 Frontend Workstation Test Suite
+Executes the comprehensive 4-tier census workstation suite:
+```bash
+cd apps/clinic-app && bun test tests/censusReportWorkstation.test.ts
+```
+
+### 4.2 Backend Unit & Integration Test Suite
+Executes CQRS query correlation, ClosedXML Excel workbook generation, and QuestPDF vector layout tests:
+```bash
+dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Census"
+```
+
+### 4.3 Static Typecheck Gate
+Ensures strict TypeScript compilation across the clinic application:
+```bash
+bun run typecheck:clinic
+```
+
+### 4.4 Design Token & Lint Gate
+Enforces zero hardcoded colors, strict token adoption, and zero unauthorized dependencies:
+```bash
+bun run lint:clinic
+```
+
+---
+
+## 5. Pass Criteria & Quality Gates
+
+1. **100% Pass Rate**: All tests across Tiers 1 through 4 in `tests/censusReportWorkstation.test.ts` must pass with zero failures or skipped assertions.
+2. **Zero Facade / Anti-Pattern Code**: No dummy tests, tautological `expect(true).toBe(true)`, or mocking that bypasses business logic validation.
+3. **Boundary Resilience**: Clean error handling for 0 visits, missing vitals, null turnaround times, and malformed custom field structures.
+4. **Design System Adherence**: Verified compliance with `@clinicez/design-tokens` (teal `#0D6963` brand palette, acuity tokens `emergencyBg`/`urgentBg`/`routineBg`, typography variants).
+5. **Static Analysis & Type Safety**: Zero TypeScript compiler errors via `bun run typecheck:clinic` and zero token lint violations via `bun run lint:clinic`.

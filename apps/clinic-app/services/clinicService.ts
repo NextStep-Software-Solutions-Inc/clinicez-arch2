@@ -1181,6 +1181,153 @@ export interface DoctorSharesReport {
   doctorShares: DoctorWorkloadDetail[];
 }
 
+export interface CensusSummary {
+  totalCensus: number;
+  newPatients: number;
+  returningPatients: number;
+  consultations: number;
+  standaloneProcedures: number;
+  diagnosticsOrLab: number;
+  nonDoctorVisits: number;
+  completedVisits: number;
+  inConsultationOrWaiting: number;
+  divertedVisits: number;
+  cancelledOrNoShow: number;
+  averageTurnaroundMinutes: number;
+  distinctPatientsCount?: number;
+  urgentAcuityCount?: number;
+  emergencyAcuityCount?: number;
+  // Aliases for compatibility
+  consultationCount?: number;
+  procedureCount?: number;
+  vitalsCheckOnlyCount?: number;
+  administrativeCount?: number;
+  pediatricCount?: number;
+  adultCount?: number;
+  seniorCount?: number;
+  pwdCount?: number;
+  philHealthCount?: number;
+  routineCount?: number;
+  urgentCount?: number;
+  emergencyCount?: number;
+  completedCount?: number;
+  divertedCount?: number;
+  noShowCount?: number;
+  cancelledCount?: number;
+}
+
+export interface CensusDemographicsBreakdown {
+  pediatricCount: number;
+  pediatricPercentage?: number;
+  adultCount: number;
+  adultPercentage?: number;
+  seniorCount: number;
+  seniorPercentage?: number;
+  maleCount: number;
+  malePercentage?: number;
+  femaleCount: number;
+  femalePercentage?: number;
+  otherGenderCount?: number;
+  otherGenderPercentage?: number;
+  otherCount?: number;
+  seniorCitizenCount?: number;
+  seniorOscaCount?: number;
+  pwdCount: number;
+  philHealthCount: number;
+}
+
+export interface CensusAcuityBreakdown {
+  routineCount: number;
+  routinePercentage?: number;
+  urgentCount: number;
+  urgentPercentage?: number;
+  emergencyCount: number;
+  emergencyPercentage?: number;
+}
+
+export interface CensusVisitTypeBreakdown {
+  visitType: string;
+  count: number;
+  percentage?: number;
+}
+
+export interface CensusProviderBreakdown {
+  staffId?: string;
+  staffName: string;
+  role: 'Doctor' | 'Nurse' | string;
+  totalEncounters: number;
+  completedEncounters: number;
+}
+
+export interface CensusItem {
+  id?: string;
+  sequenceNumber?: number;
+  queueNumber: string;
+  visitType: string;
+  acuity: 'Routine' | 'Urgent' | 'Emergency' | string;
+  outcomeStatus?: string;
+  checkInTime: string;
+  triageTime?: string | null;
+  calledTime?: string | null;
+  completedTime?: string | null;
+  turnaroundMinutes?: number | null;
+  patientId?: string;
+  patientCode: string;
+  patientName: string;
+  age: number;
+  sex: string;
+  civilStatus?: string | null;
+  classification?: string;
+  classifications?: string[];
+  customFields?: Record<string, any> | string | null;
+  customFieldsSummary?: string;
+  chiefComplaint?: string | null;
+  attendingNurse?: string | null;
+  nurseAssessment?: string | null;
+  nurseImpression?: string | null;
+  vitalsSnapshot?: string | null;
+  attendingDoctor?: string | null;
+  doctorDiagnosis?: string | null;
+  clinicalAssessment?: string | null;
+  systemsReviewed?: string | null;
+  proceduresPerformed?: string | null;
+  disposition?: string | null;
+  billingStatus?: string | null;
+  officialReceiptNumber?: string | null;
+  amountPaid?: number | null;
+  grossAmount?: number;
+  netAmount?: number;
+  balanceDue?: number;
+  isNewPatient?: boolean;
+}
+
+export interface ClinicCensusReport {
+  startDate: string;
+  endDate: string;
+  tenantId?: string;
+  clinicId?: string;
+  clinicName?: string | null;
+  facilityName?: string;
+  facilityAddress?: string | null;
+  accreditationNumber?: string | null;
+  generatedAt: string;
+  generatedByStaffName?: string | null;
+  summary: CensusSummary;
+  demographics: CensusDemographicsBreakdown;
+  acuity?: CensusAcuityBreakdown;
+  visitTypes?: CensusVisitTypeBreakdown[];
+  providers?: CensusProviderBreakdown[];
+  items: CensusItem[];
+}
+
+export interface CensusFilterOptions {
+  doctorId?: string;
+  nurseId?: string;
+  visitType?: string;
+  acuity?: string;
+  status?: string;
+}
+
 export interface PatientProblemRecord {
   id: string;
   clinicId: string;
@@ -3057,6 +3204,53 @@ export const clinicService = {
 
   getDoctorSharesReportPdfUrl(startDate?: string, endDate?: string): string {
     return this.getDoctorSharesPdfUrl(startDate, endDate);
+  },
+
+  async getCensusReport(startDate?: string, endDate?: string, options?: CensusFilterOptions) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (options?.doctorId) params.append('doctorId', options.doctorId);
+    if (options?.nurseId) params.append('nurseId', options.nurseId);
+    if (options?.visitType) params.append('visitType', options.visitType);
+    if (options?.acuity) params.append('acuity', options.acuity);
+    if (options?.status) params.append('status', options.status);
+    const qs = params.toString();
+    return clinicApiClient.get<ClinicCensusReport>(`/reports/census${qs ? `?${qs}` : ''}`);
+  },
+
+  getCensusPdfUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (options?.doctorId) params.append('doctorId', options.doctorId);
+    if (options?.nurseId) params.append('nurseId', options.nurseId);
+    if (options?.visitType) params.append('visitType', options.visitType);
+    if (options?.acuity) params.append('acuity', options.acuity);
+    if (options?.status) params.append('status', options.status);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/census/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getCensusReportPdfUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    return this.getCensusPdfUrl(startDate, endDate, options);
+  },
+
+  getCensusExcelUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (options?.doctorId) params.append('doctorId', options.doctorId);
+    if (options?.nurseId) params.append('nurseId', options.nurseId);
+    if (options?.visitType) params.append('visitType', options.visitType);
+    if (options?.acuity) params.append('acuity', options.acuity);
+    if (options?.status) params.append('status', options.status);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/census/excel${qs ? `?${qs}` : ''}`);
+  },
+
+  getCensusReportExcelUrl(startDate?: string, endDate?: string, options?: CensusFilterOptions): string {
+    return this.getCensusExcelUrl(startDate, endDate, options);
   },
 
   // Patient Chart

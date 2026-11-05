@@ -67,4 +67,5 @@ public interface IClinicDocumentPdfService
     byte[] GenerateTaxDiscountAuditReportPdf(TaxDiscountAuditReportDto report, FacilitySettings settings, string? preparedByName = null);
     byte[] GenerateDoctorSharesReportPdf(DoctorSharesReportDto report, FacilitySettings settings, string? preparedByName = null);
     byte[] GenerateClinicAnalyticsPdf(ClinicAnalyticsDto analytics, FacilitySettings settings, string? preparedByName = null);
+    byte[] GenerateClinicCensusReportPdf(ClinicCensusReportDto report, FacilitySettings settings, string? preparedByName = null);
 }

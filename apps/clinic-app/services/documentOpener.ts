@@ -80,3 +80,58 @@ export function openDocumentBlob(blob: Blob, _contentType?: string): boolean {
   setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
   return true;
 }
+
+/**
+ * Downloads a binary file (such as ClosedXML .xlsx spreadsheet or PDF) with clean filename
+ * and authenticated session headers, without leaving blank tabs open.
+ */
+export async function downloadDocument(url: string, filename?: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+
+  const base = getApiBaseUrl();
+  const isClinicApi = (Boolean(base) && url.startsWith(base!)) || url.startsWith('/');
+
+  // If external non-clinic URL, fallback to direct anchor click
+  if (!isClinicApi) {
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      if (filename) a.download = filename;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Authenticated clinic API blob fetch
+  const [blob, error] = await clinicApiClient.getBlob(url);
+  if (!blob || error) {
+    return false;
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    if (filename) {
+      a.download = filename;
+    } else {
+      const match = url.match(/\/([^/?#]+)(?:[?#]|$)/);
+      a.download = match && match[1] ? match[1] : 'document';
+    }
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    // Revoke object URL after download has started
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }
+}
+

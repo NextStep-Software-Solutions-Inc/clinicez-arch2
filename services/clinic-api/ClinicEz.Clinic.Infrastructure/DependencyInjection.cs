@@ -221,6 +221,7 @@ public static class DependencyInjection
         services.AddScoped<ILabResultReviewedPublisher, LabResultReviewedPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
+        services.AddScoped<IClinicCensusExcelService, ClinicCensusExcelService>();
         services.AddScoped<ISampleDocumentGenerator, SampleDocumentGenerator>();
 
         // Read eagerly: a missing or too-short ClinicEncryption:MasterSecret stops the service from starting.

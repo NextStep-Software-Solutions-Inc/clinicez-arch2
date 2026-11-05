@@ -1,218 +1,39 @@
-# BRIEFING — 2026-10-29T06:55:00Z
+# BRIEFING — 2026-11-05T11:18:00Z
 
 ## Mission
-Implement a secure, first-class Clinic Administrator account recovery mechanism in ClinicEZ using cryptographic Facility License Key verification across the backend API (`clinic-api`), the workstation frontend (`clinic-app`), and operational tooling.
-
+Oversee development of the institutional Clinic Census Report (interactive workstation view, vector PDF export via QuestPDF, and structured Excel export via ClosedXML) and verify completion.
 
 ## 🔒 My Identity
 - Archetype: sentinel
-- Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\sentinel
-- Orchestrator: 94a3832b-ed30-4820-9f84-6d2e4c185702 (swe_2)
-- Victory Auditor: c9249d36-a8d7-4cb0-a250-7983079fd5b1 (victory_auditor_6)
-- Active SWE Orchestrator: 94a3832b-ed30-4820-9f84-6d2e4c185702 (swe_2)
-- Active Project Orchestrator: a419699d-6150-4b80-b4d3-89c009c6cc39 (orchestrator_11)
-- Victory Auditor: to be spawned on victory claim
-- Active SWE Orchestrator (swe_3): 7d895f5c-242f-4646-b9c2-761f41034903
-- Victory Auditor (victory_auditor_9): e910a86e-47eb-4204-840a-f12e62fa1b6f
-- Active Project Orchestrator (orchestrator_13): ca7b12d0-6a35-40d1-9796-313203cdeccb
-- Victory Auditor (victory_auditor_11): 5da13317-25e0-4007-a270-44480d4b6d09
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_14): 41f067d9-3fa1-46c7-a09f-b2e90505a53a
-- Active Crons: task-28 (Progress Reporting), task-30 (Liveness Check)
-- Active SWE Orchestrator (swe_4): 42bc1ed8-b191-4fe8-a0b2-10924f959117
-- Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
-- Victory Auditor: to be spawned on victory claim
-- Victory Auditor (victory_auditor_12): 198482df-5abc-4531-abfa-92c845eb7396
-- Active Project Orchestrator (orchestrator_15): 0df9ea4a-5b1c-4d93-aed9-1bb3cd1251ea
-- Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
-- Active Project Orchestrator (orchestrator_16): f5149305-0cef-4eab-abca-0a9878057169
-- Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
-- Victory Auditor (victory_auditor_16): 663db1e1-f744-4c32-92a7-3991c2f398c0
-- Cleaned up: task-30 killed, task-32 killed, all subagents killed
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-dental-fix/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_17): 5cc4a844-dcce-47fb-b084-d9a7fe5f1618
-- Active Crons: task-42 (Progress Reporting), task-44 (Liveness Check)
-- Victory Auditor: to be spawned on victory claim
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_18): f5795226-f404-4e8d-8697-7ddd8b968279
-- Active Crons: task-36 (Progress Reporting), task-38 (Liveness Check)
-- Victory Auditor: to be spawned on victory claim
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-billing/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_billing_review): 862e57ca-e9c9-4748-a69c-1f9fb51464ca
-- Active Crons: task-38 (Progress Reporting), task-40 (Liveness Check)
-- Victory Auditor (victory_auditor_billing_review): c511277c-9dd2-437b-abc0-bf9c70edd8a2
-- Cleaned up: task-38 killed, task-40 killed, all subagents killed
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_2): 03338571-a68e-4b29-91d0-1c6ef4eb0062
-- Active Crons: task-26 (Progress Reporting), task-28 (Liveness Check)
-- Victory Auditor: to be spawned on victory claim
-- Victory Auditor (victory_auditor_2): 53251c79-b82b-4af9-b30e-e693aeecb7be
-- Cleaned up: task-26 killed, task-28 killed, all subagents killed
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_billing_workflow): ad6bd746-c457-48e8-bebc-182ea31b181b
-- Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
-- Victory Auditor (victory_auditor_billing_workflow): d8ed5215-5b05-4463-895f-804d6bd472b8
-- Cleaned up: task-30 killed, task-32 killed, all subagents killed
-- Active Project Orchestrator (orchestrator_invitations): 81eae908-dfae-4fd3-b659-5f657de02e8c
-- Active Crons: task-34 (Progress Reporting), task-36 (Liveness Check)
-- Victory Auditor: b75a8f3f-2b96-42bc-a3d4-d2cbcb89b896 (victory_auditor_invitations)
-- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/migrate_admin_panel_app/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_admin_migration): b107e165-4772-4937-83b0-dd48a3b509e1
-- Active Crons: task-29 (Progress Reporting), task-31 (Liveness Check)
-- Victory Auditor (victory_auditor_admin_migration): 2985f7fb-511d-4e09-87d0-1a9e7857f159
-- Cleaned up: task-29 killed, task-31 killed, all subagents killed
-- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_admin_recovery): [to be spawned]
-- Active Crons: pending spawn
-- Victory Auditor: to be spawned on victory claim
-- Active Project Orchestrator (orchestrator_admin_recovery): a09a15fc-793c-49d1-8768-909a7078516d
-- Active Crons: task-31 (Progress Reporting), task-34 (Liveness Check)
-- Victory Auditor (victory_auditor_admin_recovery): ecd09233-8139-4dde-82f3-e3e3f021e6a6
-- Cleaned up: task-31 killed, task-34 killed, all subagents killed
+- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/sentinel
+- Orchestrator: dc04a3ba-0545-49dc-9a84-825eb997af34 (completed & killed)
+- Victory Auditor: 2fb1cb28-6e2d-4acc-a726-56825fd5c7ee (completed & killed)
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
 - Victory Audit is MANDATORY before reporting completion
-- [other constraints from dispatch message]
-- Route to SWE Light (`teamwork_preview_swe`) for single self-contained focused fix
-- Suppress dormant modal portal mounting when visible=false (R1)
-- Guard modal portal elevation against internal tab rerenders (R2)
-- Seamless tab transitions without backdrop flash or fade-in restarts (R3)
-- Preserve multi-level modal layering and z-index (R4)
-- Verification: modalStacking.test.ts passes, test:clinic passes, typecheck:clinic passes
-- Route to General (`teamwork_preview_orchestrator`) for multi-part secured clinic join link implementation
-- Asynchronous Interop Hub relay (`patient.join.requested`) from Party.Portal to Party.ForFacility(Clinic)
-- External document quarantine (`ClinicRecordAttachments` with PendingVerification)
-- Join Code configuration with expiration windows in clinic-app
-- PhilHealth Member Type integration (MM vs DD) and Mod-11 validation
-- Complete removal of `/student-intake` route
-- Design system compliance with `@clinicez/design-tokens`
-- Route to SWE Light (`teamwork_preview_swe`) for single self-contained patient code sequence generator refactor
-- Centralized sequence generator IPatientCodeGenerator replacing in-memory table scans
-- Persistent atomic sequence tracker entity/table scoped to clinic and year
-- Optimistic retry mechanism (up to 3 times) for concurrency protection
-- External Interop intake prefix PAT-EXT-{yyyyMMdd}-{GUID_SHORT}
-- Verification: dotnet test PatientCodeSequence passes with 0 failures, full ClinicEz.Clinic.Application.Tests pass
-- Route to General (`teamwork_preview_orchestrator`) for Progressive Patient Account Claiming (Option A) across ClinicEZ ecosystem
-- Cryptographic claim tokens (HMAC-SHA256) in packages/shared-dotnet
-- Platform settings for Claim TTL (48h) and App Store / Google Play links in portal-api
-- Email confirmation delivery via Interop Hub notification.email.requested (no SMS)
-- DigitalPassCard Progressive Account Claim UI in apps/portal-web strictly compliant with @clinicez/design-tokens Teal (#0D6963)
-- Multi-identity conflict resolution (proxy, alternate email linking, medical privacy guardrails)
-- Central profile hydration endpoint POST /api/v1/patients/claim-intake in patient-api
-- Full build and test verification (CLINICEZ.sln, portal-web test & build)
-- Route to General (`teamwork_preview_orchestrator`) for multi-tenant tri-domain architectural decoupling (Facility Network, Online Presence, Service Catalog)
-- Two-tier publishing governance (portal-web/portal-api workspace eligibility, clinic-app/clinic-api facility publishing & capacity control)
-- Resilient Interop Hub synchronization to patient-api (facility.directory.updated)
-- Hybrid gated service catalog & tiered patient intake experience (join code / org link)
-- ClinicEZ Design System & Clinical Workstation UX compliance (@clinicez/design-tokens, 4 states, clinical urgency)
-- Verification: bun test packages/design-tokens/src/tokens.test.ts, dotnet test services/patient-api/ClinicEz.Patient.Application.Tests, dotnet test services/portal-api/ClinicEz.Portal.Tests
-- Route to SWE Light (`teamwork_preview_swe`) for Workspace-Wide Search Tool (⌘K / Ctrl+K)
-- Replace unrouted mail icon next to Quick Create in nav-main.tsx with IconSearch and tooltip "Search workspace (⌘K)"
-- WorkspaceSearchDialog with Radix Dialog, auto-focus, keyboard navigation (ArrowUp/Down, Enter, Esc)
-- Live indexing of pages, branches/facilities, workspace team, and quick actions
-- @clinicez/design-tokens compliance and strict TypeScript typing
-- Route to General (`teamwork_preview_orchestrator`) for Universal Pluggable Search Provider Framework across ClinicEZ
-- Strictly governed by clinicez-search-provider-expert and clinicez-ui-ux-expert
-- Shared platform contracts in packages/shared-dotnet & packages/shared-ts
-- Zero-touch assembly scanning DI in clinic-api and feature search providers
-- Workstation command palette UX (Cmd+K/Ctrl+K) in clinic-app with 200ms debounce and @clinicez/design-tokens styling
-- Deep navigation dispatch to target records and Settings tabs
-- Portal-web WorkspaceSearchDialog parity
-- Route to General (`teamwork_preview_orchestrator`) for Clean, Integrated Dental Module inside ClinicEZ
-- Strictly governed by clinicez-ui-ux-expert and clinicez-search-provider-expert
-- Coordinated with active Clinic Workspace Global Search implementation (do not overwrite existing search files)
-- Plug Dental Module via zero-touch extensibility: DentalChartSearchProvider and universalSearchRegistry
-- R1: Reuse existing rooms, documents, orders, billing; dynamic classification mapping in PublishClinicToDirectoryCommand
-- R2: Dental Chart Backend & Specialty Mode in ClinicSettings and DentalToothRecord CQRS
-- R3: Clean, jargon-free UI in Consultation (InlineDentalChartCard) & Patient Chart (DentalChartTab), Settings UI, design tokens
-- R4: Pluggable search integration
-- Route to General (`teamwork_preview_orchestrator`) for Dental Module & Clinical Workstation Live-Testing Bug Fixes and UX Enhancements
-- Dedicated isolated git worktree: /Users/macuser/projects/github/nextstep/clinicez-dental-fix (branch fix/dental-chart-and-workstation-ux)
-- R1: Patient Chart Dental Sync & Longitudinal Encounter Dental Summary
-- R2: 5-Surface Odontogram Visualization & Structured Multi-Condition Tooth Records (per-condition timestamp, doctor, surface, notes; distinct DMFT counts)
-- R3: Procedure Room Selection, Per-Procedure Sent Indicator & Button '+' Normalization
-- R4: Full-Width Responsive Workstation Layout (remove maxWidth from Consultations, Patients, Dashboard)
-- Zero raw hex color literals or direct palette.ts imports (@clinicez/design-tokens)
-- Route to General (`teamwork_preview_orchestrator`) for Clinic Analytics and Statutory Reports overhaul
-- Eliminate hardcoded mock fallbacks across reports queries; return genuine 0 counts and empty lists (R1)
-- High-performance server-side EF Core aggregations (SumAsync, CountAsync, GroupBy) & composite temporal indexes on (TenantId, ClinicId, Date/Time) (R2)
-- Interactive SVG chart components (TrendLineChart, WorkloadBarChart, TenderDonutChart, MorbidityDistributionChart) in apps/clinic-app/components/analytics/ rooted in @clinicez/design-tokens with 4-state completion (R3)
-- Enterprise-grade print-ready vector PDF generation with QuestPDF in ClinicDocumentPdfService and streaming endpoints in ReportsController.cs with QR cryptographic verification (R4)
-- Automated test verification: dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests and cd apps/clinic-app && bun test tests pass with 0 failures
-- Passes design tokens audit (bun run lint:tokens) and network isolation audit (bun run lint:hosts) with 0 violations
-- Route to General (`teamwork_preview_orchestrator`) for ClinicEZ Billing System Hardening Review
-- Dual-mode cashier routing (`ClinicDesk` vs `CashierCounter`) & concurrency audit in `services/clinic-api` (R1)
-- Clinic station settings & UI/UX audit against `@clinicez/design-tokens` (zero raw hex values) in `apps/clinic-app` (R2)
-- Clinical workstation non-disruptive queue flow & post-encounter dialog audit in `apps/clinic-app` (R3)
-- Statement of Account (SOA) review & settlement audit in `apps/clinic-app` (R4)
-- Architecture documentation & interop integrity in `docs/architecture/billing.md` (R5)
-- Automated execution of all 7 test suites & static token audit with 100% pass rate
-- Route to General (`teamwork_preview_orchestrator`) for Calendar Appointment Push Notification and Reminder System
-- Multi-service scope: packages/shared-dotnet, services/clinic-api, services/patient-api, apps/clinic-app
-- Background reminder service with 24h & 2h advance window evaluations
-- Instant event push notifications via interop hub & transactional outbox
-- Doctor staff notifications in clinic workstation notification center
-- On-demand manual reminder dispatch from inspection modal
-- Strict design token compliance (@clinicez/design-tokens) and full test verification
-- Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
-- Route to General (`teamwork_preview_orchestrator`) for multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows
-- R1: Multi-Doctor Charge Capture & Single Visit Draft SOA (merge into existing draft/partially paid invoice instead of 409 Conflict)
-- R2: Per-Item Clinician Attribution & Clean Invoice Bounding (InvoiceLineItem.DoctorId & DoctorName; remove single AttendingDoctorName; compute DoctorSharesReport per item)
-- R3: Document Separation: Statement of Account (INV-...) vs. Official Receipt (OR-...)
-- R4: Cashier Workstation UI/UX & Queue Lifecycle (3 tabs, cross-date draft retrieval, defensive cashiering, defer/promissory note)
-- R5: Encounter Signing UX Alignment in Consultations.screen.tsx (Charge Slip / Draft SOA posting)
-- Automated EF Core migrations using dotnet ef migrations add AddDoctorToInvoiceLineItem
-- Strict design tokens compliance (@clinicez/design-tokens)
-- Automated test verification: backend invoice tests, frontend billing tests, typecheck
-- Route to General (`teamwork_preview_orchestrator`) for User and Staff Invitations across all 3 tiers (Platform, Workspace, Clinic Staff)
-- Built-in email sender via Interop Hub notification.email.requested -> SMTP/Resend (not Clerk)
-- 7-day cryptographically secure invitation tokens
-- Option for administrators: Send Email or Copy Link
-- Dedicated accept pages on appropriate domains (Portal domain for Platform & Workspace; Clinic domain with local JWT auth for Clinic Staff)
-- Full lifecycle status tracking: Invited, Expired, Active, Suspended, Revoked
-- Automated test suites: dotnet test ClinicEz.Portal.Tests, dotnet test ClinicEz.Clinic.Application.Tests, bun test in portal-web & clinic-app
-- Route to General (`teamwork_preview_orchestrator`) for ClinicEZ Admin Panel Migration & Governance Workstation Restyle
-- Standalone apps/admin-web SPA (Vite + React 19 + TanStack Router + Tailwind CSS v4 + @clerk/clerk-react) on port 3001
-- Zero functional regression, clean root routing (no /admin/* prefix or legacy shims)
-- Governance Workstation UI/UX restyle strictly per .agents/skills/clinicez-ui-ux-expert/SKILL.md and @clinicez/design-tokens (0 raw hex values, 4-state UX, responsive)
-- Exclusive security hardening (strict edge headers in vercel.json, robots.txt Disallow /, 15-min idle auto-logout, configurable Admin MFA gate)
-- Stateless services/portal-api updates: AdminBaseUrl resolution, RBAC on newsletter subscribers, dev authorized parties, docker-compose & env configs
-- STRICTLY ZERO database changes, 0 migrations, 0 entity changes
-- Clean-cut removal of admin from apps/portal-web (0 files remaining, reserved slug preserved in proxy)
-- Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
-- Route to General (`teamwork_preview_orchestrator`) for Clinic Administrator account recovery mechanism
-- Anonymous, rate-limited endpoint POST /api/v1/auth/recover-admin with IFacilityLicenseValidator cryptographic check
-- Reset PasswordHash, clear lockout/failed counters, increment TokenVersion, revoke refresh tokens LAN-wide, issue fresh JWTs
-- StaffRole.Admin verification (reject non-admins with 403)
-- Workstation recovery screen in clinic-app with ClinicEZ teal palette (#0D6963) and accessible LoginScreen entry point
-- Operational CLI scripts (reset-admin-credentials.sh and .ps1)
-- Comprehensive automated verification (ClinicAuthServiceTests, adminRecovery.test.ts, staffInvitations.test.ts, tsc)
-- Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
+- R1: Interactive Workstation View in Dashboard Reports Tab (CENSUS type, presets, KPI cards, table, export buttons)
+- R2: Structured Excel Export (.xlsx) via ClosedXML (2 sheets: Census Register 25 cols, Executive Summary)
+- R3: Vector PDF Export via QuestPDF (Landscape layout, letterhead, KPI telemetry, repeating headers, signature blocks)
+- R4: Backend Reporting Endpoints and Frontend Integration (REST endpoints, DTO, query handler, frontend service, tests)
 
 ## User Context
-- **Last user request**: Implement a secure, first-class Clinic Administrator account recovery mechanism in ClinicEZ using cryptographic Facility License Key verification across the backend API (`clinic-api`), the workstation frontend (`clinic-app`), and operational tooling.
+- **Last user request**: Develop the institutional Clinic Census Report across clinic application and API based on approved implementation plan.
 - **Pending clarifications**: none
-- **Delivered results**:
-  - Recorded request verbatim to `.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-29T06:47:27Z`.
-  - Decided route: General path (`teamwork_preview_orchestrator`).
-  - Pre-flight audit: not required.
+- **Delivered results**: Clinic Census Report (Dashboard Workstation View, ClosedXML multi-tab Excel export, QuestPDF landscape vector PDF export, ReportsController REST endpoints, and automated test suites).
 
 ## Project Status
 - **Phase**: complete
-- **Route**: General -> teamwork_preview_orchestrator
-- **Active Subagents**: none (cleaned up)
-- **Active Tasks**: none (cleaned up)
-
+- **Active Orchestrator**: none (work verified and completed)
+- **Working Directory**: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/sentinel
 
 ## Victory Audit Status
 - **Triggered**: yes
 - **Verdict**: VICTORY CONFIRMED
 - **Retry count**: 0
-- **Auditor**: ecd09233-8139-4dde-82f3-e3e3f021e6a6
-
 
 ## Artifact Index
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
+- `.agents/teamwork/ORIGINAL_REQUEST.md` — Authoritative user prompt
+- `.agents/teamwork/orchestrator/handoff.md` — Orchestrator handoff report
+- `.agents/teamwork/teamwork_victory_auditor_sentinel_census/handoff.md` — Victory Auditor verification report
+- `.agents/teamwork/sentinel/handoff.md` — Sentinel final handoff report

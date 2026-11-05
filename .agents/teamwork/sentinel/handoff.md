@@ -1,86 +1,49 @@
-# Sentinel Completion Handoff Report: Clinic Administrator Account Recovery
-
-**Date**: 2026-10-29T08:15:00Z  
-**Role**: Project Sentinel  
-**Working Directory**: `/Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/reset_admin_credentials/.agents/teamwork/sentinel`  
-**Verdict**: **VICTORY CONFIRMED**
-
----
+# Sentinel Final Handoff — Clinic Census Report
 
 ## 1. Observation
-
-1. **Authoritative Request Execution**:
-   - Recorded user request verbatim in `.agents/teamwork/ORIGINAL_REQUEST.md` under `## 2026-10-29T06:47:27Z`.
-   - Evaluated task routing: Routed to General path (`teamwork_preview_orchestrator`) due to cross-stack scope (backend cryptographic endpoint, frontend workstation UX, operational CLI scripts, and automated test suite). Pre-flight audit not required.
-   - Dispatched `orchestrator_admin_recovery` (`a09a15fc-793c-49d1-8768-909a7078516d`), which coordinated an implementation hierarchy across 4 milestones, 3 survey explorers, 3 workers, 2 reviewers, 2 challengers, and 1 internal forensic auditor.
-
-2. **Backend Admin Recovery Endpoint (`clinic-api`)**:
-   - Exposed anonymous, rate-limited endpoint `POST /api/v1/auth/recover-admin` in `services/clinic-api/ClinicEz.Clinic.Api/Controllers/AuthController.cs`.
-   - Rate limiting enforced on the controller via `[EnableRateLimiting(FacilityLocalAuthExtensions.AuthRateLimitPolicy)]` (30 requests/minute).
-   - Validates ECDSA cryptographic facility license tokens via `IFacilityLicenseValidator` against the target clinic/facility context. Tampered, expired, or foreign tokens return HTTP 400 Bad Request.
-   - Validates password complexity policy (minimum 8 characters, letters, digits, confirmation match).
-   - Resolves staff member and strictly enforces Administrator role check (`StaffRole.Admin` or role name `"Clinic Administrator"`). Rejects non-administrator accounts (Doctor, Nurse, Cashier, Receptionist, Pharmacist, Lab Tech) with HTTP 403 Forbidden.
-   - Updates administrator's password hash (`PasswordHash`), clears `FailedLoginCount` and `LockoutEnd`, sets `MustChangePassword = false`, marks `IsActive = true` and `Status = Active`, increments `TokenVersion`, and updates audit timestamps.
-   - Revokes all existing refresh tokens across the LAN in PostgreSQL, evicts staff from `StaffAccessCache`, and issues fresh JWT access and refresh tokens.
-
-3. **Frontend Workstation Recovery Screen (`clinic-app`)**:
-   - Added `AdminRecoveryInput` interface and `recoverAdmin` service call in `apps/clinic-app/services/authSession.ts`, persisting tokens to secure storage.
-   - Integrated `recoverAdmin` into `apps/clinic-app/context/AuthContext.tsx`, smoothly transitioning `AuthState` into `'signedIn'`.
-   - Created `apps/clinic-app/components/auth/AdminRecoveryScreen.tsx` strictly adhering to `@clinicez/design-tokens` (Teal `#0D6963`, 0 raw hex color literals), featuring defensive client-side validation (`validateWorkstationPassword` requiring >= 8 characters, letters, digits, and confirmation matching) and clear action banners.
-   - Updated `apps/clinic-app/components/auth/LoginScreen.tsx` with view toggle and accessible entry point link ("Are you the clinic admin? Recover account").
-
-4. **Operational Recovery Tooling (`scripts/`)**:
-   - Authored `scripts/reset-admin-credentials.sh` (executable bash) and `scripts/reset-admin-credentials.ps1` (PowerShell) supporting `--list`, `--clear-lockout`, and `--generate-invite`.
-   - Auto-detects Docker `postgres` container vs local host `psql`, auto-resolves database name (`CLINICEZ-CLINIC_DB` vs `CLINICEZ_CLINIC_DB`), safely clears lockouts, increments `TokenVersion`, revokes active refresh tokens, and generates 256-bit cryptographic one-time invitation links without writing manual SQL.
-
-5. **Independent Post-Victory Audit Results**:
-   - Victory Auditor (`ecd09233-8139-4dde-82f3-e3e3f021e6a6`) conducted independent 3-phase audit and rendered:
-     **VERDICT: VICTORY CONFIRMED**
-   - Independent verification suite executions:
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceTests"`: 30 passed, 0 failed.
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceAdversarialTests"`: 24 passed, 0 failed.
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~AuthControllerTests"`: 9 passed, 0 failed.
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`: 5,071 passed, 0 failed across entire application test suite.
-     - `bun x tsc --noEmit -p apps/clinic-app`: Exit code 0 (0 TypeScript errors).
-     - `bun test apps/clinic-app/tests/staffInvitations.test.ts`: 45 passed, 0 failed.
-     - `bun test apps/clinic-app/tests/adminRecovery.test.ts`: 23 passed, 0 failed.
-     - `node apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 violations across 0 files.
-     - Operational Tooling Check (`bash -n scripts/reset-admin-credentials.sh && ./scripts/reset-admin-credentials.sh --help`): Exit code 0.
-
----
+- The user requested the implementation of the institutional Clinic Census Report (interactive workstation view, vector PDF export via QuestPDF, and structured Excel export via ClosedXML) across the clinic app and API based on the approved implementation plan.
+- The project was routed to `teamwork_orchestrator` (`dc04a3ba-0545-49dc-9a84-825eb997af34`) following the approved prompt recorded in `.agents/teamwork/ORIGINAL_REQUEST.md`.
+- Orchestrator completed survey (Phase 0), milestone decomposition (Phase 1), execution of Backend M1 and Frontend M2 (Phase 2), and convened the verification cohort (Phase 3).
+- Adversarial review in Iteration 1 caught 3 concrete edge-case defects (multi-visit entity correlation bleed, CompletedTime fallback, and stringified "null" JSON in custom fields). The team executed Iteration 2 remediation, updating `GetClinicCensusReportQuery.cs` and `Dashboard.screen.tsx`.
+- Upon orchestrator claiming victory, the Sentinel dispatched an independent `teamwork_victory_auditor` (`2fb1cb28-6e2d-4acc-a726-56825fd5c7ee`).
+- The Victory Auditor conducted timeline analysis, anti-cheating inspection, and independent test execution, delivering a verdict of **VICTORY CONFIRMED**.
 
 ## 2. Logic Chain
-
-1. **Routing and Delegation**: The Sentinel assessed the incoming request and routed to General (`teamwork_preview_orchestrator`) due to backend API additions, mobile/workstation frontend UI, operational shell/PowerShell scripts, and multi-surface test suites.
-2. **Sentinel Oversight**: Two background crons were scheduled immediately upon dispatch (Progress Reporting `*/8 * * * *`, task-31; Liveness Check `*/10 * * * *`, task-34) to continuously verify heartbeat freshness and relay milestone updates to the user.
-3. **Mandatory Audit Gate**: When the Project Orchestrator claimed completion with unanimous internal gate approvals (`GATE_STATUS.md`), the Sentinel enforced the mandatory blocking audit rule and dispatched `teamwork_preview_victory_auditor` (`ecd09233-8139-4dde-82f3-e3e3f021e6a6`) with zero shared context.
-4. **Clean Shutdown**: Upon receiving `VICTORY CONFIRMED`, both background monitoring tasks (`task-31`, `task-34`) were cancelled, and all subagents were terminated via `manage_subagents(action="kill_all")`.
-
----
+1. **Interactive Workstation View (`Dashboard.screen.tsx`)**:
+   - Added `'CENSUS'` to `ReportType` union and 'Clinic census' SegmentedControl tab.
+   - Wired date presets (Today, Yesterday, Last 7 Days, This Month, Custom).
+   - Added KPI telemetry cards: Total Census (New vs Return), Consultations (Procedures, Diagnostics), Turnaround (Completed, Diverted), Demographics badges (Pediatric, Adult, Senior, PWD, PhilHealth), and Acuity breakdown.
+   - Built searchable, filterable 25-column register table with defensive parsing for null custom fields and missing demographics.
+   - Added Export PDF, Export Excel (.xlsx), and Print action triggers.
+2. **Structured Excel Export via ClosedXML (`ClinicCensusExcelService.cs`)**:
+   - Implemented `IClinicCensusExcelService` generating multi-sheet `.xlsx`:
+     - Sheet 1 ("Census Register"): 25 columns, Navy `#1E3A8A` headers, white bold text, alternating row fills, frozen header row, active auto-filters, currency formatting (`₱#,##0.00`), and date formatting (`yyyy-MM-dd HH:mm`).
+     - Sheet 2 ("Executive Summary & Statistics"): KPI summary tables covering operations, demographics, acuity, and provider volume.
+3. **Vector PDF Export via QuestPDF (`ClinicDocumentPdfService.cs`)**:
+   - Implemented `GenerateClinicCensusReportPdf` producing landscape layout with clinic letterhead, accreditation number, facility contact, executive telemetry KPI cards, compact demographics & acuity grid, repeating table headers across page breaks, alternating row colors, dynamic page numbers (`Page X of Y`), and formal dual signature blocks.
+4. **Backend REST API & CQRS Query (`ReportsController.cs`, `GetClinicCensusReportQuery.cs`)**:
+   - Endpoints exposed: `GET /api/v1/reports/census`, `GET /api/v1/reports/census/pdf`, `GET /api/v1/reports/census/excel`.
+   - CQRS handler correlates QueueItem, Patient (CustomFields JSON), PatientVitals, ConsultationEncounter, Procedure, and Invoice/PaymentRecord with strict temporal isolation per visit and deterministic lifetime New vs Return calculation.
+5. **Frontend Services (`clinicService.ts`, `documentOpener.ts`)**:
+   - Added `getCensusReport`, `getCensusPdfUrl`, `getCensusExcelUrl` and `downloadDocument(url, filename)` with automatic blob revocation.
 
 ## 3. Caveats
-
-- **Rate Limiting Policy**: The recovery endpoint `POST /api/v1/auth/recover-admin` shares the `FacilityLocalAuthExtensions.AuthRateLimitPolicy` (30 requests/minute per IP/workspace). Brute force attempts on facility license keys or emails are automatically throttled with HTTP 429 Too Many Requests.
-- **Operational Tooling Execution**: In production VPS environments (`130.94.50.27`), `scripts/reset-admin-credentials.sh` automatically routes queries into the Docker `postgres` container. For local setups, ensure either Docker or host `psql` is on the path.
-
----
+- Production deployment requires standard database migrations to be up to date (no schema alterations were introduced; all queries leverage existing EF Core entities).
+- ClosedXML and QuestPDF packages are confirmed installed in `ClinicEz.Clinic.Infrastructure.csproj`.
 
 ## 4. Conclusion
-
-The Clinic Administrator account recovery mechanism is fully implemented, verified, and independently audited across backend API (`clinic-api`), workstation frontend (`clinic-app`), and operational tooling (`scripts/`). All security requirements, non-admin role locks, cryptographic validations, LAN session revocations, and automated test gates have passed with 100% concordance.
-
----
+- All requirements R1 through R4 and acceptance criteria specified in the approved implementation plan have been implemented, verified, remediated against adversarial stress testing, and independently certified with **VICTORY CONFIRMED**.
 
 ## 5. Verification Method
-
-- Backend Test Suites:
-  - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceTests"` (30/30 passed)
-  - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ClinicAuthServiceAdversarialTests"` (24/24 passed)
-  - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~AuthControllerTests"` (9/9 passed)
-- Frontend Test Suites:
-  - `bun test apps/clinic-app/tests/adminRecovery.test.ts` (23/23 passed)
-  - `bun test apps/clinic-app/tests/staffInvitations.test.ts` (45/45 passed)
-  - `bun x tsc --noEmit -p apps/clinic-app` (0 type errors)
-  - `node apps/clinic-app/scripts/check-tokens.mjs --strict` (0 token violations)
-- Operational Tooling:
-  - `bash -n scripts/reset-admin-credentials.sh && ./scripts/reset-admin-credentials.sh --help` (exit code 0)
+- **Backend Census Test Suite**: `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Census"`
+  - Result: **22 passed, 0 failed, 0 skipped** (100% pass rate).
+- **Backend Regression Suite**: `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`
+  - Result: **5,188 passed, 0 failed** (0 regressions).
+- **Frontend Workstation Test Suite**: `cd apps/clinic-app && bun test tests/censusReportWorkstation.test.ts`
+  - Result: **54 passed, 0 failed, 691 expect assertions** (100% pass rate).
+- **TypeScript Static Analysis**: `bun run typecheck:clinic`
+  - Result: **0 errors** (Exit code 0).
+- **Design Token & Style Linting**: `bun run lint:clinic`
+  - Result: **0 token violations across 308 files scanned** (Exit code 0).
+- **Independent Victory Audit**: `.agents/teamwork/teamwork_victory_auditor_sentinel_census/handoff.md`
+  - Verdict: **VICTORY CONFIRMED**.
