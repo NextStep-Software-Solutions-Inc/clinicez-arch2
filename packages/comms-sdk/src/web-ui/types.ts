@@ -56,6 +56,7 @@ export interface WebTriageQueueViewProps {
   facilityName: string;
   onExecuteDisposition: (payload: TriageDispositionPayload) => Promise<void>;
   onRefresh: () => void;
+  onSelectCard?: (conversationId: string) => void;
   isLoading?: boolean;
   error?: string | null;
   activeFilter?: 'All' | 'Emergency' | 'Urgent' | 'Routine';

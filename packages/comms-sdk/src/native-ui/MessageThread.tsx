@@ -31,6 +31,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   onAcknowledgeMessage,
   privacyBlurEnabled,
   onTogglePrivacyBlur,
+  showHeader = true,
+  renderEmptyState,
+  renderSendIcon,
   canWriteInternalNotes = false,
   isLoading = false,
   error = null,
@@ -42,6 +45,15 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   const [isInternal, setIsInternal] = useState(false);
   const [peekingMessageId, setPeekingMessageId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleKeyPress = (e: any) => {
+    if (e.nativeEvent?.key === 'Enter' && !e.nativeEvent?.shiftKey) {
+      if (typeof e.preventDefault === 'function') {
+        e.preventDefault();
+      }
+      handleSend();
+    }
+  };
 
   const handleSend = async () => {
     if (!inputText.trim() || isSubmitting) return;
@@ -61,30 +73,26 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     switch (msg.state) {
       case 'Sending':
         return (
-          <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIcon}>...</Text>
-            <Text style={styles.deliveryTextMuted}>Sending...</Text>
+          <View style={styles.deliveryRow} accessibilityLabel="Sending">
+            <Text style={styles.deliveryIconMuted}>◷</Text>
           </View>
         );
       case 'Waiting':
         return (
-          <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIcon}>OK</Text>
-            <Text style={styles.deliveryTextMuted}>Sent, waiting</Text>
+          <View style={styles.deliveryRow} accessibilityLabel="Sent">
+            <Text style={styles.deliveryIconMuted}>✓</Text>
           </View>
         );
       case 'Received':
         return (
-          <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIconTeal}>ACK</Text>
-            <Text style={styles.deliveryTextTeal}>Delivered</Text>
+          <View style={styles.deliveryRow} accessibilityLabel="Delivered">
+            <Text style={styles.deliveryIconTeal}>✓✓</Text>
           </View>
         );
       case 'NotReceived':
         return (
-          <View style={styles.deliveryRow}>
+          <View style={styles.deliveryRow} accessibilityLabel="Not delivered">
             <Text style={styles.deliveryIconRed}>!</Text>
-            <Text style={styles.deliveryTextRed}>Not delivered</Text>
             <TouchableOpacity
               style={styles.resendButton}
               onPress={() => onResendMessage(msg.id)}
@@ -100,32 +108,52 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   return (
     <View style={[styles.container, style]}>
       {/* Thread Header */}
-      <View style={styles.header}>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {conversationTitle}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            Scope: {conversationScope}
-          </Text>
-        </View>
+      {showHeader && (
+        <View style={styles.header}>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {conversationTitle}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {conversationScope === 'PatientFacility'
+                ? 'Patient Request'
+                : conversationScope === 'StaffContext'
+                  ? 'Care Team'
+                  : conversationScope === 'Facility'
+                    ? 'Facility Channel'
+                    : conversationScope}
+            </Text>
+          </View>
 
-        <TouchableOpacity
-          style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
-          onPress={onTogglePrivacyBlur}
-          accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
-        >
-          <Text style={[styles.privacyButtonText, privacyBlurEnabled && styles.privacyButtonTextActive]}>
-            {privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
+            onPress={onTogglePrivacyBlur}
+            accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+          >
+            <Text style={[styles.privacyButtonText, privacyBlurEnabled && styles.privacyButtonTextActive]}>
+              {privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Content States */}
       {isLoading ? (
-        <View style={styles.stateContainer}>
-          <ActivityIndicator size="small" color={lightColors.primary} />
-          <Text style={styles.stateText}>Loading messages...</Text>
+        <View style={styles.skeletonContainer}>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleLeft, { width: '65%' }]}>
+            <View style={styles.skeletonBarLong} />
+            <View style={styles.skeletonBarShort} />
+          </View>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleRight, { width: '50%' }]}>
+            <View style={styles.skeletonBarMedium} />
+          </View>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleLeft, { width: '75%' }]}>
+            <View style={styles.skeletonBarLong} />
+            <View style={styles.skeletonBarMedium} />
+          </View>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleRight, { width: '60%' }]}>
+            <View style={styles.skeletonBarMedium} />
+          </View>
         </View>
       ) : error ? (
         <View style={styles.stateContainer}>
@@ -134,13 +162,19 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : messages.length === 0 ? (
-        <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>E2EE</Text>
-          <Text style={styles.emptyTitle}>Secure Communication</Text>
-          <Text style={styles.emptySubtitle}>
-            This is the start of your medical communication thread. Messages are encrypted in transit.
-          </Text>
-        </View>
+        renderEmptyState ? (
+          renderEmptyState()
+        ) : (
+          <View style={styles.stateContainer}>
+            <View style={styles.emptyShieldBadge}>
+              <Text style={styles.emptyShieldGlyph}>✓</Text>
+            </View>
+            <Text style={styles.emptyTitle}>Secure Communication</Text>
+            <Text style={styles.emptySubtitle}>
+              This is the start of your medical communication thread. Messages are encrypted in transit.
+            </Text>
+          </View>
+        )
       ) : (
         <ScrollView style={styles.messageList} contentContainerStyle={styles.messageListContent}>
           {hasMoreHistory && onLoadMoreHistory && (
@@ -165,7 +199,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                   <View style={styles.internalHeader}>
                     <Text style={styles.internalHeaderIcon}>LOCK</Text>
                     <Text style={styles.internalHeaderText}>
-                      INTERNAL NOTE — NEVER VISIBLE TO PATIENT
+                      Private Staff Note (Care Team Only)
                     </Text>
                   </View>
                   <Text style={[styles.internalText, isObscured && styles.obscuredText]}>
@@ -256,6 +290,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}
             placeholderTextColor={lightColors.textMuted}
             multiline
+            onKeyPress={handleKeyPress}
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
             accessibilityLabel="Message input field"
           />
 
@@ -265,6 +302,11 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             disabled={!inputText.trim() || isSubmitting}
             accessibilityLabel="Send message"
           >
+            {renderSendIcon ? (
+              renderSendIcon()
+            ) : (
+              <Text style={styles.sendIconText}>➤</Text>
+            )}
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
@@ -403,15 +445,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2
   },
-  deliveryIcon: {
-    fontSize: fontSizeScale.xs
+  deliveryIconMuted: {
+    fontSize: fontSizeScale.xs,
+    color: lightColors.onPrimary,
+    opacity: 0.8,
+    marginLeft: 2,
   },
   deliveryIconTeal: {
     fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary
+    color: lightColors.onPrimary,
+    fontWeight: '700',
+    marginLeft: 2,
   },
   deliveryIconRed: {
-    fontSize: fontSizeScale.xs
+    fontSize: fontSizeScale.xs,
+    color: lightColors.emergencyBg,
+    fontWeight: '700',
+    marginLeft: 2,
   },
   deliveryTextMuted: {
     fontSize: fontSizeScale.xs,
@@ -512,70 +562,101 @@ const styles = StyleSheet.create({
     borderTopColor: lightColors.border
   },
   internalToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: spaceScale.xs,
     paddingHorizontal: spaceScale.sm,
-    borderRadius: radiusScale.xs,
+    borderRadius: radiusScale.full,
     backgroundColor: lightColors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: lightColors.border,
     alignSelf: 'flex-start',
-    marginBottom: spaceScale.xs
+    marginBottom: spaceScale.xs,
+    gap: spaceScale.xs,
   },
   internalToggleActive: {
     backgroundColor: lightColors.warningBg,
     borderColor: lightColors.warningBorder,
-    borderWidth: 1
   },
   internalToggleText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '600',
-    color: lightColors.textSecondary
+    color: lightColors.textSecondary,
   },
   internalToggleTextActive: {
-    color: lightColors.warningText
+    color: lightColors.warningText,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: spaceScale.xs
+    gap: spaceScale.sm,
   },
   input: {
     flex: 1,
     backgroundColor: lightColors.surfaceSubtle,
-    borderRadius: radiusScale.sm,
+    borderRadius: radiusScale.md,
+    borderWidth: 1,
+    borderColor: lightColors.border,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.sm,
     minHeight: sizes.touchTarget,
     maxHeight: 120,
-    fontSize: fontSizeScale.md,
-    color: lightColors.text
+    fontSize: fontSizeScale.sm,
+    color: lightColors.text,
   },
   inputInternal: {
     backgroundColor: lightColors.warningBg,
     borderColor: lightColors.warningBorder,
     borderWidth: 1,
-    color: lightColors.warningText
+    color: lightColors.warningText,
   },
   sendButton: {
-    minWidth: sizes.touchTarget,
+    minWidth: 76,
     minHeight: sizes.touchTarget,
-    paddingHorizontal: spaceScale.lg,
+    paddingHorizontal: spaceScale.md,
     backgroundColor: lightColors.primary,
-    borderRadius: radiusScale.sm,
+    borderRadius: radiusScale.md,
+    flexDirection: 'row',
+    gap: 4,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    shadowColor: lightColors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   sendButtonDisabled: {
-    opacity: 0.5
+    opacity: 0.5,
+  },
+  sendIconText: {
+    color: lightColors.onPrimary,
+    fontSize: 13,
   },
   sendButtonText: {
     color: lightColors.onPrimary,
-    fontWeight: '700',
-    fontSize: fontSizeScale.sm
+    fontWeight: '600',
+    fontSize: fontSizeScale.sm,
   },
   stateContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spaceScale.xl
+    padding: spaceScale.xl,
+  },
+  emptyShieldBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.primarySubtle,
+    borderWidth: 1,
+    borderColor: lightColors.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spaceScale.md,
+  },
+  emptyShieldGlyph: {
+    fontSize: fontSizeScale['2xl'],
   },
   stateText: {
     marginTop: spaceScale.sm,
@@ -611,5 +692,46 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
+  },
+  skeletonContainer: {
+    flex: 1,
+    padding: spaceScale.md,
+    gap: spaceScale.md,
+  },
+  skeletonBubble: {
+    padding: spaceScale.md,
+    borderRadius: radiusScale.lg,
+    gap: spaceScale.xs,
+  },
+  skeletonBubbleLeft: {
+    alignSelf: 'flex-start',
+    backgroundColor: lightColors.surfaceSubtle,
+    borderBottomLeftRadius: radiusScale.xs,
+  },
+  skeletonBubbleRight: {
+    alignSelf: 'flex-end',
+    backgroundColor: lightColors.primarySubtle,
+    borderBottomRightRadius: radiusScale.xs,
+  },
+  skeletonBarLong: {
+    height: 12,
+    width: '90%',
+    backgroundColor: lightColors.border,
+    borderRadius: radiusScale.xs,
+    opacity: 0.6,
+  },
+  skeletonBarMedium: {
+    height: 12,
+    width: '65%',
+    backgroundColor: lightColors.border,
+    borderRadius: radiusScale.xs,
+    opacity: 0.5,
+  },
+  skeletonBarShort: {
+    height: 12,
+    width: '40%',
+    backgroundColor: lightColors.border,
+    borderRadius: radiusScale.xs,
+    opacity: 0.4,
   }
 });

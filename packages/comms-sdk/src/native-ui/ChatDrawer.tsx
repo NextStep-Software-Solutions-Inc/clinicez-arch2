@@ -43,6 +43,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   loading = false,
   error = null,
   onNewConversation,
+  renderScopeIcon,
+  renderEmptyState,
+  renderSearchIcon,
   style
 }) => {
   if (isCollapsed) {
@@ -53,7 +56,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           onPress={onToggleCollapse}
           accessibilityLabel="Expand communication drawer"
         >
-          <Text style={styles.iconText}>Chat</Text>
+          {renderSearchIcon ? renderSearchIcon() : <Text style={styles.iconText}>•</Text>}
         </TouchableOpacity>
         {items.some((i) => i.unreadCount > 0) && (
           <View style={styles.collapsedBadge}>
@@ -68,54 +71,43 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     <View style={[styles.container, style]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.headerTitle}>Communications</Text>
-          <View style={styles.headerActions}>
-            {onToggleCollapse && (
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={onToggleCollapse}
-                accessibilityLabel="Collapse drawer"
-              >
-                <Text style={styles.headerButtonText}>◀</Text>
-              </TouchableOpacity>
+        {/* Search & New Button Inline Row */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer}>
+            {renderSearchIcon ? (
+              renderSearchIcon()
+            ) : (
+              <Text style={styles.searchIcon}>🔍</Text>
             )}
-            {onNewConversation && (
-              <TouchableOpacity
-                style={styles.primaryIconButton}
-                onPress={onNewConversation}
-                accessibilityLabel="New conversation"
-              >
-                <Text style={styles.primaryIconButtonText}>+ New</Text>
-              </TouchableOpacity>
-            )}
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={onSearchChange}
+              placeholder="Search conversations..."
+              placeholderTextColor={lightColors.textMuted}
+              accessibilityLabel="Search conversations"
+            />
           </View>
-        </View>
 
-        {connectionState !== 'Connected' && (
-          <View
-            style={[
-              styles.connectionBanner,
-              connectionState === 'Reconnecting' ? styles.reconnectingBanner : styles.disconnectedBanner
-            ]}
-          >
-            <Text style={styles.connectionText}>
-              {connectionState === 'Reconnecting' ? 'Reconnecting to comms...' : 'Disconnected from comms'}
-            </Text>
-          </View>
-        )}
+          {onNewConversation && (
+            <TouchableOpacity
+              style={styles.primaryIconButton}
+              onPress={onNewConversation}
+              accessibilityLabel="New conversation"
+            >
+              <Text style={styles.primaryIconButtonText}>+ New</Text>
+            </TouchableOpacity>
+          )}
 
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>Search</Text>
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={onSearchChange}
-            placeholder="Search conversations..."
-            placeholderTextColor={lightColors.textMuted}
-            accessibilityLabel="Search conversations"
-          />
+          {onToggleCollapse && (
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={onToggleCollapse}
+              accessibilityLabel="Collapse drawer"
+            >
+              <Text style={styles.headerButtonText}>◀</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Scopes Filter */}
@@ -156,20 +148,24 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : items.length === 0 ? (
-        <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>Chat</Text>
-          <Text style={styles.emptyTitle}>No Conversations</Text>
-          <Text style={styles.emptySubtitle}>No messages match your selected filter.</Text>
-          {onNewConversation && (
-            <TouchableOpacity style={styles.emptyCta} onPress={onNewConversation}>
-              <Text style={styles.emptyCtaText}>Start Conversation</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        renderEmptyState ? (
+          renderEmptyState()
+        ) : (
+          <View style={styles.stateContainer}>
+            <Text style={styles.emptyTitle}>No Conversations</Text>
+            <Text style={styles.emptySubtitle}>No messages match your selected filter.</Text>
+            {onNewConversation && (
+              <TouchableOpacity style={styles.emptyCta} onPress={onNewConversation}>
+                <Text style={styles.emptyCtaText}>Start Conversation</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )
       ) : (
         <ScrollView style={styles.listContainer}>
           {items.map((item) => {
             const isActive = item.id === activeConversationId;
+            const hasRecentMessage = Boolean(item.lastMessageSnippet);
             return (
               <TouchableOpacity
                 key={item.id}
@@ -179,39 +175,83 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 accessibilityRole="button"
                 accessibilityState={{ selected: isActive }}
               >
-                <View style={styles.cardHeader}>
-                  <Text style={[styles.cardTitle, isActive && styles.cardTitleActive]} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  {item.lastMessageAtUtc && (
-                    <Text style={styles.cardTime}>
-                      {new Date(item.lastMessageAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  )}
-                </View>
+                <View style={[styles.cardContentRow, !hasRecentMessage && styles.cardContentRowCentered]}>
+                  <View
+                    style={[
+                      styles.cardAvatar,
+                      !hasRecentMessage && styles.cardAvatarCentered,
+                      item.scope === 'Direct' && styles.cardAvatarDirect,
+                      item.scope === 'StaffContext' && styles.cardAvatarCareTeam,
+                      item.scope === 'Facility' && styles.cardAvatarFacility,
+                      item.scope === 'PatientFacility' && styles.cardAvatarTriage,
+                    ]}
+                  >
+                    {renderScopeIcon ? (
+                      renderScopeIcon(item.scope)
+                    ) : (
+                      <Text style={styles.cardAvatarText}>
+                        {item.scope === 'Direct'
+                          ? 'D'
+                          : item.scope === 'StaffContext'
+                            ? 'C'
+                            : item.scope === 'Facility'
+                              ? '#'
+                              : 'T'}
+                      </Text>
+                    )}
+                  </View>
 
-                {item.lastMessageSnippet && (
-                  <Text style={styles.cardSnippet} numberOfLines={2}>
-                    {item.lastMessageSnippet}
-                  </Text>
-                )}
+                  <View style={[styles.cardMain, !hasRecentMessage && styles.cardMainCentered]}>
+                    <View style={[styles.cardHeader, !hasRecentMessage && styles.cardHeaderCentered]}>
+                      <Text style={[styles.cardTitle, isActive && styles.cardTitleActive]} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      <View style={styles.cardHeaderRight}>
+                        <View style={styles.scopeTag}>
+                          <Text style={styles.scopeTagText}>
+                            {item.scope === 'PatientFacility'
+                              ? 'Triage'
+                              : item.scope === 'StaffContext'
+                                ? 'Care Team'
+                                : item.scope === 'Facility'
+                                  ? 'Facility'
+                                  : 'Direct'}
+                          </Text>
+                        </View>
+                        {item.lastMessageAtUtc && (
+                          <Text style={styles.cardTime}>
+                            {new Date(item.lastMessageAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
 
-                <View style={styles.cardMeta}>
-                  {item.isEmergency && (
-                    <View style={styles.statBadge}>
-                      <Text style={styles.statBadgeText}>STAT</Text>
-                    </View>
-                  )}
-                  {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
-                    <View style={styles.urgentBadge}>
-                      <Text style={styles.urgentBadgeText}>Urgent</Text>
-                    </View>
-                  )}
-                  {item.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
-                    </View>
-                  )}
+                    {item.lastMessageSnippet && (
+                      <Text style={styles.cardSnippet} numberOfLines={2}>
+                        {item.lastMessageSnippet}
+                      </Text>
+                    )}
+
+                    {(item.isEmergency || (item.urgentCount !== undefined && item.urgentCount > 0) || item.unreadCount > 0) && (
+                      <View style={styles.cardMeta}>
+                        {item.isEmergency && (
+                          <View style={styles.statBadge}>
+                            <Text style={styles.statBadgeText}>Emergency</Text>
+                          </View>
+                        )}
+                        {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
+                          <View style={styles.urgentBadge}>
+                            <Text style={styles.urgentBadgeText}>Urgent</Text>
+                          </View>
+                        )}
+                        {item.unreadCount > 0 && (
+                          <View style={styles.unreadBadge}>
+                            <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
             );
@@ -286,13 +326,24 @@ const styles = StyleSheet.create({
     color: lightColors.textSecondary,
     fontSize: fontSizeScale.md
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.sm,
+    marginBottom: spaceScale.sm,
+  },
   primaryIconButton: {
-    minHeight: sizes.touchTarget,
+    minHeight: 38,
     paddingHorizontal: spaceScale.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radiusScale.sm,
-    backgroundColor: lightColors.primary
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.primary,
+    shadowColor: lightColors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
   },
   primaryIconButtonText: {
     color: lightColors.onPrimary,
@@ -320,17 +371,20 @@ const styles = StyleSheet.create({
     color: lightColors.text
   },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: lightColors.surfaceSubtle,
-    borderRadius: radiusScale.sm,
-    paddingHorizontal: spaceScale.sm,
-    minHeight: sizes.touchTarget,
-    marginBottom: spaceScale.sm
+    borderRadius: radiusScale.full,
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    paddingHorizontal: spaceScale.md,
+    minHeight: 38,
   },
   searchIcon: {
     marginRight: spaceScale.xs,
-    fontSize: fontSizeScale.md
+    fontSize: 14,
+    opacity: 0.6,
   },
   searchInput: {
     flex: 1,
@@ -341,17 +395,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row'
   },
   scopePill: {
-    minHeight: sizes.touchTarget,
+    minHeight: 34,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.xs,
     borderRadius: radiusScale.full,
-    backgroundColor: lightColors.surfaceSubtle,
+    backgroundColor: lightColors.surface,
+    borderWidth: 1,
+    borderColor: lightColors.border,
     marginRight: spaceScale.xs,
     justifyContent: 'center',
     alignItems: 'center'
   },
   scopePillActive: {
-    backgroundColor: lightColors.primary
+    backgroundColor: lightColors.primary,
+    borderColor: lightColors.primary,
   },
   scopePillText: {
     fontSize: fontSizeScale.xs,
@@ -368,7 +425,7 @@ const styles = StyleSheet.create({
   card: {
     padding: spaceScale.md,
     borderBottomWidth: 1,
-    borderBottomColor: lightColors.border,
+    borderBottomColor: lightColors.borderLight,
     minHeight: sizes.touchTarget
   },
   cardActive: {
@@ -376,11 +433,77 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: lightColors.primary
   },
+  cardContentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spaceScale.sm,
+  },
+  cardContentRowCentered: {
+    alignItems: 'center',
+  },
+  cardAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  cardAvatarCentered: {
+    marginTop: 0,
+  },
+  cardAvatarDirect: {
+    backgroundColor: lightColors.primarySubtle,
+    borderColor: lightColors.primaryBorder,
+  },
+  cardAvatarCareTeam: {
+    backgroundColor: lightColors.surfaceSubtle,
+    borderColor: lightColors.border,
+  },
+  cardAvatarFacility: {
+    backgroundColor: lightColors.surfaceSubtle,
+    borderColor: lightColors.border,
+  },
+  cardAvatarTriage: {
+    backgroundColor: lightColors.warningBg,
+    borderColor: lightColors.warningBorder,
+  },
+  cardAvatarText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: lightColors.primary,
+  },
+  cardMain: {
+    flex: 1,
+  },
+  cardMainCentered: {
+    justifyContent: 'center',
+  },
+  scopeTag: {
+    backgroundColor: lightColors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: lightColors.borderLight,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radiusScale.xs,
+  },
+  scopeTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: lightColors.textSecondary,
+  },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spaceScale.xs
+    marginBottom: spaceScale.xs,
+    gap: spaceScale.xs,
+  },
+  cardHeaderCentered: {
+    marginBottom: 0,
   },
   cardTitle: {
     fontSize: fontSizeScale.md,
@@ -391,10 +514,15 @@ const styles = StyleSheet.create({
   cardTitleActive: {
     color: lightColors.primary
   },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.xs,
+    flexShrink: 0,
+  },
   cardTime: {
     fontSize: fontSizeScale.xs,
     color: lightColors.textMuted,
-    marginLeft: spaceScale.xs
   },
   cardSnippet: {
     fontSize: fontSizeScale.sm,

@@ -37,6 +37,9 @@ export interface ChatDrawerProps {
   loading?: boolean;
   error?: string | null;
   onNewConversation?: () => void;
+  renderScopeIcon?: (scope: ChatDrawerItem['scope']) => React.ReactNode;
+  renderEmptyState?: () => React.ReactNode;
+  renderSearchIcon?: () => React.ReactNode;
   style?: ViewStyle;
 }
 
@@ -81,6 +84,9 @@ export interface MessageThreadProps {
   onAcknowledgeMessage?: (messageId: string) => Promise<void>;
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;
+  showHeader?: boolean;
+  renderEmptyState?: () => React.ReactNode;
+  renderSendIcon?: () => React.ReactNode;
   canWriteInternalNotes?: boolean;
   isLoading?: boolean;
   error?: string | null;
@@ -126,6 +132,7 @@ export interface TriageQueueViewProps {
   facilityName: string;
   onExecuteDisposition: (payload: TriageDispositionPayload) => Promise<void>;
   onRefresh: () => void;
+  onSelectCard?: (conversationId: string) => void;
   isLoading?: boolean;
   error?: string | null;
   activeFilter?: 'All' | 'Emergency' | 'Urgent' | 'Routine';

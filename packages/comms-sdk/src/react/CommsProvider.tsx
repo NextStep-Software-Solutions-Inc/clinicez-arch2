@@ -102,6 +102,8 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
     return resp;
   }, []);
 
+  const autoReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     const unsubState = client.events.on('connectionStateChanged', (state, error) => {
       let status: ConnectionStatus = 'disconnected';
@@ -118,6 +120,21 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
         lastDisconnectedAt: state === 'Disconnected' ? new Date() : prev.lastDisconnectedAt,
         reconnectAttempt: state === 'Reconnecting' ? prev.reconnectAttempt + 1 : state === 'Connected' ? 0 : prev.reconnectAttempt
       }));
+
+      // Proactive auto-recovery: If disconnected/failed while autoConnect is enabled, re-establish connection
+      if (options?.autoConnect !== false) {
+        if (state === 'Disconnected') {
+          if (autoReconnectTimerRef.current) {
+            clearTimeout(autoReconnectTimerRef.current);
+          }
+          autoReconnectTimerRef.current = setTimeout(() => {
+            connect().catch(() => {});
+          }, 3000);
+        } else if (state === 'Connected' && autoReconnectTimerRef.current) {
+          clearTimeout(autoReconnectTimerRef.current);
+          autoReconnectTimerRef.current = null;
+        }
+      }
     });
 
     const unsubTicket = client.events.on('ticketRenewed', (rawTicket) => {
@@ -136,12 +153,16 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
     });
 
     return () => {
+      if (autoReconnectTimerRef.current) {
+        clearTimeout(autoReconnectTimerRef.current);
+        autoReconnectTimerRef.current = null;
+      }
       unsubState();
       unsubTicket();
       unsubMsg();
       unsubMsgState();
     };
-  }, [client]);
+  }, [client, connect, options?.autoConnect]);
 
   // Auto-connect
   useEffect(() => {
@@ -166,6 +187,7 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
       branchId,
       staffId,
       staffDisplayName,
+      baseUrl,
       connect,
       disconnect,
       reconnect,
@@ -182,6 +204,7 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
       branchId,
       staffId,
       staffDisplayName,
+      baseUrl,
       connect,
       disconnect,
       reconnect,

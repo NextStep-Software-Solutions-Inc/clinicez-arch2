@@ -42,34 +42,34 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
     switch (msg.state) {
       case 'Sending':
         return (
-          <span className="flex items-center gap-1 text-[11px] text-white/80" title="Sending to comms hub...">
+          <span className="flex items-center gap-1 text-xs text-white/80" title="Sending to comms hub...">
             <span>...</span>
             <span>Sending...</span>
           </span>
         );
       case 'Waiting':
         return (
-          <span className="flex items-center gap-1 text-[11px] text-white/80" title="Delivered to hub, awaiting recipient storage ACK">
+          <span className="flex items-center gap-1 text-xs text-white/80" title="Delivered to hub, awaiting recipient storage confirmation">
             <span>OK</span>
             <span>Sent, waiting</span>
           </span>
         );
       case 'Received':
         return (
-          <span className="flex items-center gap-1 text-[11px] text-white font-semibold" title="Recipient device confirmed storage">
-            <span>ACK</span>
+          <span className="flex items-center gap-1 text-xs text-white font-semibold" title="Recipient device confirmed storage">
+            <span>Read Confirmation</span>
             <span>Delivered</span>
           </span>
         );
       case 'NotReceived':
         return (
-          <span className="flex items-center gap-1.5 text-[11px] text-red-200 font-bold" title="Retention deadline expired without receipt confirmation">
+          <span className="flex items-center gap-1.5 text-xs text-red-200 font-bold" title="Retention deadline expired without receipt confirmation">
             <span>!</span>
             <span>Not delivered</span>
             <button
               type="button"
               onClick={() => onResendMessage(msg.id)}
-              className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-white text-red-700 hover:bg-red-50 transition-colors"
+              className="ml-1 px-1.5 py-0.5 rounded text-xs font-bold bg-white text-red-700 hover:bg-red-50 transition-colors"
             >
               Resend
             </button>
@@ -84,7 +84,15 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
       <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
         <div>
           <h1 className="text-base font-bold truncate">{conversationTitle}</h1>
-          <p className="text-xs text-slate-500">Scope: {conversationScope}</p>
+          <p className="text-xs text-slate-500">
+            {conversationScope === 'PatientFacility'
+              ? 'Patient Request'
+              : conversationScope === 'StaffContext'
+                ? 'Care Team'
+                : conversationScope === 'Facility'
+                  ? 'Facility Channel'
+                  : conversationScope}
+          </p>
         </div>
 
         <button
@@ -144,12 +152,12 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                 >
                   <div className="flex items-center gap-1.5 text-xs font-bold mb-1 text-amber-800 dark:text-amber-300">
                     <span>LOCK</span>
-                    <span>INTERNAL CLINICAL NOTE — NEVER VISIBLE TO PATIENT</span>
+                    <span>Private Staff Note (Care Team Only)</span>
                   </div>
                   <p className={`text-sm leading-relaxed ${isObscured ? 'blur-sm select-none' : ''}`}>
                     {msg.contentText}
                   </p>
-                  <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-2">
+                  <div className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                     {msg.senderDisplayName} •{' '}
                     {new Date(msg.clientSentAtUtc).toLocaleTimeString([], {
                       hour: '2-digit',
@@ -231,7 +239,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
                   )}
 
                   <div className="flex items-center justify-end gap-2 mt-2 pt-1 border-t border-black/5 dark:border-white/5">
-                    <span className={`text-[11px] ${isMe ? 'text-white/80' : 'text-slate-400'}`}>
+                    <span className={`text-xs ${isMe ? 'text-white/80' : 'text-slate-400'}`}>
                       {new Date(msg.clientSentAtUtc).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit'

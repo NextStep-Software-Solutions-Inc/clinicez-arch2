@@ -58,6 +58,7 @@ mock.module('react-native', () => ({
   TouchableOpacity: createMockComponent('TouchableOpacity'),
   TouchableHighlight: createMockComponent('TouchableHighlight'),
   Switch: createMockComponent('Switch'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
   FlatList: createMockComponent('FlatList'),
   SectionList: createMockComponent('SectionList'),
   Modal: createMockComponent('Modal'),
@@ -573,8 +574,8 @@ describe('Challenger 2 Empirical Verification: Design Tokens, A11y, Contrast & S
 
       const html = renderToStaticMarkup(React.createElement(ClinicChatDrawerHost, {}));
 
-      expect(html).toContain('Clinic Communications');
-      expect(html).toContain('aria-label="Expand to full screen"');
+      expect(html).toContain('Messages');
+      expect(html).toContain('aria-label="Expand side panel"');
       expect(html).toContain('lucide-maximize-2');
       expect(html).toContain('aria-label="Close communications panel"');
       expect(html).toContain('lucide-x');

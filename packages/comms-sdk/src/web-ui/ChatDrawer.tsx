@@ -193,17 +193,17 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
 
                 <div className="flex items-center gap-1.5">
                   {item.isEmergency && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-200 dark:border-red-800">
-                      STAT
+                    <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-200 dark:border-red-800">
+                      Emergency
                     </span>
                   )}
                   {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-200 dark:border-orange-800">
+                    <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-200 dark:border-orange-800">
                       Urgent
                     </span>
                   )}
                   {item.unreadCount > 0 && (
-                    <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-700 text-white">
+                    <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold bg-teal-700 text-white">
                       {item.unreadCount}
                     </span>
                   )}

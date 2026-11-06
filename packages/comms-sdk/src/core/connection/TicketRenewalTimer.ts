@@ -52,6 +52,25 @@ export class TicketRenewalTimer {
     return this.currentClaims;
   }
 
+  public async getValidTicket(): Promise<string> {
+    const nowSec = Math.floor(Date.now() / 1000);
+    // If ticket is missing or expires within 60 seconds, fetch a fresh one
+    if (!this.currentTicket || !this.currentClaims || (this.currentClaims.exp - nowSec < 60)) {
+      try {
+        const freshTicket = await this.ticketProvider();
+        this.updateTicket(freshTicket);
+        return freshTicket;
+      } catch (err: any) {
+        // If fetch fails but we have an unexpired ticket, return current
+        if (this.currentTicket && this.currentClaims && this.currentClaims.exp > nowSec) {
+          return this.currentTicket;
+        }
+        throw err;
+      }
+    }
+    return this.currentTicket;
+  }
+
   public updateTicket(rawTicket: string): void {
     this.currentTicket = rawTicket;
     this.currentClaims = this.parseClaims(rawTicket);

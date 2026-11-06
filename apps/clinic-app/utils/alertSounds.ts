@@ -39,6 +39,43 @@ export function playStatAudioChime(): void {
 }
 
 /**
+ * Synthesizes a subtle, pleasant incoming/sent chat message chime using Web Audio API.
+ * Frequency progression: 587.33Hz (D5) -> 880Hz (A5) with gentle bell decay.
+ */
+export function playMessageChime(): void {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const playTone = (freq: number, start: number, duration: number, vol = 0.15) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        gain.gain.setValueAtTime(vol, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + duration);
+      };
+
+      playTone(587.33, 0, 0.12, 0.12);
+      playTone(880, 0.08, 0.22, 0.15);
+    } catch {
+      // AudioContext could be blocked by browser autoplay policy before user gesture
+    }
+  }
+}
+
+/**
  * Triggers device vibration pattern for STAT emergency findings on supported platforms.
  */
 export function triggerStatVibration(): void {

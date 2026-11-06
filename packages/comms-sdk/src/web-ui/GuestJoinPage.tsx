@@ -229,7 +229,7 @@ export const GuestJoinPage: React.FC<GuestJoinPageProps> = ({
         {/* Attempt Warning */}
         <div className="p-3 mb-6 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200">
           <p className="font-semibold">Security Verification</p>
-          <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">
+          <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
             5 attempts allowed. <strong>{remainingAttempts}</strong> attempts remaining before permanent lockout.
           </p>
         </div>

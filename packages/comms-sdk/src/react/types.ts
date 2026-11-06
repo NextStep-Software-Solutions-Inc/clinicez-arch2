@@ -13,6 +13,8 @@ import {
   CommsAttachmentReference
 } from '../core/types';
 
+export type { TriageDisposition };
+
 export type ConnectionStatus =
   | 'disconnected'
   | 'acquiring_ticket'
@@ -72,6 +74,7 @@ export interface CommsContextValue {
   branchId?: string;
   staffId: string;
   staffDisplayName: string;
+  baseUrl: string;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   reconnect: () => Promise<void>;
@@ -123,6 +126,7 @@ export interface CreateConversationRequest {
   category?: MessageCategory;
   isLocalOnly?: boolean;
   participantIds?: string[];
+  participantStaffIds?: string[];
 }
 
 export interface UseConversationsResult {
@@ -220,7 +224,7 @@ export interface TriageDispositionInput {
   declineReasonCode?: string;
   assignedStaffId?: string;
   assignedStaffName?: string;
-  priority?: 'Routine' | 'Urgent';
+  priority?: 'Routine' | 'Urgent' | 'Emergency';
   internalNote?: string;
   publicResponseText?: string;
 }
@@ -241,7 +245,19 @@ export interface UseTriageQueueResult {
   error: Error | null;
   refresh: () => Promise<void>;
   claimRequest: (conversationId: string) => Promise<void>;
-  recordDisposition: (conversationId: string, input: TriageDispositionInput) => Promise<ConversationDto>;
+  recordDisposition: (
+    conversationId: string,
+    inputOrDisposition: TriageDispositionInput | TriageDisposition,
+    notes?: string,
+    details?: {
+      declineReasonCode?: string;
+      priority?: 'Routine' | 'Urgent' | 'Emergency';
+      internalNote?: string;
+      publicResponseText?: string;
+      assignedStaffId?: string;
+      assignedStaffName?: string;
+    }
+  ) => Promise<ConversationDto>;
   routeToStaff: (
     conversationId: string,
     staffId: string,

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Pressable,
+  Platform,
   StyleSheet,
   ActivityIndicator,
   ViewStyle,
@@ -220,6 +221,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: theme.spacing.sm,
     borderWidth: theme.sizes.borderWidth,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   textBase: {
     textAlign: 'center',

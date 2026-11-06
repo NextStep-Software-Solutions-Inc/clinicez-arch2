@@ -24,6 +24,7 @@ function createMockContext(client = new MockCommsClient(), store = new Optimisti
     facilityId: 'facility-clinic-1',
     staffId: 'staff-doc-1',
     staffDisplayName: 'Dr. Maria Santos',
+    baseUrl: '',
     connect: async () => {},
     disconnect: async () => {},
     reconnect: async () => {},
