@@ -52,6 +52,16 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
     expect(homeWebSrc.includes('{!isWorkstation ? (')).toBe(true);
     expect(homeWebSrc.includes("navigateToMainRoute('NotificationScreen')")).toBe(true);
     expect(homeWebSrc.includes("navigateToMainRoute('ProfileScreen')")).toBe(true);
+
+    const sidebarSrc = readAppFile('components/layout/WebSidebar.web.tsx');
+    expect(sidebarSrc.includes('user?.imageUrl')).toBe(true);
+    expect(sidebarSrc.includes('source={{ uri: avatarUrl }}')).toBe(true);
+    expect(sidebarSrc.includes('extractInitials')).toBe(true);
+    expect(sidebarSrc.includes('confirmSignOut')).toBe(false);
+    expect(sidebarSrc.includes('name="logout"')).toBe(false);
+
+    const logoSrc = readAppFile('components/ui/ClinicEzLogo.tsx');
+    expect(logoSrc.includes('brandSubtitle')).toBe(true);
   });
 
   test('2. Bottom Tabs: preserves native SF/Material symbols while updating strictly to Home, Records, Appointments, Messages', () => {

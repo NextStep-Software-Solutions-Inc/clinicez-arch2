@@ -109,6 +109,13 @@ import {
   BadgeCheck,
   ScanBarcode,
   ChevronLeft,
+  CalendarX,
+  Video,
+  CircleQuestionMark,
+  Sun,
+  Sunset,
+  Car,
+  Zap,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -247,6 +254,14 @@ const ICONS: Record<IconName, LucideIcon> = {
   heart: Heart,
   scanBarcode: ScanBarcode,
   chevronLeft: ChevronLeft,
+  calendarX: CalendarX,
+  video: Video,
+  helpCircle: CircleQuestionMark,
+  sun: Sun,
+  sunset: Sunset,
+  car: Car,
+  zap: Zap,
+  shieldCheck: ShieldCheck,
 };
 
 /**
@@ -255,8 +270,10 @@ const ICONS: Record<IconName, LucideIcon> = {
 const LEGACY_LOOKUP: Record<string, IconName> = {};
 for (const key of iconNames) {
   const native = NATIVE_ICONS[key];
-  LEGACY_LOOKUP[native.android.toLowerCase()] ??= key;
-  LEGACY_LOOKUP[native.ios.toLowerCase()] ??= key;
+  if (native) {
+    if (native.android) LEGACY_LOOKUP[native.android.toLowerCase()] ??= key;
+    if (native.ios) LEGACY_LOOKUP[native.ios.toLowerCase()] ??= key;
+  }
 }
 
 /** Extra aliases for symbol names that appear across screens. */

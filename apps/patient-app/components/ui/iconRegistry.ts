@@ -116,4 +116,12 @@ export const NATIVE_ICONS: Record<IconName, { android: string; ios: string }> = 
   heart: { android: 'favorite', ios: 'heart' },
   scanBarcode: { android: 'qr_code_scanner', ios: 'barcode.viewfinder' },
   chevronLeft: { android: 'chevron_left', ios: 'chevron.left' },
+  calendarX: { android: 'event_busy', ios: 'calendar.badge.minus' },
+  video: { android: 'videocam', ios: 'video.fill' },
+  helpCircle: { android: 'help', ios: 'questionmark.circle' },
+  sun: { android: 'wb_sunny', ios: 'sun.max.fill' },
+  sunset: { android: 'wb_twilight', ios: 'sunset.fill' },
+  car: { android: 'directions_car', ios: 'car.fill' },
+  zap: { android: 'bolt', ios: 'bolt.fill' },
+  shieldCheck: { android: 'verified_user', ios: 'shield.lefthalf.filled' },
 };

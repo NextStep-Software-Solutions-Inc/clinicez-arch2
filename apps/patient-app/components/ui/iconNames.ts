@@ -126,6 +126,14 @@ export const iconNames = [
   'heart',
   'scanBarcode',
   'chevronLeft',
+  'calendarX',
+  'video',
+  'helpCircle',
+  'sun',
+  'sunset',
+  'car',
+  'zap',
+  'shieldCheck',
 ] as const;
 
 export type IconName = (typeof iconNames)[number];

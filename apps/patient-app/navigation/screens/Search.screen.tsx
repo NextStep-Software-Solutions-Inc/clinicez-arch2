@@ -560,7 +560,7 @@ export default function PatientSearchScreen() {
                         <Pressable
                           key={doctor.id}
                           onPress={() => handleOpenDoctorProfile(doctor)}
-                          accessibilityRole="button"
+                          accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
                           accessibilityLabel={`${doctor.name}, ${doctor.specialty}`}
                           style={({ pressed }) => [
                             styles.resultCard,
@@ -798,7 +798,7 @@ export default function PatientSearchScreen() {
                         <Pressable
                           key={clinic.id}
                           onPress={() => handleOpenClinic(clinic)}
-                          accessibilityRole="button"
+                          accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
                           accessibilityLabel={`${clinic.name} clinic`}
                           style={({ pressed }) => [
                             styles.resultCard,

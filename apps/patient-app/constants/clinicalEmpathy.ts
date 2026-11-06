@@ -306,6 +306,13 @@ export function buildClinicalTypography() {
       letterSpacing: 0.7,
       textTransform: 'uppercase',
     } satisfies TextStyle,
+    brandSubtitle: {
+      ...ceFont('600'),
+      fontSize: 10,
+      lineHeight: 13,
+      letterSpacing: 0.75,
+      textTransform: 'uppercase',
+    } satisfies TextStyle,
     numericMetric: {
       ...ceFont('700'),
       fontSize: 28,

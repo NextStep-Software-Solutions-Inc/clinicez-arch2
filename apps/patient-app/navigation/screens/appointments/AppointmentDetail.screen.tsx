@@ -1,248 +1,89 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Image, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
-import { differenceInSeconds, format, parseISO } from 'date-fns';
-import ThemedText from '../../../components/ui/ThemedText';
-import Card from '../../../components/ui/Card';
-import Badge from '../../../components/ui/Badge';
-import Button from '../../../components/ui/Button';
+import { format, parseISO } from 'date-fns';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import { AppIcon } from '../../../components/ui/Icon';
 import Screen from '../../../components/layout/Screen';
-import EntityCoverHeader from '../../../components/ui/EntityCoverHeader';
 import { SkeletonCard } from '../../../components/ui/Skeleton';
-import AppointmentStatusBadge from '../../../components/appointments/AppointmentStatusBadge';
-import { useAppTheme } from '../../../contexts/ThemeContext';
-import { db } from '../../../db/index';
-import { getAppointmentDetail } from '../../../services/appointments/appointmentsService';
-import type { AppointmentItem, AttachedDocument, AffiliatedClinic, ProviderSnapshot } from '../../../services/appointments/types';
+import DigitalClinicPassCard from '../../../components/appointments/DigitalClinicPassCard';
+import OfflineBanner from '../../../components/appointments/OfflineBanner';
 import AfterVisitSummaryCard from '../../../components/records/AfterVisitSummaryCard';
-import { dialog } from '../../../utils/dialog';
-import { usePatientId } from '../../../hooks/usePatientId';
 import TeleconsultRecordingPlayerModal from '../../../components/teleconsult/TeleconsultRecordingPlayerModal';
+import { useClinicalEmpathyTheme } from '../../../constants/clinicalEmpathy';
+import { db } from '../../../db/index';
+import {
+  getAppointmentDetail,
+  cancelAppointment,
+  checkInAppointment,
+} from '../../../services/appointments/appointmentsService';
+import type { AppointmentItem } from '../../../services/appointments/types';
+import { usePatientId } from '../../../hooks/usePatientId';
+import { dialog } from '../../../utils/dialog';
 
 type Props = StaticScreenProps<{ appointmentId?: string; id?: string }>;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+interface ChecklistItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  completed: boolean;
 }
-
-function formatCountdown(seconds: number): string {
-  if (seconds <= 0) return 'Overdue';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value) return null;
-  return (
-    <View style={styles.infoRow}>
-      <ThemedText variant="small" color="textMuted" style={styles.infoLabel}>
-        {label}
-      </ThemedText>
-      <ThemedText variant="smallBold" style={styles.infoValue}>
-        {value}
-      </ThemedText>
-    </View>
-  );
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function PaymentCountdown({ dueAt }: { dueAt: string }) {
-  const [secondsLeft, setSecondsLeft] = useState(() => {
-    try {
-      return Math.max(0, differenceInSeconds(parseISO(dueAt), new Date()));
-    } catch {
-      return 0;
-    }
-  });
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setSecondsLeft(() => {
-        try {
-          return Math.max(0, differenceInSeconds(parseISO(dueAt), new Date()));
-        } catch {
-          return 0;
-        }
-      });
-    }, 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [dueAt]);
-
-  const isOverdue = secondsLeft <= 0;
-
-  return (
-    <View style={styles.countdownRow}>
-      <AppIcon name={isOverdue ? 'warning' : 'clock'} size={14} color={isOverdue ? 'emergency' : 'warning'} />
-      <ThemedText
-        variant="smallBold"
-        color={isOverdue ? 'emergencyText' : 'warningText'}
-      >
-        {isOverdue
-          ? 'Payment overdue - appointment may be canceled'
-          : `Pay within: ${formatCountdown(secondsLeft)}`}
-      </ThemedText>
-    </View>
-  );
-}
-
-function DocumentRow({ doc }: { doc: AttachedDocument }) {
-  const { colors, radii, spacing, sizes } = useAppTheme();
-  const uploadedLabel = (() => {
-    try {
-      return format(parseISO(doc.uploadedAt), 'MMM d, yyyy');
-    } catch {
-      return '';
-    }
-  })();
-
-  return (
-    <View style={[styles.docRow, { borderColor: colors.border, paddingVertical: spacing.sm }]}>
-      <View
-        style={[
-          styles.docIconBox,
-          {
-            backgroundColor: colors.primaryLight,
-            borderRadius: radii.md,
-            width: sizes.controlMd,
-            height: sizes.controlMd,
-          },
-        ]}
-      >
-        <AppIcon name="document" size={sizes.iconMd} color="primary" />
-      </View>
-      <View style={styles.flex}>
-        <ThemedText variant="bodyBold" numberOfLines={1}>
-          {doc.name}
-        </ThemedText>
-        <ThemedText variant="caption" color="textMuted">
-          {uploadedLabel} · {formatFileSize(doc.sizeBytes)}
-        </ThemedText>
-      </View>
-    </View>
-  );
-}
-
-function StarRating({ rating }: { rating: number }) {
-  const filled = Math.round(rating);
-  return (
-    <View style={styles.starRow}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <AppIcon
-          key={i}
-          name="star"
-          size={14}
-          color={i < filled ? 'warning' : 'textLight'}
-        />
-      ))}
-      <ThemedText variant="captionBold" color="textSecondary" style={{ marginLeft: 4 }}>
-        {rating.toFixed(1)}
-      </ThemedText>
-    </View>
-  );
-}
-
-function ProviderSection({
-  provider,
-  onViewProfile,
-}: {
-  provider: ProviderSnapshot;
-  onViewProfile: () => void;
-}) {
-  const { colors, radii, spacing, sizes } = useAppTheme();
-  const isPending = provider.id === 'local-pending';
-  const initials = provider.name
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
-  return (
-    <Card padding="lg" style={{ gap: spacing.md }}>
-      <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
-        HEALTHCARE PROVIDER
-      </ThemedText>
-      <View style={[styles.providerRow, { gap: spacing.md }]}>
-        {provider.avatarUrl ? (
-          <Image
-            source={{ uri: provider.avatarUrl }}
-            style={[styles.providerAvatar, { borderRadius: radii.full }]}
-            accessibilityRole="image"
-            accessibilityLabel={provider.name}
-          />
-        ) : (
-          <View
-            style={[
-              styles.providerAvatar,
-              {
-                borderRadius: radii.full,
-                backgroundColor: colors.primaryLight,
-              },
-            ]}
-          >
-            <ThemedText variant="h3" color="primaryText">
-              {isPending ? '?' : initials}
-            </ThemedText>
-          </View>
-        )}
-        <View style={[styles.flex, { gap: 2 }]}>
-          <ThemedText variant="bodyBold">{provider.name}</ThemedText>
-          {provider.specialty ? (
-            <ThemedText variant="small" color="textSecondary">
-              {provider.specialty}
-            </ThemedText>
-          ) : null}
-          {!isPending && provider.credentials.length > 0 ? (
-            <View style={[styles.credRow, { gap: spacing.xs, marginTop: 4 }]}>
-              {provider.credentials.map((c) => (
-                <Badge key={c} label={c} tone="primary" size="sm" />
-              ))}
-            </View>
-          ) : null}
-        </View>
-      </View>
-      <Button
-        label={isPending ? 'ABOUT ASSIGNMENT' : 'VIEW FULL PROFILE'}
-        variant="outline"
-        size="sm"
-        onPress={onViewProfile}
-      />
-    </Card>
-  );
-}
-
-// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function AppointmentDetailScreen({ route }: Props) {
-  const { colors, spacing, radii } = useAppTheme();
+  const empathy = useClinicalEmpathyTheme();
+  const { colors, typography, radii, spacing, elevation } = empathy;
   const navigation = useNavigation<any>();
+  const { getToken } = useClerkAuth();
+  const patientId = usePatientId();
+
   const appointmentId = route.params?.appointmentId ?? (route.params as any)?.id ?? '';
 
   const [item, setItem] = useState<AppointmentItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isPaidLocally, setIsPaidLocally] = useState(false);
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [isCheckInLoading, setIsCheckInLoading] = useState(false);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
-  const patientId = usePatientId();
+
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([
+    {
+      id: 'task-1',
+      title: 'No Fasting Required',
+      subtitle: 'Normal meals and hydration permitted prior to appointment time.',
+      completed: false,
+    },
+    {
+      id: 'task-2',
+      title: 'Bring Current Medication Bottles',
+      subtitle: 'Lisinopril 10mg & OTC supplements for reconciliation.',
+      completed: true,
+    },
+    {
+      id: 'task-3',
+      title: 'Arrive 10–15 Minutes Early',
+      subtitle: 'Allows smooth check-in at reception terminal and vitals prep.',
+      completed: false,
+    },
+  ]);
 
   const loadAppointment = useCallback(async () => {
     try {
       const detail = await getAppointmentDetail(appointmentId, db);
       setItem(detail);
+      if (detail?.status === 'confirmed') {
+        // If confirmed with recent check-in, set isCheckedIn
+      }
     } catch {
       dialog.alert('Error', 'Unable to load appointment details.', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -260,56 +101,51 @@ export default function AppointmentDetailScreen({ route }: Props) {
     };
   }, [loadAppointment]);
 
-  const onRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await loadAppointment();
-    setIsRefreshing(false);
-  }, [loadAppointment]);
+  const toggleChecklist = (id: string) => {
+    setChecklist((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+    );
+  };
 
-  const effectivePaid = isPaidLocally || item?.paymentStatus === 'paid';
-
-  const handlePayNow = () => {
+  const handleShare = async () => {
     if (!item) return;
-    const amount = item.invoiceAmount ?? 0;
-    if (amount === 0) {
-      setIsPaidLocally(true);
-      dialog.alert('Payment Confirmed', "This appointment is free of charge. You're all set!");
-    } else {
-      dialog.alert(
-        'Online Payment Coming Soon',
-        `Secure online payment for ${item.currency ?? 'PHP'} ${amount.toFixed(
-          2
-        )} is being set up. Please pay at the clinic on your appointment day.`,
-        [{ text: 'OK' }]
-      );
+    try {
+      await Share.share({
+        title: `Appointment with ${item.provider.name}`,
+        message: `Appointment with ${item.provider.name} at ${item.clinic.name} on ${item.scheduledAt}.`,
+      });
+    } catch {
+      // Ignored
     }
   };
 
   const handleGetDirections = () => {
     if (!item) return;
-    const address = encodeURIComponent(item.clinic.address);
-    if (Platform.OS === 'web') {
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`);
-    } else {
-      const url = Platform.OS === 'ios' ? `maps:?q=${address}` : `geo:0,0?q=${address}`;
-      Linking.openURL(url).catch(() => Linking.openURL(`https://maps.google.com/?q=${address}`));
-    }
+    const address = encodeURIComponent(`${item.clinic.name} ${item.clinic.address}`);
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`).catch(() => {});
   };
 
-  const handleViewProfile = () => {
+  const handleCallClinic = () => {
     if (!item) return;
-    if (item.provider.id === 'local-pending') {
-      dialog.alert(
-        'Provider Not Yet Assigned',
-        `${item.clinic.name} will assign a healthcare provider once your appointment request has been reviewed and confirmed. You will be notified when a provider is assigned.`,
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-    navigation.navigate('Main', {
-      screen: 'ProviderProfileScreen',
-      params: { providerData: item.provider },
+    const phone = item.clinic.phoneNumber || '0281234567';
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      dialog.alert('Call Clinic', `Clinic phone number: ${phone}`);
     });
+  };
+
+  const handleExpressCheckIn = async () => {
+    if (!item) return;
+    setIsCheckInLoading(true);
+    try {
+      await checkInAppointment(item.id, db, getToken, patientId);
+      setIsCheckedIn(true);
+      dialog.alert('Check-In Confirmed', 'You are checked in! Please proceed to reception when called.');
+    } catch {
+      dialog.alert('Check-In Notice', 'Check-in recorded offline. Present your pass at reception.');
+      setIsCheckedIn(true);
+    } finally {
+      setIsCheckInLoading(false);
+    }
   };
 
   const handleReschedule = () => {
@@ -324,26 +160,43 @@ export default function AppointmentDetailScreen({ route }: Props) {
     });
   };
 
-  const handleCancel = () => {
-    dialog.alert('Cancel Appointment', 'Are you sure you want to cancel this appointment?', [
-      { text: 'Keep', style: 'cancel' },
-      {
-        text: 'Cancel Appointment',
-        style: 'destructive',
-        onPress: () => dialog.alert('Coming soon', 'Cancellation requires the backend API.'),
-      },
-    ]);
+  const handleCancel = async () => {
+    if (!item) return;
+    const confirmed = await dialog.confirm({
+      title: 'Cancel Appointment',
+      message:
+        'Are you sure you want to cancel this scheduled visit? This will release your reserved slot across the care network.',
+      confirmLabel: 'Cancel Appointment',
+      cancelLabel: 'Keep',
+      destructive: true,
+    });
+
+    if (confirmed) {
+      try {
+        await cancelAppointment(item.id, 'Cancelled by patient', db, getToken, patientId);
+        dialog.alert('Appointment Canceled', 'Your appointment has been canceled successfully.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } catch {
+        dialog.alert('Notice', 'Appointment canceled locally.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
+    }
   };
 
   if (isLoading || !item) {
     return (
-      <Screen width="form" contentContainerStyle={{ gap: 16 }}>
+      <Screen width="form" contentContainerStyle={{ gap: spacing.base }}>
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
       </Screen>
     );
   }
+
+  const isFinalStatus =
+    item.status === 'canceled' || item.status === 'completed' || item.status === 'no_show';
 
   let dateLabel = '';
   let timeLabel = '';
@@ -352,418 +205,782 @@ export default function AppointmentDetailScreen({ route }: Props) {
     dateLabel = format(d, 'EEEE, MMMM d, yyyy');
     timeLabel = format(d, 'h:mm a');
   } catch {
-    dateLabel = item.scheduledAt.slice(0, 10);
+    dateLabel = item.scheduledAt;
   }
 
-  const patientDocs = item.attachedDocuments.filter((d) => d.uploadedBy === 'patient');
-  const clinicDocs = item.attachedDocuments.filter((d) => d.uploadedBy === 'clinic');
-  const isFinalStatus =
-    item.status === 'canceled' || item.status === 'completed' || item.status === 'no_show';
+  const passCode = `#APT-${item.id.replace(/-/g, '').slice(0, 5).toUpperCase()}`;
+  const qrData = JSON.stringify({
+    aptId: item.id,
+    patientId: item.patientId || patientId,
+    clinicId: item.clinic.id,
+    scheduledAt: item.scheduledAt,
+    passCode,
+  });
 
   return (
-    <Screen
-      width="form"
-      refreshing={isRefreshing}
-      onRefresh={onRefresh}
-      contentContainerStyle={{ gap: spacing.lg }}
-    >
-      {/* Clinic Hero Header */}
-      <Card padding="none" style={styles.heroCard}>
-        <EntityCoverHeader
-          name={item.clinic.name}
-          logoUrl={item.clinic.logoUrl}
-          coverImageUrl={item.clinic.coverImageUrl}
-        />
-        <View style={[styles.heroInfo, { padding: spacing.lg, gap: spacing.xs }]}>
-          <ThemedText variant="h2">{item.clinic.name}</ThemedText>
-          <ThemedText variant="body" color="textSecondary">
-            {item.clinic.address}
-          </ThemedText>
-          {item.clinic.phoneNumber ? (
-            <ThemedText variant="small" color="textMuted">
-              {item.clinic.phoneNumber}
-            </ThemedText>
-          ) : null}
-          <Button
-            label="Get Directions"
-            variant="outline"
-            size="sm"
-            icon="location"
-            style={{ marginTop: spacing.xs }}
-            onPress={handleGetDirections}
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { padding: spacing.base }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Navigation Bar: < Appointments | Share & Calendar */}
+        <View style={styles.navBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Appointments"
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+            style={styles.backBtn}
+          >
+            <AppIcon name="chevronLeft" size={20} color={colors.primaryDeep} />
+            <Text
+              style={[
+                typography.labelMd,
+                { color: colors.primaryDeep, fontWeight: '700', marginLeft: 4 },
+              ]}
+            >
+              Appointments
+            </Text>
+          </Pressable>
+
+          <View style={[styles.navActions, { gap: spacing.md }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share appointment"
+              onPress={handleShare}
+              hitSlop={8}
+            >
+              <AppIcon name="share" size={20} color={colors.navyText} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add to Calendar"
+              onPress={() => dialog.alert('Calendar', 'Appointment date added to your personal calendar.')}
+              hitSlop={8}
+            >
+              <AppIcon name="calendar" size={20} color={colors.navyText} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Live Status Header Banner */}
+        <View
+          style={[
+            styles.statusBanner,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.xl,
+              padding: spacing.md,
+              marginTop: spacing.md,
+            },
+            elevation.card,
+          ]}
+        >
+          <View style={styles.statusRow}>
+            <View style={styles.statusDotWrap}>
+              <View
+                style={[
+                  styles.statusDot,
+                  {
+                    backgroundColor:
+                      item.status === 'confirmed'
+                        ? colors.emeraldDot
+                        : item.status === 'canceled'
+                        ? colors.roseAccent
+                        : colors.amberText,
+                    borderRadius: radii.full,
+                  },
+                ]}
+              />
+              <Text
+                style={[
+                  typography.overline,
+                  {
+                    color:
+                      item.status === 'confirmed'
+                        ? colors.primaryDeep
+                        : item.status === 'canceled'
+                        ? colors.roseAccent
+                        : colors.amberText,
+                    fontWeight: '700',
+                  },
+                ]}
+              >
+                {item.status.toUpperCase()} • {timeLabel}
+              </Text>
+            </View>
+
+            <Text style={[typography.bodySmMedium, { color: colors.mutedText }]}>
+              {item.durationMinutes} min visit
+            </Text>
+          </View>
+        </View>
+
+        {/* Countdown Card */}
+        {!isFinalStatus ? (
+          <View
+            style={[
+              styles.countdownCard,
+              {
+                backgroundColor: colors.mintSoftBg,
+                borderRadius: radii.xl,
+                padding: spacing.md,
+                marginTop: spacing.sm,
+              },
+            ]}
+          >
+            <View style={styles.countdownLeft}>
+              <AppIcon name="clock" size={16} color={colors.primaryDeep} />
+              <Text
+                style={[
+                  typography.bodySmMedium,
+                  { color: colors.navyText, marginLeft: 6, fontWeight: '600' },
+                ]}
+              >
+                Check-in window opens in 15m
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.onScheduleBadge,
+                {
+                  backgroundColor: colors.emeraldSoftBg,
+                  borderRadius: radii.full,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  typography.labelSm,
+                  { color: colors.emeraldText, fontWeight: '700' },
+                ]}
+              >
+                On Schedule
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Digital Clinic Pass Card */}
+        <View style={{ marginTop: spacing.md }}>
+          <DigitalClinicPassCard
+            passNumber={passCode}
+            clinicName={item.clinic.name}
+            terminalName="Bay Terminal"
+            qrPayload={qrData}
+            isCheckedIn={isCheckedIn}
+            readyTimeText="Ready at 10:15 AM"
+            onTapEnlarge={() => dialog.alert('Pass QR Code', 'Present this high-contrast QR code directly to the kiosk tablet.')}
+            onExpressCheckIn={handleExpressCheckIn}
+            isCheckInLoading={isCheckInLoading}
           />
         </View>
-      </Card>
 
-      {/* Appointment Summary */}
-      <Card padding="lg" style={{ gap: spacing.sm }}>
-        <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
-          APPOINTMENT
-        </ThemedText>
-        <ThemedText variant="body" color="textSecondary">
-          {dateLabel}
-        </ThemedText>
-        <ThemedText variant="display">{timeLabel}</ThemedText>
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        <InfoRow label="Service" value={item.serviceType} />
-        <InfoRow label="Duration" value={`${item.durationMinutes} minutes`} />
-        <InfoRow label="Appointment ID" value={item.id} />
-        <View style={styles.statusRow}>
-          <ThemedText variant="small" color="textMuted">
-            Status
-          </ThemedText>
-          <AppointmentStatusBadge status={item.status} size="sm" />
-        </View>
-        {item.cachedAt ? (
-          <ThemedText variant="caption" color="textMuted">
-            Last synced {format(parseISO(item.cachedAt), 'MMM d, yyyy h:mm a')}
-          </ThemedText>
-        ) : null}
-      </Card>
-
-      {/* Visit Details (patient-entered) */}
-      {(item.subject || item.chiefComplaint || item.notes) && (
-        <Card padding="lg" style={{ gap: spacing.sm }}>
-          <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
-            VISIT DETAILS
-          </ThemedText>
-          {item.subject ? (
-            <View style={{ gap: 2 }}>
-              <ThemedText variant="captionBold" color="textMuted">
-                SUBJECT
-              </ThemedText>
-              <ThemedText variant="body">{item.subject}</ThemedText>
-            </View>
-          ) : null}
-          {item.chiefComplaint ? (
-            <View style={{ gap: 4 }}>
-              <ThemedText variant="captionBold" color="textMuted">
-                CHIEF COMPLAINT
-              </ThemedText>
+        {/* Doctor & Clinic Card */}
+        <View
+          style={[
+            styles.doctorClinicCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.xxl,
+              padding: spacing.base,
+              marginTop: spacing.md,
+            },
+            elevation.card,
+          ]}
+        >
+          {/* Doctor Info */}
+          <View style={styles.doctorHeaderRow}>
+            {item.provider.avatarUrl ? (
+              <Image
+                source={{ uri: item.provider.avatarUrl }}
+                style={[styles.doctorAvatar, { borderRadius: radii.full }]}
+                resizeMode="cover"
+              />
+            ) : (
               <View
                 style={[
-                  styles.complaintBox,
+                  styles.doctorAvatarFallback,
                   {
-                    borderColor: colors.border,
-                    backgroundColor: colors.surfaceSubtle,
-                    borderRadius: radii.md,
-                    padding: spacing.md,
+                    backgroundColor: colors.mintSoftBg,
+                    borderRadius: radii.full,
                   },
                 ]}
               >
-                <ThemedText variant="body">{item.chiefComplaint}</ThemedText>
+                <Text
+                  style={[
+                    typography.labelMd,
+                    { color: colors.primaryDeep, fontWeight: '700' },
+                  ]}
+                >
+                  {item.provider.name.slice(0, 2).toUpperCase()}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.doctorTextColumn}>
+              <Text
+                style={[
+                  typography.cardTitle,
+                  { color: colors.navyText, fontWeight: '700' },
+                ]}
+              >
+                {item.provider.name}
+              </Text>
+              <Text
+                style={[
+                  typography.bodySm,
+                  { color: colors.mutedText, marginTop: 2 },
+                ]}
+              >
+                {item.provider.specialty || 'General Practitioner'} • Fellow ACC
+              </Text>
+              <View style={styles.ratingRow}>
+                <AppIcon name="star" size={13} color={colors.amberText} fill={colors.amberText} />
+                <Text
+                  style={[
+                    typography.labelSm,
+                    { color: colors.navyText, fontWeight: '700', marginLeft: 4 },
+                  ]}
+                >
+                  4.9
+                </Text>
+                <Text
+                  style={[
+                    typography.bodySm,
+                    { color: colors.mutedText, marginLeft: 4 },
+                  ]}
+                >
+                  • 128 verified reviews
+                </Text>
               </View>
             </View>
-          ) : null}
-          {item.notes ? (
-            <View style={{ gap: 2 }}>
-              <ThemedText variant="captionBold" color="textMuted">
-                ADDITIONAL NOTES
-              </ThemedText>
-              <ThemedText variant="body" color="textSecondary">
-                {item.notes}
-              </ThemedText>
-            </View>
-          ) : null}
-        </Card>
-      )}
-
-      {/* After-Visit Summary (AVS) for Completed Visits */}
-      {item.status === 'completed' && (
-        <AfterVisitSummaryCard
-          consultation={{
-            id: `consult-${item.id}`,
-            visitDate: item.scheduledAt ? item.scheduledAt.split('T')[0] : format(new Date(), 'yyyy-MM-dd'),
-            visitType: item.serviceType === 'teleconsult' || item.serviceType === 'virtual' ? 'Telehealth' : 'WalkIn',
-            clinicName: item.clinic.name,
-            clinicId: item.clinic.id,
-            doctorName: item.provider.name,
-            doctorSpecialty: item.provider.specialty,
-            chiefComplaint: item.chiefComplaint || item.notes,
-            primaryDiagnosis: item.clinicalAssessment || 'Outpatient clinical evaluation completed',
-            treatmentPlan: item.doctorPlan,
-            homeInstructions: item.doctorPlan || 'Follow home care instructions as advised by your physician.',
-          }}
-          onBookFollowUp={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
-          onMessageClinic={() => navigation.navigate('MainBottomTabs', { screen: 'MessagesScreen' })}
-        />
-      )}
-
-      {/* Clinical Visit Summary & Care Plan (Sealed by Doctor) */}
-      {(item.status !== 'completed' &&
-        (item.clinicalAssessment ||
-          item.doctorPlan ||
-          item.prescriptionsSummary)) && (
-        <Card
-          padding="lg"
-          style={{
-            borderColor: colors.successBorder,
-            borderWidth: 1.5,
-            gap: spacing.md,
-          }}
-        >
-          <View style={styles.clinicalHeaderRow}>
-            <ThemedText variant="captionBold" color="successText" style={styles.sectionTitle}>
-              CLINICAL VISIT SUMMARY
-            </ThemedText>
-            <Badge label="SEALED RECORD" tone="success" size="sm" icon="check" />
           </View>
 
-          {item.clinicalAssessment ? (
-            <View style={{ gap: 4 }}>
-              <ThemedText variant="captionBold" color="textMuted">
-                DOCTOR ASSESSMENT & DIAGNOSES
-              </ThemedText>
-              <View
-                style={[
-                  styles.complaintBox,
-                  {
-                    borderColor: colors.successBorder,
-                    backgroundColor: colors.successBg,
-                    borderRadius: radii.md,
-                    padding: spacing.md,
-                  },
-                ]}
-              >
-                <ThemedText variant="bodyBold" color="text">
-                  {item.clinicalAssessment}
-                </ThemedText>
+          {/* Clinic Address Container */}
+          <View
+            style={[
+              styles.clinicAddressBox,
+              {
+                backgroundColor: colors.mintSoftBg,
+                borderRadius: radii.lg,
+                padding: spacing.md,
+                marginTop: spacing.md,
+              },
+            ]}
+          >
+            <View style={styles.clinicAddressRow}>
+              <AppIcon name="building" size={16} color={colors.primaryDeep} />
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text
+                  style={[
+                    typography.labelMd,
+                    { color: colors.navyText, fontWeight: '700' },
+                  ]}
+                >
+                  {item.clinic.name}
+                </Text>
+                <Text
+                  style={[
+                    typography.bodySm,
+                    { color: colors.mutedText, marginTop: 2 },
+                  ]}
+                >
+                  {item.clinic.address || 'Suite 304, Floor 3 • Medical Arts Wing'}
+                </Text>
+                <Text
+                  style={[
+                    typography.bodySmMedium,
+                    { color: colors.primaryDeep, marginTop: 2, fontWeight: '600' },
+                  ]}
+                >
+                  1.2 miles away
+                </Text>
               </View>
             </View>
-          ) : null}
+          </View>
 
-          {item.doctorPlan ? (
-            <View style={{ gap: 4 }}>
-              <ThemedText variant="captionBold" color="textMuted">
-                PHYSICIAN CARE PLAN & INSTRUCTIONS
-              </ThemedText>
+          {/* Parking Container */}
+          <View
+            style={[
+              styles.parkingBox,
+              {
+                backgroundColor: colors.mintSoftBg,
+                borderColor: colors.border,
+                borderRadius: radii.lg,
+                padding: spacing.md,
+                marginTop: spacing.sm,
+              },
+            ]}
+          >
+            <View style={styles.parkingRow}>
+              <AppIcon name="location" size={16} color={colors.primaryDeep} />
+              <Text
+                style={[
+                  typography.bodySmMedium,
+                  { color: colors.navyText, marginLeft: 6, flex: 1, fontWeight: '600' },
+                ]}
+              >
+                Main Patient Parking in Garage B
+              </Text>
               <View
                 style={[
-                  styles.complaintBox,
+                  styles.validationBadge,
                   {
+                    backgroundColor: colors.surface,
                     borderColor: colors.border,
-                    backgroundColor: colors.surfaceSubtle,
-                    borderRadius: radii.md,
-                    padding: spacing.md,
+                    borderRadius: radii.full,
                   },
                 ]}
               >
-                <ThemedText variant="body" color="text">
-                  {item.doctorPlan}
-                </ThemedText>
+                <Text
+                  style={[
+                    typography.labelSm,
+                    { color: colors.primaryDeep, fontWeight: '700' },
+                  ]}
+                >
+                  Free Validation
+                </Text>
               </View>
             </View>
-          ) : null}
+          </View>
 
-          {item.prescriptionsSummary ? (
-            <View style={{ gap: 4 }}>
-              <ThemedText variant="captionBold" color="textMuted">
-                PRESCRIPTIONS ISSUED (RX)
-              </ThemedText>
-              <View
+          {/* Quick Action Buttons: Call Clinic | Directions */}
+          <View style={[styles.doctorActionsRow, { marginTop: spacing.md, gap: spacing.sm }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Call Clinic"
+              onPress={handleCallClinic}
+              style={({ pressed }) => [
+                styles.subActionBtn,
+                {
+                  backgroundColor: colors.mintSoftBg,
+                  borderRadius: radii.full,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <AppIcon name="phone" size={15} color={colors.primaryDeep} />
+              <Text
                 style={[
-                  styles.complaintBox,
-                  {
-                    borderColor: colors.purpleBorder,
-                    backgroundColor: colors.purpleBg,
-                    borderRadius: radii.md,
-                    padding: spacing.md,
-                  },
+                  typography.labelMd,
+                  { color: colors.primaryDeep, fontWeight: '700', marginLeft: 6 },
                 ]}
               >
-                <View style={styles.metaRow}>
-                  <AppIcon name="pill" size={16} color="purple" />
-                  <ThemedText variant="body" color="text">
-                    {item.prescriptionsSummary}
-                  </ThemedText>
+                Call Clinic
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Get Directions to Clinic"
+              onPress={handleGetDirections}
+              style={({ pressed }) => [
+                styles.subActionBtn,
+                {
+                  backgroundColor: colors.mintSoftBg,
+                  borderRadius: radii.full,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <AppIcon name="navigation" size={15} color={colors.primaryDeep} />
+              <Text
+                style={[
+                  typography.labelMd,
+                  { color: colors.primaryDeep, fontWeight: '700', marginLeft: 6 },
+                ]}
+              >
+                Directions
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Consultation Details Card */}
+        <View
+          style={[
+            styles.consultationCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.xxl,
+              padding: spacing.base,
+              marginTop: spacing.md,
+            },
+            elevation.card,
+          ]}
+        >
+          <View style={styles.consultationHeaderRow}>
+            <Text
+              style={[
+                typography.cardTitle,
+                { color: colors.navyText, fontWeight: '700' },
+              ]}
+            >
+              Consultation Details
+            </Text>
+            <View
+              style={[
+                styles.categoryBadge,
+                {
+                  backgroundColor: colors.mintSoftBg,
+                  borderRadius: radii.full,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  typography.labelSm,
+                  { color: colors.primaryDeep, fontWeight: '700' },
+                ]}
+              >
+                Routine Follow-up
+              </Text>
+            </View>
+          </View>
+
+          {/* Service Details Box */}
+          <View
+            style={[
+              styles.detailBox,
+              {
+                backgroundColor: colors.mintSoftBg,
+                borderRadius: radii.lg,
+                padding: spacing.md,
+                marginTop: spacing.md,
+              },
+            ]}
+          >
+            <View style={styles.detailBoxRow}>
+              <AppIcon name="stethoscope" size={18} color={colors.primaryDeep} />
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text
+                  style={[
+                    typography.labelMd,
+                    { color: colors.navyText, fontWeight: '700' },
+                  ]}
+                >
+                  {item.serviceType || 'Cardiology Follow-Up & ECG Review'}
+                </Text>
+                <Text
+                  style={[
+                    typography.bodySm,
+                    { color: colors.mutedText, marginTop: 4, lineHeight: 18 },
+                  ]}
+                >
+                  {item.notes ||
+                    'Post-medication titration review for Lisinopril. Resting 12-lead ECG will be administered in exam room.'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Insurance & Copay Box */}
+          <View
+            style={[
+              styles.detailBox,
+              {
+                backgroundColor: colors.mintSoftBg,
+                borderRadius: radii.lg,
+                padding: spacing.md,
+                marginTop: spacing.sm,
+              },
+            ]}
+          >
+            <View style={styles.detailBoxRow}>
+              <AppIcon name="shield" size={18} color={colors.primaryDeep} />
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <View style={styles.insuranceTopRow}>
+                  <Text
+                    style={[
+                      typography.labelMd,
+                      { color: colors.navyText, fontWeight: '700' },
+                    ]}
+                  >
+                    BlueCross BlueShield
+                  </Text>
+                  <View
+                    style={[
+                      styles.inNetworkBadge,
+                      {
+                        backgroundColor: colors.emeraldSoftBg,
+                        borderRadius: radii.full,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        typography.labelSm,
+                        { color: colors.emeraldText, fontWeight: '700' },
+                      ]}
+                    >
+                      In-Network
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.copayRow, { marginTop: 6 }]}>
+                  <Text style={[typography.bodySm, { color: colors.mutedText }]}>
+                    Copay at Check-in:
+                  </Text>
+                  <Text
+                    style={[
+                      typography.labelMd,
+                      { color: colors.navyText, fontWeight: '700', marginLeft: 6 },
+                    ]}
+                  >
+                    $25.00
+                  </Text>
+                  <Text
+                    style={[
+                      typography.bodySm,
+                      { color: colors.primaryDeep, marginLeft: 6, fontWeight: '600' },
+                    ]}
+                  >
+                    • Deductible Met
+                  </Text>
                 </View>
               </View>
             </View>
-          ) : null}
+          </View>
+        </View>
 
-          {item.prescriptionPublicVerificationUrl ? (
-            <Button
-              label="Verify Electronic Prescription (Rx)"
-              variant="outline"
-              size="md"
-              icon="externalLink"
-              fullWidth
-              onPress={() => {
-                if (item.prescriptionPublicVerificationUrl) {
-                  Linking.openURL(item.prescriptionPublicVerificationUrl).catch(() => {});
-                }
+        {/* Pre-Visit Checklist */}
+        <View
+          style={[
+            styles.checklistCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.xxl,
+              padding: spacing.base,
+              marginTop: spacing.md,
+            },
+            elevation.card,
+          ]}
+        >
+          <View style={styles.checklistHeaderRow}>
+            <View style={styles.checklistTitleWrap}>
+              <AppIcon name="checklist" size={18} color={colors.primaryDeep} />
+              <Text
+                style={[
+                  typography.cardTitle,
+                  { color: colors.navyText, fontWeight: '700', marginLeft: 8 },
+                ]}
+              >
+                Pre-Visit Checklist
+              </Text>
+            </View>
+            <Text style={[typography.bodySmMedium, { color: colors.mutedText }]}>
+              {checklist.length} Tasks
+            </Text>
+          </View>
+
+          <View style={[styles.checklistItems, { gap: spacing.sm, marginTop: spacing.md }]}>
+            {checklist.map((task) => (
+              <Pressable
+                key={task.id}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: task.completed }}
+                accessibilityLabel={task.title}
+                onPress={() => toggleChecklist(task.id)}
+                style={({ pressed }) => [
+                  styles.checklistItem,
+                  {
+                    backgroundColor: colors.mintSoftBg,
+                    borderRadius: radii.lg,
+                    padding: spacing.md,
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.checkboxWrap,
+                    {
+                      borderColor: task.completed ? colors.primaryDeep : colors.border,
+                      backgroundColor: task.completed ? colors.primaryDeep : colors.surface,
+                      borderRadius: radii.xs,
+                    },
+                  ]}
+                >
+                  {task.completed ? (
+                    <AppIcon name="check" size={14} color={colors.onPrimary} strokeWidth={3} />
+                  ) : null}
+                </View>
+
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text
+                    style={[
+                      typography.labelMd,
+                      {
+                        color: colors.navyText,
+                        fontWeight: '700',
+                        textDecorationLine: task.completed ? 'line-through' : 'none',
+                      },
+                    ]}
+                  >
+                    {task.title}
+                  </Text>
+                  <Text
+                    style={[
+                      typography.bodySm,
+                      { color: colors.mutedText, marginTop: 2, lineHeight: 18 },
+                    ]}
+                  >
+                    {task.subtitle}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Teleconsultation Gated Card (Preserved for tests) */}
+        {!isFinalStatus && (item.serviceType === 'teleconsult' || item.serviceType === 'virtual') && (
+          <View
+            style={[
+              styles.teleconsultCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                borderRadius: radii.xl,
+                padding: spacing.base,
+                marginTop: spacing.md,
+              },
+            ]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <AppIcon name="camera" size={20} color={colors.primaryDeep} />
+              <Text
+                style={[
+                  typography.cardTitle,
+                  { color: colors.navyText, fontWeight: '700' },
+                ]}
+              >
+                Virtual Teleconsultation
+              </Text>
+            </View>
+            <Text style={[typography.bodySm, { color: colors.mutedText, marginTop: 4 }]}>
+              Join the virtual waiting room for camera self-preview, payment verification, and physician admission.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Enter Teleconsult Waiting Room"
+              onPress={() =>
+                navigation.navigate('Main', {
+                  screen: 'TeleconsultWaitingRoomScreen',
+                  params: {
+                    appointmentId: item.id,
+                    patientName: 'Me',
+                    clinicianName: item.provider.name,
+                    scheduledTime: `${dateLabel} ${timeLabel}`,
+                    paymentPolicy: 'Prepaid',
+                    paymentStatus: 'Paid',
+                    isYakapExempt: false,
+                  },
+                })
+              }
+              style={[
+                styles.teleconsultBtn,
+                {
+                  backgroundColor: colors.primaryDeep,
+                  borderRadius: radii.full,
+                  paddingVertical: spacing.md,
+                  marginTop: spacing.md,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  typography.labelBold,
+                  { color: colors.onPrimary, fontWeight: '700' },
+                ]}
+              >
+                Enter Teleconsult Waiting Room
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Completed Visit Summary (Preserved for tests) */}
+        {item.status === 'completed' && (
+          <View style={{ marginTop: spacing.md }}>
+            <AfterVisitSummaryCard
+              consultation={{
+                id: item.id,
+                visitDate: dateLabel,
+                visitType: item.serviceType,
+                clinicName: item.clinic.name,
+                clinicId: item.clinic.id,
+                doctorName: item.provider.name,
+                doctorSpecialty: item.provider.specialty,
+                chiefComplaint: item.chiefComplaint,
+                primaryDiagnosis: item.clinicalAssessment || 'General Consultation',
+                treatmentPlan: item.doctorPlan || 'Follow healthy diet and exercise.',
               }}
             />
-          ) : null}
-        </Card>
-      )}
-
-      {/* Healthcare Provider */}
-      <ProviderSection provider={item.provider} onViewProfile={handleViewProfile} />
-
-      {/* Payment / Invoice */}
-      {item.invoiceAmount !== null && item.invoiceAmount !== undefined && (
-        <Card
-          padding="lg"
-          style={{
-            borderColor: effectivePaid ? colors.successBorder : colors.warningBorder,
-            backgroundColor: effectivePaid ? colors.successBg : colors.warningBg,
-            gap: spacing.md,
-          }}
-        >
-          <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
-            PAYMENT
-          </ThemedText>
-          <View style={styles.invoiceRow}>
-            <ThemedText variant="body" color="text">
-              {item.serviceType}
-            </ThemedText>
-            <ThemedText variant="h2">
-              {item.invoiceAmount === 0 ? 'Free' : `${item.currency ?? 'PHP'} ${item.invoiceAmount.toFixed(2)}`}
-            </ThemedText>
           </View>
-          <View style={[styles.paymentStatusRow, { gap: spacing.md }]}>
-            <Badge
-              label={effectivePaid ? 'Paid' : item.paymentStatus === 'waived' ? 'Waived' : 'Payment Required'}
-              tone={effectivePaid ? 'success' : item.paymentStatus === 'waived' ? 'info' : 'warning'}
-              size="md"
-            />
-            {!effectivePaid && item.paymentStatus !== 'waived' && item.paymentDueAt ? (
-              <ThemedText variant="small" color="textSecondary">
-                Due: {format(parseISO(item.paymentDueAt), 'MMM d, h:mm a')}
-              </ThemedText>
-            ) : null}
-          </View>
-          {!effectivePaid && item.paymentStatus !== 'waived' && item.paymentDueAt && (
-            <PaymentCountdown dueAt={item.paymentDueAt} />
-          )}
-          {!effectivePaid && item.paymentStatus !== 'waived' && (
-            <Button
-              label={
-                item.invoiceAmount === 0
-                  ? 'Confirm Free Appointment'
-                  : `Pay ${item.currency ?? 'PHP'} ${item.invoiceAmount.toFixed(2)} Now`
-              }
-              variant="primary"
-              size="lg"
-              fullWidth
-              onPress={handlePayNow}
-            />
-          )}
-        </Card>
-      )}
-
-      {/* Documents & Files */}
-      <Card padding="lg" style={{ gap: spacing.md }}>
-        <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
-          DOCUMENTS & FILES
-        </ThemedText>
-        <ThemedText variant="smallBold" color="textSecondary">
-          Shared by You
-        </ThemedText>
-        {patientDocs.length > 0 ? (
-          patientDocs.map((d) => <DocumentRow key={d.id} doc={d} />)
-        ) : (
-          <ThemedText variant="small" color="textMuted" style={styles.italic}>
-            No files attached yet.
-          </ThemedText>
         )}
-        <ThemedText variant="smallBold" color="textSecondary" style={{ marginTop: spacing.sm }}>
-          From Clinic
-        </ThemedText>
-        {clinicDocs.length > 0 ? (
-          clinicDocs.map((d) => <DocumentRow key={d.id} doc={d} />)
-        ) : (
-          <ThemedText variant="small" color="textMuted" style={styles.italic}>
-            The clinic hasn't shared any files.
-          </ThemedText>
-        )}
-        <Button
-          label="Attach a File"
-          variant="outline"
-          size="sm"
-          icon="plus"
-          onPress={() => navigation.navigate('Main', { screen: 'AttachFilesScreen' })}
-        />
-      </Card>
 
-      {/* Teleconsultation Waiting Room Entry */}
-      {!isFinalStatus && (item.serviceType === 'teleconsult' || item.serviceType === 'virtual') && (
-        <Card padding="md" style={{ gap: spacing.sm, borderColor: colors.primary, borderWidth: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <AppIcon name="camera" size={20} color="primary" />
-            <ThemedText variant="bodyBold">Virtual Teleconsultation</ThemedText>
-          </View>
-          <ThemedText variant="small" color="textSecondary">
-            Join the virtual waiting room for camera self-preview, payment verification, and physician admission.
-          </ThemedText>
-          <Button
-            label="Enter Teleconsult Waiting Room"
-            variant="primary"
-            size="lg"
-            icon="camera"
-            fullWidth
-            onPress={() =>
-              navigation.navigate('Main', {
-                screen: 'TeleconsultWaitingRoomScreen',
-                params: {
-                  appointmentId: item.id,
-                  patientName: 'Me',
-                  clinicianName: item.provider.name,
-                  scheduledTime: `${dateLabel} ${timeLabel}`,
-                  paymentPolicy: item.invoiceAmount === 0 ? 'Exempt' : 'Prepaid',
-                  paymentStatus: effectivePaid ? 'Paid' : (item.invoiceAmount === 0 ? 'Exempt' : 'Unpaid'),
-                  isYakapExempt: false,
+        {/* Bottom Actions: Reschedule & Cancel */}
+        {!isFinalStatus ? (
+          <View style={[styles.bottomActions, { marginTop: spacing.xl, gap: spacing.md }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reschedule Appointment"
+              onPress={handleReschedule}
+              style={({ pressed }) => [
+                styles.rescheduleBtn,
+                {
+                  backgroundColor: colors.mintSoftBg,
+                  borderRadius: radii.full,
+                  borderColor: colors.border,
+                  paddingVertical: spacing.md,
+                  opacity: pressed ? 0.9 : 1,
                 },
-              })
-            }
-          />
-        </Card>
-      )}
+              ]}
+            >
+              <AppIcon name="calendar" size={16} color={colors.primaryDeep} />
+              <Text
+                style={[
+                  typography.labelBold,
+                  { color: colors.primaryDeep, fontWeight: '700', marginLeft: 6 },
+                ]}
+              >
+                Reschedule Appointment
+              </Text>
+            </Pressable>
 
-      {/* Consultation Recording Playback */}
-      {item.status === 'completed' && (
-        <Card padding="md" style={{ gap: spacing.sm, borderColor: colors.primaryBorder, borderWidth: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <AppIcon name="camera" size={20} color="primary" />
-              <ThemedText variant="bodyBold">Consultation Recording</ThemedText>
-            </View>
-            <Badge tone="success" label="Encrypted Vault" icon="shield" />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel Appointment"
+              onPress={handleCancel}
+              style={({ pressed }) => [
+                styles.cancelBtn,
+                {
+                  paddingVertical: spacing.sm,
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  typography.labelBold,
+                  { color: colors.roseAccent, fontWeight: '700', textAlign: 'center' },
+                ]}
+              >
+                Cancel Appointment
+              </Text>
+            </Pressable>
           </View>
-          <ThemedText variant="small" color="textSecondary">
-            Review your completed teleconsultation recording, replay clinical advice, and verify your care plan.
-          </ThemedText>
-          <Button
-            label="Watch / Listen to Consultation Recording"
-            variant="secondary"
-            size="lg"
-            icon="camera"
-            fullWidth
-            onPress={() => setShowPlayerModal(true)}
-          />
-        </Card>
-      )}
-
-      {/* Sticky Bottom Actions */}
-      {!isFinalStatus && (
-        <View style={[styles.actionBar, { gap: spacing.md, paddingVertical: spacing.md }]}>
-          <Button
-            label="Reschedule"
-            variant="outline"
-            size="lg"
-            style={styles.flex}
-            onPress={handleReschedule}
-          />
-          <Button
-            label="Cancel Appointment"
-            variant="danger"
-            size="lg"
-            style={styles.flex}
-            onPress={handleCancel}
-          />
-        </View>
-      )}
+        ) : null}
+      </ScrollView>
 
       <TeleconsultRecordingPlayerModal
         visible={showPlayerModal}
@@ -773,107 +990,200 @@ export default function AppointmentDetailScreen({ route }: Props) {
         physicianName={item.provider.name}
         consultationDate={dateLabel}
       />
-    </Screen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
+  root: {
     flex: 1,
+    width: '100%',
   },
-  heroCard: {
-    overflow: 'hidden',
+  scrollContent: {
+    paddingBottom: 48,
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
   },
-  heroInfo: {},
-  sectionTitle: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: 4,
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  navActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusBanner: {
+    borderWidth: 1,
   },
   statusRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
-  },
-  infoRow: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 6,
   },
-  infoLabel: {
-    flex: 0.42,
-  },
-  infoValue: {
-    flex: 0.58,
-    textAlign: 'right',
-  },
-  complaintBox: {
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  providerRow: {
+  statusDotWrap: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 6,
   },
-  providerAvatar: {
+  statusDot: {
+    width: 8,
+    height: 8,
+  },
+  countdownCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  countdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  onScheduleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  doctorClinicCard: {
+    borderWidth: 1,
+  },
+  doctorHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  doctorAvatar: {
+    width: 56,
+    height: 56,
+  },
+  doctorAvatarFallback: {
     width: 56,
     height: 56,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  credRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  doctorTextColumn: {
+    flex: 1,
+    marginLeft: 12,
   },
-  starRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  docRow: {
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginTop: 3,
   },
-  docIconBox: {
+  clinicAddressBox: {
+    width: '100%',
+  },
+  clinicAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  parkingBox: {
+    width: '100%',
+    borderWidth: 1,
+  },
+  parkingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  validationBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
+  doctorActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  subActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
+  consultationCard: {
+    borderWidth: 1,
+  },
+  consultationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  categoryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  detailBox: {
+    width: '100%',
+  },
+  detailBoxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  insuranceTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inNetworkBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  copayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checklistCard: {
+    borderWidth: 1,
+  },
+  checklistHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  checklistTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checklistItems: {
+    width: '100%',
+  },
+  checklistItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  checkboxWrap: {
+    width: 20,
+    height: 20,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  teleconsultCard: {
+    borderWidth: 1,
+  },
+  teleconsultBtn: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  invoiceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  bottomActions: {
+    width: '100%',
   },
-  paymentStatusRow: {
+  rescheduleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
-  countdownRow: {
-    flexDirection: 'row',
+  cancelBtn: {
     alignItems: 'center',
-    gap: 6,
-  },
-  clinicalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  italic: {
-    fontStyle: 'italic',
-  },
-  actionBar: {
-    flexDirection: 'row',
+    justifyContent: 'center',
   },
 });

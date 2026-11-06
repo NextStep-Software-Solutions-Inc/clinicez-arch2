@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import {
   FlatList,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -82,7 +83,7 @@ function AppointmentCarouselCard({
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
+      accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
       accessibilityLabel={`Appointment with ${item.providerName} at ${item.clinicName}`}
       style={({ pressed }) => [
         styles.carouselCard,
