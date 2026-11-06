@@ -45,7 +45,9 @@ export function createHookHarness<Result, Props = any>(
       }
       return refSlots[idx];
     },
-    useCallback: (fn: any, _deps: any[]) => fn,
+    useCallback: (fn: any, deps: any[]) => {
+      return mockHooks.useMemo(() => fn, deps);
+    },
     useMemo: (fn: any, deps: any[]) => {
       const idx = memoIndex++;
       const prev = memoSlots[idx];

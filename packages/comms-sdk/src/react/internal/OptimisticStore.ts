@@ -25,6 +25,24 @@ export class OptimisticStore {
     return this.conversationMessages.get(conversationId) ?? [];
   }
 
+  public findMessageById(messageIdOrClientId: string): MessageDto | null {
+    const rawId = messageIdOrClientId.startsWith('opt-')
+      ? messageIdOrClientId.slice(4)
+      : messageIdOrClientId;
+
+    for (const list of this.conversationMessages.values()) {
+      const found = list.find(
+        (m) =>
+          m.messageId === messageIdOrClientId ||
+          m.messageId === rawId ||
+          m.clientMessageId === messageIdOrClientId ||
+          m.clientMessageId === rawId
+      );
+      if (found) return found;
+    }
+    return null;
+  }
+
   public setMessages(conversationId: string, messages: MessageDto[]): void {
     this.conversationMessages.set(conversationId, [...messages]);
     this.notify();

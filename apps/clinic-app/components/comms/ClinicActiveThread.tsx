@@ -120,7 +120,11 @@ export default function ClinicActiveThread({
 
   const handleResend = useCallback(
     async (messageId: string) => {
-      await resendMessage(messageId);
+      try {
+        await resendMessage(messageId);
+      } catch (err: any) {
+        console.warn('Failed to resend message:', err);
+      }
     },
     [resendMessage],
   );
@@ -157,7 +161,6 @@ export default function ClinicActiveThread({
   const handleSendSpeedReply = async (pillText: string) => {
     try {
       await handleSendMessage(pillText, false);
-      notify.success(`Sent quick response: ${pillText}`);
     } catch (err: any) {
       notify.error(err?.message || 'Failed to send speed response');
     }

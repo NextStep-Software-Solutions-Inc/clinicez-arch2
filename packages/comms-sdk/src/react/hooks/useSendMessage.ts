@@ -109,18 +109,28 @@ export function useSendMessage(): UseSendMessageResult {
 
   const resendMessage = useCallback(
     async (clientMessageIdOrMessageId: string): Promise<MessageDto> => {
+      const rawId = clientMessageIdOrMessageId.startsWith('opt-')
+        ? clientMessageIdOrMessageId.slice(4)
+        : clientMessageIdOrMessageId;
+
       let pending = store.getPending().find(
         (m) =>
-          m.clientMessageId === clientMessageIdOrMessageId
+          m.clientMessageId === clientMessageIdOrMessageId ||
+          m.clientMessageId === rawId
       );
 
       if (!pending) {
-        // Check if message exists in store with that clientMessageId
-        for (const pendingItem of store.getPending()) {
-          if (pendingItem.clientMessageId === clientMessageIdOrMessageId) {
-            pending = pendingItem;
-            break;
-          }
+        // Fallback: search store messages across conversations
+        const foundMsg = store.findMessageById(clientMessageIdOrMessageId);
+        if (foundMsg) {
+          return await sendMessage({
+            conversationId: foundMsg.conversationId,
+            contentText: foundMsg.contentText,
+            visibility: foundMsg.visibility,
+            requiresAcknowledgement: foundMsg.requiresAcknowledgement,
+            attachments: foundMsg.attachments,
+            clientMessageId: foundMsg.clientMessageId || rawId
+          });
         }
       }
 
