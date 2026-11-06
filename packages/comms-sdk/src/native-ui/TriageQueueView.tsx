@@ -32,9 +32,38 @@ export function isItemSlaBreached(item: TriageQueueItem): boolean {
   return false;
 }
 
+export type SlaTier = 'breached' | 'warning' | 'onSchedule';
+
+export function getSlaTier(item: TriageQueueItem): SlaTier {
+  if (isItemSlaBreached(item)) {
+    return 'breached';
+  }
+
+  let remainingSec: number | null = null;
+  if (typeof item.slaTimeRemainingSeconds === 'number' && !isNaN(item.slaTimeRemainingSeconds)) {
+    remainingSec = item.slaTimeRemainingSeconds;
+  } else if (item.triageDueAtUtc) {
+    const dueTime = new Date(item.triageDueAtUtc).getTime();
+    if (!isNaN(dueTime)) {
+      remainingSec = Math.floor((dueTime - Date.now()) / 1000);
+    }
+  }
+
+  if (remainingSec === null || remainingSec === undefined) {
+    return 'onSchedule';
+  }
+  if (remainingSec <= 0) {
+    return 'breached';
+  }
+  if (remainingSec <= 900) {
+    return 'warning';
+  }
+  return 'onSchedule';
+}
+
 function formatSlaCountdown(item: TriageQueueItem): string {
   if (isItemSlaBreached(item)) {
-    return 'SLA Breached';
+    return 'Response Overdue';
   }
 
   let remainingSec: number | null = null;
@@ -52,7 +81,7 @@ function formatSlaCountdown(item: TriageQueueItem): string {
   }
 
   if (remainingSec <= 0) {
-    return 'SLA Breached';
+    return 'Response Overdue';
   }
 
   if (remainingSec < 60) {
@@ -85,6 +114,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
   facilityName,
   onExecuteDisposition,
   onRefresh,
+  onSelectCard,
   isLoading = false,
   error = null,
   activeFilter = 'All',
@@ -194,7 +224,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                   accessibilityState={{ selected: isActive }}
                 >
                   <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                    {filter === 'Emergency' ? 'STAT' : filter === 'Urgent' ? 'Urgent' : filter}
+                    {filter === 'Emergency' ? 'Emergency' : filter === 'Urgent' ? 'Urgent' : filter}
                   </Text>
                 </TouchableOpacity>
               );
@@ -292,13 +322,20 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
             const isUrgent = item.priority === 'Urgent';
 
             return (
-              <View key={item.conversationId} style={styles.card}>
+              <TouchableOpacity
+                key={item.conversationId}
+                style={styles.card}
+                activeOpacity={onSelectCard ? 0.7 : 1}
+                onPress={() => onSelectCard?.(item.conversationId)}
+                accessibilityRole="button"
+                accessibilityLabel={`Inquiry from ${item.patientNameMasked || 'Patient'}`}
+              >
                 {/* Urgency & SLA Header */}
                 <View style={styles.cardTopRow}>
                   <View style={styles.badgesRow}>
                     {isStat ? (
                       <View style={styles.statBadge}>
-                        <Text style={styles.statBadgeText}>STAT</Text>
+                        <Text style={styles.statBadgeText}>Emergency</Text>
                       </View>
                     ) : isUrgent ? (
                       <View style={styles.urgentBadge}>
@@ -318,21 +355,21 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                   <View
                     style={[
                       styles.slaPill,
-                      isItemSlaBreached(item)
+                      getSlaTier(item) === 'breached'
                         ? styles.slaPillBreached
-                        : item.triageDueAtUtc || item.slaTimeRemainingSeconds !== undefined
+                        : getSlaTier(item) === 'warning'
                           ? styles.slaPillWarning
-                          : styles.slaPillNormal
+                          : styles.slaPillOnSchedule
                     ]}
                   >
                     <Text
                       style={[
                         styles.slaPillText,
-                        isItemSlaBreached(item)
+                        getSlaTier(item) === 'breached'
                           ? styles.slaPillTextBreached
-                          : item.triageDueAtUtc || item.slaTimeRemainingSeconds !== undefined
+                          : getSlaTier(item) === 'warning'
                             ? styles.slaPillTextWarning
-                            : styles.slaPillTextNormal
+                            : styles.slaPillTextOnSchedule
                       ]}
                     >
                       {formatSlaCountdown(item)}
@@ -387,7 +424,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                     <Text style={styles.declineButtonText}>Decline</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>
@@ -473,7 +510,7 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
                 disabled={isSubmitting}
               >
                 <Text style={styles.modalSubmitText}>
-                  {isSubmitting ? 'Submitting...' : 'Confirm Disposition'}
+                  {isSubmitting ? 'Submitting...' : 'Confirm Clinical Decision'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -628,6 +665,11 @@ const styles = StyleSheet.create({
   slaPillNormal: {
     backgroundColor: lightColors.surfaceSubtle
   },
+  slaPillOnSchedule: {
+    backgroundColor: lightColors.successBg,
+    borderColor: lightColors.successBorder,
+    borderWidth: 1
+  },
   slaPillWarning: {
     backgroundColor: lightColors.warningBg,
     borderColor: lightColors.warningBorder,
@@ -644,6 +686,9 @@ const styles = StyleSheet.create({
   },
   slaPillTextNormal: {
     color: lightColors.textMuted
+  },
+  slaPillTextOnSchedule: {
+    color: lightColors.successText
   },
   slaPillTextWarning: {
     color: lightColors.warningText

@@ -16,9 +16,38 @@ export function isItemSlaBreached(item: TriageQueueItem): boolean {
   return false;
 }
 
+export type SlaTier = 'breached' | 'warning' | 'onSchedule';
+
+export function getSlaTier(item: TriageQueueItem): SlaTier {
+  if (isItemSlaBreached(item)) {
+    return 'breached';
+  }
+
+  let remainingSec: number | null = null;
+  if (typeof item.slaTimeRemainingSeconds === 'number' && !isNaN(item.slaTimeRemainingSeconds)) {
+    remainingSec = item.slaTimeRemainingSeconds;
+  } else if (item.triageDueAtUtc) {
+    const dueTime = new Date(item.triageDueAtUtc).getTime();
+    if (!isNaN(dueTime)) {
+      remainingSec = Math.floor((dueTime - Date.now()) / 1000);
+    }
+  }
+
+  if (remainingSec === null || remainingSec === undefined) {
+    return 'onSchedule';
+  }
+  if (remainingSec <= 0) {
+    return 'breached';
+  }
+  if (remainingSec <= 900) {
+    return 'warning';
+  }
+  return 'onSchedule';
+}
+
 function formatSlaCountdown(item: TriageQueueItem): string {
   if (isItemSlaBreached(item)) {
-    return 'SLA Breached';
+    return 'Response Overdue';
   }
 
   let remainingSec: number | null = null;
@@ -36,7 +65,7 @@ function formatSlaCountdown(item: TriageQueueItem): string {
   }
 
   if (remainingSec <= 0) {
-    return 'SLA Breached';
+    return 'Response Overdue';
   }
 
   if (remainingSec < 60) {
@@ -69,6 +98,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
   facilityName,
   onExecuteDisposition,
   onRefresh,
+  onSelectCard,
   isLoading = false,
   error = null,
   activeFilter = 'All',
@@ -181,7 +211,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
                   }`}
                 >
-                  {filter === 'Emergency' ? 'STAT' : filter === 'Urgent' ? 'Urgent' : filter}
+                  {filter === 'Emergency' ? 'Emergency' : filter === 'Urgent' ? 'Urgent' : filter}
                 </button>
               );
             })}
@@ -301,13 +331,24 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
             return (
               <div
                 key={item.conversationId}
-                className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm"
+                onClick={() => onSelectCard?.(item.conversationId)}
+                className={`p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm ${
+                  onSelectCard ? 'cursor-pointer hover:border-teal-500/50 transition-colors' : ''
+                }`}
+                role={onSelectCard ? 'button' : undefined}
+                tabIndex={onSelectCard ? 0 : undefined}
+                onKeyDown={(e) => {
+                  if (onSelectCard && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onSelectCard(item.conversationId);
+                  }
+                }}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
                     {isStat ? (
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-300">
-                        STAT
+                        Emergency
                       </span>
                     ) : isUrgent ? (
                       <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 border border-orange-300">
@@ -326,11 +367,11 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
 
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                      isItemSlaBreached(item)
+                      getSlaTier(item) === 'breached'
                         ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200 border border-red-300'
-                        : item.triageDueAtUtc || item.slaTimeRemainingSeconds !== undefined
+                        : getSlaTier(item) === 'warning'
                           ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300'
                     }`}
                   >
                     {formatSlaCountdown(item)}
@@ -355,7 +396,10 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => handleOpenAction(item, 'Answer')}
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handleOpenAction(item, 'Answer');
+                    }}
                     className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-teal-700 text-white hover:bg-teal-800 transition-colors"
                   >
                     Answer
@@ -363,7 +407,10 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => handle1ClickNeedsVisit(item)}
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handle1ClickNeedsVisit(item);
+                    }}
                     className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
                   >
                     Needs Visit
@@ -371,7 +418,10 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => handleOpenAction(item, 'Route')}
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handleOpenAction(item, 'Route');
+                    }}
                     className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 transition-colors"
                   >
                     Route
@@ -379,7 +429,10 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => handleOpenAction(item, 'Decline')}
+                    onClick={(e) => {
+                      e?.stopPropagation?.();
+                      handleOpenAction(item, 'Decline');
+                    }}
                     className="flex-1 min-w-[80px] min-h-[44px] px-3.5 rounded text-xs font-semibold bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 transition-colors"
                   >
                     Decline
@@ -471,7 +524,7 @@ export const TriageQueueView: React.FC<WebTriageQueueViewProps> = ({
                 disabled={isSubmitting}
                 className="min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50"
               >
-                {isSubmitting ? 'Submitting...' : 'Confirm Disposition'}
+                {isSubmitting ? 'Submitting...' : 'Confirm Clinical Decision'}
               </button>
             </div>
           </form>

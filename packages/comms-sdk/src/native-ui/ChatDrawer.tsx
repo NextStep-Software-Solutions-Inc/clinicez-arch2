@@ -199,7 +199,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 <View style={styles.cardMeta}>
                   {item.isEmergency && (
                     <View style={styles.statBadge}>
-                      <Text style={styles.statBadgeText}>STAT</Text>
+                      <Text style={styles.statBadgeText}>Emergency</Text>
                     </View>
                   )}
                   {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (

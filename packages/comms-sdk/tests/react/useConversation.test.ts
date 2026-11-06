@@ -25,6 +25,7 @@ function createMockContext(
     facilityId: 'f1',
     staffId: 'staff-42',
     staffDisplayName: 'Dr. Reyes',
+    baseUrl: 'https://comms.local',
     connect: async () => {},
     disconnect: async () => {},
     reconnect: async () => {},

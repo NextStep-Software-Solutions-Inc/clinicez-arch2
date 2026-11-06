@@ -400,7 +400,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       const tree = harness.result.current;
       const text = getTextContent(tree);
 
-      expect(text).toContain('STAT');
+      expect(text).toContain('Emergency');
       expect(text).toContain('Urgent');
       expect(text).toContain('Routine');
       expect(text).toContain('Target: < 1m remaining');
@@ -431,7 +431,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       // Find modal submit button
       const modalSubmit = findElement(
         harness.result.current,
-        (el) => typeof el.props?.onPress === 'function' && getTextContent(el).trim() === 'Confirm Disposition'
+        (el) => typeof el.props?.onPress === 'function' && getTextContent(el).trim() === 'Confirm Clinical Decision'
       );
       expect(modalSubmit).toBeDefined();
       await act(() => modalSubmit.props.onPress());
@@ -455,7 +455,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       const tree = harness.result.current;
       const text = getTextContent(tree);
 
-      expect(text).toContain('STAT');
+      expect(text).toContain('Emergency');
       expect(text).toContain('Urgent');
       expect(text).toContain('Routine');
       expect(text).toContain('Target: < 1m remaining');
@@ -512,7 +512,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       );
       const text = getTextContent(harness.result.current);
       harness.unmount();
-      const match = text.match(/(SLA Breached|Target: [^<]+|Target: < [^<]+)/);
+      const match = text.match(/(Response Overdue|Target: [^<]+|Target: < [^<]+)/);
       return match ? match[0] : '';
     }
 
@@ -534,14 +534,14 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       };
 
       // 1. slaBreached = true
-      expect(runWebSlaCountdown({ ...base, slaBreached: true })).toContain('SLA Breached');
+      expect(runWebSlaCountdown({ ...base, slaBreached: true })).toContain('Response Overdue');
 
       // 2. isSlaBreached = true
-      expect(runWebSlaCountdown({ ...base, isSlaBreached: true })).toContain('SLA Breached');
+      expect(runWebSlaCountdown({ ...base, isSlaBreached: true })).toContain('Response Overdue');
 
       // 3. remainingSec <= 0
-      expect(runWebSlaCountdown({ ...base, slaTimeRemainingSeconds: 0 })).toContain('SLA Breached');
-      expect(runWebSlaCountdown({ ...base, slaTimeRemainingSeconds: -50 })).toContain('SLA Breached');
+      expect(runWebSlaCountdown({ ...base, slaTimeRemainingSeconds: 0 })).toContain('Response Overdue');
+      expect(runWebSlaCountdown({ ...base, slaTimeRemainingSeconds: -50 })).toContain('Response Overdue');
 
       // 4. < 1m remaining (1 to 59s)
       expect(runWebSlaCountdown({ ...base, slaTimeRemainingSeconds: 1 })).toContain('Target: < 1m remaining');
@@ -597,7 +597,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       const tree = harness.result.current;
       const pillView = findElement(
         tree,
-        (el) => getTextContent(el) === 'SLA Breached' && Array.isArray(el.props?.style)
+        (el) => getTextContent(el) === 'Response Overdue' && Array.isArray(el.props?.style)
       );
       expect(pillView).toBeDefined();
 
@@ -611,7 +611,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       harness.unmount();
     });
 
-    it('REMEDIATED: When triageDueAtUtc is expired, both Web and Native display "SLA Breached" with Breached style', () => {
+    it('REMEDIATED: When triageDueAtUtc is expired, both Web and Native display "Response Overdue" with Breached style', () => {
       const expiredItem: TriageQueueItem = {
         conversationId: 'c-expired',
         requestId: 'r-expired',
@@ -640,7 +640,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       const webTree = webHarness.result.current;
       const webPillSpan = findElement(
         webTree,
-        (el) => el.type === 'span' && getTextContent(el) === 'SLA Breached'
+        (el) => el.type === 'span' && getTextContent(el) === 'Response Overdue'
       );
       expect(webPillSpan).toBeDefined();
       // REMEDIATED: Web UI sets red breached style for an SLA Breached item!
@@ -660,7 +660,7 @@ describe('Empirical Verification: State Machine & SLA Parity', () => {
       const nativeTree = nativeHarness.result.current;
       const nativePillView = findElement(
         nativeTree,
-        (el) => getTextContent(el) === 'SLA Breached' && Array.isArray(el.props?.style)
+        (el) => getTextContent(el) === 'Response Overdue' && Array.isArray(el.props?.style)
       );
       expect(nativePillView).toBeDefined();
       const nativeStyle = nativePillView.props.style;

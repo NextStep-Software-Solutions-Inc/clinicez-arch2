@@ -1,94 +1,94 @@
-# BRIEFING — 2026-11-05T11:08:00Z
+# BRIEFING — 2026-11-06T00:00:00Z
 
 ## Mission
-Develop the institutional Clinic Census Report (interactive workstation view, vector PDF export via QuestPDF, and structured Excel export via ClosedXML) across the clinic application and API based on the approved implementation plan.
+Elevate the Clinic Communications Sheet & Triage Desk in `apps/clinic-app` and `@clinicez/comms-sdk` to production-ready quality (R1-R5).
 
 ## 🔒 My Identity
 - Archetype: orchestrator
 - Roles: orchestrator, user_liaison, human_reporter, successor
-- Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator
-- Working directory (current mac workspace): /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/orchestrator
+- Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/orchestrator
 - Original parent: parent
-- Original parent conversation ID: da232b28-e513-4fe3-9939-ee4339c4a39a
-- Current parent conversation ID: 25c21294-e3fc-4f71-ad82-61da28aef6b0
+- Original parent conversation ID: aa61966e-9162-4dcf-99c5-2e554789ec5c
 
 ## 🔒 My Workflow
-- **Pattern**: Project Orchestration
-- **Scope document**: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/orchestrator/PROJECT.md
-1. **Decompose**: Survey existing Clinic EZ monorepo architecture, Yakap schema, and clinic app via Explorers, then decompose into R1-R4 architectural plan specification milestones.
-2. **Dispatch & Execute**: Subagent dispatch (Explorers -> Workers -> Reviewers -> Challengers -> Auditors).
-3. **On failure**: Retry -> Replace -> Skip -> Redistribute -> Redesign -> Escalate.
+- **Pattern**: Project Orchestrator
+- **Scope document**: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/orchestrator/PROJECT.md
+1. **Decompose**: Survey existing Clinic Communications Sheet & Triage Desk across `apps/clinic-app` and `@clinicez/comms-sdk` via 3 Explorers, then decompose into milestones in PROJECT.md.
+2. **Dispatch & Execute**:
+   - Subagent dispatch (Explorers -> Workers -> Reviewers -> Challengers -> Auditors).
+   - Dual track: Implementation track & E2E Testing track.
+3. **On failure** (in this order):
+   - Retry: nudge stuck agent or re-send task
+   - Replace: spawn fresh agent with partial progress
+   - Skip: proceed without (only if non-critical)
+   - Redistribute: split stuck agent's remaining work
+   - Redesign: re-partition decomposition
+   - Escalate: report to parent (sub-orchestrators only, last resort)
 4. **Succession**: At 16 spawns, write handoff.md, spawn successor.
 - **Work items**:
-  1. Phase 0: Survey codebase (Backend Application/Domain, ClosedXML/QuestPDF Infra, Frontend Workstation) [done]
-  2. Phase 1: Milestone Decomposition & Interface Contracts [done]
-  3. Phase 2: Implementation Track & E2E Testing Track [done]
-  4. Phase 3: Verification (Iteration 1: FAIL -> Iteration 2 Remediation: PASS) [done]
-- **Current phase**: 4 (Complete)
-- **Current focus**: Project Completion & Reporting
+  1. Phase 0: Codebase Survey (3 parallel Explorers: Comms SDK & Triage, Clinic App UI & Navigation, Design Tokens & Existing Tests) [in-progress]
+  2. Phase 1: Decomposition & Interface Contracts in PROJECT.md [pending]
+  3. Phase 2: Implementation Track & E2E Testing Track [pending]
+  4. Phase 3: Verification Cohort & Gate Certification [pending]
+- **Current phase**: 0 (Survey)
+- **Current focus**: Awaiting survey handoffs from 3 parallel Explorers
 
 ## 🔒 Key Constraints
-- Zero source code modifications directly by orchestrator. All work delegated to subagents.
-- Strict Clean Architecture adherence in ClinicEz.Clinic (.Domain, .Application, .Infrastructure) and React Native Expo conventions in apps/clinic-app.
-- ClosedXML for Excel export (.xlsx) with 25-column register, styled navy header, frozen row, auto-filter, and executive summary tab.
-- QuestPDF for landscape vector PDF report with letterhead, KPI telemetry, repeating table headers, page numbers, signature blocks.
-- Real-time workstation UI with date range presets, KPI cards, searchable table, export buttons.
-- All tests must pass: dotnet test, bun test, typecheck, lint.
-- Forensic audit is a binary veto. All checks passed CLEAN.
+- NEVER write, modify, or create source code files directly.
+- NEVER run build/test commands yourself — require workers to do so.
+- NEVER investigate or explore the problem at the code level — dispatch Explorers for technical investigation.
+- File-editing tools ONLY for metadata/state files (.md) in .agents/teamwork/.
+- No backward compatibility consideration is needed (development stage). Feel free to refactor, replace, or clean up outdated interfaces and legacy stubs directly.
+- Design tokens: Strictly adhere to `@clinicez/design-tokens`, no hardcoded hex, no raw palette imports, no emojis, min 12px text (`text-xs`).
+- Clinical language: Replace developer jargon with clear human-centered clinical everyday language.
+- Verification: packages/comms-sdk bun test, apps/clinic-app lint:tokens, apps/clinic-app bun test.
+- Binary Forensic Audit veto: Clean verdict required.
 
 ## Current Parent
-- Conversation ID: 25c21294-e3fc-4f71-ad82-61da28aef6b0
-- Updated: 2026-11-05T07:48:00Z
+- Conversation ID: aa61966e-9162-4dcf-99c5-2e554789ec5c
+- Updated: 2026-11-05T23:58:00Z
 
 ## Key Decisions Made
-- Use Project Orchestrator pattern.
-- Survey phase: Dispatched 3 parallel teamwork_explorers.
-- Base implementation on approved plan: /Users/macuser/.gemini/antigravity/brain/c7028f48-ba28-41aa-98ea-4632264de48b/clinic_census_report_plan.md.
-- Remediated Iteration 1 findings with 3 Explorers and a Remediation Worker.
-- Certified passing gate with 2 Reviewers (APPROVE), 2 Challengers (APPROVE), and Forensic Auditor (CLEAN).
+- Dispatched 3 parallel teamwork_explorers for survey of comms-sdk, clinic-app workstation components, and test/token baselines.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| Explorer 1 | teamwork_explorer | Backend Application & CQRS Query Explorer | completed | 0eaa6da9-b229-40f0-804c-0996b5e4565d |
-| Explorer 2 | teamwork_explorer | Backend Infrastructure Explorer | completed | bc9416b3-ab44-425e-ac1f-6f0aab2e643f |
-| Explorer 3 | teamwork_explorer | Frontend Workstation Explorer | completed | af29ce70-6bec-4be8-b851-32afb6f004b5 |
-| Worker 1 | teamwork_worker | Backend Core & Export Worker (M1) | failed | adfeeac9-9d5f-4820-a8f7-713ac70db020 |
-| Test Writer 1 | teamwork_test_writer | E2E Test Suite Architect & Writer | failed | 983e2e0e-4dfa-4d77-986a-792b94bddc8b |
-| Replacement Test Writer | teamwork_test_writer | E2E Test Suite Architect & Writer | failed | 17c8fc9b-2352-4ab8-90f3-d963ad0b28be |
-| Backend Verification Worker | teamwork_worker | Backend Verification & Tests (M1) | completed | 9a1242fc-dfa7-44d7-9ca4-e8652a69a472 |
-| Frontend Workstation Worker | teamwork_worker | Frontend Services & Workstation UI (M2) | completed | 1441fefa-1f89-4589-908a-09bea8ffa891 |
-| E2E Test Publisher Worker | teamwork_worker | Author TEST_READY.md & Validate All Tests | completed | 8b684a7d-dbc5-45c9-80e9-c3d377b8f16f |
-| Reviewer 1 | teamwork_reviewer | Backend Architecture Reviewer | completed (APPROVE) | 21e00a0c-5a4d-4784-a950-7a168790a231 |
-| Reviewer 2 | teamwork_reviewer | Frontend Workstation Reviewer | completed (APPROVE) | c3feeab7-d5fa-48b6-b90c-9bd2d5620b40 |
-| Challenger 1 | teamwork_challenger | Backend Calculation Challenger | completed (REQUEST_CHANGES) | 1476904e-79f4-44ef-874f-ab947ea6fbb1 |
-| Challenger 2 | teamwork_challenger | Workstation UI Challenger | completed (REQUEST_CHANGES) | e906b467-4d24-45e0-a698-123d01dbed5c |
-| Forensic Auditor | teamwork_auditor | Forensic Integrity Auditor | completed (INTEGRITY VIOLATION) | 565ffc56-92ce-4451-b754-a9d3119658c1 |
-| Explorer R2 (Backend CQRS) | teamwork_explorer | Backend CQRS Remediation Explorer | completed | 102e91cb-503d-495c-85a1-8617a0c2db0e |
-| Explorer R2 (Backend Tests) | teamwork_explorer | Backend Tests Verification Explorer | completed | fa5cc936-937d-4be2-a9bb-e14c06935c4f |
-| Explorer R2 (Frontend UI) | teamwork_explorer | Frontend UI Remediation Explorer | completed | ecb8c2c7-6abd-428c-9206-18d17ffd0ed3 |
-| Remediation Worker (R2) | teamwork_worker | Remediation Worker | completed | 3be9305f-e36a-4d13-bc7e-9ea17aa579d4 |
-| Reviewer 1 (R2 Backend) | teamwork_reviewer | Backend Architecture Reviewer | completed (APPROVE) | 3572a837-55a0-45a5-8983-f213190edb4c |
-| Reviewer 2 (R2 Frontend) | teamwork_reviewer | Frontend Workstation Reviewer | completed (APPROVE) | f02a8437-9f34-49b3-a2d4-78ae890c971c |
-| Challenger 1 (R2 Backend) | teamwork_challenger | Backend Calculation Challenger | completed (APPROVE) | 502735b6-763f-4c2b-8eb5-b5dc1edf8227 |
-| Challenger 2 (R2 Frontend) | teamwork_challenger | Workstation UI Challenger | completed (APPROVE) | fbdca2fa-c253-4e00-afb7-db21bac9f76c |
-| Forensic Auditor (R2) | teamwork_auditor | Forensic Integrity Auditor | completed (CLEAN) | e808b514-310e-4787-a9b6-4682b7730c2b |
+| Explorer 1 | teamwork_explorer | Comms SDK & Triage Architecture Explorer | completed | a59f32fe-b387-498d-aafe-20308c6b32ba |
+| Explorer 2 | teamwork_explorer | Clinic App Workstation UI & Navigation Explorer | completed | 85edb00b-2f4f-4baa-b519-2863042cce9d |
+| Explorer 3 | teamwork_explorer | Tokens, Jargon & Test Baseline Explorer | completed | be2d00a5-5c88-42a6-b40d-929ba600a985 |
+| Worker M1 | teamwork_worker | Comms SDK Core UI, Triage Subsystem & Jargon | completed | 72487560-a6c7-481a-978a-af96e015f359 |
+| Test Writer E2E | teamwork_test_writer | E2E Test Suite Architect & Writer (Tiers 1-4) | completed | 32db15a0-f8ee-4d19-9228-dfe43a1b7a9a |
+| Worker M2 | teamwork_worker | Clinic App Workstation Comms Sheet, Active Thread & Modals | completed | d0491ebf-c2d8-4ce4-96d2-f204d4cd514f |
+| Reviewer 1 | teamwork_reviewer | Comms SDK & Triage Architecture Reviewer | completed (REQUEST_CHANGES) | 5ec5a972-2fe9-43cb-b553-0952c1699fd0 |
+| Reviewer 2 | teamwork_reviewer | Clinic App Workstation & Navigation Reviewer | completed (APPROVE) | 200bb9eb-ba0f-44ab-8267-d54e2895da58 |
+| Challenger 1 | teamwork_challenger | Triage Subsystem & State Challenger | completed (REQUEST_CHANGES) | 168397ac-c4b7-4227-b04f-82e843f89bda |
+| Challenger 2 | teamwork_challenger | Clinic App Active Thread & Modal Challenger | completed (APPROVE) | 847a9c77-0bac-498a-aeee-c86b4a2dc0c6 |
+| Forensic Auditor | teamwork_auditor | Forensic Integrity Auditor | completed (CLEAN) | d03387d9-ff07-4ff3-9b87-0dfc92c0f79f |
+| Explorer R2.1 | teamwork_explorer | Types & Imports Remediation Explorer | completed | 05be33fd-fbd5-4865-871a-b7175b3efda6 |
+| Explorer R2.2 | teamwork_explorer | REST Error Handling Remediation Explorer | completed | 978b6e80-78d2-4ddc-9bac-785276a17092 |
+| Explorer R2.3 | teamwork_explorer | SLA Boundary Remediation Explorer | completed | 61356753-db46-4225-99a2-2da4679f1872 |
+| Worker Remediation R2 | teamwork_worker | Remediation Worker (Types, REST Errors, SLA) | completed | 2b84546b-9f78-46d9-a82c-0158ca595eb7 |
+| Reviewer R2.1 | teamwork_reviewer | Comms SDK & Triage Architecture Reviewer | completed (APPROVE) | 52d47ca0-b6cd-4b5b-8b51-018845c7dc15 |
+| Reviewer R2.2 | teamwork_reviewer | Clinic App Workstation & Navigation Reviewer | completed (APPROVE) | e2f8c9f6-5f87-4fd3-a193-862b73c40f3b |
+| Challenger R2.1 | teamwork_challenger | Triage Subsystem & State Challenger | completed (APPROVE) | 223d69c9-0aae-42ee-b720-d617f1a74aa9 |
+| Challenger R2.2 | teamwork_challenger | Clinic App Active Thread & Modal Challenger | completed (APPROVE) | d52a54a7-c0f2-4238-92ef-c1c20f20f672 |
+| Auditor R2 | teamwork_auditor | Forensic Integrity Auditor | completed (CLEAN) | c265507b-c0bf-4d12-8b4c-1c07388a47fb |
 
 ## Succession Status
-- Succession required: no (project completed with all subagents retired)
-- Spawn count: 23 / 128
+- Succession required: no (Task Complete)
+- Spawn count: 20 / 16
 - Pending subagents: none
 - Predecessor: none
-- Successor: none
+- Successor: not yet spawned
 
 ## Active Timers
-- Heartbeat cron: killed on completion
-- Safety timer: killed on completion
+- Heartbeat cron: 7ef5051f-6d63-475b-9dc4-7c04936e1481/task-31
+- Safety timer: none
 
 ## Artifact Index
-- /Users/macuser/.gemini/antigravity/brain/c7028f48-ba28-41aa-98ea-4632264de48b/clinic_census_report_plan.md — Approved Clinic Census Report implementation plan
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative User Request
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/orchestrator/PROJECT.md — Project scope, architecture, and feature inventory
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/orchestrator/GATE_STATUS.md — Gate certification tracking
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/orchestrator/progress.md — Execution log and retrospective
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/improve_clinic_patient_ui/.agents/teamwork/orchestrator/handoff.md — Final orchestrator handoff report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative User Request
+- /Users/macuser/.gemini/antigravity/brain/35833875-1d06-46ae-9d1c-223b7b36e6a9/clinic_communications_sheet_production_plan.md — Reference Implementation Plan
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/orchestrator/PROJECT.md — Scope & Architecture
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/orchestrator/progress.md — Execution Progress & Heartbeat
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/triage_desk_documentation/.agents/teamwork/orchestrator/GATE_STATUS.md — Gate Verdict Matrix

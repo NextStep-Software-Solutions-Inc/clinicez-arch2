@@ -124,6 +124,7 @@ export const ICONS = {
   patient: User,
   patientVerified: UserCheck,
   staff: Users,
+  users: Users,
   appointments: CalendarDays,
   calendar: Calendar,
   consultations: Stethoscope,

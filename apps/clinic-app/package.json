@@ -64,6 +64,7 @@
     "build:clinic-web": "bun run build:web",
     "build": "bun run build:web",
     "typecheck": "tsc --noEmit",
+    "typecheck:clinic": "tsc --noEmit",
     "lint:tokens": "bun scripts/check-tokens.mjs",
     "lint:hosts": "bun scripts/check-no-external-hosts.mjs",
     "assets": "bun ../../scripts/generate-brand-assets.mjs",

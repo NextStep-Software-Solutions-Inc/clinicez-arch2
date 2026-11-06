@@ -76,7 +76,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
       case 'Received':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIconTeal}>ACK</Text>
+            <Text style={styles.deliveryIconTeal}>Read Confirmation</Text>
             <Text style={styles.deliveryTextTeal}>Delivered</Text>
           </View>
         );
@@ -106,7 +106,13 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             {conversationTitle}
           </Text>
           <Text style={styles.headerSubtitle}>
-            Scope: {conversationScope}
+            {conversationScope === 'PatientFacility'
+              ? 'Patient Request'
+              : conversationScope === 'StaffContext'
+                ? 'Care Team'
+                : conversationScope === 'Facility'
+                  ? 'Facility Channel'
+                  : conversationScope}
           </Text>
         </View>
 
@@ -165,7 +171,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                   <View style={styles.internalHeader}>
                     <Text style={styles.internalHeaderIcon}>LOCK</Text>
                     <Text style={styles.internalHeaderText}>
-                      INTERNAL NOTE — NEVER VISIBLE TO PATIENT
+                      Private Staff Note (Care Team Only)
                     </Text>
                   </View>
                   <Text style={[styles.internalText, isObscured && styles.obscuredText]}>

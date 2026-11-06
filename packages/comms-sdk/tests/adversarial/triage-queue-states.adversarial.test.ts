@@ -408,7 +408,7 @@ describe('Adversarial Stress Test: TriageQueueView State Machine & SLA Parity', 
       const allText = getTextContent(tree);
 
       // Verify badges rendered
-      expect(allText).toContain('STAT');
+      expect(allText).toContain('Emergency');
       expect(allText).toContain('Urgent');
       expect(allText).toContain('Routine');
       expect(allText).toContain('Non-Emergency Confirmed');
@@ -462,7 +462,7 @@ describe('Adversarial Stress Test: TriageQueueView State Machine & SLA Parity', 
       const allText = getTextContent(tree);
 
       // Verify badges
-      expect(allText).toContain('STAT');
+      expect(allText).toContain('Emergency');
       expect(allText).toContain('Urgent');
       expect(allText).toContain('Routine');
       expect(allText).toContain('Non-Emergency Confirmed');
@@ -579,12 +579,12 @@ describe('Adversarial Stress Test: TriageQueueView State Machine & SLA Parity', 
 
       const tree = harness.result.current;
       const allText = getTextContent(tree);
-      expect(allText).toContain('SLA Breached');
+      expect(allText).toContain('Response Overdue');
 
       // Verify that the span for the pill contains the red breached classes
       const slaPillSpan = findElement(
         tree,
-        (el) => el.type === 'span' && getTextContent(el) === 'SLA Breached'
+        (el) => el.type === 'span' && getTextContent(el) === 'Response Overdue'
       );
       expect(slaPillSpan).toBeDefined();
       expect(slaPillSpan.props.className).toContain('bg-red-100');
@@ -620,12 +620,12 @@ describe('Adversarial Stress Test: TriageQueueView State Machine & SLA Parity', 
 
       const tree = harness.result.current;
       const allText = getTextContent(tree);
-      expect(allText).toContain('SLA Breached'); // formatSlaCountdown returned SLA Breached
+      expect(allText).toContain('Response Overdue'); // formatSlaCountdown returned Response Overdue
 
-      // Find the Pill View containing text 'SLA Breached'
+      // Find the Pill View containing text 'Response Overdue'
       const pillView = findElement(
         tree,
-        (el) => getTextContent(el) === 'SLA Breached' && Array.isArray(el.props?.style)
+        (el) => getTextContent(el) === 'Response Overdue' && Array.isArray(el.props?.style)
       );
       expect(pillView).toBeDefined();
 
@@ -668,7 +668,7 @@ describe('Adversarial Stress Test: TriageQueueView State Machine & SLA Parity', 
       const webTree = webHarness.result.current;
       const webPillSpan = findElement(
         webTree,
-        (el) => el.type === 'span' && getTextContent(el) === 'SLA Breached'
+        (el) => el.type === 'span' && getTextContent(el) === 'Response Overdue'
       );
       expect(webPillSpan).toBeDefined();
       expect(webPillSpan.props.className).toContain('bg-red-100');
@@ -687,7 +687,7 @@ describe('Adversarial Stress Test: TriageQueueView State Machine & SLA Parity', 
       const nativeTree = nativeHarness.result.current;
       const nativePillView = findElement(
         nativeTree,
-        (el) => getTextContent(el) === 'SLA Breached' && Array.isArray(el.props?.style)
+        (el) => getTextContent(el) === 'Response Overdue' && Array.isArray(el.props?.style)
       );
       expect(nativePillView).toBeDefined();
       const nativeStyle = nativePillView.props.style;

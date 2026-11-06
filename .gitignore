@@ -52,6 +52,7 @@ pnpm-debug.log*
 
 # Node / JavaScript
 node_modules/
+node_modules
 /.pnp/
 .pnp.js
 

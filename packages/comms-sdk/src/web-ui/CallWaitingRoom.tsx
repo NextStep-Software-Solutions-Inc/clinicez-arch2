@@ -140,7 +140,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 <p className="text-xs font-bold text-teal-700 dark:text-teal-300">
                   Admission Cleared • YAKAP Auto-Exempt
                 </p>
-                <p className="text-[11px] text-teal-800 dark:text-teal-400 mt-0.5">
+                <p className="text-xs text-teal-800 dark:text-teal-400 mt-0.5">
                   PhilHealth Konsulta consultation automatically cleared for admission without prepayment gate.
                 </p>
               </div>
@@ -152,7 +152,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
                   Prepayment Gate: Settlement Required
                 </p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                   This consultation is prepaid. Admission will unlock immediately upon cashier settlement.
                 </p>
                 {isDoctor && onEmergencyPaymentOverride && (
@@ -173,7 +173,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
                   Payment Cleared
                 </p>
-                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
                   Payment confirmed. Ready for consultation admission.
                 </p>
               </div>
@@ -186,7 +186,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-0.5">
                 Informed Recording Disclosure
               </h2>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-xs text-slate-500 leading-relaxed">
                 This clinical consultation may be recorded for medical records under RA 10173 and facility policy.
               </p>
             </div>
