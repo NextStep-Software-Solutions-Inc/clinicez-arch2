@@ -310,6 +310,7 @@ export default function ClinicChatDrawerHost() {
             ]}
             accessibilityRole="tab"
             accessibilityState={{ selected: drawerTab === 'conversations' }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           >
             <View style={styles.tabBadgeRow}>
               <ThemedText
@@ -336,6 +337,7 @@ export default function ClinicChatDrawerHost() {
             ]}
             accessibilityRole="tab"
             accessibilityState={{ selected: drawerTab === 'triage' }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           >
             <View style={styles.tabBadgeRow}>
               <ThemedText
@@ -591,6 +593,8 @@ const styles = StyleSheet.create({
   tabButton: {
     paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
+    minHeight: 40,
+    justifyContent: 'center',
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.transparent,
     borderWidth: theme.sizes.borderWidth,

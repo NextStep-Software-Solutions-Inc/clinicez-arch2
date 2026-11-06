@@ -12,7 +12,15 @@ export function useConversations(
   scope?: ConversationScopeFilter | ConversationScope[],
   initialFilter?: ConversationsFilterOptions
 ): UseConversationsResult {
-  const { client, facilityId } = useCommsContext();
+  const {
+    client,
+    facilityId,
+    tenantId,
+    staffId,
+    baseUrl,
+    activeTicket,
+    refreshTicket,
+  } = useCommsContext();
 
   const [filter, setFilterState] = useState<ConversationsFilterOptions>(initialFilter ?? {});
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
@@ -30,8 +38,40 @@ export function useConversations(
   const refresh = useCallback(async (): Promise<void> => {
     setIsRefreshing(true);
     try {
-      // In local mode or mock client, fetch or synthesize list
-      // Real API call or mock event update
+      if (baseUrl) {
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        let ticket = activeTicket?.ticket;
+        if (!ticket && refreshTicket) {
+          try {
+            const refreshed = await refreshTicket();
+            ticket = refreshed?.ticket;
+          } catch {
+            // ignore ticket refresh error
+          }
+        }
+        const params = new URLSearchParams();
+        if (facilityId) params.append('facilityId', facilityId);
+        if (scope && scope !== 'All' && !Array.isArray(scope)) {
+          params.append('scope', scope);
+        }
+        const queryString = params.toString();
+        const url = `${cleanBase}/api/v1/comms/conversations${queryString ? `?${queryString}` : ''}`;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(ticket ? { Authorization: `Bearer ${ticket}` } : {})
+        };
+        const res = await fetch(url, {
+          method: 'GET',
+          headers
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch conversations: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`);
+        }
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setConversations(data);
+        }
+      }
       setError(null);
     } catch (err: any) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -39,7 +79,11 @@ export function useConversations(
       setIsRefreshing(false);
       setIsLoading(false);
     }
-  }, []);
+  }, [activeTicket?.ticket, baseUrl, facilityId, refreshTicket, scope]);
+
+  useEffect(() => {
+    refresh().catch(() => {});
+  }, [refresh]);
 
   const loadMore = useCallback(async (): Promise<void> => {
     if (!hasMore) return;
@@ -48,9 +92,16 @@ export function useConversations(
 
   const createConversation = useCallback(
     async (request: CreateConversationRequest): Promise<ConversationDto> => {
+      const optimisticId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `conv-${Date.now()}`;
+      const effectiveCreatedBy = staffId || 'staff';
+      const participantsList = request.participantIds || request.participantStaffIds || [];
+
       const newConv: ConversationDto = {
-        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `conv-${Date.now()}`,
-        tenantId: '',
+        id: optimisticId,
+        tenantId: tenantId || '',
         facilityId,
         scope: request.scope,
         kind: 'General',
@@ -65,15 +116,74 @@ export function useConversations(
         messageCount: 0,
         lastSeq: 0,
         createdAtUtc: new Date().toISOString(),
-        createdBy: 'user',
-        participants: []
+        createdBy: effectiveCreatedBy,
+        participants: participantsList.map((p) => ({
+          id: p,
+          userId: p,
+          displayName: p,
+          role: 'Member',
+          joinedAtUtc: new Date().toISOString(),
+        })),
       };
 
       setConversations((prev) => [newConv, ...prev]);
+
+      if (baseUrl) {
+        const cleanBase = baseUrl.replace(/\/$/, '');
+        let ticket = activeTicket?.ticket;
+        if (!ticket && refreshTicket) {
+          try {
+            const refreshed = await refreshTicket();
+            ticket = refreshed?.ticket;
+          } catch {
+            // ignore ticket refresh error
+          }
+        }
+        const url = `${cleanBase}/api/v1/comms/conversations`;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(ticket ? { Authorization: `Bearer ${ticket}` } : {})
+        };
+        const payload = {
+          tenantId: tenantId || '',
+          facilityId,
+          scope: request.scope,
+          kind: 'General',
+          title: request.title,
+          contextType: request.contextType || null,
+          contextId: request.contextId || null,
+          category: request.category || null,
+          isEmergencyConfirmed: false,
+          isLocalOnly: request.isLocalOnly ?? false,
+          participants: participantsList.length > 0 ? participantsList.map((id) => ({
+            participantType: 'Staff',
+            participantId: id,
+            displayName: 'Staff',
+            role: 'Member'
+          })) : null
+        };
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          setConversations((prev) => prev.filter((c) => c.id !== optimisticId));
+          throw new Error(`Failed to create conversation: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`);
+        }
+
+        const serverConv: ConversationDto = await res.json();
+        setConversations((prev) => prev.map((c) => (c.id === optimisticId ? serverConv : c)));
+        client.events.emit('conversationCreated', serverConv);
+        return serverConv;
+      }
+
       client.events.emit('conversationCreated', newConv);
       return newConv;
     },
-    [client, facilityId]
+    [activeTicket?.ticket, baseUrl, client, facilityId, refreshTicket, staffId, tenantId]
   );
 
   // Real-time synchronization

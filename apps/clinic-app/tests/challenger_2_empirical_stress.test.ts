@@ -368,6 +368,12 @@ describe('Challenger 2 Empirical Verification: Comms Active Thread, Modals & Dra
     mockGoBack.mockClear();
     mockClinicComms.isChatDrawerOpen = true;
     mockClinicComms.activeConversationId = undefined;
+    mockActiveConversation = {
+      id: 'conv-active-1',
+      title: 'Pediatric Asthma Triage',
+      scope: 'PatientFacility',
+      contextId: 'p-asthma-101',
+    };
     mockCommsStatus = 'connected';
     mockCommsIsReconnecting = false;
   });

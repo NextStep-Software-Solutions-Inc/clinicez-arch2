@@ -433,6 +433,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 44,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xs,
     borderRadius: theme.radii.sm,
@@ -514,6 +515,7 @@ const styles = StyleSheet.create({
   staffCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 48,
     padding: theme.spacing.sm,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
@@ -557,6 +559,8 @@ const styles = StyleSheet.create({
   deptChip: {
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
+    minHeight: 40,
+    justifyContent: 'center',
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: theme.sizes.borderWidth,
@@ -574,5 +578,6 @@ const styles = StyleSheet.create({
   },
   footerBtn: {
     minWidth: 110,
+    minHeight: 44,
   },
 });

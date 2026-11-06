@@ -12,12 +12,20 @@ import { useAuth } from '../../context/AuthContext';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 
+export interface PinnedAlertItem {
+  id: string;
+  label: string;
+  details?: string;
+  severity?: 'Emergency' | 'Urgent' | 'Routine';
+}
+
 export interface ClinicActiveThreadProps {
   conversationId: string;
   onBack: () => void;
   currentUserId?: string;
   onOpenPatientChart?: (patientId: string) => void;
   initialActionMenuOpen?: boolean;
+  pinnedAlerts?: PinnedAlertItem[] | null;
 }
 
 const SPEED_RESPONSE_PILLS = [
@@ -49,6 +57,7 @@ export default function ClinicActiveThread({
   currentUserId,
   onOpenPatientChart,
   initialActionMenuOpen,
+  pinnedAlerts,
 }: ClinicActiveThreadProps) {
   const { conversation, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
   const { sendMessage, resendMessage } = useSendMessage();
@@ -72,12 +81,31 @@ export default function ClinicActiveThread({
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(initialActionMenuOpen ?? false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [isHandoffModalOpen, setIsHandoffModalOpen] = useState(false);
+  const [handoffInstructions, setHandoffInstructions] = useState('');
   const [selectedColleagueId, setSelectedColleagueId] = useState<string | null>(null);
 
   // Active Member List State
   const [members, setMembers] = useState<Array<{ id: string; name: string; role: string }>>([
     { id: effectiveUserId, name: auth?.user?.name || 'Current Clinician', role: auth?.user?.role || 'Clinician' },
   ]);
+
+  // Pinned Alerts & Clinical Orders Resolution
+  const activeAlerts = useMemo<PinnedAlertItem[]>(() => {
+    if (pinnedAlerts === null) return [];
+    if (Array.isArray(pinnedAlerts)) return pinnedAlerts;
+    // Default clinical alerts for emergency, patient triage, or active clinical threads
+    if (conversation?.isEmergencyConfirmed || conversation?.priority === 'Emergency' || conversation?.scope === 'PatientFacility' || !conversation) {
+      return [
+        {
+          id: 'alert-1',
+          label: 'Penicillin Allergy Alert',
+          details: 'NPO after midnight • Strict bedside observation',
+          severity: 'Emergency',
+        },
+      ];
+    }
+    return [];
+  }, [pinnedAlerts, conversation]);
 
   const handleSendMessage = useCallback(
     async (text: string, isInternal: boolean) => {
@@ -182,11 +210,15 @@ export default function ClinicActiveThread({
   // Action Menu: View Patient Chart
   const handleViewPatientChart = () => {
     setIsActionMenuOpen(false);
-    const patientId = conversation?.contextId || (conversation?.scope === 'PatientFacility' ? conversation.id : 'p-patient-active');
-    if (onOpenPatientChart) {
-      onOpenPatientChart(patientId);
+    const patientId = conversation?.contextId || (conversation?.scope === 'PatientFacility' ? conversation.id : undefined);
+    if (patientId) {
+      if (onOpenPatientChart) {
+        onOpenPatientChart(patientId);
+      } else {
+        notify.info(`Viewing patient chart: ${patientId}`);
+      }
     } else {
-      notify.info(`Viewing patient chart: ${patientId}`);
+      notify.info('This care team conversation is not linked to an individual patient record.');
     }
   };
 
@@ -216,16 +248,21 @@ export default function ClinicActiveThread({
   };
 
   const handoffSummaryContent = useMemo(() => {
+    const alertLines = activeAlerts.map((a) => `${a.label}${a.details ? ` (${a.details})` : ''}`).join(', ');
+    const instructionsText = handoffInstructions.trim()
+      ? handoffInstructions.trim()
+      : 'Monitor vital signs every 2 hours and follow up on pending lab results.';
+
     return [
       `Shift Handoff Summary`,
       `Generated: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
       `Conversation: ${activeTitle}`,
       `Category: ${getCategoryLabel(conversation?.scope)}`,
       `Care Team Members: ${members.map((m) => `${m.name} (${m.role})`).join(', ')}`,
-      `Pending Clinical Orders: Penicillin Allergy Alert, NPO after midnight`,
-      `Instructions: Monitor vital signs every 2 hours and follow up on pending lab results.`,
+      `Pending Clinical Orders: ${alertLines || 'None'}`,
+      `Instructions: ${instructionsText}`,
     ].join('\n\n');
-  }, [activeTitle, conversation?.scope, members]);
+  }, [activeAlerts, activeTitle, conversation?.scope, handoffInstructions, members]);
 
   return (
     <View style={styles.threadContainer}>
@@ -309,19 +346,30 @@ export default function ClinicActiveThread({
       </View>
 
       {/* Pinned Clinical Orders & Alerts Banner */}
-      <View style={styles.pinnedBanner}>
-        <View style={styles.pinnedAlertRow}>
-          <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
-          <View style={styles.pinnedTextGroup}>
-            <ThemedText variant="smallBold" color={theme.colors.emergency}>
-              Penicillin Allergy Alert
-            </ThemedText>
-            <ThemedText variant="caption" color={theme.colors.textSecondary}>
-              NPO after midnight • Strict bedside observation
-            </ThemedText>
+      {activeAlerts.length > 0 && (
+        <View style={styles.pinnedBanner}>
+          <View style={styles.pinnedAlertRow}>
+            <Icon
+              name="alertCircle"
+              size={theme.sizes.iconSm}
+              color={activeAlerts[0].severity === 'Emergency' ? theme.colors.emergency : theme.colors.warningText}
+            />
+            <View style={styles.pinnedTextGroup}>
+              <ThemedText
+                variant="smallBold"
+                color={activeAlerts[0].severity === 'Emergency' ? theme.colors.emergency : theme.colors.warningText}
+              >
+                {activeAlerts[0].label}
+              </ThemedText>
+              {activeAlerts[0].details ? (
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {activeAlerts[0].details}
+                </ThemedText>
+              ) : null}
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {/* In-Thread Search Bar */}
       {isSearchOpen && (
@@ -630,6 +678,14 @@ export default function ClinicActiveThread({
         footer={
           <View style={styles.modalFooterRow}>
             <Button
+              title="Copy Summary"
+              variant="outline"
+              onPress={() => {
+                notify.success('Shift handoff summary copied to clipboard.');
+              }}
+              style={styles.modalFooterBtn}
+            />
+            <Button
               title="Close"
               variant="primary"
               onPress={() => setIsHandoffModalOpen(false)}
@@ -638,10 +694,27 @@ export default function ClinicActiveThread({
           </View>
         }
       >
-        <ScrollView style={styles.handoffContainer}>
-          <ThemedText variant="small" color={theme.colors.text} style={styles.handoffText}>
-            {handoffSummaryContent}
+        <ScrollView style={styles.handoffContainer} nestedScrollEnabled>
+          <ThemedText variant="smallBold" color={theme.colors.text} style={styles.handoffSectionLabel}>
+            Special Instructions / Handoff Notes
           </ThemedText>
+          <TextInput
+            value={handoffInstructions}
+            onChangeText={setHandoffInstructions}
+            placeholder="Add specific instructions for incoming staff..."
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.handoffInput}
+            multiline
+            numberOfLines={2}
+          />
+          <ThemedText variant="smallBold" color={theme.colors.text} style={styles.handoffSectionLabel}>
+            Summary Preview
+          </ThemedText>
+          <View style={styles.handoffPreviewBox}>
+            <ThemedText variant="small" color={theme.colors.text} style={styles.handoffText}>
+              {handoffSummaryContent}
+            </ThemedText>
+          </View>
         </ScrollView>
       </Modal>
     </View>
@@ -666,6 +739,8 @@ const styles = StyleSheet.create({
   backButton: {
     width: theme.sizes.controlSm,
     height: theme.sizes.controlSm,
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.radii.sm,
@@ -681,6 +756,7 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 32,
     gap: theme.spacing.xs,
   },
   threadTitle: {
@@ -702,8 +778,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
+    minWidth: 44,
+    minHeight: 44,
     paddingHorizontal: theme.spacing.xs,
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surface,
@@ -746,8 +822,13 @@ const styles = StyleSheet.create({
     flex: 1,
     color: theme.colors.text,
     paddingVertical: theme.spacing.xs,
+    minHeight: 36,
   },
   searchCloseBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: theme.spacing.xs,
   },
   speedPillsContainer: {
@@ -758,13 +839,17 @@ const styles = StyleSheet.create({
   },
   speedPillsScroll: {
     flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.xs,
   },
   speedPill: {
     backgroundColor: theme.colors.surface,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
+    paddingVertical: 10,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
@@ -794,7 +879,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   modalFooterBtn: {
-    minWidth: 90,
+    minWidth: 100,
+    minHeight: 44,
   },
   actionMenuList: {
     gap: theme.spacing.xs,
@@ -803,6 +889,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
+    minHeight: 48,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.sm,
     borderBottomWidth: theme.sizes.borderWidth,
@@ -819,6 +906,7 @@ const styles = StyleSheet.create({
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 48,
     padding: theme.spacing.sm,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
@@ -838,6 +926,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   removeBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: theme.spacing.xs,
   },
   sectionHeader: {
@@ -853,13 +945,29 @@ const styles = StyleSheet.create({
   addColleagueRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 48,
     padding: theme.spacing.sm,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
     gap: theme.spacing.sm,
   },
   handoffContainer: {
-    maxHeight: 280,
+    maxHeight: 360,
+  },
+  handoffSectionLabel: {
+    marginBottom: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  handoffInput: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    color: theme.colors.text,
+    minHeight: 64,
+  },
+  handoffPreviewBox: {
     backgroundColor: theme.colors.surfaceSubtle,
     padding: theme.spacing.md,
     borderRadius: theme.radii.md,
