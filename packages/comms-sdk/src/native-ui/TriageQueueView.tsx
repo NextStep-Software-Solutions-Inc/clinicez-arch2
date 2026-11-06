@@ -549,32 +549,37 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   refreshButton: {
-    minHeight: sizes.touchTarget,
+    minHeight: 34,
     paddingHorizontal: spaceScale.md,
-    backgroundColor: lightColors.surfaceSubtle,
-    borderRadius: radiusScale.sm,
+    backgroundColor: lightColors.surface,
+    borderColor: lightColors.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.full,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   refreshButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '600',
-    color: lightColors.text
+    color: lightColors.text,
   },
   filterBar: {
     flexDirection: 'row',
-    gap: spaceScale.xs
+    gap: spaceScale.xs,
   },
   filterPill: {
-    minHeight: sizes.touchTarget,
+    minHeight: 34,
     paddingHorizontal: spaceScale.md,
     borderRadius: radiusScale.full,
-    backgroundColor: lightColors.surfaceSubtle,
+    backgroundColor: lightColors.surface,
+    borderColor: lightColors.border,
+    borderWidth: 1,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   filterPillActive: {
-    backgroundColor: lightColors.primary
+    backgroundColor: lightColors.primary,
+    borderColor: lightColors.primary,
   },
   filterPillText: {
     fontSize: fontSizeScale.xs,

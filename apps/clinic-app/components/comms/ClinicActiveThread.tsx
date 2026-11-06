@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
 import { useConversation, useSendMessage } from '@clinicez/comms-sdk/react';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
 import type { ThreadMessage } from '@clinicez/comms-sdk/native-ui';
@@ -438,6 +438,7 @@ export default function ClinicActiveThread({
           }}
           privacyBlurEnabled={privacyBlur}
           onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
+          showHeader={false}
           canWriteInternalNotes={true}
           isLoading={isLoading}
           error={error ? error.message : null}
@@ -743,10 +744,11 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: theme.radii.sm,
+    borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderLight,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   headerCenter: {
     flex: 1,
@@ -758,6 +760,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 32,
     gap: theme.spacing.xs,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   threadTitle: {
     flexShrink: 1,
@@ -765,8 +768,10 @@ const styles = StyleSheet.create({
   scopeBadge: {
     alignSelf: 'flex-start',
     backgroundColor: theme.colors.primarySubtle,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 1,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: theme.radii.xs,
   },
   headerRightControls: {
@@ -781,11 +786,12 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
     paddingHorizontal: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
+    borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderLight,
     gap: 4,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   headerIconButtonActive: {
     backgroundColor: theme.colors.primarySubtle,
@@ -846,13 +852,19 @@ const styles = StyleSheet.create({
   speedPill: {
     backgroundColor: theme.colors.surface,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
-    minHeight: 44,
+    paddingVertical: 8,
+    minHeight: 38,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
+    borderColor: theme.colors.borderLight,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 1,
+    elevation: 1,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   threadBody: {
     flex: 1,
@@ -895,6 +907,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
     borderRadius: theme.radii.sm,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   membersListScroll: {
     maxHeight: 180,

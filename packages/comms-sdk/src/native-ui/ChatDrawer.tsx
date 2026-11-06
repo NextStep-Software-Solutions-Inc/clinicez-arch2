@@ -107,7 +107,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
         {/* Search */}
         <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>Search</Text>
+          <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
@@ -179,39 +179,74 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 accessibilityRole="button"
                 accessibilityState={{ selected: isActive }}
               >
-                <View style={styles.cardHeader}>
-                  <Text style={[styles.cardTitle, isActive && styles.cardTitleActive]} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  {item.lastMessageAtUtc && (
-                    <Text style={styles.cardTime}>
-                      {new Date(item.lastMessageAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <View style={styles.cardContentRow}>
+                  <View
+                    style={[
+                      styles.cardAvatar,
+                      item.scope === 'Direct' && styles.cardAvatarDirect,
+                      item.scope === 'StaffContext' && styles.cardAvatarCareTeam,
+                      item.scope === 'Facility' && styles.cardAvatarFacility,
+                      item.scope === 'PatientFacility' && styles.cardAvatarTriage,
+                    ]}
+                  >
+                    <Text style={styles.cardAvatarText}>
+                      {item.scope === 'Direct'
+                        ? '👤'
+                        : item.scope === 'StaffContext'
+                          ? '👥'
+                          : item.scope === 'Facility'
+                            ? '#'
+                            : '📋'}
                     </Text>
-                  )}
-                </View>
+                  </View>
 
-                {item.lastMessageSnippet && (
-                  <Text style={styles.cardSnippet} numberOfLines={2}>
-                    {item.lastMessageSnippet}
-                  </Text>
-                )}
+                  <View style={styles.cardMain}>
+                    <View style={styles.cardHeader}>
+                      <Text style={[styles.cardTitle, isActive && styles.cardTitleActive]} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      {item.lastMessageAtUtc && (
+                        <Text style={styles.cardTime}>
+                          {new Date(item.lastMessageAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      )}
+                    </View>
 
-                <View style={styles.cardMeta}>
-                  {item.isEmergency && (
-                    <View style={styles.statBadge}>
-                      <Text style={styles.statBadgeText}>Emergency</Text>
+                    {item.lastMessageSnippet && (
+                      <Text style={styles.cardSnippet} numberOfLines={2}>
+                        {item.lastMessageSnippet}
+                      </Text>
+                    )}
+
+                    <View style={styles.cardMeta}>
+                      <View style={styles.scopeTag}>
+                        <Text style={styles.scopeTagText}>
+                          {item.scope === 'PatientFacility'
+                            ? 'Triage'
+                            : item.scope === 'StaffContext'
+                              ? 'Care Team'
+                              : item.scope === 'Facility'
+                                ? 'Facility'
+                                : 'Direct'}
+                        </Text>
+                      </View>
+                      {item.isEmergency && (
+                        <View style={styles.statBadge}>
+                          <Text style={styles.statBadgeText}>Emergency</Text>
+                        </View>
+                      )}
+                      {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
+                        <View style={styles.urgentBadge}>
+                          <Text style={styles.urgentBadgeText}>Urgent</Text>
+                        </View>
+                      )}
+                      {item.unreadCount > 0 && (
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
+                        </View>
+                      )}
                     </View>
-                  )}
-                  {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
-                    <View style={styles.urgentBadge}>
-                      <Text style={styles.urgentBadgeText}>Urgent</Text>
-                    </View>
-                  )}
-                  {item.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
-                    </View>
-                  )}
+                  </View>
                 </View>
               </TouchableOpacity>
             );
@@ -287,12 +322,17 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.md
   },
   primaryIconButton: {
-    minHeight: sizes.touchTarget,
+    minHeight: 36,
     paddingHorizontal: spaceScale.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radiusScale.sm,
-    backgroundColor: lightColors.primary
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.primary,
+    shadowColor: lightColors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
   },
   primaryIconButtonText: {
     color: lightColors.onPrimary,
@@ -323,14 +363,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: lightColors.surfaceSubtle,
-    borderRadius: radiusScale.sm,
-    paddingHorizontal: spaceScale.sm,
-    minHeight: sizes.touchTarget,
+    borderRadius: radiusScale.full,
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    paddingHorizontal: spaceScale.md,
+    minHeight: 40,
     marginBottom: spaceScale.sm
   },
   searchIcon: {
     marginRight: spaceScale.xs,
-    fontSize: fontSizeScale.md
+    fontSize: 14,
+    opacity: 0.6,
   },
   searchInput: {
     flex: 1,
@@ -341,17 +384,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row'
   },
   scopePill: {
-    minHeight: sizes.touchTarget,
+    minHeight: 34,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.xs,
     borderRadius: radiusScale.full,
-    backgroundColor: lightColors.surfaceSubtle,
+    backgroundColor: lightColors.surface,
+    borderWidth: 1,
+    borderColor: lightColors.border,
     marginRight: spaceScale.xs,
     justifyContent: 'center',
     alignItems: 'center'
   },
   scopePillActive: {
-    backgroundColor: lightColors.primary
+    backgroundColor: lightColors.primary,
+    borderColor: lightColors.primary,
   },
   scopePillText: {
     fontSize: fontSizeScale.xs,
@@ -368,13 +414,66 @@ const styles = StyleSheet.create({
   card: {
     padding: spaceScale.md,
     borderBottomWidth: 1,
-    borderBottomColor: lightColors.border,
+    borderBottomColor: lightColors.borderLight,
     minHeight: sizes.touchTarget
   },
   cardActive: {
     backgroundColor: lightColors.primarySubtle,
     borderLeftWidth: 4,
     borderLeftColor: lightColors.primary
+  },
+  cardContentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spaceScale.sm,
+  },
+  cardAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  cardAvatarDirect: {
+    backgroundColor: lightColors.primarySubtle,
+    borderColor: lightColors.primaryBorder,
+  },
+  cardAvatarCareTeam: {
+    backgroundColor: lightColors.surfaceSubtle,
+    borderColor: lightColors.border,
+  },
+  cardAvatarFacility: {
+    backgroundColor: lightColors.surfaceSubtle,
+    borderColor: lightColors.border,
+  },
+  cardAvatarTriage: {
+    backgroundColor: lightColors.warningBg,
+    borderColor: lightColors.warningBorder,
+  },
+  cardAvatarText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: lightColors.primary,
+  },
+  cardMain: {
+    flex: 1,
+  },
+  scopeTag: {
+    backgroundColor: lightColors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: lightColors.borderLight,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radiusScale.xs,
+  },
+  scopeTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: lightColors.textSecondary,
   },
   cardHeader: {
     flexDirection: 'row',

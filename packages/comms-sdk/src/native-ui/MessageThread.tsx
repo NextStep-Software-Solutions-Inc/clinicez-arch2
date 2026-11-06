@@ -31,6 +31,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   onAcknowledgeMessage,
   privacyBlurEnabled,
   onTogglePrivacyBlur,
+  showHeader = true,
   canWriteInternalNotes = false,
   isLoading = false,
   error = null,
@@ -100,32 +101,34 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   return (
     <View style={[styles.container, style]}>
       {/* Thread Header */}
-      <View style={styles.header}>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {conversationTitle}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {conversationScope === 'PatientFacility'
-              ? 'Patient Request'
-              : conversationScope === 'StaffContext'
-                ? 'Care Team'
-                : conversationScope === 'Facility'
-                  ? 'Facility Channel'
-                  : conversationScope}
-          </Text>
-        </View>
+      {showHeader && (
+        <View style={styles.header}>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {conversationTitle}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {conversationScope === 'PatientFacility'
+                ? 'Patient Request'
+                : conversationScope === 'StaffContext'
+                  ? 'Care Team'
+                  : conversationScope === 'Facility'
+                    ? 'Facility Channel'
+                    : conversationScope}
+            </Text>
+          </View>
 
-        <TouchableOpacity
-          style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
-          onPress={onTogglePrivacyBlur}
-          accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
-        >
-          <Text style={[styles.privacyButtonText, privacyBlurEnabled && styles.privacyButtonTextActive]}>
-            {privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.privacyButton, privacyBlurEnabled && styles.privacyButtonActive]}
+            onPress={onTogglePrivacyBlur}
+            accessibilityLabel={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+          >
+            <Text style={[styles.privacyButtonText, privacyBlurEnabled && styles.privacyButtonTextActive]}>
+              {privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Content States */}
       {isLoading ? (
@@ -141,7 +144,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         </View>
       ) : messages.length === 0 ? (
         <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>E2EE</Text>
+          <View style={styles.emptyShieldBadge}>
+            <Text style={styles.emptyShieldGlyph}>🛡️</Text>
+          </View>
           <Text style={styles.emptyTitle}>Secure Communication</Text>
           <Text style={styles.emptySubtitle}>
             This is the start of your medical communication thread. Messages are encrypted in transit.
@@ -518,70 +523,95 @@ const styles = StyleSheet.create({
     borderTopColor: lightColors.border
   },
   internalToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: spaceScale.xs,
     paddingHorizontal: spaceScale.sm,
-    borderRadius: radiusScale.xs,
+    borderRadius: radiusScale.full,
     backgroundColor: lightColors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: lightColors.border,
     alignSelf: 'flex-start',
-    marginBottom: spaceScale.xs
+    marginBottom: spaceScale.xs,
+    gap: spaceScale.xs,
   },
   internalToggleActive: {
     backgroundColor: lightColors.warningBg,
     borderColor: lightColors.warningBorder,
-    borderWidth: 1
   },
   internalToggleText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '600',
-    color: lightColors.textSecondary
+    color: lightColors.textSecondary,
   },
   internalToggleTextActive: {
-    color: lightColors.warningText
+    color: lightColors.warningText,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: spaceScale.xs
+    gap: spaceScale.sm,
   },
   input: {
     flex: 1,
     backgroundColor: lightColors.surfaceSubtle,
-    borderRadius: radiusScale.sm,
+    borderRadius: radiusScale.md,
+    borderWidth: 1,
+    borderColor: lightColors.border,
     paddingHorizontal: spaceScale.md,
     paddingVertical: spaceScale.sm,
     minHeight: sizes.touchTarget,
     maxHeight: 120,
-    fontSize: fontSizeScale.md,
-    color: lightColors.text
+    fontSize: fontSizeScale.sm,
+    color: lightColors.text,
   },
   inputInternal: {
     backgroundColor: lightColors.warningBg,
     borderColor: lightColors.warningBorder,
     borderWidth: 1,
-    color: lightColors.warningText
+    color: lightColors.warningText,
   },
   sendButton: {
-    minWidth: sizes.touchTarget,
+    minWidth: 72,
     minHeight: sizes.touchTarget,
-    paddingHorizontal: spaceScale.lg,
+    paddingHorizontal: spaceScale.md,
     backgroundColor: lightColors.primary,
-    borderRadius: radiusScale.sm,
+    borderRadius: radiusScale.md,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    shadowColor: lightColors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   sendButtonDisabled: {
-    opacity: 0.5
+    opacity: 0.5,
   },
   sendButtonText: {
     color: lightColors.onPrimary,
-    fontWeight: '700',
-    fontSize: fontSizeScale.sm
+    fontWeight: '600',
+    fontSize: fontSizeScale.sm,
   },
   stateContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spaceScale.xl
+    padding: spaceScale.xl,
+  },
+  emptyShieldBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.primarySubtle,
+    borderWidth: 1,
+    borderColor: lightColors.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spaceScale.md,
+  },
+  emptyShieldGlyph: {
+    fontSize: fontSizeScale['2xl'],
   },
   stateText: {
     marginTop: spaceScale.sm,

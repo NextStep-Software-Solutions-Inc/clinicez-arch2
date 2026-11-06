@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
 import Modal from '../ui/Modal';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
@@ -422,11 +422,11 @@ const styles = StyleSheet.create({
   typeSelectorRow: {
     flexDirection: 'row',
     backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.xs,
+    borderRadius: theme.radii.lg,
+    padding: 4,
     gap: theme.spacing.xs,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderLight,
   },
   typeTab: {
     flex: 1,
@@ -436,17 +436,21 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
+    borderRadius: theme.radii.md,
     gap: theme.spacing.xs,
     backgroundColor: theme.colors.transparent,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   typeTabActive: {
     backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primary,
     shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -488,10 +492,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
+    borderColor: theme.colors.borderLight,
+    borderRadius: theme.radii.full,
     paddingHorizontal: theme.spacing.md,
-    minHeight: theme.sizes.controlSm,
+    minHeight: 40,
     gap: theme.spacing.xs,
   },
   searchInput: {
@@ -520,6 +524,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
     gap: theme.spacing.sm,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   staffCardSelected: {
     backgroundColor: theme.colors.surfaceSubtle,
@@ -527,10 +532,10 @@ const styles = StyleSheet.create({
     borderLeftColor: theme.colors.primary,
   },
   staffAvatar: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
+    width: 36,
+    height: 36,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceSubtle,
+    backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
@@ -543,7 +548,9 @@ const styles = StyleSheet.create({
   roleBadge: {
     alignSelf: 'flex-start',
     backgroundColor: theme.colors.surfaceSubtle,
-    paddingHorizontal: theme.spacing.xs,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: theme.radii.xs,
   },
