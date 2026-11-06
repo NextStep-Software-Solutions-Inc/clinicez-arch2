@@ -165,6 +165,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         <ScrollView style={styles.listContainer}>
           {items.map((item) => {
             const isActive = item.id === activeConversationId;
+            const hasRecentMessage = Boolean(item.lastMessageSnippet);
             return (
               <TouchableOpacity
                 key={item.id}
@@ -174,10 +175,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 accessibilityRole="button"
                 accessibilityState={{ selected: isActive }}
               >
-                <View style={styles.cardContentRow}>
+                <View style={[styles.cardContentRow, !hasRecentMessage && styles.cardContentRowCentered]}>
                   <View
                     style={[
                       styles.cardAvatar,
+                      !hasRecentMessage && styles.cardAvatarCentered,
                       item.scope === 'Direct' && styles.cardAvatarDirect,
                       item.scope === 'StaffContext' && styles.cardAvatarCareTeam,
                       item.scope === 'Facility' && styles.cardAvatarFacility,
@@ -199,8 +201,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                     )}
                   </View>
 
-                  <View style={styles.cardMain}>
-                    <View style={styles.cardHeader}>
+                  <View style={[styles.cardMain, !hasRecentMessage && styles.cardMainCentered]}>
+                    <View style={[styles.cardHeader, !hasRecentMessage && styles.cardHeaderCentered]}>
                       <Text style={[styles.cardTitle, isActive && styles.cardTitleActive]} numberOfLines={1}>
                         {item.title}
                       </Text>
@@ -436,6 +438,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spaceScale.sm,
   },
+  cardContentRowCentered: {
+    alignItems: 'center',
+  },
   cardAvatar: {
     width: 36,
     height: 36,
@@ -446,6 +451,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
+  },
+  cardAvatarCentered: {
+    marginTop: 0,
   },
   cardAvatarDirect: {
     backgroundColor: lightColors.primarySubtle,
@@ -471,6 +479,9 @@ const styles = StyleSheet.create({
   cardMain: {
     flex: 1,
   },
+  cardMainCentered: {
+    justifyContent: 'center',
+  },
   scopeTag: {
     backgroundColor: lightColors.surfaceSubtle,
     borderWidth: 1,
@@ -490,6 +501,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spaceScale.xs,
     gap: spaceScale.xs,
+  },
+  cardHeaderCentered: {
+    marginBottom: 0,
   },
   cardTitle: {
     fontSize: fontSizeScale.md,
