@@ -100,4 +100,19 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
     expect(screenNativeSrc.includes('useKeyboardVisible')).toBe(true);
     expect(screenNativeSrc.includes('isKeyboardVisible')).toBe(true);
   });
+
+  test('8. Header & Routing: AppointmentsScreen avoids duplicate headers and routes Book New to BookingDraftScreen', () => {
+    const webFrameSrc = readAppFile('components/layout/WebAppFrame.web.tsx');
+    expect(webFrameSrc.includes("headerInfo.tabKey !== 'AppointmentsScreen'")).toBe(true);
+
+    const nativeStackSrc = readAppFile('navigation/navigators/AppointmentsStack.tsx');
+    expect(nativeStackSrc.includes('headerShown: false')).toBe(true);
+
+    const apptsNativeSrc = readAppFile('navigation/screens/Appointments.screen.tsx');
+    const apptsWebSrc = readAppFile('navigation/screens/Appointments.screen.web.tsx');
+
+    // Both route onBookNewPress and onFindDoctorPress to BookingDraftScreen
+    expect(apptsNativeSrc.includes("screen: 'BookingDraftScreen'")).toBe(true);
+    expect(apptsWebSrc.includes("screen: 'BookingDraftScreen'")).toBe(true);
+  });
 });

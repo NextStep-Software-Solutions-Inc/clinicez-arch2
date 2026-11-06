@@ -187,14 +187,10 @@ export default function AppointmentsScreen() {
             buttonLabel: 'Book Slot',
             buttonVariant: 'primary',
             onPress: () => {
-              if (doc.clinicId) {
-                navigation.navigate('Main', {
-                  screen: 'ClinicDetailsScreen',
-                  params: { clinicId: doc.clinicId, id: doc.clinicId },
-                });
-              } else {
-                navigation.navigate('Main', { screen: 'SearchScreen' });
-              }
+              navigation.navigate('Main', {
+                screen: 'BookingDraftScreen',
+                params: { clinicId: doc.clinicId, providerId: doc.id },
+              });
             },
           });
         }
@@ -420,7 +416,7 @@ export default function AppointmentsScreen() {
             navigation.navigate('Main', { screen: 'ProfileScreen' })
           }
           onBookNewPress={() =>
-            navigation.navigate('Main', { screen: 'SearchScreen' })
+            navigation.navigate('Main', { screen: 'BookingDraftScreen' })
           }
           onBrandPress={() =>
             navigation.navigate('Main', { screen: 'HomeScreen' })
@@ -500,7 +496,10 @@ export default function AppointmentsScreen() {
               <View style={{ marginTop: spacing.md }}>
                 <EmptyAppointmentsView
                   onFindDoctorPress={() =>
-                    navigation.navigate('Main', { screen: 'SearchScreen' })
+                    navigation.navigate('Main', { screen: 'BookingDraftScreen' })
+                  }
+                  onQuickConnectPress={() =>
+                    navigation.navigate('Main', { screen: 'BookingDraftScreen' })
                   }
                   suggestedServices={suggestedServices}
                 />
@@ -576,10 +575,10 @@ export default function AppointmentsScreen() {
           <View style={{ marginTop: spacing.xl }}>
             <EmptyAppointmentsView
               onFindDoctorPress={() =>
-                navigation.navigate('Main', { screen: 'SearchScreen' })
+                navigation.navigate('Main', { screen: 'BookingDraftScreen' })
               }
               onQuickConnectPress={() =>
-                navigation.navigate('Main', { screen: 'SearchScreen' })
+                navigation.navigate('Main', { screen: 'BookingDraftScreen' })
               }
               suggestedServices={suggestedServices}
             />

@@ -180,14 +180,10 @@ export default function AppointmentsScreenWeb() {
             buttonLabel: 'Book Slot',
             buttonVariant: 'primary',
             onPress: () => {
-              if (doc.clinicId) {
-                navigation.navigate('Main', {
-                  screen: 'ClinicDetailsScreen',
-                  params: { clinicId: doc.clinicId, id: doc.clinicId },
-                });
-              } else {
-                navigation.navigate('Main', { screen: 'SearchScreen' });
-              }
+              navigation.navigate('Main', {
+                screen: 'BookingDraftScreen',
+                params: { clinicId: doc.clinicId, providerId: doc.id },
+              });
             },
           });
         }
@@ -411,7 +407,7 @@ export default function AppointmentsScreenWeb() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Book a new appointment"
-              onPress={() => navigation.navigate('Main', { screen: 'SearchScreen' })}
+              onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
               style={({ pressed }) => [
                 styles.bookNewBtn,
                 {
@@ -448,7 +444,7 @@ export default function AppointmentsScreenWeb() {
               navigation.navigate('Main', { screen: 'ProfileScreen' })
             }
             onBookNewPress={() =>
-              navigation.navigate('Main', { screen: 'SearchScreen' })
+              navigation.navigate('Main', { screen: 'BookingDraftScreen' })
             }
             onBrandPress={() =>
               navigation.navigate('Main', { screen: 'HomeScreen' })
@@ -529,7 +525,10 @@ export default function AppointmentsScreenWeb() {
               <View style={{ marginTop: spacing.md }}>
                 <EmptyAppointmentsView
                   onFindDoctorPress={() =>
-                    navigation.navigate('Main', { screen: 'SearchScreen' })
+                    navigation.navigate('Main', { screen: 'BookingDraftScreen' })
+                  }
+                  onQuickConnectPress={() =>
+                    navigation.navigate('Main', { screen: 'BookingDraftScreen' })
                   }
                   suggestedServices={suggestedServices}
                 />
@@ -605,10 +604,10 @@ export default function AppointmentsScreenWeb() {
           <View style={{ marginTop: spacing.xl }}>
             <EmptyAppointmentsView
               onFindDoctorPress={() =>
-                navigation.navigate('Main', { screen: 'SearchScreen' })
+                navigation.navigate('Main', { screen: 'BookingDraftScreen' })
               }
               onQuickConnectPress={() =>
-                navigation.navigate('Main', { screen: 'SearchScreen' })
+                navigation.navigate('Main', { screen: 'BookingDraftScreen' })
               }
               suggestedServices={suggestedServices}
             />

@@ -29,7 +29,11 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
   const focusedScreenName = resolveFocusedScreenName(state);
   const headerOverride = useWebHeaderOverride(!headerInfo.isRootTab ? focusedScreenName : undefined);
   const showBackHeader = !headerInfo.isRootTab && focusedScreenName !== 'PatientSearchScreen';
-  const showCompactTabHeader = headerInfo.isRootTab && isCompact && headerInfo.tabKey !== 'HomeScreen';
+  const showCompactTabHeader =
+    headerInfo.isRootTab &&
+    isCompact &&
+    headerInfo.tabKey !== 'HomeScreen' &&
+    headerInfo.tabKey !== 'AppointmentsScreen';
   const activeSearch = useHeaderSearchEntry(headerInfo.isRootTab ? headerInfo.tabKey : undefined);
 
   const onBack = () => {

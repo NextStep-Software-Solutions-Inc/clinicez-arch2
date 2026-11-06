@@ -6,6 +6,7 @@ import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
 
 const AppointmentsStack = createNativeStackNavigator({
   screenOptions: {
+    headerShown: false,
     headerStyle: {
       backgroundColor: isLiquidGlassSupported ? 'transparent' : undefined,
     },
@@ -14,9 +15,7 @@ const AppointmentsStack = createNativeStackNavigator({
     Appointments: createNativeStackScreen({
       screen: AppointmentsScreen,
       options: {
-        title: 'My Appointments',
-        headerLargeTitleEnabled: true,
-        headerRight: () => <BottomTabsHeaderRight />,
+        headerShown: false,
       },
     }),
   },

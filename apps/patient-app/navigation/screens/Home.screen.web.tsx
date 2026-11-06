@@ -423,7 +423,7 @@ export default function HomeScreenWeb() {
                   <AppointmentCarouselSection
                     section={dashboard.appointments}
                     checkingInId={checkingInId}
-                    onBookAppointmentPress={() => openSearchScreen({ category: 'doctors' })}
+                    onBookAppointmentPress={() => navigateToMainRoute('BookingDraftScreen')}
                     onExploreClinicsPress={() => navigateToMainRoute('ExploreClinicsScreen')}
                     onViewAllPress={() => navigateToTab('AppointmentsScreen')}
                     onViewHistoryPress={() => navigateToTab('AppointmentsScreen')}
