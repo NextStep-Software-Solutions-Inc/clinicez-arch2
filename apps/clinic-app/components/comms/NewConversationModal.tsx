@@ -1,10 +1,12 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform, ActivityIndicator } from 'react-native';
 import Modal from '../ui/Modal';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import Button from '../ui/Button';
 import { useStaff, formatStaffName, staffInitials } from '../../context/StaffContext';
+import { useClinic } from '../../context/ClinicContext';
+import { clinicService, type ClinicPatient } from '../../services/clinicService';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 
@@ -20,32 +22,85 @@ export interface NewConversationModalProps {
   }) => Promise<void>;
 }
 
-const DEPARTMENTS = [
-  'Emergency & Triage',
-  'Nursing Station',
-  'Pediatrics',
-  'Internal Medicine',
-  'Laboratory',
-  'Pharmacy',
-  'General Clinic',
-];
-
 export default function NewConversationModal({
   visible,
   onClose,
   onCreateConversation,
 }: NewConversationModalProps) {
   const { staff, current } = useStaff();
+  const clinic = useClinic();
+  const rooms = clinic?.rooms || [];
   const [activeTab, setActiveTab] = useState<'Direct' | 'StaffContext' | 'Facility'>('Direct');
+
+  // Dynamic Departments from Clinic Settings
+  const availableDepartments = useMemo(() => {
+    const configured = (rooms || [])
+      .filter((r) => r.isActive && r.name && r.name.trim().length > 0)
+      .map((r) => r.name.trim());
+    if (configured.length > 0) {
+      return Array.from(new Set(configured));
+    }
+    return [
+      'Emergency & Triage',
+      'Nursing Station',
+      'Consultation',
+      'Pediatrics',
+      'Internal Medicine',
+      'Laboratory',
+      'Pharmacy',
+      'General Clinic',
+    ];
+  }, [rooms]);
 
   // Form State
   const [title, setTitle] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
-  const [patientId, setPatientId] = useState('');
-  const [selectedDepartment, setSelectedDepartment] = useState('Emergency & Triage');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+
+  // Patient Autocomplete State
+  const [patientSearch, setPatientSearch] = useState('');
+  const [patientResults, setPatientResults] = useState<ClinicPatient[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<ClinicPatient | null>(null);
+  const [isSearchingPatients, setIsSearchingPatients] = useState(false);
+
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Initialize department
+  useEffect(() => {
+    if (availableDepartments.length > 0 && !selectedDepartment) {
+      setSelectedDepartment(availableDepartments[0]);
+    }
+  }, [availableDepartments, selectedDepartment]);
+
+  // Debounced Patient Autocomplete Search
+  useEffect(() => {
+    if (activeTab !== 'StaffContext') return;
+    const term = patientSearch.trim();
+    if (term.length < 2) {
+      setPatientResults([]);
+      setIsSearchingPatients(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearchingPatients(true);
+      try {
+        const [data, err] = await clinicService.getPatients(term);
+        if (err) {
+          setPatientResults([]);
+        } else {
+          setPatientResults((data || []).slice(0, 6));
+        }
+      } catch {
+        setPatientResults([]);
+      } finally {
+        setIsSearchingPatients(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [patientSearch, activeTab]);
 
   // Filter staff: exclude current user, apply search
   const availableStaff = useMemo(() => {
@@ -63,11 +118,14 @@ export default function NewConversationModal({
     setTitle('');
     setSelectedStaffId(null);
     setStaffSearchQuery('');
-    setPatientId('');
-    setSelectedDepartment('Emergency & Triage');
+    setPatientSearch('');
+    setPatientResults([]);
+    setSelectedPatient(null);
+    setIsSearchingPatients(false);
+    setSelectedDepartment(availableDepartments[0] || 'General Clinic');
     setValidationError(null);
     setIsSubmitting(false);
-  }, []);
+  }, [availableDepartments]);
 
   const handleClose = useCallback(() => {
     handleReset();
@@ -78,7 +136,8 @@ export default function NewConversationModal({
     setActiveTab(tab);
     setValidationError(null);
     if (tab === 'Facility') {
-      setTitle(`${selectedDepartment} Channel`);
+      const dept = selectedDepartment || availableDepartments[0] || 'General Clinic';
+      setTitle(`${dept} Channel`);
     } else if (tab === 'Direct') {
       if (selectedStaffId) {
         const found = staff.find((s) => s.id === selectedStaffId);
@@ -87,7 +146,11 @@ export default function NewConversationModal({
         setTitle('');
       }
     } else if (tab === 'StaffContext') {
-      setTitle(patientId.trim() ? `Care Team: ${patientId.trim()}` : '');
+      if (selectedPatient) {
+        setTitle(`Care Team: ${selectedPatient.fullName}`);
+      } else {
+        setTitle('');
+      }
     }
   };
 
@@ -105,11 +168,20 @@ export default function NewConversationModal({
     setTitle(`${dept} Channel`);
   };
 
-  const handlePatientIdChange = (text: string) => {
-    setPatientId(text);
+  const handleSelectPatient = (patient: ClinicPatient) => {
+    setSelectedPatient(patient);
+    setPatientSearch('');
+    setPatientResults([]);
     setValidationError(null);
-    if (text.trim()) {
-      setTitle(`Care Team: ${text.trim()}`);
+    setTitle(`Care Team: ${patient.fullName}`);
+  };
+
+  const handleClearPatient = () => {
+    setSelectedPatient(null);
+    setPatientSearch('');
+    setPatientResults([]);
+    if (activeTab === 'StaffContext') {
+      setTitle('');
     }
   };
 
@@ -130,8 +202,8 @@ export default function NewConversationModal({
 
     // 3. Care team validation
     if (activeTab === 'StaffContext') {
-      if (!patientId || !patientId.trim()) {
-        setValidationError('Please select a patient for the care team.');
+      if (!selectedPatient) {
+        setValidationError('Please select a patient from the autocomplete list.');
         return;
       }
     }
@@ -143,7 +215,7 @@ export default function NewConversationModal({
         scope: activeTab,
         title: title.trim(),
         participantStaffIds: selectedStaffId ? [selectedStaffId] : undefined,
-        patientId: patientId.trim() || undefined,
+        patientId: selectedPatient?.id,
         department: activeTab === 'Facility' ? selectedDepartment : undefined,
       });
       handleClose();
@@ -282,8 +354,8 @@ export default function NewConversationModal({
                 activeTab === 'Direct'
                   ? 'Select staff colleague or enter custom title'
                   : activeTab === 'StaffContext'
-                  ? 'e.g. Care Team: Juan Dela Cruz'
-                  : 'e.g. Nursing Station'
+                  ? 'Select patient below to auto-populate'
+                  : 'Enter channel title or select department below'
               }
               placeholderTextColor={theme.colors.textMuted}
               style={styles.textInput}
@@ -358,34 +430,111 @@ export default function NewConversationModal({
           </View>
         )}
 
+        {/* Tab 2: Care Team with Patient Autocomplete */}
         {activeTab === 'StaffContext' && (
           <View style={styles.formGroup}>
             <ThemedText variant="smallBold" color={theme.colors.text}>
               Patient Context & Encounter
             </ThemedText>
-            <View style={styles.inputContainer}>
-              <Icon name="patient" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-              <TextInput
-                value={patientId}
-                onChangeText={handlePatientIdChange}
-                placeholder="Enter patient name or ID (e.g. Juan Dela Cruz, P-10492)"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.textInputWithIcon}
-              />
-            </View>
+
+            {selectedPatient ? (
+              <View style={styles.selectedPatientCard}>
+                <View style={styles.patientAvatar}>
+                  <Icon name="patient" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                </View>
+                <View style={styles.selectedPatientInfo}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    {selectedPatient.fullName}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {selectedPatient.patientCode || selectedPatient.id} • {selectedPatient.age} yo {selectedPatient.sex}
+                  </ThemedText>
+                </View>
+                <Pressable
+                  onPress={handleClearPatient}
+                  style={styles.clearPatientBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear selected patient"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                <View style={styles.inputContainer}>
+                  <Icon name="search" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                  <TextInput
+                    value={patientSearch}
+                    onChangeText={setPatientSearch}
+                    placeholder="Search patient by name or code (min. 2 characters)..."
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.textInputWithIcon}
+                  />
+                  {isSearchingPatients ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : patientSearch.length > 0 ? (
+                    <Pressable
+                      onPress={() => setPatientSearch('')}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {/* Autocomplete Results Dropdown */}
+                {patientSearch.trim().length >= 2 && (
+                  <View style={styles.autocompleteDropdown}>
+                    {patientResults.length === 0 && !isSearchingPatients ? (
+                      <View style={styles.emptyResultsRow}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          No matching patients found.
+                        </ThemedText>
+                      </View>
+                    ) : (
+                      patientResults.map((p) => (
+                        <Pressable
+                          key={p.id}
+                          onPress={() => handleSelectPatient(p)}
+                          style={styles.autocompleteRow}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Select patient ${p.fullName}`}
+                        >
+                          <View style={styles.smallPatientIcon}>
+                            <Icon name="patient" size={14} color={theme.colors.primary} />
+                          </View>
+                          <View style={styles.autocompleteTextGroup}>
+                            <ThemedText variant="smallBold" color={theme.colors.text}>
+                              {p.fullName}
+                            </ThemedText>
+                            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                              {p.patientCode || p.id} • {p.age} yo {p.sex}
+                            </ThemedText>
+                          </View>
+                          <Icon name="arrowRight" size={14} color={theme.colors.textMuted} />
+                        </Pressable>
+                      ))
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
             <ThemedText variant="caption" color={theme.colors.textMuted}>
               Attaches longitudinal patient records and allows quick linking to patient charts.
             </ThemedText>
           </View>
         )}
 
+        {/* Tab 3: Facility Channel with Dynamic Clinic Departments */}
         {activeTab === 'Facility' && (
           <View style={styles.formGroup}>
             <ThemedText variant="smallBold" color={theme.colors.text}>
               Clinic Department
             </ThemedText>
             <View style={styles.deptChipsWrap}>
-              {DEPARTMENTS.map((dept) => {
+              {availableDepartments.map((dept) => {
                 const isSelected = selectedDepartment === dept;
                 return (
                   <Pressable
@@ -397,9 +546,10 @@ export default function NewConversationModal({
                     ]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: isSelected }}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                   >
                     <ThemedText
-                      variant="small"
+                      variant="smallBold"
                       color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
                     >
                       {dept}
@@ -408,6 +558,9 @@ export default function NewConversationModal({
                 );
               })}
             </View>
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              Channels dynamically synced from clinic stations & rooms in Settings.
+            </ThemedText>
           </View>
         )}
       </View>
@@ -417,14 +570,14 @@ export default function NewConversationModal({
 
 const styles = StyleSheet.create({
   modalBody: {
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   typeSelectorRow: {
     flexDirection: 'row',
     backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.lg,
-    padding: 4,
-    gap: theme.spacing.xs,
+    borderRadius: theme.radii.md,
+    padding: 3,
+    gap: 4,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
   },
@@ -433,13 +586,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-    gap: theme.spacing.xs,
+    minHeight: 36,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: theme.radii.sm,
+    gap: 6,
     backgroundColor: theme.colors.transparent,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: 'transparent',
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
@@ -448,23 +601,23 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
     shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
     backgroundColor: theme.colors.emergencySubtle,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.sm,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.emergencyBorder,
   },
   formGroup: {
-    gap: theme.spacing.xs,
+    gap: 4,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -473,19 +626,21 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     borderRadius: theme.radii.md,
-    paddingHorizontal: theme.spacing.md,
-    minHeight: theme.sizes.controlMd,
+    paddingHorizontal: theme.spacing.sm,
+    minHeight: 38,
     gap: theme.spacing.xs,
   },
   textInput: {
     flex: 1,
     color: theme.colors.text,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: 6,
+    ...theme.typography.body,
   },
   textInputWithIcon: {
     flex: 1,
     color: theme.colors.text,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: 6,
+    ...theme.typography.body,
   },
   searchRow: {
     flexDirection: 'row',
@@ -494,36 +649,37 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
     borderRadius: theme.radii.full,
-    paddingHorizontal: theme.spacing.md,
-    minHeight: 40,
+    paddingHorizontal: theme.spacing.sm,
+    minHeight: 34,
     gap: theme.spacing.xs,
   },
   searchInput: {
     flex: 1,
     color: theme.colors.text,
-    paddingVertical: theme.spacing.xs,
+    paddingVertical: 4,
+    ...theme.typography.small,
   },
   staffList: {
-    maxHeight: 200,
-    marginTop: theme.spacing.xs,
+    maxHeight: 180,
+    marginTop: 4,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surface,
   },
   emptyStaff: {
-    padding: theme.spacing.md,
+    padding: theme.spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   staffCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
-    padding: theme.spacing.sm,
+    minHeight: 40,
+    padding: 8,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   staffCardSelected: {
@@ -532,8 +688,8 @@ const styles = StyleSheet.create({
     borderLeftColor: theme.colors.primary,
   },
   staffAvatar: {
-    width: 36,
-    height: 36,
+    width: 30,
+    height: 30,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
@@ -543,30 +699,99 @@ const styles = StyleSheet.create({
   },
   staffInfo: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   roleBadge: {
     alignSelf: 'flex-start',
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: theme.radii.xs,
   },
   selectedCheck: {
     paddingHorizontal: theme.spacing.xs,
   },
+  selectedPatientCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.sm,
+  },
+  patientAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedPatientInfo: {
+    flex: 1,
+    gap: 1,
+  },
+  clearPatientBtn: {
+    padding: 4,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+  },
+  autocompleteDropdown: {
+    marginTop: 4,
+    maxHeight: 180,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  autocompleteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+    gap: theme.spacing.xs,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+  },
+  smallPatientIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autocompleteTextGroup: {
+    flex: 1,
+  },
+  emptyResultsRow: {
+    padding: theme.spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   deptChipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
+    gap: 6,
+    marginTop: 2,
   },
   deptChip: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-    minHeight: 40,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minHeight: 28,
     justifyContent: 'center',
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surfaceSubtle,
@@ -576,15 +801,15 @@ const styles = StyleSheet.create({
   deptChipSelected: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.primary,
-    borderWidth: theme.sizes.borderWidth,
+    borderWidth: 1.5,
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   footerBtn: {
-    minWidth: 110,
-    minHeight: 44,
+    minWidth: 100,
+    minHeight: 38,
   },
 });

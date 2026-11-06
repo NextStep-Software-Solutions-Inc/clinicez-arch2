@@ -32,6 +32,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   privacyBlurEnabled,
   onTogglePrivacyBlur,
   showHeader = true,
+  renderEmptyState,
   canWriteInternalNotes = false,
   isLoading = false,
   error = null,
@@ -132,9 +133,21 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
       {/* Content States */}
       {isLoading ? (
-        <View style={styles.stateContainer}>
-          <ActivityIndicator size="small" color={lightColors.primary} />
-          <Text style={styles.stateText}>Loading messages...</Text>
+        <View style={styles.skeletonContainer}>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleLeft, { width: '65%' }]}>
+            <View style={styles.skeletonBarLong} />
+            <View style={styles.skeletonBarShort} />
+          </View>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleRight, { width: '50%' }]}>
+            <View style={styles.skeletonBarMedium} />
+          </View>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleLeft, { width: '75%' }]}>
+            <View style={styles.skeletonBarLong} />
+            <View style={styles.skeletonBarMedium} />
+          </View>
+          <View style={[styles.skeletonBubble, styles.skeletonBubbleRight, { width: '60%' }]}>
+            <View style={styles.skeletonBarMedium} />
+          </View>
         </View>
       ) : error ? (
         <View style={styles.stateContainer}>
@@ -143,15 +156,19 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : messages.length === 0 ? (
-        <View style={styles.stateContainer}>
-          <View style={styles.emptyShieldBadge}>
-            <Text style={styles.emptyShieldGlyph}>🛡️</Text>
+        renderEmptyState ? (
+          renderEmptyState()
+        ) : (
+          <View style={styles.stateContainer}>
+            <View style={styles.emptyShieldBadge}>
+              <Text style={styles.emptyShieldGlyph}>🛡️</Text>
+            </View>
+            <Text style={styles.emptyTitle}>Secure Communication</Text>
+            <Text style={styles.emptySubtitle}>
+              This is the start of your medical communication thread. Messages are encrypted in transit.
+            </Text>
           </View>
-          <Text style={styles.emptyTitle}>Secure Communication</Text>
-          <Text style={styles.emptySubtitle}>
-            This is the start of your medical communication thread. Messages are encrypted in transit.
-          </Text>
-        </View>
+        )
       ) : (
         <ScrollView style={styles.messageList} contentContainerStyle={styles.messageListContent}>
           {hasMoreHistory && onLoadMoreHistory && (
@@ -647,5 +664,46 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.sm,
     color: lightColors.textMuted,
     textAlign: 'center'
+  },
+  skeletonContainer: {
+    flex: 1,
+    padding: spaceScale.md,
+    gap: spaceScale.md,
+  },
+  skeletonBubble: {
+    padding: spaceScale.md,
+    borderRadius: radiusScale.lg,
+    gap: spaceScale.xs,
+  },
+  skeletonBubbleLeft: {
+    alignSelf: 'flex-start',
+    backgroundColor: lightColors.surfaceSubtle,
+    borderBottomLeftRadius: radiusScale.xs,
+  },
+  skeletonBubbleRight: {
+    alignSelf: 'flex-end',
+    backgroundColor: lightColors.primarySubtle,
+    borderBottomRightRadius: radiusScale.xs,
+  },
+  skeletonBarLong: {
+    height: 12,
+    width: '90%',
+    backgroundColor: lightColors.border,
+    borderRadius: radiusScale.xs,
+    opacity: 0.6,
+  },
+  skeletonBarMedium: {
+    height: 12,
+    width: '65%',
+    backgroundColor: lightColors.border,
+    borderRadius: radiusScale.xs,
+    opacity: 0.5,
+  },
+  skeletonBarShort: {
+    height: 12,
+    width: '40%',
+    backgroundColor: lightColors.border,
+    borderRadius: radiusScale.xs,
+    opacity: 0.4,
   }
 });

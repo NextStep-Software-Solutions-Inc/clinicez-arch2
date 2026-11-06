@@ -335,6 +335,14 @@ describe('ClinicActiveThread & NewConversationModal Dedicated Suite', () => {
         React.createElement(ClinicActiveThread, {
           conversationId: 'conv-1',
           onBack: () => {},
+          pinnedAlerts: [
+            {
+              id: 'alert-1',
+              label: 'Penicillin Allergy Alert',
+              details: 'NPO after midnight • Strict bedside observation',
+              severity: 'Emergency',
+            },
+          ],
         })
       );
 

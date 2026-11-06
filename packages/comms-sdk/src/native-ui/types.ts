@@ -82,6 +82,7 @@ export interface MessageThreadProps {
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;
   showHeader?: boolean;
+  renderEmptyState?: () => React.ReactNode;
   canWriteInternalNotes?: boolean;
   isLoading?: boolean;
   error?: string | null;

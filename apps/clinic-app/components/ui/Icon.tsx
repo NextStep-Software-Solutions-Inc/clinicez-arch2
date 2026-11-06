@@ -131,6 +131,7 @@ export const ICONS = {
   billing: CreditCard,
   yakap: ShieldCheck,
   shield: Shield,
+  shieldCheck: ShieldCheck,
   settings: Settings,
   chart: BarChart3,
   clinic: Building2,

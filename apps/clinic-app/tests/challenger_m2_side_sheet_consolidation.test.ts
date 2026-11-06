@@ -415,15 +415,13 @@ describe('Challenger M2: Milestone 2 Empirical & Adversarial Test Suite', () => 
       expect(hasTriageLabel).toBe(false);
     });
 
-    test('1.4 Deep link route /triage remains registered in Navigation.tsx', () => {
+    test('1.4 Deep link route /triage is cleanly removed and superseded by the side sheet', () => {
       const navPath = path.resolve(__dirname, '../navigation/Navigation.tsx');
       const navSource = fs.readFileSync(navPath, 'utf-8');
 
-      // Check registration of Triage screen
-      expect(navSource).toContain('Triage: {');
-      expect(navSource).toContain('screen: TriageScreen');
-      expect(navSource).toContain("linking: 'triage'");
-      expect(navSource).toContain("title: 'Triage desk'");
+      // Check deletion of obsolete Triage screen
+      expect(navSource).not.toContain('screen: TriageScreen');
+      expect(navSource).not.toContain("linking: 'triage'");
     });
 
     test('1.5 Role-based filtering never leaks Triage item to any user role', () => {
@@ -474,31 +472,31 @@ describe('Challenger M2: Milestone 2 Empirical & Adversarial Test Suite', () => 
       expect(mobilePanelMatch![1]).toBe('85%');
     });
 
-    test('2.2 Fullscreen maximize button with Icon name="maximize" is present and navigates to Triage', () => {
+    test('2.2 Fullscreen maximize button toggles sheet width dynamically', () => {
       const html = renderToStaticMarkup(React.createElement(ClinicChatDrawerHost));
 
       // Check header maximize button
-      expect(html).toContain('aria-label="Expand to full screen"');
+      expect(html).toContain('aria-label="Expand side panel"');
 
       // Inspect source code for the exact callback logic
       const hostPath = path.resolve(__dirname, '../components/comms/ClinicChatDrawerHost.tsx');
       const hostSource = fs.readFileSync(hostPath, 'utf-8');
-      expect(hostSource).toContain("navigation.navigate('Triage')");
-      expect(hostSource).toContain('closeChatDrawer()');
+      expect(hostSource).toContain('handleToggleMaximize');
+      expect(hostSource).toContain('dockedPanelMaximized');
     });
 
     test('2.3 Desktop vs Mobile responsive layout rendering', () => {
       // 1. Desktop Workstation layout
       mockBreakpoint.isWorkstation = true;
       const desktopHtml = renderToStaticMarkup(React.createElement(ClinicChatDrawerHost));
-      expect(desktopHtml).toContain('Clinic Communications');
+      expect(desktopHtml).toContain('Messages');
       expect(desktopHtml).not.toContain('data-component="Modal"');
 
       // 2. Mobile Compact layout
       mockBreakpoint.isWorkstation = false;
       const mobileHtml = renderToStaticMarkup(React.createElement(ClinicChatDrawerHost));
       expect(mobileHtml).toContain('data-component="Modal"');
-      expect(mobileHtml).toContain('Clinic Communications');
+      expect(mobileHtml).toContain('Messages');
     });
   });
 

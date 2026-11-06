@@ -25,6 +25,7 @@ import { useBreakpoint } from '../../utils/useBreakpoint';
 import { theme } from '../../constants/theme';
 import { PERMISSIONS } from '../../constants/permissions';
 import { notify } from '../../utils/feedback';
+import { playMessageChime } from '../../utils/alertSounds';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 
@@ -46,11 +47,24 @@ export default function ClinicChatDrawerHost() {
   const [triageFilter, setTriageFilter] = useState<'All' | 'Emergency' | 'Urgent' | 'Routine'>('All');
   const [isManualReconnecting, setIsManualReconnecting] = useState(false);
   const [isNewConvModalOpen, setIsNewConvModalOpen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  // Play audio chime when any incoming message is received
+  useEffect(() => {
+    if (!comms?.client?.events) return;
+    const unsub = comms.client.events.on('messageReceived', () => {
+      playMessageChime();
+    });
+    return () => {
+      unsub();
+    };
+  }, [comms?.client]);
 
   // Reset tab to conversations whenever drawer is opened/closed
   useEffect(() => {
     if (!isChatDrawerOpen) {
       setDrawerTab('conversations');
+      setIsMaximized(false);
     }
   }, [isChatDrawerOpen]);
 
@@ -206,10 +220,9 @@ export default function ClinicChatDrawerHost() {
     setIsNewConvModalOpen(true);
   }, []);
 
-  const handleExpandFullscreen = useCallback(() => {
-    closeChatDrawer();
-    navigation.navigate('Triage');
-  }, [closeChatDrawer, navigation]);
+  const handleToggleMaximize = useCallback(() => {
+    setIsMaximized((prev) => !prev);
+  }, []);
 
   if (!isChatDrawerOpen) {
     return null;
@@ -221,7 +234,7 @@ export default function ClinicChatDrawerHost() {
       <View style={styles.topControlRow}>
         <View style={styles.headerLeftGroup}>
           <ThemedText variant="title" color={theme.colors.text}>
-            Clinic Communications
+            Messages
           </ThemedText>
 
           {/* Live Connection Indicator Pill & Manual Reconnect */}
@@ -279,13 +292,13 @@ export default function ClinicChatDrawerHost() {
 
         <View style={styles.headerActionsGroup}>
           <Pressable
-            onPress={handleExpandFullscreen}
+            onPress={handleToggleMaximize}
             style={styles.headerIconButton}
             accessibilityRole="button"
-            accessibilityLabel="Expand to full screen"
+            accessibilityLabel={isMaximized ? "Collapse side panel" : "Expand side panel"}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Icon name="maximize" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+            <Icon name={isMaximized ? "minimize" : "maximize"} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
           </Pressable>
           <Pressable
             onPress={closeChatDrawer}
@@ -368,6 +381,7 @@ export default function ClinicChatDrawerHost() {
         {activeConversationId ? (
           <ClinicActiveThread
             conversationId={activeConversationId}
+            initialConversation={conversations.find((c) => c.id === activeConversationId)}
             onBack={() => setActiveConversationId(undefined)}
             currentUserId={user?.id || ''}
           />
@@ -424,7 +438,7 @@ export default function ClinicChatDrawerHost() {
     return (
       <View style={styles.desktopOverlay}>
         <Pressable style={styles.backdrop} onPress={closeChatDrawer} />
-        <View style={styles.dockedPanel}>{drawerContent}</View>
+        <View style={[styles.dockedPanel, isMaximized && styles.dockedPanelMaximized]}>{drawerContent}</View>
       </View>
     );
   }
@@ -470,6 +484,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
+  },
+  dockedPanelMaximized: {
+    width: '100%',
+    maxWidth: 960,
   },
   mobileModalContainer: {
     flex: 1,

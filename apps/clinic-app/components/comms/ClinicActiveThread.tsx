@@ -11,6 +11,8 @@ import { useStaff, formatStaffName, staffInitials } from '../../context/StaffCon
 import { useAuth } from '../../context/AuthContext';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
+import { playMessageChime } from '../../utils/alertSounds';
+import type { ConversationDto } from '@clinicez/comms-sdk/core';
 
 export interface PinnedAlertItem {
   id: string;
@@ -21,6 +23,7 @@ export interface PinnedAlertItem {
 
 export interface ClinicActiveThreadProps {
   conversationId: string;
+  initialConversation?: ConversationDto;
   onBack: () => void;
   currentUserId?: string;
   onOpenPatientChart?: (patientId: string) => void;
@@ -53,13 +56,15 @@ function getCategoryLabel(scope?: string): string {
 
 export default function ClinicActiveThread({
   conversationId,
+  initialConversation,
   onBack,
   currentUserId,
   onOpenPatientChart,
   initialActionMenuOpen,
   pinnedAlerts,
 }: ClinicActiveThreadProps) {
-  const { conversation, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
+  const { conversation: hookConv, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
+  const conversation = hookConv || initialConversation || null;
   const { sendMessage, resendMessage } = useSendMessage();
   const { staff } = useStaff();
   const auth = useAuth();
@@ -67,7 +72,7 @@ export default function ClinicActiveThread({
 
   // Header and View State
   const [customTitle, setCustomTitle] = useState<string | null>(null);
-  const activeTitle = customTitle ?? (conversation?.title || 'Conversation');
+  const activeTitle = customTitle ?? (conversation?.title || initialConversation?.title || '');
   const [privacyBlur, setPrivacyBlur] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -89,17 +94,16 @@ export default function ClinicActiveThread({
     { id: effectiveUserId, name: auth?.user?.name || 'Current Clinician', role: auth?.user?.role || 'Clinician' },
   ]);
 
-  // Pinned Alerts & Clinical Orders Resolution
+  // Pinned Alerts & Clinical Orders Resolution (No fake hardcoded alerts)
   const activeAlerts = useMemo<PinnedAlertItem[]>(() => {
     if (pinnedAlerts === null) return [];
     if (Array.isArray(pinnedAlerts)) return pinnedAlerts;
-    // Default clinical alerts for emergency, patient triage, or active clinical threads
-    if (conversation?.isEmergencyConfirmed || conversation?.priority === 'Emergency' || conversation?.scope === 'PatientFacility' || !conversation) {
+    if (conversation?.isEmergencyConfirmed || conversation?.priority === 'Emergency') {
       return [
         {
-          id: 'alert-1',
-          label: 'Penicillin Allergy Alert',
-          details: 'NPO after midnight • Strict bedside observation',
+          id: 'alert-emergency',
+          label: 'Emergency Alert',
+          details: 'Immediate clinical attention required',
           severity: 'Emergency',
         },
       ];
@@ -114,6 +118,7 @@ export default function ClinicActiveThread({
         contentText: text,
         visibility: isInternal ? 'Internal' : 'Public',
       });
+      playMessageChime();
     },
     [conversationId, sendMessage],
   );
@@ -284,24 +289,32 @@ export default function ClinicActiveThread({
 
         {/* Center: Title + Edit Pencil + Category Badge */}
         <View style={styles.headerCenter}>
-          <Pressable
-            onPress={handleOpenRename}
-            style={styles.titleRow}
-            accessibilityRole="button"
-            accessibilityLabel="Rename conversation"
-            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-          >
-            <ThemedText variant="bodyBold" numberOfLines={1} style={styles.threadTitle}>
-              {activeTitle}
-            </ThemedText>
-            <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
+          {isLoading && !activeTitle ? (
+            <View style={styles.skeletonTitle} />
+          ) : (
+            <Pressable
+              onPress={handleOpenRename}
+              style={styles.titleRow}
+              accessibilityRole="button"
+              accessibilityLabel="Rename conversation"
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <ThemedText variant="bodyBold" numberOfLines={1} style={styles.threadTitle}>
+                {activeTitle || 'Clinical Thread'}
+              </ThemedText>
+              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+            </Pressable>
+          )}
 
-          <View style={styles.scopeBadge}>
-            <ThemedText variant="captionBold" color={theme.colors.primary}>
-              {getCategoryLabel(conversation?.scope)}
-            </ThemedText>
-          </View>
+          {isLoading && !conversation?.scope ? (
+            <View style={styles.skeletonSubtitle} />
+          ) : (
+            <View style={styles.scopeBadge}>
+              <ThemedText variant="captionBold" color={theme.colors.primary}>
+                {getCategoryLabel(conversation?.scope)}
+              </ThemedText>
+            </View>
+          )}
         </View>
 
         {/* Right Controls in exact order: 1. Members 2. Privacy Blur 3. Action Menu */}
@@ -445,6 +458,19 @@ export default function ClinicActiveThread({
           canWriteInternalNotes={true}
           isLoading={isLoading}
           error={error ? error.message : null}
+          renderEmptyState={() => (
+            <View style={styles.emptyStateContainer}>
+              <View style={styles.emptyShieldBadge}>
+                <Icon name="shieldCheck" size={24} color={theme.colors.primary} />
+              </View>
+              <ThemedText variant="bodyBold" style={styles.emptyTitle}>
+                Secure Communication
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.emptySubtitle}>
+                This is the start of your medical communication thread. Messages are encrypted in transit.
+              </ThemedText>
+            </View>
+          )}
         />
       </View>
 
@@ -840,28 +866,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: theme.spacing.xs,
   },
+  skeletonTitle: {
+    width: 140,
+    height: 18,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    marginBottom: 2,
+  },
+  skeletonSubtitle: {
+    width: 80,
+    height: 14,
+    borderRadius: theme.radii.xs,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
   speedPillsContainer: {
     backgroundColor: theme.colors.surfaceSubtle,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.border,
-    paddingVertical: theme.spacing.xs,
+    paddingVertical: 4,
   },
   speedPillsScroll: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    gap: 6,
   },
   speedPill: {
     backgroundColor: theme.colors.surface,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 8,
-    minHeight: 38,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minHeight: 28,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
+    borderColor: theme.colors.primaryBorder,
     shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -871,6 +910,34 @@ const styles = StyleSheet.create({
   },
   threadBody: {
     flex: 1,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.xl,
+    gap: theme.spacing.xs,
+  },
+  emptyShieldBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  emptyTitle: {
+    ...theme.typography.bodyBold,
+    color: theme.colors.text,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    maxWidth: 280,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   modalContent: {
     gap: theme.spacing.sm,

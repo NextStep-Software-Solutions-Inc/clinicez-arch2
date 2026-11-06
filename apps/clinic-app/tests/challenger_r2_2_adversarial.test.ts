@@ -584,6 +584,14 @@ describe('Challenger R2.2 Empirical Stress & Adversarial Suite', () => {
         React.createElement(ClinicActiveThread, {
           conversationId: 'conv-active-1',
           onBack: () => {},
+          pinnedAlerts: [
+            {
+              id: 'alert-1',
+              label: 'Penicillin Allergy Alert',
+              details: 'NPO after midnight • Strict bedside observation',
+              severity: 'Emergency',
+            },
+          ],
         })
       );
 
