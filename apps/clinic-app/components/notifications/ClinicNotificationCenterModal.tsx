@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, Modal, Platform } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import Modal from '../ui/Modal';
 import ThemedText from '../ui/ThemedText';
 import Badge, { BadgeVariant } from '../ui/Badge';
 import Button from '../ui/Button';
@@ -391,30 +392,25 @@ export default function ClinicNotificationCenterModal({
     </View>
   );
 
-  if (isWorkstation) {
-    return (
-      <View style={styles.desktopOverlay}>
-        <Pressable
-          style={styles.backdrop}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Close notifications panel"
-        />
-        <View style={styles.dockedPanel}>{sheetContent}</View>
-      </View>
-    );
-  }
-
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.mobileModalContainer}>
+    <Modal
+      raw
+      visible={visible}
+      onClose={onClose}
+      animationType={isWorkstation ? 'none' : 'slide'}
+      transparent
+      zIndex={10000}
+    >
+      <View style={isWorkstation ? styles.desktopOverlay : styles.mobileModalContainer}>
         <Pressable
           style={styles.backdrop}
           onPress={onClose}
           accessibilityRole="button"
           accessibilityLabel="Close notifications panel"
         />
-        <View style={styles.mobilePanel}>{sheetContent}</View>
+        <View style={isWorkstation ? styles.dockedPanel : styles.mobilePanel}>
+          {sheetContent}
+        </View>
       </View>
     </Modal>
   );
@@ -427,9 +423,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 9999,
+    width: '100%',
+    height: '100%',
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+    zIndex: 10000,
   },
   backdrop: {
     position: 'absolute',
@@ -451,10 +450,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
+    zIndex: 10001,
   },
   mobileModalContainer: {
-    flex: 1,
+    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    width: '100%',
+    height: '100%',
     justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+    zIndex: 10000,
   },
   mobilePanel: {
     height: '85%',
@@ -462,9 +470,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.radii.lg,
     borderTopRightRadius: theme.radii.lg,
     overflow: 'hidden',
+    zIndex: 10001,
   },
   sheetContainer: {
     flex: 1,
+    height: '100%',
     backgroundColor: theme.colors.surface,
   },
   header: {
