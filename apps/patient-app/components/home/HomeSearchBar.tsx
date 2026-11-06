@@ -7,26 +7,29 @@ export interface HomeSearchBarProps {
   onPressSearch: () => void;
   onPressVoice: () => void;
   onPressFilter: () => void;
+  /** Compact inline mode for workstation (>= 768px) top header row. */
+  compact?: boolean;
 }
 
 function HomeSearchBarComponent({
   onPressSearch,
   onPressVoice,
   onPressFilter,
+  compact = false,
 }: HomeSearchBarProps) {
   const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
 
   return (
     <View
       style={[
-        styles.bar,
-        elevation.card,
+        compact ? styles.barCompact : styles.bar,
+        compact ? undefined : elevation.card,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.borderSubtle,
+          borderColor: compact ? colors.border : colors.borderSubtle,
           borderRadius: radii.full,
-          paddingLeft: spacing.base,
-          paddingRight: spacing.sm,
+          paddingLeft: compact ? spacing.md : spacing.base,
+          paddingRight: spacing.xs,
         },
       ]}
     >
@@ -35,31 +38,35 @@ function HomeSearchBarComponent({
         accessibilityRole="search"
         accessibilityLabel="Search clinics, doctors, or symptoms"
         style={({ pressed }) => [
-          styles.mainTrigger,
+          compact ? styles.mainTriggerCompact : styles.mainTrigger,
           { gap: spacing.sm, opacity: pressed ? 0.75 : 1 },
         ]}
       >
-        <AppIcon name="search" size={18} color={colors.primary} />
+        <AppIcon name="search" size={compact ? 16 : 18} color={colors.primary} />
         <Text
           numberOfLines={1}
-          style={[typography.bodyMd, styles.placeholder, { color: colors.mutedText }]}
+          style={[
+            compact ? typography.bodySm : typography.bodyMd,
+            styles.placeholder,
+            { color: colors.mutedText },
+          ]}
         >
           Search clinics, doctors, or symptoms...
         </Text>
       </Pressable>
 
-      <View style={[styles.actions, { gap: spacing.xs }]}>
+      <View style={[styles.actions, { gap: spacing.xxs }]}>
         <Pressable
           onPress={onPressVoice}
           accessibilityRole="button"
           accessibilityLabel="Search by voice or symptom query"
           hitSlop={6}
           style={({ pressed }) => [
-            styles.iconBtn,
+            compact ? styles.iconBtnCompact : styles.iconBtn,
             { borderRadius: radii.full, opacity: pressed ? 0.7 : 1 },
           ]}
         >
-          <AppIcon name="mic" size={18} color={colors.primary} />
+          <AppIcon name="mic" size={compact ? 16 : 18} color={colors.primary} />
         </Pressable>
 
         <Pressable
@@ -68,11 +75,11 @@ function HomeSearchBarComponent({
           accessibilityLabel="Filter clinics, doctors, and services"
           hitSlop={6}
           style={({ pressed }) => [
-            styles.iconBtn,
+            compact ? styles.iconBtnCompact : styles.iconBtn,
             { borderRadius: radii.full, opacity: pressed ? 0.7 : 1 },
           ]}
         >
-          <AppIcon name="sliders" size={18} color={colors.navyText} />
+          <AppIcon name="sliders" size={compact ? 16 : 18} color={colors.navyText} />
         </Pressable>
       </View>
     </View>
@@ -87,9 +94,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  barCompact: {
+    width: '100%',
+    minHeight: 42,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   mainTrigger: {
     flex: 1,
     minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  mainTriggerCompact: {
+    flex: 1,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     minWidth: 0,
@@ -104,6 +126,12 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 36,
     height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnCompact: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },

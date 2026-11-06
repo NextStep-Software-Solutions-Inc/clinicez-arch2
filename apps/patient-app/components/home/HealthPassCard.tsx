@@ -42,7 +42,7 @@ function HealthPassCardComponent({ healthPass, onViewCardPress }: HealthPassCard
         </View>
         <View style={styles.brandStack}>
           <Text style={[typography.overline, { color: colors.healthPassMuted }]}>
-            CLINIC EZ •
+            CLINIC EZ
           </Text>
           <Text style={[typography.overline, { color: colors.onPrimary }]}>
             HEALTH PASS
@@ -109,12 +109,12 @@ function HealthPassCardComponent({ healthPass, onViewCardPress }: HealthPassCard
         ]}
       >
         <View style={[styles.terminalHint, { gap: spacing.xs }]}>
-          <AppIcon name="scanBarcode" size={15} color={colors.healthPassMuted} />
+          <AppIcon name="qrCode" size={15} color={colors.healthPassMuted} />
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             style={[typography.bodySm, styles.hintText, { color: colors.healthPassMuted }]}
           >
-            Tap terminal or present barcode
+            Present QR code for quick record transfer
           </Text>
         </View>
 

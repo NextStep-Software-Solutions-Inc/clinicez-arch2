@@ -36,12 +36,20 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
     expect(headerSrc.includes('outputRange: [8, 0]')).toBe(true);
     expect(headerSrc.includes('name="notifications"')).toBe(true);
     expect(headerSrc.includes('ClinicEzMark')).toBe(true);
+    expect(headerSrc.includes('showBrand = true')).toBe(true);
+    expect(headerSrc.includes('alwaysShowTitle = false')).toBe(true);
+    expect(headerSrc.includes('centerSlot')).toBe(true);
 
     const homeNativeSrc = readAppFile('navigation/screens/Home.screen.tsx');
     const homeWebSrc = readAppFile('navigation/screens/Home.screen.web.tsx');
     expect(homeNativeSrc.includes('Animated.ScrollView')).toBe(true);
     expect(homeNativeSrc.includes('Animated.event')).toBe(true);
+    expect(homeNativeSrc.includes('showBrand=')).toBe(false);
     expect(homeWebSrc.includes('Animated.ScrollView')).toBe(true);
+    expect(homeWebSrc.includes('showBrand={!isWorkstation}')).toBe(true);
+    expect(homeWebSrc.includes('alwaysShowTitle={isWorkstation}')).toBe(true);
+    expect(homeWebSrc.includes('compact')).toBe(true);
+    expect(homeWebSrc.includes('{!isWorkstation ? (')).toBe(true);
     expect(homeWebSrc.includes("navigateToMainRoute('NotificationScreen')")).toBe(true);
     expect(homeWebSrc.includes("navigateToMainRoute('ProfileScreen')")).toBe(true);
   });
@@ -226,6 +234,12 @@ describe('Patient Home & Dedicated Search Replacement Suite', () => {
       expect(iconRegistrySrc.includes(`${icon}:`)).toBe(true);
       expect(iconWebSrc.includes(`${icon}:`)).toBe(true);
     }
+
+    const healthPassSrc = readAppFile('components/home/HealthPassCard.tsx');
+    expect(healthPassSrc.includes('CLINIC EZ •')).toBe(false);
+    expect(healthPassSrc.includes('Tap terminal or present barcode')).toBe(false);
+    expect(healthPassSrc.includes('Present QR code for quick record transfer')).toBe(true);
+    expect(healthPassSrc.includes('name="qrCode"')).toBe(true);
 
     const quickActionsSrc = readAppFile('components/home/QuickActionsGrid.tsx');
     expect(quickActionsSrc.includes("title: 'Reach Dr.'")).toBe(true);

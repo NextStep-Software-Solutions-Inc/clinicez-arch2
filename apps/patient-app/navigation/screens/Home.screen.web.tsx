@@ -52,7 +52,7 @@ export default function HomeScreenWeb() {
   const patientId = usePatientId();
   const { unreadCount } = useNotificationContext();
   const { isOnline } = useNetworkOnline();
-  const { isDesktop } = useBreakpoint();
+  const { isDesktop, isWorkstation } = useBreakpoint();
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -340,6 +340,20 @@ export default function HomeScreenWeb() {
         fullName={dashboard?.healthPass.fullName ?? user?.fullName ?? 'Patient'}
         avatarUrl={dashboard?.healthPass.avatarUrl ?? user?.imageUrl ?? null}
         unreadCount={effectiveUnreadCount}
+        showBrand={!isWorkstation}
+        alwaysShowTitle={isWorkstation}
+        maxContentWidth={isWorkstation ? 1120 : undefined}
+        horizontalPadding={isDesktop ? spacing.xl : spacing.lg}
+        centerSlot={
+          isWorkstation ? (
+            <HomeSearchBar
+              compact
+              onPressSearch={() => openSearchScreen({ autoFocus: true })}
+              onPressVoice={() => openSearchScreen({ autoFocus: true, voicePrompt: true })}
+              onPressFilter={() => openSearchScreen({ openFilters: true })}
+            />
+          ) : undefined
+        }
         onNotificationsPress={() => navigateToMainRoute('NotificationScreen')}
         onAvatarPress={() => navigateToMainRoute('ProfileScreen')}
       />
@@ -356,7 +370,7 @@ export default function HomeScreenWeb() {
           styles.scrollContent,
           {
             paddingHorizontal: isDesktop ? spacing.xl : spacing.lg,
-            paddingTop: spacing.xs,
+            paddingTop: isWorkstation ? spacing.lg : spacing.xs,
             paddingBottom: isOnline ? 40 : 84,
             gap: spacing.xl,
           },
@@ -364,11 +378,13 @@ export default function HomeScreenWeb() {
       >
         <View style={styles.maxContainer}>
           <View style={{ gap: spacing.xl }}>
-            <HomeSearchBar
-              onPressSearch={() => openSearchScreen({ autoFocus: true })}
-              onPressVoice={() => openSearchScreen({ autoFocus: true, voicePrompt: true })}
-              onPressFilter={() => openSearchScreen({ openFilters: true })}
-            />
+            {!isWorkstation ? (
+              <HomeSearchBar
+                onPressSearch={() => openSearchScreen({ autoFocus: true })}
+                onPressVoice={() => openSearchScreen({ autoFocus: true, voicePrompt: true })}
+                onPressFilter={() => openSearchScreen({ openFilters: true })}
+              />
+            ) : null}
 
             {isLoading && !dashboard ? (
               <View style={{ gap: spacing.base }}>

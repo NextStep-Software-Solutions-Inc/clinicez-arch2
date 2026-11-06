@@ -18,6 +18,7 @@ import { useNotificationContext } from '../../contexts/NotificationContext';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useNetworkOnline } from '../../hooks/useNetworkOnline';
 import { useContentInsets } from '../../hooks/useContentInsets';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { AppIcon } from '../../components/ui/Icon';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import HomeHeader, { extractInitials } from '../../components/home/HomeHeader';
@@ -59,6 +60,8 @@ export default function PatientSearchScreen() {
   const { unreadCount } = useNotificationContext();
   const { isOnline } = useNetworkOnline();
   const contentInsets = useContentInsets();
+  const { isDesktop, isWorkstation } = useBreakpoint();
+  const isWebWorkstation = Platform.OS === 'web' && isWorkstation;
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput | null>(null);
@@ -228,6 +231,10 @@ export default function PatientSearchScreen() {
         avatarUrl={user?.imageUrl ?? null}
         unreadCount={unreadCount}
         showBackButton={true}
+        showBrand={!isWebWorkstation}
+        alwaysShowTitle={isWebWorkstation}
+        maxContentWidth={isWebWorkstation ? 1120 : undefined}
+        horizontalPadding={isWebWorkstation ? (isDesktop ? spacing.xl : spacing.lg) : undefined}
         onBackPress={handleGoBackHome}
         onBrandPress={handleGoBackHome}
         onNotificationsPress={() => navigateToMainRoute('NotificationScreen')}
