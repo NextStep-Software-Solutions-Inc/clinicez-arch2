@@ -85,6 +85,35 @@ import {
   Monitor,
   Maximize2,
   Circle,
+  Mic,
+  SlidersHorizontal,
+  Flag,
+  ArrowRight,
+  CirclePlus,
+  Navigation,
+  Headset,
+  SquarePlus,
+  FolderHeart,
+  ClipboardPen,
+  CalendarCheck,
+  UserCheck,
+  History,
+  Droplet,
+  Gauge,
+  Moon,
+  TrendingUp,
+  ArrowLeftRight,
+  Nfc,
+  BadgeCheck,
+  ScanBarcode,
+  ChevronLeft,
+  CalendarX,
+  Video,
+  CircleQuestionMark,
+  Sun,
+  Sunset,
+  Car,
+  Zap,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -99,6 +128,8 @@ export interface IconProps {
   android?: string;
   ios?: string;
   color?: ColorToken | ColorValue;
+  fill?: ColorToken | ColorValue;
+  strokeWidth?: number;
   size?: number;
 }
 
@@ -192,6 +223,37 @@ const WEB_ICONS: Record<IconName, LucideIcon> = {
   star: Star,
   tag: Tag,
   monitor: Monitor,
+  mic: Mic,
+  sliders: SlidersHorizontal,
+  flag: Flag,
+  arrowRight: ArrowRight,
+  plusCircle: CirclePlus,
+  navigation: Navigation,
+  headset: Headset,
+  squarePlus: SquarePlus,
+  folderHeart: FolderHeart,
+  clipboardPen: ClipboardPen,
+  calendarCheck: CalendarCheck,
+  userCheck: UserCheck,
+  history: History,
+  droplet: Droplet,
+  gauge: Gauge,
+  moon: Moon,
+  trendingUp: TrendingUp,
+  arrowLeftRight: ArrowLeftRight,
+  nfc: Nfc,
+  badgeCheck: BadgeCheck,
+  heart: Heart,
+  scanBarcode: ScanBarcode,
+  chevronLeft: ChevronLeft,
+  calendarX: CalendarX,
+  video: Video,
+  helpCircle: CircleQuestionMark,
+  sun: Sun,
+  sunset: Sunset,
+  car: Car,
+  zap: Zap,
+  shieldCheck: ShieldCheck,
 };
 
 /**
@@ -201,8 +263,10 @@ const WEB_ICONS: Record<IconName, LucideIcon> = {
 const LEGACY_LOOKUP: Record<string, IconName> = {};
 for (const key of iconNames) {
   const native = NATIVE_ICONS[key];
-  LEGACY_LOOKUP[native.android.toLowerCase()] ??= key;
-  LEGACY_LOOKUP[native.ios.toLowerCase()] ??= key;
+  if (native) {
+    if (native.android) LEGACY_LOOKUP[native.android.toLowerCase()] ??= key;
+    if (native.ios) LEGACY_LOOKUP[native.ios.toLowerCase()] ??= key;
+  }
 }
 /** Extra aliases for symbol names that appear in screens but not in the registry. */
 const ALIASES: Record<string, IconName> = {
@@ -243,7 +307,7 @@ function resolveIcon(name?: string, android?: string, ios?: string): LucideIcon 
   return Circle;
 }
 
-export function AppIcon({ android, ios, name, color, size = 20 }: IconProps) {
+export function AppIcon({ android, ios, name, color, fill, strokeWidth = 2, size = 20 }: IconProps) {
   const theme = useAppTheme();
   const tokens = theme.colors as Record<string, string>;
   const resolved =
@@ -252,9 +316,22 @@ export function AppIcon({ android, ios, name, color, size = 20 }: IconProps) {
       : typeof color === 'string'
         ? color
         : theme.colors.primary;
+  const resolvedFill =
+    typeof fill === 'string' && fill in tokens
+      ? tokens[fill]
+      : typeof fill === 'string'
+        ? fill
+        : 'none';
 
   const IconComponent = resolveIcon(name, android, ios);
-  return <IconComponent color={resolved} size={size} />;
+  return (
+    <IconComponent
+      color={resolved as string}
+      fill={resolvedFill as string}
+      size={size}
+      strokeWidth={strokeWidth}
+    />
+  );
 }
 
 // Drop-in compatibility exports for @react-navigation/native symbol calls on web

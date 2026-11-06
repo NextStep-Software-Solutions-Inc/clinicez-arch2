@@ -27,6 +27,8 @@ import RescheduleScreen from '../screens/appointments/Reschedule.screen';
 import AttachFilesScreen from '../screens/appointments/AttachFiles.screen';
 
 // Profile Part A
+import ProfileScreen from '../screens/profile/Profile.screen';
+import PatientSearchScreen from '../screens/Search.screen';
 import PersonalDemographicsScreen from '../screens/profile/PersonalDemographics.screen';
 import GovernmentIdsScreen from '../screens/profile/GovernmentIds.screen';
 import ContactInfoScreen from '../screens/profile/ContactInfo.screen';
@@ -222,6 +224,14 @@ const MainStack = createNativeStackNavigator({
       },
     }),
     // ── Profile Part A ────────────────────────────────────────────────────────
+    ProfileScreen: createNativeStackScreen({
+      screen: ProfileScreen,
+      options: { title: 'My Profile', headerLargeTitleEnabled: true },
+    }),
+    PatientSearchScreen: createNativeStackScreen({
+      screen: PatientSearchScreen,
+      options: { headerShown: false },
+    }),
     PersonalDemographicsScreen: createNativeStackScreen({
       screen: PersonalDemographicsScreen,
       options: { title: 'Personal Demographics', headerLargeTitleEnabled: true },

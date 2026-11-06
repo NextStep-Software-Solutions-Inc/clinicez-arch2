@@ -87,6 +87,35 @@ import {
   Monitor,
   Maximize2,
   Circle,
+  Mic,
+  SlidersHorizontal,
+  Flag,
+  ArrowRight,
+  CirclePlus,
+  Navigation,
+  Headset,
+  SquarePlus,
+  FolderHeart,
+  ClipboardPen,
+  CalendarCheck,
+  UserCheck,
+  History,
+  Droplet,
+  Gauge,
+  Moon,
+  TrendingUp,
+  ArrowLeftRight,
+  Nfc,
+  BadgeCheck,
+  ScanBarcode,
+  ChevronLeft,
+  CalendarX,
+  Video,
+  CircleQuestionMark,
+  Sun,
+  Sunset,
+  Car,
+  Zap,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -105,6 +134,10 @@ export interface IconProps {
   ios?: string;
   /** Semantic colour token or an explicit colour. Defaults to the brand primary. */
   color?: ColorToken | ColorValue;
+  /** Optional fill colour for solid icon glyphs (e.g. filled Heart, filled Star). */
+  fill?: ColorToken | ColorValue;
+  /** Optional stroke width (defaults to 2). */
+  strokeWidth?: number;
   size?: number;
 }
 
@@ -198,6 +231,37 @@ const ICONS: Record<IconName, LucideIcon> = {
   star: Star,
   tag: Tag,
   monitor: Monitor,
+  mic: Mic,
+  sliders: SlidersHorizontal,
+  flag: Flag,
+  arrowRight: ArrowRight,
+  plusCircle: CirclePlus,
+  navigation: Navigation,
+  headset: Headset,
+  squarePlus: SquarePlus,
+  folderHeart: FolderHeart,
+  clipboardPen: ClipboardPen,
+  calendarCheck: CalendarCheck,
+  userCheck: UserCheck,
+  history: History,
+  droplet: Droplet,
+  gauge: Gauge,
+  moon: Moon,
+  trendingUp: TrendingUp,
+  arrowLeftRight: ArrowLeftRight,
+  nfc: Nfc,
+  badgeCheck: BadgeCheck,
+  heart: Heart,
+  scanBarcode: ScanBarcode,
+  chevronLeft: ChevronLeft,
+  calendarX: CalendarX,
+  video: Video,
+  helpCircle: CircleQuestionMark,
+  sun: Sun,
+  sunset: Sunset,
+  car: Car,
+  zap: Zap,
+  shieldCheck: ShieldCheck,
 };
 
 /**
@@ -206,8 +270,10 @@ const ICONS: Record<IconName, LucideIcon> = {
 const LEGACY_LOOKUP: Record<string, IconName> = {};
 for (const key of iconNames) {
   const native = NATIVE_ICONS[key];
-  LEGACY_LOOKUP[native.android.toLowerCase()] ??= key;
-  LEGACY_LOOKUP[native.ios.toLowerCase()] ??= key;
+  if (native) {
+    if (native.android) LEGACY_LOOKUP[native.android.toLowerCase()] ??= key;
+    if (native.ios) LEGACY_LOOKUP[native.ios.toLowerCase()] ??= key;
+  }
 }
 
 /** Extra aliases for symbol names that appear across screens. */
@@ -253,7 +319,7 @@ function resolveIcon(name?: string, android?: string, ios?: string): LucideIcon 
   return Circle;
 }
 
-export function AppIcon({ android, ios, name, color, size = 20 }: IconProps) {
+export function AppIcon({ android, ios, name, color, fill, strokeWidth = 2, size = 20 }: IconProps) {
   const theme = useAppTheme();
   const tokens = theme.colors as Record<string, string>;
   const resolved =
@@ -262,9 +328,22 @@ export function AppIcon({ android, ios, name, color, size = 20 }: IconProps) {
       : typeof color === 'string'
         ? color
         : theme.colors.primary;
+  const resolvedFill =
+    typeof fill === 'string' && fill in tokens
+      ? tokens[fill]
+      : typeof fill === 'string'
+        ? fill
+        : 'none';
 
   const IconComponent = resolveIcon(name, android, ios);
-  return <IconComponent color={resolved as string} size={size} strokeWidth={2} />;
+  return (
+    <IconComponent
+      color={resolved as string}
+      fill={resolvedFill as string}
+      size={size}
+      strokeWidth={strokeWidth}
+    />
+  );
 }
 
 // Drop-in compatibility exports for existing callers

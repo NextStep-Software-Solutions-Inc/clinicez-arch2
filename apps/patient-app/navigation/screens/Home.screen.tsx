@@ -1,442 +1,498 @@
-import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Linking,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
-import { LinearGradient } from 'expo-linear-gradient';
-import ThemedText from '../../components/ui/ThemedText';
-import ThemedView from '../../components/ui/ThemedView';
-import EmptyState from '../../components/ui/EmptyState';
-import { SkeletonCard } from '../../components/ui/Skeleton';
-import Card from '../../components/ui/Card';
-import Badge from '../../components/ui/Badge';
-import { AppIcon } from '../../components/ui/Icon';
-import { ListRow, SectionHeader } from '../../components/ui/Primitives';
-import { useAppTheme } from '../../contexts/ThemeContext';
-import { useContentInsets } from '../../hooks/useContentInsets';
-import { usePatientId } from '../../hooks/usePatientId';
 import { desc, eq } from 'drizzle-orm';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
-import { getHomeDashboard } from '../../services/discovery/discoveryService';
-import { HomeDashboard, HealthMetric, AppointmentLineupItem } from '../../services/discovery/types';
-import YakapPromoCard from '../../components/yakap/YakapPromoCard';
-import YakapActiveCard from '../../components/yakap/YakapActiveCard';
-import { useYakapRegistrationStatus } from '../../hooks/useYakapRegistrationStatus';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationContext } from '../../contexts/NotificationContext';
+import { useContentInsets } from '../../hooks/useContentInsets';
+import { usePatientId } from '../../hooks/usePatientId';
+import { useNetworkOnline } from '../../hooks/useNetworkOnline';
+import { SkeletonCard } from '../../components/ui/Skeleton';
+import { SectionHeader } from '../../components/ui/Primitives';
+import AfterVisitSummaryCard from '../../components/records/AfterVisitSummaryCard';
+import HomeHeader from '../../components/home/HomeHeader';
+import HomeSearchBar from '../../components/home/HomeSearchBar';
+import HealthPassCard from '../../components/home/HealthPassCard';
+import WelcomeChecklistBanner from '../../components/home/WelcomeChecklistBanner';
+import QuickActionsGrid, { type QuickActionKey } from '../../components/home/QuickActionsGrid';
+import AppointmentCarouselSection from '../../components/home/AppointmentCarouselSection';
+import RecentVitalsGrid from '../../components/home/RecentVitalsGrid';
+import LogVitalsModal from '../../components/home/LogVitalsModal';
+import TodayScheduleSection from '../../components/home/TodayScheduleSection';
+import DailyMindfulMomentCard from '../../components/home/DailyMindfulMomentCard';
+import HomeOfflinePillBanner from '../../components/home/HomeOfflinePillBanner';
+import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
 import { db } from '../../db/index';
 import { consultations, type Consultation } from '../../db/schema/consultations';
 import { vitalSigns, type VitalSign } from '../../db/schema/vitalSigns';
-import AfterVisitSummaryCard from '../../components/records/AfterVisitSummaryCard';
-
-function MetricCard({ metric }: { metric: HealthMetric }) {
-  const { colors, radii, spacing, shadows } = useAppTheme();
-
-  return (
-    <View
-      style={[
-        styles.metricCard,
-        {
-          borderColor: colors.border,
-          backgroundColor: colors.card,
-          borderRadius: radii.lg,
-          padding: spacing.md,
-          gap: spacing.xs,
-        },
-        shadows.sm,
-      ]}
-    >
-      <ThemedText variant="captionBold" color="textMuted">
-        {metric.label}
-      </ThemedText>
-      <ThemedText variant="h2">
-        {metric.value}
-      </ThemedText>
-      <ThemedText variant="small" color="textSecondary">
-        {metric.note}
-      </ThemedText>
-    </View>
-  );
-}
-
-function AppointmentCard({ item, onPress }: { item: AppointmentLineupItem; onPress: () => void }) {
-  const { colors, radii, spacing, shadows } = useAppTheme();
-
-  const badgeTone =
-    item.status === 'draft' ? 'warning' : item.status === 'follow-up' ? 'info' : 'success';
-  const badgeLabel =
-    item.status === 'draft' ? 'Draft' : item.status === 'follow-up' ? 'Follow-up' : 'Scheduled';
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.appointmentCard,
-        {
-          borderColor: colors.border,
-          backgroundColor: colors.card,
-          borderRadius: radii.lg,
-          padding: spacing.md,
-          gap: spacing.sm,
-          opacity: pressed ? 0.84 : 1,
-        },
-        shadows.sm,
-      ]}
-    >
-      <View style={styles.appointmentHeader}>
-        <ThemedText variant="bodyBold" numberOfLines={1} style={styles.flex}>
-          {item.title}
-        </ThemedText>
-        <Badge label={badgeLabel} tone={badgeTone} size="sm" />
-      </View>
-      <ThemedText variant="small" color="textSecondary" numberOfLines={1}>
-        {item.subtitle}
-      </ThemedText>
-      <View style={styles.appointmentFooter}>
-        <View style={styles.metaRow}>
-          <AppIcon name="calendar" size={14} color="textMuted" />
-          <ThemedText variant="caption" color="textMuted">
-            {item.dateLabel}
-          </ThemedText>
-        </View>
-        <View style={styles.metaRow}>
-          <AppIcon name="clock" size={14} color="textMuted" />
-          <ThemedText variant="caption" color="textMuted">
-            {item.timeLabel}
-          </ThemedText>
-        </View>
-      </View>
-    </Pressable>
-  );
-}
+import {
+  checkInPatientAppointment,
+  fetchAndCacheHomeDashboard,
+  loadLocalHomeDashboardSnapshot,
+  logMedicationDose,
+  logPatientVitals,
+  markWelcomeStepVisited,
+} from '../../services/home/homeDashboardService';
+import type {
+  HomeAppointmentCardDto,
+  LogPatientVitalsRequestDto,
+  PatientHomeDashboardDto,
+  TodayMedicationScheduleItemDto,
+  WelcomeStepKey,
+} from '../../services/api/homeApi';
+import type { PatientSearchRouteParams } from './Search.screen';
 
 export default function HomeScreen() {
-  const { colors, spacing, radii } = useAppTheme();
+  const { colors, spacing } = useClinicalEmpathyTheme();
   const navigation = useNavigation<any>();
+  const { getToken } = useAuth();
   const { user } = useUser();
   const patientId = usePatientId();
-  const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
-  const [recentConsultation, setRecentConsultation] = useState<Consultation | null>(null);
-  const [recentVitals, setRecentVitals] = useState<VitalSign | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { unreadCount } = useNotificationContext();
+  const { isOnline } = useNetworkOnline();
   const contentInsets = useContentInsets();
-  const yakapStatus = useYakapRegistrationStatus(patientId);
 
-  useEffect(() => {
-    let mounted = true;
-    const load = () => {
-      setIsLoading(true);
-      getHomeDashboard(patientId)
-        .then((value) => {
-          if (mounted) setDashboard(value);
-        })
-        .finally(() => {
-          if (mounted) setIsLoading(false);
-        });
+  const scrollY = useRef(new Animated.Value(0)).current;
 
-      if (patientId) {
-        Promise.all([
-          db
-            .select()
-            .from(consultations)
-            .where(eq(consultations.patientId, patientId))
-            .orderBy(desc(consultations.visitDate))
-            .limit(1),
-          db
-            .select()
-            .from(vitalSigns)
-            .where(eq(vitalSigns.patientId, patientId))
-            .orderBy(desc(vitalSigns.measuredAt))
-            .limit(1),
-        ])
-          .then(([cList, vList]) => {
-            if (!mounted) return;
-            const c = cList[0] ?? null;
-            if (c && c.visitDate) {
-              try {
-                const diff = differenceInCalendarDays(new Date(), parseISO(c.visitDate));
-                if (diff >= 0 && diff <= 7) {
-                  setRecentConsultation(c);
-                  setRecentVitals(vList[0] ?? null);
-                } else {
-                  setRecentConsultation(null);
-                }
-              } catch {
-                setRecentConsultation(null);
-              }
-            } else {
-              setRecentConsultation(null);
-            }
-          })
-          .catch(console.error);
+  const [dashboard, setDashboard] = useState<PatientHomeDashboardDto | null>(null);
+  const [recentConsultation, setRecentConsultation] = useState<Consultation | null>(null);
+  const [recentVitalsRow, setRecentVitalsRow] = useState<VitalSign | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [vitalsModalVisible, setVitalsModalVisible] = useState<boolean>(false);
+  const [isSavingVitals, setIsSavingVitals] = useState<boolean>(false);
+  const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const [loggingMedicationId, setLoggingMedicationId] = useState<string | null>(null);
+
+  const fallbackUser = useMemo(
+    () => ({
+      firstName: user?.firstName,
+      lastName: user?.lastName,
+      fullName: user?.fullName,
+      imageUrl: user?.imageUrl,
+    }),
+    [user?.firstName, user?.fullName, user?.imageUrl, user?.lastName],
+  );
+
+  const loadDashboard = useCallback(
+    async (showPullSpinner = false) => {
+      if (showPullSpinner) {
+        setIsRefreshing(true);
       }
 
-      void yakapStatus.refresh();
-    };
+      try {
+        const localSnapshot = await loadLocalHomeDashboardSnapshot(patientId, fallbackUser);
+        setDashboard((prev) => prev ?? localSnapshot);
 
-    load();
-    const unsub = navigation.addListener('focus', load);
+        if (patientId) {
+          const [cList, vList] = await Promise.all([
+            db
+              .select()
+              .from(consultations)
+              .where(eq(consultations.patientId, patientId))
+              .orderBy(desc(consultations.visitDate))
+              .limit(1),
+            db
+              .select()
+              .from(vitalSigns)
+              .where(eq(vitalSigns.patientId, patientId))
+              .orderBy(desc(vitalSigns.measuredAt))
+              .limit(1),
+          ]);
 
+          const latestConsult = cList[0] ?? null;
+          if (latestConsult && latestConsult.visitDate) {
+            try {
+              const diff = differenceInCalendarDays(new Date(), parseISO(latestConsult.visitDate));
+              if (diff >= 0 && diff <= 7) {
+                setRecentConsultation(latestConsult);
+                setRecentVitalsRow(vList[0] ?? null);
+              } else {
+                setRecentConsultation(null);
+              }
+            } catch {
+              setRecentConsultation(null);
+            }
+          } else {
+            setRecentConsultation(null);
+          }
+
+          const { data: liveData } = await fetchAndCacheHomeDashboard(
+            getToken,
+            patientId,
+            fallbackUser,
+          );
+          setDashboard(liveData);
+        }
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [fallbackUser, getToken, patientId],
+  );
+
+  useEffect(() => {
+    void loadDashboard(false);
+    const unsub = navigation.addListener('focus', () => {
+      void loadDashboard(false);
+    });
     return () => {
-      mounted = false;
       unsub();
     };
-  }, [navigation, patientId]);
+  }, [loadDashboard, navigation]);
 
-  const greetingName = useMemo(() => dashboard?.greetingName ?? user?.firstName ?? 'Patient', [dashboard, user]);
+  const navigateToMainRoute = useCallback(
+    (screenName: string, params?: Record<string, unknown>) => {
+      const parent = navigation.getParent?.();
+      const grandParent = parent?.getParent?.();
+      if (grandParent) {
+        grandParent.navigate(screenName, params);
+        return;
+      }
+      if (parent) {
+        parent.navigate(screenName, params);
+        return;
+      }
+      navigation.navigate('Main', { screen: screenName, params });
+    },
+    [navigation],
+  );
+
+  const navigateToTab = useCallback(
+    (tabName: 'HomeScreen' | 'RecordsScreen' | 'AppointmentsScreen' | 'MessagesScreen') => {
+      const parent = navigation.getParent?.();
+      if (parent) {
+        if (tabName === 'RecordsScreen') {
+          parent.navigate('RecordsScreen', { screen: 'FilesBrowserScreen' });
+        } else {
+          parent.navigate(tabName);
+        }
+        return;
+      }
+      navigation.navigate('Main', {
+        screen: 'BottomTabs',
+        params: { screen: tabName },
+      });
+    },
+    [navigation],
+  );
+
+  const openSearchScreen = useCallback(
+    (params?: PatientSearchRouteParams) => {
+      navigation.navigate('PatientSearch', params ?? {});
+    },
+    [navigation],
+  );
+
+  const handleWelcomeStepPress = useCallback(
+    async (stepKey: WelcomeStepKey) => {
+      if (patientId) {
+        const updatedChecklist = await markWelcomeStepVisited(getToken, patientId, stepKey);
+        setDashboard((prev) =>
+          prev ? { ...prev, welcomeChecklist: updatedChecklist } : prev,
+        );
+      }
+
+      if (stepKey === 'health_profile') {
+        navigateToMainRoute('PersonalDemographicsScreen');
+      } else if (stepKey === 'link_insurance') {
+        navigateToMainRoute('GovernmentIdsScreen');
+      } else if (stepKey === 'primary_clinic') {
+        navigateToMainRoute('ExploreClinicsScreen');
+      }
+    },
+    [getToken, navigateToMainRoute, patientId],
+  );
+
+  const handleQuickAction = useCallback(
+    (action: QuickActionKey) => {
+      switch (action) {
+        case 'reach_dr':
+          navigateToTab('MessagesScreen');
+          break;
+        case 'services':
+          openSearchScreen({ category: 'services' });
+          break;
+        case 'records':
+          navigateToTab('RecordsScreen');
+          break;
+        case 'prescriptions':
+          navigateToMainRoute('PrescriptionsScreen');
+          break;
+      }
+    },
+    [navigateToMainRoute, navigateToTab, openSearchScreen],
+  );
+
+  const handleCheckIn = useCallback(
+    async (item: HomeAppointmentCardDto) => {
+      if (!patientId) return;
+      setCheckingInId(item.id);
+      try {
+        const ack = await checkInPatientAppointment(getToken, patientId, item.id);
+        setDashboard((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            appointments: {
+              ...prev.appointments,
+              upcomingItems: prev.appointments.upcomingItems.map((appt) =>
+                appt.id === item.id
+                  ? { ...appt, isCheckedIn: true, checkedInAt: ack.checkedInAt }
+                  : appt,
+              ),
+            },
+          };
+        });
+        navigateToMainRoute('AppointmentDetailScreen', {
+          appointmentId: item.id,
+          id: item.id,
+        });
+      } finally {
+        setCheckingInId(null);
+      }
+    },
+    [getToken, navigateToMainRoute, patientId],
+  );
+
+  const handleDirections = useCallback(
+    async (item: HomeAppointmentCardDto) => {
+      const destination = encodeURIComponent(
+        [item.clinicName, item.clinicAddress].filter(Boolean).join(', '),
+      );
+      const mapUrl = Platform.select({
+        ios: `http://maps.apple.com/?q=${destination}`,
+        android: `geo:0,0?q=${destination}`,
+        default: `https://www.google.com/maps/search/?api=1&query=${destination}`,
+      });
+      if (mapUrl) {
+        const supported = await Linking.canOpenURL(mapUrl).catch(() => false);
+        if (supported) {
+          await Linking.openURL(mapUrl);
+          return;
+        }
+      }
+      navigateToMainRoute('ClinicDetailsScreen', {
+        clinicId: item.clinicId,
+        id: item.clinicId,
+      });
+    },
+    [navigateToMainRoute],
+  );
+
+  const handleSaveVitals = useCallback(
+    async (payload: LogPatientVitalsRequestDto) => {
+      if (!patientId) return;
+      setIsSavingVitals(true);
+      try {
+        await logPatientVitals(getToken, patientId, payload);
+        setVitalsModalVisible(false);
+        await loadDashboard(false);
+      } finally {
+        setIsSavingVitals(false);
+      }
+    },
+    [getToken, loadDashboard, patientId],
+  );
+
+  const handleLogMedication = useCallback(
+    async (item: TodayMedicationScheduleItemDto) => {
+      if (!patientId) return;
+      setLoggingMedicationId(item.medicationId);
+      try {
+        const updatedItem = await logMedicationDose(getToken, patientId, item.medicationId, {
+          scheduledTimeLabel: item.scheduledTimeLabel,
+        });
+        if (updatedItem) {
+          setDashboard((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              todaySchedule: {
+                ...prev.todaySchedule,
+                items: prev.todaySchedule.items.map((m) =>
+                  m.medicationId === item.medicationId ? updatedItem : m,
+                ),
+              },
+            };
+          });
+        } else {
+          await loadDashboard(false);
+        }
+      } finally {
+        setLoggingMedicationId(null);
+      }
+    },
+    [getToken, loadDashboard, patientId],
+  );
+
+  const headerTitle = useMemo(() => {
+    const first = dashboard?.healthPass.firstName ?? user?.firstName ?? 'Patient';
+    return `Hi, ${first}`;
+  }, [dashboard?.healthPass.firstName, user?.firstName]);
+
+  const headerSubtitle = useMemo(() => {
+    if (dashboard?.healthPass.clinicEzId) {
+      return `Health Pass • ${dashboard.healthPass.clinicEzId}`;
+    }
+    return 'Clinic EZ Care Overview';
+  }, [dashboard?.healthPass.clinicEzId]);
+
+  const effectiveUnreadCount = Math.max(
+    unreadCount,
+    dashboard?.healthPass.unreadNotificationsCount ?? 0,
+  );
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.container, { paddingBottom: contentInsets.bottom }]}
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.safeRoot, { backgroundColor: colors.canvas }]}
     >
-      <LinearGradient
-        colors={[colors.primary, colors.primaryDark]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.heroCard, { borderRadius: radii.xl, padding: spacing.lg, gap: spacing.sm }]}
+      <HomeHeader
+        scrollY={scrollY}
+        title={headerTitle}
+        subtitle={headerSubtitle}
+        fullName={dashboard?.healthPass.fullName ?? user?.fullName ?? 'Patient'}
+        avatarUrl={dashboard?.healthPass.avatarUrl ?? user?.imageUrl ?? null}
+        unreadCount={effectiveUnreadCount}
+        onNotificationsPress={() => navigateToMainRoute('NotificationScreen')}
+        onAvatarPress={() => navigateToMainRoute('ProfileScreen')}
+      />
+
+      <Animated.ScrollView
+        style={styles.flex}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void loadDashboard(true)}
+            tintColor={colors.primary}
+          />
+        }
+        contentContainerStyle={[
+          styles.contentContainer,
+          {
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.xs,
+            paddingBottom: Math.max(contentInsets.bottom, 24) + (isOnline ? 28 : 76),
+            gap: spacing.xl,
+          },
+        ]}
       >
-        <ThemedText variant="captionBold" color="onPrimary">
-          CARE AT A GLANCE
-        </ThemedText>
-        <ThemedText variant="h1" color="onPrimary">
-          Welcome back, {greetingName}
-        </ThemedText>
-        <ThemedText variant="body" color="onPrimary">
-          A clean overview of your health metrics, upcoming care, and active communities.
-        </ThemedText>
-      </LinearGradient>
+        <HomeSearchBar
+          onPressSearch={() => openSearchScreen({ autoFocus: true })}
+          onPressVoice={() => openSearchScreen({ autoFocus: true, voicePrompt: true })}
+          onPressFilter={() => openSearchScreen({ openFilters: true })}
+        />
 
-      <ThemedView style={styles.metricsGrid}>
         {isLoading && !dashboard ? (
+          <View style={{ gap: spacing.base }}>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </View>
+        ) : dashboard ? (
           <>
-            <SkeletonCard />
-            <SkeletonCard />
-          </>
-        ) : (
-          dashboard?.healthMetrics.map((metric) => <MetricCard key={metric.label} metric={metric} />)
-        )}
-      </ThemedView>
+            <HealthPassCard
+              healthPass={dashboard.healthPass}
+              onViewCardPress={() => navigateToMainRoute('ShareRecordsScreen')}
+            />
 
-      {/* PhilHealth YAKAP Benefit Card */}
-      {yakapStatus.isConfirmedRegistered ? (
-        <YakapActiveCard
-          philhealthPin={yakapStatus.philhealthPin}
-          assignedClinicName={yakapStatus.assignedClinicName}
-          gamotUsed={yakapStatus.gamotUsed}
-          annualAllocation={yakapStatus.annualAllocation}
-        />
-      ) : (
-        <YakapPromoCard />
-      )}
+            <WelcomeChecklistBanner
+              checklist={dashboard.welcomeChecklist}
+              onStepPress={(stepKey) => void handleWelcomeStepPress(stepKey)}
+            />
 
-      {/* 7-Day Pinned After-Visit Summary (AVS) Card */}
-      {recentConsultation && (
-        <View style={styles.sectionWrap}>
-          <SectionHeader title="Recent Visit Summary" />
-          <AfterVisitSummaryCard
-            consultation={recentConsultation}
-            vitals={recentVitals}
-            isPinned={true}
-            onBookFollowUp={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
-            onMessageClinic={() => navigation.navigate('MainBottomTabs', { screen: 'MessagesScreen' })}
-          />
-        </View>
-      )}
+            <QuickActionsGrid
+              onSelectAction={handleQuickAction}
+              onSelfServicePress={() => openSearchScreen({ category: 'all' })}
+            />
 
-      <View style={styles.sectionWrap}>
-        <SectionHeader title="Quick Actions" />
-        <Card padding="none">
-          <ListRow
-            title="Explore Organizations"
-            subtitle="Browse public communities or open private invites"
-            icon="users"
-            tone="primary"
-            onPress={() => navigation.navigate('Main', { screen: 'ExploreOrgsScreen' })}
-            divider
-          />
-          <ListRow
-            title="Explore Clinics"
-            subtitle="View public clinics and partner-only clinics"
-            icon="hospital"
-            tone="success"
-            onPress={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
-            divider
-          />
-          <ListRow
-            title="Continue Booking Draft"
-            subtitle="Open the booking draft form for your next clinic"
-            icon="calendar"
-            tone="warning"
-            onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
-            divider
-          />
-          <ListRow
-            title="Records"
-            subtitle="Prescriptions, lab requests, results, and care summaries"
-            icon="document"
-            tone="info"
-            onPress={() => navigation.navigate('RecordsScreen')}
-            divider
-          />
-          <ListRow
-            title="Share my records"
-            subtitle="Show a QR code and manage who can see your data"
-            icon="qrCode"
-            tone="purple"
-            onPress={() => navigation.navigate('Main', { screen: 'ShareRecordsScreen' })}
-          />
-        </Card>
-      </View>
+            <AppointmentCarouselSection
+              section={dashboard.appointments}
+              checkingInId={checkingInId}
+              onBookAppointmentPress={() => navigateToMainRoute('BookingDraftScreen')}
+              onExploreClinicsPress={() => navigateToMainRoute('ExploreClinicsScreen')}
+              onViewAllPress={() => navigateToTab('AppointmentsScreen')}
+              onViewHistoryPress={() => navigateToTab('AppointmentsScreen')}
+              onAppointmentPress={(item) =>
+                navigateToMainRoute('AppointmentDetailScreen', {
+                  appointmentId: item.id,
+                  id: item.id,
+                })
+              }
+              onCheckInPress={(item) => void handleCheckIn(item)}
+              onDirectionsPress={(item) => void handleDirections(item)}
+            />
 
-      <View style={styles.sectionWrap}>
-        <SectionHeader
-          title="Next Appointment Line-up"
-          actionLabel="SEE ALL"
-          onActionPress={() =>
-            navigation.navigate('Main', {
-              screen: 'BottomTabs',
-              params: { screen: 'AppointmentsScreen' },
-            })
-          }
-        />
-        {dashboard?.nextAppointments?.length ? (
-          <FlatList
-            data={dashboard.nextAppointments}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            ItemSeparatorComponent={() => <View style={{ width: spacing.md }} />}
-            renderItem={({ item }) => (
-              <AppointmentCard
-                item={item}
-                onPress={() =>
-                  item.status === 'draft' && item.clinicId
-                    ? navigation.navigate('Main', {
-                        screen: 'BookingDraftScreen',
-                        params: { clinicId: item.clinicId } as any,
-                      })
-                    : item.clinicId
-                      ? navigation.navigate('Main', {
-                          screen: 'ClinicDetailsScreen',
-                          params: { clinicId: item.clinicId } as any,
-                        })
-                      : undefined
-                }
-              />
-            )}
-          />
-        ) : (
-          <EmptyState
-            title="No upcoming line-up yet"
-            message="Once you save a booking draft or follow up on a consultation, it will appear here."
-            actionLabel="Browse clinics"
-            onActionPress={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
-          />
-        )}
-      </View>
-
-      <View style={styles.sectionWrap}>
-        <SectionHeader title="Recent Consultations" />
-        {(dashboard?.recentConsultationSummary ?? []).length ? (
-          <Card padding="md">
-            {dashboard?.recentConsultationSummary.map((item) => (
-              <View key={item} style={styles.summaryRow}>
-                <View
-                  style={[
-                    styles.summaryDot,
-                    { backgroundColor: colors.primary, borderRadius: radii.full },
-                  ]}
+            {/* 7-Day Pinned After-Visit Summary (AVS) Card */}
+            {recentConsultation ? (
+              <View style={{ gap: spacing.md }}>
+                <SectionHeader title="Recent Visit Summary" />
+                <AfterVisitSummaryCard
+                  consultation={recentConsultation}
+                  vitals={recentVitalsRow}
+                  isPinned={true}
+                  onBookFollowUp={() => navigateToMainRoute('BookingDraftScreen')}
+                  onMessageClinic={() => navigateToTab('MessagesScreen')}
                 />
-                <ThemedText variant="body" color="text" style={styles.flex}>
-                  {item}
-                </ThemedText>
               </View>
-            ))}
-          </Card>
-        ) : (
-          <EmptyState
-            title="No consultations yet"
-            message="Your consultation history will show up here once records are synced from a clinic."
-          />
-        )}
-      </View>
+            ) : null}
 
-      <View style={styles.sectionWrap}>
-        <SectionHeader title="Suggested Next Steps" />
-        <Card padding="md">
-          {(dashboard?.summary.suggestedActions ?? ['Loading recommendations...']).map((item) => (
-            <View key={item} style={styles.summaryRow}>
-              <View
-                style={[
-                  styles.summaryDot,
-                  { backgroundColor: colors.primary, borderRadius: radii.full },
-                ]}
-              />
-              <ThemedText variant="body" color="text" style={styles.flex}>
-                {item}
-              </ThemedText>
-            </View>
-          ))}
-        </Card>
-      </View>
-    </ScrollView>
+            <RecentVitalsGrid
+              vitals={dashboard.recentVitals}
+              onHistoryPress={() => navigateToMainRoute('VitalSignsScreen')}
+              onConnectOrLogPress={() => setVitalsModalVisible(true)}
+            />
+
+            <TodayScheduleSection
+              schedule={dashboard.todaySchedule}
+              loggingMedicationId={loggingMedicationId}
+              onAddOrManagePress={() => navigateToMainRoute('MedicationsScreen')}
+              onLogMedicationPress={(item) => void handleLogMedication(item)}
+            />
+
+            <DailyMindfulMomentCard moment={dashboard.mindfulMoment} />
+          </>
+        ) : null}
+      </Animated.ScrollView>
+
+      <LogVitalsModal
+        visible={vitalsModalVisible}
+        isSubmitting={isSavingVitals}
+        onClose={() => setVitalsModalVisible(false)}
+        onSubmit={handleSaveVitals}
+      />
+
+      <HomeOfflinePillBanner isOnline={isOnline} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeRoot: {
+    flex: 1,
+  },
   flex: {
     flex: 1,
   },
-  container: {
-    padding: 16,
-    gap: 16,
-  },
-  heroCard: {
-    minHeight: 150,
-    justifyContent: 'flex-end',
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  metricCard: {
-    width: '48%',
-    borderWidth: 1,
-    minHeight: 96,
-    justifyContent: 'center',
-  },
-  appointmentCard: {
-    width: 240,
-    borderWidth: 1,
-  },
-  appointmentHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  appointmentFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  sectionWrap: {
-    gap: 8,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 8,
-    alignItems: 'flex-start',
-  },
-  summaryDot: {
-    width: 8,
-    height: 8,
-    marginTop: 6,
+  contentContainer: {
+    width: '100%',
   },
 });

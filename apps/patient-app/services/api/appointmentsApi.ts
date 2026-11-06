@@ -96,3 +96,39 @@ export async function rescheduleAppointmentLive(
     return remoteAppointmentSchema.parse(data);
 }
 
+export async function cancelAppointmentLive(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    appointmentId: string,
+    reason?: string,
+): Promise<RemoteAppointment> {
+    const data = await api.post<unknown>(
+        getToken,
+        `/patients/${patientId}/appointments/${appointmentId}/cancel`,
+        { reason },
+    );
+    return remoteAppointmentSchema.parse(data);
+}
+
+export interface CheckInAppointmentResult {
+    appointmentId: string;
+    checkedInAt: string;
+    queueNumber?: string;
+    kioskPassCode?: string;
+    status: string;
+}
+
+export async function checkInAppointmentLive(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    appointmentId: string,
+): Promise<CheckInAppointmentResult> {
+    const data = await api.post<CheckInAppointmentResult>(
+        getToken,
+        `/patients/${patientId}/appointments/${appointmentId}/check-in`,
+        {},
+    );
+    return data;
+}
+
+

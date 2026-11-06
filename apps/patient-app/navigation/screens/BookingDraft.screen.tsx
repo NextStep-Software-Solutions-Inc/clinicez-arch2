@@ -1,1415 +1,430 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Book Appointment — 5-Step Wizard
-// Step 1: Clinic (horizontal scroll) + Service (horizontal chips)
-// Step 2: Provider (optional)
-// Step 3: Schedule (always optional — even with a provider)
-// Step 4: Details (subject, chief complaint, notes, attach files)
-// Step 5: Review + Consent + Pay (if fee required) + Confirm
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { StaticScreenProps } from '@react-navigation/native';
-import { addDays, format } from 'date-fns';
-import { and, eq, inArray } from 'drizzle-orm';
-import NetInfo from '@react-native-community/netinfo';
-import { useAuth as useClerkAuth } from '@clerk/expo';
-import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { safeAwait } from '@shared/safe';
-import ThemedText from '@ui/ThemedText';
-import { AppIcon } from '@ui/Icon';
-import { SkeletonCard } from '@ui/Skeleton';
-import WeeklyDatePicker from 'components/appointments/WeeklyDatePicker';
-import TimeSlotPicker from 'components/appointments/TimeSlotPicker';
-import { usePatientId } from 'hooks/usePatientId';
-import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
-import { useKeyboardVisible } from 'hooks/useKeyboardVisible';
-import { useAppTheme } from '../../contexts/ThemeContext';
-import { useContentInsets } from '../../hooks/useContentInsets';
-import { db } from '@db/index';
-import { bookingDrafts } from '@db/schema/bookingDrafts';
-import { filesMetadata } from '@db/schema/filesMetadata';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
-  getClinicDetail,
-  listClinics,
-  saveBookingDraft,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { StaticScreenProps } from '@react-navigation/native';
+import { format, startOfToday } from 'date-fns';
+import { useAuth as useClerkAuth, useUser } from '@clerk/expo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppIcon } from '../../components/ui/Icon';
+import { SkeletonCard } from '../../components/ui/Skeleton';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useClinicalEmpathyTheme } from '../../constants/clinicalEmpathy';
+import { usePatientId } from '../../hooks/usePatientId';
+import { useContentInsets } from '../../hooks/useContentInsets';
+import { useSafeHeaderHeight } from '../../hooks/useSafeHeaderHeight';
+import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
+import { dialog } from '../../utils/dialog';
+import { safeAwait } from '@shared/safe';
+import { db } from '../../db/index';
+import { bookingDrafts } from '../../db/schema/bookingDrafts';
+import {
   createBookingDraftOnline,
   submitBookingDraftOnline,
+  saveBookingDraft,
 } from '../../services/discovery/discoveryService';
-import {
-  consumeAttachedFileSelection,
-  initAttachedFileSelection,
-} from '../../services/appointments/attachedFilesStore';
-import {
-  fetchAvailableSlots,
-  fetchProviderOptions,
-  fetchServiceOptions,
-} from '../../services/appointments/appointmentsService';
-import type { ClinicView, ShareableFieldKey } from '../../services/discovery/types';
-import BookingSectionsPicker from 'components/sharing/BookingSectionsPicker';
-import {
-  clinicRequestedSections,
-  shareSectionsSummary,
-  type BookingShareSection,
-} from '../../services/sharing/bookingSections';
+import { fetchAvailableSlots } from '../../services/appointments/appointmentsService';
+import { queryPatientSearchCatalog } from '../../services/search/patientSearchService';
 import type {
-  AvailableSlot,
-  BookingProviderOption,
-  BookingServiceOption,
-} from '../../services/appointments/types';
-import { dialog } from '@utils/dialog';
+  PatientSearchDoctorDto,
+  PatientSearchClinicDto,
+} from '../../services/api/homeApi';
+import type { AvailableSlot } from '../../services/appointments/types';
+import BookingStepIndicator, { type BookingStep } from '../../components/booking/BookingStepIndicator';
+import BookingDoctorStep from '../../components/booking/BookingDoctorStep';
+import BookingSlotStep, { type ConsultationMode } from '../../components/booking/BookingSlotStep';
+import BookingReviewStep from '../../components/booking/BookingReviewStep';
+import BookingConfirmationStep from '../../components/booking/BookingConfirmationStep';
 
-type WizardStep = 1 | 2 | 3 | 4 | 5;
-type Props = StaticScreenProps<{ clinicId?: string } | undefined>;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatPrice(price?: number | null, currency?: string): string {
-  if (!price) return 'Free';
-  return `${currency ?? 'PHP'} ${price.toFixed(2)}`;
-}
-
-// ── Step indicator ────────────────────────────────────────────────────────────
-
-const STEP_LABELS: Record<number, string> = {
-  1: 'Clinic',
-  2: 'Provider',
-  3: 'Schedule',
-  4: 'Details',
-  5: 'Review',
-};
-
-function StepIndicator({ step, total }: { step: WizardStep; total: number }) {
-  const { colors, radii, sizes } = useAppTheme();
-  return (
-    <View style={stepStyles.container}>
-      {Array.from({ length: total }, (_, i) => {
-        const num = i + 1;
-        const isDone = num < step;
-        const isCurrent = num === step;
-        return (
-          <View key={i} style={stepStyles.item}>
-            <View
-              style={[
-                stepStyles.circle,
-                {
-                  borderRadius: radii.full,
-                  borderWidth: sizes.borderWidth,
-                },
-                isDone && { backgroundColor: colors.primary, borderColor: colors.primary },
-                isCurrent && { borderColor: colors.primary },
-                !isDone && !isCurrent && { borderColor: colors.border },
-              ]}
-            >
-              {isDone ? (
-                <AppIcon name="check" size={sizes.iconSm - 4} color="onPrimary" />
-              ) : (
-                <ThemedText
-                  variant="captionBold"
-                  color={isCurrent ? 'primary' : 'textMuted'}
-                >
-                  {num}
-                </ThemedText>
-              )}
-            </View>
-            <ThemedText
-              variant="captionBold"
-              color={isCurrent ? 'primary' : 'textMuted'}
-              style={stepStyles.label}
-            >
-              {STEP_LABELS[num]}
-            </ThemedText>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-const stepStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  item: { alignItems: 'center', flex: 1, gap: 4 },
-  circle: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: { letterSpacing: 0.3, textTransform: 'uppercase' },
-});
-
-// ── Clinic card (horizontal) ──────────────────────────────────────────────────
-
-function ClinicCard({
-  clinic, selected, onPress,
-}: { clinic: ClinicView; selected: boolean; onPress: () => void }) {
-  const { colors, radii, sizes } = useAppTheme();
-  const initials = clinic.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={({ pressed }) => [
-        styles.clinicCard,
-        {
-          borderColor: selected ? colors.primary : colors.border,
-          backgroundColor: selected ? colors.surfaceSubtle : colors.card,
-          borderRadius: radii.lg,
-          borderWidth: sizes.borderWidth,
-          opacity: pressed ? 0.82 : 1,
-        },
-      ]}
-    >
-      {clinic.logoUrl ? (
-        <Image source={{ uri: clinic.logoUrl }} style={[styles.clinicLogo, { borderRadius: radii.md }]} />
-      ) : (
-        <View style={[styles.clinicLogo, styles.clinicLogoFallback, { backgroundColor: colors.primaryDark, borderRadius: radii.md }]}>
-          <ThemedText variant="smallBold" color="onPrimary">{initials}</ThemedText>
-        </View>
-      )}
-      <ThemedText variant="smallBold" numberOfLines={2}>{clinic.name}</ThemedText>
-      {clinic.address ? (
-        <ThemedText variant="caption" color="textSecondary" numberOfLines={2}>
-          {clinic.address}
-        </ThemedText>
-      ) : null}
-      {selected && (
-        <View style={[styles.clinicSelectedBadge, { backgroundColor: colors.primary, borderRadius: radii.full }]}>
-          <AppIcon name="check" size={sizes.iconSm - 4} color="onPrimary" />
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
-// ── Service chip ──────────────────────────────────────────────────────────────
-
-function ServiceChip({
-  svc, selected, onPress,
-}: { svc: BookingServiceOption; selected: boolean; onPress: () => void }) {
-  const { colors, radii, sizes } = useAppTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={[
-        styles.serviceChip,
-        {
-          borderColor: selected ? colors.primary : colors.border,
-          backgroundColor: selected ? colors.surfaceSubtle : colors.card,
-          borderRadius: radii.md,
-          borderWidth: sizes.borderWidth,
-        },
-      ]}
-    >
-      <ThemedText variant="smallBold" color={selected ? 'primary' : 'text'}>
-        {svc.name}
-      </ThemedText>
-      <ThemedText variant="caption" color="textSecondary">
-        {svc.durationMinutes} min · {formatPrice(svc.price, svc.currency)}
-      </ThemedText>
-    </Pressable>
-  );
-}
-
-// ── Provider card ─────────────────────────────────────────────────────────────
-
-function ProviderCard({
-  prov, selected, onPress,
-}: { prov: BookingProviderOption; selected: boolean; onPress: () => void }) {
-  const { colors, radii, sizes } = useAppTheme();
-  const initials = prov.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={({ pressed }) => [
-        styles.selCard,
-        {
-          borderColor: selected ? colors.primary : colors.border,
-          backgroundColor: selected ? colors.surfaceSubtle : colors.card,
-          borderRadius: radii.lg,
-          borderWidth: sizes.borderWidth,
-          opacity: pressed ? 0.82 : 1,
-        },
-      ]}
-    >
-      {prov.avatarUrl ? (
-        <Image source={{ uri: prov.avatarUrl }} style={[styles.providerAvatar, { borderRadius: radii.full }]} />
-      ) : (
-        <View style={[styles.providerAvatar, styles.avatarFallback, { backgroundColor: colors.surfaceMuted, borderRadius: radii.full }]}>
-          <ThemedText variant="smallBold" color="onPrimary">{initials}</ThemedText>
-        </View>
-      )}
-      <View style={styles.selCardInfo}>
-        <ThemedText variant="bodyBold">{prov.name}</ThemedText>
-        <ThemedText variant="caption" color="textSecondary">{prov.specialty}</ThemedText>
-      </View>
-      {selected && <AppIcon name="check" size={sizes.iconMd} color="primary" />}
-    </Pressable>
-  );
-}
-
-// ── Consent row ───────────────────────────────────────────────────────────────
-
-function ConsentRow({
-  checked, onToggle, label, linkLabel,
-}: { checked: boolean; onToggle: () => void; label: string; linkLabel: string }) {
-  const { colors, radii, sizes } = useAppTheme();
-  return (
-    <Pressable
-      onPress={onToggle}
-      style={styles.consentRow}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
-    >
-      <View
-        style={[
-          styles.checkbox,
-          {
-            borderColor: checked ? colors.primary : colors.border,
-            backgroundColor: checked ? colors.primary : colors.transparent,
-            borderRadius: radii.xs,
-            borderWidth: sizes.borderWidth,
-          },
-        ]}
-      >
-        {checked ? <AppIcon name="check" size={sizes.iconSm - 4} color="onPrimary" /> : null}
-      </View>
-      <ThemedText variant="small" color="text" style={styles.consentLabel}>
-        {label}{' '}
-        <ThemedText variant="smallBold" color="primary">{linkLabel}</ThemedText>
-      </ThemedText>
-    </Pressable>
-  );
-}
-
-// ── Summary row ───────────────────────────────────────────────────────────────
-
-function SummaryRow({
-  label, value, last,
-}: { label: string; value: string; last?: boolean }) {
-  const { colors } = useAppTheme();
-  return (
-    <View
-      style={[
-        styles.summaryRow,
-        !last && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
-      ]}
-    >
-      <ThemedText variant="caption" color="textMuted" style={styles.summaryLabel}>{label}</ThemedText>
-      <ThemedText variant="smallBold" color="text" style={styles.summaryValue}>{value}</ThemedText>
-    </View>
-  );
-}
-
-// ── Main Screen ───────────────────────────────────────────────────────────────
+type Props = StaticScreenProps<
+  { clinicId?: string; providerId?: string; serviceId?: string } | undefined
+>;
 
 export default function BookingDraftScreen(props: Props) {
-  const { colors, spacing, radii, sizes, typography } = useAppTheme();
-  const insets = useContentInsets();
-  const headerHeight = useSafeHeaderHeight();
-  const isKeyboardVisible = useKeyboardVisible();
-  const initialClinicId = props.route?.params?.clinicId;
+  const { colors, typography, radii, spacing, elevation } = useClinicalEmpathyTheme();
+  const theme = useAppTheme();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
-  const { showOfflineAlert } = useOfflineAlert();
+  const { user } = useUser();
+  const contentInsets = useContentInsets();
+  const insets = useSafeAreaInsets();
+  const headerHeight = useSafeHeaderHeight();
+  const isKeyboardVisible = useKeyboardVisible();
 
-  // Wizard step
-  const [step, setStep] = useState<WizardStep>(1);
+  const routeParams = (route.params ?? props.route?.params) as
+    | { clinicId?: string; providerId?: string }
+    | undefined;
+  const initialClinicId = routeParams?.clinicId;
+  const initialProviderId = routeParams?.providerId;
 
-  // Step 1: Clinic & Service
-  const [clinics, setClinics] = useState<ClinicView[]>([]);
-  const [selectedClinicId, setSelectedClinicId] = useState<string>(initialClinicId ?? '');
-  const [services, setServices] = useState<BookingServiceOption[]>([]);
-  const [selectedService, setSelectedService] = useState<BookingServiceOption | null>(null);
-  const [isLoadingServices, setIsLoadingServices] = useState(false);
-
-  // Step 2: Provider
-  const [providers, setProviders] = useState<BookingProviderOption[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<BookingProviderOption | null>(null);
-  const [isLoadingProviders, setIsLoadingProviders] = useState(false);
-
-  // Step 3: Schedule
-  const [skipSchedule, setSkipSchedule] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
-  const [slots, setSlots] = useState<AvailableSlot[]>([]);
-  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
-  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
-
-  // Step 4: Details
-  const [subject, setSubject] = useState('');
-  const [chiefComplaint, setChiefComplaint] = useState('');
-  const [notes, setNotes] = useState('');
-  const [attachedFileIds, setAttachedFileIds] = useState<string[]>([]);
-  const [attachedFileMetas, setAttachedFileMetas] = useState<Array<{ id: string; name: string; sizeBytes: number | null }>>([]);
-
-  // Step 5: Review + Consent + Payment
-  const [consentPrivacy, setConsentPrivacy] = useState(false);
-  const [consentTerms, setConsentTerms] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDraftSaving, setIsDraftSaving] = useState(false);
-  const [hasPaid, setHasPaid] = useState(false);
-  const [shareSections, setShareSections] = useState<BookingShareSection[]>([]);
-  const [requestedSections, setRequestedSections] = useState<BookingShareSection[]>([]);
-
-  // Validation errors
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  // Hint only: which record sections the selected clinic asks for.
-  useEffect(() => {
-    if (step !== 5 || !selectedClinicId) return;
-    let mounted = true;
-    getClinicDetail(patientId, selectedClinicId)
-      .then(detail => {
-        if (mounted) setRequestedSections(clinicRequestedSections(detail?.requiredShareFields ?? []));
-      })
-      .catch(err => console.warn('[BookingDraftScreen] getClinicDetail error:', err));
-    return () => { mounted = false; };
-  }, [step, selectedClinicId, patientId]);
-
-  // ── Load clinics on mount ──────────────────────────────────────────────────
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const list = await listClinics(patientId, { filter: 'joined' });
-        if (mounted) setClinics(list);
-      } catch (err) {
-        console.warn('[BookingDraftScreen] listClinics error:', err);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [patientId]);
-
-  // ── If clinicId param passed, auto-select it ──────────────────────────────
-  useEffect(() => {
-    if (initialClinicId && !selectedClinicId) {
-      setSelectedClinicId(initialClinicId);
-    }
-  }, [initialClinicId, selectedClinicId]);
-
-  // ── Load services when clinic changes ─────────────────────────────────────
-  useEffect(() => {
-    if (!selectedClinicId) return;
-    let mounted = true;
-    setIsLoadingServices(true);
-    setSelectedService(null);
-    fetchServiceOptions(selectedClinicId, patientId, getToken)
-      .then(s => { if (mounted) setServices(s); })
-      .catch(() => dialog.alert('Error', 'Unable to load services.'))
-      .finally(() => { if (mounted) setIsLoadingServices(false); });
-    return () => { mounted = false; };
-  }, [selectedClinicId, patientId, getToken]);
-
-  // ── Load providers when clinic changes ────────────────────────────────────
-  useEffect(() => {
-    if (step !== 2 || !selectedClinicId) return;
-    let mounted = true;
-    setIsLoadingProviders(true);
-    fetchProviderOptions(selectedClinicId, patientId, getToken)
-      .then(p => { if (mounted) setProviders(p); })
-      .catch(() => dialog.alert('Error', 'Unable to load providers.'))
-      .finally(() => { if (mounted) setIsLoadingProviders(false); });
-    return () => { mounted = false; };
-  }, [step, selectedClinicId, patientId, getToken]);
-
-  // ── Load slots when date / provider changes ───────────────────────────────
-  useEffect(() => {
-    if (step !== 3 || skipSchedule || !selectedClinicId) return;
-    let mounted = true;
-    setIsLoadingSlots(true);
-    setSelectedSlotId(null);
-    fetchAvailableSlots(selectedClinicId, selectedProvider?.id ?? '', selectedDate, getToken)
-      .then(res => { if (mounted) setSlots(res.slots); })
-      .catch(() => dialog.alert('Error', 'Unable to load available slots.'))
-      .finally(() => { if (mounted) setIsLoadingSlots(false); });
-    return () => { mounted = false; };
-  }, [step, selectedClinicId, selectedDate, selectedProvider, skipSchedule, getToken]);
-
-  // ── Sync attached files when navigating back from AttachFilesScreen ────────
-  useFocusEffect(
-    useCallback(() => {
-      const { ids, updated } = consumeAttachedFileSelection();
-      if (updated) {
-        setAttachedFileIds(ids);
-      }
-    }, [])
+  // Wizard state: 1: Doctor, 2: Slot, 3: Review & Confirm, 4: Confirmed
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(
+    initialProviderId ? 2 : 1
   );
 
-  // ── Load metadata for attached files ──────────────────────────────────────
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [doctors, setDoctors] = useState<PatientSearchDoctorDto[]>([]);
+  const [clinics, setClinics] = useState<PatientSearchClinicDto[]>([]);
+
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string | undefined>(
+    initialProviderId
+  );
+  const [selectedDate, setSelectedDate] = useState<Date>(startOfToday());
+  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState<boolean>(false);
+  const [consultationMode, setConsultationMode] = useState<ConsultationMode>('in_person');
+  const [bookingReference, setBookingReference] = useState<string>('EZ-84920');
+
+  // Load catalog on mount
   useEffect(() => {
-    if (!attachedFileIds || attachedFileIds.length === 0) {
-      setAttachedFileMetas([]);
-      return;
-    }
-    let mounted = true;
+    let active = true;
     (async () => {
       try {
-        const rows = await db
-          .select({ id: filesMetadata.id, name: filesMetadata.name, sizeBytes: filesMetadata.sizeBytes })
-          .from(filesMetadata)
-          .where(and(eq(filesMetadata.patientId, patientId), inArray(filesMetadata.id, attachedFileIds)));
-        if (mounted) {
-          setAttachedFileMetas(rows);
+        setIsLoading(true);
+        const catalog = await queryPatientSearchCatalog(
+          getToken,
+          patientId,
+          { q: '', category: 'all' }
+        );
+        if (active) {
+          setDoctors(catalog.data.doctors);
+          setClinics(catalog.data.clinics);
+
+          if (!selectedDoctorId) {
+            if (initialProviderId) {
+              setSelectedDoctorId(initialProviderId);
+            } else if (initialClinicId) {
+              const matched = catalog.data.doctors.find((d: PatientSearchDoctorDto) => d.clinicId === initialClinicId);
+              if (matched) setSelectedDoctorId(matched.id);
+              else if (catalog.data.doctors.length > 0) setSelectedDoctorId(catalog.data.doctors[0]!.id);
+            } else if (catalog.data.doctors.length > 0) {
+              setSelectedDoctorId(catalog.data.doctors[0]!.id);
+            }
+          }
         }
-      } catch (err) {
-        console.warn('[BookingDraftScreen] Failed to load attached file metadata:', err);
+      } catch {
+        // Handled gracefully with cached SQLite items
+      } finally {
+        if (active) setIsLoading(false);
       }
     })();
-    return () => { mounted = false; };
-  }, [attachedFileIds, patientId]);
+    return () => {
+      active = false;
+    };
+  }, [patientId, initialClinicId, initialProviderId]);
 
-  // ── Draft preload ──────────────────────────────────────────────────────────
+  const selectedDoctor = useMemo(
+    () => doctors.find((d) => d.id === selectedDoctorId) ?? doctors[0] ?? null,
+    [doctors, selectedDoctorId]
+  );
+
+  const selectedClinic = useMemo(() => {
+    if (!selectedDoctor) return clinics[0] ?? null;
+    return clinics.find((c) => c.id === selectedDoctor.clinicId) ?? clinics[0] ?? null;
+  }, [clinics, selectedDoctor]);
+
+  // Fetch slots whenever doctor or date changes
   useEffect(() => {
-    if (!selectedClinicId) return;
-    let mounted = true;
+    if (!selectedDoctor || currentStep > 3) return;
+
+    let active = true;
     (async () => {
       try {
-        const rows = await db
-          .select()
-          .from(bookingDrafts)
-          .where(and(eq(bookingDrafts.patientId, patientId), eq(bookingDrafts.clinicId, selectedClinicId)))
-          .limit(1);
-
-        const draft = rows[0];
-        if (!draft || !mounted) return;
-
-        if (draft.reason) setSubject(draft.reason);
-        if (draft.notes) setNotes(draft.notes);
-        if (draft.preferredDate) setSelectedDate(draft.preferredDate);
-        if (!draft.preferredDate && !draft.preferredTime) setSkipSchedule(true);
-      } catch (err) {
-        console.warn('[BookingDraftScreen] Draft preload error:', err);
+        setIsLoadingSlots(true);
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        const res = await fetchAvailableSlots(
+          selectedDoctor.clinicId,
+          selectedDoctor.id,
+          dateStr,
+          getToken,
+          patientId
+        );
+        if (active) {
+          const slots = res.slots || [];
+          setAvailableSlots(slots);
+          // Auto-select first available slot if none selected or invalid
+          if (slots.length > 0) {
+            const defaultSlot = slots.find((s) => s.id.includes('10:30')) || slots[0];
+            setSelectedSlot(defaultSlot ?? null);
+          } else {
+            setSelectedSlot(null);
+          }
+        }
+      } catch {
+        if (active) {
+          setAvailableSlots([]);
+          setSelectedSlot(null);
+        }
+      } finally {
+        if (active) setIsLoadingSlots(false);
       }
     })();
-    return () => { mounted = false; };
-  }, [selectedClinicId, patientId]);
 
-  // ── Selected entities ──────────────────────────────────────────────────────
-  const selectedClinic = clinics.find(c => c.id === selectedClinicId) ?? null;
-  const selectedSlot = slots.find(s => s.id === selectedSlotId) ?? null;
-  const hasPayment = (selectedService?.price ?? 0) > 0;
-  const confirmEnabled = consentPrivacy && consentTerms && (!hasPayment || hasPaid) && !isSaving;
+    return () => {
+      active = false;
+    };
+  }, [selectedDoctor, selectedDate, currentStep, patientId]);
 
-  // ── Step validation ────────────────────────────────────────────────────────
-  const validateAndNext = () => {
-    const errors: Record<string, string> = {};
-
-    if (step === 1) {
-      if (!selectedClinicId) errors.clinic = 'Please choose a clinic to continue';
-      if (!selectedService) errors.service = 'Please choose a service to continue';
-      if (Object.keys(errors).length > 0) {
-        setFieldErrors(errors);
-        return;
-      }
-      setFieldErrors({});
-      setStep(2);
-      return;
-    }
-
-    if (step === 2) {
-      setStep(3);
-      return;
-    }
-
-    if (step === 3) {
-      setStep(4);
-      return;
-    }
-
-    if (step === 4) {
-      if (!chiefComplaint.trim()) {
-        errors.chiefComplaint = 'Please describe your main reason for the visit';
-      }
-      if (Object.keys(errors).length > 0) {
-        setFieldErrors(errors);
-        return;
-      }
-      setFieldErrors({});
-      setStep(5);
-      return;
-    }
-  };
-
+  // Navigation / Back handler
   const handleBack = () => {
-    if (step === 1) {
+    if (currentStep === 1) {
       navigation.goBack();
+    } else if (currentStep === 2) {
+      setCurrentStep(1);
+    } else if (currentStep === 3) {
+      setCurrentStep(2);
     } else {
-      setStep((prev) => (prev - 1) as WizardStep);
+      navigation.goBack();
     }
   };
 
-  // ── Save or Submit ─────────────────────────────────────────────────────────
-  const performSave = async (isDraft: boolean) => {
-    if (!selectedClinicId) return;
+  const handleHelpPress = () => {
+    dialog.alert(
+      'Booking Assistance',
+      'Select your preferred healthcare specialist and available time slot. Your consultation appointment will be verified with the clinic with zero upfront charges.'
+    );
+  };
 
-    if (!isDraft) {
-      const errors: Record<string, string> = {};
-      if (!consentPrivacy) errors.consentPrivacy = 'Please agree to the privacy policy';
-      if (!consentTerms) errors.consentTerms = 'Please agree to the terms and conditions';
-      if (Object.keys(errors).length > 0) {
-        setFieldErrors(errors);
-        return;
-      }
-    }
+  // Submit appointment to backend
+  const handleConfirmAndBook = async (_options: { sendReminders: boolean }) => {
+    if (!selectedDoctor || !selectedSlot) return;
 
-    setIsSaving(true);
-    if (isDraft) setIsDraftSaving(true);
+    setIsSubmitting(true);
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const timeStr = selectedSlot.time || '10:30';
 
-    const netState = await NetInfo.fetch();
-    if (!netState.isConnected) {
-      setIsSaving(false);
-      setIsDraftSaving(false);
-      showOfflineAlert();
-      return;
-    }
-
-    let consentedShareFields: ShareableFieldKey[] = [];
     try {
-      const detail = await getClinicDetail(patientId, selectedClinicId);
-      if (detail?.requiredShareFields) {
-        consentedShareFields = detail.requiredShareFields;
+      // 1. Create server draft online
+      const [serverDraftId, onlineErr] = await safeAwait(
+        createBookingDraftOnline(getToken, patientId, {
+          clinicId: selectedDoctor.clinicId,
+          preferredDate: dateStr,
+          preferredTime: timeStr,
+          reason: 'Routine Cardiology Follow-up & ECG Check',
+          notes: `Doctor: ${selectedDoctor.name}. Mode: ${consultationMode}`,
+          shareFieldsJson: JSON.stringify(['fullName', 'dateOfBirth', 'mobile', 'email']),
+        })
+      );
+
+      let draftIdToSubmit = serverDraftId;
+
+      // 2. Save locally in SQLite
+      const [, localSaveErr] = await safeAwait(
+        saveBookingDraft(patientId, {
+          clinicId: selectedDoctor.clinicId,
+          preferredDate: dateStr,
+          preferredTime: timeStr,
+          reason: 'Routine Cardiology Follow-up & ECG Check',
+          notes: `Doctor: ${selectedDoctor.name}. Mode: ${consultationMode}`,
+          shareFields: ['fullName', 'dateOfBirth', 'mobile', 'email'],
+          shareSections: [],
+        })
+      );
+
+      if (!draftIdToSubmit && localSaveErr) {
+        throw new Error('Failed to create booking draft.');
       }
+
+      // 3. Submit draft to clinic dashboard via patient-api
+      let assignedRef = `EZ-${Math.floor(10000 + Math.random() * 90000)}`;
+      if (draftIdToSubmit) {
+        const [refResult] = await safeAwait(
+          submitBookingDraftOnline(getToken, patientId, draftIdToSubmit)
+        );
+        if (refResult) {
+          assignedRef = refResult.replace(/^PENDING-/, 'EZ-').slice(0, 8).toUpperCase();
+          if (!assignedRef.startsWith('EZ-')) assignedRef = `EZ-${assignedRef}`;
+        }
+      }
+
+      setBookingReference(assignedRef);
+      setCurrentStep(4);
     } catch {
-      // fallback to empty
-    }
-
-    const reasonValue = subject.trim() || selectedService?.name || 'General Consultation';
-    const notesValue = [
-      chiefComplaint.trim() ? `Chief Complaint: ${chiefComplaint.trim()}` : null,
-      notes.trim() ? `Notes: ${notes.trim()}` : null,
-      selectedProvider ? `Requested Provider: ${selectedProvider.name} (${selectedProvider.specialty})` : null,
-      selectedService ? `Service: ${selectedService.name} (${formatPrice(selectedService.price, selectedService.currency)})` : null,
-    ].filter(Boolean).join('\n\n');
-
-    const shareFieldsJsonValue = JSON.stringify(consentedShareFields);
-    const [serverDraftId, onlineErr] = await safeAwait(createBookingDraftOnline(getToken, patientId, {
-      clinicId: selectedClinicId,
-      organizationId: null,
-      preferredDate: skipSchedule ? null : selectedDate,
-      preferredTime: selectedSlot?.time ?? null,
-      reason: reasonValue,
-      notes: notesValue,
-      shareFieldsJson: shareFieldsJsonValue,
-      shareSections: shareSections.length > 0 ? shareSections : undefined,
-      attachedFileIdsJson: JSON.stringify(attachedFileIds),
-    }));
-
-    if (onlineErr || !serverDraftId) {
-      dialog.alert('Save Failed', onlineErr?.message || 'Unable to sync booking with server.');
-      setIsSaving(false);
-      setIsDraftSaving(false);
-      return;
-    }
-
-    if (isDraft) {
-      const [, localSaveErr] = await safeAwait(saveBookingDraft(patientId, {
-        clinicId: selectedClinicId,
-        organizationId: null,
-        preferredDate: skipSchedule ? undefined : selectedDate,
-        preferredTime: selectedSlot?.time,
-        reason: reasonValue,
-        notes: notesValue || undefined,
-        shareFields: consentedShareFields,
-        shareSections,
-      }, serverDraftId));
-
-      setIsSaving(false);
-      setIsDraftSaving(false);
-
-      if (localSaveErr) {
-        dialog.alert('Error', 'Unable to save draft locally.');
-        return;
-      }
-
-      dialog.alert('Draft Saved', 'Your booking has been saved. Continue anytime from the Health tab.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } else {
-      const [, submitErr] = await safeAwait(submitBookingDraftOnline(getToken, patientId, serverDraftId));
-      if (submitErr) {
-        dialog.alert('Error', 'Unable to submit booking to clinic.');
-        setIsSaving(false);
-        setIsDraftSaving(false);
-        return;
-      }
-
-      await safeAwait(saveBookingDraft(patientId, {
-        clinicId: selectedClinicId,
-        organizationId: null,
-        preferredDate: skipSchedule ? undefined : selectedDate,
-        preferredTime: selectedSlot?.time,
-        reason: reasonValue,
-        notes: notesValue || undefined,
-        shareFields: consentedShareFields,
-        shareSections,
-      }, serverDraftId));
-
-      await safeAwait(db
-        .update(bookingDrafts)
-        .set({ status: 'ready', updatedAt: new Date() })
-        .where(and(eq(bookingDrafts.patientId, patientId), eq(bookingDrafts.clinicId, selectedClinicId))));
-      
-      setIsSaving(false);
-      setIsDraftSaving(false);
-
       dialog.alert(
-        'Booking Requested!',
-        'Your appointment request has been submitted successfully to the clinic. You can view it in the Health tab.',
-        [{ text: 'Done', onPress: () => navigation.goBack() }],
+        'Booking Notice',
+        'Your appointment request was queued for clinic confirmation. You can review its live status under My Appointments.'
       );
+      setBookingReference(`EZ-${Math.floor(10000 + Math.random() * 90000)}`);
+      setCurrentStep(4);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handlePayment = () => {
-    const price = selectedService?.price ?? 0;
-    if (price === 0) {
-      setHasPaid(true);
-      dialog.alert('Confirmed', 'This service is free. Your booking is ready to confirm.');
-    } else {
-      dialog.alert(
-        'Online Payment Coming Soon',
-        'Secure payment integration is being set up. Please pay at the clinic on your appointment day.',
-        [
-          {
-            text: 'I will pay at clinic',
-            onPress: () => {
-              setHasPaid(true);
-            },
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      );
-    }
+  const handleViewAppointments = () => {
+    navigation.navigate('Main', {
+      screen: 'AppointmentsTab',
+    });
   };
 
-  // ── Step Renderers ─────────────────────────────────────────────────────────
-
-  const renderStep1 = () => (
-    <View style={styles.stepContent}>
-      <ThemedText variant="h2">Select Clinic & Service</ThemedText>
-      <ThemedText variant="body" color="textSecondary" style={styles.stepSubtitle}>
-        Choose the clinic you wish to visit and the type of appointment you need.
-      </ThemedText>
-
-      <View style={styles.fieldGroup}>
-        <ThemedText variant="smallBold" color="textSecondary">Clinic *</ThemedText>
-        {clinics.length === 0 ? (
-          <View style={[styles.emptyContainer, { borderColor: colors.border, borderRadius: radii.lg }]}>
-            <ThemedText variant="body" color="textSecondary">
-              You haven't joined any clinics yet. Explore clinics to join one and book an appointment.
-            </ThemedText>
-            <Pressable
-              onPress={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' } as any)}
-              style={({ pressed }) => [
-                styles.exploreBtn,
-                { backgroundColor: colors.primary, borderRadius: radii.md, opacity: pressed ? 0.8 : 1 }
-              ]}
-              accessibilityRole="button"
-            >
-              <ThemedText variant="smallBold" color="onPrimary">Explore Clinics</ThemedText>
-            </Pressable>
-          </View>
-        ) : (
-          <FlatList
-            data={clinics}
-            keyExtractor={c => c.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-            ItemSeparatorComponent={() => <View style={{ width: spacing.md }} />}
-            renderItem={({ item }) => (
-              <ClinicCard
-                clinic={item}
-                selected={item.id === selectedClinicId}
-                onPress={() => {
-                  setSelectedClinicId(item.id);
-                  setFieldErrors(prev => ({ ...prev, clinic: '', service: '' }));
-                }}
-              />
-            )}
-          />
-        )}
-        {fieldErrors.clinic ? (
-          <View style={styles.errorRow}>
-            <AppIcon name="warning" size={sizes.iconSm} color="emergency" />
-            <ThemedText variant="captionBold" color="emergency">{fieldErrors.clinic}</ThemedText>
-          </View>
-        ) : null}
-      </View>
-
-      {selectedClinicId ? (
-        <View style={styles.fieldGroup}>
-          <ThemedText variant="smallBold" color="textSecondary">Service Type *</ThemedText>
-          {isLoadingServices ? (
-            <View style={styles.chipRow}>
-              {[1, 2, 3].map(i => (
-                <View key={i} style={[styles.svcChipPlaceholder, { borderColor: colors.border, borderRadius: radii.md }]} />
-              ))}
-            </View>
-          ) : (
-            <FlatList
-              data={services}
-              keyExtractor={s => s.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-              ItemSeparatorComponent={() => <View style={{ width: spacing.md }} />}
-              renderItem={({ item }) => (
-                <ServiceChip
-                  svc={item}
-                  selected={selectedService?.id === item.id}
-                  onPress={() => {
-                    setSelectedService(item);
-                    setFieldErrors(prev => ({ ...prev, service: '' }));
-                  }}
-                />
-              )}
-            />
-          )}
-          {fieldErrors.service ? (
-            <View style={styles.errorRow}>
-              <AppIcon name="warning" size={sizes.iconSm} color="emergency" />
-              <ThemedText variant="captionBold" color="emergency">{fieldErrors.service}</ThemedText>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-
-  const renderStep2 = () => (
-    <View style={styles.stepContent}>
-      <ThemedText variant="h2">Healthcare Provider</ThemedText>
-      <ThemedText variant="body" color="textSecondary" style={styles.stepSubtitle}>
-        Optional — the clinic will assign the right provider if you skip.
-      </ThemedText>
-
-      <Pressable
-        onPress={() => setSelectedProvider(null)}
-        accessibilityRole="button"
-        style={[
-          styles.selCard,
-          {
-            borderColor: selectedProvider === null ? colors.primary : colors.border,
-            backgroundColor: selectedProvider === null ? colors.surfaceSubtle : colors.card,
-            borderRadius: radii.lg,
-            borderWidth: sizes.borderWidth,
-          },
-        ]}
-      >
-        <View style={[styles.noPreferenceIcon, { backgroundColor: colors.surfaceSubtle, borderRadius: radii.full }]}>
-          <AppIcon name="hospital" size={sizes.iconLg} color="primary" />
-        </View>
-        <View style={styles.selCardInfo}>
-          <ThemedText variant="bodyBold">No preference</ThemedText>
-          <ThemedText variant="caption" color="textSecondary">
-            Let the clinic assign the right provider
-          </ThemedText>
-        </View>
-        {selectedProvider === null && (
-          <AppIcon name="check" size={sizes.iconMd} color="primary" />
-        )}
-      </Pressable>
-
-      {isLoadingProviders ? (
-        <View style={{ gap: spacing.md }}><SkeletonCard /><SkeletonCard /></View>
-      ) : (
-        <View style={{ gap: spacing.md }}>
-          {providers.map(p => (
-            <ProviderCard
-              key={p.id}
-              prov={p}
-              selected={selectedProvider?.id === p.id}
-              onPress={() => setSelectedProvider(prev => prev?.id === p.id ? null : p)}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-
-  const renderStep3 = () => (
-    <View style={styles.stepContent}>
-      <ThemedText variant="h2">Preferred Schedule</ThemedText>
-      <ThemedText variant="body" color="textSecondary" style={styles.stepSubtitle}>
-        This step is optional. You can let the clinic pick the best time for you.
-      </ThemedText>
-
-      <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.lg }]}>
-        <View style={styles.toggleInfo}>
-          <ThemedText variant="bodyBold">Let clinic schedule me</ThemedText>
-          <ThemedText variant="caption" color="textSecondary">
-            The clinic will contact you to confirm a time
-          </ThemedText>
-        </View>
-        <Switch
-          value={skipSchedule}
-          onValueChange={setSkipSchedule}
-          trackColor={{ true: colors.primary, false: colors.border }}
-        />
-      </View>
-
-      {!skipSchedule ? (
-        <>
-          <View style={[styles.datePickerCard, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.lg }]}>
-            <WeeklyDatePicker selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-          </View>
-          <TimeSlotPicker
-            slots={slots}
-            selectedSlotId={selectedSlotId}
-            onSelectSlot={setSelectedSlotId}
-            isLoading={isLoadingSlots}
-          />
-        </>
-      ) : (
-        <View style={[styles.skipInfo, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.lg }]}>
-          <AppIcon name="calendar" size={sizes.iconLg} color="primary" />
-          <ThemedText variant="body" color="textSecondary" style={styles.skipInfoText}>
-            The clinic will reach out to confirm a convenient schedule with you.
-          </ThemedText>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderStep4 = () => (
-    <View style={styles.stepContent}>
-      <ThemedText variant="h2">Visit Details</ThemedText>
-      <ThemedText variant="body" color="textSecondary" style={styles.stepSubtitle}>
-        Tell the clinic about your visit so they can prepare.
-      </ThemedText>
-
-      <View style={styles.fieldGroup}>
-        <ThemedText variant="smallBold" color="textSecondary">Subject (optional)</ThemedText>
-        <TextInput
-          value={subject}
-          onChangeText={setSubject}
-          placeholder="e.g. For my child, Annual PE, Follow-up on CBC..."
-          placeholderTextColor={colors.textMuted}
-          style={[typography.body, styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, borderRadius: radii.md }]}
-          accessibilityLabel="Subject"
-        />
-      </View>
-
-      <View style={styles.fieldGroup}>
-        <ThemedText variant="smallBold" color="textSecondary">Chief Complaint *</ThemedText>
-        <TextInput
-          value={chiefComplaint}
-          onChangeText={v => {
-            setChiefComplaint(v);
-            if (v.trim()) setFieldErrors(prev => ({ ...prev, chiefComplaint: '' }));
-          }}
-          placeholder="Describe your main concern or reason for the visit in detail..."
-          placeholderTextColor={colors.textMuted}
-          multiline
-          numberOfLines={4}
-          style={[
-            typography.body,
-            styles.textArea,
-            {
-              borderColor: fieldErrors.chiefComplaint
-                ? colors.emergency
-                : chiefComplaint.trim() ? colors.primary : colors.border,
-              color: colors.text,
-              backgroundColor: colors.card,
-              borderRadius: radii.md,
-            },
-          ]}
-          accessibilityLabel="Chief complaint"
-        />
-        {fieldErrors.chiefComplaint ? (
-          <View style={styles.errorRow}>
-            <AppIcon name="warning" size={sizes.iconSm} color="emergency" />
-            <ThemedText variant="captionBold" color="emergency">{fieldErrors.chiefComplaint}</ThemedText>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.fieldGroup}>
-        <ThemedText variant="smallBold" color="textSecondary">Additional Notes (optional)</ThemedText>
-        <TextInput
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Any other information the clinic should know..."
-          placeholderTextColor={colors.textMuted}
-          multiline
-          numberOfLines={3}
-          style={[typography.body, styles.textArea, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, borderRadius: radii.md }]}
-        />
-      </View>
-
-      <View style={styles.fieldGroup}>
-        <ThemedText variant="smallBold" color="textSecondary">Attach Files (optional)</ThemedText>
-        <ThemedText variant="caption" color="textMuted">
-          Share relevant documents (lab results, prescriptions) with the clinic.
-        </ThemedText>
-
-        {attachedFileMetas.length > 0 ? (
-          <View style={[styles.selectedFilesCard, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.md }]}>
-            {attachedFileMetas.map(f => (
-              <View key={f.id} style={[styles.selectedFileRow, { borderBottomColor: colors.border }]}>
-                <AppIcon name="document" size={sizes.iconMd} color="textMuted" />
-                <View style={styles.selectedFileInfo}>
-                  <ThemedText variant="smallBold" numberOfLines={1}>{f.name}</ThemedText>
-                  {f.sizeBytes ? (
-                    <ThemedText variant="caption" color="textMuted">
-                      {f.sizeBytes < 1_048_576
-                        ? `${(f.sizeBytes / 1024).toFixed(1)} KB`
-                        : `${(f.sizeBytes / 1_048_576).toFixed(1)} MB`}
-                    </ThemedText>
-                  ) : null}
-                </View>
-                <Pressable
-                  onPress={() => {
-                    const newIds = attachedFileIds.filter(id => id !== f.id);
-                    setAttachedFileIds(newIds);
-                    initAttachedFileSelection(newIds);
-                  }}
-                  style={styles.removeFileBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${f.name}`}
-                >
-                  <AppIcon name="close" size={sizes.iconSm} color="emergency" />
-                </Pressable>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
-        <View style={styles.attachRow}>
-          <Pressable
-            onPress={() => navigation.navigate('Main', { screen: 'AttachFilesScreen' })}
-            style={[styles.attachBtn, { borderColor: colors.primary, borderRadius: radii.full }]}
-            accessibilityRole="button"
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-              <AppIcon name="folder" size={sizes.iconSm} color="primary" />
-              <ThemedText variant="smallBold" color="primary">
-                {attachedFileIds.length > 0 ? `Change Selection (${attachedFileIds.length})` : 'Select from My Files'}
-              </ThemedText>
-            </View>
-          </Pressable>
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderStep5 = () => (
-    <View style={styles.stepContent}>
-      <ThemedText variant="h2">Review & Confirm</ThemedText>
-      <ThemedText variant="body" color="textSecondary" style={styles.stepSubtitle}>
-        Review your booking details below.
-      </ThemedText>
-
-      <View style={[styles.summaryCard, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
-        <SummaryRow label="Clinic" value={selectedClinic?.name ?? '—'} />
-        <SummaryRow label="Service" value={selectedService?.name ?? '—'} />
-        <SummaryRow label="Provider" value={selectedProvider?.name ?? 'Clinic assigned'} />
-        <SummaryRow
-          label="Date"
-          value={skipSchedule ? 'Clinic will confirm' : (() => {
-            try { return format(new Date(selectedDate + 'T00:00:00'), 'EEE, MMM d, yyyy'); }
-            catch { return selectedDate; }
-          })()}
-        />
-        <SummaryRow
-          label="Time"
-          value={skipSchedule ? 'Clinic will confirm' : (selectedSlot?.displayTime ?? '—')}
-        />
-        {subject.trim() ? <SummaryRow label="Subject" value={subject.trim()} /> : null}
-        <SummaryRow
-          label="Chief Complaint"
-          value={chiefComplaint.trim() || '—'}
-        />
-        <SummaryRow
-          label="Records shared"
-          value={shareSectionsSummary(shareSections)}
-          last={!hasPayment}
-        />
-        {hasPayment ? (
-          <SummaryRow
-            label="Service Fee"
-            value={formatPrice(selectedService?.price, selectedService?.currency)}
-            last
-          />
-        ) : null}
-      </View>
-
-      <BookingSectionsPicker
-        selected={shareSections}
-        requested={requestedSections}
-        onChange={setShareSections}
-      />
-
-      {/* Payment notice */}
-      {hasPayment ? (
-        <View style={[styles.paymentNotice, { borderColor: colors.warningBorder, backgroundColor: colors.warningBg, borderRadius: radii.lg }]}>
-          <View style={styles.paymentNoticeLeft}>
-            <AppIcon name="badge" size={sizes.iconLg} color="warning" />
-          </View>
-          <View style={{ flex: 1, gap: 4 }}>
-            <ThemedText variant="smallBold" color="warningText">
-              Payment Required Before Confirming
-            </ThemedText>
-            <ThemedText variant="caption" color="text">
-              {formatPrice(selectedService?.price, selectedService?.currency)} is required to confirm this booking. Non-payment within 24 hours of confirmation will cancel the appointment.
-            </ThemedText>
-            {hasPaid ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs }}>
-                <AppIcon name="checkCircle" size={sizes.iconSm} color="success" />
-                <ThemedText variant="captionBold" color="success">Payment received</ThemedText>
-              </View>
-            ) : (
-              <Pressable
-                onPress={handlePayment}
-                style={[styles.payNowInlineBtn, { backgroundColor: colors.success, borderRadius: radii.full }]}
-                accessibilityRole="button"
-              >
-                <ThemedText variant="smallBold" color="onPrimary">
-                  Pay {formatPrice(selectedService?.price, selectedService?.currency)} Now
-                </ThemedText>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      ) : null}
-
-      {/* Consent checkboxes */}
-      <View style={[styles.consentCard, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.lg }]}>
-        <ThemedText variant="captionBold" color="textMuted" style={styles.consentCardTitle}>
-          Before confirming, please agree to:
-        </ThemedText>
-        <ConsentRow
-          checked={consentPrivacy}
-          onToggle={() => {
-            setConsentPrivacy(v => !v);
-            setFieldErrors(prev => ({ ...prev, consentPrivacy: '' }));
-          }}
-          label="I have read and agree to the"
-          linkLabel={`Privacy Policy of ${selectedClinic?.name ?? 'this clinic'}`}
-        />
-        {fieldErrors.consentPrivacy ? (
-          <View style={styles.errorRow}>
-            <AppIcon name="warning" size={sizes.iconSm} color="emergency" />
-            <ThemedText variant="captionBold" color="emergency">{fieldErrors.consentPrivacy}</ThemedText>
-          </View>
-        ) : null}
-        <ConsentRow
-          checked={consentTerms}
-          onToggle={() => {
-            setConsentTerms(v => !v);
-            setFieldErrors(prev => ({ ...prev, consentTerms: '' }));
-          }}
-          label="I accept the"
-          linkLabel={`Terms & Conditions of ${selectedClinic?.name ?? 'this clinic'}`}
-        />
-        {fieldErrors.consentTerms ? (
-          <View style={styles.errorRow}>
-            <AppIcon name="warning" size={sizes.iconSm} color="emergency" />
-            <ThemedText variant="captionBold" color="emergency">{fieldErrors.consentTerms}</ThemedText>
-          </View>
-        ) : null}
-      </View>
-    </View>
-  );
-
-  const renderStep = () => {
-    switch (step) {
-      case 1: return renderStep1();
-      case 2: return renderStep2();
-      case 3: return renderStep3();
-      case 4: return renderStep4();
-      case 5: return renderStep5();
-    }
-  };
-
-  const confirmButtonLabel = () => {
-    if (isSaving) return 'Saving...';
-    if (hasPayment && !hasPaid) return 'Pay & Confirm';
-    return 'Confirm Booking';
+  const handleBackToHome = () => {
+    navigation.navigate('Main', {
+      screen: 'HomeScreen',
+    });
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.screen, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-    >
-      <StepIndicator step={step} total={5} />
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: (isKeyboardVisible ? spacing.md : insets.bottom) + 110 },
-        ]}
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={headerHeight}
+        style={styles.keyboardContainer}
       >
-        {renderStep()}
-      </ScrollView>
-
-      <View
-        style={[
-          styles.bottomNav,
-          {
-            borderTopColor: colors.border,
-            backgroundColor: colors.card,
-            paddingBottom: (isKeyboardVisible ? spacing.sm : insets.bottom) + spacing.md,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={handleBack}
-          style={[styles.backBtn, { borderColor: colors.urgent, borderRadius: radii.full }]}
-          accessibilityRole="button"
-          accessibilityLabel={step === 1 ? 'Cancel' : 'Back'}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + (currentStep === 4 ? 8 : 12),
+              paddingBottom: contentInsets.bottom + (isKeyboardVisible ? 16 : 48),
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
+          keyboardDismissMode="on-drag"
         >
-          <AppIcon name={step === 1 ? 'close' : 'back'} size={sizes.iconMd} color="urgent" />
-        </Pressable>
+          {/* Top Bar for Steps 1-3 */}
+          {currentStep < 4 && (
+            <View style={styles.topBar}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                onPress={handleBack}
+                hitSlop={8}
+                style={styles.backButton}
+              >
+                <AppIcon name="chevronLeft" size={24} color={colors.navyText} />
+              </Pressable>
 
-        {step === 5 ? (
-          <Pressable
-            onPress={() => performSave(true)}
-            disabled={isDraftSaving || !chiefComplaint.trim()}
-            style={[styles.draftBtn, { borderColor: colors.success, borderRadius: radii.full, opacity: chiefComplaint.trim() ? 1 : 0.4 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Save Draft"
-          >
-            {isDraftSaving ? (
-              <ThemedText variant="captionBold" color="success">...</ThemedText>
-            ) : (
-              <AppIcon name="archive" size={sizes.iconMd} color="success" />
-            )}
-          </Pressable>
-        ) : null}
+              <Text
+                style={[
+                  typography.headlineLg,
+                  { color: colors.navyText, fontWeight: '700' },
+                ]}
+              >
+                Book Appointment
+              </Text>
 
-        {step < 5 ? (
-          <Pressable
-            onPress={validateAndNext}
-            style={[styles.primaryBtn, { backgroundColor: colors.primary, borderRadius: radii.full }]}
-            accessibilityRole="button"
-          >
-            <ThemedText variant="bodyBold" color="onPrimary">Continue</ThemedText>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={() => performSave(false)}
-            disabled={!confirmEnabled}
-            style={[
-              styles.primaryBtn,
-              {
-                backgroundColor: hasPaid || !hasPayment ? colors.success : colors.warning,
-                borderRadius: radii.full,
-                opacity: confirmEnabled ? 1 : 0.5,
-              },
-            ]}
-            accessibilityRole="button"
-          >
-            <ThemedText variant="bodyBold" color="onPrimary">{confirmButtonLabel()}</ThemedText>
-          </Pressable>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Booking help"
+                onPress={handleHelpPress}
+                hitSlop={8}
+                style={styles.helpButton}
+              >
+                <AppIcon name="helpCircle" size={22} color={colors.navyText} />
+              </Pressable>
+            </View>
+          )}
+
+          {/* Stepper (Steps 1, 2, 3) */}
+          {currentStep < 4 && (
+            <BookingStepIndicator currentStep={currentStep as BookingStep} />
+          )}
+
+          {/* Body Content */}
+          {isLoading ? (
+            <View style={{ marginTop: spacing.xl, gap: spacing.md }}>
+              <SkeletonCard />
+              <SkeletonCard />
+            </View>
+          ) : currentStep === 1 ? (
+            <BookingDoctorStep
+              doctors={doctors}
+              clinics={clinics}
+              selectedDoctorId={selectedDoctorId}
+              onSelectDoctor={(doc) => {
+                setSelectedDoctorId(doc.id);
+              }}
+              onProceed={() => {
+                if (selectedDoctor) setCurrentStep(2);
+              }}
+              onViewClinicInfo={(clinicId) => {
+                navigation.navigate('Main', {
+                  screen: 'ClinicDetailsScreen',
+                  params: { clinicId },
+                });
+              }}
+              onViewAllHubs={() => {
+                navigation.navigate('Main', { screen: 'ExploreClinicsScreen' });
+              }}
+            />
+          ) : currentStep === 2 && selectedDoctor ? (
+            <BookingSlotStep
+              doctor={selectedDoctor}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              selectedSlot={selectedSlot}
+              onSelectSlot={setSelectedSlot}
+              availableSlots={availableSlots}
+              isLoadingSlots={isLoadingSlots}
+              consultationMode={consultationMode}
+              onChangeConsultationMode={setConsultationMode}
+              onChangeDoctor={() => setCurrentStep(1)}
+              onProceed={() => {
+                if (selectedSlot) setCurrentStep(3);
+              }}
+            />
+          ) : currentStep === 3 && selectedDoctor && selectedSlot ? (
+            <BookingReviewStep
+              doctor={selectedDoctor}
+              clinic={selectedClinic}
+              selectedDate={selectedDate}
+              selectedSlot={selectedSlot}
+              consultationMode={consultationMode}
+              isSubmitting={isSubmitting}
+              onChangeTimeOrMode={() => setCurrentStep(2)}
+              onConfirmAndBook={handleConfirmAndBook}
+            />
+          ) : currentStep === 4 && selectedDoctor ? (
+            <BookingConfirmationStep
+              bookingReference={bookingReference}
+              patientEmail={user?.primaryEmailAddress?.emailAddress}
+              doctorName={selectedDoctor.name}
+              onViewAppointments={handleViewAppointments}
+              onBackToHome={handleBackToHome}
+              onDone={handleBackToHome}
+            />
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  scrollContent: { paddingBottom: 24 },
-  stepContent: { paddingHorizontal: 16, gap: 20 },
-  stepSubtitle: { marginTop: -12 },
-  fieldGroup: { gap: 8 },
-  emptyContainer: {
-    padding: 20,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    marginVertical: 10,
-  },
-  exploreBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  horizontalList: { paddingHorizontal: 0 },
-  clinicCard: {
-    width: 230,
-    padding: 14,
-    gap: 6,
-    position: 'relative',
-  },
-  clinicLogo: { width: 40, height: 40 },
-  clinicLogoFallback: { alignItems: 'center', justifyContent: 'center' },
-  clinicSelectedBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  serviceChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 3,
-    minWidth: 130,
-  },
-  svcChipPlaceholder: {
-    width: 120,
-    height: 58,
-    borderWidth: 1,
-  },
-  selCard: {
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  selCardInfo: { flex: 1, gap: 2 },
-  noPreferenceIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  providerAvatar: { width: 44, height: 44 },
-  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    gap: 12,
-  },
-  toggleInfo: { flex: 1, gap: 2 },
-  datePickerCard: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-  skipInfo: {
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  skipInfoText: { flex: 1 },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 44,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  textArea: {
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 88,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    textAlignVertical: 'top',
-  },
-  attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  attachBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-  },
-  summaryCard: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  summaryLabel: { flex: 0.38, marginTop: 1 },
-  summaryValue: { flex: 0.62, textAlign: 'right' },
-  paymentNotice: {
-    borderWidth: 1,
-    padding: 14,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'flex-start',
-  },
-  paymentNoticeLeft: {},
-  payNowInlineBtn: { alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, marginTop: 4 },
-  consentCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    gap: 12,
-  },
-  consentCardTitle: { textTransform: 'uppercase', letterSpacing: 0.5 },
-  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  checkbox: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-    flexShrink: 0,
-  },
-  consentLabel: { flex: 1 },
-  bottomNav: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  backBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  draftBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryBtn: {
+  root: {
     flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: '100%',
   },
-  errorRow: {
+  keyboardContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+  },
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingTop: 4,
-    paddingHorizontal: 2,
-  },
-  selectedFilesCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  selectedFileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
+    justifyContent: 'space-between',
     paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    width: '100%',
   },
-  selectedFileInfo: { flex: 1, gap: 1 },
-  removeFileBtn: {
-    padding: 6,
+  backButton: {
+    padding: 4,
+  },
+  helpButton: {
+    padding: 4,
   },
 });

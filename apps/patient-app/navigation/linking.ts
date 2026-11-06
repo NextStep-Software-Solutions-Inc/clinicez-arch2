@@ -67,8 +67,12 @@ export const linking: LinkingOptions<RootParamList> = {
         screens: {
           BottomTabs: {
             screens: {
-              HomeScreen: 'home',
-              AppointmentsScreen: 'appointments',
+              HomeScreen: {
+                screens: {
+                  Home: 'home',
+                  PatientSearch: 'search',
+                },
+              },
               RecordsScreen: {
                 screens: {
                   FilesBrowserScreen: 'records',
@@ -77,9 +81,12 @@ export const linking: LinkingOptions<RootParamList> = {
                   ExternalOpenConsentScreen: 'records/consent/:fileId',
                 },
               },
-              ProfileScreen: 'profile',
+              AppointmentsScreen: 'appointments',
+              MessagesScreen: 'inbox',
             },
           },
+          ProfileScreen: 'profile',
+          PatientSearchScreen: 'care-search',
           NotificationScreen: 'notifications',
           NotificationDetailScreen: 'notifications/:id',
           SettingsScreen: 'settings',

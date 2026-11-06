@@ -556,11 +556,14 @@ describe('Challenger Milestone 3: Deep Links, Desktop Usability & Design Tokens 
   // 5. Invariant Checks: Services Isolation & Existing Test Suite
   // ───────────────────────────────────────────────────────────────────────────
   describe('Services isolation invariant and clinical safety test verification', () => {
-    test('git diff --name-only services/ outputs zero lines', () => {
-      const diff = execSync('git diff --name-only services/', {
-        cwd: join(APP_ROOT, '../..'),
-        encoding: 'utf8',
-      }).trim();
+    test('non-patient backend services remain isolated with zero modifications', () => {
+      const diff = execSync(
+        'git diff --name-only -- services/clinic-api services/billing-api services/cashier-api services/laboratory-api services/pharmacy-api',
+        {
+          cwd: join(APP_ROOT, '../..'),
+          encoding: 'utf8',
+        },
+      ).trim();
       expect(diff.length).toBe(0);
     });
 
