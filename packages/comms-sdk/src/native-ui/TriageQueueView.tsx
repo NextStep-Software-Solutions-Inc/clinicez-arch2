@@ -194,24 +194,9 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <View>
-            <Text style={styles.headerTitle}>Triage Workstation</Text>
-            <Text style={styles.headerSubtitle}>{facilityName}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.refreshButton}
-            onPress={onRefresh}
-            accessibilityLabel="Refresh triage queue"
-          >
-            <Text style={styles.refreshButtonText}>Refresh</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Filter Bar */}
-        {onFilterChange && (
+      {/* Header with Filter Bar */}
+      {onFilterChange && (
+        <View style={styles.header}>
           <View style={styles.filterBar}>
             {(['All', 'Emergency', 'Urgent', 'Routine'] as const).map((filter) => {
               const isActive = activeFilter === filter;
@@ -230,8 +215,8 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
               );
             })}
           </View>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* Content States */}
       {isLoading ? (

@@ -462,6 +462,7 @@ export default function ClinicActiveThread({
           canWriteInternalNotes={true}
           isLoading={isLoading}
           error={error ? error.message : null}
+          renderSendIcon={() => <Icon name="send" size={14} color={theme.colors.onPrimary} />}
           renderEmptyState={() => (
             <View style={styles.emptyStateContainer}>
               <View style={styles.emptyShieldBadge}>
@@ -771,10 +772,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   backButton: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    minWidth: 44,
-    minHeight: 44,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.radii.full,
@@ -786,18 +785,17 @@ const styles = StyleSheet.create({
   headerCenter: {
     flex: 1,
     justifyContent: 'center',
-    gap: 1,
+    gap: 0,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 26,
     gap: 2,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
   pencilBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -809,10 +807,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
     borderRadius: theme.radii.xs,
-    marginTop: 0,
+    marginTop: 1,
   },
   scopeBadgeText: {
     fontSize: theme.typography.caption.fontSize,
@@ -821,15 +819,16 @@ const styles = StyleSheet.create({
   headerRightControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
+    gap: 6,
   },
   headerIconButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 44,
-    minHeight: 44,
-    paddingHorizontal: theme.spacing.xs,
+    height: 34,
+    minWidth: 34,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,

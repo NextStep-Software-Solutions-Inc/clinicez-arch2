@@ -33,6 +33,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   onTogglePrivacyBlur,
   showHeader = true,
   renderEmptyState,
+  renderSendIcon,
   canWriteInternalNotes = false,
   isLoading = false,
   error = null,
@@ -44,6 +45,15 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   const [isInternal, setIsInternal] = useState(false);
   const [peekingMessageId, setPeekingMessageId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleKeyPress = (e: any) => {
+    if (e.nativeEvent?.key === 'Enter' && !e.nativeEvent?.shiftKey) {
+      if (typeof e.preventDefault === 'function') {
+        e.preventDefault();
+      }
+      handleSend();
+    }
+  };
 
   const handleSend = async () => {
     if (!inputText.trim() || isSubmitting) return;
@@ -63,26 +73,26 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     switch (msg.state) {
       case 'Sending':
         return (
-          <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryTextMuted}>• Sending...</Text>
+          <View style={styles.deliveryRow} accessibilityLabel="Sending">
+            <Text style={styles.deliveryIconMuted}>◷</Text>
           </View>
         );
       case 'Waiting':
         return (
-          <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryTextMuted}>• Sent</Text>
+          <View style={styles.deliveryRow} accessibilityLabel="Sent">
+            <Text style={styles.deliveryIconMuted}>✓</Text>
           </View>
         );
       case 'Received':
         return (
-          <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryTextTeal}>• Delivered</Text>
+          <View style={styles.deliveryRow} accessibilityLabel="Delivered">
+            <Text style={styles.deliveryIconTeal}>✓✓</Text>
           </View>
         );
       case 'NotReceived':
         return (
-          <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryTextRed}>• Not delivered</Text>
+          <View style={styles.deliveryRow} accessibilityLabel="Not delivered">
+            <Text style={styles.deliveryIconRed}>!</Text>
             <TouchableOpacity
               style={styles.resendButton}
               onPress={() => onResendMessage(msg.id)}
@@ -280,6 +290,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}
             placeholderTextColor={lightColors.textMuted}
             multiline
+            onKeyPress={handleKeyPress}
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
             accessibilityLabel="Message input field"
           />
 
@@ -289,6 +302,11 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             disabled={!inputText.trim() || isSubmitting}
             accessibilityLabel="Send message"
           >
+            {renderSendIcon ? (
+              renderSendIcon()
+            ) : (
+              <Text style={styles.sendIconText}>➤</Text>
+            )}
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
@@ -427,15 +445,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2
   },
-  deliveryIcon: {
-    fontSize: fontSizeScale.xs
+  deliveryIconMuted: {
+    fontSize: fontSizeScale.xs,
+    color: lightColors.onPrimary,
+    opacity: 0.8,
+    marginLeft: 2,
   },
   deliveryIconTeal: {
     fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary
+    color: lightColors.onPrimary,
+    fontWeight: '700',
+    marginLeft: 2,
   },
   deliveryIconRed: {
-    fontSize: fontSizeScale.xs
+    fontSize: fontSizeScale.xs,
+    color: lightColors.emergencyBg,
+    fontWeight: '700',
+    marginLeft: 2,
   },
   deliveryTextMuted: {
     fontSize: fontSizeScale.xs,
@@ -585,11 +611,13 @@ const styles = StyleSheet.create({
     color: lightColors.warningText,
   },
   sendButton: {
-    minWidth: 72,
+    minWidth: 76,
     minHeight: sizes.touchTarget,
     paddingHorizontal: spaceScale.md,
     backgroundColor: lightColors.primary,
     borderRadius: radiusScale.md,
+    flexDirection: 'row',
+    gap: 4,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: lightColors.shadow,
@@ -600,6 +628,10 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  sendIconText: {
+    color: lightColors.onPrimary,
+    fontSize: 13,
   },
   sendButtonText: {
     color: lightColors.onPrimary,

@@ -71,19 +71,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     <View style={[styles.container, style]}>
       {/* Header */}
       <View style={styles.header}>
-        {connectionState !== 'Connected' && (
-          <View
-            style={[
-              styles.connectionBanner,
-              connectionState === 'Reconnecting' ? styles.reconnectingBanner : styles.disconnectedBanner
-            ]}
-          >
-            <Text style={styles.connectionText}>
-              {connectionState === 'Reconnecting' ? 'Reconnecting to comms...' : 'Disconnected from comms'}
-            </Text>
-          </View>
-        )}
-
         {/* Search & New Button Inline Row */}
         <View style={styles.searchRow}>
           <View style={styles.searchContainer}>
@@ -217,11 +204,24 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       <Text style={[styles.cardTitle, isActive && styles.cardTitleActive]} numberOfLines={1}>
                         {item.title}
                       </Text>
-                      {item.lastMessageAtUtc && (
-                        <Text style={styles.cardTime}>
-                          {new Date(item.lastMessageAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                      )}
+                      <View style={styles.cardHeaderRight}>
+                        <View style={styles.scopeTag}>
+                          <Text style={styles.scopeTagText}>
+                            {item.scope === 'PatientFacility'
+                              ? 'Triage'
+                              : item.scope === 'StaffContext'
+                                ? 'Care Team'
+                                : item.scope === 'Facility'
+                                  ? 'Facility'
+                                  : 'Direct'}
+                          </Text>
+                        </View>
+                        {item.lastMessageAtUtc && (
+                          <Text style={styles.cardTime}>
+                            {new Date(item.lastMessageAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        )}
+                      </View>
                     </View>
 
                     {item.lastMessageSnippet && (
@@ -230,34 +230,25 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       </Text>
                     )}
 
-                    <View style={styles.cardMeta}>
-                      <View style={styles.scopeTag}>
-                        <Text style={styles.scopeTagText}>
-                          {item.scope === 'PatientFacility'
-                            ? 'Triage'
-                            : item.scope === 'StaffContext'
-                              ? 'Care Team'
-                              : item.scope === 'Facility'
-                                ? 'Facility'
-                                : 'Direct'}
-                        </Text>
+                    {(item.isEmergency || (item.urgentCount !== undefined && item.urgentCount > 0) || item.unreadCount > 0) && (
+                      <View style={styles.cardMeta}>
+                        {item.isEmergency && (
+                          <View style={styles.statBadge}>
+                            <Text style={styles.statBadgeText}>Emergency</Text>
+                          </View>
+                        )}
+                        {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
+                          <View style={styles.urgentBadge}>
+                            <Text style={styles.urgentBadgeText}>Urgent</Text>
+                          </View>
+                        )}
+                        {item.unreadCount > 0 && (
+                          <View style={styles.unreadBadge}>
+                            <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
+                          </View>
+                        )}
                       </View>
-                      {item.isEmergency && (
-                        <View style={styles.statBadge}>
-                          <Text style={styles.statBadgeText}>Emergency</Text>
-                        </View>
-                      )}
-                      {item.urgentCount !== undefined && item.urgentCount > 0 && !item.isEmergency && (
-                        <View style={styles.urgentBadge}>
-                          <Text style={styles.urgentBadgeText}>Urgent</Text>
-                        </View>
-                      )}
-                      {item.unreadCount > 0 && (
-                        <View style={styles.unreadBadge}>
-                          <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
-                        </View>
-                      )}
-                    </View>
+                    )}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -497,7 +488,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spaceScale.xs
+    marginBottom: spaceScale.xs,
+    gap: spaceScale.xs,
   },
   cardTitle: {
     fontSize: fontSizeScale.md,
@@ -508,10 +500,15 @@ const styles = StyleSheet.create({
   cardTitleActive: {
     color: lightColors.primary
   },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.xs,
+    flexShrink: 0,
+  },
   cardTime: {
     fontSize: fontSizeScale.xs,
     color: lightColors.textMuted,
-    marginLeft: spaceScale.xs
   },
   cardSnippet: {
     fontSize: fontSizeScale.sm,
