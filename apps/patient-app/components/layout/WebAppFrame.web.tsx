@@ -29,11 +29,7 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
   const focusedScreenName = resolveFocusedScreenName(state);
   const headerOverride = useWebHeaderOverride(!headerInfo.isRootTab ? focusedScreenName : undefined);
   const showBackHeader = !headerInfo.isRootTab && focusedScreenName !== 'PatientSearchScreen';
-  const showCompactTabHeader =
-    headerInfo.isRootTab &&
-    isCompact &&
-    headerInfo.tabKey !== 'HomeScreen' &&
-    headerInfo.tabKey !== 'AppointmentsScreen';
+  const showCompactTabHeader = headerInfo.isRootTab && isCompact && headerInfo.tabKey !== 'HomeScreen';
   const activeSearch = useHeaderSearchEntry(headerInfo.isRootTab ? headerInfo.tabKey : undefined);
 
   const onBack = () => {
@@ -64,6 +60,7 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
           subtitle={headerInfo.subtitle}
           showBrand
           showAccountActions
+          seamless={headerInfo.tabKey === 'AppointmentsScreen'}
           onOpenSearch={activeSearch?.openSearch}
           hasActiveSearch={activeSearch?.hasActiveSearch}
           onOpenNotifications={() => navigation.navigate('NotificationScreen')}

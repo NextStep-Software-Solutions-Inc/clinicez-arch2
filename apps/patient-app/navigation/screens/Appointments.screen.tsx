@@ -15,10 +15,10 @@ import { isToday, isFuture, isPast, parseISO } from 'date-fns';
 import { and, eq, desc } from 'drizzle-orm';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import { ActiveSearchBanner, SearchModal } from '../../components/ui/SearchModal';
+import { AppIcon } from '../../components/ui/Icon';
 import { FilterChipBar } from '../../components/ui/FilterChipBar';
 import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
 import OfflineBanner from '../../components/appointments/OfflineBanner';
-import AppointmentsHeader from '../../components/appointments/AppointmentsHeader';
 import AppointmentsFilterBar, {
   type AppointmentFilterTab,
 } from '../../components/appointments/AppointmentsFilterBar';
@@ -404,24 +404,57 @@ export default function AppointmentsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Top Header */}
-        <AppointmentsHeader
-          fullName={patientProfile.fullName}
-          avatarUrl={patientProfile.avatarUrl}
-          unreadCount={unreadNotificationsCount}
-          showBrand={true}
-          onNotificationsPress={() =>
-            navigation.navigate('Main', { screen: 'NotificationsScreen' })
-          }
-          onAvatarPress={() =>
-            navigation.navigate('Main', { screen: 'ProfileScreen' })
-          }
-          onBookNewPress={() =>
-            navigation.navigate('Main', { screen: 'BookingDraftScreen' })
-          }
-          onBrandPress={() =>
-            navigation.navigate('Main', { screen: 'HomeScreen' })
-          }
-        />
+        {/* Title & Action Row: Appointments + Book New */}
+        <View style={styles.compactTitleRow}>
+          <View style={{ flex: 1, paddingRight: spacing.sm }}>
+            <Text
+              style={[
+                empathy.typography.headlineLg,
+                { color: empathy.colors.navyText, fontWeight: '700' },
+              ]}
+            >
+              Appointments
+            </Text>
+            <Text
+              style={[
+                empathy.typography.bodySm,
+                { color: empathy.colors.mutedText, marginTop: 2 },
+              ]}
+            >
+              Scheduled visits across open network
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Book New Appointment"
+            onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
+            style={({ pressed }) => [
+              styles.bookNewBtn,
+              {
+                backgroundColor: empathy.colors.primaryDeep,
+                borderRadius: radii.full,
+                paddingHorizontal: spacing.lg,
+                paddingVertical: spacing.sm + 2,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+          >
+            <AppIcon name="plus" size={16} color={empathy.colors.onPrimary} strokeWidth={2.5} />
+            <Text
+              style={[
+                empathy.typography.labelMd,
+                {
+                  color: empathy.colors.onPrimary,
+                  fontWeight: '700',
+                  marginLeft: 4,
+                },
+              ]}
+            >
+              Book New
+            </Text>
+          </Pressable>
+        </View>
 
         {/* Search & Filter Bar */}
         <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
@@ -776,5 +809,17 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     alignItems: 'center',
+  },
+  compactTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  bookNewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

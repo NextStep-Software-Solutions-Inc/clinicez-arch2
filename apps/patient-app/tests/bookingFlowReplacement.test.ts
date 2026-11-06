@@ -101,18 +101,21 @@ describe('Patient Appointment Booking Flow Replacement Suite', () => {
     expect(screenNativeSrc.includes('isKeyboardVisible')).toBe(true);
   });
 
-  test('8. Header & Routing: AppointmentsScreen avoids duplicate headers and routes Book New to BookingDraftScreen', () => {
+  test('8. Header & Routing: AppointmentsScreen styles built-in header seamlessly and routes Book New to BookingDraftScreen', () => {
     const webFrameSrc = readAppFile('components/layout/WebAppFrame.web.tsx');
-    expect(webFrameSrc.includes("headerInfo.tabKey !== 'AppointmentsScreen'")).toBe(true);
+    expect(webFrameSrc.includes("seamless={headerInfo.tabKey === 'AppointmentsScreen'}")).toBe(true);
 
-    const nativeStackSrc = readAppFile('navigation/navigators/AppointmentsStack.tsx');
-    expect(nativeStackSrc.includes('headerShown: false')).toBe(true);
+    const webPageHeaderSrc = readAppFile('components/layout/WebPageHeader.web.tsx');
+    expect(webPageHeaderSrc.includes('seamless = false')).toBe(true);
+    expect(webPageHeaderSrc.includes('backgroundColor: seamless ? colors.background : colors.surface')).toBe(true);
 
     const apptsNativeSrc = readAppFile('navigation/screens/Appointments.screen.tsx');
     const apptsWebSrc = readAppFile('navigation/screens/Appointments.screen.web.tsx');
 
-    // Both route onBookNewPress and onFindDoctorPress to BookingDraftScreen
+    // Both screens route Book New to BookingDraftScreen
     expect(apptsNativeSrc.includes("screen: 'BookingDraftScreen'")).toBe(true);
     expect(apptsWebSrc.includes("screen: 'BookingDraftScreen'")).toBe(true);
+    expect(apptsNativeSrc.includes('compactTitleRow')).toBe(true);
+    expect(apptsWebSrc.includes('compactTitleRow')).toBe(true);
   });
 });

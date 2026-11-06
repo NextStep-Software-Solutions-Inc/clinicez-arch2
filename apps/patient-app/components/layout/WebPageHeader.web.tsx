@@ -19,6 +19,7 @@ interface WebPageHeaderProps {
   onOpenNotifications?: () => void;
   onOpenSettings?: () => void;
   right?: React.ReactNode;
+  seamless?: boolean;
 }
 
 /**
@@ -40,6 +41,7 @@ export default function WebPageHeader({
   onOpenNotifications,
   onOpenSettings,
   right,
+  seamless = false,
 }: WebPageHeaderProps) {
   const { colors, spacing, radii, sizes } = useAppTheme();
   const { unreadCount } = useNotificationContext();
@@ -52,8 +54,9 @@ export default function WebPageHeader({
         {
           height: sizes.headerHeight,
           paddingHorizontal: spacing.lg,
-          backgroundColor: colors.surface,
-          borderBottomColor: colors.border,
+          backgroundColor: seamless ? colors.background : colors.surface,
+          borderBottomWidth: seamless ? 0 : 1,
+          borderBottomColor: seamless ? 'transparent' : colors.border,
         },
       ]}
     >
@@ -155,13 +158,15 @@ export default function WebPageHeader({
                   {
                     width: sizes.controlMd,
                     height: sizes.controlMd,
-                    borderRadius: radii.md,
-                    borderColor: hasActiveSearch ? colors.primary : colors.border,
+                    borderRadius: seamless ? radii.full : radii.md,
+                    borderColor: hasActiveSearch ? colors.primary : seamless ? 'transparent' : colors.border,
                     backgroundColor: hasActiveSearch
                       ? colors.primaryLight
-                      : hovered
-                        ? colors.surfaceSubtle
-                        : colors.transparent,
+                      : seamless
+                        ? colors.surface
+                        : hovered
+                          ? colors.surfaceSubtle
+                          : colors.transparent,
                   },
                 ];
               }}
@@ -193,9 +198,13 @@ export default function WebPageHeader({
                   {
                     width: sizes.controlMd,
                     height: sizes.controlMd,
-                    borderRadius: radii.md,
-                    borderColor: colors.border,
-                    backgroundColor: hovered ? colors.surfaceSubtle : colors.transparent,
+                    borderRadius: seamless ? radii.full : radii.md,
+                    borderColor: seamless ? 'transparent' : colors.border,
+                    backgroundColor: seamless
+                      ? colors.surface
+                      : hovered
+                        ? colors.surfaceSubtle
+                        : colors.transparent,
                   },
                 ];
               }}
@@ -231,9 +240,13 @@ export default function WebPageHeader({
                   {
                     width: sizes.controlMd,
                     height: sizes.controlMd,
-                    borderRadius: radii.md,
-                    borderColor: colors.border,
-                    backgroundColor: hovered ? colors.surfaceSubtle : colors.transparent,
+                    borderRadius: seamless ? radii.full : radii.md,
+                    borderColor: seamless ? 'transparent' : colors.border,
+                    backgroundColor: seamless
+                      ? colors.surface
+                      : hovered
+                        ? colors.surfaceSubtle
+                        : colors.transparent,
                   },
                 ];
               }}
