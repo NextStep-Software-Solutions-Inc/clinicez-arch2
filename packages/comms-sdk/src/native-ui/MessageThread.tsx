@@ -157,7 +157,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         ) : (
           <View style={styles.stateContainer}>
             <View style={styles.emptyShieldBadge}>
-              <Text style={styles.emptyShieldGlyph}>🛡️</Text>
+              <Text style={styles.emptyShieldGlyph}>✓</Text>
             </View>
             <Text style={styles.emptyTitle}>Secure Communication</Text>
             <Text style={styles.emptySubtitle}>

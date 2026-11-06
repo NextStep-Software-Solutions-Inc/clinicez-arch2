@@ -28,6 +28,7 @@ import { notify } from '../../utils/feedback';
 import { playMessageChime } from '../../utils/alertSounds';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
+import Button from '../ui/Button';
 
 export default function ClinicChatDrawerHost() {
   const { isChatDrawerOpen, closeChatDrawer, activeConversationId, setActiveConversationId } = useClinicComms();
@@ -410,6 +411,42 @@ export default function ClinicChatDrawerHost() {
             loading={isLoading}
             error={error ? error.message : null}
             onNewConversation={handleNewConversation}
+            renderSearchIcon={() => (
+              <Icon name="search" size={16} color={theme.colors.textMuted} />
+            )}
+            renderScopeIcon={(scope) => {
+              switch (scope) {
+                case 'Direct':
+                  return <Icon name="patient" size={16} color={theme.colors.primary} />;
+                case 'StaffContext':
+                  return <Icon name="users" size={16} color={theme.colors.primary} />;
+                case 'Facility':
+                  return <Icon name="clinic" size={16} color={theme.colors.primary} />;
+                case 'PatientFacility':
+                  return <Icon name="heartPulse" size={16} color={theme.colors.primary} />;
+                default:
+                  return <Icon name="message" size={16} color={theme.colors.primary} />;
+              }
+            }}
+            renderEmptyState={() => (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconBadge}>
+                  <Icon name="message" size={28} color={theme.colors.primary} />
+                </View>
+                <ThemedText variant="bodyBold" style={styles.emptyTitle}>
+                  No Conversations
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.emptySubtitle}>
+                  No messages match your selected filter.
+                </ThemedText>
+                <Button
+                  title="Start Conversation"
+                  variant="primary"
+                  onPress={handleNewConversation}
+                  style={styles.emptyButton}
+                />
+              </View>
+            )}
           />
         )}
       </View>
@@ -667,5 +704,31 @@ const styles = StyleSheet.create({
   },
   drawerBody: {
     flex: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.xl,
+  },
+  emptyIconBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  emptyTitle: {
+    marginBottom: theme.spacing.xs,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    textAlign: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  emptyButton: {
+    minWidth: 160,
   },
 });

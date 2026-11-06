@@ -43,6 +43,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   loading = false,
   error = null,
   onNewConversation,
+  renderScopeIcon,
+  renderEmptyState,
+  renderSearchIcon,
   style
 }) => {
   if (isCollapsed) {
@@ -53,7 +56,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           onPress={onToggleCollapse}
           accessibilityLabel="Expand communication drawer"
         >
-          <Text style={styles.iconText}>Chat</Text>
+          {renderSearchIcon ? renderSearchIcon() : <Text style={styles.iconText}>•</Text>}
         </TouchableOpacity>
         {items.some((i) => i.unreadCount > 0) && (
           <View style={styles.collapsedBadge}>
@@ -68,30 +71,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     <View style={[styles.container, style]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.headerTitle}>Communications</Text>
-          <View style={styles.headerActions}>
-            {onToggleCollapse && (
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={onToggleCollapse}
-                accessibilityLabel="Collapse drawer"
-              >
-                <Text style={styles.headerButtonText}>◀</Text>
-              </TouchableOpacity>
-            )}
-            {onNewConversation && (
-              <TouchableOpacity
-                style={styles.primaryIconButton}
-                onPress={onNewConversation}
-                accessibilityLabel="New conversation"
-              >
-                <Text style={styles.primaryIconButtonText}>+ New</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
         {connectionState !== 'Connected' && (
           <View
             style={[
@@ -105,17 +84,43 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           </View>
         )}
 
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={onSearchChange}
-            placeholder="Search conversations..."
-            placeholderTextColor={lightColors.textMuted}
-            accessibilityLabel="Search conversations"
-          />
+        {/* Search & New Button Inline Row */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer}>
+            {renderSearchIcon ? (
+              renderSearchIcon()
+            ) : (
+              <Text style={styles.searchIcon}>🔍</Text>
+            )}
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={onSearchChange}
+              placeholder="Search conversations..."
+              placeholderTextColor={lightColors.textMuted}
+              accessibilityLabel="Search conversations"
+            />
+          </View>
+
+          {onNewConversation && (
+            <TouchableOpacity
+              style={styles.primaryIconButton}
+              onPress={onNewConversation}
+              accessibilityLabel="New conversation"
+            >
+              <Text style={styles.primaryIconButtonText}>+ New</Text>
+            </TouchableOpacity>
+          )}
+
+          {onToggleCollapse && (
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={onToggleCollapse}
+              accessibilityLabel="Collapse drawer"
+            >
+              <Text style={styles.headerButtonText}>◀</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Scopes Filter */}
@@ -156,16 +161,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : items.length === 0 ? (
-        <View style={styles.stateContainer}>
-          <Text style={styles.emptyIcon}>Chat</Text>
-          <Text style={styles.emptyTitle}>No Conversations</Text>
-          <Text style={styles.emptySubtitle}>No messages match your selected filter.</Text>
-          {onNewConversation && (
-            <TouchableOpacity style={styles.emptyCta} onPress={onNewConversation}>
-              <Text style={styles.emptyCtaText}>Start Conversation</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        renderEmptyState ? (
+          renderEmptyState()
+        ) : (
+          <View style={styles.stateContainer}>
+            <Text style={styles.emptyTitle}>No Conversations</Text>
+            <Text style={styles.emptySubtitle}>No messages match your selected filter.</Text>
+            {onNewConversation && (
+              <TouchableOpacity style={styles.emptyCta} onPress={onNewConversation}>
+                <Text style={styles.emptyCtaText}>Start Conversation</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )
       ) : (
         <ScrollView style={styles.listContainer}>
           {items.map((item) => {
@@ -189,15 +197,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       item.scope === 'PatientFacility' && styles.cardAvatarTriage,
                     ]}
                   >
-                    <Text style={styles.cardAvatarText}>
-                      {item.scope === 'Direct'
-                        ? '👤'
-                        : item.scope === 'StaffContext'
-                          ? '👥'
-                          : item.scope === 'Facility'
-                            ? '#'
-                            : '📋'}
-                    </Text>
+                    {renderScopeIcon ? (
+                      renderScopeIcon(item.scope)
+                    ) : (
+                      <Text style={styles.cardAvatarText}>
+                        {item.scope === 'Direct'
+                          ? 'D'
+                          : item.scope === 'StaffContext'
+                            ? 'C'
+                            : item.scope === 'Facility'
+                              ? '#'
+                              : 'T'}
+                      </Text>
+                    )}
                   </View>
 
                   <View style={styles.cardMain}>
@@ -321,8 +333,14 @@ const styles = StyleSheet.create({
     color: lightColors.textSecondary,
     fontSize: fontSizeScale.md
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.sm,
+    marginBottom: spaceScale.sm,
+  },
   primaryIconButton: {
-    minHeight: 36,
+    minHeight: 38,
     paddingHorizontal: spaceScale.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -360,6 +378,7 @@ const styles = StyleSheet.create({
     color: lightColors.text
   },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: lightColors.surfaceSubtle,
@@ -367,8 +386,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: lightColors.border,
     paddingHorizontal: spaceScale.md,
-    minHeight: 40,
-    marginBottom: spaceScale.sm
+    minHeight: 38,
   },
   searchIcon: {
     marginRight: spaceScale.xs,

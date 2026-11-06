@@ -346,7 +346,7 @@ export default function ClinicActiveThread({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon
-              name="eye"
+              name={privacyBlur ? 'eyeOff' : 'eye'}
               size={theme.sizes.iconSm}
               color={privacyBlur ? theme.colors.primary : theme.colors.text}
             />

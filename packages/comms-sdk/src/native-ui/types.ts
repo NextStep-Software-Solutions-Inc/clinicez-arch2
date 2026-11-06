@@ -37,6 +37,9 @@ export interface ChatDrawerProps {
   loading?: boolean;
   error?: string | null;
   onNewConversation?: () => void;
+  renderScopeIcon?: (scope: ChatDrawerItem['scope']) => React.ReactNode;
+  renderEmptyState?: () => React.ReactNode;
+  renderSearchIcon?: () => React.ReactNode;
   style?: ViewStyle;
 }
 

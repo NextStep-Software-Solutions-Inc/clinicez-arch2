@@ -48,11 +48,16 @@ export class SignalRConnectionManager implements ICommsClient {
 
     this.connection = new HubConnectionBuilder()
       .withUrl(options.hubUrl, {
-        accessTokenFactory: () => this.renewalTimer.getActiveTicket() ?? options.initialTicket ?? ''
+        accessTokenFactory: async () => {
+          return await this.renewalTimer.getValidTicket();
+        }
       })
       .withAutomaticReconnect(retryPolicy)
       .configureLogging(options.logLevel ?? LogLevel.Warning)
       .build();
+
+    this.connection.serverTimeoutInMilliseconds = 60000;
+    this.connection.keepAliveIntervalInMilliseconds = 15000;
 
     this.registerConnectionHooks();
     this.registerHubEventHandlers();
