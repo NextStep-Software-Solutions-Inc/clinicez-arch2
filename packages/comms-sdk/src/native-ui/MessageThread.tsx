@@ -64,29 +64,25 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
       case 'Sending':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIcon}>...</Text>
-            <Text style={styles.deliveryTextMuted}>Sending...</Text>
+            <Text style={styles.deliveryTextMuted}>• Sending...</Text>
           </View>
         );
       case 'Waiting':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIcon}>OK</Text>
-            <Text style={styles.deliveryTextMuted}>Sent, waiting</Text>
+            <Text style={styles.deliveryTextMuted}>• Sent</Text>
           </View>
         );
       case 'Received':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIconTeal}>Read Confirmation</Text>
-            <Text style={styles.deliveryTextTeal}>Delivered</Text>
+            <Text style={styles.deliveryTextTeal}>• Delivered</Text>
           </View>
         );
       case 'NotReceived':
         return (
           <View style={styles.deliveryRow}>
-            <Text style={styles.deliveryIconRed}>!</Text>
-            <Text style={styles.deliveryTextRed}>Not delivered</Text>
+            <Text style={styles.deliveryTextRed}>• Not delivered</Text>
             <TouchableOpacity
               style={styles.resendButton}
               onPress={() => onResendMessage(msg.id)}

@@ -98,6 +98,8 @@ export default function ClinicActiveThread({
   const activeAlerts = useMemo<PinnedAlertItem[]>(() => {
     if (pinnedAlerts === null) return [];
     if (Array.isArray(pinnedAlerts)) return pinnedAlerts;
+    if (isLoading && !conversation) return [];
+    if (!conversation && !pinnedAlerts) return [];
     if (conversation?.isEmergencyConfirmed || conversation?.priority === 'Emergency') {
       return [
         {
@@ -109,7 +111,7 @@ export default function ClinicActiveThread({
       ];
     }
     return [];
-  }, [pinnedAlerts, conversation]);
+  }, [pinnedAlerts, conversation, isLoading]);
 
   const handleSendMessage = useCallback(
     async (text: string, isInternal: boolean) => {
@@ -302,7 +304,9 @@ export default function ClinicActiveThread({
               <ThemedText variant="bodyBold" numberOfLines={1} style={styles.threadTitle}>
                 {activeTitle || 'Clinical Thread'}
               </ThemedText>
-              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+              <View style={styles.pencilBtn}>
+                <Icon name="edit" size={14} color={theme.colors.textMuted} />
+              </View>
             </Pressable>
           )}
 
@@ -310,7 +314,7 @@ export default function ClinicActiveThread({
             <View style={styles.skeletonSubtitle} />
           ) : (
             <View style={styles.scopeBadge}>
-              <ThemedText variant="captionBold" color={theme.colors.primary}>
+              <ThemedText variant="captionBold" color={theme.colors.primary} style={styles.scopeBadgeText}>
                 {getCategoryLabel(conversation?.scope)}
               </ThemedText>
             </View>
@@ -361,8 +365,8 @@ export default function ClinicActiveThread({
         </View>
       </View>
 
-      {/* Pinned Clinical Orders & Alerts Banner */}
-      {activeAlerts.length > 0 && (
+      {/* Pinned Clinical Orders & Alerts Banner (Guarded against loading flicker) */}
+      {!isLoading && activeAlerts.length > 0 && (
         <View style={styles.pinnedBanner}>
           <View style={styles.pinnedAlertRow}>
             <Icon
@@ -782,14 +786,20 @@ const styles = StyleSheet.create({
   headerCenter: {
     flex: 1,
     justifyContent: 'center',
-    gap: 2,
+    gap: 1,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 32,
-    gap: theme.spacing.xs,
+    minHeight: 26,
+    gap: 2,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+  },
+  pencilBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   threadTitle: {
     flexShrink: 1,
@@ -799,9 +809,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
     borderRadius: theme.radii.xs,
+    marginTop: 0,
+  },
+  scopeBadgeText: {
+    fontSize: theme.typography.caption.fontSize,
+    lineHeight: 14,
   },
   headerRightControls: {
     flexDirection: 'row',

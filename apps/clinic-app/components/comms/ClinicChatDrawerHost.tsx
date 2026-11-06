@@ -448,7 +448,7 @@ export default function ClinicChatDrawerHost() {
     <Modal visible={isChatDrawerOpen} animationType="slide" transparent onRequestClose={closeChatDrawer}>
       <View style={styles.mobileModalContainer}>
         <Pressable style={styles.backdrop} onPress={closeChatDrawer} />
-        <View style={styles.mobilePanel}>{drawerContent}</View>
+        <View style={[styles.mobilePanel, isMaximized && styles.mobilePanelMaximized]}>{drawerContent}</View>
       </View>
     </Modal>
   );
@@ -487,7 +487,6 @@ const styles = StyleSheet.create({
   },
   dockedPanelMaximized: {
     width: '100%',
-    maxWidth: 960,
   },
   mobileModalContainer: {
     flex: 1,
@@ -499,6 +498,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.radii.lg,
     borderTopRightRadius: theme.radii.lg,
     overflow: 'hidden',
+  },
+  mobilePanelMaximized: {
+    height: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
   },
   drawerPane: {
     flex: 1,
