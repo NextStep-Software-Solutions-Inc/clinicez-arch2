@@ -16,11 +16,8 @@ services:
     expose:
       - "8080"
     networks:
-      data-network:
-      npm-default:
-        aliases:
-          - clinic-api
-          - clinicez-clinic-api
+      - data-network
+      - npm-default
     # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
     # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
     cpu_shares: ${CLINIC_CPU_SHARES:-1536}
