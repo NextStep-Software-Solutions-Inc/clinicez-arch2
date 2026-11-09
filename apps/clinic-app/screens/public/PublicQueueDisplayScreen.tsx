@@ -340,6 +340,10 @@ export default function PublicQueueDisplayScreen() {
   const safeWidth = windowWidth > 0 ? windowWidth : 1280;
   const hasUpNext = upNextList.length > 0;
   const isCompact = safeWidth < 1024 || (Boolean(data?.nowServing && data.nowServing.length >= 4) && safeWidth < 1280) || !hasUpNext;
+  const headerNowServingFontSize = Math.max(
+    theme.fontSizes.md + 2,
+    Math.min(theme.fontSizes.xl + 1, Math.round(safeWidth * 0.015))
+  );
   const sectionTitleFontSize = Math.max(
     theme.fontSizes.xl,
     Math.min(theme.fontSizes['3xl'] + 2, Math.round(safeWidth * 0.024))
@@ -348,6 +352,26 @@ export default function PublicQueueDisplayScreen() {
     theme.fontSizes.xs,
     Math.min(theme.fontSizes.md, Math.round(safeWidth * 0.011))
   );
+
+  // Dynamic ticket number font size calculation to guarantee zero truncation and zero overflow
+  const getTicketFontSize = (ticketNum: string, stationCount: number) => {
+    const len = Math.max(ticketNum?.length || 5, 4);
+    const colWidth = hasUpNext ? safeWidth * 0.6 : safeWidth * 0.95;
+    const cols = stationCount === 1 ? 1 : stationCount === 2 ? 2 : Math.min(stationCount, 3);
+    const cardWidth = (colWidth - (cols - 1) * 20 - 48) / cols;
+    // Monospace character width is ~0.62 * fontSize
+    const maxFontByWidth = Math.floor((cardWidth - 28) / (len * 0.62));
+
+    if (stationCount === 1) {
+      return Math.min(84, Math.max(48, maxFontByWidth));
+    } else if (stationCount === 2) {
+      return Math.min(60, Math.max(34, maxFontByWidth));
+    } else if (stationCount === 3) {
+      return Math.min(46, Math.max(26, maxFontByWidth));
+    } else {
+      return Math.min(36, Math.max(22, maxFontByWidth));
+    }
+  };
 
   return (
     <View
@@ -397,7 +421,7 @@ export default function PublicQueueDisplayScreen() {
             <Text
               style={[
                 styles.clinicTitle,
-                { fontSize: sectionTitleFontSize },
+                { fontSize: headerNowServingFontSize },
               ]}
               numberOfLines={1}
             >
@@ -676,12 +700,8 @@ export default function PublicQueueDisplayScreen() {
                       <Text
                         style={[
                           styles.stationTicketNumber,
-                          count === 2 && styles.stationTicketNumber2Up,
-                          count === 3 && styles.stationTicketNumber3Up,
-                          count >= 4 && styles.stationTicketNumber4Plus,
+                          { fontSize: getTicketFontSize(item.ticketNumber, count) },
                         ]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit={true}
                       >
                         {item.ticketNumber}
                       </Text>
@@ -732,7 +752,12 @@ export default function PublicQueueDisplayScreen() {
                 <Text style={styles.ticketLabel} numberOfLines={1}>
                   TICKET NUMBER
                 </Text>
-                <Text style={styles.ticketHero} numberOfLines={1} adjustsFontSizeToFit={true}>
+                <Text
+                  style={[
+                    styles.ticketHero,
+                    { fontSize: getTicketFontSize(primaryServing.ticketNumber, 1) },
+                  ]}
+                >
                   {primaryServing.ticketNumber}
                 </Text>
               </View>
@@ -992,19 +1017,19 @@ const styles = StyleSheet.create({
   mainGrid: {
     flex: 1,
     flexDirection: 'row',
-    padding: 20,
-    gap: 20,
+    padding: 24,
+    gap: 24,
   },
   servingCol: {
     flex: 6,
-    gap: 16,
+    gap: 20,
   },
   servingColCompact: {
     flex: 1,
   },
   upNextCol: {
     flex: 4,
-    gap: 16,
+    gap: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1044,13 +1069,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   ticketHero: {
-    fontSize: theme.fontSizes['4xl'] * 2.67,
+    fontSize: theme.fontSizes['4xl'] * 2.2,
     fontWeight: '900',
     color: darkColors.primary,
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     letterSpacing: -2,
-    lineHeight: 104,
-    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any, wordBreak: 'keep-all' as any } : {}),
+    textAlign: 'center',
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap' as any,
+          wordBreak: 'keep-all' as any,
+          textOverflow: 'clip' as any,
+        } as any)
+      : {}),
   },
   ticketHeroCompact: {
     fontSize: theme.fontSizes['4xl'] * 1.8,
@@ -1130,7 +1161,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 20,
     overflow: 'hidden',
   },
   stationCard: {
@@ -1140,7 +1171,7 @@ const styles = StyleSheet.create({
     borderColor: darkColors.border,
     borderWidth: 2,
     borderRadius: theme.radii['2xl'],
-    padding: 18,
+    padding: 20,
     justifyContent: 'space-between',
     overflow: 'hidden',
     ...(Platform.OS === 'web'
@@ -1151,23 +1182,24 @@ const styles = StyleSheet.create({
       : {}),
   },
   stationCard2Up: {
-    flexBasis: '46%',
+    flexBasis: '47%',
     height: '100%',
+    padding: 24,
   },
   stationCard3Up: {
-    flexBasis: '30%',
+    flexBasis: '31%',
     height: '100%',
-    padding: 14,
+    padding: 18,
   },
   stationCard4Up: {
-    flexBasis: '46%',
-    height: '48%',
-    padding: 14,
+    flexBasis: '47%',
+    height: '47%',
+    padding: 16,
   },
   stationCard5Plus: {
-    flexBasis: '30%',
-    height: '48%',
-    padding: 12,
+    flexBasis: '31%',
+    height: '47%',
+    padding: 14,
   },
   stationCardPulsing: {
     borderColor: darkColors.primary,
@@ -1184,7 +1216,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 10,
+    paddingBottom: 12,
+    marginBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: darkColors.border,
   },
@@ -1192,7 +1225,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     width: '100%',
     overflow: 'hidden',
   },
@@ -1201,29 +1234,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: darkColors.textMuted,
     letterSpacing: 1,
-    marginBottom: 4,
+    marginBottom: 6,
     ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
   },
   stationTicketNumber: {
-    fontSize: theme.fontSizes['4xl'] * 2.0,
     fontWeight: '900',
     color: darkColors.primary,
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     letterSpacing: -1,
     textAlign: 'center',
-    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any, wordBreak: 'keep-all' as any } : {}),
-  },
-  stationTicketNumber2Up: {
-    fontSize: theme.fontSizes['4xl'] * 2.4,
-  },
-  stationTicketNumber3Up: {
-    fontSize: theme.fontSizes['4xl'] * 1.85,
-  },
-  stationTicketNumber4Plus: {
-    fontSize: theme.fontSizes['4xl'] * 1.35,
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap' as any,
+          wordBreak: 'keep-all' as any,
+          textOverflow: 'clip' as any,
+        } as any)
+      : {}),
   },
   stationFooter: {
-    paddingTop: 10,
+    paddingTop: 12,
+    marginTop: 8,
     borderTopWidth: 1,
     borderTopColor: darkColors.border,
   },
@@ -1261,11 +1291,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: darkColors.border,
     borderRadius: theme.radii['2xl'],
-    padding: 16,
+    padding: 20,
   },
   upNextCardHeader: {
-    paddingBottom: 12,
-    marginBottom: 12,
+    paddingBottom: 14,
+    marginBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: darkColors.border,
   },
@@ -1273,33 +1303,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   upNextList: {
-    gap: 10,
+    gap: 16,
   },
   upNextCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: theme.radii.lg,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: theme.radii.xl,
     backgroundColor: darkColors.surface,
     borderWidth: 1,
   },
   upNextLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     flex: 1,
   },
   indexCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: theme.radii.lg - 1,
+    width: 28,
+    height: 28,
+    borderRadius: theme.radii.lg,
     backgroundColor: darkColors.surfaceHighlight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   indexText: {
-    fontSize: theme.fontSizes.xs,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '700',
     color: darkColors.textMuted,
   },
@@ -1308,6 +1339,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     lineHeight: 26,
+    ...(Platform.OS === 'web'
+      ? ({
+          whiteSpace: 'nowrap' as any,
+          textOverflow: 'clip' as any,
+        } as any)
+      : {}),
   },
   upNextName: {
     fontSize: theme.fontSizes.md + 1,

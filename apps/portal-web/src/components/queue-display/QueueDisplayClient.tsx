@@ -424,7 +424,7 @@ export default function QueueDisplayClient({
             />
           )}
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
               Now Serving
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
@@ -771,10 +771,10 @@ export default function QueueDisplayClient({
                       <div
                         className={`font-black tracking-tight leading-none drop-shadow-md font-mono whitespace-nowrap ${
                           count === 2
-                            ? "text-[clamp(3.75rem,6.5vw,6.5rem)]"
+                            ? "text-[clamp(2.75rem,4.5vw,4.5rem)]"
                             : count === 3
-                            ? "text-[clamp(3rem,5vw,5rem)]"
-                            : "text-[clamp(2.25rem,3.5vw,3.75rem)]"
+                            ? "text-[clamp(2rem,3vw,3.25rem)]"
+                            : "text-[clamp(1.5rem,2.2vw,2.5rem)]"
                         }`}
                         style={{ color: darkColors.primary }}
                       >
@@ -840,7 +840,7 @@ export default function QueueDisplayClient({
                   Ticket Number
                 </span>
                 <div
-                  className="text-[clamp(5rem,10vw,10.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono"
+                  className="text-[clamp(4.5rem,8.5vw,8.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono whitespace-nowrap"
                   style={{ color: darkColors.primary }}
                 >
                   {primaryServing.ticketNumber}
@@ -875,7 +875,7 @@ export default function QueueDisplayClient({
             </div>
 
             {upNextList.length > 0 ? (
-              <div className="flex flex-col gap-4 overflow-y-auto no-scrollbar max-h-[calc(100vh-280px)]">
+              <div className="flex flex-col gap-4 sm:gap-5 overflow-y-auto no-scrollbar max-h-[calc(100vh-280px)]">
                 {upNextList.slice(0, 8).map((ticket, idx) => {
                   const isUrgent = ticket.priority.toLowerCase() === "urgent";
                   const isEmergency = ticket.priority.toLowerCase() === "emergency";
@@ -884,7 +884,7 @@ export default function QueueDisplayClient({
                   return (
                     <div
                       key={ticket.queueItemId}
-                      className="p-5 rounded-2xl border transition-all duration-150 flex items-center justify-between shadow-sm"
+                      className="p-4 sm:p-5 rounded-2xl border transition-all duration-150 flex items-center justify-between shadow-sm"
                       style={{
                         backgroundColor: idx === 0 ? darkColors.surfaceHighlight : darkColors.surface,
                         borderColor: isEmergency
@@ -906,7 +906,7 @@ export default function QueueDisplayClient({
                         </div>
                         <div>
                           <div
-                            className="text-[clamp(1.75rem,2.6vw,2.75rem)] font-black font-mono leading-none tracking-tight"
+                            className="text-[clamp(1.5rem,2.2vw,2.25rem)] font-black font-mono leading-none tracking-tight whitespace-nowrap"
                             style={{
                               color: isEmergency
                                 ? darkColors.emergency
