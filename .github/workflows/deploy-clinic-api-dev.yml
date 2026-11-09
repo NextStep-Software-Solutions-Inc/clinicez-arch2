@@ -215,10 +215,13 @@ jobs:
 
           echo "==> Verifying container status on server..."
           sleep 5
-          docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          docker ps -a --filter "name=${{ env.CONTAINER_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
           echo "==> Container logs for ${{ env.CONTAINER_NAME }}:"
           docker logs --tail 200 "${{ env.CONTAINER_NAME }}" || true
-          echo "==> Testing direct HTTP connection on localhost:8080..."
-          curl -sI -m 5 "http://127.0.0.1:8080/health" || true
+          echo "==> Inspecting NPM configuration for clinic API..."
+          docker exec nginx-proxy-manager-app-1 grep -rn "clinicez-clinic.api" /data/nginx/proxy_host/ || true
+          echo "==> Testing connectivity from inside NPM container..."
+          docker exec nginx-proxy-manager-app-1 curl -sI -m 5 "http://clinic-api:8080/health" || true
+          docker exec nginx-proxy-manager-app-1 curl -sI -m 5 "http://clinicez-clinic-api:8080/health" || true
 
           echo "==> Deployment complete!"
