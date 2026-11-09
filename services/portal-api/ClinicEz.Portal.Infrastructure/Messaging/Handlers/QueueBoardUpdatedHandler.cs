@@ -59,7 +59,8 @@ public sealed class QueueBoardUpdatedHandler(
         {
             Emergency = emergencyList,
             TvDisplaySoundTheme = payload.TvDisplaySoundTheme ?? "classicChime",
-            TvDisplayVoiceEnabled = payload.TvDisplayVoiceEnabled
+            TvDisplayVoiceEnabled = payload.TvDisplayVoiceEnabled,
+            TvDisplayShowPhysicianName = payload.TvDisplayShowPhysicianName
         };
         var emergencyJson = JsonSerializer.Serialize(settingsMetadata, JsonOptions);
 

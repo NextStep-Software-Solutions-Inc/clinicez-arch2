@@ -49,6 +49,7 @@ export interface PublicQueueDisplayData {
   isPinValid?: boolean;
   tvDisplaySoundTheme?: string;
   tvDisplayVoiceEnabled?: boolean;
+  tvDisplayShowPhysicianName?: boolean;
 }
 
 const PIN_STORAGE_KEY = 'clinicez_tv_pin_lan';
@@ -592,118 +593,142 @@ export default function PublicQueueDisplayScreen() {
             </View>
             {primaryServing && (
               <View style={styles.inConsultationBadge}>
-                <Text style={styles.inConsultationText}>
-                  {otherServing.length > 0 ? `${data?.nowServing?.length} Active Stations` : 'In Consultation'}
-                </Text>
+                <Text style={styles.inConsultationText}>In Consultation</Text>
               </View>
             )}
           </View>
 
-          {primaryServing ? (
-            <View
-              style={[
-                styles.servingCard,
-                pulseActive && { borderColor: darkColors.primary, borderWidth: 3 },
-              ]}
-            >
-              <View style={styles.ticketBox}>
-                <Text style={styles.ticketLabel}>TICKET NUMBER / NUMERO NG TIKET</Text>
-                <Text
-                  style={[
-                    styles.ticketHero,
-                    otherServing.length > 0 && styles.ticketHeroCompact,
-                  ]}
-                >
-                  {primaryServing.ticketNumber}
-                </Text>
-              </View>
-
-              <View style={styles.attributionGrid}>
-                {/* Station / Room */}
-                <View style={styles.attributionItem}>
-                  <View style={styles.attrIconBox}>
-                    <Icon name="mapPin" size={24} color={darkColors.primary} />
-                  </View>
-                  <View style={styles.attrTextBox}>
-                    <Text style={styles.attrCaption}>STATION / ROOM</Text>
-                    <Text style={styles.attrValue} numberOfLines={1}>
-                      {primaryServing.roomOrStation || '—'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Doctor */}
-                <View style={styles.attributionItem}>
-                  <View style={styles.attrIconBox}>
-                    <Icon name="stethoscope" size={24} color={darkColors.primary} />
-                  </View>
-                  <View style={styles.attrTextBox}>
-                    <Text style={styles.attrCaption}>ATTENDING PHYSICIAN</Text>
-                    <Text style={styles.attrValue} numberOfLines={1}>
-                      {primaryServing.doctorName || '—'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Other concurrently serving stations */}
-              {otherServing.length > 0 && (
-                <View style={styles.concurrentBox}>
-                  <View style={styles.concurrentHeaderRow}>
-                    <Text style={styles.concurrentCaption}>ALSO SERVING AT OTHER STATIONS:</Text>
-                    <Text style={styles.concurrentCountBadge}>
-                      {otherServing.length} active {otherServing.length === 1 ? 'station' : 'stations'}
-                    </Text>
-                  </View>
-                  <View style={styles.concurrentGrid}>
-                    {otherServing.map((item) => {
-                      const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
-                      return (
-                        <View
-                          key={item.queueItemId}
-                          style={[
-                            styles.concurrentCard,
-                            isItemPulsing && styles.concurrentCardPulsing,
-                          ]}
-                        >
-                          <View style={styles.concurrentLeft}>
-                            <Text style={styles.concurrentTicket}>{item.ticketNumber}</Text>
-                            {isItemPulsing && (
-                              <View style={styles.concurrentJustCalledBadge}>
-                                <Text style={styles.concurrentJustCalledText}>JUST CALLED</Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.concurrentDetails}>
-                            <View style={styles.concurrentRow}>
-                              <Icon name="mapPin" size={14} color={darkColors.primary} />
-                              <Text style={styles.concurrentRoom} numberOfLines={1}>
-                                {item.roomOrStation || '—'}
-                              </Text>
-                            </View>
-                            {item.doctorName ? (
-                              <View style={styles.concurrentRow}>
-                                <Icon name="stethoscope" size={12} color={darkColors.textSecondary} />
-                                <Text style={styles.concurrentDoctor} numberOfLines={1}>
-                                  {item.doctorName}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-            </View>
-          ) : (
+          {!primaryServing ? (
             <View style={styles.emptyServingCard}>
               <Icon name="clock" size={48} color={darkColors.primary} />
               <Text style={styles.emptyServingTitle}>No Active Patient Called</Text>
               <Text style={styles.emptyServingSubtitle}>
                 Please wait for your ticket number to be called.
               </Text>
+            </View>
+          ) : data?.nowServing && data.nowServing.length > 1 ? (
+            /* Multi-Station Equal Prominence Grid */
+            <View style={styles.multiStationContainer}>
+              <ScrollView
+                style={styles.multiStationScroll}
+                contentContainerStyle={[
+                  styles.multiStationGrid,
+                  data.nowServing.length === 2 && styles.multiStationGrid2Up,
+                ]}
+                showsVerticalScrollIndicator={false}
+              >
+                {data.nowServing.map((item) => {
+                  const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
+                  const isTwoUp = data.nowServing.length === 2;
+                  return (
+                    <View
+                      key={item.queueItemId}
+                      style={[
+                        styles.stationCard,
+                        isTwoUp && styles.stationCard2Up,
+                        isItemPulsing && styles.stationCardPulsing,
+                      ]}
+                    >
+                      {/* Header: Station & Status */}
+                      <View style={styles.stationCardHeader}>
+                        <View>
+                          <Text style={styles.stationCaption}>STATION / ROOM</Text>
+                          <Text style={styles.stationName} numberOfLines={1}>
+                            {item.roomOrStation || '—'}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.stationStatusBadge,
+                            isItemPulsing && styles.stationStatusBadgePulsing,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.stationStatusText,
+                              isItemPulsing && styles.stationStatusTextPulsing,
+                            ]}
+                          >
+                            {isItemPulsing ? 'JUST CALLED' : 'In Consultation'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Center: Ticket Number */}
+                      <View style={styles.stationTicketBox}>
+                        <Text style={styles.stationTicketLabel}>TICKET NUMBER</Text>
+                        <Text
+                          style={[
+                            styles.stationTicketNumber,
+                            isTwoUp && styles.stationTicketNumber2Up,
+                          ]}
+                        >
+                          {item.ticketNumber}
+                        </Text>
+                      </View>
+
+                      {/* Footer: Attending Physician */}
+                      {data?.tvDisplayShowPhysicianName !== false && (
+                        <View style={styles.stationFooter}>
+                          <Text style={styles.stationDoctorCaption}>ATTENDING PHYSICIAN</Text>
+                          <Text style={styles.stationDoctorText} numberOfLines={1}>
+                            {item.doctorName || '—'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : (
+            /* Single Station Clean Display */
+            <View
+              style={[
+                styles.servingCard,
+                pulseActive && { borderColor: darkColors.primary, borderWidth: 3 },
+              ]}
+            >
+              {/* Header: Station & Status */}
+              <View style={styles.singleCardHeader}>
+                <View>
+                  <Text style={styles.stationCaption}>STATION / ROOM</Text>
+                  <Text style={styles.singleStationName} numberOfLines={1}>
+                    {primaryServing.roomOrStation || '—'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.stationStatusBadge,
+                    pulseActive && styles.stationStatusBadgePulsing,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.stationStatusText,
+                      pulseActive && styles.stationStatusTextPulsing,
+                    ]}
+                  >
+                    {pulseActive ? 'JUST CALLED' : 'In Consultation'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Center: Hero Ticket Number */}
+              <View style={styles.ticketBox}>
+                <Text style={styles.ticketLabel}>TICKET NUMBER / NUMERO NG TIKET</Text>
+                <Text style={styles.ticketHero}>{primaryServing.ticketNumber}</Text>
+              </View>
+
+              {/* Footer: Attending Physician */}
+              {data?.tvDisplayShowPhysicianName !== false && (
+                <View style={styles.singleCardFooter}>
+                  <Text style={styles.stationDoctorCaption}>ATTENDING PHYSICIAN</Text>
+                  <Text style={styles.singleDoctorName} numberOfLines={1}>
+                    {primaryServing.doctorName || '—'}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -1022,135 +1047,147 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes['4xl'] * 1.8,
     lineHeight: 76,
   },
-  attributionGrid: {
-    flexDirection: 'row',
-    gap: 16,
-    backgroundColor: darkColors.surfaceHighlight,
-    padding: 16,
-    borderRadius: theme.radii.xl - 2,
-    borderWidth: 1,
-    borderColor: darkColors.border,
-  },
-  attributionItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  attrIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.radii.lg - 2,
-    backgroundColor: darkColors.surface,
-    borderWidth: 1,
-    borderColor: darkColors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attrTextBox: {
-    flex: 1,
-  },
-  attrCaption: {
-    fontSize: theme.fontSizes.xs - 1,
-    fontWeight: '700',
-    color: darkColors.textMuted,
-    letterSpacing: 0.5,
-  },
-  attrValue: {
-    fontSize: theme.fontSizes.xl,
-    fontWeight: '800',
-    color: darkColors.text,
-  },
-  concurrentBox: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: darkColors.border,
-    paddingTop: 12,
-  },
-  concurrentHeaderRow: {
+  singleCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: darkColors.border,
   },
-  concurrentCaption: {
+  singleStationName: {
+    fontSize: theme.fontSizes['2xl'],
+    fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
+  },
+  stationCaption: {
     fontSize: theme.fontSizes.xs - 1,
     fontWeight: '700',
     color: darkColors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  concurrentCountBadge: {
-    fontSize: theme.fontSizes.xs - 2,
-    fontWeight: '700',
-    color: darkColors.textSecondary,
+  stationName: {
+    fontSize: theme.fontSizes.xl,
+    fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
+  },
+  stationStatusBadge: {
     backgroundColor: darkColors.surfaceHighlight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderColor: darkColors.border,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: theme.radii.full,
   },
-  concurrentGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
+  stationStatusBadgePulsing: {
+    backgroundColor: darkColors.primaryLight,
+    borderColor: darkColors.primaryBorder,
   },
-  concurrentCard: {
+  stationStatusText: {
+    fontSize: theme.fontSizes.xs,
+    fontWeight: '700',
+    color: darkColors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  stationStatusTextPulsing: {
+    color: darkColors.primary,
+  },
+  singleCardFooter: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: darkColors.border,
+  },
+  singleDoctorName: {
+    fontSize: theme.fontSizes.xl,
+    fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
+  },
+  stationDoctorCaption: {
+    fontSize: theme.fontSizes.xs - 1,
+    fontWeight: '700',
+    color: darkColors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  multiStationContainer: {
     flex: 1,
-    minWidth: 160,
-    backgroundColor: darkColors.surfaceHighlight,
-    borderWidth: 1,
+  },
+  multiStationScroll: {
+    flex: 1,
+  },
+  multiStationGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    paddingBottom: 8,
+  },
+  multiStationGrid2Up: {
+    flexDirection: 'column',
+    flex: 1,
+  },
+  stationCard: {
+    flex: 1,
+    minWidth: 280,
+    backgroundColor: darkColors.surface,
     borderColor: darkColors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: theme.radii.md,
+    borderWidth: 2,
+    borderRadius: theme.radii['2xl'],
+    padding: 20,
+    justifyContent: 'space-between',
+  },
+  stationCard2Up: {
+    minWidth: '100%',
+    flex: 1,
+  },
+  stationCardPulsing: {
+    borderColor: darkColors.primary,
+    borderWidth: 2,
+    backgroundColor: darkColors.surfaceHighlight,
+  },
+  stationCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: darkColors.border,
   },
-  concurrentCardPulsing: {
-    borderColor: darkColors.primary,
-    borderWidth: 2,
-  },
-  concurrentLeft: {
-    flexDirection: 'row',
+  stationTicketBox: {
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 18,
   },
-  concurrentTicket: {
-    fontSize: theme.fontSizes.xl,
-    fontWeight: '800',
-    color: darkColors.primary,
-    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
-  },
-  concurrentJustCalledBadge: {
-    backgroundColor: darkColors.primaryLight,
-    borderColor: darkColors.primaryBorder,
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.sm,
-  },
-  concurrentJustCalledText: {
-    fontSize: theme.fontSizes.xs - 2,
-    fontWeight: '800',
-    color: darkColors.primary,
-  },
-  concurrentDetails: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  concurrentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  concurrentRoom: {
+  stationTicketLabel: {
     fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: darkColors.text,
-  },
-  concurrentDoctor: {
-    fontSize: theme.fontSizes.xs - 1,
     color: darkColors.textMuted,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  stationTicketNumber: {
+    fontSize: theme.fontSizes['4xl'] * 1.5,
+    fontWeight: '900',
+    color: darkColors.primary,
+    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+    letterSpacing: -1,
+  },
+  stationTicketNumber2Up: {
+    fontSize: theme.fontSizes['4xl'] * 1.8,
+  },
+  stationFooter: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: darkColors.border,
+  },
+  stationDoctorText: {
+    fontSize: theme.fontSizes.lg,
+    fontWeight: '800',
+    color: darkColors.text,
+    marginTop: 2,
   },
   emptyServingCard: {
     flex: 1,

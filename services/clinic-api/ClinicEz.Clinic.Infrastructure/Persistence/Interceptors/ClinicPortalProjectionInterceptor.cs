@@ -222,6 +222,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                     TvDisplayPin = settings?.TvDisplayPin,
                     TvDisplaySoundTheme = settings?.TvDisplaySoundTheme ?? "classicChime",
                     TvDisplayVoiceEnabled = settings?.TvDisplayVoiceEnabled ?? false,
+                    TvDisplayShowPhysicianName = settings?.TvDisplayShowPhysicianName ?? true,
                     NowServing = nowServing,
                     UpNext = upNext
                 };

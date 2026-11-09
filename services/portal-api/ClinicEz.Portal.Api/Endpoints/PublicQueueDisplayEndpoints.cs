@@ -30,7 +30,8 @@ public sealed record PublicQueueDisplayData(
     bool IsPinRequired = false,
     bool IsPinValid = true,
     string? TvDisplaySoundTheme = "classicChime",
-    bool TvDisplayVoiceEnabled = false
+    bool TvDisplayVoiceEnabled = false,
+    bool TvDisplayShowPhysicianName = true
 );
 
 public sealed class PublicQueueDisplayEndpoints : IEndpoint
@@ -181,6 +182,7 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
 
         string soundTheme = "classicChime";
         bool voiceEnabled = false;
+        bool showPhysician = true;
         if (!string.IsNullOrWhiteSpace(board.EmergencyJson))
         {
             try
@@ -192,6 +194,8 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
                         soundTheme = t;
                     if (doc.RootElement.TryGetProperty("TvDisplayVoiceEnabled", out var voiceProp))
                         voiceEnabled = voiceProp.GetBoolean();
+                    if (doc.RootElement.TryGetProperty("TvDisplayShowPhysicianName", out var showPhysProp))
+                        showPhysician = showPhysProp.GetBoolean();
                 }
             }
             catch {}
@@ -211,7 +215,8 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
             IsPinRequired: isPinRequired,
             IsPinValid: true,
             TvDisplaySoundTheme: soundTheme,
-            TvDisplayVoiceEnabled: voiceEnabled
+            TvDisplayVoiceEnabled: voiceEnabled,
+            TvDisplayShowPhysicianName: showPhysician
         );
 
         return Results.Ok(ApiResponse<PublicQueueDisplayData>.Success(displayData));

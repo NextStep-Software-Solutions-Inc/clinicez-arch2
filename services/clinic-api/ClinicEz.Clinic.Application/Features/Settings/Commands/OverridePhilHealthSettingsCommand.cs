@@ -172,6 +172,7 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
             IsKioskIntakeEnabled: settings.IsKioskIntakeEnabled,
             KioskTokenVersion: settings.KioskTokenVersion,
             TvDisplaySoundTheme: settings.TvDisplaySoundTheme ?? "classicChime",
-            TvDisplayVoiceEnabled: settings.TvDisplayVoiceEnabled);
+            TvDisplayVoiceEnabled: settings.TvDisplayVoiceEnabled,
+            TvDisplayShowPhysicianName: settings.TvDisplayShowPhysicianName);
     }
 }

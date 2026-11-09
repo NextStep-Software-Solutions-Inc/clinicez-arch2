@@ -114,7 +114,8 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
                 IsPinRequired: true,
                 IsPinValid: false,
                 TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
-                TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled
+                TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled,
+                TvDisplayShowPhysicianName: clinic.TvDisplayShowPhysicianName
             );
         }
 
@@ -180,7 +181,8 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             IsPinRequired: isPinRequired,
             IsPinValid: true,
             TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
-            TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled
+            TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled,
+            TvDisplayShowPhysicianName: clinic.TvDisplayShowPhysicianName
         );
     }
 

@@ -147,6 +147,7 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                         TvDisplayPin = clinic.TvDisplayPin,
                         TvDisplaySoundTheme = clinic.TvDisplaySoundTheme ?? "classicChime",
                         TvDisplayVoiceEnabled = clinic.TvDisplayVoiceEnabled,
+                        TvDisplayShowPhysicianName = clinic.TvDisplayShowPhysicianName,
                         NowServing = nowServing,
                         UpNext = upNext
                     });

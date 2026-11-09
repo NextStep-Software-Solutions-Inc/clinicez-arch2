@@ -126,6 +126,12 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public bool TvDisplayMaskPatientNames { get; set; } = true;
 
     /// <summary>
+    /// Controls whether attending physician and staff names are displayed on public waiting area TV displays.
+    /// When false, only the Station / Room and Ticket Number are displayed to protect staff privacy.
+    /// </summary>
+    public bool TvDisplayShowPhysicianName { get; set; } = true;
+
+    /// <summary>
     /// Optional PIN / passcode required to view the waiting area TV display (both LAN and Cloud).
     /// If set, visitors opening the TV link must supply this PIN to unlock the live queue display.
     /// </summary>

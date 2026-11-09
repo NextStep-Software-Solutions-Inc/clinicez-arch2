@@ -36,5 +36,6 @@ public sealed record PublicQueueDisplayDto(
     bool IsPinRequired = false,
     bool IsPinValid = true,
     string TvDisplaySoundTheme = "classicChime",
-    bool TvDisplayVoiceEnabled = false
+    bool TvDisplayVoiceEnabled = false,
+    bool TvDisplayShowPhysicianName = true
 );

@@ -28,7 +28,9 @@ export default function WaitingAreaTvSettingsCard({
   showSkeletons = false,
 }: WaitingAreaTvSettingsCardProps) {
   const [maskNames, setMaskNames] = useState<boolean>(true);
+  const [showPhysicianName, setShowPhysicianName] = useState<boolean>(settings?.tvDisplayShowPhysicianName ?? true);
   const [, setSaving] = useState<boolean>(false);
+  const [, setSavingPhysician] = useState<boolean>(false);
   const [copiedLan, setCopiedLan] = useState<boolean>(false);
   const [copiedCloud, setCopiedCloud] = useState<boolean>(false);
   const [savedPin, setSavedPin] = useState<string | null>(settings?.tvDisplayPin || null);
@@ -44,6 +46,9 @@ export default function WaitingAreaTvSettingsCard({
   useEffect(() => {
     if (settings) {
       setMaskNames(settings.tvDisplayMaskPatientNames ?? true);
+      if (settings.tvDisplayShowPhysicianName !== undefined) {
+        setShowPhysicianName(settings.tvDisplayShowPhysicianName);
+      }
       if (settings.tvDisplayPin !== undefined) {
         setSavedPin(settings.tvDisplayPin || null);
         setPinInput(settings.tvDisplayPin || '');
@@ -110,6 +115,35 @@ export default function WaitingAreaTvSettingsCard({
         notify.error('Failed to save TV display setting.');
       } finally {
         setSaving(false);
+      }
+    },
+    [onSettingsUpdated]
+  );
+
+  const handleTogglePhysicianName = useCallback(
+    async (val: boolean) => {
+      setShowPhysicianName(val);
+      setSavingPhysician(true);
+      try {
+        const [updated, err] = await clinicService.updateSettings({
+          tvDisplayShowPhysicianName: val,
+        });
+        if (err || !updated) {
+          setShowPhysicianName(!val);
+          notify.error(err?.message || 'Could not update TV clinician display setting.');
+          return;
+        }
+        notify.success(
+          val
+            ? 'Clinician and staff names will be shown on waiting room TV screens.'
+            : 'Clinician and staff names hidden on waiting room TV screens (room/station only).'
+        );
+        onSettingsUpdated?.(updated);
+      } catch {
+        setShowPhysicianName(!val);
+        notify.error('Failed to save TV clinician display setting.');
+      } finally {
+        setSavingPhysician(false);
       }
     },
     [onSettingsUpdated]
@@ -292,6 +326,26 @@ export default function WaitingAreaTvSettingsCard({
                 value={maskNames}
                 onValueChange={handleToggleMask}
                 accessibilityLabel="Toggle Patient Name Masking on TV Display"
+              />
+            </View>
+
+            {/* Show Attending Physician / Clinician Name Toggle Row */}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleInfo}>
+                <View style={styles.titleWithIcon}>
+                  <Icon name="staff" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Show Attending Physician / Staff Name
+                  </ThemedText>
+                </View>
+                <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.toggleSubtitle}>
+                  Displays the clinician or staff name under the station or room on waiting room screens. Turn off to protect staff privacy.
+                </ThemedText>
+              </View>
+              <ToggleSwitch
+                value={showPhysicianName}
+                onValueChange={handleTogglePhysicianName}
+                accessibilityLabel="Toggle Physician Name Display on TV Screens"
               />
             </View>
 

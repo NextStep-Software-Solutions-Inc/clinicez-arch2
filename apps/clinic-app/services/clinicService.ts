@@ -2304,6 +2304,7 @@ export interface ClinicSettingsRecord {
   clearTvDisplayPin?: boolean;
   tvDisplaySoundTheme?: 'classicChime' | 'doorbell' | 'marimba' | 'bell' | 'elevator' | 'silent' | string;
   tvDisplayVoiceEnabled?: boolean;
+  tvDisplayShowPhysicianName?: boolean;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';

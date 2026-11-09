@@ -32,4 +32,5 @@ export interface PublicQueueDisplayData {
   isPinValid?: boolean;
   tvDisplaySoundTheme?: string;
   tvDisplayVoiceEnabled?: boolean;
+  tvDisplayShowPhysicianName?: boolean;
 }
