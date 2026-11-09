@@ -51,8 +51,9 @@ export default function QueueDisplayClient({
   const [currentTime, setCurrentTime] = useState<string>("");
   const [currentDate, setCurrentDate] = useState<string>("");
   const [lastUpdatedTime, setLastUpdatedTime] = useState<number>(Date.now());
-  const [pulseActive, setPulseActive] = useState<boolean>(false);
+  const [pulsingTicketIds, setPulsingTicketIds] = useState<string[]>([]);
   const [logoError, setLogoError] = useState<boolean>(false);
+  const alertTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   // Storage key for wall TV / browser pin persistence
   const storageKey = tenantSlug && facilitySlug ? `clinicez_tv_pin_${tenantSlug}_${facilitySlug}` : "clinicez_tv_pin_cloud";
@@ -124,6 +125,13 @@ export default function QueueDisplayClient({
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
+  // Cleanup alert timeouts on unmount
+  useEffect(() => {
+    return () => {
+      alertTimeoutsRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
   // Poll function
   const fetchQueue = useCallback(async (pinOverride?: string) => {
     const activePin = pinOverride !== undefined ? pinOverride : tvPin;
@@ -148,18 +156,27 @@ export default function QueueDisplayClient({
       const newServing = res.data.nowServing.map((s) => s.ticketNumber);
       const prevServing = prevServingRef.current;
 
-      // Check if ticket advanced
-      const hasNewCall = newServing.some((t) => !prevServing.includes(t));
-      if (!isInitialMountRef.current && hasNewCall) {
-        setPulseActive(true);
-        setTimeout(() => setPulseActive(false), 3600);
-        const calledTicket = res.data.nowServing.find((s) => !prevServing.includes(s.ticketNumber));
-        playQueueCallAlert({
-          theme: res.data.tvDisplaySoundTheme || 'classicChime',
-          voiceEnabled: res.data.tvDisplayVoiceEnabled,
-          ticketNumber: calledTicket?.ticketNumber,
-          roomOrStation: calledTicket?.roomOrStation,
-          doctorName: calledTicket?.doctorName,
+      // Audio & visual alerts when one or more tickets are newly called
+      const newlyCalledTickets = res.data.nowServing.filter((s) => !prevServing.includes(s.ticketNumber));
+      if (!isInitialMountRef.current && newlyCalledTickets.length > 0) {
+        const newlyCalledIds = newlyCalledTickets.map((t) => t.queueItemId);
+        setPulsingTicketIds((prev) => Array.from(new Set([...prev, ...newlyCalledIds])));
+        const clearPulseTimer = setTimeout(() => {
+          setPulsingTicketIds((prev) => prev.filter((id) => !newlyCalledIds.includes(id)));
+        }, 5000);
+        alertTimeoutsRef.current.push(clearPulseTimer);
+
+        newlyCalledTickets.forEach((ticket, idx) => {
+          const alertTimer = setTimeout(() => {
+            playQueueCallAlert({
+              theme: res.data?.tvDisplaySoundTheme || "classicChime",
+              voiceEnabled: res.data?.tvDisplayVoiceEnabled,
+              ticketNumber: ticket.ticketNumber,
+              roomOrStation: ticket.roomOrStation,
+              doctorName: ticket.doctorName,
+            });
+          }, idx * 3600);
+          alertTimeoutsRef.current.push(alertTimer);
         });
       }
 
@@ -369,6 +386,7 @@ export default function QueueDisplayClient({
   const primaryServing = data?.nowServing?.[0];
   const otherServing = data?.nowServing?.slice(1) || [];
   const upNextList = data?.upNext || [];
+  const pulseActive = primaryServing ? pulsingTicketIds.includes(primaryServing.queueItemId) : false;
 
   return (
     <div
@@ -699,7 +717,7 @@ export default function QueueDisplayClient({
                   borderColor: darkColors.primaryBorder,
                 }}
               >
-                In Consultation
+                {otherServing.length > 0 ? `${data?.nowServing?.length} Active Stations` : "In Consultation"}
               </span>
             )}
           </div>
@@ -723,7 +741,11 @@ export default function QueueDisplayClient({
                   Ticket Number / Numero ng Tiket
                 </span>
                 <div
-                  className="text-[clamp(5.5rem,11vw,11.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono"
+                  className={`${
+                    otherServing.length > 0
+                      ? "text-[clamp(4.5rem,8vw,7.5rem)]"
+                      : "text-[clamp(5.5rem,11vw,11.5rem)]"
+                  } font-black tracking-tight leading-none drop-shadow-md font-mono transition-all duration-300`}
                   style={{ color: darkColors.primary }}
                 >
                   {primaryServing.ticketNumber}
@@ -755,7 +777,7 @@ export default function QueueDisplayClient({
                       Station / Room
                     </span>
                     <div className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold leading-snug">
-                      {primaryServing.roomOrStation || "Consultation Room 1"}
+                      {primaryServing.roomOrStation || "—"}
                     </div>
                   </div>
                 </div>
@@ -777,7 +799,7 @@ export default function QueueDisplayClient({
                       Attending Physician
                     </span>
                     <div className="text-[clamp(1.25rem,2vw,2rem)] font-extrabold leading-snug">
-                      {primaryServing.doctorName || "Attending Doctor"}
+                      {primaryServing.doctorName || "—"}
                     </div>
                   </div>
                 </div>
@@ -786,24 +808,60 @@ export default function QueueDisplayClient({
               {/* Other concurrently serving stations */}
               {otherServing.length > 0 && (
                 <div className="mt-6 pt-6 border-t" style={{ borderColor: darkColors.border }}>
-                  <span className="text-xs uppercase font-bold tracking-wider mb-3 block" style={{ color: darkColors.textMuted }}>
-                    Also Serving at Other Stations:
-                  </span>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs uppercase font-bold tracking-wider block" style={{ color: darkColors.textMuted }}>
+                      Also Serving at Other Stations:
+                    </span>
+                    <span
+                      className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                      style={{ backgroundColor: darkColors.surfaceHighlight, color: darkColors.textSecondary }}
+                    >
+                      {otherServing.length} active {otherServing.length === 1 ? "station" : "stations"}
+                    </span>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {otherServing.map((item) => (
-                      <div
-                        key={item.queueItemId}
-                        className="p-3.5 rounded-xl border flex items-center justify-between"
-                        style={{ backgroundColor: darkColors.surfaceHighlight, borderColor: darkColors.border }}
-                      >
-                        <span className="text-2xl font-mono font-bold" style={{ color: darkColors.primary }}>
-                          {item.ticketNumber}
-                        </span>
-                        <span className="text-sm font-semibold truncate ml-2">
-                          {item.roomOrStation || "Exam Room"}
-                        </span>
-                      </div>
-                    ))}
+                    {otherServing.map((item) => {
+                      const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
+                      return (
+                        <div
+                          key={item.queueItemId}
+                          className={`p-4 rounded-2xl border transition-all duration-300 flex items-center justify-between shadow-md ${
+                            isItemPulsing ? "animate-serving-pulse" : ""
+                          }`}
+                          style={{
+                            backgroundColor: darkColors.surfaceHighlight,
+                            borderColor: isItemPulsing ? darkColors.primary : darkColors.border,
+                            borderWidth: isItemPulsing ? 2 : 1,
+                          }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-3xl sm:text-4xl font-mono font-black" style={{ color: darkColors.primary }}>
+                              {item.ticketNumber}
+                            </span>
+                            {isItemPulsing && (
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider"
+                                style={{ backgroundColor: darkColors.primaryLight, color: darkColors.primary }}
+                              >
+                                Just Called
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-right flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-1.5 text-base sm:text-lg font-bold">
+                              <MapPin className="w-4 h-4 shrink-0" style={{ color: darkColors.primary }} />
+                              <span className="truncate">{item.roomOrStation || "—"}</span>
+                            </div>
+                            {item.doctorName && (
+                              <div className="flex items-center gap-1.5 text-xs" style={{ color: darkColors.textMuted }}>
+                                <Stethoscope className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">{item.doctorName}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

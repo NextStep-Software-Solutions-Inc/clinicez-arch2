@@ -341,8 +341,8 @@ describe('Adversarial Verification: Milestone 4 LAN Kiosk Boundary & Offline Chi
 
       // Primary serving renders ticketNumber, roomOrStation, doctorName
       expect(screenSrc).toContain('{primaryServing.ticketNumber}');
-      expect(screenSrc).toContain('{primaryServing.roomOrStation || \'Consultation Room 1\'}');
-      expect(screenSrc).toContain('{primaryServing.doctorName || \'Attending Physician\'}');
+      expect(screenSrc).toContain('{primaryServing.roomOrStation || \'—\'}');
+      expect(screenSrc).toContain('{primaryServing.doctorName || \'—\'}');
 
       // Up Next renders ticketNumber, displayName, priority, status
       expect(screenSrc).toContain('{ticket.ticketNumber}');

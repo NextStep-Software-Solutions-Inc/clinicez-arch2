@@ -80,7 +80,8 @@ export default function PublicQueueDisplayScreen() {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
   const [lastUpdatedTime, setLastUpdatedTime] = useState<number>(Date.now());
-  const [pulseActive, setPulseActive] = useState<boolean>(false);
+  const [pulsingTicketIds, setPulsingTicketIds] = useState<string[]>([]);
+  const alertTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   // PIN / Passcode state
   const [pin, setPin] = useState<string>(getStoredPin);
@@ -130,6 +131,13 @@ export default function PublicQueueDisplayScreen() {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // Cleanup alert timeouts on unmount
+  useEffect(() => {
+    return () => {
+      alertTimeoutsRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
   // Data fetching and ticket advancement detection
   const fetchQueue = useCallback(async (pinOverride?: string) => {
     const activePin = pinOverride !== undefined ? pinOverride : pin;
@@ -160,18 +168,28 @@ export default function PublicQueueDisplayScreen() {
       const newServing: string[] = res.nowServing?.map((s: ServingTicket) => s.ticketNumber) || [];
       const prevServing = prevServingRef.current;
 
-      // Audio & visual alert when a new ticket is called
-      const hasNewCall = newServing.some((t) => !prevServing.includes(t));
-      if (!isInitialMountRef.current && hasNewCall) {
-        setPulseActive(true);
-        setTimeout(() => setPulseActive(false), 3600);
-        const calledTicket = res.nowServing?.find((s: ServingTicket) => !prevServing.includes(s.ticketNumber));
-        playQueueCallAlert({
-          theme: res.tvDisplaySoundTheme || 'classicChime',
-          voiceEnabled: res.tvDisplayVoiceEnabled,
-          ticketNumber: calledTicket?.ticketNumber,
-          roomOrStation: calledTicket?.roomOrStation,
-          doctorName: calledTicket?.doctorName,
+      // Audio & visual alerts when one or more tickets are newly called
+      const newlyCalled: ServingTicket[] = res.nowServing?.filter((s: ServingTicket) => !prevServing.includes(s.ticketNumber)) || [];
+      if (!isInitialMountRef.current && newlyCalled.length > 0) {
+        const newlyCalledIds: string[] = newlyCalled.map((t: ServingTicket) => t.queueItemId);
+        setPulsingTicketIds((prev) => Array.from(new Set([...prev, ...newlyCalledIds])));
+        const clearPulseTimer = setTimeout(() => {
+          setPulsingTicketIds((prev) => prev.filter((id) => !newlyCalledIds.includes(id)));
+        }, 5000);
+        alertTimeoutsRef.current.push(clearPulseTimer);
+
+        // Sequentially announce each newly called patient with spacing so utterances don't collide
+        newlyCalled.forEach((ticket: ServingTicket, idx: number) => {
+          const alertTimer = setTimeout(() => {
+            playQueueCallAlert({
+              theme: res.tvDisplaySoundTheme || 'classicChime',
+              voiceEnabled: res.tvDisplayVoiceEnabled,
+              ticketNumber: ticket.ticketNumber,
+              roomOrStation: ticket.roomOrStation,
+              doctorName: ticket.doctorName,
+            });
+          }, idx * 3600);
+          alertTimeoutsRef.current.push(alertTimer);
         });
       }
 
@@ -314,6 +332,7 @@ export default function PublicQueueDisplayScreen() {
   const primaryServing = data?.nowServing?.[0];
   const otherServing = data?.nowServing?.slice(1) || [];
   const upNextList = data?.upNext || [];
+  const pulseActive = primaryServing ? pulsingTicketIds.includes(primaryServing.queueItemId) : false;
 
   return (
     <View
@@ -573,7 +592,9 @@ export default function PublicQueueDisplayScreen() {
             </View>
             {primaryServing && (
               <View style={styles.inConsultationBadge}>
-                <Text style={styles.inConsultationText}>In Consultation</Text>
+                <Text style={styles.inConsultationText}>
+                  {otherServing.length > 0 ? `${data?.nowServing?.length} Active Stations` : 'In Consultation'}
+                </Text>
               </View>
             )}
           </View>
@@ -587,7 +608,14 @@ export default function PublicQueueDisplayScreen() {
             >
               <View style={styles.ticketBox}>
                 <Text style={styles.ticketLabel}>TICKET NUMBER / NUMERO NG TIKET</Text>
-                <Text style={styles.ticketHero}>{primaryServing.ticketNumber}</Text>
+                <Text
+                  style={[
+                    styles.ticketHero,
+                    otherServing.length > 0 && styles.ticketHeroCompact,
+                  ]}
+                >
+                  {primaryServing.ticketNumber}
+                </Text>
               </View>
 
               <View style={styles.attributionGrid}>
@@ -599,7 +627,7 @@ export default function PublicQueueDisplayScreen() {
                   <View style={styles.attrTextBox}>
                     <Text style={styles.attrCaption}>STATION / ROOM</Text>
                     <Text style={styles.attrValue} numberOfLines={1}>
-                      {primaryServing.roomOrStation || 'Consultation Room 1'}
+                      {primaryServing.roomOrStation || '—'}
                     </Text>
                   </View>
                 </View>
@@ -612,7 +640,7 @@ export default function PublicQueueDisplayScreen() {
                   <View style={styles.attrTextBox}>
                     <Text style={styles.attrCaption}>ATTENDING PHYSICIAN</Text>
                     <Text style={styles.attrValue} numberOfLines={1}>
-                      {primaryServing.doctorName || 'Attending Physician'}
+                      {primaryServing.doctorName || '—'}
                     </Text>
                   </View>
                 </View>
@@ -621,16 +649,50 @@ export default function PublicQueueDisplayScreen() {
               {/* Other concurrently serving stations */}
               {otherServing.length > 0 && (
                 <View style={styles.concurrentBox}>
-                  <Text style={styles.concurrentCaption}>ALSO SERVING AT OTHER STATIONS:</Text>
+                  <View style={styles.concurrentHeaderRow}>
+                    <Text style={styles.concurrentCaption}>ALSO SERVING AT OTHER STATIONS:</Text>
+                    <Text style={styles.concurrentCountBadge}>
+                      {otherServing.length} active {otherServing.length === 1 ? 'station' : 'stations'}
+                    </Text>
+                  </View>
                   <View style={styles.concurrentGrid}>
-                    {otherServing.map((item) => (
-                      <View key={item.queueItemId} style={styles.concurrentCard}>
-                        <Text style={styles.concurrentTicket}>{item.ticketNumber}</Text>
-                        <Text style={styles.concurrentRoom} numberOfLines={1}>
-                          {item.roomOrStation || 'Exam Room'}
-                        </Text>
-                      </View>
-                    ))}
+                    {otherServing.map((item) => {
+                      const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
+                      return (
+                        <View
+                          key={item.queueItemId}
+                          style={[
+                            styles.concurrentCard,
+                            isItemPulsing && styles.concurrentCardPulsing,
+                          ]}
+                        >
+                          <View style={styles.concurrentLeft}>
+                            <Text style={styles.concurrentTicket}>{item.ticketNumber}</Text>
+                            {isItemPulsing && (
+                              <View style={styles.concurrentJustCalledBadge}>
+                                <Text style={styles.concurrentJustCalledText}>JUST CALLED</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.concurrentDetails}>
+                            <View style={styles.concurrentRow}>
+                              <Icon name="mapPin" size={14} color={darkColors.primary} />
+                              <Text style={styles.concurrentRoom} numberOfLines={1}>
+                                {item.roomOrStation || '—'}
+                              </Text>
+                            </View>
+                            {item.doctorName ? (
+                              <View style={styles.concurrentRow}>
+                                <Icon name="stethoscope" size={12} color={darkColors.textSecondary} />
+                                <Text style={styles.concurrentDoctor} numberOfLines={1}>
+                                  {item.doctorName}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               )}
@@ -956,6 +1018,10 @@ const styles = StyleSheet.create({
     letterSpacing: -2,
     lineHeight: 104,
   },
+  ticketHeroCompact: {
+    fontSize: theme.fontSizes['4xl'] * 1.8,
+    lineHeight: 76,
+  },
   attributionGrid: {
     flexDirection: 'row',
     gap: 16,
@@ -1001,11 +1067,25 @@ const styles = StyleSheet.create({
     borderTopColor: darkColors.border,
     paddingTop: 12,
   },
+  concurrentHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   concurrentCaption: {
     fontSize: theme.fontSizes.xs - 1,
     fontWeight: '700',
     color: darkColors.textMuted,
-    marginBottom: 8,
+  },
+  concurrentCountBadge: {
+    fontSize: theme.fontSizes.xs - 2,
+    fontWeight: '700',
+    color: darkColors.textSecondary,
+    backgroundColor: darkColors.surfaceHighlight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: theme.radii.full,
   },
   concurrentGrid: {
     flexDirection: 'row',
@@ -1014,16 +1094,26 @@ const styles = StyleSheet.create({
   },
   concurrentCard: {
     flex: 1,
-    minWidth: 140,
+    minWidth: 160,
     backgroundColor: darkColors.surfaceHighlight,
     borderWidth: 1,
     borderColor: darkColors.border,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: theme.radii.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+  },
+  concurrentCardPulsing: {
+    borderColor: darkColors.primary,
+    borderWidth: 2,
+  },
+  concurrentLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   concurrentTicket: {
     fontSize: theme.fontSizes.xl,
@@ -1031,10 +1121,36 @@ const styles = StyleSheet.create({
     color: darkColors.primary,
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
   },
+  concurrentJustCalledBadge: {
+    backgroundColor: darkColors.primaryLight,
+    borderColor: darkColors.primaryBorder,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
+  },
+  concurrentJustCalledText: {
+    fontSize: theme.fontSizes.xs - 2,
+    fontWeight: '800',
+    color: darkColors.primary,
+  },
+  concurrentDetails: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  concurrentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   concurrentRoom: {
     fontSize: theme.fontSizes.xs,
-    fontWeight: '600',
-    color: darkColors.textSecondary,
+    fontWeight: '700',
+    color: darkColors.text,
+  },
+  concurrentDoctor: {
+    fontSize: theme.fontSizes.xs - 1,
+    color: darkColors.textMuted,
   },
   emptyServingCard: {
     flex: 1,
