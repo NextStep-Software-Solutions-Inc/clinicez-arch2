@@ -685,9 +685,9 @@ export default function QueueDisplayClient({
         </main>
       ) : (
         <main className="flex-1 min-h-0 flex items-center justify-center p-6 sm:p-8 lg:p-10 overflow-hidden">
-          <div className="w-full h-full max-h-[82vh] lg:max-h-[640px] grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 min-h-0">
-            {/* Left Column (Flex 3 or 5 cols): NOW SERVING Active Stations */}
-            <section className={`${upNextList.length > 0 ? "lg:col-span-3" : "lg:col-span-5"} flex flex-col h-full min-h-0 overflow-hidden`}>
+          <div className="w-full h-full max-h-[82vh] lg:max-h-[640px] flex flex-col lg:flex-row gap-6 sm:gap-8 min-h-0">
+            {/* Left Column (65% on wide screens): NOW SERVING Active Stations */}
+            <section className={`${upNextList.length > 0 ? "lg:w-[65%]" : "w-full"} flex flex-col h-full min-h-0 overflow-hidden`}>
           {!primaryServing ? (
             /* Empty serving state */
             <div
@@ -857,8 +857,8 @@ export default function QueueDisplayClient({
           )}
         </section>
 
-        {/* Right Column (Flex 2 / 40%): UP NEXT (Shown on widescreen displays when tickets exist) */}
-        <section className={`${upNextList.length > 0 ? "hidden lg:flex lg:col-span-2" : "hidden"} flex-col h-full min-h-0 overflow-hidden`}>
+        {/* Right Column (35% on wide screens): UP NEXT (Shown on widescreen displays when tickets exist) */}
+        <section className={`${upNextList.length > 0 ? "hidden lg:flex lg:w-[35%]" : "hidden"} flex-col h-full min-h-0 overflow-hidden`}>
           <div
             className="flex-1 h-full rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
             style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}

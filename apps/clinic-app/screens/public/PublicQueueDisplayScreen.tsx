@@ -340,7 +340,8 @@ export default function PublicQueueDisplayScreen() {
   const safeWidth = windowWidth > 0 ? windowWidth : 1280;
   const safeHeight = windowHeight > 0 ? windowHeight : 800;
   const hasUpNext = upNextList.length > 0;
-  const isCompact = safeWidth < 1024 || (Boolean(data?.nowServing && data.nowServing.length >= 4) && safeWidth < 1280) || !hasUpNext;
+  // Breakpoint strictly by screen size (<1024px) or empty queue - never collapses based on station count
+  const isCompact = safeWidth < 1024 || !hasUpNext;
 
   // Responsive padding to squeeze content inwards from top, sides, and bottom
   const bodyPaddingHorizontal = Math.max(28, Math.min(64, Math.round(safeWidth * 0.04)));
@@ -365,7 +366,7 @@ export default function PublicQueueDisplayScreen() {
   // Dynamic ticket number font size calculation to guarantee zero truncation and zero overflow
   const getTicketFontSize = (ticketNum: string, stationCount: number) => {
     const len = Math.max(ticketNum?.length || 5, 4);
-    const colWidth = hasUpNext ? safeWidth * 0.6 : safeWidth * 0.95;
+    const colWidth = hasUpNext ? safeWidth * 0.65 : safeWidth * 0.95;
     const cols = stationCount === 1 ? 1 : stationCount === 2 ? 2 : Math.min(stationCount, 3);
     const cardWidth = (colWidth - (cols - 1) * 20 - 48) / cols;
     // Monospace character width is ~0.62 * fontSize
@@ -1038,7 +1039,7 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   servingCol: {
-    flex: 6,
+    flex: 65,
     height: '100%',
     gap: 20,
   },
@@ -1046,7 +1047,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   upNextCol: {
-    flex: 4,
+    flex: 35,
     height: '100%',
     gap: 20,
   },
