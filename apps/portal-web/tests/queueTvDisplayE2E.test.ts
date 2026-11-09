@@ -285,7 +285,6 @@ describe('Public TV Display Board E2E Test Suite (portal-web)', () => {
     it('F2.8-T3: Now Serving section has clean typography without sparkle icon', () => {
       const nowServingConfig = {
         title: 'Now Serving',
-        subtitle: 'Kasalukuyang Tinatawag',
         hasSparkleIcon: false,
       };
 

@@ -371,20 +371,15 @@ export default function PublicQueueDisplayScreen() {
             />
           )}
           <View>
-            <View style={styles.headerTitleRow}>
-              <Text
-                style={[
-                  styles.clinicTitle,
-                  { fontSize: sectionTitleFontSize },
-                ]}
-                numberOfLines={1}
-              >
-                NOW SERVING
-              </Text>
-              <Text style={styles.headerNowServingSub} numberOfLines={1}>
-                Kasalukuyang Tinatawag
-              </Text>
-            </View>
+            <Text
+              style={[
+                styles.clinicTitle,
+                { fontSize: sectionTitleFontSize },
+              ]}
+              numberOfLines={1}
+            >
+              NOW SERVING
+            </Text>
             <View style={styles.liveBadgeRow}>
               <View
                 style={[
@@ -425,11 +420,6 @@ export default function PublicQueueDisplayScreen() {
                   {isLocked ? 'Locked (Passcode Required)' : isStale ? 'Syncing...' : 'Live Queue Display'}
                 </Text>
               </View>
-              {!isLocked && (
-                <Text style={styles.waitingCountText}>
-                  {data?.patientsWaitingCount || 0} waiting in line
-                </Text>
-              )}
             </View>
           </View>
         </View>
@@ -717,7 +707,7 @@ export default function PublicQueueDisplayScreen() {
               {/* Center: Hero Ticket Number */}
               <View style={styles.ticketBox}>
                 <Text style={styles.ticketLabel} numberOfLines={1}>
-                  TICKET NUMBER / NUMERO NG TIKET
+                  TICKET NUMBER
                 </Text>
                 <Text style={styles.ticketHero} numberOfLines={1} adjustsFontSizeToFit={true}>
                   {primaryServing.ticketNumber}
@@ -752,15 +742,6 @@ export default function PublicQueueDisplayScreen() {
                 numberOfLines={1}
               >
                 UP NEXT
-              </Text>
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontSize: sectionSubtitleFontSize },
-                ]}
-                numberOfLines={1}
-              >
-                Susunod Na Tiket
               </Text>
             </View>
 
@@ -914,16 +895,6 @@ const styles = StyleSheet.create({
     color: darkColors.text,
     letterSpacing: -0.5,
   },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-  },
-  headerNowServingSub: {
-    fontSize: theme.fontSizes.xs,
-    color: darkColors.textMuted,
-    fontWeight: '500',
-  },
   liveBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -947,10 +918,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.xs - 1,
     fontWeight: '700',
     textTransform: 'uppercase',
-  },
-  waitingCountText: {
-    fontSize: theme.fontSizes.xs,
-    color: darkColors.textMuted,
   },
   controlsRow: {
     flexDirection: 'row',

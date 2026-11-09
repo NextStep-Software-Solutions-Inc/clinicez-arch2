@@ -425,14 +425,9 @@ export default function QueueDisplayClient({
             />
           )}
           <div>
-            <div className="flex items-baseline gap-3">
-              <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight">
-                Now Serving
-              </h1>
-              <span className="text-sm font-medium hidden sm:inline" style={{ color: darkColors.textMuted }}>
-                Kasalukuyang Tinatawag
-              </span>
-            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight">
+              Now Serving
+            </h1>
             <div className="flex items-center gap-2 mt-0.5">
               <span
                 className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"
@@ -452,11 +447,6 @@ export default function QueueDisplayClient({
                 <span className="w-2 h-2 rounded-full bg-current animate-ping" />
                 {isLocked ? "Locked (Passcode Required)" : isStale ? "Syncing..." : "Live Queue Display"}
               </span>
-              {!isLocked && (
-                <span className="text-xs" style={{ color: darkColors.textMuted }}>
-                  {data?.patientsWaitingCount || 0} waiting in line
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -883,9 +873,6 @@ export default function QueueDisplayClient({
               <h2 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
                 Up Next
               </h2>
-              <p className="text-xs sm:text-sm font-medium" style={{ color: darkColors.textMuted }}>
-                Susunod Na Tiket
-              </p>
             </div>
 
             {upNextList.length > 0 ? (
