@@ -4029,8 +4029,13 @@ export const clinicService = {
     if (facilitySlug) params.append('facilitySlug', facilitySlug);
     if (tenantSlug) params.append('tenantSlug', tenantSlug);
     if (pin) params.append('pin', pin);
+    params.append('_t', Date.now().toString());
     const query = params.toString();
-    const headers = pin ? { 'X-Queue-Pin': pin } : undefined;
+    const headers: Record<string, string> = {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+    };
+    if (pin) headers['X-Queue-Pin'] = pin;
     return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`, { headers });
   },
 
