@@ -74,7 +74,7 @@ function getStoredPin(): string {
 }
 
 export default function PublicQueueDisplayScreen() {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [data, setData] = useState<PublicQueueDisplayData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -338,11 +338,20 @@ export default function PublicQueueDisplayScreen() {
   const pulseActive = primaryServing ? pulsingTicketIds.includes(primaryServing.queueItemId) : false;
 
   const safeWidth = windowWidth > 0 ? windowWidth : 1280;
+  const safeHeight = windowHeight > 0 ? windowHeight : 800;
   const hasUpNext = upNextList.length > 0;
   const isCompact = safeWidth < 1024 || (Boolean(data?.nowServing && data.nowServing.length >= 4) && safeWidth < 1280) || !hasUpNext;
+
+  // Responsive padding to squeeze content inwards from top, sides, and bottom
+  const bodyPaddingHorizontal = Math.max(28, Math.min(64, Math.round(safeWidth * 0.04)));
+  const bodyPaddingVertical = Math.max(20, Math.min(44, Math.round(safeHeight * 0.04)));
+
+  // Equal height constraint so Now Serving and Up Next match and avoid overly tall cards
+  const contentMaxHeight = Math.min(640, Math.max(400, Math.round((safeHeight - 110) * 0.84)));
+
   const headerNowServingFontSize = Math.max(
-    theme.fontSizes.md + 2,
-    Math.min(theme.fontSizes.xl + 1, Math.round(safeWidth * 0.015))
+    theme.fontSizes['2xl'],
+    Math.min(theme.fontSizes['3xl'] + 2, Math.round(safeWidth * 0.02))
   );
   const sectionTitleFontSize = Math.max(
     theme.fontSizes.xl,
@@ -417,7 +426,7 @@ export default function PublicQueueDisplayScreen() {
               variant="squircle"
             />
           )}
-          <View>
+          <View style={styles.brandTitleContainer}>
             <Text
               style={[
                 styles.clinicTitle,
@@ -427,47 +436,31 @@ export default function PublicQueueDisplayScreen() {
             >
               NOW SERVING
             </Text>
-            <View style={styles.liveBadgeRow}>
-              <View
-                style={[
-                  styles.livePill,
-                  {
-                    backgroundColor: isLocked
-                      ? darkColors.warningBg
-                      : isStale
-                      ? darkColors.warningBg
-                      : darkColors.primaryLight,
-                  },
-                ]}
-              >
+            {(isLocked || isStale) && (
+              <View style={styles.liveBadgeRow}>
                 <View
                   style={[
-                    styles.pingDot,
-                    {
-                      backgroundColor: isLocked
-                        ? darkColors.warningText
-                        : isStale
-                        ? darkColors.warningText
-                        : darkColors.primary,
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.livePillText,
-                    {
-                      color: isLocked
-                        ? darkColors.warningText
-                        : isStale
-                        ? darkColors.warningText
-                        : darkColors.primary,
-                    },
+                    styles.livePill,
+                    { backgroundColor: darkColors.warningBg },
                   ]}
                 >
-                  {isLocked ? 'Locked (Passcode Required)' : isStale ? 'Syncing...' : 'Live Queue Display'}
-                </Text>
+                  <View
+                    style={[
+                      styles.pingDot,
+                      { backgroundColor: darkColors.warningText },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.livePillText,
+                      { color: darkColors.warningText },
+                    ]}
+                  >
+                    {isLocked ? 'Locked (Passcode Required)' : 'Syncing...'}
+                  </Text>
+                </View>
               </View>
-            </View>
+            )}
           </View>
         </View>
 
@@ -646,9 +639,23 @@ export default function PublicQueueDisplayScreen() {
           </View>
         </View>
       ) : (
-        <View style={styles.mainGrid}>
-        {/* Left Column: Active Stations (NOW SERVING) */}
-        <View style={[styles.servingCol, isCompact && styles.servingColCompact]}>
+        <View
+          style={[
+            styles.mainGrid,
+            {
+              paddingHorizontal: bodyPaddingHorizontal,
+              paddingVertical: bodyPaddingVertical,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.contentWrapper,
+              { maxHeight: contentMaxHeight },
+            ]}
+          >
+            {/* Left Column: Active Stations (NOW SERVING) */}
+            <View style={[styles.servingCol, isCompact && styles.servingColCompact]}>
           {!primaryServing ? (
             <View style={styles.emptyServingCard}>
               <Icon name="clock" size={48} color={darkColors.primary} />
@@ -884,7 +891,8 @@ export default function PublicQueueDisplayScreen() {
           </View>
         </View>
         )}
-      </View>
+          </View>
+        </View>
       )}
 
       {/* Footer Ticker */}
@@ -936,6 +944,9 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: theme.radii.md - 2,
+  },
+  brandTitleContainer: {
+    justifyContent: 'center',
   },
   clinicTitle: {
     fontSize: theme.fontSizes['2xl'],
@@ -1016,12 +1027,19 @@ const styles = StyleSheet.create({
   },
   mainGrid: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contentWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
     flexDirection: 'row',
-    padding: 24,
     gap: 24,
   },
   servingCol: {
     flex: 6,
+    height: '100%',
     gap: 20,
   },
   servingColCompact: {
@@ -1029,6 +1047,7 @@ const styles = StyleSheet.create({
   },
   upNextCol: {
     flex: 4,
+    height: '100%',
     gap: 20,
   },
   sectionHeader: {
@@ -1049,6 +1068,7 @@ const styles = StyleSheet.create({
   },
   servingCard: {
     flex: 1,
+    height: '100%',
     backgroundColor: darkColors.surface,
     borderColor: darkColors.border,
     borderWidth: 2,
@@ -1159,6 +1179,7 @@ const styles = StyleSheet.create({
   },
   multiStationContainer: {
     flex: 1,
+    height: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 20,
@@ -1287,6 +1308,7 @@ const styles = StyleSheet.create({
   },
   upNextContainer: {
     flex: 1,
+    height: '100%',
     backgroundColor: darkColors.surface,
     borderWidth: 2,
     borderColor: darkColors.border,

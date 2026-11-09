@@ -423,30 +423,24 @@ export default function QueueDisplayClient({
               className="w-12 h-12 rounded-xl shrink-0 shadow-inner"
             />
           )}
-          <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
+          <div className="flex flex-col justify-center">
+            <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight leading-none">
               Now Serving
             </h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"
-                style={{
-                  backgroundColor: isLocked
-                    ? darkColors.warningBg
-                    : isStale
-                    ? darkColors.warningBg
-                    : darkColors.primaryLight,
-                  color: isLocked
-                    ? darkColors.warningText
-                    : isStale
-                    ? darkColors.warningText
-                    : darkColors.primary,
-                }}
-              >
-                <span className="w-2 h-2 rounded-full bg-current animate-ping" />
-                {isLocked ? "Locked (Passcode Required)" : isStale ? "Syncing..." : "Live Queue Display"}
-              </span>
-            </div>
+            {(isLocked || isStale) && (
+              <div className="flex items-center gap-2 mt-1">
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"
+                  style={{
+                    backgroundColor: darkColors.warningBg,
+                    color: darkColors.warningText,
+                  }}
+                >
+                  <span className="w-2 h-2 rounded-full bg-current animate-ping" />
+                  {isLocked ? "Locked (Passcode Required)" : "Syncing..."}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -690,9 +684,10 @@ export default function QueueDisplayClient({
           </div>
         </main>
       ) : (
-        <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-8 overflow-hidden">
-        {/* Left Column (Flex 3 or 5 cols): NOW SERVING Active Stations */}
-        <section className={`${upNextList.length > 0 ? "lg:col-span-3" : "lg:col-span-5"} flex flex-col min-h-0 overflow-hidden`}>
+        <main className="flex-1 min-h-0 flex items-center justify-center p-6 sm:p-8 lg:p-10 overflow-hidden">
+          <div className="w-full h-full max-h-[82vh] lg:max-h-[640px] grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 min-h-0">
+            {/* Left Column (Flex 3 or 5 cols): NOW SERVING Active Stations */}
+            <section className={`${upNextList.length > 0 ? "lg:col-span-3" : "lg:col-span-5"} flex flex-col h-full min-h-0 overflow-hidden`}>
           {!primaryServing ? (
             /* Empty serving state */
             <div
@@ -712,7 +707,7 @@ export default function QueueDisplayClient({
             </div>
           ) : data?.nowServing && data.nowServing.length > 1 ? (
             /* Multi-Station Equal Prominence Flexbox (Responsive, Zero-Scroll) */
-            <div className="flex-1 min-h-0 flex flex-wrap gap-4 sm:gap-6 overflow-hidden">
+            <div className="flex-1 h-full min-h-0 flex flex-wrap gap-4 sm:gap-6 overflow-hidden">
               {data.nowServing.map((item) => {
                 const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
                 const count = data.nowServing.length;
@@ -863,9 +858,9 @@ export default function QueueDisplayClient({
         </section>
 
         {/* Right Column (Flex 2 / 40%): UP NEXT (Shown on widescreen displays when tickets exist) */}
-        <section className={`${upNextList.length > 0 ? "hidden lg:flex lg:col-span-2" : "hidden"} flex-col min-h-0 overflow-hidden`}>
+        <section className={`${upNextList.length > 0 ? "hidden lg:flex lg:col-span-2" : "hidden"} flex-col h-full min-h-0 overflow-hidden`}>
           <div
-            className="flex-1 rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
+            className="flex-1 h-full rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
             style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
           >
             <div className="pb-4 mb-4 border-b shrink-0" style={{ borderColor: darkColors.border }}>
@@ -971,7 +966,8 @@ export default function QueueDisplayClient({
             )}
           </div>
         </section>
-      </main>
+          </div>
+        </main>
       )}
 
       {/* Footer Ticker Bar */}
