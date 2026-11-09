@@ -174,14 +174,8 @@ export default function PublicQueueDisplayScreen() {
       // Audio & visual alerts when one or more tickets are newly called
       const newlyCalled: ServingTicket[] = res.nowServing?.filter((s: ServingTicket) => !prevServing.includes(s.ticketNumber)) || [];
       if (!isInitialMountRef.current && newlyCalled.length > 0) {
-        const newlyCalledIds: string[] = newlyCalled.map((t: ServingTicket) => t.queueItemId);
-        setPulsingTicketIds((prev) => Array.from(new Set([...prev, ...newlyCalledIds])));
-        const clearPulseTimer = setTimeout(() => {
-          setPulsingTicketIds((prev) => prev.filter((id) => !newlyCalledIds.includes(id)));
-        }, 5000);
-        alertTimeoutsRef.current.push(clearPulseTimer);
-
-        // Sequentially announce each newly called patient with spacing so utterances don't collide
+        // Sequentially announce each newly called patient and keep the card glow active
+        // for that specific ticket until its announcement finishes
         newlyCalled.forEach((ticket: ServingTicket, idx: number) => {
           const alertTimer = setTimeout(() => {
             playQueueCallAlert({
@@ -190,6 +184,12 @@ export default function PublicQueueDisplayScreen() {
               ticketNumber: ticket.ticketNumber,
               roomOrStation: ticket.roomOrStation,
               doctorName: ticket.doctorName,
+              onStart: () => {
+                setPulsingTicketIds((prev) => Array.from(new Set([...prev, ticket.queueItemId])));
+              },
+              onEnd: () => {
+                setPulsingTicketIds((prev) => prev.filter((id) => id !== ticket.queueItemId));
+              },
             });
           }, idx * 3600);
           alertTimeoutsRef.current.push(alertTimer);
@@ -338,7 +338,8 @@ export default function PublicQueueDisplayScreen() {
   const pulseActive = primaryServing ? pulsingTicketIds.includes(primaryServing.queueItemId) : false;
 
   const safeWidth = windowWidth > 0 ? windowWidth : 1280;
-  const isCompact = safeWidth < 1024 || (Boolean(data?.nowServing && data.nowServing.length >= 4) && safeWidth < 1280);
+  const hasUpNext = upNextList.length > 0;
+  const isCompact = safeWidth < 1024 || (Boolean(data?.nowServing && data.nowServing.length >= 4) && safeWidth < 1280) || !hasUpNext;
   const sectionTitleFontSize = Math.max(
     theme.fontSizes.xl,
     Math.min(theme.fontSizes['3xl'] + 2, Math.round(safeWidth * 0.024))
@@ -354,6 +355,28 @@ export default function PublicQueueDisplayScreen() {
       onTouchStart={handleUserInteraction}
       {...(Platform.OS === 'web' ? { onClick: handleUserInteraction } : {})}
     >
+      {Platform.OS === 'web' && (
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              @keyframes cardFadeIn {
+                from { opacity: 0; transform: scale(0.96) translateY(8px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
+              }
+              @keyframes cardPulseGlow {
+                0%, 100% {
+                  box-shadow: 0 0 20px ${darkColors.primaryBorder};
+                  border-color: ${darkColors.primaryBorder};
+                }
+                50% {
+                  box-shadow: 0 0 45px ${darkColors.primary}, 0 0 15px ${darkColors.primaryHover};
+                  border-color: ${darkColors.primary};
+                }
+              }
+            `,
+          }}
+        />
+      )}
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={styles.brandRow}>
@@ -1120,6 +1143,12 @@ const styles = StyleSheet.create({
     padding: 18,
     justifyContent: 'space-between',
     overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? ({
+          transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+          animation: 'cardFadeIn 0.35s ease-out',
+        } as any)
+      : {}),
   },
   stationCard2Up: {
     flexBasis: '46%',
@@ -1142,8 +1171,14 @@ const styles = StyleSheet.create({
   },
   stationCardPulsing: {
     borderColor: darkColors.primary,
-    borderWidth: 2,
+    borderWidth: 3,
     backgroundColor: darkColors.surfaceHighlight,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxShadow: `0 0 35px ${darkColors.primaryLight}, 0 0 15px ${darkColors.primary}`,
+          animation: 'cardPulseGlow 1.6s ease-in-out infinite',
+        } as any)
+      : {}),
   },
   stationCardHeader: {
     flexDirection: 'row',
@@ -1154,9 +1189,10 @@ const styles = StyleSheet.create({
     borderBottomColor: darkColors.border,
   },
   stationTicketBox: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     width: '100%',
     overflow: 'hidden',
   },
@@ -1169,7 +1205,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
   },
   stationTicketNumber: {
-    fontSize: theme.fontSizes['4xl'] * 1.4,
+    fontSize: theme.fontSizes['4xl'] * 2.0,
     fontWeight: '900',
     color: darkColors.primary,
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
@@ -1178,13 +1214,13 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any, wordBreak: 'keep-all' as any } : {}),
   },
   stationTicketNumber2Up: {
-    fontSize: theme.fontSizes['4xl'] * 1.6,
+    fontSize: theme.fontSizes['4xl'] * 2.4,
   },
   stationTicketNumber3Up: {
-    fontSize: theme.fontSizes['4xl'] * 1.15,
+    fontSize: theme.fontSizes['4xl'] * 1.85,
   },
   stationTicketNumber4Plus: {
-    fontSize: theme.fontSizes['3xl'],
+    fontSize: theme.fontSizes['4xl'] * 1.35,
   },
   stationFooter: {
     paddingTop: 10,

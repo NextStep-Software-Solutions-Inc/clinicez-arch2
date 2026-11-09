@@ -159,13 +159,6 @@ export default function QueueDisplayClient({
       // Audio & visual alerts when one or more tickets are newly called
       const newlyCalledTickets = res.data.nowServing.filter((s) => !prevServing.includes(s.ticketNumber));
       if (!isInitialMountRef.current && newlyCalledTickets.length > 0) {
-        const newlyCalledIds = newlyCalledTickets.map((t) => t.queueItemId);
-        setPulsingTicketIds((prev) => Array.from(new Set([...prev, ...newlyCalledIds])));
-        const clearPulseTimer = setTimeout(() => {
-          setPulsingTicketIds((prev) => prev.filter((id) => !newlyCalledIds.includes(id)));
-        }, 5000);
-        alertTimeoutsRef.current.push(clearPulseTimer);
-
         newlyCalledTickets.forEach((ticket, idx) => {
           const alertTimer = setTimeout(() => {
             playQueueCallAlert({
@@ -174,6 +167,12 @@ export default function QueueDisplayClient({
               ticketNumber: ticket.ticketNumber,
               roomOrStation: ticket.roomOrStation,
               doctorName: ticket.doctorName,
+              onStart: () => {
+                setPulsingTicketIds((prev) => Array.from(new Set([...prev, ticket.queueItemId])));
+              },
+              onEnd: () => {
+                setPulsingTicketIds((prev) => prev.filter((id) => id !== ticket.queueItemId));
+              },
             });
           }, idx * 3600);
           alertTimeoutsRef.current.push(alertTimer);
@@ -692,8 +691,8 @@ export default function QueueDisplayClient({
         </main>
       ) : (
         <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-8 overflow-hidden">
-        {/* Left Column (Flex 3 / 60%): NOW SERVING Active Stations */}
-        <section className="lg:col-span-3 flex flex-col min-h-0 overflow-hidden">
+        {/* Left Column (Flex 3 or 5 cols): NOW SERVING Active Stations */}
+        <section className={`${upNextList.length > 0 ? "lg:col-span-3" : "lg:col-span-5"} flex flex-col min-h-0 overflow-hidden`}>
           {!primaryServing ? (
             /* Empty serving state */
             <div
@@ -772,10 +771,10 @@ export default function QueueDisplayClient({
                       <div
                         className={`font-black tracking-tight leading-none drop-shadow-md font-mono whitespace-nowrap ${
                           count === 2
-                            ? "text-[clamp(3rem,5vw,5rem)]"
+                            ? "text-[clamp(3.75rem,6.5vw,6.5rem)]"
                             : count === 3
-                            ? "text-[clamp(2.25rem,3.5vw,3.75rem)]"
-                            : "text-[clamp(1.75rem,2.5vw,3rem)]"
+                            ? "text-[clamp(3rem,5vw,5rem)]"
+                            : "text-[clamp(2.25rem,3.5vw,3.75rem)]"
                         }`}
                         style={{ color: darkColors.primary }}
                       >
@@ -838,7 +837,7 @@ export default function QueueDisplayClient({
                   className="text-xs sm:text-sm uppercase font-bold tracking-widest block mb-2"
                   style={{ color: darkColors.textMuted }}
                 >
-                  Ticket Number / Numero ng Tiket
+                  Ticket Number
                 </span>
                 <div
                   className="text-[clamp(5rem,10vw,10.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono"
@@ -863,8 +862,8 @@ export default function QueueDisplayClient({
           )}
         </section>
 
-        {/* Right Column (Flex 2 / 40%): UP NEXT (Shown on widescreen displays) */}
-        <section className="hidden lg:flex lg:col-span-2 flex-col min-h-0 overflow-hidden">
+        {/* Right Column (Flex 2 / 40%): UP NEXT (Shown on widescreen displays when tickets exist) */}
+        <section className={`${upNextList.length > 0 ? "hidden lg:flex lg:col-span-2" : "hidden"} flex-col min-h-0 overflow-hidden`}>
           <div
             className="flex-1 rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
             style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}

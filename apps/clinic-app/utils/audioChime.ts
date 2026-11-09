@@ -258,9 +258,16 @@ export function announceTicketVoice(params: {
   ticketNumber: string;
   roomOrStation?: string | null;
   doctorName?: string | null;
+  onEnd?: () => void;
 }): void {
-  if (isAudioMuted()) return;
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  if (isAudioMuted()) {
+    params.onEnd?.();
+    return;
+  }
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    params.onEnd?.();
+    return;
+  }
 
   try {
     // Cancel any in-flight utterance so announcements do not pile up
@@ -285,9 +292,23 @@ export function announceTicketVoice(params: {
     utterance.rate = 0.92; // Slightly paced for waiting room acoustic clarity
     utterance.pitch = 1.0;
 
+    let finished = false;
+    const finish = () => {
+      if (!finished) {
+        finished = true;
+        params.onEnd?.();
+      }
+    };
+
+    utterance.onend = finish;
+    utterance.onerror = finish;
+
+    // Safety fallback timeout in case browser TTS does not fire onend
+    setTimeout(finish, 6000);
+
     window.speechSynthesis.speak(utterance);
   } catch {
-    // Non-fatal if speech synthesis is unsupported on platform
+    params.onEnd?.();
   }
 }
 
@@ -295,6 +316,7 @@ export function announceTicketVoice(params: {
  * Orchestrates the full calling sequence:
  * 1. Plays selected chime sound (if not silent).
  * 2. If voiceEnabled, waits 600ms for chime decay, then reads the ticket in English.
+ * 3. Triggers onStart when alert starts and onEnd when utterance/chime completes.
  */
 export function playQueueCallAlert(params: {
   theme?: string;
@@ -302,8 +324,17 @@ export function playQueueCallAlert(params: {
   ticketNumber?: string;
   roomOrStation?: string | null;
   doctorName?: string | null;
+  onStart?: () => void;
+  onEnd?: () => void;
 }): void {
-  if (isAudioMuted()) return;
+  params.onStart?.();
+
+  if (isAudioMuted()) {
+    setTimeout(() => {
+      params.onEnd?.();
+    }, 3200);
+    return;
+  }
 
   const theme = params.theme || 'classicChime';
   if (theme !== 'silent') {
@@ -317,7 +348,13 @@ export function playQueueCallAlert(params: {
         ticketNumber: params.ticketNumber!,
         roomOrStation: params.roomOrStation,
         doctorName: params.doctorName,
+        onEnd: params.onEnd,
       });
     }, delay);
+  } else {
+    // If voice not enabled, maintain glow for chime duration (~3200ms)
+    setTimeout(() => {
+      params.onEnd?.();
+    }, 3200);
   }
 }

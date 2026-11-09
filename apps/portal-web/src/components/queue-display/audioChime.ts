@@ -242,9 +242,16 @@ export function announceTicketVoice(params: {
   ticketNumber: string;
   roomOrStation?: string | null;
   doctorName?: string | null;
+  onEnd?: () => void;
 }): void {
-  if (isAudioMuted()) return;
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  if (isAudioMuted()) {
+    params.onEnd?.();
+    return;
+  }
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    params.onEnd?.();
+    return;
+  }
 
   try {
     window.speechSynthesis.cancel();
@@ -267,14 +274,30 @@ export function announceTicketVoice(params: {
     utterance.rate = 0.92;
     utterance.pitch = 1.0;
 
+    let finished = false;
+    const finish = () => {
+      if (!finished) {
+        finished = true;
+        params.onEnd?.();
+      }
+    };
+
+    utterance.onend = finish;
+    utterance.onerror = finish;
+
+    setTimeout(finish, 6000);
+
     window.speechSynthesis.speak(utterance);
   } catch {
-    // Non-fatal if speech synthesis is unsupported
+    params.onEnd?.();
   }
 }
 
 /**
- * Orchestrates the full calling sequence for Cloud TV display.
+ * Orchestrates the full calling sequence for Cloud TV display:
+ * 1. Plays selected chime sound (if not silent).
+ * 2. If voiceEnabled, waits 600ms for chime decay, then reads the ticket in English.
+ * 3. Triggers onStart and onEnd lifecycle callbacks for glowing synchronization.
  */
 export function playQueueCallAlert(params: {
   theme?: string;
@@ -282,8 +305,17 @@ export function playQueueCallAlert(params: {
   ticketNumber?: string;
   roomOrStation?: string | null;
   doctorName?: string | null;
+  onStart?: () => void;
+  onEnd?: () => void;
 }): void {
-  if (isAudioMuted()) return;
+  params.onStart?.();
+
+  if (isAudioMuted()) {
+    setTimeout(() => {
+      params.onEnd?.();
+    }, 3200);
+    return;
+  }
 
   const theme = params.theme || 'classicChime';
   if (theme !== 'silent') {
@@ -297,7 +329,12 @@ export function playQueueCallAlert(params: {
         ticketNumber: params.ticketNumber!,
         roomOrStation: params.roomOrStation,
         doctorName: params.doctorName,
+        onEnd: params.onEnd,
       });
     }, delay);
+  } else {
+    setTimeout(() => {
+      params.onEnd?.();
+    }, 3200);
   }
 }
