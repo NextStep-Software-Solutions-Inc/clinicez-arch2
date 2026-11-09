@@ -75,7 +75,6 @@ function getStoredPin(): string {
 
 export default function PublicQueueDisplayScreen() {
   const { width: windowWidth } = useWindowDimensions();
-  const isCompact = windowWidth < 1024;
   const [data, setData] = useState<PublicQueueDisplayData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -338,6 +337,17 @@ export default function PublicQueueDisplayScreen() {
   const upNextList = data?.upNext || [];
   const pulseActive = primaryServing ? pulsingTicketIds.includes(primaryServing.queueItemId) : false;
 
+  const safeWidth = windowWidth > 0 ? windowWidth : 1280;
+  const isCompact = safeWidth < 1024 || (Boolean(data?.nowServing && data.nowServing.length >= 4) && safeWidth < 1280);
+  const sectionTitleFontSize = Math.max(
+    theme.fontSizes.xl,
+    Math.min(theme.fontSizes['3xl'] + 2, Math.round(safeWidth * 0.024))
+  );
+  const sectionSubtitleFontSize = Math.max(
+    theme.fontSizes.xs,
+    Math.min(theme.fontSizes.md, Math.round(safeWidth * 0.011))
+  );
+
   return (
     <View
       style={styles.root}
@@ -591,8 +601,24 @@ export default function PublicQueueDisplayScreen() {
         <View style={[styles.servingCol, isCompact && styles.servingColCompact]}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={styles.sectionTitle}>NOW SERVING</Text>
-              <Text style={styles.sectionSubtitle}>Kasalukuyang Tinatawag</Text>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { fontSize: sectionTitleFontSize },
+                ]}
+                numberOfLines={1}
+              >
+                NOW SERVING
+              </Text>
+              <Text
+                style={[
+                  styles.sectionSubtitle,
+                  { fontSize: sectionSubtitleFontSize },
+                ]}
+                numberOfLines={1}
+              >
+                Kasalukuyang Tinatawag
+              </Text>
             </View>
           </View>
 
@@ -728,8 +754,24 @@ export default function PublicQueueDisplayScreen() {
         <View style={styles.upNextCol}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={styles.sectionTitle}>UP NEXT</Text>
-              <Text style={styles.sectionSubtitle}>Susunod Na Tiket</Text>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { fontSize: sectionTitleFontSize },
+                ]}
+                numberOfLines={1}
+              >
+                UP NEXT
+              </Text>
+              <Text
+                style={[
+                  styles.sectionSubtitle,
+                  { fontSize: sectionSubtitleFontSize },
+                ]}
+                numberOfLines={1}
+              >
+                Susunod Na Tiket
+              </Text>
             </View>
           </View>
 
@@ -1020,10 +1062,12 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     letterSpacing: -2,
     lineHeight: 104,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any, wordBreak: 'keep-all' as any } : {}),
   },
   ticketHeroCompact: {
     fontSize: theme.fontSizes['4xl'] * 1.8,
     lineHeight: 76,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any, wordBreak: 'keep-all' as any } : {}),
   },
   singleCardHeader: {
     flexDirection: 'row',
@@ -1148,6 +1192,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
+    width: '100%',
+    overflow: 'hidden',
   },
   stationTicketLabel: {
     fontSize: theme.fontSizes.xs - 1,
@@ -1155,6 +1201,7 @@ const styles = StyleSheet.create({
     color: darkColors.textMuted,
     letterSpacing: 1,
     marginBottom: 4,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
   },
   stationTicketNumber: {
     fontSize: theme.fontSizes['4xl'] * 1.4,
@@ -1163,13 +1210,13 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     letterSpacing: -1,
     textAlign: 'center',
-    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any, wordBreak: 'keep-all' as any } : {}),
   },
   stationTicketNumber2Up: {
     fontSize: theme.fontSizes['4xl'] * 1.6,
   },
   stationTicketNumber3Up: {
-    fontSize: theme.fontSizes['4xl'] * 1.2,
+    fontSize: theme.fontSizes['4xl'] * 1.15,
   },
   stationTicketNumber4Plus: {
     fontSize: theme.fontSizes['3xl'],

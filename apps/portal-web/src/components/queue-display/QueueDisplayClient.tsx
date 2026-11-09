@@ -701,10 +701,10 @@ export default function QueueDisplayClient({
         <section className="lg:col-span-3 flex flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
           <div className="flex items-center justify-between shrink-0">
             <div>
-              <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
+              <h2 className="text-[clamp(1.25rem,2.4vw,3.25rem)] font-extrabold uppercase tracking-tight">
                 Now Serving
               </h2>
-              <p className="text-sm sm:text-base font-medium" style={{ color: darkColors.textMuted }}>
+              <p className="text-[clamp(0.75rem,1.1vw,1rem)] font-medium" style={{ color: darkColors.textMuted }}>
                 Kasalukuyang Tinatawag
               </p>
             </div>
@@ -883,10 +883,10 @@ export default function QueueDisplayClient({
         <section className="hidden lg:flex lg:col-span-2 flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
           <div className="flex items-center justify-between shrink-0">
             <div>
-              <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
+              <h2 className="text-[clamp(1.25rem,2.4vw,3.25rem)] font-extrabold uppercase tracking-tight">
                 Up Next
               </h2>
-              <p className="text-sm sm:text-base font-medium" style={{ color: darkColors.textMuted }}>
+              <p className="text-[clamp(0.75rem,1.1vw,1rem)] font-medium" style={{ color: darkColors.textMuted }}>
                 Susunod Na Tiket
               </p>
             </div>
