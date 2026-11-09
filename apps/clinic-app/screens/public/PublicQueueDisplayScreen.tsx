@@ -1197,8 +1197,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...(Platform.OS === 'web'
       ? ({
-          transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-          animation: 'cardFadeIn 0.35s ease-out',
+          transitionProperty: 'all',
+          transitionDuration: '400ms',
+          transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+          animationKeyframes: 'cardFadeIn',
+          animationDuration: '350ms',
+          animationTimingFunction: 'ease-out',
         } as any)
       : {}),
   },
@@ -1229,7 +1233,10 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web'
       ? ({
           boxShadow: `0 0 35px ${darkColors.primaryLight}, 0 0 15px ${darkColors.primary}`,
-          animation: 'cardPulseGlow 1.6s ease-in-out infinite',
+          animationKeyframes: 'cardPulseGlow',
+          animationDuration: '1600ms',
+          animationTimingFunction: 'ease-in-out',
+          animationIterationCount: 'infinite',
         } as any)
       : {}),
   },
