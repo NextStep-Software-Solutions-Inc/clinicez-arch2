@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { darkColors } from '@clinicez/design-tokens';
 import { theme } from '../../constants/theme';
@@ -73,6 +74,8 @@ function getStoredPin(): string {
 }
 
 export default function PublicQueueDisplayScreen() {
+  const { width: windowWidth } = useWindowDimensions();
+  const isCompact = windowWidth < 1024;
   const [data, setData] = useState<PublicQueueDisplayData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -584,8 +587,8 @@ export default function PublicQueueDisplayScreen() {
         </View>
       ) : (
         <View style={styles.mainGrid}>
-        {/* Left Column (60%): NOW SERVING */}
-        <View style={styles.servingCol}>
+        {/* Left Column: NOW SERVING */}
+        <View style={[styles.servingCol, isCompact && styles.servingColCompact]}>
           <View style={styles.sectionHeader}>
             <View>
               <Text style={styles.sectionTitle}>NOW SERVING</Text>
@@ -622,7 +625,9 @@ export default function PublicQueueDisplayScreen() {
                     {/* Header: Station & Status */}
                     <View style={styles.stationCardHeader}>
                       <View style={{ flex: 1, marginRight: 8 }}>
-                        <Text style={styles.stationCaption}>STATION / ROOM</Text>
+                        <Text style={styles.stationCaption} numberOfLines={1}>
+                          STATION / ROOM
+                        </Text>
                         <Text style={styles.stationName} numberOfLines={1}>
                           {item.roomOrStation || '—'}
                         </Text>
@@ -636,7 +641,9 @@ export default function PublicQueueDisplayScreen() {
 
                     {/* Center: Ticket Number */}
                     <View style={styles.stationTicketBox}>
-                      <Text style={styles.stationTicketLabel}>TICKET NUMBER</Text>
+                      <Text style={styles.stationTicketLabel} numberOfLines={1}>
+                        TICKET NUMBER
+                      </Text>
                       <Text
                         style={[
                           styles.stationTicketNumber,
@@ -644,6 +651,8 @@ export default function PublicQueueDisplayScreen() {
                           count === 3 && styles.stationTicketNumber3Up,
                           count >= 4 && styles.stationTicketNumber4Plus,
                         ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit={true}
                       >
                         {item.ticketNumber}
                       </Text>
@@ -652,7 +661,9 @@ export default function PublicQueueDisplayScreen() {
                     {/* Footer: Attending Physician */}
                     {data?.tvDisplayShowPhysicianName !== false && (
                       <View style={styles.stationFooter}>
-                        <Text style={styles.stationDoctorCaption}>ATTENDING PHYSICIAN</Text>
+                        <Text style={styles.stationDoctorCaption} numberOfLines={1}>
+                          ATTENDING PHYSICIAN
+                        </Text>
                         <Text style={styles.stationDoctorText} numberOfLines={1}>
                           {item.doctorName || '—'}
                         </Text>
@@ -673,7 +684,9 @@ export default function PublicQueueDisplayScreen() {
               {/* Header: Station & Status */}
               <View style={styles.singleCardHeader}>
                 <View>
-                  <Text style={styles.stationCaption}>STATION / ROOM</Text>
+                  <Text style={styles.stationCaption} numberOfLines={1}>
+                    STATION / ROOM
+                  </Text>
                   <Text style={styles.singleStationName} numberOfLines={1}>
                     {primaryServing.roomOrStation || '—'}
                   </Text>
@@ -687,14 +700,20 @@ export default function PublicQueueDisplayScreen() {
 
               {/* Center: Hero Ticket Number */}
               <View style={styles.ticketBox}>
-                <Text style={styles.ticketLabel}>TICKET NUMBER / NUMERO NG TIKET</Text>
-                <Text style={styles.ticketHero}>{primaryServing.ticketNumber}</Text>
+                <Text style={styles.ticketLabel} numberOfLines={1}>
+                  TICKET NUMBER / NUMERO NG TIKET
+                </Text>
+                <Text style={styles.ticketHero} numberOfLines={1} adjustsFontSizeToFit={true}>
+                  {primaryServing.ticketNumber}
+                </Text>
               </View>
 
               {/* Footer: Attending Physician */}
               {data?.tvDisplayShowPhysicianName !== false && (
                 <View style={styles.singleCardFooter}>
-                  <Text style={styles.stationDoctorCaption}>ATTENDING PHYSICIAN</Text>
+                  <Text style={styles.stationDoctorCaption} numberOfLines={1}>
+                    ATTENDING PHYSICIAN
+                  </Text>
                   <Text style={styles.singleDoctorName} numberOfLines={1}>
                     {primaryServing.doctorName || '—'}
                   </Text>
@@ -704,7 +723,8 @@ export default function PublicQueueDisplayScreen() {
           )}
         </View>
 
-        {/* Right Column (40%): UP NEXT */}
+        {/* Right Column: UP NEXT (Visible on widescreen displays) */}
+        {!isCompact && (
         <View style={styles.upNextCol}>
           <View style={styles.sectionHeader}>
             <View>
@@ -804,6 +824,7 @@ export default function PublicQueueDisplayScreen() {
             )}
           </View>
         </View>
+        )}
       </View>
       )}
 
@@ -839,12 +860,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: darkColors.surface,
     borderBottomWidth: 1,
     borderBottomColor: darkColors.border,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: 12,
   },
   brandRow: {
@@ -894,19 +915,19 @@ const styles = StyleSheet.create({
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 12,
   },
   clockBox: {
     alignItems: 'flex-end',
   },
   clockTime: {
-    fontSize: theme.fontSizes['2xl'],
+    fontSize: theme.fontSizes.xl,
     fontWeight: '700',
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     color: darkColors.text,
   },
   clockDate: {
-    fontSize: theme.fontSizes.xs,
+    fontSize: theme.fontSizes.xs - 1,
     color: darkColors.textSecondary,
     fontWeight: '500',
   },
@@ -941,12 +962,15 @@ const styles = StyleSheet.create({
   mainGrid: {
     flex: 1,
     flexDirection: 'row',
-    padding: 24,
-    gap: 24,
+    padding: 20,
+    gap: 20,
   },
   servingCol: {
     flex: 6,
     gap: 16,
+  },
+  servingColCompact: {
+    flex: 1,
   },
   upNextCol: {
     flex: 4,
@@ -1021,12 +1045,14 @@ const styles = StyleSheet.create({
     color: darkColors.textMuted,
     letterSpacing: 1,
     textTransform: 'uppercase',
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
   },
   stationName: {
     fontSize: theme.fontSizes.xl,
     fontWeight: '800',
     color: darkColors.text,
     marginTop: 2,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
   },
   stationStatusBadge: {
     backgroundColor: darkColors.surfaceHighlight,
@@ -1066,6 +1092,7 @@ const styles = StyleSheet.create({
     color: darkColors.textMuted,
     letterSpacing: 1,
     textTransform: 'uppercase',
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
   },
   multiStationContainer: {
     flex: 1,
@@ -1130,17 +1157,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stationTicketNumber: {
-    fontSize: theme.fontSizes['4xl'] * 1.5,
+    fontSize: theme.fontSizes['4xl'] * 1.4,
     fontWeight: '900',
     color: darkColors.primary,
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     letterSpacing: -1,
+    textAlign: 'center',
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
   },
   stationTicketNumber2Up: {
-    fontSize: theme.fontSizes['4xl'] * 1.8,
+    fontSize: theme.fontSizes['4xl'] * 1.6,
   },
   stationTicketNumber3Up: {
-    fontSize: theme.fontSizes['4xl'] * 1.3,
+    fontSize: theme.fontSizes['4xl'] * 1.2,
   },
   stationTicketNumber4Plus: {
     fontSize: theme.fontSizes['3xl'],

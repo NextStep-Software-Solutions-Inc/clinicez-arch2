@@ -396,7 +396,7 @@ export default function QueueDisplayClient({
     >
       {/* Top Header Bar */}
       <header
-        className="px-6 py-4 sm:px-10 sm:py-5 flex flex-wrap justify-between items-center border-b shadow-md shrink-0"
+        className="px-4 py-3 sm:px-8 sm:py-4 flex flex-nowrap justify-between items-center border-b shadow-md shrink-0"
         style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
       >
         {/* Left: Facility Brand & Live Pill */}
@@ -786,12 +786,12 @@ export default function QueueDisplayClient({
                         Ticket Number
                       </span>
                       <div
-                        className={`font-black tracking-tight leading-none drop-shadow-md font-mono ${
+                        className={`font-black tracking-tight leading-none drop-shadow-md font-mono whitespace-nowrap ${
                           count === 2
-                            ? "text-[clamp(3.5rem,5.5vw,5.5rem)]"
+                            ? "text-[clamp(3rem,5vw,5rem)]"
                             : count === 3
-                            ? "text-[clamp(2.75rem,4vw,4.25rem)]"
-                            : "text-[clamp(2.25rem,3vw,3.5rem)]"
+                            ? "text-[clamp(2.25rem,3.5vw,3.75rem)]"
+                            : "text-[clamp(1.75rem,2.5vw,3rem)]"
                         }`}
                         style={{ color: darkColors.primary }}
                       >
@@ -879,8 +879,8 @@ export default function QueueDisplayClient({
           )}
         </section>
 
-        {/* Right Column (Flex 2 / 40%): UP NEXT */}
-        <section className="lg:col-span-2 flex flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
+        {/* Right Column (Flex 2 / 40%): UP NEXT (Shown on widescreen displays) */}
+        <section className="hidden lg:flex lg:col-span-2 flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
           <div className="flex items-center justify-between shrink-0">
             <div>
               <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
