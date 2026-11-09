@@ -21,6 +21,7 @@ import {
   isAudioMuted,
   setAudioMuted,
   playAlertChime,
+  playQueueCallAlert,
   unlockAudio,
 } from "./audioChime";
 import { queueDisplayService } from "@/services/queueDisplay.service";
@@ -151,7 +152,14 @@ export default function QueueDisplayClient({
       if (hasNewCall) {
         setPulseActive(true);
         setTimeout(() => setPulseActive(false), 3600);
-        playAlertChime();
+        const calledTicket = res.data.nowServing.find((s) => !prevServing.includes(s.ticketNumber));
+        playQueueCallAlert({
+          theme: (res.data as any).tvDisplaySoundTheme || 'classicChime',
+          voiceEnabled: (res.data as any).tvDisplayVoiceEnabled,
+          ticketNumber: calledTicket?.ticketNumber,
+          roomOrStation: calledTicket?.roomOrStation,
+          doctorName: calledTicket?.doctorName,
+        });
       }
 
       prevServingRef.current = newServing;
@@ -272,7 +280,7 @@ export default function QueueDisplayClient({
     setMuted(nextMuted);
     setAudioMuted(nextMuted);
     if (!nextMuted) {
-      playAlertChime();
+      playAlertChime((data as any)?.tvDisplaySoundTheme || 'classicChime');
     }
   };
 

@@ -65,7 +65,9 @@ public sealed record UpdateClinicSettingsCommand(
     string? TimeFormat = null,
     string? TvDisplayPin = null,
     bool ClearTvDisplayPin = false,
-    bool? IsKioskIntakeEnabled = null) : IRequest<ClinicSettingsDto>;
+    bool? IsKioskIntakeEnabled = null,
+    string? TvDisplaySoundTheme = null,
+    bool? TvDisplayVoiceEnabled = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -202,6 +204,12 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.TvDisplayPin = null;
         else if (!string.IsNullOrWhiteSpace(request.TvDisplayPin))
             settings.TvDisplayPin = request.TvDisplayPin.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.TvDisplaySoundTheme))
+            settings.TvDisplaySoundTheme = request.TvDisplaySoundTheme.Trim();
+
+        if (request.TvDisplayVoiceEnabled.HasValue)
+            settings.TvDisplayVoiceEnabled = request.TvDisplayVoiceEnabled.Value;
 
         if (request.EnableQueuePushNotifications.HasValue)
             settings.EnableQueuePushNotifications = request.EnableQueuePushNotifications.Value;
@@ -383,7 +391,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             FacilitySlug: settings.FacilitySlug,
             TvDisplayPin: settings.TvDisplayPin,
             IsKioskIntakeEnabled: settings.IsKioskIntakeEnabled,
-            KioskTokenVersion: settings.KioskTokenVersion);
+            KioskTokenVersion: settings.KioskTokenVersion,
+            TvDisplaySoundTheme: settings.TvDisplaySoundTheme ?? "classicChime",
+            TvDisplayVoiceEnabled: settings.TvDisplayVoiceEnabled);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)

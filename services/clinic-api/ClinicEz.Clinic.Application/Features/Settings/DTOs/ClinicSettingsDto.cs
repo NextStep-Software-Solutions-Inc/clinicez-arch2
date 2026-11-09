@@ -76,4 +76,6 @@ public sealed record ClinicSettingsDto(
     string? FacilitySlug = null,
     string? TvDisplayPin = null,
     bool IsKioskIntakeEnabled = false,
-    int KioskTokenVersion = 1);
+    int KioskTokenVersion = 1,
+    string TvDisplaySoundTheme = "classicChime",
+    bool TvDisplayVoiceEnabled = false);

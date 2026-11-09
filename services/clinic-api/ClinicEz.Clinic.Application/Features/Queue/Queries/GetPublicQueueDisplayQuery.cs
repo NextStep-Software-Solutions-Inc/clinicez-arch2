@@ -112,7 +112,9 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
                 PatientsWaitingCount: 0,
                 LogoUrl: clinic.PrimaryLogoUrl,
                 IsPinRequired: true,
-                IsPinValid: false
+                IsPinValid: false,
+                TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
+                TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled
             );
         }
 
@@ -176,7 +178,9 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             PatientsWaitingCount: upNext.Count,
             LogoUrl: clinic.PrimaryLogoUrl,
             IsPinRequired: isPinRequired,
-            IsPinValid: true
+            IsPinValid: true,
+            TvDisplaySoundTheme: clinic.TvDisplaySoundTheme ?? "classicChime",
+            TvDisplayVoiceEnabled: clinic.TvDisplayVoiceEnabled
         );
     }
 

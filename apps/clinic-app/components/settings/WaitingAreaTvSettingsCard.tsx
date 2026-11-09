@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Linking } from 'react-native';
+import { View, StyleSheet, Linking, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -14,6 +14,7 @@ import { clinicService, ClinicSettingsRecord } from '../../services/clinicServic
 import { getPortalBaseUrl, getApiBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 import { buildCloudTvDisplayUrl } from '../../utils/queueDisplayRoute';
+import { TV_SOUND_THEMES, playAlertChime, playQueueCallAlert } from '../../utils/audioChime';
 
 export interface WaitingAreaTvSettingsCardProps {
   settings: ClinicSettingsRecord | null;
@@ -34,12 +35,24 @@ export default function WaitingAreaTvSettingsCard({
   const [pinInput, setPinInput] = useState<string>(settings?.tvDisplayPin || '');
   const [savingPin, setSavingPin] = useState<boolean>(false);
 
+  // Sound Theme & Voice Announcement Settings
+  const [soundTheme, setSoundTheme] = useState<string>(settings?.tvDisplaySoundTheme || 'classicChime');
+  const [voiceEnabled, setVoiceEnabled] = useState<boolean>(settings?.tvDisplayVoiceEnabled ?? false);
+  const [, setSavingTheme] = useState<boolean>(false);
+  const [, setSavingVoice] = useState<boolean>(false);
+
   useEffect(() => {
     if (settings) {
       setMaskNames(settings.tvDisplayMaskPatientNames ?? true);
       if (settings.tvDisplayPin !== undefined) {
         setSavedPin(settings.tvDisplayPin || null);
         setPinInput(settings.tvDisplayPin || '');
+      }
+      if (settings.tvDisplaySoundTheme) {
+        setSoundTheme(settings.tvDisplaySoundTheme);
+      }
+      if (settings.tvDisplayVoiceEnabled !== undefined) {
+        setVoiceEnabled(settings.tvDisplayVoiceEnabled);
       }
     }
   }, [settings]);
@@ -144,6 +157,77 @@ export default function WaitingAreaTvSettingsCard({
     void handleSavePin(randomPin);
   }, [handleSavePin]);
 
+  const handleSelectTheme = useCallback(
+    async (newTheme: string) => {
+      setSoundTheme(newTheme);
+      setSavingTheme(true);
+      playAlertChime(newTheme);
+      try {
+        const [updated, err] = await clinicService.updateSettings({
+          tvDisplaySoundTheme: newTheme,
+        });
+        if (err || !updated) {
+          notify.error(err?.message || 'Could not update TV display sound theme.');
+          return;
+        }
+        notify.success('Waiting area TV chime sound updated.');
+        onSettingsUpdated?.(updated);
+      } catch {
+        notify.error('Failed to update TV display sound theme.');
+      } finally {
+        setSavingTheme(false);
+      }
+    },
+    [onSettingsUpdated]
+  );
+
+  const handleToggleVoice = useCallback(
+    async (enabled: boolean) => {
+      setVoiceEnabled(enabled);
+      setSavingVoice(true);
+      if (enabled) {
+        playQueueCallAlert({
+          theme: soundTheme,
+          voiceEnabled: true,
+          ticketNumber: 'P-101',
+          roomOrStation: 'Room 1',
+        });
+      }
+      try {
+        const [updated, err] = await clinicService.updateSettings({
+          tvDisplayVoiceEnabled: enabled,
+        });
+        if (err || !updated) {
+          setVoiceEnabled(!enabled);
+          notify.error(err?.message || 'Could not update TV voice announcement setting.');
+          return;
+        }
+        notify.success(
+          enabled
+            ? 'Voice ticket announcements enabled (English).'
+            : 'Voice ticket announcements disabled.'
+        );
+        onSettingsUpdated?.(updated);
+      } catch {
+        setVoiceEnabled(!enabled);
+        notify.error('Failed to save TV voice announcement setting.');
+      } finally {
+        setSavingVoice(false);
+      }
+    },
+    [soundTheme, onSettingsUpdated]
+  );
+
+  const handleTestAnnouncement = useCallback(() => {
+    playQueueCallAlert({
+      theme: soundTheme,
+      voiceEnabled: true,
+      ticketNumber: 'P-102',
+      roomOrStation: 'Room 2',
+    });
+    notify.info('Playing test announcement for ticket P-102...');
+  }, [soundTheme]);
+
   const openUrl = useCallback((url: string) => {
     if (typeof window !== 'undefined' && window.open) {
       window.open(url, '_blank');
@@ -209,6 +293,109 @@ export default function WaitingAreaTvSettingsCard({
                 onValueChange={handleToggleMask}
                 accessibilityLabel="Toggle Patient Name Masking on TV Display"
               />
+            </View>
+
+            {/* TV Sound Theme Section */}
+            <View style={styles.soundCard}>
+              <View style={styles.urlHeader}>
+                <View style={styles.iconWrapSound}>
+                  <Icon name="volume2" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                </View>
+                <View style={styles.urlInfo}>
+                  <View style={styles.cardTitleBadgeRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Queue Calling Sound Chime
+                    </ThemedText>
+                    <Badge
+                      label={TV_SOUND_THEMES.find((t) => t.id === soundTheme)?.name || 'Classic Chime'}
+                      variant="primary"
+                    />
+                  </View>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.urlSubtitle}>
+                    Select the tone that plays on the waiting room TV whenever a new ticket is called.
+                  </ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.themeGrid}>
+                {TV_SOUND_THEMES.map((t) => {
+                  const isSelected = soundTheme === t.id;
+                  const isSilent = t.id === 'silent';
+                  return (
+                    <Pressable
+                      key={t.id}
+                      style={[styles.themeOptionCard, isSelected && styles.themeOptionCardSelected]}
+                      onPress={() => handleSelectTheme(t.id)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={t.name}
+                    >
+                      <View style={styles.themeOptionHeader}>
+                        <ThemedText
+                          variant="captionBold"
+                          color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                        >
+                          {t.name}
+                        </ThemedText>
+                        {isSelected && <Badge label="Active" variant="primary" size="xs" />}
+                      </View>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        {t.description}
+                      </ThemedText>
+                      {!isSilent && (
+                        <View style={styles.themePreviewRow}>
+                          <Button
+                            title="Preview Tone"
+                            variant="ghost"
+                            size="sm"
+                            icon="volume2"
+                            onPress={() => playAlertChime(t.id)}
+                          />
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Text-to-Speech Voice Ticket Read-Aloud Section */}
+            <View style={styles.voiceCard}>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleInfo}>
+                  <View style={styles.titleWithIcon}>
+                    <Icon name="volume2" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Read Aloud Queuing Ticket (Text-to-Speech)
+                    </ThemedText>
+                    {voiceEnabled && (
+                      <Badge label="English Only" variant="success" size="xs" />
+                    )}
+                  </View>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.toggleSubtitle}>
+                    Speaks ticket numbers and destination rooms aloud over the waiting room TV audio (e.g. "Now serving ticket P-102. Please proceed to Room 1."). Strictly English language only.
+                  </ThemedText>
+                </View>
+                <ToggleSwitch
+                  value={voiceEnabled}
+                  onValueChange={handleToggleVoice}
+                  accessibilityLabel="Toggle Read Aloud Queuing Ticket"
+                />
+              </View>
+
+              {voiceEnabled && (
+                <View style={styles.voiceActionsRow}>
+                  <Button
+                    title="Test Voice Announcement"
+                    variant="secondary"
+                    icon="volume2"
+                    onPress={handleTestAnnouncement}
+                  />
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Test announcement plays sample ticket P-102 using browser-native speech synthesis.
+                  </ThemedText>
+                </View>
+              )}
             </View>
 
             {/* TV Passcode / PIN Protection Card */}
@@ -481,5 +668,68 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+  },
+  soundCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  iconWrapSound: {
+    width: theme.sizes.iconLg,
+    height: theme.sizes.iconLg,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  themeOptionCard: {
+    flex: 1,
+    minWidth: 200,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    gap: theme.spacing.xs,
+  },
+  themeOptionCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySubtle,
+  },
+  themeOptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.xs,
+  },
+  themePreviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginTop: 2,
+  },
+  voiceCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  voiceActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
   },
 });

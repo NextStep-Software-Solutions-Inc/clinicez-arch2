@@ -132,6 +132,17 @@ public sealed class FacilitySettings : ClinicScopedEntity
     public string? TvDisplayPin { get; set; }
 
     /// <summary>
+    /// Selected audio chime theme for the public waiting area TV display.
+    /// Options: "classicChime", "doorbell", "marimba", "bell", "elevator", "silent".
+    /// </summary>
+    public string TvDisplaySoundTheme { get; set; } = "classicChime";
+
+    /// <summary>
+    /// Controls whether newly called queuing tickets are read aloud via Text-to-Speech in English.
+    /// </summary>
+    public bool TvDisplayVoiceEnabled { get; set; } = false;
+
+    /// <summary>
     /// Controls whether mobile patient app push notifications are dispatched for queue events.
     /// </summary>
     public bool EnableQueuePushNotifications { get; set; } = true;

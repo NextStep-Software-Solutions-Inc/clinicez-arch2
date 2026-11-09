@@ -12,7 +12,7 @@ import { darkColors } from '@clinicez/design-tokens';
 import { theme } from '../../constants/theme';
 import Icon from '../../components/ui/Icon';
 import { clinicService } from '../../services/clinicService';
-import { isAudioMuted, setAudioMuted, playAlertChime, unlockAudio } from '../../utils/audioChime';
+import { isAudioMuted, setAudioMuted, playAlertChime, playQueueCallAlert, unlockAudio } from '../../utils/audioChime';
 import { CoBrandedLogo } from '../../components/ui/ClinicEzLogo';
 
 export interface ServingTicket {
@@ -47,6 +47,8 @@ export interface PublicQueueDisplayData {
   logoUrl?: string | null;
   isPinRequired?: boolean;
   isPinValid?: boolean;
+  tvDisplaySoundTheme?: string;
+  tvDisplayVoiceEnabled?: boolean;
 }
 
 const PIN_STORAGE_KEY = 'clinicez_tv_pin_lan';
@@ -162,7 +164,14 @@ export default function PublicQueueDisplayScreen() {
       if (hasNewCall && prevServing.length > 0) {
         setPulseActive(true);
         setTimeout(() => setPulseActive(false), 3600);
-        playAlertChime();
+        const calledTicket = res.nowServing?.find((s: ServingTicket) => !prevServing.includes(s.ticketNumber));
+        playQueueCallAlert({
+          theme: res.tvDisplaySoundTheme || 'classicChime',
+          voiceEnabled: res.tvDisplayVoiceEnabled,
+          ticketNumber: calledTicket?.ticketNumber,
+          roomOrStation: calledTicket?.roomOrStation,
+          doctorName: calledTicket?.doctorName,
+        });
       }
 
       prevServingRef.current = newServing;
@@ -278,7 +287,7 @@ export default function PublicQueueDisplayScreen() {
     setMuted(nextMuted);
     setAudioMuted(nextMuted);
     if (!nextMuted) {
-      playAlertChime();
+      playAlertChime(data?.tvDisplaySoundTheme || 'classicChime');
     }
   };
 
