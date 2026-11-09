@@ -1581,6 +1581,24 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenSrc).toContain('patientCode: formPatientCode.trim() || undefined,');
     expect(screenSrc).toMatch(/if\s*\(formPatientCode\.trim\(\)\)\s*\{\s*if\s*\(pcErr\)\s*fieldErrorsMap\.patientCode\s*=\s*pcErr;\s*\}\s*else\s*\{\s*delete\s*fieldErrorsMap\.patientCode;\s*\}/);
   });
+
+  test('44. Patients.screen.tsx eliminates redundant "Scan patient QR" header action while retaining scan trigger in search input', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const screenSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+
+    // ResponsiveLayout header actions should only contain Register patient, not Scan QR
+    expect(screenSrc).not.toMatch(/actions=\{\[\s*\.\.\.\(canImportPatient/);
+    expect(screenSrc).not.toContain("label: 'Scan patient QR'");
+
+    // Search Input retains QR scanning trigger
+    expect(screenSrc).toContain("rightIcon={searchTerm ? 'close' : (canImportPatient ? 'scan' : undefined)}");
+    expect(screenSrc).toContain("navigation.navigate('ShareImport')");
+  });
 });
 
 

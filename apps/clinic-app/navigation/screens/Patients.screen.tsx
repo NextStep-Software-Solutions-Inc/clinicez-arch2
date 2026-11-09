@@ -1935,18 +1935,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     <ResponsiveLayout
       headerTitle="Patients"
       actions={[
-        ...(canImportPatient
-          ? [
-              {
-                id: 'scan',
-                label: 'Scan patient QR',
-                shortLabel: 'Scan QR',
-                icon: 'scan' as const,
-                variant: 'outline' as const,
-                onPress: () => navigation.navigate('ShareImport'),
-              },
-            ]
-          : []),
         {
           id: 'register',
           label: 'Register patient',
