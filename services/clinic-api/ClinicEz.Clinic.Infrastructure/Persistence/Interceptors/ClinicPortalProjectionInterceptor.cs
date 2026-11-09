@@ -145,17 +145,16 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
         if (affectedClinicsForQueue.Count > 0)
         {
-            var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
-            var todayManila = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-
             foreach (var (tenantId, clinicId) in affectedClinicsForQueue)
             {
                 var settings = await GetClinicSettingsAsync(db, clinicId, clinicSettingsCache, cancellationToken);
                 var isAcceptingWalkIns = settings == null || !settings.IsOnlineBookingPaused;
+                var tz = ClinicTimeZoneResolver.ResolveTimeZone(settings?.TimeZoneId);
+                var todayClinic = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
-                // Load existing persisted tickets for today Manila
+                // Load existing persisted tickets for today
                 var dbTickets = await db.QueueItems.IgnoreQueryFilters().AsNoTracking()
-                    .Where(q => q.ClinicId == clinicId && q.QueueDate == todayManila && !q.IsDeleted && !q.IsDirectVisit)
+                    .Where(q => q.ClinicId == clinicId && q.QueueDate == todayClinic && !q.IsDeleted && !q.IsDirectVisit)
                     .ToListAsync(cancellationToken);
 
                 // Overlay change tracker modifications
@@ -167,7 +166,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                     {
                         activeTickets.Remove(qEntry.Entity.Id);
                     }
-                    else if (qEntry.Entity.QueueDate == todayManila)
+                    else if (qEntry.Entity.QueueDate == todayClinic)
                     {
                         activeTickets[qEntry.Entity.Id] = qEntry.Entity;
                     }
@@ -215,7 +214,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                 {
                     TenantId = tenantId,
                     FacilityId = clinicId,
-                    QueueDate = todayManila,
+                    QueueDate = todayClinic,
                     GeneratedAtUtc = DateTime.UtcNow,
                     IsAcceptingWalkIns = isAcceptingWalkIns,
                     PatientsWaitingCount = upNext.Count,

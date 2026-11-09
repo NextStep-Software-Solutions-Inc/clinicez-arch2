@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -119,7 +120,8 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             );
         }
 
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var tz = ClinicTimeZoneResolver.ResolveTimeZone(clinic.TimeZoneId);
+        var targetDate = request.Date ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
         // 2. Fetch queue items for this clinic on the target date
         var queueItems = await _queueRepo.IgnoreQueryFilters()
