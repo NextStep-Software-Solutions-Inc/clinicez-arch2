@@ -391,12 +391,12 @@ export default function QueueDisplayClient({
   return (
     <div
       onClick={handleUserInteraction}
-      className="min-h-screen w-full flex flex-col font-sans select-none overflow-x-hidden"
+      className="h-screen w-full flex flex-col font-sans select-none overflow-hidden"
       style={{ backgroundColor: darkColors.background, color: darkColors.text }}
     >
       {/* Top Header Bar */}
       <header
-        className="px-6 py-4 sm:px-10 sm:py-6 flex flex-wrap justify-between items-center border-b shadow-md"
+        className="px-6 py-4 sm:px-10 sm:py-5 flex flex-wrap justify-between items-center border-b shadow-md shrink-0"
         style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
       >
         {/* Left: Facility Brand & Live Pill */}
@@ -696,10 +696,10 @@ export default function QueueDisplayClient({
           </div>
         </main>
       ) : (
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-10">
+        <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-8 overflow-hidden">
         {/* Left Column (Flex 3 / 60%): NOW SERVING */}
-        <section className="lg:col-span-3 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
+        <section className="lg:col-span-3 flex flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between shrink-0">
             <div>
               <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
                 Now Serving
@@ -708,18 +708,6 @@ export default function QueueDisplayClient({
                 Kasalukuyang Tinatawag
               </p>
             </div>
-            {primaryServing && (
-              <span
-                className="px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold uppercase tracking-wider border shadow-sm"
-                style={{
-                  backgroundColor: darkColors.primaryLight,
-                  color: darkColors.primary,
-                  borderColor: darkColors.primaryBorder,
-                }}
-              >
-                In Consultation
-              </span>
-            )}
           </div>
 
           {!primaryServing ? (
@@ -740,22 +728,25 @@ export default function QueueDisplayClient({
               </p>
             </div>
           ) : data?.nowServing && data.nowServing.length > 1 ? (
-            /* Multi-Station Equal Prominence Grid */
+            /* Multi-Station Equal Prominence Grid (Zero Scroll, Fits Entire Screen) */
             <div
-              className={`flex-1 grid gap-4 sm:gap-6 ${
+              className={`flex-1 min-h-0 grid gap-4 sm:gap-6 overflow-hidden ${
                 data.nowServing.length === 2
-                  ? "grid-cols-1 sm:grid-cols-2"
+                  ? "grid-cols-2 grid-rows-1"
                   : data.nowServing.length === 3
-                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-                  : "grid-cols-1 sm:grid-cols-2"
+                  ? "grid-cols-3 grid-rows-1"
+                  : data.nowServing.length === 4
+                  ? "grid-cols-2 grid-rows-2"
+                  : "grid-cols-3 grid-rows-2"
               }`}
             >
               {data.nowServing.map((item) => {
                 const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
+                const count = data.nowServing.length;
                 return (
                   <div
                     key={item.queueItemId}
-                    className={`rounded-3xl border-2 p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 shadow-xl ${
+                    className={`rounded-3xl border-2 p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 shadow-xl min-h-0 overflow-hidden ${
                       isItemPulsing ? "animate-serving-pulse" : ""
                     }`}
                     style={{
@@ -764,36 +755,44 @@ export default function QueueDisplayClient({
                     }}
                   >
                     {/* Header: Station & Status */}
-                    <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: darkColors.border }}>
-                      <div>
+                    <div className="flex items-center justify-between pb-3 border-b shrink-0" style={{ borderColor: darkColors.border }}>
+                      <div className="min-w-0 pr-2">
                         <span className="text-[10px] sm:text-xs uppercase font-bold tracking-wider block" style={{ color: darkColors.textMuted }}>
                           Station / Room
                         </span>
-                        <div className="text-base sm:text-lg font-black" style={{ color: darkColors.text }}>
+                        <div className="text-base sm:text-lg font-black truncate" style={{ color: darkColors.text }}>
                           {item.roomOrStation || "—"}
                         </div>
                       </div>
-                      <span
-                        className="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider"
-                        style={{
-                          backgroundColor: isItemPulsing ? darkColors.primaryLight : darkColors.surfaceHighlight,
-                          color: isItemPulsing ? darkColors.primary : darkColors.textSecondary,
-                        }}
-                      >
-                        {isItemPulsing ? "Just Called" : "In Consultation"}
-                      </span>
+                      {isItemPulsing && (
+                        <span
+                          className="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider shrink-0"
+                          style={{
+                            backgroundColor: darkColors.primaryLight,
+                            color: darkColors.primary,
+                          }}
+                        >
+                          Just Called
+                        </span>
+                      )}
                     </div>
 
                     {/* Center: Ticket Number */}
-                    <div className="text-center my-auto py-6 sm:py-8">
+                    <div className="text-center my-auto py-2 sm:py-4">
                       <span
-                        className="text-[10px] sm:text-xs uppercase font-bold tracking-widest block mb-2"
+                        className="text-[10px] sm:text-xs uppercase font-bold tracking-widest block mb-1"
                         style={{ color: darkColors.textMuted }}
                       >
                         Ticket Number
                       </span>
                       <div
-                        className="text-[clamp(3.5rem,6vw,6.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono"
+                        className={`font-black tracking-tight leading-none drop-shadow-md font-mono ${
+                          count === 2
+                            ? "text-[clamp(3.5rem,5.5vw,5.5rem)]"
+                            : count === 3
+                            ? "text-[clamp(2.75rem,4vw,4.25rem)]"
+                            : "text-[clamp(2.25rem,3vw,3.5rem)]"
+                        }`}
                         style={{ color: darkColors.primary }}
                       >
                         {item.ticketNumber}
@@ -802,7 +801,7 @@ export default function QueueDisplayClient({
 
                     {/* Footer: Attending Physician (if enabled) */}
                     {data?.tvDisplayShowPhysicianName !== false && (
-                      <div className="pt-3 border-t flex flex-col" style={{ borderColor: darkColors.border }}>
+                      <div className="pt-2 sm:pt-3 border-t flex flex-col shrink-0" style={{ borderColor: darkColors.border }}>
                         <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: darkColors.textMuted }}>
                           Attending Physician
                         </span>
@@ -818,7 +817,7 @@ export default function QueueDisplayClient({
           ) : (
             /* Single Station Clean Display */
             <div
-              className={`flex-1 rounded-3xl border-2 p-8 sm:p-12 flex flex-col justify-between transition-all duration-300 shadow-2xl ${
+              className={`flex-1 rounded-3xl border-2 p-6 sm:p-10 flex flex-col justify-between transition-all duration-300 shadow-2xl min-h-0 overflow-hidden ${
                 pulseActive ? "animate-serving-pulse" : ""
               }`}
               style={{
@@ -827,7 +826,7 @@ export default function QueueDisplayClient({
               }}
             >
               {/* Header: Station & Status */}
-              <div className="flex items-center justify-between pb-4 border-b" style={{ borderColor: darkColors.border }}>
+              <div className="flex items-center justify-between pb-4 border-b shrink-0" style={{ borderColor: darkColors.border }}>
                 <div>
                   <span className="text-xs uppercase font-bold tracking-wider block mb-0.5" style={{ color: darkColors.textMuted }}>
                     Station / Room
@@ -836,27 +835,29 @@ export default function QueueDisplayClient({
                     {primaryServing.roomOrStation || "—"}
                   </div>
                 </div>
-                <span
-                  className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
-                  style={{
-                    backgroundColor: pulseActive ? darkColors.primaryLight : darkColors.surfaceHighlight,
-                    color: pulseActive ? darkColors.primary : darkColors.textSecondary,
-                  }}
-                >
-                  {pulseActive ? "Just Called" : "In Consultation"}
-                </span>
+                {pulseActive && (
+                  <span
+                    className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
+                    style={{
+                      backgroundColor: darkColors.primaryLight,
+                      color: darkColors.primary,
+                    }}
+                  >
+                    Just Called
+                  </span>
+                )}
               </div>
 
               {/* Center: Ticket Number */}
-              <div className="text-center my-auto py-8">
+              <div className="text-center my-auto py-4 sm:py-6">
                 <span
-                  className="text-xs sm:text-sm uppercase font-bold tracking-widest block mb-3"
+                  className="text-xs sm:text-sm uppercase font-bold tracking-widest block mb-2"
                   style={{ color: darkColors.textMuted }}
                 >
                   Ticket Number / Numero ng Tiket
                 </span>
                 <div
-                  className="text-[clamp(5.5rem,11vw,11.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono"
+                  className="text-[clamp(5rem,10vw,10.5rem)] font-black tracking-tight leading-none drop-shadow-md font-mono"
                   style={{ color: darkColors.primary }}
                 >
                   {primaryServing.ticketNumber}
@@ -865,7 +866,7 @@ export default function QueueDisplayClient({
 
               {/* Footer: Attending Physician (if enabled) */}
               {data?.tvDisplayShowPhysicianName !== false && (
-                <div className="pt-4 border-t flex flex-col" style={{ borderColor: darkColors.border }}>
+                <div className="pt-4 border-t flex flex-col shrink-0" style={{ borderColor: darkColors.border }}>
                   <span className="text-xs uppercase font-bold tracking-wider mb-0.5" style={{ color: darkColors.textMuted }}>
                     Attending Physician
                   </span>
@@ -879,8 +880,8 @@ export default function QueueDisplayClient({
         </section>
 
         {/* Right Column (Flex 2 / 40%): UP NEXT */}
-        <section className="lg:col-span-2 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
+        <section className="lg:col-span-2 flex flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between shrink-0">
             <div>
               <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
                 Up Next
@@ -889,16 +890,6 @@ export default function QueueDisplayClient({
                 Susunod Na Tiket
               </p>
             </div>
-            <span
-              className="px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border"
-              style={{
-                backgroundColor: darkColors.surfaceHighlight,
-                borderColor: darkColors.border,
-                color: darkColors.textSecondary,
-              }}
-            >
-              Waiting List
-            </span>
           </div>
 
           <div
@@ -1007,7 +998,7 @@ export default function QueueDisplayClient({
 
       {/* Footer Ticker Bar */}
       <footer
-        className="px-6 py-4 sm:px-10 flex flex-wrap justify-between items-center border-t text-xs sm:text-sm font-medium"
+        className="px-6 py-3.5 sm:px-10 flex flex-wrap justify-between items-center border-t text-xs sm:text-sm font-medium shrink-0"
         style={{
           backgroundColor: darkColors.surface,
           borderColor: darkColors.border,

@@ -591,11 +591,6 @@ export default function PublicQueueDisplayScreen() {
               <Text style={styles.sectionTitle}>NOW SERVING</Text>
               <Text style={styles.sectionSubtitle}>Kasalukuyang Tinatawag</Text>
             </View>
-            {primaryServing && (
-              <View style={styles.inConsultationBadge}>
-                <Text style={styles.inConsultationText}>In Consultation</Text>
-              </View>
-            )}
           </View>
 
           {!primaryServing ? (
@@ -607,79 +602,71 @@ export default function PublicQueueDisplayScreen() {
               </Text>
             </View>
           ) : data?.nowServing && data.nowServing.length > 1 ? (
-            /* Multi-Station Equal Prominence Grid */
-            <View style={styles.multiStationContainer}>
-              <ScrollView
-                style={styles.multiStationScroll}
-                contentContainerStyle={[
-                  styles.multiStationGrid,
-                  data.nowServing.length === 2 && styles.multiStationGrid2Up,
-                ]}
-                showsVerticalScrollIndicator={false}
-              >
-                {data.nowServing.map((item) => {
-                  const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
-                  const isTwoUp = data.nowServing.length === 2;
-                  return (
-                    <View
-                      key={item.queueItemId}
-                      style={[
-                        styles.stationCard,
-                        isTwoUp && styles.stationCard2Up,
-                        isItemPulsing && styles.stationCardPulsing,
-                      ]}
-                    >
-                      {/* Header: Station & Status */}
-                      <View style={styles.stationCardHeader}>
-                        <View>
-                          <Text style={styles.stationCaption}>STATION / ROOM</Text>
-                          <Text style={styles.stationName} numberOfLines={1}>
-                            {item.roomOrStation || '—'}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.stationStatusBadge,
-                            isItemPulsing && styles.stationStatusBadgePulsing,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.stationStatusText,
-                              isItemPulsing && styles.stationStatusTextPulsing,
-                            ]}
-                          >
-                            {isItemPulsing ? 'JUST CALLED' : 'In Consultation'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Center: Ticket Number */}
-                      <View style={styles.stationTicketBox}>
-                        <Text style={styles.stationTicketLabel}>TICKET NUMBER</Text>
-                        <Text
-                          style={[
-                            styles.stationTicketNumber,
-                            isTwoUp && styles.stationTicketNumber2Up,
-                          ]}
-                        >
-                          {item.ticketNumber}
+            /* Multi-Station Equal Prominence Grid (Zero-Scroll, Fits Entire Screen) */
+            <View
+              style={[
+                styles.multiStationContainer,
+                data.nowServing.length === 2 && styles.multiStationGrid2Up,
+                data.nowServing.length === 3 && styles.multiStationGrid3Up,
+                data.nowServing.length >= 4 && styles.multiStationGrid4Plus,
+              ]}
+            >
+              {data.nowServing.map((item) => {
+                const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
+                const count = data.nowServing.length;
+                return (
+                  <View
+                    key={item.queueItemId}
+                    style={[
+                      styles.stationCard,
+                      count === 2 && styles.stationCard2Up,
+                      count === 3 && styles.stationCard3Up,
+                      count >= 4 && styles.stationCard4Plus,
+                      isItemPulsing && styles.stationCardPulsing,
+                    ]}
+                  >
+                    {/* Header: Station & Status */}
+                    <View style={styles.stationCardHeader}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={styles.stationCaption}>STATION / ROOM</Text>
+                        <Text style={styles.stationName} numberOfLines={1}>
+                          {item.roomOrStation || '—'}
                         </Text>
                       </View>
-
-                      {/* Footer: Attending Physician */}
-                      {data?.tvDisplayShowPhysicianName !== false && (
-                        <View style={styles.stationFooter}>
-                          <Text style={styles.stationDoctorCaption}>ATTENDING PHYSICIAN</Text>
-                          <Text style={styles.stationDoctorText} numberOfLines={1}>
-                            {item.doctorName || '—'}
-                          </Text>
+                      {isItemPulsing && (
+                        <View style={styles.stationStatusBadgePulsing}>
+                          <Text style={styles.stationStatusTextPulsing}>JUST CALLED</Text>
                         </View>
                       )}
                     </View>
-                  );
-                })}
-              </ScrollView>
+
+                    {/* Center: Ticket Number */}
+                    <View style={styles.stationTicketBox}>
+                      <Text style={styles.stationTicketLabel}>TICKET NUMBER</Text>
+                      <Text
+                        style={[
+                          styles.stationTicketNumber,
+                          count === 2 && styles.stationTicketNumber2Up,
+                          count === 3 && styles.stationTicketNumber3Up,
+                          count >= 4 && styles.stationTicketNumber4Plus,
+                        ]}
+                      >
+                        {item.ticketNumber}
+                      </Text>
+                    </View>
+
+                    {/* Footer: Attending Physician */}
+                    {data?.tvDisplayShowPhysicianName !== false && (
+                      <View style={styles.stationFooter}>
+                        <Text style={styles.stationDoctorCaption}>ATTENDING PHYSICIAN</Text>
+                        <Text style={styles.stationDoctorText} numberOfLines={1}>
+                          {item.doctorName || '—'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
           ) : (
             /* Single Station Clean Display */
@@ -697,21 +684,11 @@ export default function PublicQueueDisplayScreen() {
                     {primaryServing.roomOrStation || '—'}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.stationStatusBadge,
-                    pulseActive && styles.stationStatusBadgePulsing,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.stationStatusText,
-                      pulseActive && styles.stationStatusTextPulsing,
-                    ]}
-                  >
-                    {pulseActive ? 'JUST CALLED' : 'In Consultation'}
-                  </Text>
-                </View>
+                {pulseActive && (
+                  <View style={styles.stationStatusBadgePulsing}>
+                    <Text style={styles.stationStatusTextPulsing}>JUST CALLED</Text>
+                  </View>
+                )}
               </View>
 
               {/* Center: Hero Ticket Number */}
@@ -739,9 +716,6 @@ export default function PublicQueueDisplayScreen() {
             <View>
               <Text style={styles.sectionTitle}>UP NEXT</Text>
               <Text style={styles.sectionSubtitle}>Susunod Na Tiket</Text>
-            </View>
-            <View style={styles.queueOrderBadge}>
-              <Text style={styles.queueOrderText}>Queue Order</Text>
             </View>
           </View>
 
@@ -1000,20 +974,6 @@ const styles = StyleSheet.create({
     color: darkColors.textMuted,
     fontWeight: '500',
   },
-  inConsultationBadge: {
-    backgroundColor: darkColors.primaryLight,
-    borderColor: darkColors.primaryBorder,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: theme.radii.xl - 2,
-  },
-  inConsultationText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '700',
-    color: darkColors.primary,
-    textTransform: 'uppercase',
-  },
   servingCard: {
     flex: 1,
     backgroundColor: darkColors.surface,
@@ -1115,33 +1075,47 @@ const styles = StyleSheet.create({
   },
   multiStationContainer: {
     flex: 1,
-  },
-  multiStationScroll: {
-    flex: 1,
-  },
-  multiStationGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 16,
-    paddingBottom: 8,
+    overflow: 'hidden',
   },
   multiStationGrid2Up: {
-    flexDirection: 'column',
-    flex: 1,
+    flexDirection: 'row',
+    gap: 16,
+  },
+  multiStationGrid3Up: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  multiStationGrid4Plus: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   stationCard: {
     flex: 1,
-    minWidth: 280,
     backgroundColor: darkColors.surface,
     borderColor: darkColors.border,
     borderWidth: 2,
     borderRadius: theme.radii['2xl'],
     padding: 20,
     justifyContent: 'space-between',
+    overflow: 'hidden',
   },
   stationCard2Up: {
-    minWidth: '100%',
     flex: 1,
+    height: '100%',
+  },
+  stationCard3Up: {
+    flex: 1,
+    height: '100%',
+    padding: 16,
+  },
+  stationCard4Plus: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    flexShrink: 1,
+    padding: 14,
   },
   stationCardPulsing: {
     borderColor: darkColors.primary,
@@ -1152,21 +1126,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 12,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: darkColors.border,
   },
   stationTicketBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
+    paddingVertical: 10,
   },
   stationTicketLabel: {
-    fontSize: theme.fontSizes.xs,
+    fontSize: theme.fontSizes.xs - 1,
     fontWeight: '700',
     color: darkColors.textMuted,
     letterSpacing: 1,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   stationTicketNumber: {
     fontSize: theme.fontSizes['4xl'] * 1.5,
@@ -1178,13 +1152,19 @@ const styles = StyleSheet.create({
   stationTicketNumber2Up: {
     fontSize: theme.fontSizes['4xl'] * 1.8,
   },
+  stationTicketNumber3Up: {
+    fontSize: theme.fontSizes['4xl'] * 1.3,
+  },
+  stationTicketNumber4Plus: {
+    fontSize: theme.fontSizes['3xl'],
+  },
   stationFooter: {
-    paddingTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: darkColors.border,
   },
   stationDoctorText: {
-    fontSize: theme.fontSizes.lg,
+    fontSize: theme.fontSizes.md,
     fontWeight: '800',
     color: darkColors.text,
     marginTop: 2,
@@ -1210,20 +1190,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.lg,
     color: darkColors.textSecondary,
     textAlign: 'center',
-  },
-  queueOrderBadge: {
-    backgroundColor: darkColors.surfaceHighlight,
-    borderColor: darkColors.border,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: theme.radii.lg - 2,
-  },
-  queueOrderText: {
-    fontSize: theme.fontSizes.xs - 1,
-    fontWeight: '700',
-    color: darkColors.textSecondary,
-    textTransform: 'uppercase',
   },
   upNextContainer: {
     flex: 1,
