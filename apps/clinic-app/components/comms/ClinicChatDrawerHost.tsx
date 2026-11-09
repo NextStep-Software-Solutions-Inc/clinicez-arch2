@@ -344,19 +344,15 @@ export default function ClinicChatDrawerHost() {
                 color={
                   status === 'connected'
                     ? theme.colors.successText
-                    : status === 'reconnecting' || isReconnecting || isManualReconnecting
+                    : status === 'reconnecting' || isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket'
                     ? theme.colors.warningText
-                    : status === 'connecting' || status === 'acquiring_ticket'
-                    ? theme.colors.primaryDark
                     : theme.colors.textMuted
                 }
               >
                 {status === 'connected'
                   ? 'Connected'
-                  : status === 'reconnecting' || isReconnecting || isManualReconnecting
+                  : status === 'reconnecting' || isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket'
                   ? 'Reconnecting...'
-                  : status === 'connecting' || status === 'acquiring_ticket'
-                  ? 'Connecting...'
                   : 'Offline'}
               </ThemedText>
             </View>

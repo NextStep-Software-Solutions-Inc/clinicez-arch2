@@ -1,7 +1,7 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus, ApiError, type SearchResponseDto, type EhrOptionDescriptor } from '@shared/safe';
-import { getSetting } from './runtimeConfig';
+import { getSetting, getPortalBaseUrl } from './runtimeConfig';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus =
@@ -3532,7 +3532,7 @@ export const clinicService = {
     }
 
     // 4. Query Portal directory to resolve tenant -> facility mapping (if portal is reachable)
-    const portalUrl = getSetting('EXPO_PUBLIC_PORTAL_URL') || 'https://clinicez-portal.api.dev.nextstep-software.com';
+    const portalUrl = getSetting('EXPO_PUBLIC_PORTAL_URL') || getPortalBaseUrl();
     const cleanPortalBase = portalUrl.endsWith('/api/v1') ? portalUrl : `${portalUrl.replace(/\/+$/, '')}/api/v1`;
     try {
       const portalRes = await axios.get(`${cleanPortalBase}/tenants/lookup/${encodeURIComponent(clean)}`, {
