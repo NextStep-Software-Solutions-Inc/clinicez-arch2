@@ -116,7 +116,22 @@ describe('Queue TV Display Alert Chimes & Voice Announcement (English Only)', ()
       expect(utterance.lang).toBe('en-US');
     });
 
-    it('pronounces ticket with doctor name when room is absent', () => {
+    it('announces station or room and strictly omits doctor or staff names', () => {
+      announceTicketVoice({
+        ticketNumber: 'D-005',
+        roomOrStation: 'Station 4',
+        doctorName: 'Dr. Santos',
+      });
+
+      expect(spokenUtterances.length).toBe(1);
+      const utterance = spokenUtterances[0];
+      expect(utterance.text).toContain('D 0 0 5');
+      expect(utterance.text).toContain('Please proceed to Station 4.');
+      expect(utterance.text).not.toContain('Dr. Santos');
+      expect(utterance.lang).toBe('en-US');
+    });
+
+    it('pronounces only ticket when room or station is absent, omitting doctor name', () => {
       announceTicketVoice({
         ticketNumber: 'D-005',
         doctorName: 'Dr. Santos',
@@ -124,8 +139,8 @@ describe('Queue TV Display Alert Chimes & Voice Announcement (English Only)', ()
 
       expect(spokenUtterances.length).toBe(1);
       const utterance = spokenUtterances[0];
-      expect(utterance.text).toContain('D 0 0 5');
-      expect(utterance.text).toContain('Please proceed to Dr. Santos.');
+      expect(utterance.text).toBe('Now serving ticket D 0 0 5.');
+      expect(utterance.text).not.toContain('Dr. Santos');
       expect(utterance.lang).toBe('en-US');
     });
 

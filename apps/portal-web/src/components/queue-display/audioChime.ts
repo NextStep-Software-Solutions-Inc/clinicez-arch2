@@ -256,11 +256,10 @@ export function announceTicketVoice(params: {
       .replace(/\s+/g, ' ')
       .trim();
 
+    // Strictly announce station or room only, omitting attending physician or staff
     let text = `Now serving ticket ${pronouncedTicket}.`;
     if (params.roomOrStation && params.roomOrStation.trim()) {
       text += ` Please proceed to ${params.roomOrStation.trim()}.`;
-    } else if (params.doctorName && params.doctorName.trim()) {
-      text += ` Please proceed to ${params.doctorName.trim()}.`;
     }
 
     const utterance = new SpeechSynthesisUtterance(text);
