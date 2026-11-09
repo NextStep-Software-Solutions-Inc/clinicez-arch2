@@ -371,7 +371,20 @@ export default function PublicQueueDisplayScreen() {
             />
           )}
           <View>
-            <Text style={styles.clinicTitle}>{data?.clinicName || 'Clinic EZ Healthcare'}</Text>
+            <View style={styles.headerTitleRow}>
+              <Text
+                style={[
+                  styles.clinicTitle,
+                  { fontSize: sectionTitleFontSize },
+                ]}
+                numberOfLines={1}
+              >
+                NOW SERVING
+              </Text>
+              <Text style={styles.headerNowServingSub} numberOfLines={1}>
+                Kasalukuyang Tinatawag
+              </Text>
+            </View>
             <View style={styles.liveBadgeRow}>
               <View
                 style={[
@@ -597,31 +610,8 @@ export default function PublicQueueDisplayScreen() {
         </View>
       ) : (
         <View style={styles.mainGrid}>
-        {/* Left Column: NOW SERVING */}
+        {/* Left Column: Active Stations (NOW SERVING) */}
         <View style={[styles.servingCol, isCompact && styles.servingColCompact]}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { fontSize: sectionTitleFontSize },
-                ]}
-                numberOfLines={1}
-              >
-                NOW SERVING
-              </Text>
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontSize: sectionSubtitleFontSize },
-                ]}
-                numberOfLines={1}
-              >
-                Kasalukuyang Tinatawag
-              </Text>
-            </View>
-          </View>
-
           {!primaryServing ? (
             <View style={styles.emptyServingCard}>
               <Icon name="clock" size={48} color={darkColors.primary} />
@@ -752,8 +742,8 @@ export default function PublicQueueDisplayScreen() {
         {/* Right Column: UP NEXT (Visible on widescreen displays) */}
         {!isCompact && (
         <View style={styles.upNextCol}>
-          <View style={styles.sectionHeader}>
-            <View>
+          <View style={styles.upNextContainer}>
+            <View style={styles.upNextCardHeader}>
               <Text
                 style={[
                   styles.sectionTitle,
@@ -773,9 +763,7 @@ export default function PublicQueueDisplayScreen() {
                 Susunod Na Tiket
               </Text>
             </View>
-          </View>
 
-          <View style={styles.upNextContainer}>
             {upNextList.length > 0 ? (
               <ScrollView style={styles.upNextScroll} contentContainerStyle={styles.upNextList}>
                 {upNextList.slice(0, 10).map((ticket, idx) => {
@@ -925,6 +913,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: darkColors.text,
     letterSpacing: -0.5,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  headerNowServingSub: {
+    fontSize: theme.fontSizes.xs,
+    color: darkColors.textMuted,
+    fontWeight: '500',
   },
   liveBadgeRow: {
     flexDirection: 'row',
@@ -1261,6 +1259,12 @@ const styles = StyleSheet.create({
     borderColor: darkColors.border,
     borderRadius: theme.radii['2xl'],
     padding: 16,
+  },
+  upNextCardHeader: {
+    paddingBottom: 12,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: darkColors.border,
   },
   upNextScroll: {
     flex: 1,

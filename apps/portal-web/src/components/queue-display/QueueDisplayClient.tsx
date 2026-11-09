@@ -425,9 +425,14 @@ export default function QueueDisplayClient({
             />
           )}
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {data?.clinicName || "Clinic EZ Healthcare"}
-            </h1>
+            <div className="flex items-baseline gap-3">
+              <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-tight">
+                Now Serving
+              </h1>
+              <span className="text-sm font-medium hidden sm:inline" style={{ color: darkColors.textMuted }}>
+                Kasalukuyang Tinatawag
+              </span>
+            </div>
             <div className="flex items-center gap-2 mt-0.5">
               <span
                 className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"
@@ -697,19 +702,8 @@ export default function QueueDisplayClient({
         </main>
       ) : (
         <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 p-6 sm:p-8 overflow-hidden">
-        {/* Left Column (Flex 3 / 60%): NOW SERVING */}
-        <section className="lg:col-span-3 flex flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between shrink-0">
-            <div>
-              <h2 className="text-[clamp(1.25rem,2.4vw,3.25rem)] font-extrabold uppercase tracking-tight">
-                Now Serving
-              </h2>
-              <p className="text-[clamp(0.75rem,1.1vw,1rem)] font-medium" style={{ color: darkColors.textMuted }}>
-                Kasalukuyang Tinatawag
-              </p>
-            </div>
-          </div>
-
+        {/* Left Column (Flex 3 / 60%): NOW SERVING Active Stations */}
+        <section className="lg:col-span-3 flex flex-col min-h-0 overflow-hidden">
           {!primaryServing ? (
             /* Empty serving state */
             <div
@@ -880,22 +874,20 @@ export default function QueueDisplayClient({
         </section>
 
         {/* Right Column (Flex 2 / 40%): UP NEXT (Shown on widescreen displays) */}
-        <section className="hidden lg:flex lg:col-span-2 flex-col gap-4 sm:gap-6 min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between shrink-0">
-            <div>
-              <h2 className="text-[clamp(1.25rem,2.4vw,3.25rem)] font-extrabold uppercase tracking-tight">
-                Up Next
-              </h2>
-              <p className="text-[clamp(0.75rem,1.1vw,1rem)] font-medium" style={{ color: darkColors.textMuted }}>
-                Susunod Na Tiket
-              </p>
-            </div>
-          </div>
-
+        <section className="hidden lg:flex lg:col-span-2 flex-col min-h-0 overflow-hidden">
           <div
             className="flex-1 rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
             style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
           >
+            <div className="pb-4 mb-4 border-b shrink-0" style={{ borderColor: darkColors.border }}>
+              <h2 className="text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
+                Up Next
+              </h2>
+              <p className="text-xs sm:text-sm font-medium" style={{ color: darkColors.textMuted }}>
+                Susunod Na Tiket
+              </p>
+            </div>
+
             {upNextList.length > 0 ? (
               <div className="flex flex-col gap-4 overflow-y-auto no-scrollbar max-h-[calc(100vh-280px)]">
                 {upNextList.slice(0, 8).map((ticket, idx) => {
