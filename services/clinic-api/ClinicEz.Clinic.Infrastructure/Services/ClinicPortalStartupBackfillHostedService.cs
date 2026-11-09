@@ -145,6 +145,8 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                         IsAcceptingWalkIns = !clinic.IsOnlineBookingPaused,
                         PatientsWaitingCount = upNext.Count,
                         TvDisplayPin = clinic.TvDisplayPin,
+                        TvDisplaySoundTheme = clinic.TvDisplaySoundTheme ?? "classicChime",
+                        TvDisplayVoiceEnabled = clinic.TvDisplayVoiceEnabled,
                         NowServing = nowServing,
                         UpNext = upNext
                     });

@@ -220,6 +220,8 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                     IsAcceptingWalkIns = isAcceptingWalkIns,
                     PatientsWaitingCount = upNext.Count,
                     TvDisplayPin = settings?.TvDisplayPin,
+                    TvDisplaySoundTheme = settings?.TvDisplaySoundTheme ?? "classicChime",
+                    TvDisplayVoiceEnabled = settings?.TvDisplayVoiceEnabled ?? false,
                     NowServing = nowServing,
                     UpNext = upNext
                 };

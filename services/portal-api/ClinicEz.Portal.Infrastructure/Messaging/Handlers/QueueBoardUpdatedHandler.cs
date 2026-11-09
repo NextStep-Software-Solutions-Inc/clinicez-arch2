@@ -55,7 +55,13 @@ public sealed class QueueBoardUpdatedHandler(
         var emergencyList = payload.UpNext
             .Where(t => string.Equals(t.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var emergencyJson = JsonSerializer.Serialize(emergencyList, JsonOptions);
+        var settingsMetadata = new
+        {
+            Emergency = emergencyList,
+            TvDisplaySoundTheme = payload.TvDisplaySoundTheme ?? "classicChime",
+            TvDisplayVoiceEnabled = payload.TvDisplayVoiceEnabled
+        };
+        var emergencyJson = JsonSerializer.Serialize(settingsMetadata, JsonOptions);
 
         if (existing is null)
         {

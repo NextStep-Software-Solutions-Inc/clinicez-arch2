@@ -80,6 +80,7 @@ export default function QueueDisplayClient({
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Tracking previously serving ticket numbers to detect call advancement
+  const isInitialMountRef = useRef<boolean>(!initialData);
   const prevServingRef = useRef<string[]>(initialData?.nowServing.map((s) => s.ticketNumber) || []);
 
   // Sync mute state on mount
@@ -149,19 +150,20 @@ export default function QueueDisplayClient({
 
       // Check if ticket advanced
       const hasNewCall = newServing.some((t) => !prevServing.includes(t));
-      if (hasNewCall) {
+      if (!isInitialMountRef.current && hasNewCall) {
         setPulseActive(true);
         setTimeout(() => setPulseActive(false), 3600);
         const calledTicket = res.data.nowServing.find((s) => !prevServing.includes(s.ticketNumber));
         playQueueCallAlert({
-          theme: (res.data as any).tvDisplaySoundTheme || 'classicChime',
-          voiceEnabled: (res.data as any).tvDisplayVoiceEnabled,
+          theme: res.data.tvDisplaySoundTheme || 'classicChime',
+          voiceEnabled: res.data.tvDisplayVoiceEnabled,
           ticketNumber: calledTicket?.ticketNumber,
           roomOrStation: calledTicket?.roomOrStation,
           doctorName: calledTicket?.doctorName,
         });
       }
 
+      isInitialMountRef.current = false;
       prevServingRef.current = newServing;
       setData(res.data);
       setLoading(false);
@@ -425,7 +427,7 @@ export default function QueueDisplayClient({
                 }}
               >
                 <span className="w-2 h-2 rounded-full bg-current animate-ping" />
-                {isLocked ? "Locked (PIN Required)" : isStale ? "Syncing..." : "Live Queue Board"}
+                {isLocked ? "Locked (Passcode Required)" : isStale ? "Syncing..." : "Live Queue Display"}
               </span>
               {!isLocked && (
                 <span className="text-xs" style={{ color: darkColors.textMuted }}>
@@ -845,7 +847,7 @@ export default function QueueDisplayClient({
                 color: darkColors.textSecondary,
               }}
             >
-              Queue Order
+              Waiting List
             </span>
           </div>
 
@@ -963,14 +965,12 @@ export default function QueueDisplayClient({
         }}
       >
         <div className="flex items-center gap-3">
-          <span className="font-bold text-white uppercase tracking-wider">Instructions:</span>
-          <span>Please prepare your PhilHealth ID or QR pass and wait for your ticket to be called.</span>
+          <span>Please wait for your ticket number to be called.</span>
         </div>
-        <div className="flex items-center gap-6 mt-2 sm:mt-0 font-mono">
-          <span>Display Mode: 1080p / 4K UHD</span>
-          <span className="flex items-center gap-1.5">
+        <div className="flex items-center gap-6 mt-2 sm:mt-0">
+          <span className="flex items-center gap-1.5 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Auto-refresh: 4s
+            Live
           </span>
         </div>
       </footer>

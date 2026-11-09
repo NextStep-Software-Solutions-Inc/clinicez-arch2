@@ -88,6 +88,7 @@ export default function PublicQueueDisplayScreen() {
   const [pinError, setPinError] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState<boolean>(false);
 
+  const isInitialMountRef = useRef<boolean>(true);
   const prevServingRef = useRef<string[]>([]);
   const failureCountRef = useRef<number>(0);
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -161,7 +162,7 @@ export default function PublicQueueDisplayScreen() {
 
       // Audio & visual alert when a new ticket is called
       const hasNewCall = newServing.some((t) => !prevServing.includes(t));
-      if (hasNewCall && prevServing.length > 0) {
+      if (!isInitialMountRef.current && hasNewCall) {
         setPulseActive(true);
         setTimeout(() => setPulseActive(false), 3600);
         const calledTicket = res.nowServing?.find((s: ServingTicket) => !prevServing.includes(s.ticketNumber));
@@ -174,6 +175,7 @@ export default function PublicQueueDisplayScreen() {
         });
       }
 
+      isInitialMountRef.current = false;
       prevServingRef.current = newServing;
       setData(res);
       setLoading(false);
@@ -374,7 +376,7 @@ export default function PublicQueueDisplayScreen() {
                     },
                   ]}
                 >
-                  {isLocked ? 'Locked (PIN Required)' : isStale ? 'Syncing...' : 'Live LAN Queue Kiosk'}
+                  {isLocked ? 'Locked (Passcode Required)' : isStale ? 'Syncing...' : 'Live Queue Display'}
                 </Text>
               </View>
               {!isLocked && (
@@ -753,17 +755,15 @@ export default function PublicQueueDisplayScreen() {
       {/* Footer Ticker */}
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
-          <Text style={styles.footerHighlight}>INSTRUCTIONS:</Text>
           <Text style={styles.footerNote}>
-            Please prepare your PhilHealth ID or QR pass and wait for your ticket to be called.
+            Please wait for your ticket number to be called.
           </Text>
         </View>
 
         <View style={styles.footerRight}>
-          <Text style={styles.footerMode}>Display: LAN Kiosk (1080p/4K)</Text>
           <View style={styles.autoRefreshPill}>
             <View style={styles.refreshDot} />
-            <Text style={styles.autoRefreshText}>Auto-refresh: 4s</Text>
+            <Text style={styles.autoRefreshText}>Live</Text>
           </View>
           <TouchableOpacity onPress={handleExitKiosk} style={styles.staffLink}>
             <Text style={styles.staffLinkText}>Staff Sign In</Text>

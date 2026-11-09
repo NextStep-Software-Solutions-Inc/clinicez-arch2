@@ -129,6 +129,8 @@ public sealed record QueueBoardUpdatedPayload
     public bool IsAcceptingWalkIns { get; init; } = true;
     public int PatientsWaitingCount { get; init; }
     public string? TvDisplayPin { get; init; }
+    public string? TvDisplaySoundTheme { get; init; } = "classicChime";
+    public bool TvDisplayVoiceEnabled { get; init; } = false;
     public IReadOnlyList<QueueBoardServingItemDto> NowServing { get; init; } = Array.Empty<QueueBoardServingItemDto>();
     public IReadOnlyList<QueueBoardUpcomingItemDto> UpNext { get; init; } = Array.Empty<QueueBoardUpcomingItemDto>();
 }

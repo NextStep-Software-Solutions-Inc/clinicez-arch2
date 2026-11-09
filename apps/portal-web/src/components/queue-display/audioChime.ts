@@ -68,7 +68,7 @@ function getAudioContext(): AudioContext | null {
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContextClass) return null;
 
-  if (!audioCtx) {
+  if (!audioCtx || (audioCtx as any).constructor !== AudioContextClass) {
     audioCtx = new AudioContextClass();
   }
   if (audioCtx.state === 'suspended') {

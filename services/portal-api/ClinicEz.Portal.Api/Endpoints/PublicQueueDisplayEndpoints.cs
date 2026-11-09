@@ -28,7 +28,9 @@ public sealed record PublicQueueDisplayData(
     int PatientsWaitingCount,
     string? LogoUrl = null,
     bool IsPinRequired = false,
-    bool IsPinValid = true
+    bool IsPinValid = true,
+    string? TvDisplaySoundTheme = "classicChime",
+    bool TvDisplayVoiceEnabled = false
 );
 
 public sealed class PublicQueueDisplayEndpoints : IEndpoint
@@ -177,6 +179,24 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
         // Strict Zero-PHI guarantee: Enforce displayName = null on all upcoming tickets
         var zeroPhiUpNext = upNext.Select(u => u with { DisplayName = null }).ToList();
 
+        string soundTheme = "classicChime";
+        bool voiceEnabled = false;
+        if (!string.IsNullOrWhiteSpace(board.EmergencyJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(board.EmergencyJson);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    if (doc.RootElement.TryGetProperty("TvDisplaySoundTheme", out var themeProp) && themeProp.GetString() is { } t)
+                        soundTheme = t;
+                    if (doc.RootElement.TryGetProperty("TvDisplayVoiceEnabled", out var voiceProp))
+                        voiceEnabled = voiceProp.GetBoolean();
+                }
+            }
+            catch {}
+        }
+
         var displayData = new PublicQueueDisplayData(
             ClinicId: facility.Id,
             ClinicName: facility.Name,
@@ -189,7 +209,9 @@ public sealed class PublicQueueDisplayEndpoints : IEndpoint
             PatientsWaitingCount: board.PatientsWaitingCount,
             LogoUrl: null,
             IsPinRequired: isPinRequired,
-            IsPinValid: true
+            IsPinValid: true,
+            TvDisplaySoundTheme: soundTheme,
+            TvDisplayVoiceEnabled: voiceEnabled
         );
 
         return Results.Ok(ApiResponse<PublicQueueDisplayData>.Success(displayData));
