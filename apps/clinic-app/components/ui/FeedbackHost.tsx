@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { View, StyleSheet, Pressable, Platform } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback, useSyncExternalStore } from 'react';
+import { View, StyleSheet, Pressable, Platform, Animated } from 'react-native';
 import ThemedText from './ThemedText';
 import Icon, { IconName } from './Icon';
 import Button from './Button';
@@ -37,11 +37,43 @@ const TOAST_STYLE: Record<ToastKind, { icon: IconName; color: string; bg: string
 
 function Toast({ toast }: { toast: ToastRequest }) {
   const [copied, setCopied] = useState(false);
+  const slideAnim = useRef(new Animated.Value(-16)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  const handleDismiss = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: -16,
+        duration: 180,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start(() => {
+      dismissToast(toast.id);
+    });
+  }, [slideAnim, opacityAnim, toast.id]);
 
   useEffect(() => {
-    const timer = setTimeout(() => dismissToast(toast.id), toast.durationMs);
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start();
+
+    const timer = setTimeout(handleDismiss, toast.durationMs);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.durationMs]);
+  }, [handleDismiss, opacityAnim, slideAnim, toast.durationMs]);
 
   const handleCopyRef = async () => {
     if (!toast.traceId) return;
@@ -56,9 +88,17 @@ function Toast({ toast }: { toast: ToastRequest }) {
 
   const look = TOAST_STYLE[toast.kind];
   return (
-    <View
+    <Animated.View
       accessibilityRole="alert"
-      style={[styles.toast, { backgroundColor: look.bg, borderColor: look.border }]}
+      style={[
+        styles.toast,
+        {
+          backgroundColor: look.bg,
+          borderColor: look.border,
+          opacity: opacityAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
     >
       <View style={styles.toastHeaderRow}>
         <Icon name={look.icon} size={theme.sizes.iconMd} color={look.color} />
@@ -97,7 +137,7 @@ function Toast({ toast }: { toast: ToastRequest }) {
             <Pressable
               onPress={() => {
                 toast.action?.onPress();
-                dismissToast(toast.id);
+                handleDismiss();
               }}
               style={styles.actionBtn}
               accessibilityRole="button"
@@ -111,7 +151,7 @@ function Toast({ toast }: { toast: ToastRequest }) {
         </View>
 
         <Pressable
-          onPress={() => dismissToast(toast.id)}
+          onPress={handleDismiss}
           accessibilityLabel="Close notification"
           accessibilityRole="button"
           style={styles.closeBtn}
@@ -120,7 +160,7 @@ function Toast({ toast }: { toast: ToastRequest }) {
           <Icon name="close" size={theme.sizes.iconSm} color={look.color} />
         </Pressable>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

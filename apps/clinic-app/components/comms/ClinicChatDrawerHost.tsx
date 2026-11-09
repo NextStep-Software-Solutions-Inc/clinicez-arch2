@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable, Platform, Modal } from 'react-native';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Pressable, Platform, Modal, Animated, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
   useComms,
@@ -189,14 +189,93 @@ export default function ClinicChatDrawerHost() {
     [answerRequest, requestVisit, declineRequest, routeToStaff, user?.id],
   );
 
+  const { width: windowWidth } = useWindowDimensions();
+  const [isMounted, setIsMounted] = useState(isChatDrawerOpen);
+
+  const slideAnim = useRef(new Animated.Value(isChatDrawerOpen ? 0 : 1)).current;
+  const opacityAnim = useRef(new Animated.Value(isChatDrawerOpen ? 1 : 0)).current;
+  const widthAnim = useRef(new Animated.Value(isMaximized ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (isChatDrawerOpen) {
+      setIsMounted(true);
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start(() => {
+        setIsMounted(false);
+      });
+    }
+  }, [isChatDrawerOpen, opacityAnim, slideAnim]);
+
+  useEffect(() => {
+    Animated.timing(widthAnim, {
+      toValue: isMaximized ? 1 : 0,
+      duration: 280,
+      useNativeDriver: false,
+    }).start();
+  }, [isMaximized, widthAnim]);
+
+  const handleClose = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start(() => {
+      setIsMounted(false);
+      closeChatDrawer();
+    });
+  }, [closeChatDrawer, opacityAnim, slideAnim]);
+
+  const handleOpenPatientChart = useCallback(
+    (patientId: string) => {
+      handleClose();
+      navigation.navigate('Patients', {
+        screen: 'PatientDetail',
+        params: { patientId, initialTab: 'chart' },
+      });
+    },
+    [handleClose, navigation],
+  );
+
   const connectionStateDisplay =
     status === 'connected'
       ? 'Connected'
-      : status === 'connecting' || status === 'reconnecting' || status === 'acquiring_ticket'
+      : status === 'reconnecting'
       ? 'Reconnecting'
+      : status === 'connecting' || status === 'acquiring_ticket'
+      ? 'Connecting'
       : 'Disconnected';
 
-  const isSpinning = isReconnecting || isManualReconnecting;
+  const isSpinning = isReconnecting || isManualReconnecting || status === 'connecting' || status === 'acquiring_ticket';
 
   const handleManualReconnect = useCallback(async () => {
     if (isManualReconnecting) return;
@@ -225,7 +304,7 @@ export default function ClinicChatDrawerHost() {
     setIsMaximized((prev) => !prev);
   }, []);
 
-  if (!isChatDrawerOpen) {
+  if (!isMounted && !isChatDrawerOpen) {
     return null;
   }
 
@@ -245,7 +324,7 @@ export default function ClinicChatDrawerHost() {
                 styles.connectionPill,
                 status === 'connected'
                   ? styles.connectionPillConnected
-                  : isSpinning || status === 'connecting' || status === 'reconnecting' || status === 'acquiring_ticket'
+                  : isSpinning || status === 'reconnecting'
                   ? styles.connectionPillReconnecting
                   : styles.connectionPillOffline,
               ]}
@@ -255,7 +334,7 @@ export default function ClinicChatDrawerHost() {
                   styles.connectionDot,
                   status === 'connected'
                     ? styles.connectionDotConnected
-                    : isSpinning || status === 'connecting' || status === 'reconnecting' || status === 'acquiring_ticket'
+                    : isSpinning || status === 'reconnecting'
                     ? styles.connectionDotReconnecting
                     : styles.connectionDotOffline,
                 ]}
@@ -265,15 +344,19 @@ export default function ClinicChatDrawerHost() {
                 color={
                   status === 'connected'
                     ? theme.colors.successText
-                    : isSpinning || status === 'connecting' || status === 'reconnecting' || status === 'acquiring_ticket'
+                    : status === 'reconnecting' || isReconnecting || isManualReconnecting
                     ? theme.colors.warningText
+                    : status === 'connecting' || status === 'acquiring_ticket'
+                    ? theme.colors.primaryDark
                     : theme.colors.textMuted
                 }
               >
                 {status === 'connected'
                   ? 'Connected'
-                  : isSpinning || status === 'connecting' || status === 'reconnecting' || status === 'acquiring_ticket'
+                  : status === 'reconnecting' || isReconnecting || isManualReconnecting
                   ? 'Reconnecting...'
+                  : status === 'connecting' || status === 'acquiring_ticket'
+                  ? 'Connecting...'
                   : 'Offline'}
               </ThemedText>
             </View>
@@ -302,7 +385,7 @@ export default function ClinicChatDrawerHost() {
             <Icon name={isMaximized ? "minimize" : "maximize"} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
           </Pressable>
           <Pressable
-            onPress={closeChatDrawer}
+            onPress={handleClose}
             style={styles.closeBtn}
             accessibilityRole="button"
             accessibilityLabel="Close communications panel"
@@ -384,6 +467,7 @@ export default function ClinicChatDrawerHost() {
             conversationId={activeConversationId}
             initialConversation={conversations.find((c) => c.id === activeConversationId)}
             onBack={() => setActiveConversationId(undefined)}
+            onOpenPatientChart={handleOpenPatientChart}
             currentUserId={user?.id || ''}
           />
         ) : drawerTab === 'triage' && canViewTriage ? (
@@ -417,7 +501,7 @@ export default function ClinicChatDrawerHost() {
             renderScopeIcon={(scope) => {
               switch (scope) {
                 case 'Direct':
-                  return <Icon name="patient" size={16} color={theme.colors.primary} />;
+                  return null; // Monogram initials rendered by ChatDrawer
                 case 'StaffContext':
                   return <Icon name="users" size={16} color={theme.colors.primary} />;
                 case 'Facility':
@@ -470,22 +554,57 @@ export default function ClinicChatDrawerHost() {
     </View>
   );
 
-  // If workstation, render as an overlay docked to the right edge
+  const normalWidth = Math.min(460, windowWidth);
+  const targetWidth = windowWidth;
+  const animatedWidth = widthAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [normalWidth, targetWidth],
+  });
+  const slideX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, Math.min(windowWidth, 500)],
+  });
+
+  // If workstation, render as an overlay docked to the right edge with slide and width expansion
   if (isWorkstation) {
     return (
       <View style={styles.desktopOverlay}>
-        <Pressable style={styles.backdrop} onPress={closeChatDrawer} />
-        <View style={[styles.dockedPanel, isMaximized && styles.dockedPanelMaximized]}>{drawerContent}</View>
+        <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.dockedPanel,
+            {
+              width: animatedWidth,
+              transform: [{ translateX: slideX }],
+            },
+          ]}
+        >
+          {drawerContent}
+        </Animated.View>
       </View>
     );
   }
 
   // Mobile / compact: use modal
   return (
-    <Modal visible={isChatDrawerOpen} animationType="slide" transparent onRequestClose={closeChatDrawer}>
+    <Modal visible={isChatDrawerOpen} animationType="slide" transparent onRequestClose={handleClose}>
       <View style={styles.mobileModalContainer}>
-        <Pressable style={styles.backdrop} onPress={closeChatDrawer} />
-        <View style={[styles.mobilePanel, isMaximized && styles.mobilePanelMaximized]}>{drawerContent}</View>
+        <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.mobilePanel,
+            {
+              width: animatedWidth,
+              transform: [{ translateX: slideX }],
+            },
+          ]}
+        >
+          {drawerContent}
+        </Animated.View>
       </View>
     </Modal>
   );

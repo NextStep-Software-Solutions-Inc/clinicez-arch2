@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -45,6 +45,42 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   const [isInternal, setIsInternal] = useState(false);
   const [peekingMessageId, setPeekingMessageId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+  const isNearBottomRef = useRef(true);
+  const [showNewMessagesPill, setShowNewMessagesPill] = useState(false);
+  const prevMessagesCountRef = useRef(messages.length);
+
+  const handleScroll = useCallback((event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 80;
+    const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    isNearBottomRef.current = isNearBottom;
+    if (isNearBottom) {
+      setShowNewMessagesPill(false);
+    }
+  }, []);
+
+  const scrollToBottom = useCallback((animated: boolean = true) => {
+    scrollViewRef.current?.scrollToEnd({ animated });
+    setShowNewMessagesPill(false);
+    isNearBottomRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (messages.length > prevMessagesCountRef.current) {
+      if (isNearBottomRef.current) {
+        // User is at the bottom: smoothly scroll down
+        setTimeout(() => {
+          scrollToBottom(true);
+        }, 50);
+      } else {
+        // User has scrolled up to read history: do not yank their scroll position!
+        setShowNewMessagesPill(true);
+      }
+    }
+    prevMessagesCountRef.current = messages.length;
+  }, [messages.length, scrollToBottom]);
 
   const handleKeyPress = (e: any) => {
     if (e.nativeEvent?.key === 'Enter' && !e.nativeEvent?.shiftKey) {
@@ -176,7 +212,13 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
           </View>
         )
       ) : (
-        <ScrollView style={styles.messageList} contentContainerStyle={styles.messageListContent}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messageList}
+          contentContainerStyle={styles.messageListContent}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
           {hasMoreHistory && onLoadMoreHistory && (
             <TouchableOpacity style={styles.loadMoreButton} onPress={onLoadMoreHistory}>
               <Text style={styles.loadMoreText}>Load earlier messages</Text>
@@ -266,6 +308,21 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             );
           })}
         </ScrollView>
+      )}
+
+      {/* Floating Jump to New Messages Pill */}
+      {showNewMessagesPill && (
+        <View style={styles.newMessagesPillContainer} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.newMessagesPill}
+            onPress={() => scrollToBottom(true)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Scroll to new messages"
+          >
+            <Text style={styles.newMessagesPillText}>New messages ↓</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Input Bar */}
@@ -365,6 +422,30 @@ const styles = StyleSheet.create({
   },
   messageList: {
     flex: 1
+  },
+  newMessagesPillContainer: {
+    position: 'absolute',
+    bottom: 84,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  newMessagesPill: {
+    backgroundColor: lightColors.primary,
+    paddingHorizontal: spaceScale.md,
+    paddingVertical: spaceScale.xs,
+    borderRadius: radiusScale.full,
+    shadowColor: lightColors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  newMessagesPillText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.surface,
   },
   messageListContent: {
     padding: spaceScale.md

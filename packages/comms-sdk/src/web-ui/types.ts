@@ -27,7 +27,7 @@ export interface WebChatDrawerProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onNewConversation?: () => void;
-  connectionState?: 'Connected' | 'Reconnecting' | 'Disconnected';
+  connectionState?: 'Connected' | 'Reconnecting' | 'Connecting' | 'Disconnected';
   loading?: boolean;
   error?: string | null;
   className?: string;

@@ -77,11 +77,18 @@ export function useTriageQueue(
       }
     });
 
+    const unsubState = client.events.on('connectionStateChanged', (state) => {
+      if (state === 'Connected') {
+        refresh().catch(() => {});
+      }
+    });
+
     return () => {
       unsubThread();
       unsubCreated();
+      unsubState();
     };
-  }, [client, facilityId]);
+  }, [client, facilityId, refresh]);
 
   const claimRequest = useCallback(
     async (conversationId: string): Promise<void> => {

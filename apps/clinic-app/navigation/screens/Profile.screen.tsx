@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   Image,
+  Platform,
 } from 'react-native';
 import {
   ThemedText,
@@ -29,6 +30,16 @@ import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
 import { useTextScale, TEXT_SCALE_OPTIONS } from '../../context/TextScaleContext';
 import { useUiDensity, UI_DENSITY_OPTIONS } from '../../context/UiDensityContext';
+import {
+  SoundTheme,
+  UserAudioPreferences,
+  SOUND_THEME_PRESETS,
+  playAlertTone,
+  validateAudioFile,
+  setActiveAudioPreferences,
+  getActiveAudioPreferences,
+} from '../../utils/alertSounds';
+import { ToggleSwitch } from '../../components/settings/AddEditFieldModal';
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -88,6 +99,25 @@ export default function ProfileScreen() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
+  // Personal Alert Audio & Sound Preferences State
+  const [soundTheme, setSoundTheme] = useState<SoundTheme>(() => {
+    return getActiveAudioPreferences().soundTheme || 'gentleBell';
+  });
+  const [customAudioDataUri, setCustomAudioDataUri] = useState<string | null>(() => {
+    return getActiveAudioPreferences().customAudioDataUri || null;
+  });
+  const [customAudioFileName, setCustomAudioFileName] = useState<string | null>(() => {
+    return getActiveAudioPreferences().customAudioFileName || null;
+  });
+  const [isAlertMuted, setIsAlertMuted] = useState<boolean>(() => {
+    return Boolean(getActiveAudioPreferences().isMuted);
+  });
+  const [personalChartLayout, setPersonalChartLayout] = useState<'default' | 'modal' | 'split' | 'drawer'>(() => {
+    return (getActiveAudioPreferences().preferredChartLayout as any) || 'default';
+  });
+  const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+
   // Load authoritative staff record from GET /staff/me on mount / user switch
   const loadMyProfile = useCallback(async () => {
     if (!user?.id || offline) return;
@@ -101,6 +131,23 @@ export default function ProfileScreen() {
     setSelfStaff((prev) => (prev && prev.id === user?.id ? prev : null));
     void loadMyProfile();
   }, [loadMyProfile, user?.id]);
+
+  // Sync personal audio & workstation preferences from authoritative staff record
+  useEffect(() => {
+    if (effectiveStaff?.preferencesJson) {
+      try {
+        const prefs: UserAudioPreferences = JSON.parse(effectiveStaff.preferencesJson);
+        if (prefs.soundTheme) setSoundTheme(prefs.soundTheme);
+        if (prefs.customAudioDataUri) setCustomAudioDataUri(prefs.customAudioDataUri);
+        if (prefs.customAudioFileName) setCustomAudioFileName(prefs.customAudioFileName);
+        if (typeof prefs.isMuted === 'boolean') setIsAlertMuted(prefs.isMuted);
+        if (prefs.preferredChartLayout) setPersonalChartLayout(prefs.preferredChartLayout);
+        setActiveAudioPreferences(prefs);
+      } catch {
+        // Ignore JSON parse error
+      }
+    }
+  }, [effectiveStaff?.preferencesJson]);
 
   // Sync form with authoritative staff record
   useEffect(() => {
@@ -128,6 +175,81 @@ export default function ProfileScreen() {
   const displayName = effectiveStaff ? formatStaffName(effectiveStaff) : user.name;
   const accountEmail = effectiveStaff?.email?.trim() || user.email?.trim() || '';
 
+  const handleSelectCustomAudio = () => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      notify.info('Custom audio upload is supported on web workstations.');
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.mp3,.wav,.ogg,audio/mpeg,audio/mp3,audio/wav,audio/ogg';
+    input.onchange = (e: any) => {
+      const file = e.target?.files?.[0];
+      if (!file) return;
+
+      const check = validateAudioFile({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      });
+
+      if (!check.valid) {
+        setAudioUploadError(check.error || 'Invalid audio file.');
+        notify.error(check.error || 'Invalid audio file.');
+        return;
+      }
+
+      setAudioUploadError(null);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Uri = reader.result as string;
+        setCustomAudioDataUri(base64Uri);
+        setCustomAudioFileName(file.name);
+        setSoundTheme('custom');
+        playAlertTone('custom', base64Uri);
+        notify.success(`Loaded custom audio: ${file.name}`);
+      };
+      reader.onerror = () => {
+        notify.error('Failed to read audio file.');
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  const handleSavePersonalPreferences = async () => {
+    setSavingPreferences(true);
+    const preferencesPayload: UserAudioPreferences = {
+      soundTheme,
+      customAudioDataUri: soundTheme === 'custom' ? customAudioDataUri : null,
+      customAudioFileName: soundTheme === 'custom' ? customAudioFileName : null,
+      isMuted: isAlertMuted,
+      preferredChartLayout: personalChartLayout !== 'default' ? personalChartLayout : undefined,
+    };
+
+    setActiveAudioPreferences(preferencesPayload);
+
+    const [updated, err] = await clinicService.updateMyProfile({
+      firstName: firstName.trim() || resolveDefaultNames(effectiveStaff, user).firstName,
+      lastName: lastName.trim() || resolveDefaultNames(effectiveStaff, user).lastName,
+      middleName: middleName.trim() || undefined,
+      title: title.trim() || undefined,
+      phoneNumber: phone.trim() || undefined,
+      preferencesJson: JSON.stringify(preferencesPayload),
+    });
+    setSavingPreferences(false);
+
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not sync preferences to server.');
+      return;
+    }
+
+    setSelfStaff(updated);
+    await reloadStaff();
+    notify.success('Personal alert and workstation preferences saved successfully.');
+  };
+
   const handleSaveProfile = async () => {
     if (!firstName.trim() || !lastName.trim()) {
       setProfileError('First and last name are required.');
@@ -142,6 +264,15 @@ export default function ProfileScreen() {
     setSavingProfile(true);
     setProfileError(null);
 
+    const preferencesPayload: UserAudioPreferences = {
+      soundTheme,
+      customAudioDataUri: soundTheme === 'custom' ? customAudioDataUri : null,
+      customAudioFileName: soundTheme === 'custom' ? customAudioFileName : null,
+      isMuted: isAlertMuted,
+      preferredChartLayout: personalChartLayout !== 'default' ? personalChartLayout : undefined,
+    };
+    setActiveAudioPreferences(preferencesPayload);
+
     const [updated, err] = await clinicService.updateMyProfile({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -155,6 +286,7 @@ export default function ProfileScreen() {
       specialty: specialty.trim() || undefined,
       signatureSpecimen: isDoctor ? signatureSpecimen : undefined,
       defaultSignatureMode: isDoctor ? defaultSignatureMode : undefined,
+      preferencesJson: JSON.stringify(preferencesPayload),
     });
 
     setSavingProfile(false);
@@ -569,6 +701,304 @@ export default function ProfileScreen() {
                 icon="key"
                 onPress={handleUpdatePassword}
                 loading={savingPassword}
+                disabled={offline}
+              />
+            </View>
+          </CardContent>
+        </Card>
+
+        {/* Section: Notification & Personal Alert Sounds */}
+        <Card>
+          <CardHeader
+            title="Notification & Personal Alert Sounds"
+            subtitle="Personalize your alert chimes and override clinic-wide notification sounds for your workstation"
+          />
+          <CardContent style={styles.cardSection}>
+            {/* Master Sound Alert Toggle */}
+            <View style={styles.audioToggleRow}>
+              <View style={styles.audioToggleInfo}>
+                <View style={styles.inlineHeader}>
+                  <Icon
+                    name={isAlertMuted ? 'volumeX' : 'volume2'}
+                    size={20}
+                    color={isAlertMuted ? theme.colors.emergency : theme.colors.primary}
+                  />
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Mute All Alert Sounds
+                  </ThemedText>
+                  {isAlertMuted && (
+                    <Badge label="Muted" variant="emergency" size="xs" />
+                  )}
+                </View>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Silence incoming triage announcements and direct chat sound alerts on this workstation.
+                </ThemedText>
+              </View>
+              <ToggleSwitch
+                value={isAlertMuted}
+                onValueChange={(muted) => {
+                  setIsAlertMuted(muted);
+                  if (muted) {
+                    notify.info('Sound alerts muted on this workstation.');
+                  } else {
+                    playAlertTone(soundTheme, customAudioDataUri);
+                    notify.info('Sound alerts enabled.');
+                  }
+                }}
+                accessibilityLabel="Mute All Alert Sounds"
+              />
+            </View>
+
+            {/* Sound Preset Theme Selection */}
+            <View style={styles.soundPresetsSection}>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  ALERT CHIME PRESET
+                </ThemedText>
+                <Badge
+                  label={
+                    soundTheme === 'custom'
+                      ? 'Custom Audio File'
+                      : SOUND_THEME_PRESETS.find((p) => p.id === soundTheme)?.name || 'Gentle Bell'
+                  }
+                  variant="primary"
+                  size="xs"
+                />
+              </View>
+
+              <View style={styles.presetOptionsGrid}>
+                {SOUND_THEME_PRESETS.map((presetItem) => {
+                  const isSelected = soundTheme === presetItem.id;
+                  const isPresetMuted = presetItem.id === 'silent';
+                  const isCustomTheme = presetItem.id === 'custom';
+
+                  return (
+                    <Pressable
+                      key={presetItem.id}
+                      onPress={() => {
+                        setSoundTheme(presetItem.id);
+                        if (!isAlertMuted && !isPresetMuted) {
+                          playAlertTone(presetItem.id, customAudioDataUri);
+                        }
+                      }}
+                      style={[
+                        styles.presetCard,
+                        isSelected && styles.presetCardActive,
+                        isAlertMuted && styles.presetCardMuted,
+                      ]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={presetItem.name}
+                    >
+                      <View style={styles.presetHeader}>
+                        <View style={styles.inlineHeader}>
+                          <Icon
+                            name={
+                              isPresetMuted
+                                ? 'volumeX'
+                                : isCustomTheme
+                                ? 'upload'
+                                : isSelected
+                                ? 'volume2'
+                                : 'bell'
+                            }
+                            size={16}
+                            color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
+                          />
+                          <ThemedText
+                            variant="bodyBold"
+                            color={isSelected ? theme.colors.primary : theme.colors.text}
+                          >
+                            {presetItem.name}
+                          </ThemedText>
+                        </View>
+                        {isSelected && (
+                          <Badge label="Selected" variant="primary" size="xs" />
+                        )}
+                      </View>
+
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        {presetItem.description}
+                      </ThemedText>
+
+                      {!isPresetMuted && (!isCustomTheme || customAudioDataUri) && (
+                        <View style={styles.presetActionRow}>
+                          <Button
+                            title="Preview Tone"
+                            variant="ghost"
+                            size="sm"
+                            icon="volume2"
+                            onPress={() => {
+                              playAlertTone(presetItem.id, customAudioDataUri);
+                            }}
+                          />
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Custom Audio File Upload Card */}
+            <View style={styles.customAudioSection}>
+              <View style={styles.customAudioCard}>
+                <View style={styles.customAudioHeader}>
+                  <Icon name="upload" size={20} color={theme.colors.primary} />
+                  <View style={styles.customAudioInfo}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Custom Audio Alert File
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      Strictly supports MP3, WAV, or OGG files up to 500 KB. Follows your account across devices.
+                    </ThemedText>
+                  </View>
+                </View>
+
+                {customAudioFileName ? (
+                  <View style={styles.customAudioLoadedRow}>
+                    <View style={styles.selectedFilePill}>
+                      <Icon name="volume2" size={16} color={theme.colors.primary} />
+                      <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
+                        {customAudioFileName}
+                      </ThemedText>
+                      <Badge label="Saved to Profile" variant="success" size="xs" />
+                    </View>
+                    <View style={styles.customAudioButtons}>
+                      <Button
+                        title="Test Play"
+                        variant="secondary"
+                        size="sm"
+                        icon="volume2"
+                        onPress={() => {
+                          if (customAudioDataUri) {
+                            playAlertTone('custom', customAudioDataUri);
+                          }
+                        }}
+                      />
+                      <Button
+                        title="Replace Audio"
+                        variant="ghost"
+                        size="sm"
+                        icon="upload"
+                        onPress={handleSelectCustomAudio}
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.customAudioUploadRow}>
+                    <Button
+                      title="Upload Audio File (.mp3, .wav, .ogg)"
+                      variant="secondary"
+                      icon="upload"
+                      onPress={handleSelectCustomAudio}
+                    />
+                  </View>
+                )}
+
+                {audioUploadError && (
+                  <ThemedText variant="caption" color={theme.colors.emergency}>
+                    {audioUploadError}
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+
+            {/* Patient Chart Personal Layout Mode Override */}
+            <View style={styles.chartLayoutSection}>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  PATIENT CHART WORKSTATION VIEW (OVERRIDE CLINIC DEFAULT)
+                </ThemedText>
+                <Badge
+                  label={
+                    personalChartLayout === 'default'
+                      ? 'Clinic Default'
+                      : personalChartLayout === 'split'
+                      ? 'Split View'
+                      : personalChartLayout === 'modal'
+                      ? 'Modal'
+                      : 'Side Drawer'
+                  }
+                  variant="neutral"
+                  size="xs"
+                />
+              </View>
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                Choose how patient medical charts open during consultations on your workstation.
+              </ThemedText>
+              <View style={styles.presetOptionsGrid}>
+                {[
+                  {
+                    id: 'default' as const,
+                    name: 'Clinic Default',
+                    desc: 'Follow the standard layout configured in Clinic Settings',
+                    icon: 'clinic' as const,
+                  },
+                  {
+                    id: 'split' as const,
+                    name: 'Split Screen View',
+                    desc: 'Persistent side-by-side split screen for wide monitors',
+                    icon: 'layoutSplit' as const,
+                  },
+                  {
+                    id: 'modal' as const,
+                    name: 'Centered Modal',
+                    desc: 'Classic centered dialog with backdrop blur',
+                    icon: 'layoutModal' as const,
+                  },
+                  {
+                    id: 'drawer' as const,
+                    name: 'Right Slide Drawer',
+                    desc: 'Sleek right drawer that slides in over the queue',
+                    icon: 'layoutDrawer' as const,
+                  },
+                ].map((layoutOpt) => {
+                  const isSelected = personalChartLayout === layoutOpt.id;
+                  return (
+                    <Pressable
+                      key={layoutOpt.id}
+                      onPress={() => setPersonalChartLayout(layoutOpt.id)}
+                      style={[styles.presetCard, isSelected && styles.presetCardActive]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={layoutOpt.name}
+                    >
+                      <View style={styles.presetHeader}>
+                        <View style={styles.inlineHeader}>
+                          <Icon
+                            name={layoutOpt.icon}
+                            size={16}
+                            color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
+                          />
+                          <ThemedText
+                            variant="bodyBold"
+                            color={isSelected ? theme.colors.primary : theme.colors.text}
+                          >
+                            {layoutOpt.name}
+                          </ThemedText>
+                        </View>
+                        {isSelected && (
+                          <Badge label="Active" variant="primary" size="xs" />
+                        )}
+                      </View>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        {layoutOpt.desc}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Save Preferences Action Button */}
+            <View style={styles.saveActionsRow}>
+              <Button
+                title="Save Personal Preferences"
+                variant="primary"
+                icon="check"
+                onPress={handleSavePersonalPreferences}
+                loading={savingPreferences}
                 disabled={offline}
               />
             </View>
@@ -1095,5 +1525,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+  },
+  audioToggleRow: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  audioToggleInfo: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  inlineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  soundPresetsSection: {
+    gap: theme.spacing.sm,
+  },
+  presetActionRow: {
+    marginTop: theme.spacing.xs,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  presetCardMuted: {
+    opacity: 0.65,
+  },
+  customAudioSection: {
+    gap: theme.spacing.sm,
+  },
+  customAudioCard: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.sm,
+  },
+  customAudioHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  customAudioInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  customAudioLoadedRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  selectedFilePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    maxWidth: 320,
+  },
+  customAudioButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  customAudioUploadRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  chartLayoutSection: {
+    gap: theme.spacing.sm,
   },
 });

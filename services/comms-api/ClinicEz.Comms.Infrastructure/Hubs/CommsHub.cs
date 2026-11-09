@@ -115,6 +115,20 @@ public class CommsHub : Hub<ICommsClient>
             throw new HubException("Unauthorized: Branch mismatch.");
         }
 
+        // Direct message audience guard: only active designated participants may subscribe
+        if (conversation.Scope == ConversationScope.Direct)
+        {
+            var isParticipant = await _db.Participants.AnyAsync(p =>
+                p.ConversationId == conversationId &&
+                p.ParticipantId == staffId &&
+                p.LeftAtUtc == null);
+
+            if (!isParticipant)
+            {
+                throw new HubException("Unauthorized: You are not a participant in this direct conversation.");
+            }
+        }
+
         // Triage scoping guard
         if (conversation.Scope == ConversationScope.PatientFacility &&
             conversation.Status == RequestStatus.Submitted)

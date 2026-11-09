@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
-import { ApiError, extractApiError, ensureApiPrefix, resolveTenantContext, type ApiResponse } from '@shared/safe';
+import { ApiError, extractApiError, ensureApiPrefix, resolveTenantContext, getStoredTenantSlug, getStoredFacilitySlug, type ApiResponse } from '@shared/safe';
 import { deleteSecureItem, getSecureItem, setSecureItem } from './secureStorage';
 import { getApiBaseUrl, getOfflineGraceHours } from './runtimeConfig';
 
@@ -104,8 +104,10 @@ function apiRoot(): string {
 function tenantHeaders(): Record<string, string> {
   const context = resolveTenantContext();
   const headers: Record<string, string> = {};
-  if (context.tenantSlug) headers['X-Tenant-Id'] = context.tenantSlug;
-  if (context.facilitySlug) headers['X-Facility-Slug'] = context.facilitySlug;
+  const effectiveFacility = context.facilitySlug || getStoredFacilitySlug();
+  const effectiveTenant = context.tenantSlug || (!effectiveFacility ? getStoredTenantSlug() : null);
+  if (effectiveFacility) headers['X-Facility-Slug'] = effectiveFacility;
+  if (effectiveTenant) headers['X-Tenant-Id'] = effectiveTenant;
   if (context.clinicId) headers['X-Clinic-Id'] = context.clinicId;
   return headers;
 }
@@ -177,9 +179,12 @@ export async function getAuthStatus(): Promise<AuthResult<AuthStatus>> {
 
 export async function login(email: string, password: string): Promise<AuthResult<AuthUser>> {
   const trimmedEmail = email.trim();
+  const context = resolveTenantContext();
+  const operationalWorkspace = context.facilitySlug || getStoredFacilitySlug() || context.tenantSlug || getStoredTenantSlug();
   const [tokens, error] = await post<AuthTokens>('/auth/login', {
     email: trimmedEmail,
     password,
+    workspace: operationalWorkspace || undefined,
     deviceLabel: deviceLabel(),
   });
   if (error || !tokens) return [null, error ?? new ApiError('Sign-in failed.', 0)];

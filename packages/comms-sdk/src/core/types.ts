@@ -212,7 +212,8 @@ export interface ThreadStateChangedPayload {
 export interface ICommsClient {
   readonly events: import('./events/CommsEventEmitter').CommsEventEmitter;
   connect(): Promise<void>;
-  disconnect(): Promise<void>;
+  disconnect(clearConversations?: boolean): Promise<void>;
+  reconnect?(): Promise<void>;
   getConnectionState(): ConnectionState;
   joinConversation(conversationId: string): Promise<void>;
   leaveConversation(conversationId: string): Promise<void>;

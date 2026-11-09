@@ -5,6 +5,8 @@ import {
   ApiError,
   extractApiError,
   resolveTenantContext,
+  getStoredTenantSlug,
+  getStoredFacilitySlug,
   ensureApiPrefix,
   joinApiUrl,
 } from '@shared/safe';
@@ -49,8 +51,10 @@ export class ClinicApiClient {
 
       // Workspace hints (cloud multi-tenant hosts). On-prem single-clinic servers resolve the clinic themselves.
       const context = resolveTenantContext();
-      if (context.tenantSlug) config.headers['X-Tenant-Id'] = context.tenantSlug;
-      if (context.facilitySlug) config.headers['X-Facility-Slug'] = context.facilitySlug;
+      const effectiveFacility = context.facilitySlug || getStoredFacilitySlug();
+      const tenantHint = context.tenantSlug || (!effectiveFacility ? getStoredTenantSlug() : null);
+      if (effectiveFacility) config.headers['X-Facility-Slug'] = effectiveFacility;
+      if (tenantHint) config.headers['X-Tenant-Id'] = tenantHint;
       if (context.clinicId) config.headers['X-Clinic-Id'] = context.clinicId;
 
       if (this.options.authenticated) {

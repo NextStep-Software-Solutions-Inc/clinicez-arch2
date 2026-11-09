@@ -72,6 +72,9 @@ public sealed class WorkspaceResolver : IWorkspaceResolver
             if (settings != null) return new ResolvedWorkspace(settings, settings.TenantId, settings.ClinicId);
         }
 
+        var directFacility = await all.FirstOrDefaultAsync(s => s.FacilitySlug != null && s.FacilitySlug.ToLower() == clean, ct);
+        if (directFacility != null) return new ResolvedWorkspace(directFacility, directFacility.TenantId, directFacility.ClinicId);
+
         return null;
     }
 
@@ -93,13 +96,20 @@ public sealed class WorkspaceResolver : IWorkspaceResolver
             _logger.LogDebug(ex, "[Workspace] Tenant lookup unavailable for '{Slug}'; using local settings.", clean);
         }
 
+        if (tenant?.FacilityId is { } facilityId && facilityId != Guid.Empty)
+        {
+            var byFacility = await all.FirstOrDefaultAsync(s => s.ClinicId == facilityId, ct);
+            if (byFacility != null) return new ResolvedWorkspace(byFacility, byFacility.TenantId, byFacility.ClinicId);
+        }
+
         var tenantGuid = tenant?.Id.ToString().ToLowerInvariant();
         var tSlug = tenant?.Slug?.ToLowerInvariant();
 
         var matches = await all
             .Where(s => s.TenantId.ToLower() == clean
-                        || (tenantGuid != null && s.TenantId.ToLower() == tenantGuid)
-                        || (tSlug != null && s.TenantId.ToLower() == tSlug))
+                        || (s.TenantSlug != null && s.TenantSlug.ToLower() == clean)
+                        || (tenantGuid != null && (s.TenantId.ToLower() == tenantGuid || (s.TenantSlug != null && s.TenantSlug.ToLower() == tenantGuid)))
+                        || (tSlug != null && (s.TenantId.ToLower() == tSlug || (s.TenantSlug != null && s.TenantSlug.ToLower() == tSlug))))
             .Take(2)
             .ToListAsync(ct);
 

@@ -27,6 +27,7 @@ import {
   pushChartTabHistory,
   popChartTabHistory,
 } from './types';
+import { getActiveAudioPreferences } from '../../utils/alertSounds';
 
 export { CHART_TABS };
 export type { ChartTab, ChartLayoutMode, PatientChartModalProps };
@@ -76,8 +77,10 @@ export default function PatientChartModal({
   allowDuplicateActive = false,
 }: PatientChartModalProps) {
   const { settings } = useClinic();
+  const personalPreferredLayout = getActiveAudioPreferences().preferredChartLayout;
   const configuredLayout: ChartLayoutMode =
     preferredLayoutProp ||
+    personalPreferredLayout ||
     ((settings as any)?.preferredChartLayout as ChartLayoutMode) ||
     DEFAULT_CHART_LAYOUT;
 

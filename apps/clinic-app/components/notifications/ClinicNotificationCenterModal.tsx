@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, Platform } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { View, StyleSheet, Pressable, ScrollView, Platform, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Modal from '../ui/Modal';
 import ThemedText from '../ui/ThemedText';
@@ -93,17 +93,72 @@ export default function ClinicNotificationCenterModal({
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [markingAll, setMarkingAll] = useState<boolean>(false);
 
+  const [isMounted, setIsMounted] = useState(visible);
+  const slideAnim = useRef(new Animated.Value(visible ? 0 : 1)).current;
+  const opacityAnim = useRef(new Animated.Value(visible ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setIsMounted(true);
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start(() => {
+        setIsMounted(false);
+      });
+    }
+  }, [visible, opacityAnim, slideAnim]);
+
+  const handleClose = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start(() => {
+      setIsMounted(false);
+      onClose();
+    });
+  }, [onClose, opacityAnim, slideAnim]);
+
   // Close panel on web when Escape key is pressed
   useEffect(() => {
     if (!visible || Platform.OS !== 'web') return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [visible, onClose]);
+  }, [visible, handleClose]);
 
   const filteredNotifications = useMemo(() => {
     switch (activeTab) {
@@ -140,7 +195,7 @@ export default function ClinicNotificationCenterModal({
       if (!item.isRead) {
         await onMarkRead(item.id);
       }
-      onClose();
+      handleClose();
 
       if (item.actionRoute) {
         try {
@@ -154,10 +209,10 @@ export default function ClinicNotificationCenterModal({
         }
       }
     },
-    [onMarkRead, onClose, navigation]
+    [onMarkRead, handleClose, navigation]
   );
 
-  if (!visible) {
+  if (!isMounted && !visible) {
     return null;
   }
 
@@ -187,7 +242,7 @@ export default function ClinicNotificationCenterModal({
             </Pressable>
           ) : null}
           <Pressable
-            onPress={onClose}
+            onPress={handleClose}
             style={styles.closeBtn}
             accessibilityRole="button"
             accessibilityLabel="Close notifications panel"
@@ -395,22 +450,54 @@ export default function ClinicNotificationCenterModal({
   return (
     <Modal
       raw
-      visible={visible}
-      onClose={onClose}
-      animationType={isWorkstation ? 'none' : 'slide'}
+      visible={isMounted || visible}
+      onClose={handleClose}
+      animationType="none"
       transparent
       zIndex={10000}
     >
       <View style={isWorkstation ? styles.desktopOverlay : styles.mobileModalContainer}>
-        <Pressable
-          style={styles.backdrop}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Close notifications panel"
-        />
-        <View style={isWorkstation ? styles.dockedPanel : styles.mobilePanel}>
+        <Animated.View
+          style={[
+            styles.backdrop,
+            {
+              opacity: opacityAnim,
+            },
+          ]}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={handleClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close notifications panel"
+          />
+        </Animated.View>
+        <Animated.View
+          style={[
+            isWorkstation ? styles.dockedPanel : styles.mobilePanel,
+            {
+              transform: isWorkstation
+                ? [
+                    {
+                      translateX: slideAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 480],
+                      }),
+                    },
+                  ]
+                : [
+                    {
+                      translateY: slideAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 600],
+                      }),
+                    },
+                  ],
+            },
+          ]}
+        >
           {sheetContent}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

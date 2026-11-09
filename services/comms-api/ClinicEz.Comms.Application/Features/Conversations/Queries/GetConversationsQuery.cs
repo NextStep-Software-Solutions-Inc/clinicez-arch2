@@ -50,6 +50,16 @@ public sealed class GetConversationsQueryHandler : IRequestHandler<GetConversati
             query = query.Where(c => c.Participants.Any(p => p.ParticipantId == request.ParticipantId && p.LeftAtUtc == null));
         }
 
+        // Audience privacy enforcement:
+        // Direct messages (1-on-1 private chats) MUST ONLY be visible to active participants in that chat.
+        // Even system administrators or supervisors cannot see or query private direct messages between other users.
+        if (!string.IsNullOrWhiteSpace(request.StaffId))
+        {
+            query = query.Where(c =>
+                c.Scope != ConversationScope.Direct ||
+                c.Participants.Any(p => p.ParticipantId == request.StaffId && p.LeftAtUtc == null));
+        }
+
         if (!request.IncludeUnassignedTriage)
         {
             query = query.Where(c => c.Status != RequestStatus.WithTriage || (request.StaffId != null && c.AssignedStaffId == request.StaffId));
@@ -112,7 +122,8 @@ public sealed class GetConversationsQueryHandler : IRequestHandler<GetConversati
 
 public sealed record GetConversationByIdQuery(
     Guid ConversationId,
-    string TenantId) : IRequest<ConversationDto?>;
+    string TenantId,
+    string? StaffId = null) : IRequest<ConversationDto?>;
 
 public sealed class GetConversationByIdQueryHandler : IRequestHandler<GetConversationByIdQuery, ConversationDto?>
 {
@@ -130,6 +141,16 @@ public sealed class GetConversationByIdQueryHandler : IRequestHandler<GetConvers
             .FirstOrDefaultAsync(x => x.Id == request.ConversationId && x.TenantId == request.TenantId, ct);
 
         if (c == null) return null;
+
+        // Privacy enforcement: Direct conversations cannot be viewed by non-participants
+        if (c.Scope == ConversationScope.Direct && !string.IsNullOrWhiteSpace(request.StaffId))
+        {
+            var isParticipant = c.Participants.Any(p => p.ParticipantId == request.StaffId && p.LeftAtUtc == null);
+            if (!isParticipant)
+            {
+                return null;
+            }
+        }
 
         return new ConversationDto(
             c.Id,

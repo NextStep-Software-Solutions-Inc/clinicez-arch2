@@ -29,6 +29,15 @@ const SCOPES: ConversationScopeFilter[] = [
   'Direct'
 ];
 
+export function getInitials(name: string): string {
+  if (!name) return '??';
+  const clean = name.replace(/^(Dr\.|Doc\.|Nurse|Atty\.|Mr\.|Ms\.|Mrs\.)\s+/i, '').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   items,
   activeConversationId,
@@ -186,24 +195,33 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       item.scope === 'PatientFacility' && styles.cardAvatarTriage,
                     ]}
                   >
-                    {renderScopeIcon ? (
+                    {item.scope === 'Direct' ? (
+                      <Text style={[styles.cardAvatarText, styles.cardAvatarMonogramText]}>
+                        {getInitials(item.title)}
+                      </Text>
+                    ) : renderScopeIcon ? (
                       renderScopeIcon(item.scope)
                     ) : (
                       <Text style={styles.cardAvatarText}>
-                        {item.scope === 'Direct'
-                          ? 'D'
-                          : item.scope === 'StaffContext'
-                            ? 'C'
-                            : item.scope === 'Facility'
-                              ? '#'
-                              : 'T'}
+                        {item.scope === 'StaffContext'
+                          ? 'C'
+                          : item.scope === 'Facility'
+                            ? '#'
+                            : 'T'}
                       </Text>
                     )}
                   </View>
 
                   <View style={[styles.cardMain, !hasRecentMessage && styles.cardMainCentered]}>
                     <View style={[styles.cardHeader, !hasRecentMessage && styles.cardHeaderCentered]}>
-                      <Text style={[styles.cardTitle, isActive && styles.cardTitleActive]} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.cardTitle,
+                          isActive && styles.cardTitleActive,
+                          item.unreadCount > 0 && styles.cardTitleUnread,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {item.title}
                       </Text>
                       <View style={styles.cardHeaderRight}>
@@ -227,7 +245,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                     </View>
 
                     {item.lastMessageSnippet && (
-                      <Text style={styles.cardSnippet} numberOfLines={2}>
+                      <Text
+                        style={[
+                          styles.cardSnippet,
+                          item.unreadCount > 0 && styles.cardSnippetUnread,
+                        ]}
+                        numberOfLines={2}
+                      >
                         {item.lastMessageSnippet}
                       </Text>
                     )}
@@ -476,6 +500,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: lightColors.primary,
   },
+  cardAvatarMonogramText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.primary,
+  },
   cardMain: {
     flex: 1,
   },
@@ -514,6 +543,10 @@ const styles = StyleSheet.create({
   cardTitleActive: {
     color: lightColors.primary
   },
+  cardTitleUnread: {
+    fontWeight: '700',
+    color: lightColors.text
+  },
   cardHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -528,6 +561,10 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.sm,
     color: lightColors.textSecondary,
     marginBottom: spaceScale.xs
+  },
+  cardSnippetUnread: {
+    fontWeight: '600',
+    color: lightColors.text
   },
   cardMeta: {
     flexDirection: 'row',

@@ -7,6 +7,7 @@ import { theme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useFacilityLicense } from '../FacilityActivationGate';
 import { useConnection } from '../connection/ConnectionGate';
+import { isWorkspaceRequired } from '../../services/runtimeConfig';
 import { isValidEmail } from '../../services/passwordPolicy';
 import { AuthScreen, ErrorNotice, InfoNotice, authStyles } from './AuthScreen';
 import AdminRecoveryScreen from './AdminRecoveryScreen';
@@ -14,7 +15,8 @@ import AdminRecoveryScreen from './AdminRecoveryScreen';
 /** Email + password sign-in against the facility's own user store. Works on a LAN with no internet. */
 export default function LoginScreen() {
   const { login, notice } = useAuth();
-  const { license } = useFacilityLicense();
+  const { license, switchWorkspace } = useFacilityLicense();
+  const workspaceRequired = isWorkspaceRequired();
   const { serverLabel, changeServer } = useConnection();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -127,6 +129,24 @@ export default function LoginScreen() {
             </ThemedText>
           </Pressable>
         </View>
+
+        {workspaceRequired && switchWorkspace ? (
+          <View style={styles.recoveryPrompt}>
+            <Pressable
+              onPress={switchWorkspace}
+              accessibilityRole="button"
+              accessibilityLabel="Wrong clinic? Change workspace"
+              hitSlop={theme.spacing.xs}
+            >
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Wrong clinic?{' '}
+                <ThemedText variant="captionBold" color={theme.colors.primary}>
+                  Change workspace
+                </ThemedText>
+              </ThemedText>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </AuthScreen>
   );

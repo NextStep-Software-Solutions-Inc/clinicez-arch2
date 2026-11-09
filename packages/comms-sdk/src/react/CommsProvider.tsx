@@ -92,9 +92,24 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
   }, [client]);
 
   const reconnect = useCallback(async (): Promise<void> => {
-    await disconnect();
-    await connect();
-  }, [connect, disconnect]);
+    try {
+      if (typeof client.reconnect === 'function') {
+        await client.reconnect();
+      } else {
+        await disconnect();
+        await connect();
+      }
+    } catch (err: any) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      setConnectionState((prev) => ({
+        ...prev,
+        status: 'failed',
+        error,
+        lastDisconnectedAt: new Date()
+      }));
+      throw error;
+    }
+  }, [client, connect, disconnect]);
 
   const refreshTicket = useCallback(async (): Promise<CommsTicketResponse> => {
     const resp = await ticketProviderRef.current();
@@ -103,6 +118,28 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
   }, []);
 
   const autoReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef<number>(0);
+
+  const clearAutoReconnectTimer = useCallback(() => {
+    if (autoReconnectTimerRef.current) {
+      clearTimeout(autoReconnectTimerRef.current);
+      autoReconnectTimerRef.current = null;
+    }
+  }, []);
+
+  const triggerAutoReconnect = useCallback((delayMs?: number) => {
+    if (options?.autoConnect === false) return;
+    clearAutoReconnectTimer();
+
+    const attempt = reconnectAttemptRef.current;
+    const computedDelay = delayMs ?? Math.min(10000, Math.round(1500 * Math.pow(2, attempt)));
+    reconnectAttemptRef.current = attempt + 1;
+
+    autoReconnectTimerRef.current = setTimeout(() => {
+      autoReconnectTimerRef.current = null;
+      reconnect().catch(() => {});
+    }, computedDelay);
+  }, [clearAutoReconnectTimer, options?.autoConnect, reconnect]);
 
   useEffect(() => {
     const unsubState = client.events.on('connectionStateChanged', (state, error) => {
@@ -121,18 +158,16 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
         reconnectAttempt: state === 'Reconnecting' ? prev.reconnectAttempt + 1 : state === 'Connected' ? 0 : prev.reconnectAttempt
       }));
 
-      // Proactive auto-recovery: If disconnected/failed while autoConnect is enabled, re-establish connection
+      // Unified auto-recovery using the identical reconnect flow
       if (options?.autoConnect !== false) {
         if (state === 'Disconnected') {
-          if (autoReconnectTimerRef.current) {
-            clearTimeout(autoReconnectTimerRef.current);
-          }
-          autoReconnectTimerRef.current = setTimeout(() => {
-            connect().catch(() => {});
-          }, 3000);
-        } else if (state === 'Connected' && autoReconnectTimerRef.current) {
-          clearTimeout(autoReconnectTimerRef.current);
-          autoReconnectTimerRef.current = null;
+          triggerAutoReconnect();
+        } else if (state === 'Reconnecting') {
+          // If SignalR's internal reconnection doesn't resolve in 4s, trigger unified reconnect
+          triggerAutoReconnect(4000);
+        } else if (state === 'Connected') {
+          clearAutoReconnectTimer();
+          reconnectAttemptRef.current = 0;
         }
       }
     });
@@ -153,16 +188,49 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
     });
 
     return () => {
-      if (autoReconnectTimerRef.current) {
-        clearTimeout(autoReconnectTimerRef.current);
-        autoReconnectTimerRef.current = null;
-      }
+      clearAutoReconnectTimer();
       unsubState();
       unsubTicket();
       unsubMsg();
       unsubMsgState();
     };
-  }, [client, connect, options?.autoConnect]);
+  }, [client, clearAutoReconnectTimer, triggerAutoReconnect, options?.autoConnect]);
+
+  // Window/tab visibility and focus listener: automatically recover stalled/idle socket connections on wake
+  useEffect(() => {
+    if (options?.autoConnect === false) return;
+
+    const checkAndRecoverConnection = () => {
+      const state = client.getConnectionState();
+      if (state !== 'Connected') {
+        clearAutoReconnectTimer();
+        reconnect().catch(() => {});
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          checkAndRecoverConnection();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      const handleFocus = () => {
+        checkAndRecoverConnection();
+      };
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', handleFocus);
+      }
+
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('focus', handleFocus);
+        }
+      };
+    }
+  }, [client, clearAutoReconnectTimer, reconnect, options?.autoConnect]);
 
   // Auto-connect
   useEffect(() => {

@@ -1,6 +1,7 @@
-import type { AxiosRequestConfig } from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
-import { SyncStatus, type SearchResponseDto, type ApiError, type EhrOptionDescriptor } from '@shared/safe';
+import { SyncStatus, ApiError, type SearchResponseDto, type EhrOptionDescriptor } from '@shared/safe';
+import { getSetting } from './runtimeConfig';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus =
@@ -108,6 +109,7 @@ export interface StaffMember {
   hasCredentials?: boolean;
   mustChangePassword?: boolean;
   temporaryPassword?: string | null;
+  preferencesJson?: string | null;
 }
 
 export interface CreateStaffPayload {
@@ -167,6 +169,7 @@ export interface UpdateMyProfilePayload {
   specialty?: string;
   signatureSpecimen?: string | null;
   defaultSignatureMode?: SignatureMode;
+  preferencesJson?: string | null;
 }
 
 export interface ResetStaffPasswordResult {
@@ -3478,6 +3481,88 @@ export const clinicService = {
 
   async getLicenseStatus() {
     return clinicApiClient.get<FacilityLicenseStatus>('/clinic/license');
+  },
+
+  /**
+   * Resolves a workspace input (which may be a tenant slug or a facility slug)
+   * into a verified facility license status with its true facilitySlug.
+   */
+  async resolveWorkspace(workspaceInput: string): Promise<[FacilityLicenseStatus | null, ApiError | null]> {
+    const clean = workspaceInput.trim().toLowerCase();
+    if (!clean) {
+      return [null, new ApiError('Workspace name is required.', 400)];
+    }
+
+    // 1. Direct facility probe against clinic server
+    const [directFacility, directErr] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+      headers: { 'X-Facility-Slug': clean },
+      params: { facilitySlug: clean },
+    });
+
+    if (directFacility && directFacility.status === 'Active' && directFacility.facilitySlug) {
+      return [directFacility, null];
+    }
+
+    // 2. Tenant workspace probe against clinic server
+    const [tenantFacility, tenantErr] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+      headers: { 'X-Tenant-Id': clean },
+      params: { tenant: clean },
+    });
+
+    if (tenantFacility && tenantFacility.facilitySlug && tenantFacility.status === 'Active') {
+      return [tenantFacility, null];
+    }
+
+    // 3. If tenant license check returned a clinic name without facilitySlug,
+    // derive candidate slug from the clinic name (e.g. "Nextstep OPD" -> "nextstep") and verify against clinic server
+    if (tenantFacility?.clinicName) {
+      const candidateSlug = tenantFacility.clinicName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .split('-')[0];
+      if (candidateSlug && candidateSlug !== clean) {
+        const [verifiedByClinicName] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+          headers: { 'X-Facility-Slug': candidateSlug },
+          params: { facilitySlug: candidateSlug },
+        });
+        if (verifiedByClinicName && verifiedByClinicName.status === 'Active' && verifiedByClinicName.facilitySlug) {
+          return [verifiedByClinicName, null];
+        }
+      }
+    }
+
+    // 4. Query Portal directory to resolve tenant -> facility mapping (if portal is reachable)
+    const portalUrl = getSetting('EXPO_PUBLIC_PORTAL_URL') || 'https://clinicez-portal.api.dev.nextstep-software.com';
+    const cleanPortalBase = portalUrl.endsWith('/api/v1') ? portalUrl : `${portalUrl.replace(/\/+$/, '')}/api/v1`;
+    try {
+      const portalRes = await axios.get(`${cleanPortalBase}/tenants/lookup/${encodeURIComponent(clean)}`, {
+        timeout: 5000,
+      });
+      const data = portalRes?.data;
+      if (data?.exists) {
+        const resolvedFacilitySlug = data.facilitySlug || (data.facilityId ? clean : null);
+        if (resolvedFacilitySlug) {
+          const [verified] = await clinicApiClient.get<FacilityLicenseStatus>('/clinic/license', {
+            headers: { 'X-Facility-Slug': resolvedFacilitySlug },
+            params: { facilitySlug: resolvedFacilitySlug },
+          });
+          if (verified && verified.status === 'Active' && verified.facilitySlug) {
+            return [verified, null];
+          }
+        }
+      }
+    } catch {
+      // Portal lookup unavailable; fall through
+    }
+
+    if (tenantFacility && tenantFacility.facilitySlug) {
+      return [tenantFacility, null];
+    }
+    if (directFacility && directFacility.facilitySlug) {
+      return [directFacility, null];
+    }
+
+    return [null, directErr || tenantErr || new ApiError(`Workspace "${clean}" was not found or has no active facilities registered.`, 404)];
   },
 
   async applyLicense(licenseToken: string) {

@@ -36,7 +36,8 @@ public sealed record StaffMemberDto(
     string? InvitationToken = null,
     DateTime? InvitationExpiresAt = null,
     DateTime? InviteAcceptedAt = null,
-    string? InviteUrl = null)
+    string? InviteUrl = null,
+    string? PreferencesJson = null)
 {
     public bool IsExpired => Status == StaffAccountStatus.Invited && InvitationExpiresAt.HasValue && InvitationExpiresAt.Value < DateTime.UtcNow;
     public StaffMemberDto(

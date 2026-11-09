@@ -75,7 +75,8 @@ public class ConversationsController : ControllerBase
     public async Task<ActionResult<ConversationDto>> GetById(Guid id, CancellationToken ct)
     {
         var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
-        var query = new GetConversationByIdQuery(id, tenantId);
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        var query = new GetConversationByIdQuery(id, tenantId, staffId);
         var result = await _mediator.Send(query, ct);
         if (result == null) return NotFound();
         return Ok(result);

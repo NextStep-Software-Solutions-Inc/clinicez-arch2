@@ -102,7 +102,8 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
                 Status: effectiveStatus,
                 InvitationToken: staff.InvitationToken,
                 InvitationExpiresAt: staff.InvitationExpiresAt,
-                InviteAcceptedAt: staff.InviteAcceptedAt
+                InviteAcceptedAt: staff.InviteAcceptedAt,
+                PreferencesJson: staff.PreferencesJson
             );
         }).ToList();
     }
@@ -183,6 +184,7 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             Status: effectiveStatus,
             InvitationToken: staff.InvitationToken,
             InvitationExpiresAt: staff.InvitationExpiresAt,
-            InviteAcceptedAt: staff.InviteAcceptedAt);
+            InviteAcceptedAt: staff.InviteAcceptedAt,
+            PreferencesJson: staff.PreferencesJson);
     }
 }

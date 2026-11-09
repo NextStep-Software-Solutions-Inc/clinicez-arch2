@@ -56,6 +56,18 @@ public sealed class SendMessageCommandHandler : IRequestHandler<SendMessageComma
             throw new ValidationException("Conversation thread is closed. New messages cannot be sent.");
         }
 
+        if (conversation.Scope == ConversationScope.Direct)
+        {
+            var isParticipant = conversation.Participants.Any(p =>
+                p.ParticipantId == request.SenderId &&
+                p.LeftAtUtc == null);
+
+            if (!isParticipant)
+            {
+                throw new ValidationException("Unauthorized: You cannot send messages in a direct conversation you are not a participant in.");
+            }
+        }
+
         if (string.Equals(request.SenderType, "Patient", StringComparison.OrdinalIgnoreCase) && conversation.Status == RequestStatus.WithTriage)
         {
             throw new ValidationException("Inquiry is currently with triage. Patient messages are blocked until disposition or routing.");

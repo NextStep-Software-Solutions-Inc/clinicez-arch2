@@ -591,11 +591,11 @@ export default function ClinicActiveThread({
             }}
             style={styles.actionMenuItem}
             accessibilityRole="button"
-            accessibilityLabel="Mute channel"
+            accessibilityLabel={isMuted ? 'Unmute channel' : 'Mute channel'}
           >
             <Icon name={isMuted ? 'volume2' : 'volumeX'} size={theme.sizes.iconSm} color={theme.colors.text} />
             <ThemedText variant="body" color={theme.colors.text}>
-              Mute Channel
+              {isMuted ? 'Unmute Channel' : 'Mute Channel'}
             </ThemedText>
           </Pressable>
 

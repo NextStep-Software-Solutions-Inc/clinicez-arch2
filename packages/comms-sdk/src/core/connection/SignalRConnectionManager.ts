@@ -33,6 +33,7 @@ export class SignalRConnectionManager implements ICommsClient {
   public readonly events: CommsEventEmitter = new CommsEventEmitter();
   private readonly activeConversations: Set<string> = new Set();
   private isConnecting: boolean = false;
+  private inFlightConnect: Promise<void> | null = null;
 
   constructor(private readonly options: CommsClientOptions) {
     this.renewalTimer = new TicketRenewalTimer(options.ticketProvider, {
@@ -65,41 +66,72 @@ export class SignalRConnectionManager implements ICommsClient {
 
   public async connect(): Promise<void> {
     if (this.connection.state === HubConnectionState.Connected) return;
-    if (this.isConnecting) return;
+    if (this.inFlightConnect) return this.inFlightConnect;
 
-    this.isConnecting = true;
-    try {
-      // Start proactive ticket renewal before handshake
-      await this.renewalTimer.start(this.options.initialTicket);
-
-      this.events.emit('connectionStateChanged', 'Connecting');
-      await this.connection.start();
-      this.events.emit('connectionStateChanged', 'Connected');
-
-      // Rejoin any previously active conversations
-      for (const convId of this.activeConversations) {
-        try {
-          await this.connection.invoke('JoinConversation', convId);
-        } catch (e) {
-          this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
+    this.inFlightConnect = (async () => {
+      this.isConnecting = true;
+      try {
+        // If the connection is in a transient disconnecting/reconnecting state, ensure it is cleanly stopped first
+        if (
+          this.connection.state === HubConnectionState.Reconnecting ||
+          this.connection.state === HubConnectionState.Disconnecting ||
+          this.connection.state === HubConnectionState.Connecting
+        ) {
+          try {
+            await this.connection.stop();
+          } catch {
+            // Ignore stop errors during pre-connect reset
+          }
         }
+
+        // Start proactive ticket renewal before handshake
+        await this.renewalTimer.start(this.options.initialTicket);
+
+        this.events.emit('connectionStateChanged', 'Connecting');
+        await this.connection.start();
+        this.events.emit('connectionStateChanged', 'Connected');
+
+        // Rejoin any previously active conversations
+        for (const convId of this.activeConversations) {
+          try {
+            await this.connection.invoke('JoinConversation', convId);
+          } catch (e) {
+            this.events.emit('error', e instanceof Error ? e : new Error(String(e)));
+          }
+        }
+      } catch (err: any) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        this.events.emit('connectionStateChanged', 'Disconnected', error);
+        throw new ConnectionError(error.message, error);
+      } finally {
+        this.isConnecting = false;
+        this.inFlightConnect = null;
       }
-    } catch (err: any) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      this.events.emit('connectionStateChanged', 'Disconnected', error);
-      throw new ConnectionError(error.message, error);
-    } finally {
-      this.isConnecting = false;
-    }
+    })();
+
+    return this.inFlightConnect;
   }
 
-  public async disconnect(): Promise<void> {
+  public async disconnect(clearConversations: boolean = true): Promise<void> {
     this.renewalTimer.stop();
     if (this.connection.state !== HubConnectionState.Disconnected) {
-      await this.connection.stop();
+      try {
+        await this.connection.stop();
+      } catch {
+        // Ignore stop error
+      }
     }
-    this.activeConversations.clear();
+    if (clearConversations) {
+      this.activeConversations.clear();
+    }
     this.events.emit('connectionStateChanged', 'Disconnected');
+  }
+
+  public async reconnect(): Promise<void> {
+    // Gracefully stop connection and renewal timer without clearing activeConversations
+    await this.disconnect(false);
+    // Re-establish connection and rejoin activeConversations
+    await this.connect();
   }
 
   public getConnectionState(): ConnectionState {

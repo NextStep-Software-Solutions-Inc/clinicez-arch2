@@ -33,7 +33,7 @@ export interface ChatDrawerProps {
   onSearchChange: (query: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
-  connectionState?: 'Connected' | 'Reconnecting' | 'Disconnected';
+  connectionState?: 'Connected' | 'Reconnecting' | 'Connecting' | 'Disconnected';
   loading?: boolean;
   error?: string | null;
   onNewConversation?: () => void;

@@ -65,7 +65,8 @@ public sealed class StaffController : ControllerBase
             request.Specialty,
             request.PhilHealthPan,
             SignatureSpecimen: request.SignatureSpecimen,
-            DefaultSignatureMode: request.DefaultSignatureMode);
+            DefaultSignatureMode: request.DefaultSignatureMode,
+            PreferencesJson: request.PreferencesJson);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Profile updated successfully."));
@@ -291,4 +292,5 @@ public sealed record UpdateMyProfileRequest(
     string? Specialty,
     string? PhilHealthPan = null,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null);
+    SignatureMode? DefaultSignatureMode = null,
+    string? PreferencesJson = null);

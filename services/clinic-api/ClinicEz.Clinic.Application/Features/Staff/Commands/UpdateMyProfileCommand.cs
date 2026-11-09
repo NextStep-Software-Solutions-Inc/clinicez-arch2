@@ -30,7 +30,8 @@ public sealed record UpdateMyProfileCommand(
     StaffRole? RequestedRole = null,
     Guid? RequestedClinicRoleId = null,
     string? SignatureSpecimen = null,
-    SignatureMode? DefaultSignatureMode = null) : IRequest<StaffMemberDto>;
+    SignatureMode? DefaultSignatureMode = null,
+    string? PreferencesJson = null) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateMyProfileCommandValidator : AbstractValidator<UpdateMyProfileCommand>
 {
@@ -109,6 +110,10 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
         {
             staff.DefaultSignatureMode = request.DefaultSignatureMode.Value;
         }
+        if (request.PreferencesJson != null)
+        {
+            staff.PreferencesJson = string.IsNullOrWhiteSpace(request.PreferencesJson) ? null : request.PreferencesJson;
+        }
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = staff.Id.ToString();
 
@@ -153,6 +158,7 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
             AssignedRoomIds: roomIds,
             AssignedRoomNames: roomNames,
             SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode);
+            DefaultSignatureMode: staff.DefaultSignatureMode,
+            PreferencesJson: staff.PreferencesJson);
     }
 }

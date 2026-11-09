@@ -205,17 +205,26 @@ export function useConversations(
       setConversations((prev) =>
         prev.map((c) => {
           if (c.id === msg.conversationId) {
+            const isOwn = Boolean(msg.senderId && staffId && msg.senderId === staffId);
+            const currentUnread = (c as any).unreadCount || 0;
             return {
               ...c,
               lastMessageAtUtc: msg.sentAtUtc,
               lastMessageSnippet: msg.contentText,
               messageCount: c.messageCount + 1,
-              lastSeq: Math.max(c.lastSeq, msg.seq)
+              lastSeq: Math.max(c.lastSeq, msg.seq),
+              unreadCount: isOwn ? currentUnread : currentUnread + 1,
             };
           }
           return c;
         })
       );
+    });
+
+    const unsubState = client.events.on('connectionStateChanged', (state) => {
+      if (state === 'Connected') {
+        refresh().catch(() => {});
+      }
     });
 
     setIsLoading(false);
@@ -224,8 +233,9 @@ export function useConversations(
       unsubCreated();
       unsubUpdated();
       unsubMsg();
+      unsubState();
     };
-  }, [client]);
+  }, [client, refresh]);
 
   // Filtering conversations
   const filteredConversations = useMemo(() => {
@@ -267,13 +277,23 @@ export function useConversations(
       StaffContext: 0,
       PatientFacility: 0
     };
+    for (const c of filteredConversations) {
+      const u = (c as any).unreadCount || 0;
+      if (u > 0 && counts[c.scope] !== undefined) {
+        counts[c.scope] += u;
+      }
+    }
     return counts;
-  }, []);
+  }, [filteredConversations]);
+
+  const totalUnreadCount = useMemo(() => {
+    return filteredConversations.reduce((sum, c) => sum + ((c as any).unreadCount || 0), 0);
+  }, [filteredConversations]);
 
   return {
     conversations: filteredConversations,
     totalCount: filteredConversations.length,
-    unreadCount: 0,
+    unreadCount: totalUnreadCount,
     unreadCountsByScope,
     isLoading,
     isRefreshing,

@@ -88,6 +88,11 @@ public sealed class StaffMember : ClinicScopedEntity
     public string? SignatureSpecimen { get; set; }
     public SignatureMode DefaultSignatureMode { get; set; } = SignatureMode.ESignatureSpecimen;
 
+    /// <summary>
+    /// Flexible JSON payload storing individual staff member preferences (e.g. notification sound theme, custom audio data, UI chart layout override).
+    /// </summary>
+    public string? PreferencesJson { get; set; }
+
     public bool IsActive { get; set; } = true;
     public StaffAccountStatus Status { get; set; } = StaffAccountStatus.Active;
     public string? InvitationToken { get; set; }

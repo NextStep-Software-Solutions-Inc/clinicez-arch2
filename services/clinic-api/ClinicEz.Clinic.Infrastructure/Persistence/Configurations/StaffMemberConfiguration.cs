@@ -40,6 +40,7 @@ public sealed class StaffMemberConfiguration : IEntityTypeConfiguration<StaffMem
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.Property(e => e.AssignedRoomIdsJson).HasColumnType("text");
+            entity.Property(e => e.PreferencesJson).HasColumnType("text");
 
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(StaffAccountStatus.Active).HasSentinel((StaffAccountStatus)0);
