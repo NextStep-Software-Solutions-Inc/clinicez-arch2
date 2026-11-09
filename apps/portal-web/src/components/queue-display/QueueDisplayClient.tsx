@@ -728,28 +728,28 @@ export default function QueueDisplayClient({
               </p>
             </div>
           ) : data?.nowServing && data.nowServing.length > 1 ? (
-            /* Multi-Station Equal Prominence Grid (Zero Scroll, Fits Entire Screen) */
-            <div
-              className={`flex-1 min-h-0 grid gap-4 sm:gap-6 overflow-hidden ${
-                data.nowServing.length === 2
-                  ? "grid-cols-2 grid-rows-1"
-                  : data.nowServing.length === 3
-                  ? "grid-cols-3 grid-rows-1"
-                  : data.nowServing.length === 4
-                  ? "grid-cols-2 grid-rows-2"
-                  : "grid-cols-3 grid-rows-2"
-              }`}
-            >
+            /* Multi-Station Equal Prominence Flexbox (Responsive, Zero-Scroll) */
+            <div className="flex-1 min-h-0 flex flex-wrap gap-4 sm:gap-6 overflow-hidden">
               {data.nowServing.map((item) => {
                 const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
                 const count = data.nowServing.length;
                 return (
                   <div
                     key={item.queueItemId}
-                    className={`rounded-3xl border-2 p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 shadow-xl min-h-0 overflow-hidden ${
+                    className={`flex-1 rounded-3xl border-2 p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 shadow-xl min-h-0 overflow-hidden ${
                       isItemPulsing ? "animate-serving-pulse" : ""
                     }`}
                     style={{
+                      flexBasis:
+                        count === 2
+                          ? "calc(50% - 1rem)"
+                          : count === 3
+                          ? "calc(33.333% - 1rem)"
+                          : count === 4
+                          ? "calc(50% - 1rem)"
+                          : "calc(33.333% - 1rem)",
+                      height: count <= 3 ? "100%" : "calc(50% - 0.75rem)",
+                      minWidth: "240px",
                       backgroundColor: darkColors.surface,
                       borderColor: isItemPulsing ? darkColors.primary : darkColors.border,
                     }}

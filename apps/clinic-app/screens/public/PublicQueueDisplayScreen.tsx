@@ -602,15 +602,8 @@ export default function PublicQueueDisplayScreen() {
               </Text>
             </View>
           ) : data?.nowServing && data.nowServing.length > 1 ? (
-            /* Multi-Station Equal Prominence Grid (Zero-Scroll, Fits Entire Screen) */
-            <View
-              style={[
-                styles.multiStationContainer,
-                data.nowServing.length === 2 && styles.multiStationGrid2Up,
-                data.nowServing.length === 3 && styles.multiStationGrid3Up,
-                data.nowServing.length >= 4 && styles.multiStationGrid4Plus,
-              ]}
-            >
+            /* Multi-Station Equal Prominence Flexbox (Responsive, Zero-Scroll) */
+            <View style={styles.multiStationContainer}>
               {data.nowServing.map((item) => {
                 const isItemPulsing = pulsingTicketIds.includes(item.queueItemId);
                 const count = data.nowServing.length;
@@ -621,7 +614,8 @@ export default function PublicQueueDisplayScreen() {
                       styles.stationCard,
                       count === 2 && styles.stationCard2Up,
                       count === 3 && styles.stationCard3Up,
-                      count >= 4 && styles.stationCard4Plus,
+                      count === 4 && styles.stationCard4Up,
+                      count >= 5 && styles.stationCard5Plus,
                       isItemPulsing && styles.stationCardPulsing,
                     ]}
                   >
@@ -1076,46 +1070,39 @@ const styles = StyleSheet.create({
   multiStationContainer: {
     flex: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 16,
     overflow: 'hidden',
   },
-  multiStationGrid2Up: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  multiStationGrid3Up: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  multiStationGrid4Plus: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
   stationCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     backgroundColor: darkColors.surface,
     borderColor: darkColors.border,
     borderWidth: 2,
     borderRadius: theme.radii['2xl'],
-    padding: 20,
+    padding: 18,
     justifyContent: 'space-between',
     overflow: 'hidden',
   },
   stationCard2Up: {
-    flex: 1,
+    flexBasis: '46%',
     height: '100%',
   },
   stationCard3Up: {
-    flex: 1,
+    flexBasis: '30%',
     height: '100%',
-    padding: 16,
-  },
-  stationCard4Plus: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    flexShrink: 1,
     padding: 14,
+  },
+  stationCard4Up: {
+    flexBasis: '46%',
+    height: '48%',
+    padding: 14,
+  },
+  stationCard5Plus: {
+    flexBasis: '30%',
+    height: '48%',
+    padding: 12,
   },
   stationCardPulsing: {
     borderColor: darkColors.primary,
