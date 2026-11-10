@@ -21,9 +21,6 @@ export function inferStaffRole(role: { name: string; isSystem?: boolean; permiss
   if (name.includes('nurse') || perms.includes('triage:write') || perms.includes('procedures:write')) {
     return 'Nurse';
   }
-  if (name.includes('cashier') || name.includes('billing') || (perms.includes('billing:write') && !perms.includes('consultations:read'))) {
-    return 'Cashier';
-  }
   if (
     name.includes('admin') ||
     name.includes('director') ||
@@ -35,6 +32,16 @@ export function inferStaffRole(role: { name: string; isSystem?: boolean; permiss
     perms.includes('audit:read')
   ) {
     return 'Admin';
+  }
+  if (name.includes('reception') || name.includes('front desk')) {
+    return 'Receptionist';
+  }
+  if (
+    name.includes('cashier') ||
+    name.includes('billing') ||
+    (perms.includes('billing:write') && !perms.includes('consultations:read') && !perms.includes('appointments:read'))
+  ) {
+    return 'Cashier';
   }
   return 'Receptionist';
 }

@@ -340,8 +340,8 @@ export default function PublicQueueDisplayScreen() {
   const safeWidth = windowWidth > 0 ? windowWidth : 1280;
   const safeHeight = windowHeight > 0 ? windowHeight : 800;
   const hasUpNext = upNextList.length > 0;
-  // Breakpoint strictly by screen size (<1024px) or empty queue - never collapses based on station count
-  const isCompact = safeWidth < 1024 || !hasUpNext;
+  // Breakpoint strictly by screen size (<1024px) - Up Next column remains visible on widescreen displays to maintain balanced 65/35 grid layout
+  const isCompact = safeWidth < 1024;
 
   // Responsive padding to squeeze content inwards from top, sides, and bottom
   const bodyPaddingHorizontal = Math.max(28, Math.min(64, Math.round(safeWidth * 0.04)));
@@ -366,14 +366,14 @@ export default function PublicQueueDisplayScreen() {
   // Dynamic ticket number font size calculation to guarantee zero truncation and zero overflow
   const getTicketFontSize = (ticketNum: string, stationCount: number) => {
     const len = Math.max(ticketNum?.length || 5, 4);
-    const colWidth = hasUpNext ? safeWidth * 0.65 : safeWidth * 0.95;
+    const colWidth = isCompact ? safeWidth * 0.95 : safeWidth * 0.65;
     const cols = stationCount === 1 ? 1 : stationCount === 2 ? 2 : Math.min(stationCount, 3);
     const cardWidth = (colWidth - (cols - 1) * 20 - 48) / cols;
     // Monospace character width is ~0.62 * fontSize
     const maxFontByWidth = Math.floor((cardWidth - 28) / (len * 0.62));
 
     if (stationCount === 1) {
-      return Math.min(84, Math.max(48, maxFontByWidth));
+      return Math.min(96, Math.max(52, maxFontByWidth));
     } else if (stationCount === 2) {
       return Math.min(60, Math.max(34, maxFontByWidth));
     } else if (stationCount === 3) {
@@ -1078,9 +1078,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   ticketBox: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 20,
+    width: '100%',
   },
   ticketLabel: {
     fontSize: theme.fontSizes.md,

@@ -13,6 +13,30 @@ describe('inferStaffRole', () => {
     ).toBe('Doctor');
     expect(inferStaffRole({ name: 'Triage Nurse', isSystem: true })).toBe('Nurse');
     expect(inferStaffRole({ name: 'Front Desk Receptionist', isSystem: true })).toBe('Receptionist');
+    expect(
+      inferStaffRole({
+        name: 'Front Desk Receptionist',
+        isSystem: true,
+        permissions: [
+          'appointments:read',
+          'appointments:manage',
+          'queue:read',
+          'queue:check-in',
+          'queue:call',
+          'queue:complete-non-doctor',
+          'patients:read',
+          'patients:write',
+          'documents:read',
+          'records:read',
+          'records:upload',
+          'staff:read',
+          'billing:read',
+          'billing:write',
+          'services:read',
+          'reports:read',
+        ],
+      }),
+    ).toBe('Receptionist');
     expect(inferStaffRole({ name: 'Clinic Cashier / Billing Officer', isSystem: true })).toBe('Cashier');
     expect(inferStaffRole({ name: 'Clinic Administrator', isSystem: true })).toBe('Admin');
     expect(inferStaffRole({ name: 'Data Protection Officer / Compliance Officer', isSystem: true })).toBe('Admin');

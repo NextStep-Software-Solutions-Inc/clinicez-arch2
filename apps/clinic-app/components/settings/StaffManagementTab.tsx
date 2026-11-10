@@ -221,13 +221,19 @@ export default function StaffManagementTab({
       return;
     }
     setSelectedRoleId(r.id);
-    setRole(r.staffRole);
-    if (r.staffRole !== 'Doctor' && r.staffRole !== 'Nurse') {
+  };
+
+  const handleSelectArchetype = (newRole: StaffRole) => {
+    if (editingStaff && (!canModifyStaffRole(editingStaff, user) || !canModifyStaffRole(editingStaff, currentStaff))) {
+      return;
+    }
+    setRole(newRole);
+    if (newRole !== 'Doctor' && newRole !== 'Nurse') {
       setAssignedRoomIds([]);
     }
-    if (r.staffRole === 'Doctor') {
+    if (newRole === 'Doctor') {
       if (!title || title === 'RN' || title === 'Ms.' || title === 'Mr.') setTitle('Dr.');
-    } else if (r.staffRole === 'Nurse') {
+    } else if (newRole === 'Nurse') {
       if (!title || title === 'Dr.') setTitle('RN');
     } else if (title === 'Dr.' || title === 'RN') {
       setTitle('');
@@ -1099,17 +1105,41 @@ export default function StaffManagementTab({
           </View>
         ) : null}
 
-        {/* Single unified Role Selection: System standard roles + Clinic custom roles */}
+        {/* 1. Professional Archetype (Statutory Qualification) */}
         <View style={styles.roleSelectionGroup}>
-          <FieldGroup label="Staff Role *">
+          <FieldGroup label="Professional Archetype *">
             <ThemedText variant="caption" color={theme.colors.textMuted}>
-              Select the system standard role or a clinic custom role.
+              Determines statutory credentials (e.g. PRC license for Doctors, consultation/triage room stationing).
+            </ThemedText>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled
+              contentContainerStyle={styles.chipScrollRow}
+            >
+              {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
+                <Chip
+                  key={cat}
+                  label={cat}
+                  active={role === cat}
+                  onPress={() => handleSelectArchetype(cat)}
+                />
+              ))}
+            </ScrollView>
+          </FieldGroup>
+        </View>
+
+        {/* 2. Assigned Permission Profile */}
+        <View style={styles.roleSelectionGroup}>
+          <FieldGroup label="Permission Profile *">
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              Select a standard system profile or custom permission profile for operational access.
             </ThemedText>
 
-            {/* System Standard Roles */}
+            {/* Standard Permission Profiles */}
             <View style={styles.roleSubgroup}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                System Standard Roles
+                Standard Permission Profiles
               </ThemedText>
               <ScrollView
                 horizontal
@@ -1128,12 +1158,12 @@ export default function StaffManagementTab({
               </ScrollView>
             </View>
 
-            {/* Clinic Custom Roles */}
+            {/* Custom Permission Profiles */}
             {customRoleOptions.length > 0 ? (
               <View style={styles.roleSubgroup}>
                 <View style={styles.customRoleHeader}>
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                    Clinic Custom Roles
+                    Custom Permission Profiles
                   </ThemedText>
                   <Badge label={`${customRoleOptions.length} Custom`} variant="purple" size="sm" />
                 </View>
@@ -1162,43 +1192,6 @@ export default function StaffManagementTab({
                 <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
                   {selectedRoleOption.description}
                 </ThemedText>
-              </View>
-            ) : null}
-
-            {/* Clinical category override for custom roles only */}
-            {!selectedRoleOption.isSystem ? (
-              <View style={styles.customCategoryRow}>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Clinical category:
-                </ThemedText>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  nestedScrollEnabled
-                  contentContainerStyle={styles.categoryChips}
-                >
-                  {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
-                    <Pressable
-                      key={cat}
-                      onPress={() => {
-                        setRole(cat);
-                        if (cat === 'Doctor' && !title) setTitle('Dr.');
-                        if (cat === 'Nurse' && (!title || title === 'Dr.')) setTitle('RN');
-                      }}
-                      style={[
-                        styles.miniChip,
-                        role === cat && styles.miniChipActive,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="captionBold"
-                        color={role === cat ? theme.colors.primary : theme.colors.textMuted}
-                      >
-                        {cat}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </ScrollView>
               </View>
             ) : null}
           </FieldGroup>
@@ -1595,9 +1588,9 @@ export default function StaffManagementTab({
             </View>
           ) : null}
 
-          {/* Role Selection */}
+          {/* 1. Professional Archetype (Statutory Qualification) */}
           <View style={styles.roleSelectionGroup}>
-            <FieldGroup label="Staff Role *">
+            <FieldGroup label="Professional Archetype *">
               {isEditingSelf ? (
                 <View style={styles.selfRoleNoticeBox}>
                   <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
@@ -1607,9 +1600,34 @@ export default function StaffManagementTab({
                 </View>
               ) : (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Select the system standard role or a clinic custom role.
+                  Determines statutory credentials (e.g. PRC license for Doctors, consultation/triage room stationing).
                 </ThemedText>
               )}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled
+                contentContainerStyle={styles.chipScrollRow}
+              >
+                {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
+                  <Chip
+                    key={cat}
+                    label={cat}
+                    active={role === cat}
+                    disabled={isEditingSelf}
+                    onPress={() => handleSelectArchetype(cat)}
+                  />
+                ))}
+              </ScrollView>
+            </FieldGroup>
+          </View>
+
+          {/* 2. Assigned Permission Profile */}
+          <View style={styles.roleSelectionGroup}>
+            <FieldGroup label="Permission Profile *">
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Select a standard system profile or custom permission profile for operational software access.
+              </ThemedText>
 
               {isSoleActiveAdmin ? (
                 <View style={styles.systemNotice}>
@@ -1620,10 +1638,10 @@ export default function StaffManagementTab({
                 </View>
               ) : null}
 
-              {/* System Standard Roles */}
+              {/* Standard Permission Profiles */}
               <View style={styles.roleSubgroup}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  System Standard Roles
+                  Standard Permission Profiles
                 </ThemedText>
                 <ScrollView
                   horizontal
@@ -1643,12 +1661,12 @@ export default function StaffManagementTab({
                 </ScrollView>
               </View>
 
-              {/* Clinic Custom Roles */}
+              {/* Custom Permission Profiles */}
               {customRoleOptions.length > 0 ? (
                 <View style={styles.roleSubgroup}>
                   <View style={styles.customRoleHeader}>
                     <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                      Clinic Custom Roles
+                      Custom Permission Profiles
                     </ThemedText>
                     <Badge label={`${customRoleOptions.length} Custom`} variant="purple" size="sm" />
                   </View>
@@ -1678,46 +1696,6 @@ export default function StaffManagementTab({
                   <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
                     {selectedRoleOption.description}
                   </ThemedText>
-                </View>
-              ) : null}
-
-              {/* Clinical category override for custom roles only */}
-              {!selectedRoleOption.isSystem ? (
-                <View style={styles.customCategoryRow}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Clinical category:
-                  </ThemedText>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    nestedScrollEnabled
-                    contentContainerStyle={styles.categoryChips}
-                  >
-                    {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
-                      <Pressable
-                        key={cat}
-                        disabled={isEditingSelf}
-                        onPress={() => {
-                          if (isEditingSelf) return;
-                          setRole(cat);
-                          if (cat === 'Doctor' && !title) setTitle('Dr.');
-                          if (cat === 'Nurse' && (!title || title === 'Dr.')) setTitle('RN');
-                        }}
-                        style={[
-                          styles.miniChip,
-                          role === cat && styles.miniChipActive,
-                          isEditingSelf && styles.miniChipDisabled,
-                        ]}
-                      >
-                        <ThemedText
-                          variant="captionBold"
-                          color={role === cat ? theme.colors.primary : theme.colors.textMuted}
-                        >
-                          {cat}
-                        </ThemedText>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
                 </View>
               ) : null}
             </FieldGroup>

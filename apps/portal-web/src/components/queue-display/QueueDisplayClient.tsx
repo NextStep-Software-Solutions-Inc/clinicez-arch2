@@ -687,7 +687,7 @@ export default function QueueDisplayClient({
         <main className="flex-1 min-h-0 flex items-center justify-center p-6 sm:p-8 lg:p-10 overflow-hidden">
           <div className="w-full h-full max-h-[82vh] lg:max-h-[640px] flex flex-col lg:flex-row gap-6 sm:gap-8 min-h-0">
             {/* Left Column (65% on wide screens): NOW SERVING Active Stations */}
-            <section className={`${upNextList.length > 0 ? "lg:w-[65%]" : "w-full"} flex flex-col h-full min-h-0 overflow-hidden`}>
+            <section className="w-full lg:w-[65%] flex flex-col h-full min-h-0 overflow-hidden">
           {!primaryServing ? (
             /* Empty serving state */
             <div
@@ -827,7 +827,7 @@ export default function QueueDisplayClient({
               </div>
 
               {/* Center: Ticket Number */}
-              <div className="text-center my-auto py-4 sm:py-6">
+              <div className="flex-1 flex flex-col items-center justify-center text-center py-4 sm:py-6">
                 <span
                   className="text-xs sm:text-sm uppercase font-bold tracking-widest block mb-2"
                   style={{ color: darkColors.textMuted }}
@@ -857,8 +857,8 @@ export default function QueueDisplayClient({
           )}
         </section>
 
-        {/* Right Column (35% on wide screens): UP NEXT (Shown on widescreen displays when tickets exist) */}
-        <section className={`${upNextList.length > 0 ? "hidden lg:flex lg:w-[35%]" : "hidden"} flex-col h-full min-h-0 overflow-hidden`}>
+        {/* Right Column (35% on wide screens): UP NEXT */}
+        <section className="hidden lg:flex lg:w-[35%] flex-col h-full min-h-0 overflow-hidden">
           <div
             className="flex-1 h-full rounded-3xl border-2 p-6 sm:p-8 flex flex-col shadow-xl overflow-hidden"
             style={{ backgroundColor: darkColors.surface, borderColor: darkColors.border }}
