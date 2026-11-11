@@ -24,6 +24,9 @@ export interface PatientSearchResultRowProps {
   customFieldDefs?: ClinicCustomFieldDefinition[];
   onPress?: () => void;
   testID?: string;
+  selected?: boolean;
+  extraBadges?: React.ReactNode;
+  rightAction?: React.ReactNode;
 }
 
 export function parseConfiguredSearchFields(jsonOrArray?: string | string[] | null): string[] {
@@ -44,6 +47,9 @@ export default function PatientSearchResultRow({
   customFieldDefs = [],
   onPress,
   testID = 'patient-search-result-row',
+  selected = false,
+  extraBadges,
+  rightAction,
 }: PatientSearchResultRowProps) {
   const activeKeys = configuredFieldKeys.length > 0 ? configuredFieldKeys : ['patientCode'];
 
@@ -57,7 +63,10 @@ export default function PatientSearchResultRow({
       case 'dateOfBirth':
         return patient.dateOfBirth ? { label: 'DOB', value: patient.dateOfBirth } : null;
       case 'sex':
-        return patient.sex ? { value: patient.sex } : null;
+      case 'gender': {
+        const val = patient.sex || (patient as any).gender;
+        return val ? { value: val } : null;
+      }
       case 'contactNumber':
         return patient.contactNumber ? { value: patient.contactNumber } : null;
       case 'philHealthNumber':
@@ -90,23 +99,27 @@ export default function PatientSearchResultRow({
     .map((k) => renderFieldDetail(k))
     .filter((d): d is { label?: string; value: string } => d !== null);
 
-  return (
-    <Pressable
-      testID={testID}
-      style={({ pressed }) => [styles.resultRow, pressed && styles.resultRowPressed]}
-      onPress={onPress}
-    >
+  const displayName =
+    patient.fullName ||
+    `${patient.firstName || ''} ${patient.lastName || ''}`.trim() ||
+    'Unnamed Patient';
+
+  const rowContent = (
+    <View style={styles.flexFill}>
       <View style={styles.headerLine}>
         <ThemedText variant="bodyBold" color={theme.colors.text}>
-          {patient.fullName}
+          {displayName}
         </ThemedText>
-        {patient.verificationStatus ? (
-          <Badge
-            label={patient.verificationStatus}
-            variant={patient.verificationStatus === 'Verified' ? 'success' : 'neutral'}
-            size="sm"
-          />
-        ) : null}
+        <View style={styles.badgeCluster}>
+          {patient.verificationStatus ? (
+            <Badge
+              label={patient.verificationStatus}
+              variant={patient.verificationStatus === 'Verified' ? 'success' : 'neutral'}
+              size="sm"
+            />
+          ) : null}
+          {extraBadges}
+        </View>
       </View>
 
       {details.length > 0 ? (
@@ -128,6 +141,42 @@ export default function PatientSearchResultRow({
           ))}
         </View>
       ) : null}
+    </View>
+  );
+
+  if (rightAction) {
+    return (
+      <View
+        testID={testID}
+        style={[
+          styles.resultRow,
+          styles.resultRowWithAction,
+          selected && styles.resultRowSelected,
+        ]}
+      >
+        <Pressable
+          style={styles.flexFill}
+          onPress={onPress}
+          disabled={!onPress}
+        >
+          {rowContent}
+        </Pressable>
+        <View style={styles.actionWrap}>{rightAction}</View>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      testID={testID}
+      style={({ pressed }) => [
+        styles.resultRow,
+        pressed && styles.resultRowPressed,
+        selected && styles.resultRowSelected,
+      ]}
+      onPress={onPress}
+    >
+      {rowContent}
     </Pressable>
   );
 }
@@ -145,11 +194,36 @@ const styles = StyleSheet.create({
   resultRowPressed: {
     backgroundColor: theme.colors.surfaceMuted,
   },
+  resultRowSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  resultRowWithAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  flexFill: {
+    flex: 1,
+    gap: 4,
+  },
+  actionWrap: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   headerLine: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  badgeCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
   },
   detailsRow: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -28,6 +28,12 @@ import {
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import {
+  parseConfiguredSearchFields,
+} from '../../components/patient/PatientSearchResultRow';
+import { computePatientLocation } from '../../utils/patientLocation';
+// PatientSearchResultRow-aligned search display field configuration
+import type { ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { useStaff } from '../../context/StaffContext';
 import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
@@ -165,7 +171,7 @@ export default function BillingScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= theme.breakpoints.desktop;
 
-  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead } = useClinic();
+  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, settings } = useClinic();
   const { current: currentStaff, currentName } = useStaff();
 
   const [billingMode, setBillingMode] = useState<BillingMode>('queue');
@@ -180,6 +186,21 @@ export default function BillingScreen() {
   const [patients, setPatients] = useState<BillingPatient[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [clinicSettings, setClinicSettings] = useState<ClinicSettingsRecord | null>(null);
+  const [customFieldDefs, setCustomFieldDefs] = useState<ClinicCustomFieldDefinition[]>([]);
+
+  useEffect(() => {
+    clinicService.getCustomFields('ClinicPatient').then(([defs]) => {
+      if (defs) setCustomFieldDefs(defs);
+    });
+  }, []);
+
+  const configuredSearchFields = useMemo(
+    () =>
+      parseConfiguredSearchFields(
+        settings?.patientSearchDisplayFieldsJson ?? clinicSettings?.patientSearchDisplayFieldsJson
+      ),
+    [settings?.patientSearchDisplayFieldsJson, clinicSettings?.patientSearchDisplayFieldsJson]
+  );
   const [selectedPatient, setSelectedPatient] = useState<BillingPatient | null>(null);
   const [activeInvoice, setActiveInvoice] = useState<InvoiceRecord | null>(null);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -2408,12 +2429,60 @@ export default function BillingScreen() {
               >
                 {registryResults.map((patient) => {
                   const isSelected = selectedPatient?.patientId === patient.id;
-                  const displayName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
+                  const displayName =
+                    patient.fullName || `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unnamed Patient';
                   const openInv = invoices.find(
                     (inv) => inv.patientId === patient.id && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
                   );
                   const paidInv = invoices.find((inv) => inv.patientId === patient.id && inv.status === 'Paid');
                   const inQueue = patients.find((p) => p.patientId === patient.id && !p.isAlreadyBilled);
+
+                  const details: string[] = [];
+                  for (const key of configuredSearchFields) {
+                    switch (key) {
+                      case 'age':
+                        if (patient.age != null) details.push(`${patient.age}y`);
+                        break;
+                      case 'dateOfBirth':
+                        if (patient.dateOfBirth) details.push(`DOB: ${patient.dateOfBirth}`);
+                        break;
+                      case 'sex':
+                      case 'gender': {
+                        const sex = patient.sex || (patient as any).gender;
+                        if (sex) details.push(sex);
+                        break;
+                      }
+                      case 'contactNumber':
+                        if (patient.contactNumber) details.push(patient.contactNumber);
+                        break;
+                      case 'philHealthNumber':
+                        if (patient.philHealthNumber) details.push(`PIN: ${patient.philHealthNumber}`);
+                        break;
+                      case 'bloodType':
+                        if (patient.bloodType) details.push(`Blood: ${patient.bloodType}`);
+                        break;
+                      case 'civilStatus':
+                        if (patient.civilStatus) details.push(patient.civilStatus);
+                        break;
+                      case 'barangay': {
+                        const loc = computePatientLocation(patient);
+                        if (loc) details.push(loc);
+                        break;
+                      }
+                      case 'patientCode':
+                        // Handled in header badge cluster when configured
+                        break;
+                      default: {
+                        const customDef = customFieldDefs.find((d) => d.fieldKey === key || `meta:${d.fieldKey}` === key);
+                        const actualKey = key.startsWith('meta:') ? key.slice(5) : key;
+                        const rawVal = patient.customFields?.[actualKey];
+                        if (rawVal != null && String(rawVal).trim() !== '') {
+                          details.push(`${customDef?.label || actualKey}: ${String(rawVal)}`);
+                        }
+                        break;
+                      }
+                    }
+                  }
 
                   return (
                     <Pressable
@@ -2430,8 +2499,10 @@ export default function BillingScreen() {
                           <ThemedText variant="bodyBold" color={theme.colors.text}>
                             {displayName}
                           </ThemedText>
-                          {patient.patientCode && <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />}
-                          {patient.philHealthNumber && <Badge label="PhilHealth" variant="success" size="sm" />}
+                          {configuredSearchFields.includes('patientCode') && patient.patientCode && (
+                            <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />
+                          )}
+                          {configuredSearchFields.includes('philHealthNumber') && patient.philHealthNumber && <Badge label="PhilHealth" variant="success" size="sm" />}
                           {patient.seniorCitizenId && <Badge label="Senior" variant="warning" size="sm" />}
                           {patient.pwdId && <Badge label="PWD" variant="info" size="sm" />}
                           {openInv && (
@@ -2444,10 +2515,11 @@ export default function BillingScreen() {
                           {paidInv && !openInv && <Badge label="Paid Today" variant="neutral" size="sm" />}
                           {inQueue?.queueNumber && <Badge label={`Queue #${inQueue.queueNumber}`} variant="info" size="sm" />}
                         </View>
-                        <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          DOB: {patient.dateOfBirth || 'N/A'} • Contact: {patient.contactNumber || 'N/A'}
-                          {patient.philHealthNumber ? ` • PIN: ${patient.philHealthNumber}` : ''}
-                        </ThemedText>
+                        {details.length > 0 && (
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {details.join(' • ')}
+                          </ThemedText>
+                        )}
                       </View>
                       <Button
                         size="sm"

@@ -112,7 +112,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   }, []);
 
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
-  const { refresh: refreshClinic } = useClinic();
+  const { refresh: refreshClinic, updateSettings: updateClinicSettings } = useClinic();
   const { reload: reloadStaffContext } = useStaff();
   const { user } = useAuth();
   const canManageSettings = usePermission(PERMISSIONS.settingsManage);
@@ -352,6 +352,15 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     setRefreshing(false);
   }, [loadAll]);
 
+  const handleSettingsUpdated = useCallback(
+    (updated: ClinicSettingsRecord) => {
+      setSettings(updated);
+      updateClinicSettings(updated);
+      void refreshClinic();
+    },
+    [updateClinicSettings, refreshClinic]
+  );
+
   const handleSavePreferences = async () => {
     const slotMinutes = parseInt(slotDuration, 10);
     const fee = parseFloat(consultationFee);
@@ -410,6 +419,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       setLetterheadHeader(saved.letterheadHeader ?? '');
       setLetterheadAddress(saved.letterheadAddress ?? '');
       setLetterheadContact(saved.letterheadContact ?? '');
+      updateClinicSettings(saved);
     }
     notify.success('Settings saved.');
     await refreshClinic();
@@ -451,14 +461,22 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       return;
     }
 
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            isDirectoryPublished: result.isPublished,
-          }
-        : null
-    );
+    const updatedPublishedSettings = (result as any).settings ?? (settings ? { ...settings, isDirectoryPublished: result.isPublished } : null);
+    if (updatedPublishedSettings) {
+      setSettings(updatedPublishedSettings);
+      updateClinicSettings(updatedPublishedSettings);
+      void refreshClinic();
+    } else {
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              isDirectoryPublished: result.isPublished,
+            }
+          : null
+      );
+      void refreshClinic();
+    }
     notify.success(
       result.isPublished
         ? 'Facility is now published to the Patient App directory.'
@@ -481,14 +499,22 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       return;
     }
 
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            isOnlineBookingPaused: result.isPaused,
-          }
-        : null
-    );
+    const updatedPausedSettings = (result as any).settings ?? (settings ? { ...settings, isOnlineBookingPaused: result.isPaused } : null);
+    if (updatedPausedSettings) {
+      setSettings(updatedPausedSettings);
+      updateClinicSettings(updatedPausedSettings);
+      void refreshClinic();
+    } else {
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              isOnlineBookingPaused: result.isPaused,
+            }
+          : null
+      );
+      void refreshClinic();
+    }
     notify.success(
       result.isPaused
         ? 'Online patient bookings are now paused.'
@@ -496,13 +522,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     );
   };
 
-    const handleSettingsUpdated = useCallback(
-    async (updated: ClinicSettingsRecord) => {
-      setSettings(updated);
-      await refreshClinic();
-    },
-    [refreshClinic]
-  );
 
   const showSkeletons = loading && !refreshing;
 
@@ -773,7 +792,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             clinicName={clinicName}
             settings={settings}
             onSettingsUpdated={(updated) => {
-              void handleSettingsUpdated(updated);
+              handleSettingsUpdated(updated);
               if (updated.accreditationNumber !== undefined) {
                 setAccreditationNumber(updated.accreditationNumber || '');
               }
