@@ -85,6 +85,9 @@ export type {
 export {
   OrderCatalogSearchModal,
   default as OrderCatalogSearchModalComponent,
+  EMPTY_STRING_ARRAY,
+  EMPTY_EXISTING_ORDERS,
+  EMPTY_ROOMS,
 } from './OrderCatalogSearchModal';
 export type {
   OrderCatalogItemPayload,
