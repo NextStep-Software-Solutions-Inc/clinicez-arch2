@@ -842,7 +842,7 @@ describe('Challenger M2-2: Adversarial Rehydration & Workstation Layout Stress S
     });
 
     test('5.5 Lab order delete button is conditionally rendered only when !isSigned', () => {
-      const deleteBtnPattern = /\{!isSigned\s*\?\s*\(\s*<Pressable[^>]*accessibilityLabel=\{`Remove \$\{lab\.name\}`\}/;
+      const deleteBtnPattern = /\{!isSigned\s*\?\s*\(\s*<(?:Button|Pressable)[^>]*accessibilityLabel=\{`Remove \$\{lab\.name\}`\}/;
       expect(deleteBtnPattern.test(sourceCode)).toBe(true);
     });
 

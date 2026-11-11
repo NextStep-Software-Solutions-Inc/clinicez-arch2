@@ -299,6 +299,7 @@ export default function ClinicActiveThread({
           iconOnly
           onPress={onBack}
           accessibilityLabel="Back to conversations"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={styles.backButton}
         />
 

@@ -220,27 +220,38 @@ describe('Clinic Branding & Database Logo Persistence', () => {
     expect(captured.colorSource).toBe('workspace_inherited');
   });
 
-  test('auto-inherits workspace accent when clinic has legacy unset default color (#0284C7)', () => {
+  test('persists Sky Blue (#0284C7) as an explicit clinic_override while unset values auto-inherit workspace accent (#151)', () => {
     setDeviceItem(CLINIC_WORKSPACE_ACCENT_STORAGE_KEY, '#4F46E5');
     setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, '#0284C7');
 
     let captured: any = null;
-    renderToStaticMarkup(
-      React.createElement(
-        ClinicProvider,
-        null,
-        React.createElement(TestClinicConsumer, {
-          onRender: (ctx) => {
-            captured = ctx;
-          },
-        })
-      )
-    );
+    const renderProvider = () =>
+      renderToStaticMarkup(
+        React.createElement(
+          ClinicProvider,
+          null,
+          React.createElement(TestClinicConsumer, {
+            onRender: (ctx) => {
+              captured = ctx;
+            },
+          })
+        )
+      );
+
+    renderProvider();
 
     expect(captured).not.toBeNull();
-    expect(captured.primaryColorHex).toBe('#4F46E5');
-    expect(captured.isColorOverridden).toBe(false);
-    expect(captured.colorSource).toBe('workspace_inherited');
+    expect(captured.primaryColorHex).toBe('#0284C7');
+    expect(captured.isColorOverridden).toBe(true);
+    expect(captured.colorSource).toBe('clinic_override');
+
+    for (const unsetVal of ['', '   ', 'inherit', null]) {
+      setDeviceItem(CLINIC_PRIMARY_COLOR_OVERRIDE_KEY, unsetVal);
+      renderProvider();
+      expect(captured.primaryColorHex).toBe('#4F46E5');
+      expect(captured.isColorOverridden).toBe(false);
+      expect(captured.colorSource).toBe('workspace_inherited');
+    }
   });
 
   test('falls back to default brand teal (#0D6963) when neither clinic override nor workspace accent is set', () => {

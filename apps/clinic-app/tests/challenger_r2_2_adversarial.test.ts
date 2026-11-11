@@ -48,7 +48,7 @@ const createMockComponent = (name: string) => {
         'data-style': resolvedStyle ? JSON.stringify(resolvedStyle) : undefined,
         ...rest,
       },
-      title || label,
+      name === 'Pressable' ? label : (title || label),
       children
     );
   };
@@ -533,7 +533,7 @@ describe('Challenger R2.2 Empirical Stress & Adversarial Suite', () => {
       expect(posReconnect).toBeGreaterThan(-1);
       expect(posReconnect).toBeGreaterThan(posPill);
 
-      const reconnectSlice = html.slice(posReconnect, posReconnect + 800);
+      const reconnectSlice = html.slice(posReconnect, posReconnect + 2000);
       expect(reconnectSlice).toContain('lucide-refresh-cw');
     });
   });

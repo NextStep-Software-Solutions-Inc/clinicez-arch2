@@ -1,10 +1,18 @@
 // token-guard:ignore-file
 import { describe, expect, test, mock, beforeEach, afterEach } from 'bun:test';
+import * as ReactNamespace from 'react';
 import React from 'react';
+import * as ReactJsxRuntime from 'react/jsx-runtime';
+import * as ReactJsxDevRuntime from 'react/jsx-dev-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { lightColors, radiusScale } from '@clinicez/design-tokens';
 
 (globalThis as any).__DEV__ = true;
+
+// Force a single React instance across apps/clinic-app and packages/comms-sdk even if nested node_modules exist
+mock.module('react', () => ({ ...ReactNamespace, default: React }));
+mock.module('react/jsx-runtime', () => ReactJsxRuntime);
+mock.module('react/jsx-dev-runtime', () => ReactJsxDevRuntime);
 
 const createMockComponent = (name: string) => {
   const Comp = ({
@@ -76,7 +84,7 @@ const createMockComponent = (name: string) => {
   return Comp;
 };
 
-mock.module('react-native', () => ({
+const reactNativeMockFactory = () => ({
   StyleSheet: {
     create: (s: any) => s,
     flatten: (s: any) => (Array.isArray(s) ? Object.assign({}, ...s.flat(Infinity).filter(Boolean)) : s || {}),
@@ -127,8 +135,10 @@ mock.module('react-native', () => ({
     Text: createMockComponent('Animated.Text'),
   },
   Alert: { alert: () => {} },
+  I18nManager: { isRTL: false, allowRTL: () => {}, forceRTL: () => {} },
   Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
-}));
+});
+mock.module('react-native', reactNativeMockFactory);
 
 mock.module('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
@@ -182,6 +192,10 @@ mock.module('@react-navigation/native', () => ({
     navigate: mock(() => {}),
     goBack: mock(() => {}),
   }),
+  useRoute: () => ({ params: {} }),
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
+  NavigationContainer: ({ children }: any) => children,
 }));
 
 const mockStaffList = [
@@ -194,7 +208,8 @@ mock.module('../context/StaffContext', () => ({
     current: mockStaffList[0],
     staff: mockStaffList,
   }),
-  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
+  formatStaffName: (s: any) =>
+    s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
   staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
   StaffProvider: ({ children }: any) => children,
 }));
@@ -203,7 +218,8 @@ mock.module('../../context/StaffContext', () => ({
     current: mockStaffList[0],
     staff: mockStaffList,
   }),
-  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
+  formatStaffName: (s: any) =>
+    s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
   staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
   StaffProvider: ({ children }: any) => children,
 }));
@@ -275,15 +291,20 @@ mock.module('../../utils/useBreakpoint', () => ({
   }),
 }));
 
+const realFeedback = await import('../utils/feedback');
 mock.module('../utils/feedback', () => ({
+  ...realFeedback,
   notify: {
+    ...realFeedback.notify,
     success: () => {},
     error: () => {},
     info: () => {},
   },
 }));
 mock.module('../../utils/feedback', () => ({
+  ...realFeedback,
   notify: {
+    ...realFeedback.notify,
     success: () => {},
     error: () => {},
     info: () => {},
@@ -378,7 +399,16 @@ mock.module('@clinicez/comms-sdk/react', () => ({
   }),
 }));
 
-const { ChatDrawer, MessageThread, TriageQueueView } = await import('@clinicez/comms-sdk/native-ui');
+const { ChatDrawer } = await import('../../../packages/comms-sdk/src/native-ui/ChatDrawer');
+const { MessageThread } = await import('../../../packages/comms-sdk/src/native-ui/MessageThread');
+const { TriageQueueView } = await import('../../../packages/comms-sdk/src/native-ui/TriageQueueView');
+
+mock.module('@clinicez/comms-sdk/native-ui', () => ({
+  ChatDrawer,
+  MessageThread,
+  TriageQueueView,
+}));
+
 const { getActiveThemeState, syncActiveTheme } = await import('../constants/theme');
 const { DEFAULT_CLINIC_BRAND_COLOR } = await import('../constants/color');
 const { default: ClinicChatDrawerHost } = await import('../components/comms/ClinicChatDrawerHost');

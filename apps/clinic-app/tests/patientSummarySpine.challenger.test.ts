@@ -5,46 +5,169 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 (globalThis as any).__DEV__ = true;
 
+function flattenStyleProp(style: any): Record<string, string | number> | undefined {
+  if (!style) return undefined;
+  const resolved =
+    typeof style === 'function' ? style({ pressed: false, hovered: false }) : style;
+  const acc: Record<string, string | number> = {};
+  const walk = (item: any) => {
+    if (!item || typeof item !== 'object') return;
+    if (Array.isArray(item)) {
+      for (const sub of item) walk(sub);
+      return;
+    }
+    for (const [k, v] of Object.entries(item)) {
+      if (k === 'transform' && Array.isArray(v)) {
+        const parts = v
+          .map((entry: any) =>
+            entry && typeof entry === 'object'
+              ? Object.entries(entry)
+                  .map(([fn, val]) =>
+                    typeof val === 'number' && !fn.startsWith('scale')
+                      ? `${fn}(${val}px)`
+                      : `${fn}(${val})`,
+                  )
+                  .join(' ')
+              : '',
+          )
+          .filter(Boolean);
+        if (parts.length > 0) acc.transform = parts.join(' ');
+      } else if (typeof v === 'string' || typeof v === 'number') {
+        acc[k] = v;
+      }
+    }
+  };
+  walk(resolved);
+  return Object.keys(acc).length > 0 ? acc : undefined;
+}
+
+const createMockComponent = (name: string) => {
+  const Comp = ({
+    children,
+    accessibilityLabel,
+    accessibilityRole,
+    accessibilityState,
+    className,
+    dataSet,
+    placeholder,
+    value,
+    onPress,
+    title,
+    source,
+    style,
+    testID,
+  }: any) => {
+    const flatStyle = flattenStyleProp(style);
+    const resolvedChildren =
+      typeof children === 'function' ? children({ pressed: false, hovered: false }) : children;
+    const dataAttrs: Record<string, string> = {};
+    if (dataSet && typeof dataSet === 'object') {
+      for (const [k, v] of Object.entries(dataSet)) {
+        if (v !== undefined && v !== null) {
+          const kebab = k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+          dataAttrs[`data-${kebab}`] = String(v);
+        }
+      }
+    }
+    return React.createElement(
+      'div',
+      {
+        'data-component': name,
+        ...(className ? { className } : {}),
+        ...dataAttrs,
+        ...(testID ? { 'data-testid': testID } : {}),
+        ...(accessibilityLabel ? { accessibilitylabel: accessibilityLabel } : {}),
+        ...(accessibilityRole ? { role: accessibilityRole } : {}),
+        ...(accessibilityState?.selected !== undefined
+          ? { 'aria-selected': String(accessibilityState.selected) }
+          : {}),
+        ...(placeholder ? { 'data-placeholder': placeholder } : {}),
+        ...(value !== undefined ? { 'data-value': String(value) } : {}),
+        ...(title ? { title } : {}),
+        ...(source?.uri ? { 'data-src': source.uri } : {}),
+        ...(flatStyle ? { style: flatStyle } : {}),
+        onClick: onPress,
+      },
+      resolvedChildren,
+    );
+  };
+  Comp.displayName = name;
+  return Comp;
+};
+
 // Mock React Native modules for Bun environment
 mock.module('react-native', () => ({
   Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
-  StyleSheet: { create: (s: any) => s },
-  View: 'View',
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  TextInput: 'TextInput',
-  Text: 'Text',
-  ActivityIndicator: 'ActivityIndicator',
-  Modal: 'Modal',
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  FlatList: 'FlatList',
-  SectionList: 'SectionList',
-  Switch: 'Switch',
-  TouchableOpacity: 'TouchableOpacity',
-  TouchableHighlight: 'TouchableHighlight',
-  Image: 'Image',
+  StyleSheet: {
+    create: (s: any) => s,
+    flatten: (input: any): any => {
+      const acc: Record<string, any> = {};
+      const walk = (item: any) => {
+        if (!item) return;
+        if (Array.isArray(item)) {
+          for (const sub of item) walk(sub);
+        } else if (typeof item === 'object') {
+          Object.assign(acc, item);
+        }
+      };
+      walk(input);
+      return acc;
+    },
+    absoluteFillObject: {},
+  },
+  View: createMockComponent('View'),
+  Pressable: createMockComponent('Pressable'),
+  ScrollView: createMockComponent('ScrollView'),
+  RefreshControl: createMockComponent('RefreshControl'),
+  TextInput: createMockComponent('TextInput'),
+  Text: createMockComponent('Text'),
+  ActivityIndicator: createMockComponent('ActivityIndicator'),
+  Modal: createMockComponent('Modal'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  FlatList: createMockComponent('FlatList'),
+  SectionList: createMockComponent('SectionList'),
+  Switch: createMockComponent('Switch'),
+  TouchableOpacity: createMockComponent('TouchableOpacity'),
+  TouchableHighlight: createMockComponent('TouchableHighlight'),
+  Image: createMockComponent('Image'),
   Dimensions: {
     get: () => ({ width: 1024, height: 768 }),
     addEventListener: () => ({ remove: () => {} }),
   },
   useWindowDimensions: () => ({ width: 1024, height: 768 }),
   Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
+  NativeEventEmitter: class {
+    addListener() {
+      return { remove: () => {} };
+    }
+    removeAllListeners() {}
+  },
   Animated: {
     Value: class {
       constructor(public val: any) {}
-      setValue(val: any) { this.val = val; }
-      interpolate() { return this; }
+      setValue(val: any) {
+        this.val = val;
+      }
+      interpolate() {
+        return this;
+      }
     },
     timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
     spring: () => ({ start: (cb?: any) => cb && cb() }),
-    View: 'Animated.View',
-    Text: 'Animated.Text',
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
   },
+  Easing: { linear: (t: number) => t, inOut: () => (t: number) => t, ease: (t: number) => t },
+  PanResponder: { create: (config: any) => ({ panHandlers: {}, ...config }) },
+  processColor: (c: any) => c,
+  Vibration: { vibrate: () => {}, cancel: () => {} },
   Alert: {
     alert: () => {},
   },
@@ -55,18 +178,19 @@ mock.module('expo-crypto', () => ({
 }));
 
 mock.module('react-native-svg', () => ({
-  Svg: 'Svg',
-  Path: 'Path',
-  Circle: 'Circle',
-  Rect: 'Rect',
-  Line: 'Line',
-  default: 'Svg',
+  Svg: createMockComponent('Svg'),
+  Path: createMockComponent('Path'),
+  Circle: createMockComponent('Circle'),
+  Rect: createMockComponent('Rect'),
+  Line: createMockComponent('Line'),
+  default: createMockComponent('Svg'),
   Defs: ({ children }: any) => children,
   LinearGradient: ({ children }: any) => children,
   Stop: () => null,
   G: ({ children }: any) => children,
   Text: ({ children }: any) => children,
-  Polyline: 'Polyline',
+  Polyline: createMockComponent('Polyline'),
+  Polygon: createMockComponent('Polygon'),
 }));
 
 mock.module('../constants/fonts', () => ({
