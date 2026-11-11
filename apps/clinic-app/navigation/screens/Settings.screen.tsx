@@ -496,6 +496,14 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     );
   };
 
+    const handleSettingsUpdated = useCallback(
+    async (updated: ClinicSettingsRecord) => {
+      setSettings(updated);
+      await refreshClinic();
+    },
+    [refreshClinic]
+  );
+
   const showSkeletons = loading && !refreshing;
 
   // Build all 14 categorized sections respecting RBAC authority (omitting 0/fallback badges while loading)
@@ -627,7 +635,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           setEnableDentalModule={setEnableDentalModule}
           cashierMode={cashierMode}
           setCashierMode={setCashierMode}
-          onSettingsUpdated={setSettings}
+          onSettingsUpdated={handleSettingsUpdated}
         />
       );
     }
@@ -673,7 +681,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             settings={settings}
             showSkeletons={showSkeletons}
             settingsLoadError={settingsLoadError}
-            onSettingsUpdated={setSettings}
+            onSettingsUpdated={handleSettingsUpdated}
             onRefreshSettings={async () => {
               const [fresh] = await clinicService.getSettings();
               if (fresh) setSettings(fresh);
@@ -765,7 +773,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             clinicName={clinicName}
             settings={settings}
             onSettingsUpdated={(updated) => {
-              setSettings(updated);
+              void handleSettingsUpdated(updated);
               if (updated.accreditationNumber !== undefined) {
                 setAccreditationNumber(updated.accreditationNumber || '');
               }

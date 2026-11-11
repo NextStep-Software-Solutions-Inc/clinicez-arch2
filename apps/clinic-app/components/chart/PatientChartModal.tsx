@@ -86,17 +86,25 @@ export default function PatientChartModal({
 
   const availableTabs = useMemo(() => {
     if (availableTabsProp) return availableTabsProp;
+    const hasDentalRecords = Boolean(
+      (patientChart?.dentalTeeth && patientChart.dentalTeeth.length > 0) ||
+      (patientChart?.dentalChart?.teeth && patientChart.dentalChart.teeth.length > 0)
+    );
     const isDentalEnabled = Boolean(
       settings?.enableDentalModule ||
       settings?.specialtyMode === 'Dental' ||
-      (patientChart?.dentalTeeth && patientChart.dentalTeeth.length > 0) ||
-      (patientChart?.dentalChart?.teeth && patientChart.dentalChart.teeth.length > 0) ||
-      focusToothNumber ||
-      activeTabProp === 'dental' ||
-      initialTab === 'dental'
+      hasDentalRecords ||
+      focusToothNumber
     );
     return getAvailableChartTabs(isDentalEnabled);
-  }, [availableTabsProp, settings?.enableDentalModule, settings?.specialtyMode, patientChart?.dentalTeeth, patientChart?.dentalChart, focusToothNumber, activeTabProp, initialTab]);
+  }, [
+    availableTabsProp,
+    settings?.enableDentalModule,
+    settings?.specialtyMode,
+    patientChart?.dentalTeeth,
+    patientChart?.dentalChart,
+    focusToothNumber,
+  ]);
 
   const defaultInitialTab: ChartTab = activeTabProp || (focusToothNumber ? 'dental' : initialTab);
   const [internalTab, setInternalTab] = useState<ChartTab>(defaultInitialTab);
@@ -214,12 +222,23 @@ export default function PatientChartModal({
     () => (patientChart ? reconcileChartWithPatient(patientChart, displayPatient) : patientChart),
     [patientChart, displayPatient],
   );
-  const activeTab = activeTabProp ?? internalTab;
+  const rawActiveTab = activeTabProp ?? internalTab;
 
   const allowedTabIds = useMemo(
     () => availableTabs.map((t) => t.value),
     [availableTabs],
   );
+
+  const isTabAvailable = allowedTabIds.includes(rawActiveTab);
+  const activeTab: ChartTab = isTabAvailable ? rawActiveTab : 'summary';
+
+  useEffect(() => {
+    if (visible && allowedTabIds.length > 0 && !isTabAvailable) {
+      setInternalTab('summary');
+      onTabChange?.('summary');
+    }
+  }, [visible, allowedTabIds, isTabAvailable, onTabChange]);
+
   const { previousTab } = useMemo(
     () => popChartTabHistory(tabHistory, allowedTabIds),
     [tabHistory, allowedTabIds],
