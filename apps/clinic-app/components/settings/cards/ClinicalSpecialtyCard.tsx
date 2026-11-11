@@ -9,6 +9,7 @@ import { SkeletonList } from '../../ui/Skeleton';
 import { ToggleSwitch } from '../FacilityReadinessTab';
 import { theme } from '../../../constants/theme';
 import { clinicService, type ClinicSettingsRecord } from '../../../services/clinicService';
+import { useClinic } from '../../../context/ClinicContext';
 import { notify } from '../../../utils/feedback';
 
 export type ClinicSpecialtyMode = 'Medical' | 'Dental' | 'Multi-Specialty';
@@ -90,6 +91,7 @@ export default function ClinicalSpecialtyCard({
   showSkeletons,
   onSettingsUpdated,
 }: ClinicalSpecialtyCardProps) {
+  const { refresh: refreshClinic } = useClinic();
   const [internalSpecialty, setInternalSpecialty] = useState<ClinicSpecialtyMode>(() => {
     if (specialtyMode) return specialtyMode;
     return normalizeSpecialtyMode(settings?.specialtyMode);
@@ -161,6 +163,7 @@ export default function ClinicalSpecialtyCard({
     }
     notify.success('Clinic specialty settings saved.');
     onSettingsUpdated?.(updated);
+    await refreshClinic();
   };
 
   return (

@@ -1259,7 +1259,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setSelectedPatient(null);
     setChartQueueItemId(null);
     setFocusToothNumber(undefined);
+    setActiveChartTab('summary');
     setSessionItem('clinicez_active_patient_id', null);
+    setSessionItem('clinicez_active_chart_tab', null);
     if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
       try {
         const url = new URL(window.location.href);
