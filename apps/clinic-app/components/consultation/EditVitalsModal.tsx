@@ -151,8 +151,8 @@ export default function EditVitalsModal({
 
   // Live BMI calculation
   const bmiEval = useMemo(
-    () => evaluateBmi(form.height, form.weight, form.bodyLength, cohort.isInfant),
-    [form.height, form.bodyLength, form.weight, cohort.isInfant]
+    () => evaluateBmi(form.height, form.weight, form.bodyLength, cohort.isInfant, cohort.isPediatric),
+    [form.height, form.bodyLength, form.weight, cohort.isInfant, cohort.isPediatric]
   );
 
   // Live Adult Sex-Differentiated Central Obesity & WHR Risk Evaluation
