@@ -308,15 +308,20 @@ export default function DiagnosticLabTab({
             style={styles.orderDiagnosticBtn}
           />
         ) : isDoctor && (user ? hasLabOrdersWrite : true) && !hasPrcLicense ? (
-          <View
+          <Pressable
             testID="order-diagnostic-prc-required"
+            accessibilityRole="button"
+            accessibilityLabel="PRC License Required to order diagnostics"
+            onPress={() => {
+              notify.warning('Physicians must have a registered PRC license number on file to issue diagnostic orders.');
+            }}
             style={styles.orderDiagnosticBtn_disabled}
           >
             <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
             <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.emergencyText}>
               PRC License Required
             </ThemedText>
-          </View>
+          </Pressable>
         ) : null}
       </View>
 
