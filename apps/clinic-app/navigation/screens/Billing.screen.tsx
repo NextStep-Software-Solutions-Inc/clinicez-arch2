@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -28,6 +28,10 @@ import {
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import PatientSearchResultRow, {
+  parseConfiguredSearchFields,
+} from '../../components/patient/PatientSearchResultRow';
+import type { ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { useStaff } from '../../context/StaffContext';
 import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
@@ -165,7 +169,7 @@ export default function BillingScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= theme.breakpoints.desktop;
 
-  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead } = useClinic();
+  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, settings } = useClinic();
   const { current: currentStaff, currentName } = useStaff();
 
   const [billingMode, setBillingMode] = useState<BillingMode>('queue');
@@ -180,6 +184,21 @@ export default function BillingScreen() {
   const [patients, setPatients] = useState<BillingPatient[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [clinicSettings, setClinicSettings] = useState<ClinicSettingsRecord | null>(null);
+  const [customFieldDefs, setCustomFieldDefs] = useState<ClinicCustomFieldDefinition[]>([]);
+
+  useEffect(() => {
+    clinicService.getCustomFields('ClinicPatient').then(([defs]) => {
+      if (defs) setCustomFieldDefs(defs);
+    });
+  }, []);
+
+  const configuredSearchFields = useMemo(
+    () =>
+      parseConfiguredSearchFields(
+        settings?.patientSearchDisplayFieldsJson ?? clinicSettings?.patientSearchDisplayFieldsJson
+      ),
+    [settings?.patientSearchDisplayFieldsJson, clinicSettings?.patientSearchDisplayFieldsJson]
+  );
   const [selectedPatient, setSelectedPatient] = useState<BillingPatient | null>(null);
   const [activeInvoice, setActiveInvoice] = useState<InvoiceRecord | null>(null);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -2408,7 +2427,6 @@ export default function BillingScreen() {
               >
                 {registryResults.map((patient) => {
                   const isSelected = selectedPatient?.patientId === patient.id;
-                  const displayName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
                   const openInv = invoices.find(
                     (inv) => inv.patientId === patient.id && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
                   );
@@ -2416,46 +2434,37 @@ export default function BillingScreen() {
                   const inQueue = patients.find((p) => p.patientId === patient.id && !p.isAlreadyBilled);
 
                   return (
-                    <Pressable
+                    <PatientSearchResultRow
                       key={patient.id}
-                      onPress={() => handleSelectRegistryPatient(patient)}
-                      style={({ pressed }) => [
-                        styles.registryResultItem,
-                        pressed && styles.registryResultItemPressed,
-                        isSelected && styles.registryResultItemSelected,
-                      ]}
-                    >
-                      <View style={styles.flexFill}>
-                        <View style={styles.registryResultHeader}>
-                          <ThemedText variant="bodyBold" color={theme.colors.text}>
-                            {displayName}
-                          </ThemedText>
-                          {patient.patientCode && <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />}
-                          {patient.philHealthNumber && <Badge label="PhilHealth" variant="success" size="sm" />}
-                          {patient.seniorCitizenId && <Badge label="Senior" variant="warning" size="sm" />}
-                          {patient.pwdId && <Badge label="PWD" variant="info" size="sm" />}
-                          {openInv && (
+                      patient={patient}
+                      configuredFieldKeys={configuredSearchFields}
+                      customFieldDefs={customFieldDefs}
+                      selected={isSelected}
+                      extraBadges={
+                        <>
+                          {patient.seniorCitizenId ? <Badge label="Senior" variant="warning" size="sm" /> : null}
+                          {patient.pwdId ? <Badge label="PWD" variant="info" size="sm" /> : null}
+                          {openInv ? (
                             <Badge
                               label={`Open SOA · ${formatPeso(openInv.balanceDue ?? openInv.netAmount)}`}
                               variant="emergency"
                               size="sm"
                             />
-                          )}
-                          {paidInv && !openInv && <Badge label="Paid Today" variant="neutral" size="sm" />}
-                          {inQueue?.queueNumber && <Badge label={`Queue #${inQueue.queueNumber}`} variant="info" size="sm" />}
-                        </View>
-                        <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          DOB: {patient.dateOfBirth || 'N/A'} • Contact: {patient.contactNumber || 'N/A'}
-                          {patient.philHealthNumber ? ` • PIN: ${patient.philHealthNumber}` : ''}
-                        </ThemedText>
-                      </View>
-                      <Button
-                        size="sm"
-                        variant={isSelected ? 'primary' : 'outline'}
-                        title={isSelected ? 'Selected' : 'Load SOA / Bill'}
-                        onPress={() => handleSelectRegistryPatient(patient)}
-                      />
-                    </Pressable>
+                          ) : null}
+                          {paidInv && !openInv ? <Badge label="Paid Today" variant="neutral" size="sm" /> : null}
+                          {inQueue?.queueNumber ? <Badge label={`Queue #${inQueue.queueNumber}`} variant="info" size="sm" /> : null}
+                        </>
+                      }
+                      rightAction={
+                        <Button
+                          size="sm"
+                          variant={isSelected ? 'primary' : 'outline'}
+                          title={isSelected ? 'Selected' : 'Load SOA / Bill'}
+                          onPress={() => handleSelectRegistryPatient(patient)}
+                        />
+                      }
+                      onPress={() => handleSelectRegistryPatient(patient)}
+                    />
                   );
                 })}
               </ScrollView>

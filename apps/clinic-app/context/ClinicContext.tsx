@@ -96,6 +96,8 @@ export interface ClinicContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   refreshRooms: () => Promise<void>;
+  /** Synchronously update in-memory clinic settings across all subscribed workstations. */
+  updateSettings: (settings: ClinicSettingsRecord) => void;
 }
 
 const EMPTY_LETTERHEAD: Letterhead = { header: '', subHeader: '', address: '', contact: '', footer: '' };
@@ -132,6 +134,7 @@ export const ClinicContext = createContext<ClinicContextValue>({
   error: null,
   refresh: async () => {},
   refreshRooms: async () => {},
+  updateSettings: () => {},
 });
 
 export const useClinic = (): ClinicContextValue => {
@@ -180,6 +183,10 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     if (Array.isArray(roomsData)) {
       setRooms(roomsData);
     }
+  }, []);
+
+  const updateSettings = useCallback((updated: ClinicSettingsRecord) => {
+    setSettings(updated);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -450,6 +457,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       error,
       refresh,
       refreshRooms,
+      updateSettings,
     }),
     [
       settings,
@@ -473,6 +481,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       error,
       refresh,
       refreshRooms,
+      updateSettings,
     ],
   );
 
