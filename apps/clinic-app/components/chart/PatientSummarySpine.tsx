@@ -92,8 +92,52 @@ export function evaluateHeartRate(hr?: number): VitalsThresholdResult {
   return { level: 'routine', label: 'Normal', isAbnormal: false };
 }
 
-export function evaluateRespiratoryRate(rr?: number): VitalsThresholdResult {
-  if (!rr) return { level: 'routine', label: '—', isAbnormal: false };
+export function evaluateRespiratoryRate(rr?: number, ageYears?: number): VitalsThresholdResult {
+  if (!rr || rr <= 0) return { level: 'routine', label: '—', isAbnormal: false };
+
+  // Pediatric cohort evaluation (< 18 years)
+  if (ageYears !== undefined && ageYears !== null && ageYears >= 0 && ageYears < 18) {
+    if (ageYears < 1) {
+      // Infant (< 1 year): Normal 30–60
+      if (rr > 70) return { level: 'emergency', label: 'Severe Tachypnea', isAbnormal: true };
+      if (rr > 60) return { level: 'urgent', label: 'Tachypnea', isAbnormal: true };
+      if (rr < 20) return { level: 'emergency', label: 'Severe Bradypnea', isAbnormal: true };
+      if (rr < 30) return { level: 'urgent', label: 'Bradypnea', isAbnormal: true };
+      return { level: 'routine', label: 'Normal', isAbnormal: false };
+    }
+    if (ageYears < 3) {
+      // Toddler (1–2 years): Normal 24–40
+      if (rr > 50) return { level: 'emergency', label: 'Severe Tachypnea', isAbnormal: true };
+      if (rr > 40) return { level: 'urgent', label: 'Tachypnea', isAbnormal: true };
+      if (rr < 15) return { level: 'emergency', label: 'Severe Bradypnea', isAbnormal: true };
+      if (rr < 24) return { level: 'urgent', label: 'Bradypnea', isAbnormal: true };
+      return { level: 'routine', label: 'Normal', isAbnormal: false };
+    }
+    if (ageYears <= 5) {
+      // Preschool (3–5 years): Normal 20–30
+      if (rr > 40) return { level: 'emergency', label: 'Severe Tachypnea', isAbnormal: true };
+      if (rr > 30) return { level: 'urgent', label: 'Tachypnea', isAbnormal: true };
+      if (rr < 12) return { level: 'emergency', label: 'Severe Bradypnea', isAbnormal: true };
+      if (rr < 20) return { level: 'urgent', label: 'Bradypnea', isAbnormal: true };
+      return { level: 'routine', label: 'Normal', isAbnormal: false };
+    }
+    if (ageYears <= 12) {
+      // School-age (6–12 years): Normal 18–25
+      if (rr > 35) return { level: 'emergency', label: 'Severe Tachypnea', isAbnormal: true };
+      if (rr > 25) return { level: 'urgent', label: 'Tachypnea', isAbnormal: true };
+      if (rr < 10) return { level: 'emergency', label: 'Severe Bradypnea', isAbnormal: true };
+      if (rr < 18) return { level: 'urgent', label: 'Bradypnea', isAbnormal: true };
+      return { level: 'routine', label: 'Normal', isAbnormal: false };
+    }
+    // Adolescent (13–17 years): Normal 12–20
+    if (rr > 28) return { level: 'emergency', label: 'Severe Tachypnea', isAbnormal: true };
+    if (rr > 20) return { level: 'urgent', label: 'Tachypnea', isAbnormal: true };
+    if (rr < 8) return { level: 'emergency', label: 'Severe Bradypnea', isAbnormal: true };
+    if (rr < 12) return { level: 'urgent', label: 'Bradypnea', isAbnormal: true };
+    return { level: 'routine', label: 'Normal', isAbnormal: false };
+  }
+
+  // Adult thresholds (>= 18 years, or undefined/unspecified age)
   if (rr > 28) return { level: 'emergency', label: 'Severe Tachypnea', isAbnormal: true };
   if (rr > 20) return { level: 'urgent', label: 'Tachypnea', isAbnormal: true };
   if (rr < 8) return { level: 'emergency', label: 'Severe Bradypnea', isAbnormal: true };
@@ -469,6 +513,17 @@ export default function PatientSummarySpine({
     }
     return Math.max(0, yrs);
   }, [dob]);
+  const derivedAgeMonthsFromDob = useMemo(() => {
+    if (!dob) return undefined;
+    const parsed = new Date(dob);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    const now = new Date();
+    let m = (now.getFullYear() - parsed.getFullYear()) * 12 + now.getMonth() - parsed.getMonth();
+    if (now.getDate() < parsed.getDate()) {
+      m -= 1;
+    }
+    return Math.max(0, m);
+  }, [dob]);
   const rawAge =
     demoProp?.age ??
     (hasLoadedPatient ? patient?.age : undefined) ??
@@ -546,12 +601,23 @@ export default function PatientSummarySpine({
 
   const bpEval = evaluateBloodPressure(latestVitals?.systolicBp, latestVitals?.diastolicBp);
   const hrEval = evaluateHeartRate(hrValue);
-  const rrEval = evaluateRespiratoryRate(rrValue);
+  const rrEval = evaluateRespiratoryRate(rrValue, hasKnownAge ? age : undefined);
   const tempEval = evaluateTemperature(tempValue);
   const spo2Eval = evaluateOxygenSat(spo2Value);
 
   // Pediatric check (Under 19 years old when age is known, or explicit WHO Z-score recorded)
   const isPediatric = (hasKnownAge && age < 19) || Boolean(latestVitals?.zScoreWeightForAge);
+
+  const hasZScores = Boolean(
+    latestVitals?.zScoreWeightForAge != null ||
+    latestVitals?.zScoreLengthForAge != null ||
+    latestVitals?.zScoreWeightForLength != null ||
+    latestVitals?.philHealthZScoreCategory
+  );
+
+  const isPost60Months =
+    (derivedAgeMonthsFromDob !== undefined && derivedAgeMonthsFromDob > 60) ||
+    (hasKnownAge && age >= 5 && derivedAgeMonthsFromDob === undefined);
 
   // Red Alerts (Zone 4: Anaphylaxis, Fall Risk, Pregnancy)
   const redAlerts = useMemo(() => {
@@ -1135,52 +1201,71 @@ export default function PatientSummarySpine({
             )}
 
             {/* WHO Pediatric Z-Scores Sub-Strip (Children < 19 yrs) */}
-            {isPediatric && latestVitals ? (
+            {isPediatric && latestVitals && (hasZScores || isPost60Months) ? (
               <View style={styles.pediatricBox}>
                 <View style={styles.pediatricTitleRow}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
                     <Icon name="baby" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
                     <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      WHO Pediatric Anthropometrics & Z-Scores
+                      {hasZScores
+                        ? 'WHO Pediatric Anthropometrics & Z-Scores'
+                        : 'WHO Pediatric Anthropometrics'}
                     </ThemedText>
                   </View>
-                  {latestVitals.philHealthZScoreCategory ? (
+                  {hasZScores && latestVitals.philHealthZScoreCategory ? (
                     <Badge
                       label={latestVitals.philHealthZScoreCategory}
                       variant={evaluateZScoreCategory(latestVitals.philHealthZScoreCategory)}
                       size="sm"
                     />
+                  ) : isPost60Months ? (
+                    <Badge
+                      label="WHO Under-5 curves apply to ≤60 months"
+                      variant="neutral"
+                      size="sm"
+                    />
                   ) : null}
                 </View>
 
-                <View style={styles.pediatricPillsRow}>
-                  <View style={styles.pediatricPill}>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>WAZ (Weight-for-Age):</ThemedText>
-                    <ThemedText variant="captionBold" color={theme.colors.text}>
-                      {latestVitals.zScoreWeightForAge != null ? `${latestVitals.zScoreWeightForAge} SD` : '—'}
-                    </ThemedText>
+                {hasZScores ? (
+                  <View style={styles.pediatricPillsRow}>
+                    <View style={styles.pediatricPill}>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>WAZ (Weight-for-Age):</ThemedText>
+                      <ThemedText variant="captionBold" color={theme.colors.text}>
+                        {latestVitals.zScoreWeightForAge != null ? `${latestVitals.zScoreWeightForAge} SD` : '—'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.pediatricPill}>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>HAZ (Height-for-Age):</ThemedText>
+                      <ThemedText variant="captionBold" color={theme.colors.text}>
+                        {latestVitals.zScoreLengthForAge != null ? `${latestVitals.zScoreLengthForAge} SD` : '—'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.pediatricPill}>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>WHZ (Weight-for-Height):</ThemedText>
+                      <ThemedText variant="captionBold" color={theme.colors.text}>
+                        {latestVitals.zScoreWeightForLength != null ? `${latestVitals.zScoreWeightForLength} SD` : '—'}
+                      </ThemedText>
+                    </View>
+                    {latestVitals.headCircumferenceCm ? (
+                      <View style={styles.pediatricPill}>
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>Head Circ:</ThemedText>
+                        <ThemedText variant="captionBold" color={theme.colors.text}>
+                          {latestVitals.headCircumferenceCm} cm
+                        </ThemedText>
+                      </View>
+                    ) : null}
                   </View>
-                  <View style={styles.pediatricPill}>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>HAZ (Height-for-Age):</ThemedText>
-                    <ThemedText variant="captionBold" color={theme.colors.text}>
-                      {latestVitals.zScoreLengthForAge != null ? `${latestVitals.zScoreLengthForAge} SD` : '—'}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.pediatricPill}>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>WHZ (Weight-for-Height):</ThemedText>
-                    <ThemedText variant="captionBold" color={theme.colors.text}>
-                      {latestVitals.zScoreWeightForLength != null ? `${latestVitals.zScoreWeightForLength} SD` : '—'}
-                    </ThemedText>
-                  </View>
-                  {latestVitals.headCircumferenceCm ? (
+                ) : latestVitals.headCircumferenceCm ? (
+                  <View style={styles.pediatricPillsRow}>
                     <View style={styles.pediatricPill}>
                       <ThemedText variant="caption" color={theme.colors.textSecondary}>Head Circ:</ThemedText>
                       <ThemedText variant="captionBold" color={theme.colors.text}>
                         {latestVitals.headCircumferenceCm} cm
                       </ThemedText>
                     </View>
-                  ) : null}
-                </View>
+                  </View>
+                ) : null}
               </View>
             ) : null}
           </View>

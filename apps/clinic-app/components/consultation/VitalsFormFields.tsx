@@ -162,14 +162,15 @@ export interface BmiEvaluation {
   category: {
     label: string;
     variant: 'success' | 'warning' | 'emergency';
-  };
+  } | null;
 }
 
 export function evaluateBmi(
   heightStr: string,
   weightStr: string,
   bodyLengthStr?: string,
-  isInfant?: boolean
+  isInfant?: boolean,
+  isPediatric?: boolean
 ): BmiEvaluation | null {
   const effectiveHeight = isInfant
     ? parseOptionalFloat(bodyLengthStr || '') || parseOptionalFloat(heightStr)
@@ -178,6 +179,12 @@ export function evaluateBmi(
   if (effectiveHeight && w && effectiveHeight > 0) {
     const heightM = effectiveHeight / 100;
     const bmi = Math.round((w / (heightM * heightM)) * 10) / 10;
+
+    // Adult cutoffs (<18.5 Underweight, >25 Overweight, >30 Obese) MUST NOT be applied to pediatric patients.
+    if (isPediatric) {
+      return { bmi, category: null };
+    }
+
     let label = 'Normal weight';
     let variant: 'success' | 'warning' | 'emergency' = 'success';
     if (bmi < 18.5) {
@@ -512,8 +519,12 @@ export function AnthropometricsSection({
               ? 'Under-5 Anthropometrics & Growth'
               : 'Anthropometrics & Body Composition'}
         </ThemedText>
-        {calculatedBmi && bmiCategory && !cohort.isInfant ? (
-          <Badge label={`BMI: ${calculatedBmi} (${bmiCategory.label})`} variant={bmiCategory.variant} size="sm" />
+        {calculatedBmi && !cohort.isInfant ? (
+          <Badge
+            label={bmiCategory ? `BMI: ${calculatedBmi} (${bmiCategory.label})` : `BMI: ${calculatedBmi}`}
+            variant={bmiCategory?.variant ?? 'routine'}
+            size="sm"
+          />
         ) : null}
       </View>
 
