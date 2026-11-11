@@ -28,9 +28,11 @@ import {
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
-import PatientSearchResultRow, {
+import {
   parseConfiguredSearchFields,
 } from '../../components/patient/PatientSearchResultRow';
+import { computePatientLocation } from '../../utils/patientLocation';
+// PatientSearchResultRow-aligned search display field configuration
 import type { ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { useStaff } from '../../context/StaffContext';
 import { openDocument, openDocumentBlob } from '../../services/documentOpener';
@@ -2427,44 +2429,105 @@ export default function BillingScreen() {
               >
                 {registryResults.map((patient) => {
                   const isSelected = selectedPatient?.patientId === patient.id;
+                  const displayName =
+                    patient.fullName || `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unnamed Patient';
                   const openInv = invoices.find(
                     (inv) => inv.patientId === patient.id && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
                   );
                   const paidInv = invoices.find((inv) => inv.patientId === patient.id && inv.status === 'Paid');
                   const inQueue = patients.find((p) => p.patientId === patient.id && !p.isAlreadyBilled);
 
+                  const details: string[] = [];
+                  for (const key of configuredSearchFields) {
+                    switch (key) {
+                      case 'age':
+                        if (patient.age != null) details.push(`${patient.age}y`);
+                        break;
+                      case 'dateOfBirth':
+                        if (patient.dateOfBirth) details.push(`DOB: ${patient.dateOfBirth}`);
+                        break;
+                      case 'sex':
+                      case 'gender': {
+                        const sex = patient.sex || (patient as any).gender;
+                        if (sex) details.push(sex);
+                        break;
+                      }
+                      case 'contactNumber':
+                        if (patient.contactNumber) details.push(patient.contactNumber);
+                        break;
+                      case 'philHealthNumber':
+                        if (patient.philHealthNumber) details.push(`PIN: ${patient.philHealthNumber}`);
+                        break;
+                      case 'bloodType':
+                        if (patient.bloodType) details.push(`Blood: ${patient.bloodType}`);
+                        break;
+                      case 'civilStatus':
+                        if (patient.civilStatus) details.push(patient.civilStatus);
+                        break;
+                      case 'barangay': {
+                        const loc = computePatientLocation(patient);
+                        if (loc) details.push(loc);
+                        break;
+                      }
+                      case 'patientCode':
+                        // Handled in header badge cluster when configured
+                        break;
+                      default: {
+                        const customDef = customFieldDefs.find((d) => d.fieldKey === key || `meta:${d.fieldKey}` === key);
+                        const actualKey = key.startsWith('meta:') ? key.slice(5) : key;
+                        const rawVal = patient.customFields?.[actualKey];
+                        if (rawVal != null && String(rawVal).trim() !== '') {
+                          details.push(`${customDef?.label || actualKey}: ${String(rawVal)}`);
+                        }
+                        break;
+                      }
+                    }
+                  }
+
                   return (
-                    <PatientSearchResultRow
+                    <Pressable
                       key={patient.id}
-                      patient={patient}
-                      configuredFieldKeys={configuredSearchFields}
-                      customFieldDefs={customFieldDefs}
-                      selected={isSelected}
-                      extraBadges={
-                        <>
-                          {patient.seniorCitizenId ? <Badge label="Senior" variant="warning" size="sm" /> : null}
-                          {patient.pwdId ? <Badge label="PWD" variant="info" size="sm" /> : null}
-                          {openInv ? (
+                      onPress={() => handleSelectRegistryPatient(patient)}
+                      style={({ pressed }) => [
+                        styles.registryResultItem,
+                        pressed && styles.registryResultItemPressed,
+                        isSelected && styles.registryResultItemSelected,
+                      ]}
+                    >
+                      <View style={styles.flexFill}>
+                        <View style={styles.registryResultHeader}>
+                          <ThemedText variant="bodyBold" color={theme.colors.text}>
+                            {displayName}
+                          </ThemedText>
+                          {configuredSearchFields.includes('patientCode') && patient.patientCode && (
+                            <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />
+                          )}
+                          {configuredSearchFields.includes('philHealthNumber') && patient.philHealthNumber && <Badge label="PhilHealth" variant="success" size="sm" />}
+                          {patient.seniorCitizenId && <Badge label="Senior" variant="warning" size="sm" />}
+                          {patient.pwdId && <Badge label="PWD" variant="info" size="sm" />}
+                          {openInv && (
                             <Badge
                               label={`Open SOA · ${formatPeso(openInv.balanceDue ?? openInv.netAmount)}`}
                               variant="emergency"
                               size="sm"
                             />
-                          ) : null}
-                          {paidInv && !openInv ? <Badge label="Paid Today" variant="neutral" size="sm" /> : null}
-                          {inQueue?.queueNumber ? <Badge label={`Queue #${inQueue.queueNumber}`} variant="info" size="sm" /> : null}
-                        </>
-                      }
-                      rightAction={
-                        <Button
-                          size="sm"
-                          variant={isSelected ? 'primary' : 'outline'}
-                          title={isSelected ? 'Selected' : 'Load SOA / Bill'}
-                          onPress={() => handleSelectRegistryPatient(patient)}
-                        />
-                      }
-                      onPress={() => handleSelectRegistryPatient(patient)}
-                    />
+                          )}
+                          {paidInv && !openInv && <Badge label="Paid Today" variant="neutral" size="sm" />}
+                          {inQueue?.queueNumber && <Badge label={`Queue #${inQueue.queueNumber}`} variant="info" size="sm" />}
+                        </View>
+                        {details.length > 0 && (
+                          <ThemedText variant="caption" color={theme.colors.textMuted}>
+                            {details.join(' • ')}
+                          </ThemedText>
+                        )}
+                      </View>
+                      <Button
+                        size="sm"
+                        variant={isSelected ? 'primary' : 'outline'}
+                        title={isSelected ? 'Selected' : 'Load SOA / Bill'}
+                        onPress={() => handleSelectRegistryPatient(patient)}
+                      />
+                    </Pressable>
                   );
                 })}
               </ScrollView>
