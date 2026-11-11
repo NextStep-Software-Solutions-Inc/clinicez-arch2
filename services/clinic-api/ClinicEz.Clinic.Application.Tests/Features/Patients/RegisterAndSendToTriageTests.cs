@@ -264,4 +264,316 @@ public class RegisterAndSendToTriageTests
         queueItem.RoomId.Should().Be(roomId);
         queueItem.RoomOrStation.Should().Be("Exam Room 1");
     }
+
+    [Fact]
+    public async Task Handle_SendToTriageTrue_SeniorCitizenByAge_GeneratesPriorityTicketSQ001()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, queueRepo: queueRepo);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var seniorDob = today.AddYears(-72); // 72 years old
+
+        var command = new RegisterClinicPatientCommand(
+            FirstName: "Eduardo",
+            LastName: "Dela Cruz",
+            MiddleName: "Santos",
+            Suffix: "Sr.",
+            DateOfBirth: seniorDob,
+            Sex: "Male",
+            CivilStatus: "Married",
+            ContactNumber: "+639171234567",
+            Email: null,
+            AddressLine: "123 Mabini St",
+            Barangay: "Barangay 1",
+            City: "Manila",
+            Province: "Metro Manila",
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            SendToTriage: true,
+            Priority: "Routine",
+            ChiefComplaint: "Routine check-up",
+            QueueDate: today
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ActiveQueueTicket.Should().Be("SQ-001");
+        result.ActiveQueueItemId.Should().NotBeNull();
+
+        var queueItem = await queueRepo.Query(q => q.Id == result.ActiveQueueItemId!.Value).FirstOrDefaultAsync();
+        queueItem.Should().NotBeNull();
+        queueItem!.QueueNumber.Should().Be("SQ-001");
+        queueItem.SequenceNumber.Should().Be(1);
+        queueItem.Status.Should().Be(QueueStatus.Waiting);
+    }
+
+    [Fact]
+    public async Task Handle_SendToTriageTrue_SeniorCitizenById_GeneratesPriorityTicketSQ001()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, queueRepo: queueRepo);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var nonSeniorDob = today.AddYears(-45); // 45 years old, but with OSCA Senior ID
+
+        var command = new RegisterClinicPatientCommand(
+            FirstName: "Carlos",
+            LastName: "Tan",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: nonSeniorDob,
+            Sex: "Male",
+            CivilStatus: null,
+            ContactNumber: "09171112233",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: "OSCA-MNL-2014-9982",
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            SendToTriage: true,
+            Priority: "Routine",
+            ChiefComplaint: "Consultation",
+            QueueDate: today
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ActiveQueueTicket.Should().Be("SQ-001");
+        var queueItem = await queueRepo.Query(q => q.Id == result.ActiveQueueItemId!.Value).FirstOrDefaultAsync();
+        queueItem.Should().NotBeNull();
+        queueItem!.QueueNumber.Should().Be("SQ-001");
+    }
+
+    [Fact]
+    public async Task Handle_SendToTriageTrue_PwdById_GeneratesPriorityTicketSQ001()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, queueRepo: queueRepo);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var youngDob = today.AddYears(-25); // 25 years old with PWD ID
+
+        var command = new RegisterClinicPatientCommand(
+            FirstName: "Maria",
+            LastName: "Santos",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: youngDob,
+            Sex: "Female",
+            CivilStatus: null,
+            ContactNumber: "09174445566",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: "PWD-MNL-2024-5555",
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            SendToTriage: true,
+            Priority: "Routine",
+            ChiefComplaint: "PWD Consultation",
+            QueueDate: today
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ActiveQueueTicket.Should().Be("SQ-001");
+        var queueItem = await queueRepo.Query(q => q.Id == result.ActiveQueueItemId!.Value).FirstOrDefaultAsync();
+        queueItem.Should().NotBeNull();
+        queueItem!.QueueNumber.Should().Be("SQ-001");
+    }
+
+    [Fact]
+    public async Task Handle_SendToTriageTrue_InterleavedSeries_SequenceIsolation()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, queueRepo: queueRepo);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Pre-seed tickets in other series: Q-001, Q-002, A-001, DV-001 (total 4 tickets across clinic)
+        await queueRepo.AddAsync(new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            QueueNumber = "Q-001",
+            SequenceNumber = 1,
+            QueueDate = today,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Regular Pat 1"
+        });
+        await queueRepo.AddAsync(new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            QueueNumber = "Q-002",
+            SequenceNumber = 2,
+            QueueDate = today,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Regular Pat 2"
+        });
+        await queueRepo.AddAsync(new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            QueueNumber = "A-001",
+            SequenceNumber = 1,
+            QueueDate = today,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Admin Pat 1"
+        });
+        await queueRepo.AddAsync(new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            QueueNumber = "DV-001",
+            SequenceNumber = 1,
+            QueueDate = today,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Direct Visit Pat 1"
+        });
+        await uow.SaveChangesAsync();
+
+        // Act 1: Register Senior patient (DOB 70 years ago) -> sequence MUST isolate to SQ-001 (not SQ-005 or Q-003)
+        var seniorCommand1 = new RegisterClinicPatientCommand(
+            FirstName: "Lola",
+            LastName: "Remedios",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: today.AddYears(-70),
+            Sex: "Female",
+            CivilStatus: null,
+            ContactNumber: "09170001111",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            SendToTriage: true,
+            QueueDate: today
+        );
+        var seniorResult1 = await handler.Handle(seniorCommand1, CancellationToken.None);
+        seniorResult1.ActiveQueueTicket.Should().Be("SQ-001");
+
+        // Act 2: Register second Senior patient -> must be SQ-002
+        var seniorCommand2 = new RegisterClinicPatientCommand(
+            FirstName: "Lolo",
+            LastName: "Domingo",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: today.AddYears(-65),
+            Sex: "Male",
+            CivilStatus: null,
+            ContactNumber: "09170002222",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            SendToTriage: true,
+            QueueDate: today
+        );
+        var seniorResult2 = await handler.Handle(seniorCommand2, CancellationToken.None);
+        seniorResult2.ActiveQueueTicket.Should().Be("SQ-002");
+
+        // Act 3: Register third patient who is NOT senior -> must continue Q series at Q-003
+        var regularCommand = new RegisterClinicPatientCommand(
+            FirstName: "Juan",
+            LastName: "Cruz",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: today.AddYears(-20),
+            Sex: "Male",
+            CivilStatus: null,
+            ContactNumber: "09170003333",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            SendToTriage: true,
+            QueueDate: today
+        );
+        var regularResult = await handler.Handle(regularCommand, CancellationToken.None);
+        regularResult.ActiveQueueTicket.Should().Be("Q-003");
+    }
 }

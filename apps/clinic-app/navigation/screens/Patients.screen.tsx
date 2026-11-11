@@ -925,6 +925,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
       : formAllergies.trim() || undefined;
 
+    const isPrioritySeries = isSeniorOrPwdEligible({
+      dateOfBirth: formDob.trim(),
+      seniorCitizenId: formSeniorId.trim(),
+      pwdId: formPwdId.trim(),
+      customFields,
+    });
+    const seriesPrefix = isPrioritySeries ? 'SQ' : 'Q';
+
     const payload: RegisterPatientPayload = {
       firstName: formFirstName.trim(),
       lastName: formLastName.trim(),
@@ -960,6 +968,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       barangayPsgc: formAddress.barangayPsgc || undefined,
       zipCode: formAddress.zipCode || undefined,
       sendToTriage,
+      seriesPrefix: sendToTriage ? seriesPrefix : undefined,
       priority: sendToTriage ? formTriagePriority : 'Routine',
       chiefComplaint: sendToTriage && formChiefComplaint.trim() ? formChiefComplaint.trim() : undefined,
       doctorId: sendToTriage && formTriageDoctorId ? formTriageDoctorId : undefined,

@@ -1645,6 +1645,36 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(auditSrc).not.toContain('headerSubtitle');
     expect(resultReviewSrc).not.toContain('headerSubtitle');
   });
+
+  test('47. Issue 169: Patient Registration & Appointment Check-In route Priority Series (SQ/SP) for Senior & PWD patients', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const patientsSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+    const appointmentsSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Appointments.screen.tsx'),
+      'utf8'
+    );
+    const serviceSrc = fs.readFileSync(
+      path.resolve(__dirname, '../services/clinicService.ts'),
+      'utf8'
+    );
+
+    // RegisterPatientPayload contains seriesPrefix
+    expect(serviceSrc).toMatch(/export interface RegisterPatientPayload\s*\{[\s\S]*?seriesPrefix\?:\s*string;/);
+
+    // Patients.screen.tsx evaluates isSeniorOrPwdEligible and transmits seriesPrefix
+    expect(patientsSrc).toContain('const isPrioritySeries = isSeniorOrPwdEligible(');
+    expect(patientsSrc).toContain("const seriesPrefix = isPrioritySeries ? 'SQ' : 'Q';");
+    expect(patientsSrc).toContain('seriesPrefix: sendToTriage ? seriesPrefix : undefined,');
+
+    // Appointments.screen.tsx resolves patient priority and transmits seriesPrefix
+    expect(appointmentsSrc).toContain('isSeniorOrPwdEligible');
+    expect(appointmentsSrc).toContain('resolveTicketPrefix');
+    expect(appointmentsSrc).toMatch(/seriesPrefix\s*=\s*resolveTicketPrefix/);
+    expect(appointmentsSrc).toContain('seriesPrefix,');
+  });
 });
-
-
