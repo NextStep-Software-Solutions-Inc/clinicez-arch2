@@ -938,4 +938,104 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(consultSource).toContain('patient-chart-back-btn');
     expect(consultSource).toContain('latestVitalsRecordedMeta');
   });
+
+  test('31. Issue #172: Gating hides Dental Chart tab and clamps to summary when specialtyMode is Medical and patient has no dental teeth, even if initialTab or activeTab="dental" is requested', () => {
+    (globalThis as any).__mockClinicContext = {
+      settings: {
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+      },
+    };
+
+    try {
+      const markup = renderToStaticMarkup(
+        React.createElement(PatientChartModal, {
+          visible: true,
+          patient: mockPatient,
+          patientChart: mockChart,
+          activeTab: 'dental',
+          initialTab: 'dental',
+          onClose: () => {},
+        })
+      );
+
+      // Dental Chart tab should be completely hidden from the segmented control / tabs
+      expect(markup).not.toContain('value="dental"');
+      expect(markup).not.toContain('Dental Chart');
+      // Odontogram visualizer should NOT be rendered
+      expect(markup).not.toContain('Odontogram Visualizer');
+      // Clamps cleanly to summary
+      expect(markup).toContain('aria-label="Summary"');
+      expect(markup).toContain('Recent Diagnostic Lab Orders');
+    } finally {
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('32. Issue #172: Preserves Dental Chart tab when specialtyMode is Medical if patient has persisted longitudinal dental findings', () => {
+    (globalThis as any).__mockClinicContext = {
+      settings: {
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+      },
+    };
+
+    const dentalChartData: PatientChart = {
+      ...mockChart,
+      dentalTeeth: [
+        {
+          id: 'dt-hist-1',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          patientId: 'pat-001',
+          toothNumber: 21,
+          status: 'Restored',
+          surface: 'M',
+          notes: 'Composite restoration',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    try {
+      const markup = renderToStaticMarkup(
+        React.createElement(PatientChartModal, {
+          visible: true,
+          patient: mockPatient,
+          patientChart: dentalChartData,
+          activeTab: 'dental',
+          initialTab: 'dental',
+          onClose: () => {},
+        })
+      );
+
+      // Dental Chart tab should be preserved because patient has persisted dental teeth
+      expect(markup).toContain('Dental Chart');
+      expect(markup).toContain('Odontogram Visualizer');
+      expect(markup).toContain('aria-label="Tooth 21, status Restored"');
+    } finally {
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('33. Issue #172: Tab clamping skips unavailable dental tab when navigating tab history in Medical mode', () => {
+    (globalThis as any).__mockClinicContext = {
+      settings: {
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+      },
+    };
+
+    try {
+      let history: string[] = ['summary', 'diagnostics', 'dental'];
+      // Pop history when dental is unavailable in Medical mode
+      const allowed = ['summary', 'diagnostics', 'vault', 'documents'];
+      const popped = popChartTabHistory(history, allowed);
+      expect(popped.previousTab).toBe('diagnostics');
+      expect(popped.nextHistory).toEqual(['summary']);
+    } finally {
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
 });

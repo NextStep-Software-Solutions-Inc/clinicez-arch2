@@ -522,6 +522,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     );
   };
 
+
   const showSkeletons = loading && !refreshing;
 
   // Build all 14 categorized sections respecting RBAC authority (omitting 0/fallback badges while loading)
