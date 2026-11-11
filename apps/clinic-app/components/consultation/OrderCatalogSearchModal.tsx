@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import {
   Modal,
@@ -126,6 +126,10 @@ export const DENTAL_CLINICAL_INSTRUCTION_CHIPS = [
   'Suture removal 7 days',
 ];
 
+export const EMPTY_STRING_ARRAY: readonly string[] = Object.freeze([]);
+export const EMPTY_EXISTING_ORDERS: readonly ExistingOrderItemContext[] = Object.freeze([]);
+export const EMPTY_ROOMS: readonly ClinicRoom[] = Object.freeze([]);
+
 const IN_HOUSE_RAPID_TEST_REGEX = /fingerstick|ecg|dipstick|rapid|rbs|urinalysis/i;
 
 function getHeuristicFulfillmentMode(item: ClinicServiceItem): FulfillmentMode {
@@ -144,14 +148,14 @@ export function OrderCatalogSearchModal({
   visible,
   onClose,
   catalog,
-  rooms,
+  rooms = EMPTY_ROOMS as ClinicRoom[],
   initialRoomId,
   initialCategory = 'All',
   isYakapEligible = false,
   onSelectOrder,
-  alreadyOrderedNames = [],
-  alreadyOrderedCodes = [],
-  existingOrders = [],
+  alreadyOrderedNames = EMPTY_STRING_ARRAY as string[],
+  alreadyOrderedCodes = EMPTY_STRING_ARRAY as string[],
+  existingOrders = EMPTY_EXISTING_ORDERS as ExistingOrderItemContext[],
   initialToothNumber,
   initialToothSurface,
   initialSelectedItem,
@@ -246,7 +250,7 @@ export function OrderCatalogSearchModal({
       const treatment = clinic.rooms.filter((r) => r.isActive && r.type === 'Treatment');
       return treatment.length > 0 ? treatment : clinic.rooms.filter((r) => r.isActive);
     }
-    return [];
+    return EMPTY_ROOMS as ClinicRoom[];
   }, [rooms, clinic?.rooms]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -261,9 +265,17 @@ export function OrderCatalogSearchModal({
     return initialRoomId || (targetRooms[0]?.id ?? '');
   });
 
-  // Reset form when modal becomes visible or initialCategory changes
+  const prevVisibleRef = useRef(false);
+
+  // Reset form ONLY when transitioning from closed to open (visible becomes true)
   useEffect(() => {
-    if (visible) {
+    if (!visible) {
+      prevVisibleRef.current = false;
+      return;
+    }
+
+    if (!prevVisibleRef.current) {
+      prevVisibleRef.current = true;
       setSearchQuery('');
       setSelectedCategory(resolvedInitialCategory);
       setSelectedItem(initialSelectedItem ?? null);
