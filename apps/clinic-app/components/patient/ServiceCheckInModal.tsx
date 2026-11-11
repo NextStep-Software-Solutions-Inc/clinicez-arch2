@@ -98,7 +98,7 @@ export function calculateAge(dobString?: string | null, referenceDate = new Date
  * Plain clinical rule: Age >= 60 OR valid Senior Citizen ID OR valid PWD ID.
  */
 export function isSeniorOrPwdEligible(
-  patient: Pick<ClinicPatient, 'age' | 'dateOfBirth' | 'seniorCitizenId' | 'pwdId' | 'customFields'> | null | undefined
+  patient: Partial<Pick<ClinicPatient, 'age' | 'dateOfBirth' | 'seniorCitizenId' | 'pwdId' | 'customFields'>> | null | undefined
 ): boolean {
   if (!patient) return false;
   if (patient.seniorCitizenId && patient.seniorCitizenId.trim().length > 0) return true;

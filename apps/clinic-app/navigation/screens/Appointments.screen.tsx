@@ -32,6 +32,8 @@ import PatientSearchResultRow, {
 } from '../../components/patient/PatientSearchResultRow';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
+import { isSeniorOrPwdEligible, resolveTicketPrefix } from '../../components/patient/ServiceCheckInModal';
+import type { ClinicalServiceType } from '../../components/patient/PatientDirectoryCard';
 import {
   clinicService,
   AppointmentItem,
@@ -698,6 +700,14 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     const chosenRoom = checkInRoomId ? activeRooms.find((r) => r.id === checkInRoomId) : undefined;
 
     try {
+      let seriesPrefix: string | undefined = undefined;
+      const [patient] = await clinicService.getPatientById(item.patientId);
+      if (patient) {
+        const isPriority = isSeniorOrPwdEligible(patient);
+        const serviceType = (item.serviceType as ClinicalServiceType) || 'Doctor Consultation';
+        seriesPrefix = resolveTicketPrefix(serviceType, isPriority);
+      }
+
       const isUrgent = item.reason?.toLowerCase().includes('chest') || item.reason?.toLowerCase().includes('pain');
       const [queueItem, err] = await clinicService.checkInPatient({
         patientId: item.patientId,
@@ -710,6 +720,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         priority: isUrgent ? 'Urgent' : 'Routine',
         chiefComplaint: item.reason ?? 'General Consultation',
         queueDate: getManilaTodayStr(),
+        seriesPrefix,
       });
 
       if (err) {

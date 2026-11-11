@@ -733,4 +733,86 @@ describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
     dismissAlert(alert.id);
     expect(getFeedbackState().alerts).toHaveLength(0);
   });
+
+  test('Issue 169: Register & Send to Triage for Senior Citizen patient transmits seriesPrefix: "SQ"', async () => {
+    const payload: RegisterPatientPayload = {
+      firstName: 'Eduardo',
+      lastName: 'Dela Cruz',
+      dateOfBirth: '1954-08-15',
+      sex: 'Male',
+      contactNumber: '0917-123-4567',
+      seniorCitizenId: 'OSCA-MNL-2014-9982',
+      sendToTriage: true,
+      seriesPrefix: 'SQ',
+      priority: 'Routine',
+      chiefComplaint: 'Routine check-up',
+    };
+
+    mockRegisteredPatient = {
+      id: 'patient-uuid-senior-1',
+      tenantId: 'tenant-demo',
+      clinicId: 'clinic-demo',
+      patientCode: 'PAT-2026-01115',
+      firstName: 'Eduardo',
+      lastName: 'Dela Cruz',
+      fullName: 'Dela Cruz, Eduardo',
+      dateOfBirth: '1954-08-15',
+      age: 72,
+      sex: 'Male',
+      contactNumber: '0917-123-4567',
+      seniorCitizenId: 'OSCA-MNL-2014-9982',
+      createdAt: '2026-10-11T12:00:00Z',
+      activeQueueTicket: 'SQ-001',
+      activeQueueItemId: 'queue-uuid-sq-001',
+    };
+
+    const [patient, err] = await clinicService.registerPatient(payload);
+
+    expect(err).toBeNull();
+    expect(patient).toBeDefined();
+    expect(lastPostPayload.sendToTriage).toBe(true);
+    expect(lastPostPayload.seriesPrefix).toBe('SQ');
+    expect(patient?.activeQueueTicket).toBe('SQ-001');
+  });
+
+  test('Issue 169: Register & Send to Triage for PWD patient transmits seriesPrefix: "SQ"', async () => {
+    const payload: RegisterPatientPayload = {
+      firstName: 'Maria',
+      lastName: 'Santos',
+      dateOfBirth: '2001-03-20',
+      sex: 'Female',
+      contactNumber: '0917-999-8888',
+      pwdId: 'PWD-NCR-2024-001',
+      sendToTriage: true,
+      seriesPrefix: 'SQ',
+      priority: 'Routine',
+      chiefComplaint: 'Consultation',
+    };
+
+    mockRegisteredPatient = {
+      id: 'patient-uuid-pwd-1',
+      tenantId: 'tenant-demo',
+      clinicId: 'clinic-demo',
+      patientCode: 'PAT-2026-01116',
+      firstName: 'Maria',
+      lastName: 'Santos',
+      fullName: 'Santos, Maria',
+      dateOfBirth: '2001-03-20',
+      age: 25,
+      sex: 'Female',
+      contactNumber: '0917-999-8888',
+      pwdId: 'PWD-NCR-2024-001',
+      createdAt: '2026-10-11T12:00:00Z',
+      activeQueueTicket: 'SQ-001',
+      activeQueueItemId: 'queue-uuid-sq-002',
+    };
+
+    const [patient, err] = await clinicService.registerPatient(payload);
+
+    expect(err).toBeNull();
+    expect(patient).toBeDefined();
+    expect(lastPostPayload.sendToTriage).toBe(true);
+    expect(lastPostPayload.seriesPrefix).toBe('SQ');
+    expect(patient?.activeQueueTicket).toBe('SQ-001');
+  });
 });

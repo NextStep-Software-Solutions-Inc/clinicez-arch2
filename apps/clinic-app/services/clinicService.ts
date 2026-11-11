@@ -2099,6 +2099,7 @@ export interface RegisterPatientPayload {
   barangayPsgc?: string | null;
   zipCode?: string | null;
   sendToTriage?: boolean;
+  seriesPrefix?: string;
   priority?: 'Routine' | 'Urgent' | 'Emergency' | 'Normal';
   chiefComplaint?: string;
   doctorId?: string;

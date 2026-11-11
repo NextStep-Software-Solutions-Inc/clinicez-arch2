@@ -75,6 +75,13 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
                     .MaximumLength(150).WithMessage("Allergen name cannot exceed 150 characters.");
             });
         });
+
+        When(x => !string.IsNullOrEmpty(x.SeriesPrefix), () =>
+        {
+            RuleFor(x => x.SeriesPrefix!)
+                .MaximumLength(10)
+                .WithMessage("Series prefix must not exceed 10 characters.");
+        });
     }
 
     public static bool BeValidPhilHealthMod11(string pin)

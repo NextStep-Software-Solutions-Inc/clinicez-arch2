@@ -65,7 +65,8 @@ public sealed record RegisterClinicPatientCommand(
     string? GenderIdentity = null,
     List<PatientAddressDto>? Addresses = null,
     List<PatientGuardianDto>? Guardians = null,
-    string? PatientCode = null) : IRequest<ClinicPatientDto>;
+    string? PatientCode = null,
+    string? SeriesPrefix = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -457,13 +458,18 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         {
             var today = request.QueueDate
                 ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct, _settingsRepo);
-            var lastSequence = await _queueRepo.Query(q =>
-                q.ClinicId == _clinicContext.ClinicId &&
-                q.QueueDate == today)
-                .MaxAsync(q => (int?)q.SequenceNumber, ct) ?? 0;
+            var isSeniorOrPwd = PatientPriorityHelper.IsSeniorOrPwd(patient, today);
+            var seriesPrefix = PatientPriorityHelper.ResolveSeriesPrefix(
+                VisitType.Consultation,
+                isSeniorOrPwd,
+                request.SeriesPrefix);
 
-            var nextSequence = lastSequence + 1;
-            var queueNumber = $"Q-{nextSequence:D3}";
+            var (nextSequence, queueNumber) = await QueueSeriesHelper.GetNextQueueSequenceAsync(
+                _queueRepo,
+                _clinicContext.ClinicId,
+                today,
+                seriesPrefix,
+                ct);
 
             var priority = QueuePriority.Routine;
             if (!string.IsNullOrWhiteSpace(request.Priority))
