@@ -425,15 +425,14 @@ export default function ScheduleVisitModal({
                 </ThemedText>
               </View>
             </View>
-            <Pressable
-              onPress={onClose}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
+            <Button
+              icon="close"
+              iconOnly
+              variant="ghost"
+              size="sm"
               accessibilityLabel="Close schedule visit dialog"
-              style={styles.closeBtn}
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onClose}
+            />
           </View>
 
           {/* Conditional View: Post-Appointment Setup Dialog vs Initial Booking Form */}
@@ -865,10 +864,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  closeBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.md,
   },
   formScroll: {
     flex: 1,

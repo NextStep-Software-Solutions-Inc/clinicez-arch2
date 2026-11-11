@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform, ActivityIndicator } from 'react-native';
 import Modal from '../ui/Modal';
 import ThemedText from '../ui/ThemedText';
@@ -7,7 +7,7 @@ import Button from '../ui/Button';
 import { useStaff, formatStaffName, staffInitials } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { clinicService, type ClinicPatient } from '../../services/clinicService';
-import { theme } from '../../constants/theme';
+import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 
 export interface NewConversationModalProps {
@@ -22,11 +22,24 @@ export interface NewConversationModalProps {
   }) => Promise<void>;
 }
 
+function getActiveThemeSnapshot(): string {
+  const s = getActiveThemeState();
+  return `${s.brandColorHex}|${s.clinicBrandColorHex}|${s.userBrandColorHex ?? ''}|${s.scheme}`;
+}
+
 export default function NewConversationModal({
   visible,
   onClose,
   onCreateConversation,
 }: NewConversationModalProps) {
+  const themeSnapshot = useSyncExternalStore(
+    subscribeActiveTheme,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
+  );
+  const resolvedCommsColors = useMemo(() => getActiveThemeState().resolvedColors, [themeSnapshot]);
+  const styles = useMemo(() => createStyles(), [themeSnapshot]);
+
   const { staff, current } = useStaff();
   const clinic = useClinic();
   const rooms = clinic?.rooms || [];
@@ -271,11 +284,11 @@ export default function NewConversationModal({
             <Icon
               name="patient"
               size={theme.sizes.iconSm}
-              color={activeTab === 'Direct' ? theme.colors.primary : theme.colors.textMuted}
+              color={activeTab === 'Direct' ? theme.colors.primaryDark : theme.colors.textMuted}
             />
             <ThemedText
               variant="smallBold"
-              color={activeTab === 'Direct' ? theme.colors.primary : theme.colors.textSecondary}
+              color={activeTab === 'Direct' ? theme.colors.primaryDark : theme.colors.textSecondary}
             >
               Direct Message
             </ThemedText>
@@ -294,11 +307,11 @@ export default function NewConversationModal({
             <Icon
               name="users"
               size={theme.sizes.iconSm}
-              color={activeTab === 'StaffContext' ? theme.colors.primary : theme.colors.textMuted}
+              color={activeTab === 'StaffContext' ? theme.colors.primaryDark : theme.colors.textMuted}
             />
             <ThemedText
               variant="smallBold"
-              color={activeTab === 'StaffContext' ? theme.colors.primary : theme.colors.textSecondary}
+              color={activeTab === 'StaffContext' ? theme.colors.primaryDark : theme.colors.textSecondary}
             >
               Care Team
             </ThemedText>
@@ -317,11 +330,11 @@ export default function NewConversationModal({
             <Icon
               name="clinic"
               size={theme.sizes.iconSm}
-              color={activeTab === 'Facility' ? theme.colors.primary : theme.colors.textMuted}
+              color={activeTab === 'Facility' ? theme.colors.primaryDark : theme.colors.textMuted}
             />
             <ThemedText
               variant="smallBold"
-              color={activeTab === 'Facility' ? theme.colors.primary : theme.colors.textSecondary}
+              color={activeTab === 'Facility' ? theme.colors.primaryDark : theme.colors.textSecondary}
             >
               Facility Channel
             </ThemedText>
@@ -357,7 +370,7 @@ export default function NewConversationModal({
                   ? 'Select patient below to auto-populate'
                   : 'Enter channel title or select department below'
               }
-              placeholderTextColor={theme.colors.textMuted}
+              placeholderTextColor={resolvedCommsColors.textMuted}
               style={styles.textInput}
             />
           </View>
@@ -375,7 +388,7 @@ export default function NewConversationModal({
                 value={staffSearchQuery}
                 onChangeText={setStaffSearchQuery}
                 placeholder="Search staff by name or role..."
-                placeholderTextColor={theme.colors.textMuted}
+                placeholderTextColor={resolvedCommsColors.textMuted}
                 style={styles.searchInput}
               />
             </View>
@@ -450,15 +463,15 @@ export default function NewConversationModal({
                     {selectedPatient.patientCode || selectedPatient.id} • {selectedPatient.age} yo {selectedPatient.sex}
                   </ThemedText>
                 </View>
-                <Pressable
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  icon="close"
+                  iconOnly
                   onPress={handleClearPatient}
-                  style={styles.clearPatientBtn}
-                  accessibilityRole="button"
                   accessibilityLabel="Clear selected patient"
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                </Pressable>
+                  style={styles.clearPatientBtn}
+                />
               </View>
             ) : (
               <View>
@@ -468,11 +481,11 @@ export default function NewConversationModal({
                     value={patientSearch}
                     onChangeText={setPatientSearch}
                     placeholder="Search patient by name or code (min. 2 characters)..."
-                    placeholderTextColor={theme.colors.textMuted}
+                    placeholderTextColor={resolvedCommsColors.textMuted}
                     style={styles.textInputWithIcon}
                   />
                   {isSearchingPatients ? (
-                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                    <ActivityIndicator size="small" color={resolvedCommsColors.primary} />
                   ) : patientSearch.length > 0 ? (
                     <Pressable
                       onPress={() => setPatientSearch('')}
@@ -550,7 +563,7 @@ export default function NewConversationModal({
                   >
                     <ThemedText
                       variant="smallBold"
-                      color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
                     >
                       {dept}
                     </ThemedText>
@@ -568,248 +581,238 @@ export default function NewConversationModal({
   );
 }
 
-const styles = StyleSheet.create({
-  modalBody: {
-    gap: theme.spacing.sm,
-  },
-  typeSelectorRow: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.md,
-    padding: 3,
-    gap: 4,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-  },
-  typeTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 36,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    gap: 6,
-    backgroundColor: theme.colors.transparent,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  typeTabActive: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.primary,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.emergencySubtle,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
-  },
-  formGroup: {
-    gap: 4,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    paddingHorizontal: theme.spacing.sm,
-    minHeight: 38,
-    gap: theme.spacing.xs,
-  },
-  textInput: {
-    flex: 1,
-    color: theme.colors.text,
-    paddingVertical: 6,
-    ...theme.typography.body,
-  },
-  textInputWithIcon: {
-    flex: 1,
-    color: theme.colors.text,
-    paddingVertical: 6,
-    ...theme.typography.body,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    borderRadius: theme.radii.full,
-    paddingHorizontal: theme.spacing.sm,
-    minHeight: 34,
-    gap: theme.spacing.xs,
-  },
-  searchInput: {
-    flex: 1,
-    color: theme.colors.text,
-    paddingVertical: 4,
-    ...theme.typography.small,
-  },
-  staffList: {
-    maxHeight: 180,
-    marginTop: 4,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-  },
-  emptyStaff: {
-    padding: theme.spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  staffCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 40,
-    padding: 8,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.borderLight,
-    gap: theme.spacing.xs,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  staffCardSelected: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary,
-  },
-  staffAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  staffInfo: {
-    flex: 1,
-    gap: 1,
-  },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: theme.radii.xs,
-  },
-  selectedCheck: {
-    paddingHorizontal: theme.spacing.xs,
-  },
-  selectedPatientCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
-    gap: theme.spacing.sm,
-  },
-  patientAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectedPatientInfo: {
-    flex: 1,
-    gap: 1,
-  },
-  clearPatientBtn: {
-    padding: 4,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-  },
-  autocompleteDropdown: {
-    marginTop: 4,
-    maxHeight: 180,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  autocompleteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.borderLight,
-    gap: theme.spacing.xs,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  smallPatientIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primarySubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  autocompleteTextGroup: {
-    flex: 1,
-  },
-  emptyResultsRow: {
-    padding: theme.spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deptChipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  deptChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    minHeight: 28,
-    justifyContent: 'center',
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
-  deptChipSelected: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.primary,
-    borderWidth: 1.5,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: theme.spacing.xs,
-  },
-  footerBtn: {
-    minWidth: 100,
-    minHeight: 38,
-  },
-});
+function createStyles() {
+  return StyleSheet.create({
+    modalBody: {
+      gap: theme.spacing.sm,
+    },
+    typeSelectorRow: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderRadius: theme.radii.md,
+      padding: 3,
+      gap: 4,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.borderLight,
+    },
+    typeTab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 36,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      borderRadius: theme.radii.sm,
+      gap: 6,
+      backgroundColor: theme.colors.transparent,
+      borderWidth: 1,
+      borderColor: theme.colors.transparent,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+    },
+    typeTabActive: {
+      backgroundColor: theme.colors.primaryLight,
+      borderColor: theme.colors.primaryBorder,
+      ...theme.shadows.brandSubtle,
+    },
+    errorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      backgroundColor: theme.colors.emergencySubtle,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radii.sm,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.emergencyBorder,
+    },
+    formGroup: {
+      gap: 4,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.md,
+      paddingHorizontal: theme.spacing.sm,
+      minHeight: 38,
+      gap: theme.spacing.xs,
+    },
+    textInput: {
+      flex: 1,
+      color: theme.colors.text,
+      paddingVertical: 6,
+      ...theme.typography.body,
+    },
+    textInputWithIcon: {
+      flex: 1,
+      color: theme.colors.text,
+      paddingVertical: 6,
+      ...theme.typography.body,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.borderLight,
+      borderRadius: theme.radii.full,
+      paddingHorizontal: theme.spacing.sm,
+      minHeight: 34,
+      gap: theme.spacing.xs,
+    },
+    searchInput: {
+      flex: 1,
+      color: theme.colors.text,
+      paddingVertical: 4,
+      ...theme.typography.small,
+    },
+    staffList: {
+      maxHeight: 180,
+      marginTop: 4,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+    },
+    emptyStaff: {
+      padding: theme.spacing.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    staffCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 40,
+      padding: 8,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.borderLight,
+      gap: theme.spacing.xs,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+    },
+    staffCardSelected: {
+      backgroundColor: theme.colors.primarySubtle,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.colors.primary,
+    },
+    staffAvatar: {
+      width: 30,
+      height: 30,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.primarySubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.primaryBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    staffInfo: {
+      flex: 1,
+      gap: 1,
+    },
+    roleBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.borderLight,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: theme.radii.xs,
+    },
+    selectedCheck: {
+      paddingHorizontal: theme.spacing.xs,
+    },
+    selectedPatientCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.primarySubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.primaryBorder,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.sm,
+      gap: theme.spacing.sm,
+    },
+    patientAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.primaryBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    selectedPatientInfo: {
+      flex: 1,
+      gap: 1,
+    },
+    clearPatientBtn: {
+      borderRadius: theme.radii.full,
+    },
+    autocompleteDropdown: {
+      marginTop: 4,
+      maxHeight: 180,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+      ...theme.shadows.sm,
+    },
+    autocompleteRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 8,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.borderLight,
+      gap: theme.spacing.xs,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+    },
+    smallPatientIcon: {
+      width: 24,
+      height: 24,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.primarySubtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    autocompleteTextGroup: {
+      flex: 1,
+    },
+    emptyResultsRow: {
+      padding: theme.spacing.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    deptChipsWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 2,
+    },
+    deptChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      minHeight: 28,
+      justifyContent: 'center',
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+    },
+    deptChipSelected: {
+      backgroundColor: theme.colors.primaryLight,
+      borderColor: theme.colors.primaryBorder,
+      borderWidth: 1.5,
+    },
+    footerRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: theme.spacing.xs,
+    },
+    footerBtn: {
+      minWidth: 100,
+      minHeight: 38,
+    },
+  });
+}

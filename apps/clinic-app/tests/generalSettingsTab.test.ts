@@ -7,11 +7,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 // Mock React Native modules for Bun environment
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress }: any) =>
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, testID }: any) =>
     React.createElement(
       'div',
       {
         'data-component': name,
+        ...(testID ? { 'data-testid': testID } : {}),
         ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
         ...(accessibilityRole ? { role: accessibilityRole } : {}),
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
@@ -24,10 +25,11 @@ const createMockComponent = (name: string) => {
 };
 
 mock.module('react-native', () => ({
-  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
+  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFill: {} },
   View: createMockComponent('View'),
   Pressable: createMockComponent('Pressable'),
   ScrollView: createMockComponent('ScrollView'),
+  RefreshControl: createMockComponent('RefreshControl'),
   TextInput: createMockComponent('TextInput'),
   Text: createMockComponent('Text'),
   ActivityIndicator: createMockComponent('ActivityIndicator'),
@@ -69,10 +71,6 @@ mock.module('react-native', () => ({
     Text: createMockComponent('Animated.Text'),
   },
   Alert: { alert: () => {} },
-  NativeEventEmitter: class {
-    addListener() { return { remove: () => {} }; }
-    removeAllListeners() {}
-  },
 }));
 
 mock.module('expo-document-picker', () => ({
@@ -80,18 +78,19 @@ mock.module('expo-document-picker', () => ({
 }));
 
 mock.module('react-native-svg', () => ({
-  Svg: 'Svg',
-  Path: 'Path',
-  Circle: 'Circle',
-  Rect: 'Rect',
-  Line: 'Line',
-  default: 'Svg',
+  Svg: 'svg',
+  Path: 'path',
+  Circle: 'circle',
+  Rect: 'rect',
+  Line: 'line',
+  default: 'svg',
   Defs: ({ children }: any) => children,
   LinearGradient: ({ children }: any) => children,
   Stop: () => null,
   G: ({ children }: any) => children,
   Text: ({ children }: any) => children,
-  Polyline: 'Polyline',
+  Polyline: 'polyline',
+  Polygon: 'polygon',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -99,166 +98,132 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
-const { default: GeneralSettingsTab } = await import('../components/settings/GeneralSettingsTab');
-const { CHART_LAYOUT_OPTIONS } = await import('../components/chart/types');
+const {
+  default: GeneralSettingsTab,
+  CLINIC_SPECIALTY_OPTIONS,
+  PLAIN_CHART_VIEW_OPTIONS,
+  buildChartLayoutSavePayload,
+  isBillingShortcutEnabled,
+} = await import('../components/settings/GeneralSettingsTab');
 
-describe('GeneralSettingsTab — Preferred Medical Chart Layout Configuration', () => {
-  test('1. Renders Preferred Medical Chart Layout section with title and description', () => {
-    const markup = renderToStaticMarkup(
+const baseProps = {
+  clinicName: 'St. Jude Family Clinic',
+  setClinicName: () => {},
+  accreditationNumber: 'PHIC-001',
+  setAccreditationNumber: () => {},
+  operatingHours: 'Mon-Fri 8am-5pm',
+  setOperatingHours: () => {},
+  slotDuration: '30',
+  setSlotDuration: () => {},
+  consultationFee: '500',
+  setConsultationFee: () => {},
+  letterheadHeader: 'St. Jude Clinic',
+  setLetterheadHeader: () => {},
+  letterheadAddress: '123 Main St',
+  setLetterheadAddress: () => {},
+  letterheadContact: '0917-123-4567',
+  setLetterheadContact: () => {},
+  savingSettings: false,
+  onSavePreferences: async () => {},
+  showSkeletons: false,
+  settingsLoadError: null,
+  settings: null,
+  eodReport: null,
+  eodLoadError: null,
+  onRefreshEod: async () => {},
+  formatPeso: (v: number | undefined | null) => `₱${v ?? 0}`,
+};
+
+describe('GeneralSettingsTab — Modular Decomposition & Card Restyling', () => {
+  test('1. Renders Default Patient Chart View section with plain clinic language and dirty-only Save button', () => {
+    const cleanMarkup = renderToStaticMarkup(
       React.createElement(GeneralSettingsTab, {
-        clinicName: 'St. Jude Family Clinic',
-        setClinicName: () => {},
-        accreditationNumber: 'PHIC-001',
-        setAccreditationNumber: () => {},
-        operatingHours: 'Mon-Fri 8am-5pm',
-        setOperatingHours: () => {},
-        slotDuration: '30',
-        setSlotDuration: () => {},
-        consultationFee: '500',
-        setConsultationFee: () => {},
-        letterheadHeader: 'St. Jude Clinic',
-        setLetterheadHeader: () => {},
-        letterheadAddress: '123 Main St',
-        setLetterheadAddress: () => {},
-        letterheadContact: '0917-123-4567',
-        setLetterheadContact: () => {},
-        savingSettings: false,
-        onSavePreferences: async () => {},
-        showSkeletons: false,
-        settingsLoadError: null,
-        settings: null,
-        eodReport: null,
-        eodLoadError: null,
-        onRefreshEod: async () => {},
-        formatPeso: (v) => `₱${v}`,
+        ...baseProps,
+        settings: { preferredChartLayout: 'modal' } as any,
         preferredChartLayout: 'modal',
         setPreferredChartLayout: () => {},
       })
     );
 
-    expect(markup).toContain('Preferred Medical Chart Layout');
-    expect(markup).toContain('Configure the default workstation layout when opening patient medical charts across your facility');
-    expect(markup).toContain('Centered Workstation Modal');
-    expect(markup).toContain('Split-Pane Clinical Workstation');
-    expect(markup).toContain('Slide-Over Focus Drawer');
-    expect(markup).toContain('Save layout preference');
+    expect(cleanMarkup).toContain('Default Patient Chart View');
+    expect(cleanMarkup).toContain('Choose how patient medical charts open by default across your clinic');
+    expect(cleanMarkup).toContain('Centered Window');
+    expect(cleanMarkup).toContain('Side-by-Side View');
+    expect(cleanMarkup).toContain('Side Panel');
+    expect(cleanMarkup).not.toContain('Save chart view');
+
+    const dirtyMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        settings: { preferredChartLayout: 'modal' } as any,
+        preferredChartLayout: 'split',
+        setPreferredChartLayout: () => {},
+      })
+    );
+    expect(dirtyMarkup).toContain('Save chart view');
   });
 
-  test('2. Renders all 3 layout option cards with radio accessibility attributes', () => {
+  test('2. Renders all 3 plain chart view cards with radio accessibility attributes', () => {
     const markup = renderToStaticMarkup(
       React.createElement(GeneralSettingsTab, {
-        clinicName: 'St. Jude Family Clinic',
-        setClinicName: () => {},
-        accreditationNumber: 'PHIC-001',
-        setAccreditationNumber: () => {},
-        operatingHours: 'Mon-Fri 8am-5pm',
-        setOperatingHours: () => {},
-        slotDuration: '30',
-        setSlotDuration: () => {},
-        consultationFee: '500',
-        setConsultationFee: () => {},
-        letterheadHeader: 'St. Jude Clinic',
-        setLetterheadHeader: () => {},
-        letterheadAddress: '123 Main St',
-        setLetterheadAddress: () => {},
-        letterheadContact: '0917-123-4567',
-        setLetterheadContact: () => {},
-        savingSettings: false,
-        onSavePreferences: async () => {},
-        showSkeletons: false,
-        settingsLoadError: null,
-        settings: null,
-        eodReport: null,
-        eodLoadError: null,
-        onRefreshEod: async () => {},
-        formatPeso: (v) => `₱${v}`,
+        ...baseProps,
         preferredChartLayout: 'split',
         setPreferredChartLayout: () => {},
       })
     );
 
-    for (const opt of CHART_LAYOUT_OPTIONS) {
+    for (const opt of PLAIN_CHART_VIEW_OPTIONS) {
       expect(markup).toContain(`aria-label="${opt.label} (${opt.badge})"`);
       expect(markup).toContain(opt.description);
     }
   });
 
-  test('3. Renders Clinic Specialty & Clinical Modules section with Medical, Dental, and Multi-Specialty cards', () => {
-    const markup = renderToStaticMarkup(
+  test('3. Renders Clinic Specialty section with Medical, Dental, and Multi-Specialty cards and dirty-only Save button', () => {
+    const cleanMarkup = renderToStaticMarkup(
       React.createElement(GeneralSettingsTab, {
-        clinicName: 'St. Jude Family Clinic',
-        setClinicName: () => {},
-        accreditationNumber: 'PHIC-001',
-        setAccreditationNumber: () => {},
-        operatingHours: 'Mon-Fri 8am-5pm',
-        setOperatingHours: () => {},
-        slotDuration: '30',
-        setSlotDuration: () => {},
-        consultationFee: '500',
-        setConsultationFee: () => {},
-        letterheadHeader: 'St. Jude Clinic',
-        setLetterheadHeader: () => {},
-        letterheadAddress: '123 Main St',
-        setLetterheadAddress: () => {},
-        letterheadContact: '0917-123-4567',
-        setLetterheadContact: () => {},
-        savingSettings: false,
-        onSavePreferences: async () => {},
-        showSkeletons: false,
-        settingsLoadError: null,
-        settings: {
-          specialtyMode: 'Medical',
-          enableDentalModule: false,
-        } as any,
-        eodReport: null,
-        eodLoadError: null,
-        onRefreshEod: async () => {},
-        formatPeso: (v) => `₱${v}`,
-      })
-    );
-
-    expect(markup).toContain('Clinic Specialty');
-    expect(markup).toContain('Clinical Modules');
-    expect(markup).toContain('Configure facility specialization and toggle specialty clinical workstations');
-    expect(markup).toContain('Medical Practice');
-    expect(markup).toContain('Dental Practice');
-    expect(markup).toContain('Multi-Specialty Clinic');
-    expect(markup).toContain('Save specialty preferences');
-  });
-
-  test('4. In Medical specialty mode: Dental Chart Module is marked Inactive and toggle is disabled', () => {
-    const markup = renderToStaticMarkup(
-      React.createElement(GeneralSettingsTab, {
-        clinicName: 'General Med Clinic',
-        setClinicName: () => {},
-        accreditationNumber: 'PHIC-001',
-        setAccreditationNumber: () => {},
-        operatingHours: 'Mon-Fri 8am-5pm',
-        setOperatingHours: () => {},
-        slotDuration: '30',
-        setSlotDuration: () => {},
-        consultationFee: '500',
-        setConsultationFee: () => {},
-        letterheadHeader: 'St. Jude Clinic',
-        setLetterheadHeader: () => {},
-        letterheadAddress: '123 Main St',
-        setLetterheadAddress: () => {},
-        letterheadContact: '0917-123-4567',
-        setLetterheadContact: () => {},
-        savingSettings: false,
-        onSavePreferences: async () => {},
-        showSkeletons: false,
-        settingsLoadError: null,
+        ...baseProps,
         specialtyMode: 'Medical',
         enableDentalModule: false,
         settings: {
           specialtyMode: 'Medical',
           enableDentalModule: false,
         } as any,
-        eodReport: null,
-        eodLoadError: null,
-        onRefreshEod: async () => {},
-        formatPeso: (v) => `₱${v}`,
+      })
+    );
+
+    expect(cleanMarkup).toContain('Clinic Specialty');
+    expect(cleanMarkup).toContain('Choose whether your clinic sees medical patients, dental patients, or both');
+    expect(cleanMarkup).toContain('Medical Practice');
+    expect(cleanMarkup).toContain('Dental Practice');
+    expect(cleanMarkup).toContain('Multi-Specialty Clinic');
+    expect(cleanMarkup).toContain('Dental Tooth Chart');
+    expect(cleanMarkup).not.toContain('Save specialty');
+
+    const dirtyMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        specialtyMode: 'Dental',
+        enableDentalModule: true,
+        settings: {
+          specialtyMode: 'Medical',
+          enableDentalModule: false,
+        } as any,
+      })
+    );
+    expect(dirtyMarkup).toContain('Save specialty');
+  });
+
+  test('4. In Medical specialty mode: Dental Chart Module is marked Inactive and toggle is disabled', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        clinicName: 'General Med Clinic',
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+        settings: {
+          specialtyMode: 'Medical',
+          enableDentalModule: false,
+        } as any,
       })
     );
 
@@ -269,36 +234,14 @@ describe('GeneralSettingsTab — Preferred Medical Chart Layout Configuration', 
   test('5. In Dental specialty mode: Dental Chart Module is Permanently Active and toggle is locked', () => {
     const markup = renderToStaticMarkup(
       React.createElement(GeneralSettingsTab, {
+        ...baseProps,
         clinicName: 'Bright Smiles Dental Clinic',
-        setClinicName: () => {},
-        accreditationNumber: 'DENT-001',
-        setAccreditationNumber: () => {},
-        operatingHours: 'Mon-Fri 9am-6pm',
-        setOperatingHours: () => {},
-        slotDuration: '45',
-        setSlotDuration: () => {},
-        consultationFee: '800',
-        setConsultationFee: () => {},
-        letterheadHeader: 'Bright Smiles',
-        setLetterheadHeader: () => {},
-        letterheadAddress: '456 Dental Ave',
-        setLetterheadAddress: () => {},
-        letterheadContact: '0917-888-9999',
-        setLetterheadContact: () => {},
-        savingSettings: false,
-        onSavePreferences: async () => {},
-        showSkeletons: false,
-        settingsLoadError: null,
         specialtyMode: 'Dental',
         enableDentalModule: true,
         settings: {
           specialtyMode: 'Dental',
           enableDentalModule: true,
         } as any,
-        eodReport: null,
-        eodLoadError: null,
-        onRefreshEod: async () => {},
-        formatPeso: (v) => `₱${v}`,
       })
     );
 
@@ -309,36 +252,14 @@ describe('GeneralSettingsTab — Preferred Medical Chart Layout Configuration', 
   test('6. In Multi-Specialty mode: Dental Chart Module toggle is enabled and reflects active status', () => {
     const markupActive = renderToStaticMarkup(
       React.createElement(GeneralSettingsTab, {
+        ...baseProps,
         clinicName: 'Metro Polymedic Center',
-        setClinicName: () => {},
-        accreditationNumber: 'POLY-001',
-        setAccreditationNumber: () => {},
-        operatingHours: '24/7',
-        setOperatingHours: () => {},
-        slotDuration: '30',
-        setSlotDuration: () => {},
-        consultationFee: '600',
-        setConsultationFee: () => {},
-        letterheadHeader: 'Metro Polymedic',
-        setLetterheadHeader: () => {},
-        letterheadAddress: '789 Highway',
-        setLetterheadAddress: () => {},
-        letterheadContact: '0917-555-1234',
-        setLetterheadContact: () => {},
-        savingSettings: false,
-        onSavePreferences: async () => {},
-        showSkeletons: false,
-        settingsLoadError: null,
         specialtyMode: 'Multi-Specialty',
         enableDentalModule: true,
         settings: {
           specialtyMode: 'Multi-Specialty',
           enableDentalModule: true,
         } as any,
-        eodReport: null,
-        eodLoadError: null,
-        onRefreshEod: async () => {},
-        formatPeso: (v) => `₱${v}`,
       })
     );
 
@@ -347,39 +268,280 @@ describe('GeneralSettingsTab — Preferred Medical Chart Layout Configuration', 
 
     const markupDisabled = renderToStaticMarkup(
       React.createElement(GeneralSettingsTab, {
+        ...baseProps,
         clinicName: 'Metro Polymedic Center',
-        setClinicName: () => {},
-        accreditationNumber: 'POLY-001',
-        setAccreditationNumber: () => {},
-        operatingHours: '24/7',
-        setOperatingHours: () => {},
-        slotDuration: '30',
-        setSlotDuration: () => {},
-        consultationFee: '600',
-        setConsultationFee: () => {},
-        letterheadHeader: 'Metro Polymedic',
-        setLetterheadHeader: () => {},
-        letterheadAddress: '789 Highway',
-        setLetterheadAddress: () => {},
-        letterheadContact: '0917-555-1234',
-        setLetterheadContact: () => {},
-        savingSettings: false,
-        onSavePreferences: async () => {},
-        showSkeletons: false,
-        settingsLoadError: null,
         specialtyMode: 'Multi-Specialty',
         enableDentalModule: false,
         settings: {
           specialtyMode: 'Multi-Specialty',
           enableDentalModule: false,
         } as any,
-        eodReport: null,
-        eodLoadError: null,
-        onRefreshEod: async () => {},
-        formatPeso: (v) => `₱${v}`,
       })
     );
 
     expect(markupDisabled).toContain('Disabled');
+  });
+
+  test('7. Fixes all UTF-8 mojibake in specialty descriptions, schedule helper, and Peso fee label', () => {
+    for (const opt of CLINIC_SPECIALTY_OPTIONS) {
+      expect(opt.description).not.toContain('â');
+    }
+    const dentalOpt = CLINIC_SPECIALTY_OPTIONS.find((o) => o.id === 'Dental')!;
+    const multiOpt = CLINIC_SPECIALTY_OPTIONS.find((o) => o.id === 'Multi-Specialty')!;
+    expect(dentalOpt.description).toContain('11–48');
+    expect(multiOpt.description).toContain('facility’s');
+
+    const generalMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'general',
+        operatingHours: '',
+      })
+    );
+    expect(generalMarkup).toContain('Not configured yet — please specify clinic schedule');
+    expect(generalMarkup).toContain('Consultation fee (₱)');
+    expect(generalMarkup).not.toContain('â');
+  });
+
+  test('8. activeSection isolates each decomposed section cleanly and expands fluidly across 100% width', () => {
+    const generalOnly = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, { ...baseProps, activeSection: 'general' })
+    );
+    expect(generalOnly).toContain('data-testid="general-settings-constrained-root"');
+    expect(generalOnly).not.toContain('960');
+    expect(generalOnly).toContain('data-testid="facility-identity-card"');
+    expect(generalOnly).toContain('data-testid="schedule-consultation-card"');
+    expect(generalOnly).toContain('data-testid="official-letterhead-card"');
+    expect(generalOnly).not.toContain('data-testid="clinical-specialty-card"');
+    expect(generalOnly).not.toContain('data-testid="clinic-logo-specimen-card"');
+
+    const brandingOnly = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, { ...baseProps, activeSection: 'branding' })
+    );
+    expect(brandingOnly).toContain('data-testid="clinic-logo-specimen-card"');
+    expect(brandingOnly).not.toContain('data-testid="facility-identity-card"');
+
+    const clinicalOnly = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, { ...baseProps, activeSection: 'clinical' })
+    );
+    expect(clinicalOnly).toContain('data-testid="clinical-specialty-card"');
+    expect(clinicalOnly).toContain('data-testid="chart-layout-default-card"');
+    expect(clinicalOnly).not.toContain('data-testid="facility-identity-card"');
+  });
+
+  test('9. Removes duplicate 6-StatCard collections census block and conditionally renders Billing shortcut', () => {
+    const billingHiddenMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'billing-policy',
+        canAccessBilling: false,
+        eodReport: {
+          cashInDrawer: 10000,
+          totalAmountCollected: 15000,
+          totalNetAmount: 15000,
+          totalCheckedIn: 12,
+          totalCompletedVisits: 10,
+          totalDiscountsGiven: 500,
+          totalPhilHealthCovered: 1000,
+        } as any,
+      })
+    );
+    expect(billingHiddenMarkup).not.toContain("Today's collections");
+    expect(billingHiddenMarkup).not.toContain('Cash in drawer');
+    expect(billingHiddenMarkup).not.toContain('data-testid="billing-live-shortcut-card"');
+
+    const billingVisibleMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'billing-policy',
+        canAccessBilling: true,
+        cashierMode: 'ClinicDesk',
+      })
+    );
+    expect(billingVisibleMarkup).toContain('data-testid="billing-live-shortcut-card"');
+    expect(billingVisibleMarkup).toContain('Today&#x27;s Billing &amp; Daily Summary');
+    expect(billingVisibleMarkup).toContain('Front-Desk Billing');
+    expect(billingVisibleMarkup).toContain('Open Billing');
+
+    // Hidden when routed to external Centralized Cashier Counter
+    const counterModeMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'billing-policy',
+        canAccessBilling: true,
+        cashierMode: 'CashierCounter',
+      })
+    );
+    expect(counterModeMarkup).not.toContain('data-testid="billing-live-shortcut-card"');
+
+    expect(isBillingShortcutEnabled({ cashierMode: 'ClinicDesk', userRole: 'Admin' })).toBe(true);
+    expect(isBillingShortcutEnabled({ cashierMode: 'ClinicDesk', userRole: 'Doctor' })).toBe(false);
+    expect(isBillingShortcutEnabled({ cashierMode: 'CashierCounter', userRole: 'Admin' })).toBe(false);
+  });
+
+  test('10. Chart layout save payload is decoupled from clinic-name validation', () => {
+    expect(buildChartLayoutSavePayload('split')).toEqual({ preferredChartLayout: 'split' });
+    expect(buildChartLayoutSavePayload('drawer')).toEqual({ preferredChartLayout: 'drawer' });
+  });
+
+  test('11. Zero hardcoded fallbacks & full Skeleton loading coverage across GeneralSettingsTab cards', () => {
+    const brandingSkeleton = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'branding',
+        clinicName: '',
+        showSkeletons: true,
+      })
+    );
+    expect(brandingSkeleton).toContain('role="progressbar"');
+    expect(brandingSkeleton).not.toContain('Default Logo');
+    expect(brandingSkeleton).not.toContain('Clinic EZ Facility');
+
+    const brandingLoadedBlank = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'branding',
+        clinicName: '',
+        showSkeletons: false,
+      })
+    );
+    expect(brandingLoadedBlank).toContain('No clinic name set');
+    expect(brandingLoadedBlank).not.toContain('Clinic EZ Facility');
+
+    const clinicalSkeleton = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'clinical',
+        showSkeletons: true,
+      })
+    );
+    expect(clinicalSkeleton).toContain('data-testid="patient-search-skeleton"');
+
+    const queueSkeleton = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'queue-tv',
+        showSkeletons: true,
+      })
+    );
+    expect(queueSkeleton).toContain('data-testid="clinic-rooms-skeleton"');
+
+    const billingSkeleton = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'billing-policy',
+        canAccessBilling: true,
+        showSkeletons: true,
+      })
+    );
+    expect(billingSkeleton).toContain('data-testid="billing-live-shortcut-skeleton"');
+    expect(billingSkeleton).not.toContain('Front-Desk Billing');
+
+    const generalNeutralPlaceholders = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'general',
+      })
+    );
+    expect(generalNeutralPlaceholders).toContain('Enter clinic hours');
+    expect(generalNeutralPlaceholders).toContain('Minutes per slot');
+    expect(generalNeutralPlaceholders).not.toContain('e.g. 30');
+    expect(generalNeutralPlaceholders).not.toContain('e.g. 500');
+  });
+
+  test('12. Hides all inline Save buttons across Settings cards when unchanged (!isDirty && !saving) and shows only the modified card Save button', () => {
+    const savedSettings = {
+      id: 's-1',
+      tenantId: 't-1',
+      clinicId: 'c-1',
+      clinicName: 'St. Jude Family Clinic',
+      accreditationNumber: 'PHIC-001',
+      operatingHours: 'Mon-Fri 8am-5pm',
+      defaultSlotDurationMinutes: 30,
+      defaultConsultationFee: 500,
+      letterheadHeader: 'St. Jude Clinic',
+      letterheadAddress: '123 Main St',
+      letterheadContact: '0917-123-4567',
+      specialtyMode: 'Medical',
+      enableDentalModule: false,
+      preferredChartLayout: 'modal',
+      cashierMode: 'ClinicDesk',
+      eodReconciliationTime: '21:00',
+      autoEodEnabled: true,
+      enableQueuePushNotifications: true,
+      queuePushNotificationThreshold: 2,
+      staffNotificationRetentionDays: 30,
+      enableStatAudioAlert: true,
+      enableStatVibrationAlert: true,
+      enableAppointmentReminders: true,
+      appointmentReminder24hEnabled: true,
+      appointmentReminder2hEnabled: true,
+      enableStaffAppointmentNotifications: true,
+      tvDisplayPin: '123456',
+    } as any;
+
+    const cleanAllMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        settings: savedSettings,
+        preferredChartLayout: 'modal',
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+        cashierMode: 'ClinicDesk',
+      })
+    );
+
+    // Every single inline Save button must be omitted from the DOM when clean
+    expect(cleanAllMarkup).not.toContain('Save changes');
+    expect(cleanAllMarkup).not.toContain('Save hours &amp; fee');
+    expect(cleanAllMarkup).not.toContain('Save header &amp; contact info');
+    expect(cleanAllMarkup).not.toContain('Save Regional Settings');
+    expect(cleanAllMarkup).not.toContain('Save specialty');
+    expect(cleanAllMarkup).not.toContain('Save chart view');
+    expect(cleanAllMarkup).not.toContain('Save Search Fields');
+    expect(cleanAllMarkup).not.toContain('Save Passcode');
+    expect(cleanAllMarkup).not.toContain('Save Notification Settings');
+    expect(cleanAllMarkup).not.toContain('Save Reminder Preferences');
+    expect(cleanAllMarkup).not.toContain('Save billing station preferences');
+    expect(cleanAllMarkup).not.toContain('Save EOD Schedule');
+
+    // Modifying Clinic Details only reveals "Save changes" and keeps other cards clean
+    const dirtyIdentityMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'general',
+        settings: savedSettings,
+        clinicName: 'St. Jude Family Clinic Updated',
+      })
+    );
+    expect(dirtyIdentityMarkup).toContain('Save changes');
+    expect(dirtyIdentityMarkup).not.toContain('Save hours &amp; fee');
+    expect(dirtyIdentityMarkup).not.toContain('Save header &amp; contact info');
+
+    // Modifying Consultation Fee only reveals "Save hours & fee"
+    const dirtyScheduleMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'general',
+        settings: savedSettings,
+        consultationFee: '650',
+      })
+    );
+    expect(dirtyScheduleMarkup).not.toContain('Save changes');
+    expect(dirtyScheduleMarkup).toContain('Save hours &amp; fee');
+    expect(dirtyScheduleMarkup).not.toContain('Save header &amp; contact info');
+
+    // Modifying Printed Header only reveals "Save header & contact info"
+    const dirtyLetterheadMarkup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        ...baseProps,
+        activeSection: 'general',
+        settings: savedSettings,
+        letterheadAddress: '456 Rizal Ave, Manila',
+      })
+    );
+    expect(dirtyLetterheadMarkup).not.toContain('Save changes');
+    expect(dirtyLetterheadMarkup).not.toContain('Save hours &amp; fee');
+    expect(dirtyLetterheadMarkup).toContain('Save header &amp; contact info');
   });
 });

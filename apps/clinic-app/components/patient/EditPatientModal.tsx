@@ -893,14 +893,15 @@ export function EditPatientModal({
                 {patient ? `${patient.fullName} (${patient.patientCode})` : 'Update details'}
               </ThemedText>
             </View>
-            <Pressable
-              onPress={onClose}
+            <Button
+              icon="close"
+              iconOnly
+              variant="ghost"
+              size="sm"
               disabled={saving}
-              style={styles.closeBtn}
               accessibilityLabel="Close"
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onClose}
+            />
           </View>
 
           {/* Form Body */}
@@ -1404,9 +1405,6 @@ const styles = StyleSheet.create({
   },
   headerTitleGroup: {
     gap: 2,
-  },
-  closeBtn: {
-    padding: theme.spacing.xs,
   },
   formScroll: {
     flexShrink: 1,

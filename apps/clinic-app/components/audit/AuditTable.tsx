@@ -450,6 +450,7 @@ const styles = StyleSheet.create({
   },
   toggleBtnActive: {
     backgroundColor: theme.colors.primaryLight,
+    ...theme.shadows.brandSubtle,
   },
   toggleBtnInactive: {
     backgroundColor: theme.colors.transparent,

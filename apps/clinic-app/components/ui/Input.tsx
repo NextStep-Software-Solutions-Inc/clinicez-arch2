@@ -47,6 +47,7 @@ export default function Input({
 }: InputProps) {
   const { multiplier } = useUiDensity();
   const [isFocused, setIsFocused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const isEditable = disabled !== undefined ? !disabled : (editable ?? true);
 
   const densityWrapperStyle =
@@ -77,9 +78,14 @@ export default function Input({
       ) : null}
 
       <View
+        {...({
+          onMouseEnter: () => setIsHovered(true),
+          onMouseLeave: () => setIsHovered(false),
+        } as any)}
         style={[
           styles.inputWrapper,
           densityWrapperStyle,
+          isHovered && !isFocused && !disabled && !error ? styles.inputHovered : null,
           isFocused && styles.inputFocused,
           disabled ? styles.inputDisabled : null,
           error ? styles.inputError : null,
@@ -88,7 +94,11 @@ export default function Input({
       >
         {resolveIconName(leftIcon) ? (
           <View style={styles.leftIcon}>
-            <IconSlot value={leftIcon} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+            <IconSlot
+              value={leftIcon}
+              size={theme.sizes.iconSm}
+              color={isFocused && !error ? theme.colors.primary : theme.colors.textMuted}
+            />
           </View>
         ) : null}
 
@@ -152,6 +162,9 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.controlLg + theme.sizes.controlMd,
     alignItems: 'flex-start',
     paddingVertical: theme.spacing.sm,
+  },
+  inputHovered: {
+    borderColor: theme.colors.primaryBorder,
   },
   inputFocused: {
     borderColor: theme.colors.primary,

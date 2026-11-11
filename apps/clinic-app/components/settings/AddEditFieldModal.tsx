@@ -13,6 +13,10 @@ import {
   VisibilityRule,
   ConditionalOptionsConfig,
 } from '../../services/clinicService';
+import {
+  resolveCustomFieldPlaceholderPresentation,
+  LONG_PLACEHOLDER_CHAR_LIMIT,
+} from '../custom-fields/DynamicCustomFieldsRenderer';
 import { Chip, FieldGroup } from './common';
 
 export interface ToggleSwitchProps {
@@ -183,14 +187,20 @@ export default function AddEditFieldModal({
   const isEditing = Boolean(fieldToEdit);
 
   // Core metadata state
-  const [label, setLabel] = useState('');
-  const [fieldKey, setFieldKey] = useState('');
-  const [isFieldKeyManuallyEdited, setIsFieldKeyManuallyEdited] = useState(false);
+  const [label, setLabel] = useState(() => (visible && fieldToEdit ? fieldToEdit.label || '' : ''));
+  const [fieldKey, setFieldKey] = useState(() => (visible && fieldToEdit ? fieldToEdit.fieldKey || '' : ''));
+  const [isFieldKeyManuallyEdited, setIsFieldKeyManuallyEdited] = useState(() => Boolean(visible && fieldToEdit));
   const [fieldKeyError, setFieldKeyError] = useState<string | null>(null);
-  const [dataType, setDataType] = useState<ClinicCustomFieldDefinition['dataType']>('Text');
-  const [category, setCategory] = useState('Demographics');
-  const [placeholder, setPlaceholder] = useState('');
-  const [isRequired, setIsRequired] = useState(false);
+  const [dataType, setDataType] = useState<ClinicCustomFieldDefinition['dataType']>(() =>
+    visible && fieldToEdit ? fieldToEdit.dataType || 'Text' : 'Text'
+  );
+  const [category, setCategory] = useState(() =>
+    visible && fieldToEdit ? fieldToEdit.category || 'Demographics' : 'Demographics'
+  );
+  const [placeholder, setPlaceholder] = useState(() =>
+    visible && fieldToEdit ? fieldToEdit.placeholder || '' : ''
+  );
+  const [isRequired, setIsRequired] = useState(() => Boolean(visible && fieldToEdit?.isRequired));
   const [options, setOptions] = useState('');
   const [boundaryMode, setBoundaryMode] = useState<BoundaryMode>('any');
   const [isBoundaryModeManuallySet, setIsBoundaryModeManuallySet] = useState(false);
@@ -630,16 +640,21 @@ export default function AddEditFieldModal({
   };
 
   const displayedError = error || (!dismissedSaveError ? saveError : null);
+  const isSingleLineFieldType =
+    dataType === 'Text' || dataType === 'Number' || dataType === 'Date';
+  const placeholderPresentation = isSingleLineFieldType
+    ? resolveCustomFieldPlaceholderPresentation(placeholder, dataType)
+    : { inputPlaceholder: placeholder, helperHint: undefined, isExpandedHint: false };
 
   return (
     <Modal
       visible={visible}
       onClose={onClose}
-      title={isEditing ? 'Edit patient intake field' : 'Add patient intake field'}
+      title={isEditing ? 'Edit Registration Question' : 'Add Registration Question'}
       subtitle={
         isEditing
-          ? 'Modify field rules, mandatory constraints, or cascading choices.'
-          : 'Define custom intake prompt, data validation, and visibility rules.'
+          ? 'Update the question wording, answer type, or when this question is shown.'
+          : 'Create an extra question asked when registering a patient.'
       }
       maxWidth={580}
       footer={
@@ -651,7 +666,7 @@ export default function AddEditFieldModal({
             disabled={saving}
           />
           <Button
-            title={isEditing ? 'Update field' : 'Save field'}
+            title={isEditing ? 'Save Changes' : 'Add Question'}
             onPress={handleSave}
             loading={saving}
           />
@@ -668,33 +683,30 @@ export default function AddEditFieldModal({
           </View>
         ) : null}
 
-        {/* Display Label */}
+        {/* Question Label */}
         <Input
-          label="Field display label"
+          label="Question label"
           required
           value={label}
           onChangeText={handleLabelChange}
-          placeholder="e.g. Student ID, College, Religion, Spouse Full Name"
+          placeholder="Enter question label"
         />
 
-        {/* Machine Key */}
+        {/* Field ID */}
         <View style={styles.machineKeyFieldBlock}>
           <View style={styles.rowBetween}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-              Machine Key (System Identifier)
+              Field ID
               <ThemedText color={theme.colors.emergency}> *</ThemedText>
             </ThemedText>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Auto-slugify machine key from label"
+            <Button
+              title="Generate from label"
+              icon="refresh"
+              variant="ghost"
+              size="xs"
+              accessibilityLabel="Generate field ID from question label"
               onPress={handleAutoSlugify}
-              style={styles.slugifyActionBtn}
-            >
-              <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.primary} />
-              <ThemedText variant="captionBold" color={theme.colors.primary}>
-                Auto-slugify from label
-              </ThemedText>
-            </Pressable>
+            />
           </View>
           <Input
             value={fieldKey}
@@ -702,14 +714,14 @@ export default function AddEditFieldModal({
             onBlur={handleFieldKeyBlur}
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="e.g. student_id, college, spouse_name"
+            placeholder="Enter field ID"
             error={fieldKeyError || undefined}
-            helperText="Lowercase letters, numbers, and underscores only (^[a-z0-9_]+$)."
+            helperText="Lowercase letters, numbers, and underscores only."
           />
         </View>
 
-        {/* Data Type */}
-        <FieldGroup label="Data Format / Field Type">
+        {/* Answer Type */}
+        <FieldGroup label="Answer Type">
           <View style={styles.chipRow}>
             {(['Text', 'Number', 'Date', 'Boolean', 'Select'] as const).map((type) => (
               <Chip
@@ -722,8 +734,8 @@ export default function AddEditFieldModal({
           </View>
         </FieldGroup>
 
-        {/* Category */}
-        <FieldGroup label="Category">
+        {/* Question Group */}
+        <FieldGroup label="Question Group">
           <View style={styles.chipRow}>
             {['Demographics', 'Academic', 'Employment', 'Clinical', 'Insurance'].map((cat) => (
               <Chip
@@ -736,9 +748,9 @@ export default function AddEditFieldModal({
           </View>
         </FieldGroup>
 
-        {/* Date Boundary Rule */}
+        {/* Allowed Dates */}
         {dataType === 'Date' && (
-          <FieldGroup label="Date Boundary Rule">
+          <FieldGroup label="Allowed Dates">
             <View style={styles.chipRow}>
               {([
                 { key: 'pastOrToday', label: 'Past or Today' },
@@ -759,21 +771,21 @@ export default function AddEditFieldModal({
             </View>
             <ThemedText variant="caption" color={theme.colors.textMuted}>
               {boundaryMode === 'pastOrToday'
-                ? 'Restricts input to past dates or today (recommended for clinical history, past examinations, onset dates).'
+                ? 'Allows past dates or today (good for medical history, past exams, or symptom start dates).'
                 : boundaryMode === 'futureOrToday'
-                ? 'Restricts input to today or future dates (recommended for expiry dates, follow-up scheduling).'
+                ? 'Allows today or future dates (good for ID expiry dates or follow-up dates).'
                 : boundaryMode === 'futureOnly'
-                ? 'Restricts input strictly to future dates.'
-                : 'Permits any calendar date without restriction.'}
+                ? 'Allows future dates only.'
+                : 'Allows any calendar date.'}
             </ThemedText>
           </FieldGroup>
         )}
 
-        {/* Mandatory / Required Toggle */}
+        {/* Required Answer Toggle */}
         <View style={styles.toggleRowContainer}>
           <View style={styles.toggleTextCol}>
             <View style={styles.rowAlign}>
-              <ThemedText variant="bodyBold">Mark field as mandatory / required</ThemedText>
+              <ThemedText variant="bodyBold">Require an answer</ThemedText>
               <Badge
                 label={isRequired ? 'Required' : 'Optional'}
                 variant={isRequired ? 'emergency' : 'neutral'}
@@ -781,23 +793,52 @@ export default function AddEditFieldModal({
               />
             </View>
             <ThemedText variant="caption" color={theme.colors.textMuted}>
-              Enforces validation during patient registration when visible on intake form.
+              Patients and staff must fill in this question when it is shown during registration.
             </ThemedText>
           </View>
           <ToggleSwitch
             value={isRequired}
             onValueChange={setIsRequired}
-            accessibilityLabel="Mark field as mandatory / required"
+            accessibilityLabel="Require an answer"
           />
         </View>
 
-        {/* Placeholder hint */}
+        {/* Help text / example */}
         <Input
-          label="Placeholder hint (optional)"
+          label="Help text or example (optional)"
           value={placeholder}
           onChangeText={setPlaceholder}
-          placeholder="e.g. Enter student registration number"
+          placeholder="Optional guidance shown to patients or staff"
         />
+        {isSingleLineFieldType &&
+        placeholderPresentation.isExpandedHint &&
+        placeholderPresentation.helperHint ? (
+          <View style={styles.longPlaceholderPreviewCard}>
+            <View style={styles.rowBetween}>
+              <View style={styles.rowAlign}>
+                <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.infoText} />
+                <ThemedText variant="captionBold" color={theme.colors.infoText}>
+                  Full Help Text Preview ({placeholder.trim().length} characters)
+                </ThemedText>
+              </View>
+              <Badge label="Wraps Below Field" variant="primary" size="sm" />
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              Long help text is shown underneath single-line {dataType.toLowerCase()} fields so the entire instruction is easy to read without getting cut off:
+            </ThemedText>
+            <View style={styles.simulatedInputPreview}>
+              <ThemedText variant="caption" color={theme.colors.textLight}>
+                {placeholderPresentation.inputPlaceholder}
+              </ThemedText>
+            </View>
+            <View style={styles.simulatedExpandedHintBox}>
+              <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+              <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
+                {placeholderPresentation.helperHint}
+              </ThemedText>
+            </View>
+          </View>
+        ) : null}
 
         {/* Select Choices (Flat options when not cascading) */}
         {dataType === 'Select' && !isCascading && (
@@ -805,7 +846,7 @@ export default function AddEditFieldModal({
             label="Dropdown choices (comma separated)"
             value={options}
             onChangeText={setOptions}
-            placeholder="e.g. 1st Year, 2nd Year, 3rd Year, 4th Year"
+            placeholder="Enter choices separated by commas"
           />
         )}
 
@@ -816,31 +857,31 @@ export default function AddEditFieldModal({
           <View style={styles.sectionHeaderRow}>
             <View style={styles.rowAlign}>
               <Icon name="eye" size={theme.sizes.iconSm} color={theme.colors.primary} />
-              <ThemedText variant="bodyBold">Conditional Visibility Rule</ThemedText>
+              <ThemedText variant="bodyBold">Show Only For Specific Answers</ThemedText>
             </View>
             <ToggleSwitch
               value={hasVisibilityRule}
               onValueChange={setHasVisibilityRule}
-              accessibilityLabel="Conditional Visibility Rule"
+              accessibilityLabel="Show Only For Specific Answers"
             />
           </View>
 
           {hasVisibilityRule && (
             <View style={styles.ruleBuilderBody}>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Determine when this field appears on the intake form based on parent answers.
+                Only show this question when an earlier answer matches your condition.
               </ThemedText>
 
               {/* Source Selector */}
-              <FieldGroup label="Rule Source">
+              <FieldGroup label="Check Answer From">
                 <View style={styles.chipRow}>
                   <Chip
-                    label="Custom Intake Field"
+                    label="Another Registration Question"
                     active={ruleSource === 'custom_field'}
                     onPress={() => handleRuleSourceChange('custom_field')}
                   />
                   <Chip
-                    label="Static Patient Demographic"
+                    label="Basic Patient Info"
                     active={ruleSource === 'static'}
                     onPress={() => handleRuleSourceChange('static')}
                   />
@@ -848,7 +889,7 @@ export default function AddEditFieldModal({
               </FieldGroup>
 
               {/* Field Selector */}
-              <FieldGroup label="Parent Trigger Field">
+              <FieldGroup label="Question to Check">
                 {ruleSource === 'static' ? (
                   <View style={styles.chipRow}>
                     {STATIC_FIELD_OPTIONS.map((opt) => (
@@ -864,7 +905,7 @@ export default function AddEditFieldModal({
                   <View style={styles.chipRow}>
                     {candidateParentFields.length === 0 ? (
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        No other custom fields created yet.
+                        No other registration questions created yet.
                       </ThemedText>
                     ) : (
                       candidateParentFields.map((f) => (
@@ -881,7 +922,7 @@ export default function AddEditFieldModal({
               </FieldGroup>
 
               {/* Operator Selector */}
-              <FieldGroup label="Comparison Operator">
+              <FieldGroup label="Condition">
                 <View style={styles.chipRow}>
                   {(isParentBoolean ? BOOLEAN_OPERATORS : OPERATORS).map((op) => (
                     <Chip
@@ -897,7 +938,7 @@ export default function AddEditFieldModal({
               {/* Expected Value Input */}
               {ruleOperator !== 'not_empty' && (
                 isParentBoolean ? (
-                  <FieldGroup label="Expected Value to Trigger Visibility">
+                  <FieldGroup label="Answer That Shows This Question">
                     <View style={styles.chipRow}>
                       <Chip
                         label="Yes"
@@ -913,13 +954,13 @@ export default function AddEditFieldModal({
                   </FieldGroup>
                 ) : (
                   <Input
-                    label="Expected Value to Trigger Visibility"
+                    label="Answer That Shows This Question"
                     value={ruleValue}
                     onChangeText={setRuleValue}
                     placeholder={
                       ruleOperator === 'in'
-                        ? 'e.g. 4th Year, 5th Year / Grad (comma separated)'
-                        : 'e.g. Student, Married, Female'
+                        ? 'Enter matching answers separated by commas'
+                        : 'Enter matching answer'
                     }
                   />
                 )
@@ -928,7 +969,7 @@ export default function AddEditFieldModal({
               {/* Live Preview Badge */}
               <View style={styles.previewBox}>
                 <ThemedText variant="captionBold" color={theme.colors.warningText}>
-                  LIVE RULE PREVIEW:
+                  RULE PREVIEW:
                 </ThemedText>
                 {ruleField ? (
                   <Badge
@@ -938,7 +979,7 @@ export default function AddEditFieldModal({
                   />
                 ) : (
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Select a trigger field above to preview live rule.
+                    Choose a question above to preview when this will appear.
                   </ThemedText>
                 )}
               </View>
@@ -947,30 +988,30 @@ export default function AddEditFieldModal({
         </View>
 
         {/* =========================================================================
-            CASCADING DROPDOWN OPTIONS MAPPER (FOR SELECT FIELDS)
+            DEPENDENT DROPDOWN OPTIONS MAPPER (FOR SELECT FIELDS)
            ========================================================================= */}
         {dataType === 'Select' && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.rowAlign}>
                 <Icon name="tag" size={theme.sizes.iconSm} color={theme.colors.purple} />
-                <ThemedText variant="bodyBold">Cascading / Dependent Dropdown Choices</ThemedText>
+                <ThemedText variant="bodyBold">Filter Choices by Earlier Answer</ThemedText>
               </View>
               <ToggleSwitch
                 value={isCascading}
                 onValueChange={setIsCascading}
-                accessibilityLabel="Cascading / Dependent Dropdown Choices"
+                accessibilityLabel="Filter Choices by Earlier Answer"
               />
             </View>
 
             {isCascading && (
               <View style={styles.ruleBuilderBody}>
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Available choices change dynamically based on the value chosen in a parent field (e.g. College -&gt; Program).
+                  Show different dropdown choices depending on what was picked in an earlier dropdown question.
                 </ThemedText>
 
                 {/* Parent Select Field Selector */}
-                <FieldGroup label="Parent Dropdown Field">
+                <FieldGroup label="Earlier Dropdown Question">
                   <View style={styles.chipRow}>
                     {candidateParentFields
                       .filter((f) => f.dataType === 'Select')
@@ -989,10 +1030,10 @@ export default function AddEditFieldModal({
                 <View style={styles.mappingList}>
                   <View style={styles.rowBetween}>
                     <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                      Parent Value to Child Choices Mapping:
+                      Choices for Each Earlier Answer:
                     </ThemedText>
                     <Button
-                      title="+ Add Mapping"
+                      title="+ Add Answer Group"
                       variant="outline"
                       size="sm"
                       onPress={handleAddMappingEntry}
@@ -1003,26 +1044,27 @@ export default function AddEditFieldModal({
                     <View key={entry.id} style={styles.mappingEntryCard}>
                       <View style={styles.rowBetween}>
                         <ThemedText variant="captionBold" color={theme.colors.primary}>
-                          Mapping #{index + 1}
+                          Answer Group {index + 1}
                         </ThemedText>
                         <Button
                           title="Remove"
-                          variant="ghost"
-                          size="sm"
+                          icon="trash"
+                          variant="dangerGhost"
+                          size="xs"
                           onPress={() => handleRemoveMappingEntry(entry.id)}
                         />
                       </View>
                       <Input
-                        label="Parent Option Value"
+                        label="Earlier Answer"
                         value={entry.parentVal}
                         onChangeText={(v) => handleUpdateMappingEntry(entry.id, 'parentVal', v)}
-                        placeholder="e.g. College of Science"
+                        placeholder="Enter earlier answer"
                       />
                       <Input
-                        label="Resulting Child Choices (comma separated)"
+                        label="Dropdown Choices (comma separated)"
                         value={entry.childOptions}
                         onChangeText={(v) => handleUpdateMappingEntry(entry.id, 'childOptions', v)}
-                        placeholder="e.g. BS Applied Physics, BS Chemistry, BS Biology"
+                        placeholder="Enter choices separated by commas"
                       />
                     </View>
                   ))}
@@ -1030,16 +1072,16 @@ export default function AddEditFieldModal({
 
                 {/* Default Fallback Options */}
                 <Input
-                  label="Default / Fallback Choices (when parent is unselected)"
+                  label="Default Choices (when no earlier answer is picked)"
                   value={defaultOptions}
                   onChangeText={setDefaultOptions}
-                  placeholder="e.g. General Choice 1, General Choice 2"
+                  placeholder="Enter default choices separated by commas"
                 />
 
                 {parentField ? (
                   <View style={styles.previewBox}>
                     <Badge
-                      label={`Cascades on ${parentField} (${mappingEntries.length} mapped parents)`}
+                      label={`Depends on ${parentField} (${mappingEntries.length} answer groups)`}
                       variant="purple"
                       size="md"
                     />
@@ -1182,5 +1224,32 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     paddingVertical: 2,
     paddingHorizontal: theme.spacing.xs,
+  },
+  longPlaceholderPreviewCard: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.infoBorder,
+    backgroundColor: theme.colors.infoBg,
+    gap: theme.spacing.xs,
+  },
+  simulatedInputPreview: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  simulatedExpandedHintBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surfaceSubtle,
   },
 });

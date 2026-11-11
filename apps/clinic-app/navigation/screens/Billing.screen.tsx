@@ -1695,37 +1695,37 @@ export default function BillingScreen() {
               </ThemedText>
             </View>
             <View style={styles.qtyStepperRow}>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="minus"
+                iconOnly
                 onPress={() => handleUpdateQty(item.id, item.qty - 1)}
-                style={styles.qtyBtn}
-                accessibilityRole="button"
                 accessibilityLabel={`Decrease quantity of ${item.name}`}
-              >
-                <Icon name="minus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-              </Pressable>
+              />
               <ThemedText variant="bodyBold" style={styles.qtyText}>
                 {item.qty}
               </ThemedText>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="plus"
+                iconOnly
                 onPress={() => handleUpdateQty(item.id, item.qty + 1)}
-                style={styles.qtyBtn}
-                accessibilityRole="button"
                 accessibilityLabel={`Increase quantity of ${item.name}`}
-              >
-                <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-              </Pressable>
+              />
             </View>
             <ThemedText variant="bodyBold" color={theme.colors.primary}>
               {formatPeso(item.price * item.qty)}
             </ThemedText>
-            <Pressable
+            <Button
+              variant="dangerGhost"
+              size="xs"
+              icon="close"
+              iconOnly
               onPress={() => handleRemoveItem(item.id)}
-              style={styles.removeBtn}
-              accessibilityRole="button"
               accessibilityLabel={`Remove ${item.name}`}
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+            />
           </View>
         ))
       )}
@@ -2052,14 +2052,17 @@ export default function BillingScreen() {
               <ThemedText variant="caption" color={theme.colors.emergencyText}>
                 Invoice #{selectedPatient.existingInvoiceNumber} was already issued and paid for this encounter today.
               </ThemedText>
-              <Pressable
+              <Button
+                variant={allowDuplicate ? 'dangerOutline' : 'outline'}
+                size="xs"
+                title={
+                  allowDuplicate
+                    ? '[Authorized] Additional billing permitted'
+                    : 'Authorize additional / duplicate invoice'
+                }
                 onPress={() => setAllowDuplicate((prev) => !prev)}
                 style={styles.overrideCheck}
-              >
-                <ThemedText variant="captionBold" color={allowDuplicate ? theme.colors.emergencyText : theme.colors.primary}>
-                  {allowDuplicate ? '[Authorized] Additional billing permitted' : 'Authorize additional / duplicate invoice'}
-                </ThemedText>
-              </Pressable>
+              />
             </View>
           </View>
         )
@@ -2807,10 +2810,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
   },
-  removeBtn: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
   catalogSection: {
     gap: theme.spacing.sm,
   },
@@ -2838,7 +2837,7 @@ const styles = StyleSheet.create({
   },
   overrideCheck: {
     marginTop: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
+    alignSelf: 'flex-start',
   },
   soaHeaderBanner: {
     flexDirection: 'row',
@@ -2955,6 +2954,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
+    ...theme.shadows.brandSubtle,
   },
   paymentModeSegment: {
     flexDirection: 'row',
@@ -2976,6 +2976,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
+    ...theme.shadows.brandSubtle,
   },
   partialPayBox: {
     gap: theme.spacing.xs,
@@ -2991,9 +2992,6 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderLight,
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 2,
-  },
-  qtyBtn: {
-    padding: theme.spacing.xs,
   },
   qtyText: {
     minWidth: 20,

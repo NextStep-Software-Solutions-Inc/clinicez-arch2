@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, Modal, ScrollView, TextInput, Pressable } from 'react-native';
+import { View, StyleSheet, Modal, ScrollView, TextInput } from 'react-native';
 import ThemedText from './ui/ThemedText';
 import Button from './ui/Button';
 import Icon from './ui/Icon';
@@ -86,14 +86,14 @@ export function CrashRecoveryBanner() {
               variant="secondary"
               onPress={() => setModalVisible(true)}
             />
-            <Pressable
+            <Button
+              variant="ghost"
+              size="xs"
+              icon="close"
+              iconOnly
               onPress={handleDismiss}
-              accessibilityRole="button"
               accessibilityLabel="Dismiss crash banner"
-              style={styles.dismissButton}
-            >
-              <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-            </Pressable>
+            />
           </View>
         </View>
       </View>
@@ -116,14 +116,14 @@ export function CrashRecoveryBanner() {
                   Share this technical report with support to resolve and patch the issue quickly.
                 </ThemedText>
               </View>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="close"
+                iconOnly
                 onPress={() => setModalVisible(false)}
-                accessibilityRole="button"
                 accessibilityLabel="Close dialog"
-                style={styles.modalCloseButton}
-              >
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
-              </Pressable>
+              />
             </View>
 
             {/* Error metadata */}
@@ -206,9 +206,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  dismissButton: {
-    padding: theme.spacing.xs,
-  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: theme.colors.overlay,
@@ -233,9 +230,6 @@ const styles = StyleSheet.create({
   modalTitleBlock: {
     flex: 1,
     gap: theme.spacing.xs,
-  },
-  modalCloseButton: {
-    padding: theme.spacing.xs,
   },
   metaRow: {
     flexDirection: 'row',

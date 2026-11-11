@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
 import { useClinic } from '../../context/ClinicContext';
 import {
   type ClinicPatient,
@@ -440,26 +440,22 @@ export default function EncountersTimelineTab({
                       {/* Action Bar */}
                       <View style={styles.actionBar}>
                         {onViewPrescriptionSlip ? (
-                          <Pressable
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            icon="file"
+                            title="View E-Rx Slip"
                             onPress={() => onViewPrescriptionSlip(enc)}
-                            style={styles.actionBtn}
-                          >
-                            <Icon name="file" size={14} color={theme.colors.primaryDark} />
-                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                              View E-Rx Slip
-                            </ThemedText>
-                          </Pressable>
+                          />
                         ) : null}
                         {onOpenExternalDispense ? (
-                          <Pressable
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            icon="check"
+                            title="Log External Dispense"
                             onPress={() => onOpenExternalDispense(enc)}
-                            style={styles.actionBtn}
-                          >
-                            <Icon name="check" size={14} color={theme.colors.primaryDark} />
-                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                              Log External Dispense
-                            </ThemedText>
-                          </Pressable>
+                          />
                         ) : null}
                       </View>
 
@@ -709,17 +705,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
   },
   signingFooter: {
     paddingTop: theme.spacing.xs,

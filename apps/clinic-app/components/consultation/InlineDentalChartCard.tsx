@@ -996,18 +996,15 @@ export function InlineDentalChartCard({
                           </View>
 
                           {!disabled && isCurrentEncounterRecord ? (
-                            <Pressable
-                              accessibilityRole="button"
+                            <Button
+                              title="Remove"
+                              variant="dangerGhost"
+                              size="xs"
+                              icon="trash"
                               accessibilityLabel={`Remove ${getToothStatusLabel(cond.status)} from Tooth #${selectedToothNumber}`}
                               onPress={() => handleRemoveCondition(selectedToothNumber, cond.id || cond.status)}
                               testID={`remove-condition-${cond.id || cond.status.toLowerCase()}`}
-                              style={styles.removeConditionBtn}
-                            >
-                              <Icon name="trash" size={14} color={theme.colors.emergency} />
-                              <ThemedText variant="captionBold" color={theme.colors.emergency}>
-                                Remove
-                              </ThemedText>
-                            </Pressable>
+                            />
                           ) : null}
                         </View>
 
@@ -1247,13 +1244,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  removeConditionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: theme.spacing.xs,
   },
   conditionNotes: {
     fontStyle: 'italic',

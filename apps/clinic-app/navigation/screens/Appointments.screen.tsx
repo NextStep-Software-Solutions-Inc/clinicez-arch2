@@ -4,7 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  Pressable,
 } from 'react-native';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { notify } from '@utils/feedback';
@@ -1215,16 +1214,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-  },
-  cancelBtn: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.emergencyBorder,
-    borderRadius: theme.radii.sm,
   },
   modalFooter: {
     flexDirection: 'row',

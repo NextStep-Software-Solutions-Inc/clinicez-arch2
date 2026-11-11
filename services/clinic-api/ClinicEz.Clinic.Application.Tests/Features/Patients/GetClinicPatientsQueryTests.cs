@@ -10,6 +10,8 @@ using ClinicEz.Clinic.Application.Tests;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using Xunit;
 
@@ -429,6 +431,340 @@ public class GetClinicPatientsQueryTests
 
         patient2Result.Should().NotBeNull();
         patient2Result!.ActiveQueueTicket.Should().Be("Q-005", "today's ticket is active");
+    }
+
+    [Fact]
+    public async Task FilterMode_Students_ReturnsStudentsAndExcludesBlankIds_OnDirectLoadAndTabSwitching()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var handler = new GetClinicPatientsQueryHandler(repo, queueRepo, encounterRepo);
+
+        var doctorId = Guid.NewGuid();
+
+        var studentByClassification = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "STU-001",
+            FirstName = "Angela",
+            LastName = "Aquino",
+            DateOfBirth = new DateOnly(2006, 4, 12),
+            ContactNumber = "09171110001",
+            CustomFields = new Dictionary<string, object?> { ["classification"] = "Student" }
+        };
+
+        var studentByCategory = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "STU-002",
+            FirstName = "Bryan",
+            LastName = "Bautista",
+            DateOfBirth = new DateOnly(2005, 9, 20),
+            ContactNumber = "09171110002",
+            CustomFields = new Dictionary<string, object?> { ["category"] = "student" }
+        };
+
+        var studentByIdOnly = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "STU-003",
+            FirstName = "Camille",
+            LastName = "Cruz",
+            DateOfBirth = new DateOnly(2007, 1, 15),
+            ContactNumber = "09171110003",
+            CustomFields = new Dictionary<string, object?> { ["student_id"] = "2026-00419" }
+        };
+
+        var generalWithBlankStudentId = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "GEN-001",
+            FirstName = "Dennis",
+            LastName = "Dizon",
+            DateOfBirth = new DateOnly(1990, 6, 10),
+            ContactNumber = "09171110004",
+            CustomFields = new Dictionary<string, object?> { ["classification"] = "General", ["student_id"] = "   " }
+        };
+
+        var employeeWithNullStudentId = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "EMP-001",
+            FirstName = "Elena",
+            LastName = "Espino",
+            DateOfBirth = new DateOnly(1986, 3, 5),
+            ContactNumber = "09171110005",
+            HasActiveSafetyAlert = true,
+            CustomFields = new Dictionary<string, object?>
+            {
+                ["classification"] = "Employee",
+                ["employee_id"] = "EMP-1001",
+                ["student_id"] = null,
+                ["assigned_doctor_id"] = doctorId.ToString()
+            }
+        };
+
+        var seniorPatient = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "SEN-001",
+            FirstName = "Francisco",
+            LastName = "Flores",
+            DateOfBirth = new DateOnly(1955, 11, 2),
+            ContactNumber = "09171110006",
+            SeniorCitizenId = "OSCA-8891",
+            CustomFields = new Dictionary<string, object?> { ["student_id"] = "" }
+        };
+
+        context.Patients.AddRange(
+            studentByClassification,
+            studentByCategory,
+            studentByIdOnly,
+            generalWithBlankStudentId,
+            employeeWithNullStudentId,
+            seniorPatient);
+        await context.SaveChangesAsync();
+
+        // 1. Direct initial load / page refresh on STUDENTS tab (previously crashed with HTTP 500)
+        var initialStudents = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "STUDENTS"), CancellationToken.None);
+        initialStudents.Select(p => p.Id).Should().BeEquivalentTo(new[]
+        {
+            studentByClassification.Id,
+            studentByCategory.Id,
+            studentByIdOnly.Id
+        });
+
+        // 2. Sequential tab switching across all directory filter modes
+        var allTab = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "ALL"), CancellationToken.None);
+        allTab.Should().HaveCount(6);
+
+        var studentsTab = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "STUDENTS", DoctorId: doctorId), CancellationToken.None);
+        studentsTab.Should().HaveCount(3);
+
+        var employeesTab = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "EMPLOYEES", DoctorId: doctorId), CancellationToken.None);
+        employeesTab.Select(p => p.Id).Should().Equal(employeeWithNullStudentId.Id);
+
+        var alertsTab = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "ALERTS", DoctorId: doctorId), CancellationToken.None);
+        alertsTab.Select(p => p.Id).Should().Equal(employeeWithNullStudentId.Id);
+
+        var seniorPwdTab = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "SENIOR_PWD", DoctorId: doctorId), CancellationToken.None);
+        seniorPwdTab.Select(p => p.Id).Should().Equal(seniorPatient.Id);
+
+        var myPatientsTab = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "MY_PATIENTS", DoctorId: doctorId), CancellationToken.None);
+        myPatientsTab.Select(p => p.Id).Should().Equal(employeeWithNullStudentId.Id);
+
+        var defaultNullFilter = await handler.Handle(new GetClinicPatientsQuery(FilterMode: null), CancellationToken.None);
+        defaultNullFilter.Should().HaveCount(6);
+    }
+
+    [Fact]
+    public async Task FilterMode_Employees_ReturnsEmployeesAndExcludesBlankEmployeeIds()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var handler = new GetClinicPatientsQueryHandler(repo);
+
+        var empByClassification = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "EMP-101",
+            FirstName = "Grace",
+            LastName = "Garcia",
+            DateOfBirth = new DateOnly(1991, 2, 14),
+            ContactNumber = "09172220001",
+            CustomFields = new Dictionary<string, object?> { ["classification"] = "Employee" }
+        };
+
+        var empByCategory = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "EMP-102",
+            FirstName = "Hector",
+            LastName = "Hernandez",
+            DateOfBirth = new DateOnly(1989, 7, 19),
+            ContactNumber = "09172220002",
+            CustomFields = new Dictionary<string, object?> { ["category"] = "employee" }
+        };
+
+        var empByIdOnly = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "EMP-103",
+            FirstName = "Irene",
+            LastName = "Ilagan",
+            DateOfBirth = new DateOnly(1993, 12, 1),
+            ContactNumber = "09172220003",
+            CustomFields = new Dictionary<string, object?> { ["employee_id"] = "FAC-4402" }
+        };
+
+        var blankEmployeeId = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "GEN-104",
+            FirstName = "Jerome",
+            LastName = "Javier",
+            DateOfBirth = new DateOnly(1995, 5, 25),
+            ContactNumber = "09172220004",
+            CustomFields = new Dictionary<string, object?> { ["employee_id"] = "" }
+        };
+
+        var whitespaceEmployeeId = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "STU-105",
+            FirstName = "Katrina",
+            LastName = "Katigbak",
+            DateOfBirth = new DateOnly(2004, 8, 8),
+            ContactNumber = "09172220005",
+            CustomFields = new Dictionary<string, object?> { ["classification"] = "Student", ["employee_id"] = "   " }
+        };
+
+        context.Patients.AddRange(empByClassification, empByCategory, empByIdOnly, blankEmployeeId, whitespaceEmployeeId);
+        await context.SaveChangesAsync();
+
+        var employees = await handler.Handle(new GetClinicPatientsQuery(FilterMode: "EMPLOYEES"), CancellationToken.None);
+
+        employees.Select(p => p.Id).Should().BeEquivalentTo(new[]
+        {
+            empByClassification.Id,
+            empByCategory.Id,
+            empByIdOnly.Id
+        });
+    }
+
+    [Fact]
+    public async Task FilterMode_MyPatients_IncludesHistoricalConsultationEncounters()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var handler = new GetClinicPatientsQueryHandler(repo, queueRepo, encounterRepo);
+
+        var doctorId = Guid.NewGuid();
+
+        var pEncounter = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-ENC-001",
+            FirstName = "Lorenzo",
+            LastName = "Lopez",
+            DateOfBirth = new DateOnly(1984, 10, 10),
+            ContactNumber = "09173330001"
+        };
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = pEncounter.Id,
+            PatientName = "Lopez, Lorenzo",
+            DoctorId = doctorId,
+            DoctorName = "Dr. Santos"
+        };
+
+        var pUnrelated = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-ENC-002",
+            FirstName = "Marco",
+            LastName = "Mendoza",
+            DateOfBirth = new DateOnly(1990, 4, 4),
+            ContactNumber = "09173330002"
+        };
+
+        context.Patients.AddRange(pEncounter, pUnrelated);
+        context.Consultations.Add(encounter);
+        await context.SaveChangesAsync();
+
+        var result = await handler.Handle(new GetClinicPatientsQuery(
+            FilterMode: "MY_PATIENTS",
+            DoctorId: doctorId), CancellationToken.None);
+
+        result.Select(p => p.Id).Should().Equal(pEncounter.Id);
+    }
+
+    [Theory]
+    [InlineData("ALL")]
+    [InlineData("STUDENTS")]
+    [InlineData("EMPLOYEES")]
+    [InlineData("MY_PATIENTS")]
+    [InlineData("ALERTS")]
+    [InlineData("SENIOR_PWD")]
+    public void NpgsqlSqlTranslation_AllFilterModesAndCursorPagination_TranslateCleanlyWithJsonbValueConverter(string filterMode)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "public") })
+            .Build();
+        var options = new DbContextOptionsBuilder<ClinicEz.Clinic.Infrastructure.Persistence.ApplicationDbContext>()
+            .UseNpgsql("Host=localhost;Database=test;Username=postgres;Password=postgres")
+            .Options;
+
+        using var npgsqlContext = new ClinicEz.Clinic.Infrastructure.Persistence.ApplicationDbContext(options, config, _clinicContext);
+
+        var staffId = Guid.NewGuid();
+        var relatedIds = new List<Guid> { Guid.NewGuid() };
+        var request = new GetClinicPatientsQuery(
+            SearchTerm: "Santos",
+            FilterMode: filterMode,
+            StaffId: staffId,
+            CursorLastName: "Adams",
+            CursorFirstName: "Alice",
+            CursorId: Guid.NewGuid(),
+            PageSize: 25);
+
+        var baseQuery = GetClinicPatientsQueryHandler.ApplyRelationalBaseFilters(npgsqlContext.Patients.AsNoTracking(), request);
+        var filteredQuery = GetClinicPatientsQueryHandler.ApplyPostgresFilterMode(baseQuery, request.FilterMode, staffId, relatedIds);
+        var pagedQuery = GetClinicPatientsQueryHandler.ApplyOrderingAndPagination(filteredQuery, request);
+
+        var sql = pagedQuery.ToQueryString();
+
+        sql.Should().NotBeNullOrWhiteSpace();
+        sql.Should().Contain("FROM public.\"Patients\"");
+
+        if (filterMode == "STUDENTS")
+        {
+            sql.Should().Contain("@>");
+            sql.Should().Contain("? 'student_id'");
+        }
+        else if (filterMode == "EMPLOYEES")
+        {
+            sql.Should().Contain("@>");
+            sql.Should().Contain("? 'employee_id'");
+        }
+        else if (filterMode == "MY_PATIENTS")
+        {
+            sql.Should().Contain("@>");
+        }
     }
 }
 

@@ -360,16 +360,16 @@ export default function NursingProceduresTab({
         </View>
 
         {canOrderProcedures ? (
-          <Pressable
+          <Button
             testID="order-procedure-button"
+            variant="primary"
+            size="sm"
+            icon="plus"
+            title="Order Procedure"
+            numberOfLines={1}
             onPress={onOrderProcedure || (() => setOrderModalVisible(true))}
             style={styles.orderProcedureBtn}
-          >
-            <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
-            <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.onPrimary}>
-              Order Procedure
-            </ThemedText>
-          </Pressable>
+          />
         ) : null}
       </View>
 
@@ -504,8 +504,12 @@ export default function NursingProceduresTab({
                 {/* Nurse Execution & Cancellation Action */}
                 {!isCompleted && proc.status !== 'Cancelled' ? (
                   <View style={styles.procedureFooter}>
-                    <Pressable
+                    <Button
                       testID="execute-procedure-action"
+                      variant="outline"
+                      size="xs"
+                      icon="check"
+                      title="Execute / Document Procedure"
                       onPress={() => {
                         if (onExecuteProcedure) {
                           onExecuteProcedure(proc);
@@ -513,25 +517,17 @@ export default function NursingProceduresTab({
                           setExecutingProc(proc);
                         }
                       }}
-                      style={styles.executeBtn}
-                    >
-                      <Icon name="check" size={14} color={theme.colors.primaryDark} />
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        Execute / Document Procedure
-                      </ThemedText>
-                    </Pressable>
+                    />
 
                     {canCancelProcedureOrder(proc) ? (
-                      <Pressable
+                      <Button
                         testID="cancel-procedure-action"
+                        variant="dangerOutline"
+                        size="xs"
+                        icon="close"
+                        title="Cancel Order"
                         onPress={() => handleCancelProcedure(proc)}
-                        style={styles.cancelBtn}
-                      >
-                        <Icon name="close" size={14} color={theme.colors.emergencyText} />
-                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                          Cancel Order
-                        </ThemedText>
-                      </Pressable>
+                      />
                     ) : null}
                   </View>
                 ) : null}
@@ -630,15 +626,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primaryBorder,
   },
   orderProcedureBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
     flexShrink: 0,
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.radii.sm,
-    minHeight: theme.sizes.controlSm,
   },
   proceduresList: {
     gap: theme.spacing.sm,
@@ -727,28 +715,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-  },
-  executeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  cancelBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: 1,
-    borderColor: theme.colors.emergencyBorder,
   },
   modalContent: {
     padding: theme.spacing.md,

@@ -8,7 +8,6 @@ export default function AuditScreen() {
   return (
     <ResponsiveLayout
       headerTitle="Audit Log"
-      headerSubtitle="Clinic-wide forensic activity trail & privacy compliance"
       hideHeader={false}
       style={styles.container}
     >

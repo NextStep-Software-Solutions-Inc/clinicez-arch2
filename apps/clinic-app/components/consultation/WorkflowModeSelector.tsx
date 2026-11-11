@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     borderColor: theme.colors.primaryDark,
     borderWidth: theme.sizes.borderWidth,
-    ...theme.shadows.sm,
+    ...theme.shadows.brandSubtle,
   },
   atcSection: {
     paddingTop: theme.spacing.xs,

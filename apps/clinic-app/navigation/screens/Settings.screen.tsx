@@ -1,10 +1,18 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
-import { ThemedText } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { Alert, notify } from '@utils/feedback';
+import { getDeviceItem, setDeviceItem } from '../../utils/deviceStorage';
+import { usePersistedScrollPosition } from '../../hooks/usePersistedScrollPosition';
 import { useFacilityLicense } from '../../components/FacilityActivationGate';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff } from '../../context/StaffContext';
@@ -12,16 +20,15 @@ import { usePermission, useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
-  DailyEodReport,
   ClinicSettingsRecord,
   StaffMember,
   ClinicCustomFieldDefinition,
   ClinicServiceItem,
   ClinicRole,
-  getManilaTodayStr,
 } from '../../services/clinicService';
 
 import SettingsTabBar from '../../components/settings/SettingsTabBar';
+import SettingsVerticalRail from '../../components/settings/SettingsVerticalRail';
 import GeneralSettingsTab from '../../components/settings/GeneralSettingsTab';
 import DocumentTemplatesSettingsTab from '../../components/settings/DocumentTemplatesSettingsTab';
 import FacilityReadinessTab from '../../components/settings/FacilityReadinessTab';
@@ -31,15 +38,46 @@ import ServicesCatalogTab from '../../components/settings/ServicesCatalogTab';
 import CustomFieldsTab from '../../components/settings/CustomFieldsTab';
 import PhilHealthSettingsTab from '../../components/settings/PhilHealthSettingsTab';
 import LicenseSystemTab from '../../components/settings/LicenseSystemTab';
+import SecuritySection from '../../components/settings/SecuritySection';
+import AppUpdatesSettingsCard from '../../components/settings/AppUpdatesSettingsCard';
+import WorkstationNodeDevSection from '../../components/settings/cards/WorkstationNodeDevSection';
+import { Card, CardContent } from '../../components/ui/Card';
+import { SkeletonList } from '../../components/ui/Skeleton';
 import {
+  SETTINGS_SECTION_CATALOG,
+  SETTINGS_NAV_MODE_STORAGE_KEY,
+  SETTINGS_VERTICAL_RAIL_MIN_WIDTH,
   type SettingsTabItem,
   type SettingsTabKey,
+  type SettingsNavMode,
   type SettingsRouteParams,
+  buildSyncedSettingsRouteParams,
+  filterSettingsTabs,
+  isGeneralSettingsSectionKey,
+  readInitialSettingsTabFromSearch,
+  resolveEffectiveSettingsNavMode,
   resolveSettingsRouteIntent,
 } from '../../components/settings/types';
 import { formatPeso } from '../../components/settings/common';
 
-export { type SettingsRouteParams, resolveSettingsRouteIntent };
+export {
+  type SettingsRouteParams,
+  SETTINGS_NAV_MODE_STORAGE_KEY,
+  SETTINGS_VERTICAL_RAIL_MIN_WIDTH,
+  buildSyncedSettingsRouteParams,
+  resolveEffectiveSettingsNavMode,
+  resolveSettingsRouteIntent,
+};
+
+export function readInitialSettingsTabFromUrl(search?: string | null): SettingsTabKey | null {
+  const rawSearch =
+    search !== undefined
+      ? search
+      : Platform.OS === 'web' && typeof window !== 'undefined'
+      ? window.location?.search
+      : null;
+  return readInitialSettingsTabFromSearch(rawSearch);
+}
 
 export type SettingsScreenProps = StaticScreenProps<SettingsRouteParams | undefined>;
 
@@ -52,17 +90,26 @@ const sanitizeLegacyDefault = (val?: string | null): string => {
 
 export default function SettingsScreen({ route }: Partial<SettingsScreenProps> = {}) {
   const navigation = useNavigation<any>();
+  const { width: viewportWidth } = useWindowDimensions();
+
   const incomingTab = route?.params?.tab;
   const incomingOpenAddStaff = route?.params?.openAddStaff;
-  const initialIntent = useMemo(
-    () =>
-      resolveSettingsRouteIntent({
-        tab: incomingTab,
-        openAddStaff: incomingOpenAddStaff,
-      }),
+
+  const initialIntent = useMemo(() => {
+    const routeIntent = resolveSettingsRouteIntent({
+      tab: incomingTab,
+      openAddStaff: incomingOpenAddStaff,
+    });
+    if (routeIntent.targetTab || routeIntent.shouldOpenAddStaff) {
+      return routeIntent;
+    }
+    const urlTab = readInitialSettingsTabFromUrl();
+    return {
+      targetTab: urlTab,
+      shouldOpenAddStaff: false,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+  }, []);
 
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
   const { refresh: refreshClinic } = useClinic();
@@ -73,10 +120,82 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const canManageRoles = usePermission(PERMISSIONS.rolesManage);
   const isAdmin = canManageSettings || canManageStaff || user?.role === 'Admin';
 
-  const [activeTab, setActiveTab] = useState<SettingsTabKey>(() => initialIntent.targetTab ?? 'general');
+  const [activeTab, setActiveTab] = useState<SettingsTabKey>(
+    () => initialIntent.targetTab ?? 'general'
+  );
+  const [filterQuery, setFilterQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const activeTabRef = useRef<SettingsTabKey>(activeTab);
+  activeTabRef.current = activeTab;
+
+  const {
+    scrollViewRef,
+    onScroll: handleCanvasScroll,
+    onContentSizeChange: handleCanvasContentSizeChange,
+    resetScrollPosition,
+  } = usePersistedScrollPosition({
+    storageKey: `clinicez.scroll.settings.${activeTab}`,
+    ready: !loading,
+  });
+
+  const lastIncomingTabRef = useRef<string | undefined>(initialIntent.targetTab ?? incomingTab);
+  const prevIncomingTabRef = useRef<string | undefined>(incomingTab);
+  const pendingSyncedTabsRef = useRef<SettingsTabKey[]>([]);
+  const isInitialRouteSyncRef = useRef(true);
+
+  // Persisted Navigation Mode ('vertical' | 'horizontal')
+  const [preferredNavMode, setPreferredNavMode] = useState<SettingsNavMode>(() => {
+    const stored = getDeviceItem(SETTINGS_NAV_MODE_STORAGE_KEY);
+    return stored === 'horizontal' || stored === 'vertical' ? stored : 'vertical';
+  });
+
+  const canUseVerticalRail = viewportWidth >= SETTINGS_VERTICAL_RAIL_MIN_WIDTH;
+  const effectiveNavMode = resolveEffectiveSettingsNavMode(preferredNavMode, viewportWidth);
+
+  const handleChangeNavMode = useCallback((nextMode: SettingsNavMode) => {
+    setPreferredNavMode(nextMode);
+    setDeviceItem(SETTINGS_NAV_MODE_STORAGE_KEY, nextMode);
+  }, []);
+
+  const syncTabToNavigation = useCallback(
+    (nextTab: SettingsTabKey) => {
+      navigation?.setParams?.(buildSyncedSettingsRouteParams(nextTab));
+      if (
+        Platform.OS === 'web' &&
+        typeof window !== 'undefined' &&
+        window.history &&
+        typeof window.history.replaceState === 'function'
+      ) {
+        try {
+          const url = new URL(window.location.href);
+          if (url.pathname.toLowerCase().includes('settings')) {
+            url.searchParams.set('tab', nextTab);
+            url.searchParams.delete('openAddStaff');
+            window.history.replaceState(window.history.state, '', url.toString());
+          }
+        } catch {
+          // Ignore malformed environment URLs in non-browser test runners
+        }
+      }
+    },
+    [navigation]
+  );
+
+  const handleSelectTab = useCallback(
+    (nextTab: SettingsTabKey) => {
+      lastIncomingTabRef.current = nextTab;
+      pendingSyncedTabsRef.current = [...pendingSyncedTabsRef.current.slice(-4), nextTab];
+      if (activeTabRef.current !== nextTab) {
+        resetScrollPosition(`clinicez.scroll.settings.${nextTab}`);
+      }
+      setActiveTab(nextTab);
+      syncTabToNavigation(nextTab);
+    },
+    [resetScrollPosition, syncTabToNavigation]
+  );
 
   // Core Data States
-  const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
   const [settings, setSettings] = useState<ClinicSettingsRecord | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [roles, setRoles] = useState<ClinicRole[]>([]);
@@ -84,16 +203,13 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
 
   // Loading & Error States
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  const [eodLoadError, setEodLoadError] = useState<string | null>(null);
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [staffLoadError, setStaffLoadError] = useState<string | null>(null);
   const [fieldsLoadError, setFieldsLoadError] = useState<string | null>(null);
   const [servicesLoadError, setServicesLoadError] = useState<string | null>(null);
-  const [rolesLoadError, setRolesLoadError] = useState<string | null>(null);
 
   // Form states for general clinic profile
   const [clinicName, setClinicName] = useState('');
@@ -104,53 +220,84 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [letterheadHeader, setLetterheadHeader] = useState('');
   const [letterheadAddress, setLetterheadAddress] = useState('');
   const [letterheadContact, setLetterheadContact] = useState('');
-  const [preferredChartLayout, setPreferredChartLayout] = useState<'modal' | 'split' | 'drawer'>('modal');
-  const [specialtyMode, setSpecialtyMode] = useState<'Medical' | 'Dental' | 'Multi-Specialty'>('Medical');
-  const [enableDentalModule, setEnableDentalModule] = useState(false);
-  const [cashierMode, setCashierMode] = useState<'ClinicDesk' | 'CashierCounter'>('ClinicDesk');
+  const [preferredChartLayout, setPreferredChartLayout] = useState<'modal' | 'split' | 'drawer' | undefined>(undefined);
+  const [specialtyMode, setSpecialtyMode] = useState<'Medical' | 'Dental' | 'Multi-Specialty' | undefined>(undefined);
+  const [enableDentalModule, setEnableDentalModule] = useState<boolean | undefined>(undefined);
+  const [cashierMode, setCashierMode] = useState<'ClinicDesk' | 'CashierCounter' | undefined>(undefined);
 
   // Modals for sub-components
   const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(() => initialIntent.shouldOpenAddStaff);
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
 
+  // Sync incoming route params WITHOUT clearing `tab` (fixes GitHub Issue #163)
+  // Guarded via `lastIncomingTabRef` / `prevIncomingTabRef` with `activeTab` omitted from deps
+  // so clicking tabs never snaps backward while `route.params.tab` lags behind.
   useEffect(() => {
     const intent = resolveSettingsRouteIntent({
       tab: incomingTab,
       openAddStaff: incomingOpenAddStaff,
     });
-    if (!intent.targetTab && !intent.shouldOpenAddStaff) return;
 
-    if (intent.targetTab) {
-      setActiveTab(intent.targetTab);
+    if (isInitialRouteSyncRef.current) {
+      isInitialRouteSyncRef.current = false;
+      prevIncomingTabRef.current = incomingTab;
+      if (intent.shouldOpenAddStaff) {
+        const preservedTab = intent.targetTab ?? 'staff';
+        lastIncomingTabRef.current = preservedTab;
+        setActiveTab(preservedTab);
+        setShowAddStaffModal(true);
+        syncTabToNavigation(preservedTab);
+      } else if (initialIntent.targetTab) {
+        lastIncomingTabRef.current = initialIntent.targetTab;
+        syncTabToNavigation(initialIntent.targetTab);
+      }
+      return;
     }
+
+    const didIncomingTabChange = incomingTab !== prevIncomingTabRef.current;
+    prevIncomingTabRef.current = incomingTab;
+
     if (intent.shouldOpenAddStaff) {
+      const preservedTab = intent.targetTab ?? 'staff';
+      lastIncomingTabRef.current = preservedTab;
+      pendingSyncedTabsRef.current = [];
+      setActiveTab(preservedTab);
       setShowAddStaffModal(true);
+      syncTabToNavigation(preservedTab);
+      return;
     }
-    navigation.setParams?.({
-      tab: undefined,
-      openAddStaff: undefined,
-    });
-  }, [incomingTab, incomingOpenAddStaff, navigation]);
+
+    if (didIncomingTabChange && intent.targetTab) {
+      const pendingIdx = pendingSyncedTabsRef.current.indexOf(intent.targetTab);
+      if (pendingIdx !== -1) {
+        pendingSyncedTabsRef.current = pendingSyncedTabsRef.current.slice(pendingIdx + 1);
+        return;
+      }
+
+      if (intent.targetTab !== lastIncomingTabRef.current) {
+        pendingSyncedTabsRef.current = [];
+        lastIncomingTabRef.current = intent.targetTab;
+        setActiveTab(intent.targetTab);
+        syncTabToNavigation(intent.targetTab);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingTab, incomingOpenAddStaff]);
 
   const loadAll = useCallback(async () => {
     const [
-      [eodData, eodErr],
       [settingsData, settingsErr],
       [staffData, staffErr],
       [customFieldsData, fieldsErr],
       [servicesData, servicesErr],
       [rolesData, rolesErr],
     ] = await Promise.all([
-      clinicService.getDailyEodReport(getManilaTodayStr()),
       clinicService.getSettings(),
       clinicService.getStaff(),
       clinicService.getCustomFields('ClinicPatient'),
       clinicService.getServices(),
       clinicService.getRoles(),
     ]);
-
-    setEodLoadError(eodErr ? eodErr.message || 'Unable to load today\'s collections.' : null);
-    if (!eodErr) setEodReport(eodData ?? null);
 
     setSettingsLoadError(settingsErr ? settingsErr.message || 'Unable to load clinic settings.' : null);
     if (settingsData) {
@@ -191,7 +338,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     setServicesLoadError(servicesErr ? servicesErr.message || 'Unable to load the service catalog.' : null);
     if (!servicesErr) setServices(servicesData ?? []);
 
-    setRolesLoadError(rolesErr ? rolesErr.message || 'Unable to load roles.' : null);
     if (!rolesErr) setRoles(rolesData ?? []);
   }, []);
 
@@ -229,17 +375,20 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       accreditationNumber: accreditationNumber.trim(),
       operatingHours: operatingHours.trim(),
       defaultSlotDurationMinutes: slotMinutes,
-      queuePrefix: settings?.queuePrefix || 'Q',
-      invoicePrefix: settings?.invoicePrefix || 'INV',
+      queuePrefix: settings?.queuePrefix ?? '',
+      invoicePrefix: settings?.invoicePrefix ?? '',
       defaultConsultationFee: fee,
-      vatRate: settings?.vatRate ?? 0.12,
+      vatRate: settings?.vatRate,
       letterheadHeader: letterheadHeader.trim(),
       letterheadAddress: letterheadAddress.trim(),
       letterheadContact: letterheadContact.trim(),
-      preferredChartLayout,
-      specialtyMode,
-      enableDentalModule: specialtyMode === 'Dental' ? true : enableDentalModule,
-      cashierMode,
+      preferredChartLayout: preferredChartLayout ?? settings?.preferredChartLayout,
+      specialtyMode: specialtyMode ?? (settings?.specialtyMode as any),
+      enableDentalModule:
+        specialtyMode === 'Dental'
+          ? true
+          : enableDentalModule ?? settings?.enableDentalModule,
+      cashierMode: cashierMode ?? settings?.cashierMode,
     });
     setSavingSettings(false);
 
@@ -247,7 +396,21 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       notify.error(err.message || 'Could not save settings.');
       return;
     }
-    if (saved) setSettings(saved);
+    if (saved) {
+      setSettings(saved);
+      setClinicName(saved.clinicName ?? '');
+      setAccreditationNumber(saved.accreditationNumber ?? '');
+      setOperatingHours(sanitizeLegacyDefault(saved.operatingHours));
+      setSlotDuration(
+        saved.defaultSlotDurationMinutes != null ? String(saved.defaultSlotDurationMinutes) : ''
+      );
+      setConsultationFee(
+        saved.defaultConsultationFee != null ? String(saved.defaultConsultationFee) : ''
+      );
+      setLetterheadHeader(saved.letterheadHeader ?? '');
+      setLetterheadAddress(saved.letterheadAddress ?? '');
+      setLetterheadContact(saved.letterheadContact ?? '');
+    }
     notify.success('Settings saved.');
     await refreshClinic();
   };
@@ -276,7 +439,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const handleTogglePublishDirectory = async (nextValue: boolean) => {
     if (!settings) return;
     const prevPublished = settings.isDirectoryPublished ?? false;
-    // Optimistic update
     setSettings((prev) => (prev ? { ...prev, isDirectoryPublished: nextValue } : null));
     setPublishingLoading(true);
 
@@ -284,7 +446,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     setPublishingLoading(false);
 
     if (err || !result?.success) {
-      // Rollback
       setSettings((prev) => (prev ? { ...prev, isDirectoryPublished: prevPublished } : null));
       notify.error(err?.message || result?.message || 'Failed to update patient directory status.');
       return;
@@ -308,7 +469,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const handleToggleBookingPause = async (nextValue: boolean) => {
     if (!settings) return;
     const prevPaused = settings.isOnlineBookingPaused ?? false;
-    // Optimistic update
     setSettings((prev) => (prev ? { ...prev, isOnlineBookingPaused: nextValue } : null));
     setPauseLoading(true);
 
@@ -316,7 +476,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     setPauseLoading(false);
 
     if (err || !result?.success) {
-      // Rollback
       setSettings((prev) => (prev ? { ...prev, isOnlineBookingPaused: prevPaused } : null));
       notify.error(err?.message || result?.message || 'Failed to update booking pause status.');
       return;
@@ -337,64 +496,10 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     );
   };
 
-  // Build Tabs based on RBAC authority
+  const showSkeletons = loading && !refreshing;
+
+  // Build all 14 categorized sections respecting RBAC authority (omitting 0/fallback badges while loading)
   const tabs = useMemo<SettingsTabItem[]>(() => {
-    const list: SettingsTabItem[] = [];
-
-    if (isAdmin) {
-      list.push({
-        key: 'readiness',
-        label: 'Facility Readiness',
-        icon: isFacilityReady ? 'checkCircle' : 'alertCircle',
-        badge: isFacilityReady ? undefined : 'Setup Needed',
-        adminOnly: true,
-      });
-    }
-
-    list.push({
-      key: 'general',
-      label: 'General & Profile',
-      icon: 'settings',
-    });
-
-    list.push({
-      key: 'documents',
-      label: 'Document & Stationery Studio',
-      icon: 'file',
-    });
-
-    if (isAdmin || canManageStaff) {
-      list.push({
-        key: 'staff',
-        label: 'Staff Directory & Roster',
-        icon: 'staff',
-        badge: maxStaffSeats != null ? `${activeStaffCount}/${maxStaffSeats}` : activeStaffCount,
-        adminOnly: true,
-      });
-    }
-
-    if (isAdmin || canManageRoles) {
-      list.push({
-        key: 'rbac',
-        label: 'Access Control (RBAC)',
-        icon: 'key',
-        adminOnly: true,
-      });
-    }
-
-    list.push({
-      key: 'services',
-      label: 'Services & Catalog',
-      icon: 'clipboard',
-      badge: services.length,
-    });
-
-    list.push({
-      key: 'fields',
-      label: 'Intake Fields',
-      icon: 'patients',
-    });
-
     const isPhilHealthConfigured = Boolean(settings?.isPhilHealthConfigured);
     const hasAccreditation = Boolean(accreditationNumber?.trim());
     const philHealthBadge = !hasAccreditation
@@ -403,24 +508,50 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       ? 'Linked'
       : 'Pending';
 
-    list.push({
-      key: 'philhealth',
-      label: 'PhilHealth & Yakap',
-      icon: 'yakap',
-      badge: philHealthBadge,
-    });
+    const list: SettingsTabItem[] = [];
 
-    if (isAdmin) {
-      list.push({
-        key: 'license',
-        label: 'Facility License',
-        icon: 'key',
-        adminOnly: true,
-      });
+    for (const group of SETTINGS_SECTION_CATALOG) {
+      for (const section of group.sections) {
+        if (section.key === 'readiness' && !isAdmin) continue;
+        if (section.key === 'staff' && !(isAdmin || canManageStaff)) continue;
+        if (section.key === 'rbac' && !(isAdmin || canManageRoles)) continue;
+        if (section.key === 'license' && !isAdmin) continue;
+
+        let icon = section.icon;
+        let badge: string | number | undefined;
+
+        if (!showSkeletons) {
+          if (section.key === 'readiness') {
+            icon = isFacilityReady ? 'checkCircle' : 'alertCircle';
+            badge = isFacilityReady ? undefined : 'Setup Needed';
+          } else if (section.key === 'services') {
+            badge = services.length;
+          } else if (section.key === 'fields') {
+            badge = customFields.length > 0 ? customFields.length : undefined;
+          } else if (section.key === 'philhealth') {
+            badge = philHealthBadge;
+          } else if (section.key === 'staff') {
+            badge = maxStaffSeats != null ? `${activeStaffCount}/${maxStaffSeats}` : activeStaffCount;
+          }
+        }
+
+        list.push({
+          key: section.key,
+          label: section.label,
+          icon,
+          badge,
+          adminOnly: section.adminOnly,
+          groupKey: section.groupKey,
+          groupLabel: section.groupLabel,
+          description: section.description,
+          keywords: section.keywords,
+        });
+      }
     }
 
     return list;
   }, [
+    showSkeletons,
     isAdmin,
     canManageStaff,
     canManageRoles,
@@ -428,22 +559,82 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     maxStaffSeats,
     activeStaffCount,
     services.length,
+    customFields.length,
     accreditationNumber,
     settings?.isPhilHealthConfigured,
   ]);
 
-  const showSkeletons = loading && !refreshing;
+  // Guard activeTab against RBAC-hidden tabs
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some((t) => t.key === activeTab)) {
+      const fallback = tabs.find((t) => t.key === 'general')?.key ?? tabs[0].key;
+      lastIncomingTabRef.current = fallback;
+      setActiveTab(fallback);
+      syncTabToNavigation(fallback);
+    }
+  }, [tabs, activeTab, syncTabToNavigation]);
 
-  return (
-    <ResponsiveLayout headerTitle="Settings & Configuration">
-      <SettingsTabBar tabs={tabs} activeTab={activeTab} onSelectTab={setActiveTab} />
+  // Auto-focus first matching section when instant filter narrows out activeTab
+  const handleFilterChange = useCallback(
+    (nextQuery: string) => {
+      setFilterQuery(nextQuery);
+      const trimmed = nextQuery.trim();
+      if (!trimmed) return;
+      const matches = filterSettingsTabs(tabs, trimmed);
+      if (matches.length > 0 && !matches.some((m) => m.key === activeTab)) {
+        handleSelectTab(matches[0].key);
+      }
+    },
+    [tabs, activeTab, handleSelectTab]
+  );
 
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
-      >
-        {activeTab === 'readiness' && (
+  const renderSectionCanvas = () => {
+    if (isGeneralSettingsSectionKey(activeTab)) {
+      return (
+        <GeneralSettingsTab
+          activeSection={activeTab}
+          filterQuery={filterQuery}
+          onNavigateBilling={() => navigation.navigate('Billing')}
+          preferredChartLayout={preferredChartLayout}
+          setPreferredChartLayout={setPreferredChartLayout}
+          clinicName={clinicName}
+          setClinicName={setClinicName}
+          accreditationNumber={accreditationNumber}
+          setAccreditationNumber={setAccreditationNumber}
+          operatingHours={operatingHours}
+          setOperatingHours={setOperatingHours}
+          slotDuration={slotDuration}
+          setSlotDuration={setSlotDuration}
+          consultationFee={consultationFee}
+          setConsultationFee={setConsultationFee}
+          letterheadHeader={letterheadHeader}
+          setLetterheadHeader={setLetterheadHeader}
+          letterheadAddress={letterheadAddress}
+          setLetterheadAddress={setLetterheadAddress}
+          letterheadContact={letterheadContact}
+          setLetterheadContact={setLetterheadContact}
+          savingSettings={savingSettings}
+          onSavePreferences={handleSavePreferences}
+          showSkeletons={showSkeletons}
+          settingsLoadError={settingsLoadError}
+          settings={settings}
+          onRefreshEod={onRefresh}
+          formatPeso={formatPeso}
+          onNavigatePatients={() => navigation.navigate('Patients')}
+          specialtyMode={specialtyMode}
+          setSpecialtyMode={setSpecialtyMode}
+          enableDentalModule={enableDentalModule}
+          setEnableDentalModule={setEnableDentalModule}
+          cashierMode={cashierMode}
+          setCashierMode={setCashierMode}
+          onSettingsUpdated={setSettings}
+        />
+      );
+    }
+
+    switch (activeTab) {
+      case 'readiness':
+        return (
           <FacilityReadinessTab
             license={license}
             clinicName={clinicName}
@@ -463,60 +654,21 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             isPublishingMutating={publishingLoading}
             isBookingPauseMutating={pauseLoading}
             showSkeletons={showSkeletons}
-            onNavigateTab={setActiveTab}
+            onNavigateTab={handleSelectTab}
             onOpenAddStaff={() => {
-              setActiveTab('staff');
+              handleSelectTab('staff');
               setShowAddStaffModal(true);
             }}
             onOpenAddService={() => {
-              setActiveTab('services');
+              handleSelectTab('services');
               setShowAddServiceModal(true);
             }}
             onOpenLicenseModal={openActivationModal}
           />
-        )}
+        );
 
-        {activeTab === 'general' && (
-          <GeneralSettingsTab
-            preferredChartLayout={preferredChartLayout}
-            setPreferredChartLayout={setPreferredChartLayout}
-            clinicName={clinicName}
-            setClinicName={setClinicName}
-            accreditationNumber={accreditationNumber}
-            setAccreditationNumber={setAccreditationNumber}
-            operatingHours={operatingHours}
-            setOperatingHours={setOperatingHours}
-            slotDuration={slotDuration}
-            setSlotDuration={setSlotDuration}
-            consultationFee={consultationFee}
-            setConsultationFee={setConsultationFee}
-            letterheadHeader={letterheadHeader}
-            setLetterheadHeader={setLetterheadHeader}
-            letterheadAddress={letterheadAddress}
-            setLetterheadAddress={setLetterheadAddress}
-            letterheadContact={letterheadContact}
-            setLetterheadContact={setLetterheadContact}
-            savingSettings={savingSettings}
-            onSavePreferences={handleSavePreferences}
-            showSkeletons={showSkeletons}
-            settingsLoadError={settingsLoadError}
-            settings={settings}
-            eodReport={eodReport}
-            eodLoadError={eodLoadError}
-            onRefreshEod={onRefresh}
-            formatPeso={formatPeso}
-            onNavigatePatients={() => navigation.navigate('Patients')}
-            specialtyMode={specialtyMode}
-            setSpecialtyMode={setSpecialtyMode}
-            enableDentalModule={enableDentalModule}
-            setEnableDentalModule={setEnableDentalModule}
-            cashierMode={cashierMode}
-            setCashierMode={setCashierMode}
-            onSettingsUpdated={setSettings}
-          />
-        )}
-
-        {activeTab === 'documents' && (
+      case 'documents':
+        return (
           <DocumentTemplatesSettingsTab
             settings={settings}
             showSkeletons={showSkeletons}
@@ -527,9 +679,10 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
               if (fresh) setSettings(fresh);
             }}
           />
-        )}
+        );
 
-        {activeTab === 'staff' && (
+      case 'staff':
+        return (
           <StaffManagementTab
             staff={staff}
             setStaff={setStaff}
@@ -551,9 +704,10 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
               if (fresh) setStaff(fresh);
             }}
           />
-        )}
+        );
 
-        {activeTab === 'rbac' && (
+      case 'rbac':
+        return (
           <AccessControlTab
             roles={roles}
             onRefreshRoles={async () => {
@@ -562,9 +716,10 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             }}
             loading={showSkeletons}
           />
-        )}
+        );
 
-        {activeTab === 'services' && (
+      case 'services':
+        return (
           <ServicesCatalogTab
             services={services}
             setServices={setServices}
@@ -578,9 +733,10 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             showAddModal={showAddServiceModal}
             setShowAddModal={setShowAddServiceModal}
           />
-        )}
+        );
 
-        {activeTab === 'fields' && (
+      case 'fields':
+        return (
           <CustomFieldsTab
             fields={customFields}
             setFields={setCustomFields}
@@ -591,9 +747,19 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
               if (fresh) setCustomFields(fresh);
             }}
           />
-        )}
+        );
 
-        {activeTab === 'philhealth' && (
+      case 'philhealth':
+        if (showSkeletons) {
+          return (
+            <Card testID="philhealth-tab-skeleton">
+              <CardContent>
+                <SkeletonList rows={4} />
+              </CardContent>
+            </Card>
+          );
+        }
+        return (
           <PhilHealthSettingsTab
             accreditationNumber={accreditationNumber}
             clinicName={clinicName}
@@ -605,30 +771,146 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
               }
             }}
           />
-        )}
+        );
 
-        {activeTab === 'license' && (
-          <LicenseSystemTab
-            license={license}
-            clinicName={clinicName}
-            activeStaffCount={activeStaffCount}
-            maxStaffSeats={maxStaffSeats}
-            onOpenActivationModal={openActivationModal}
-            onRefreshLicense={refreshLicense}
+      case 'license':
+        if (showSkeletons) {
+          return (
+            <Card testID="license-tab-skeleton">
+              <CardContent>
+                <SkeletonList rows={4} />
+              </CardContent>
+            </Card>
+          );
+        }
+        return (
+          <View style={styles.licenseStack}>
+            <LicenseSystemTab
+              license={license}
+              clinicName={clinicName}
+              activeStaffCount={activeStaffCount}
+              maxStaffSeats={maxStaffSeats}
+              onOpenActivationModal={openActivationModal}
+              onRefreshLicense={refreshLicense}
+            />
+            {isAdmin ? (
+              <WorkstationNodeDevSection
+                filterQuery={filterQuery}
+                onNavigatePatients={() => navigation.navigate('Patients')}
+              />
+            ) : null}
+            {Platform.OS !== 'web' ? (
+              <>
+                <SecuritySection />
+                <AppUpdatesSettingsCard />
+              </>
+            ) : null}
+          </View>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <ResponsiveLayout headerTitle="Clinic Settings">
+      {effectiveNavMode === 'vertical' ? (
+        <View style={styles.verticalBody}>
+          <SettingsVerticalRail
+            tabs={tabs}
+            activeTab={activeTab}
+            onSelectTab={handleSelectTab}
+            filterQuery={filterQuery}
+            onChangeFilterQuery={handleFilterChange}
+            navMode={effectiveNavMode}
+            onChangeNavMode={handleChangeNavMode}
           />
-        )}
-      </ScrollView>
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            onScroll={handleCanvasScroll}
+            onContentSizeChange={handleCanvasContentSizeChange}
+            scrollEventThrottle={100}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.colors.primary]}
+              />
+            }
+          >
+            {renderSectionCanvas()}
+          </ScrollView>
+        </View>
+      ) : (
+        <View style={styles.horizontalBody}>
+          <SettingsTabBar
+            tabs={tabs}
+            activeTab={activeTab}
+            onSelectTab={handleSelectTab}
+            filterQuery={filterQuery}
+            onChangeFilterQuery={handleFilterChange}
+            navMode={effectiveNavMode}
+            onChangeNavMode={handleChangeNavMode}
+            canSwitchNavMode={canUseVerticalRail}
+          />
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            onScroll={handleCanvasScroll}
+            onContentSizeChange={handleCanvasContentSizeChange}
+            scrollEventThrottle={100}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.colors.primary]}
+              />
+            }
+          >
+            {renderSectionCanvas()}
+          </ScrollView>
+        </View>
+      )}
     </ResponsiveLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  verticalBody: {
     flex: 1,
+    width: '100%',
+    minWidth: 0,
+    flexDirection: 'row',
     backgroundColor: theme.colors.background,
   },
+  horizontalBody: {
+    flex: 1,
+    width: '100%',
+    minWidth: 0,
+    flexDirection: 'column',
+    backgroundColor: theme.colors.background,
+  },
+  container: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: theme.colors.background,
+    ...(Platform.OS === 'web' ? ({ scrollbarGutter: 'stable' } as any) : {}),
+  },
   content: {
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
     padding: theme.spacing.xl,
+    gap: theme.spacing.lg,
+  },
+  licenseStack: {
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
     gap: theme.spacing.lg,
   },
 });

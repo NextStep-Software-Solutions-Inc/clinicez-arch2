@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, Skeleton } from '../ui';
+import { ThemedText, Badge, Icon, Skeleton, Button } from '../ui';
 import type { IconName } from '../ui/Icon';
 import type { BadgeVariant } from '../ui/Badge';
 import { formatLongAge } from '../../utils/age';
@@ -782,41 +782,34 @@ export default function PatientSummarySpine({
         {/* Right Action / Expand toggle */}
         <View style={styles.topActionsRow}>
           {onPressEdit ? (
-            <Pressable
-              onPress={onPressEdit}
-              style={styles.actionIconBtn}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="xs"
+              icon="edit"
+              iconOnly
               accessibilityLabel="Edit Demographics"
-            >
-              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onPressEdit}
+            />
           ) : null}
           {onPressRefresh ? (
-            <Pressable
-              onPress={handleRefresh}
-              style={styles.actionIconBtn}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="xs"
+              icon="refresh"
+              iconOnly
               accessibilityLabel="Refresh patient chart"
+              loading={isRefreshing}
               disabled={isRefreshing}
-            >
-              <Icon
-                name="refresh"
-                size={theme.sizes.iconSm}
-                color={isRefreshing ? theme.colors.primary : theme.colors.textSecondary}
-                spin={isRefreshing}
-              />
-            </Pressable>
-          ) : null}
-          <Pressable onPress={() => setCollapsed(!collapsed)} style={styles.toggleCollapseBtn}>
-            <ThemedText variant="caption" color={theme.colors.primaryDark} style={{ fontWeight: '600' }}>
-              {collapsed ? 'View Full Spine' : 'Compact'}
-            </ThemedText>
-            <Icon
-              name={collapsed ? 'chevronDown' : 'chevronUp'}
-              size={theme.sizes.iconSm}
-              color={theme.colors.primaryDark}
+              onPress={handleRefresh}
             />
-          </Pressable>
+          ) : null}
+          <Button
+            variant="outline"
+            size="xs"
+            title={collapsed ? 'View Full Spine' : 'Compact'}
+            rightIcon={collapsed ? 'chevronDown' : 'chevronUp'}
+            onPress={() => setCollapsed(!collapsed)}
+          />
         </View>
       </View>
 
@@ -930,17 +923,14 @@ export default function PatientSummarySpine({
                   </ThemedText>
                 ) : null}
                 {onPressRecordVitals ? (
-                  <Pressable
-                    onPress={onPressRecordVitals}
-                    style={styles.vitalsActionBtn}
-                    accessibilityRole="button"
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    icon="activity"
+                    title={latestVitals ? 'Update Vitals' : 'Record Vitals'}
                     accessibilityLabel={latestVitals ? 'Update Vitals' : 'Record Vitals'}
-                  >
-                    <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    <ThemedText variant="captionBold" color={theme.colors.primary}>
-                      {latestVitals ? 'Update Vitals' : 'Record Vitals'}
-                    </ThemedText>
-                  </Pressable>
+                    onPress={onPressRecordVitals}
+                  />
                 ) : null}
               </View>
             </View>
@@ -1312,31 +1302,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  actionIconBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surfaceSubtle,
-  },
-  vitalsActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-  },
-  toggleCollapseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
   },
   badgesStrip: {
     flexDirection: 'row',

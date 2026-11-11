@@ -166,10 +166,14 @@ export default function RegionalDateTimeSettingsCard({
   const previewQueueDate = getClinicTodayStr(sampleNow, selectedTimeZone);
 
   const workspaceDisplayName = workspaceProfile?.displayName || 'Portal Workspace';
+  const baseTimeZone = timeZoneId || 'Asia/Manila';
+  const baseDateFormat = dateFormat || 'MMM d, yyyy';
+  const baseTimeFormat = timeFormat || '12h';
   const hasPendingChanges =
-    selectedTimeZone !== timeZoneId ||
-    selectedDateFormat !== dateFormat ||
-    selectedTimeFormat !== timeFormat;
+    selectedTimeZone !== baseTimeZone ||
+    customTimeZoneInput.trim() !== baseTimeZone ||
+    selectedDateFormat !== baseDateFormat ||
+    selectedTimeFormat !== baseTimeFormat;
 
   return (
     <Card>
@@ -382,15 +386,17 @@ export default function RegionalDateTimeSettingsCard({
             </View>
 
             {/* Save Actions */}
-            <View style={styles.actionsEnd}>
-              <Button
-                title="Save Regional Settings"
-                icon="check"
-                onPress={handleSaveRegional}
-                loading={saving}
-                disabled={saving || Boolean(tzError)}
-              />
-            </View>
+            {hasPendingChanges || saving ? (
+              <View style={styles.actionsEnd}>
+                <Button
+                  title="Save Regional Settings"
+                  icon="check"
+                  onPress={handleSaveRegional}
+                  loading={saving}
+                  disabled={saving || Boolean(tzError)}
+                />
+              </View>
+            ) : null}
           </View>
         )}
       </CardContent>

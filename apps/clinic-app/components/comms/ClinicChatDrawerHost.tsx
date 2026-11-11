@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Pressable, Platform, Modal, Animated, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -22,7 +22,7 @@ import { useClinicComms } from '../../context/ClinicCommsContext';
 import { useAuth } from '../../context/AuthContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
-import { theme } from '../../constants/theme';
+import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
 import { PERMISSIONS } from '../../constants/permissions';
 import { notify } from '../../utils/feedback';
 import { playMessageChime } from '../../utils/alertSounds';
@@ -30,7 +30,20 @@ import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import Button from '../ui/Button';
 
+function getActiveThemeSnapshot(): string {
+  const s = getActiveThemeState();
+  return `${s.brandColorHex}|${s.clinicBrandColorHex}|${s.userBrandColorHex ?? ''}|${s.scheme}`;
+}
+
 export default function ClinicChatDrawerHost() {
+  const themeSnapshot = useSyncExternalStore(
+    subscribeActiveTheme,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
+  );
+  const resolvedCommsColors = useMemo(() => getActiveThemeState().resolvedColors, [themeSnapshot]);
+  const styles = useMemo(() => createStyles(), [themeSnapshot]);
+
   const { isChatDrawerOpen, closeChatDrawer, activeConversationId, setActiveConversationId } = useClinicComms();
   const { user, can } = useAuth();
   const { facilityName, license } = useClinic();
@@ -313,7 +326,7 @@ export default function ClinicChatDrawerHost() {
       {/* Top Header Control Row */}
       <View style={styles.topControlRow}>
         <View style={styles.headerLeftGroup}>
-          <ThemedText variant="title" color={theme.colors.text}>
+          <ThemedText variant="title" color={theme.colors.primary}>
             Messages
           </ThemedText>
 
@@ -358,37 +371,41 @@ export default function ClinicChatDrawerHost() {
             </View>
 
             {/* Manual Reconnect Icon Button positioned right beside connection pill */}
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="refresh"
+              iconOnly
+              loading={isSpinning}
               onPress={handleManualReconnect}
-              style={styles.reconnectBtn}
-              accessibilityRole="button"
               accessibilityLabel="Manual reconnect to clinic communications"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textSecondary} spin={isSpinning} />
-            </Pressable>
+            </Button>
           </View>
         </View>
 
         <View style={styles.headerActionsGroup}>
-          <Pressable
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={isMaximized ? 'minimize' : 'maximize'}
+            iconOnly
             onPress={handleToggleMaximize}
-            style={styles.headerIconButton}
-            accessibilityRole="button"
-            accessibilityLabel={isMaximized ? "Collapse side panel" : "Expand side panel"}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel={isMaximized ? 'Collapse side panel' : 'Expand side panel'}
           >
-            <Icon name={isMaximized ? "minimize" : "maximize"} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
-          <Pressable
+            <Icon name={isMaximized ? 'minimize' : 'maximize'} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="close"
+            iconOnly
             onPress={handleClose}
-            style={styles.closeBtn}
-            accessibilityRole="button"
             accessibilityLabel="Close communications panel"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
+          </Button>
         </View>
       </View>
 
@@ -408,7 +425,7 @@ export default function ClinicChatDrawerHost() {
             <View style={styles.tabBadgeRow}>
               <ThemedText
                 variant="smallBold"
-                color={drawerTab === 'conversations' ? theme.colors.primary : theme.colors.textSecondary}
+                color={drawerTab === 'conversations' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 Conversations
               </ThemedText>
@@ -435,7 +452,7 @@ export default function ClinicChatDrawerHost() {
             <View style={styles.tabBadgeRow}>
               <ThemedText
                 variant="smallBold"
-                color={drawerTab === 'triage' ? theme.colors.primary : theme.colors.textSecondary}
+                color={drawerTab === 'triage' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 Triage Requests
               </ThemedText>
@@ -477,6 +494,7 @@ export default function ClinicChatDrawerHost() {
             error={triageError ? triageError.message : null}
             activeFilter={triageFilter}
             onFilterChange={setTriageFilter}
+            colors={resolvedCommsColors}
           />
         ) : (
           <ChatDrawer
@@ -491,6 +509,7 @@ export default function ClinicChatDrawerHost() {
             loading={isLoading}
             error={error ? error.message : null}
             onNewConversation={handleNewConversation}
+            colors={resolvedCommsColors}
             renderSearchIcon={() => (
               <Icon name="search" size={16} color={theme.colors.textMuted} />
             )}
@@ -606,244 +625,205 @@ export default function ClinicChatDrawerHost() {
   );
 }
 
-const styles = StyleSheet.create({
-  desktopOverlay: {
-    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 9999,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.overlay,
-  },
-  dockedPanel: {
-    width: 460,
-    height: '100%',
-    backgroundColor: theme.colors.surface,
-    borderLeftWidth: theme.sizes.borderWidth,
-    borderLeftColor: theme.colors.border,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  dockedPanelMaximized: {
-    width: '100%',
-  },
-  mobileModalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  mobilePanel: {
-    height: '85%',
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.radii.lg,
-    borderTopRightRadius: theme.radii.lg,
-    overflow: 'hidden',
-  },
-  mobilePanelMaximized: {
-    height: '100%',
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-  },
-  drawerPane: {
-    flex: 1,
-    flexDirection: 'column',
-    backgroundColor: theme.colors.surface,
-  },
-  topControlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceSubtle,
-    gap: theme.spacing.xs,
-  },
-  headerLeftGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flex: 1,
-    flexWrap: 'wrap',
-  },
-  connectionGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  connectionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: theme.radii.full,
-    borderWidth: theme.sizes.borderWidth,
-    gap: 6,
-  },
-  connectionPillConnected: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.borderLight,
-  },
-  connectionPillReconnecting: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.warningBorder,
-  },
-  connectionPillOffline: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.emergencyBorder,
-  },
-  connectionDot: {
-    width: 7,
-    height: 7,
-    borderRadius: theme.radii.full,
-  },
-  connectionDotConnected: {
-    backgroundColor: theme.colors.successText,
-  },
-  connectionDotReconnecting: {
-    backgroundColor: theme.colors.warning,
-  },
-  connectionDotOffline: {
-    backgroundColor: theme.colors.emergency,
-  },
-  reconnectBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  headerActionsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  headerIconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  tabSegmentBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: theme.spacing.md,
-    marginVertical: theme.spacing.xs,
-    padding: 3,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.lg,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    gap: theme.spacing.xs,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    minHeight: 38,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.transparent,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.transparent,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  tabButtonActive: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.borderLight,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  tabBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  tabUnreadBadge: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 5,
-    minWidth: 16,
-    height: 16,
-    borderRadius: theme.radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  triageCountPill: {
-    backgroundColor: theme.colors.urgent,
-    paddingHorizontal: 5,
-    minWidth: 16,
-    height: 16,
-    borderRadius: theme.radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  triageCountPillUrgent: {
-    backgroundColor: theme.colors.emergency,
-  },
-  drawerBody: {
-    flex: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing.xl,
-  },
-  emptyIconBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.md,
-  },
-  emptyTitle: {
-    marginBottom: theme.spacing.xs,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    textAlign: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  emptyButton: {
-    minWidth: 160,
-  },
-});
+function createStyles() {
+  return StyleSheet.create({
+    desktopOverlay: {
+      position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 9999,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+    },
+    backdrop: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: theme.colors.overlay,
+    },
+    dockedPanel: {
+      width: 460,
+      height: '100%',
+      backgroundColor: theme.colors.surface,
+      borderLeftWidth: theme.sizes.borderWidth,
+      borderLeftColor: theme.colors.border,
+      ...theme.shadows.lg,
+    },
+    dockedPanelMaximized: {
+      width: '100%',
+    },
+    mobileModalContainer: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    mobilePanel: {
+      height: '85%',
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: theme.radii.lg,
+      borderTopRightRadius: theme.radii.lg,
+      overflow: 'hidden',
+    },
+    mobilePanelMaximized: {
+      height: '100%',
+      borderTopLeftRadius: 0,
+      borderTopRightRadius: 0,
+    },
+    drawerPane: {
+      flex: 1,
+      flexDirection: 'column',
+      backgroundColor: theme.colors.surface,
+    },
+    topControlRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceSubtle,
+      gap: theme.spacing.xs,
+    },
+    headerLeftGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      flex: 1,
+      flexWrap: 'wrap',
+    },
+    connectionGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    connectionPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: theme.radii.full,
+      borderWidth: theme.sizes.borderWidth,
+      gap: 6,
+    },
+    connectionPillConnected: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.borderLight,
+    },
+    connectionPillReconnecting: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.warningBorder,
+    },
+    connectionPillOffline: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.emergencyBorder,
+    },
+    connectionDot: {
+      width: 7,
+      height: 7,
+      borderRadius: theme.radii.full,
+    },
+    connectionDotConnected: {
+      backgroundColor: theme.colors.successText,
+    },
+    connectionDotReconnecting: {
+      backgroundColor: theme.colors.warning,
+    },
+    connectionDotOffline: {
+      backgroundColor: theme.colors.emergency,
+    },
+    headerActionsGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    tabSegmentBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: theme.spacing.md,
+      marginVertical: theme.spacing.xs,
+      padding: 3,
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderRadius: theme.radii.lg,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.borderLight,
+      gap: theme.spacing.xs,
+    },
+    tabButton: {
+      flex: 1,
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      minHeight: 38,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.transparent,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.transparent,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+    },
+    tabButtonActive: {
+      backgroundColor: theme.colors.primaryLight,
+      borderColor: theme.colors.primaryBorder,
+      ...theme.shadows.brandSubtle,
+    },
+    tabBadgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    tabUnreadBadge: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 5,
+      minWidth: 16,
+      height: 16,
+      borderRadius: theme.radii.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    triageCountPill: {
+      backgroundColor: theme.colors.urgent,
+      paddingHorizontal: 5,
+      minWidth: 16,
+      height: 16,
+      borderRadius: theme.radii.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    triageCountPillUrgent: {
+      backgroundColor: theme.colors.emergency,
+    },
+    drawerBody: {
+      flex: 1,
+    },
+    emptyContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.xl,
+    },
+    emptyIconBadge: {
+      width: 56,
+      height: 56,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.primaryLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    emptyTitle: {
+      marginBottom: theme.spacing.xs,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      textAlign: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    emptyButton: {
+      minWidth: 160,
+    },
+  });
+}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';

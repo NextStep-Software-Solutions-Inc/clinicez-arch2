@@ -18,6 +18,8 @@ export interface UserAudioPreferences {
   customAudioFileName?: string | null;
   isMuted?: boolean;
   preferredChartLayout?: 'modal' | 'split' | 'drawer';
+  themeMode?: 'light' | 'dark' | 'system';
+  userBrandColorHex?: string | null;
 }
 
 export const SOUND_THEME_PRESETS: Array<{

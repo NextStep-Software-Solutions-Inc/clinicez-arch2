@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
 import {
   ORGAN_SYSTEMS,
   type OrganSystemDef,
@@ -266,10 +266,13 @@ export default function ExecutiveSummaryTab({
               <Badge label={String(activeProblems.length)} variant="routine" size="sm" />
             </View>
             {onOpenAddProblemModal ? (
-              <Pressable onPress={onOpenAddProblemModal} style={styles.addBtn}>
-                <Icon name="plus" size={14} color={theme.colors.primaryDark} />
-                <ThemedText variant="captionBold" color={theme.colors.primaryDark}>Add</ThemedText>
-              </Pressable>
+              <Button
+                variant="outline"
+                size="xs"
+                icon="plus"
+                title="Add"
+                onPress={onOpenAddProblemModal}
+              />
             ) : null}
           </View>
 
@@ -337,10 +340,13 @@ export default function ExecutiveSummaryTab({
               />
             </View>
             {onOpenAddAllergyModal ? (
-              <Pressable onPress={onOpenAddAllergyModal} style={styles.addBtn}>
-                <Icon name="plus" size={14} color={theme.colors.primaryDark} />
-                <ThemedText variant="captionBold" color={theme.colors.primaryDark}>Add</ThemedText>
-              </Pressable>
+              <Button
+                variant="outline"
+                size="xs"
+                icon="plus"
+                title="Add"
+                onPress={onOpenAddAllergyModal}
+              />
             ) : null}
           </View>
 
@@ -403,10 +409,13 @@ export default function ExecutiveSummaryTab({
               <ThemedText variant="h3" color={theme.colors.text}>Ongoing Medications</ThemedText>
               <Badge label={String(activePrescriptions.length)} variant="routine" size="sm" />
             </View>
-            <Pressable onPress={() => onNavigateTab('encounters')} style={styles.actionLink}>
-              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>View E-Rx</ThemedText>
-              <Icon name="arrowRight" size={12} color={theme.colors.primaryDark} />
-            </Pressable>
+            <Button
+              variant="ghost"
+              size="xs"
+              title="View E-Rx"
+              rightIcon="arrowRight"
+              onPress={() => onNavigateTab('encounters')}
+            />
           </View>
 
           <View style={styles.quadrantBody}>
@@ -450,10 +459,13 @@ export default function ExecutiveSummaryTab({
               <Icon name="heartPulse" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
               <ThemedText variant="h3" color={theme.colors.text}>Vitals & Lab Status</ThemedText>
             </View>
-            <Pressable onPress={() => onNavigateTab('diagnostics')} style={styles.actionLink}>
-              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>Full Labs</ThemedText>
-              <Icon name="arrowRight" size={12} color={theme.colors.primaryDark} />
-            </Pressable>
+            <Button
+              variant="ghost"
+              size="xs"
+              title="Full Labs"
+              rightIcon="arrowRight"
+              onPress={() => onNavigateTab('diagnostics')}
+            />
           </View>
 
           {hasCriticalPanicAlert ? (
@@ -547,17 +559,14 @@ export default function ExecutiveSummaryTab({
               size="sm"
             />
           </View>
-          <Pressable
-            onPress={() => onNavigateTab('profiles')}
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            title="Review & Edit"
+            rightIcon="arrowRight"
             accessibilityLabel="Review and edit organ systems examination in health profiles"
-            style={styles.actionLink}
-          >
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-              Review &amp; Edit
-            </ThemedText>
-            <Icon name="arrowRight" size={12} color={theme.colors.primaryDark} />
-          </Pressable>
+            onPress={() => onNavigateTab('profiles')}
+          />
         </View>
 
         <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: theme.spacing.sm }}>
@@ -655,22 +664,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-  },
-  actionLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
   },
   anaphylaxisWarningBanner: {
     flexDirection: 'row',

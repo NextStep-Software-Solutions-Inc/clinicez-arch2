@@ -62,10 +62,11 @@ export default function SegmentedControl<T extends string>({
               {...(Platform.OS === 'web' && isIconOnly
                 ? ({ title: option.label } as Record<string, unknown>)
                 : {})}
-              style={({ pressed }) => [
+              style={({ pressed, hovered }: any) => [
                 styles.segment,
                 isIconOnly && styles.segmentIconOnly,
                 active && styles.segmentActive,
+                hovered && !active && styles.segmentHover,
                 pressed && !active && styles.segmentPressed,
               ]}
             >
@@ -73,7 +74,7 @@ export default function SegmentedControl<T extends string>({
                 <Icon
                   name={option.icon}
                   size={theme.sizes.iconSm}
-                  color={active ? theme.colors.text : theme.colors.textSecondary}
+                  color={active ? theme.colors.primary : theme.colors.textSecondary}
                 />
               ) : null}
               {!isIconOnly ? (
@@ -81,7 +82,7 @@ export default function SegmentedControl<T extends string>({
                   variant="smallBold"
                   numberOfLines={1}
                   style={styles.labelText}
-                  color={active ? theme.colors.text : theme.colors.textSecondary}
+                  color={active ? theme.colors.primary : theme.colors.textSecondary}
                 >
                   {option.label}
                 </ThemedText>
@@ -134,6 +135,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
     padding: theme.spacing.xs,
     gap: theme.spacing.xs,
     alignSelf: 'flex-start',
@@ -143,6 +146,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.transparent,
     flexDirection: 'row',
     flexWrap: 'nowrap',
     flexShrink: 0,
@@ -159,16 +164,20 @@ const styles = StyleSheet.create({
   },
   segmentActive: {
     backgroundColor: theme.colors.surface,
-    ...theme.shadows.sm,
+    borderColor: theme.colors.primaryBorder,
+    ...theme.shadows.brandSubtle,
+  },
+  segmentHover: {
+    backgroundColor: theme.colors.primarySubtle,
   },
   segmentPressed: {
-    backgroundColor: theme.colors.surfaceHighlight,
+    backgroundColor: theme.colors.primaryLight,
   },
   countBadge: {
     paddingHorizontal: 7,
     paddingVertical: 1.5,
     borderRadius: theme.radii.full,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 20,

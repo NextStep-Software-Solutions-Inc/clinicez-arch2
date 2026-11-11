@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { View, StyleSheet, Modal, Pressable } from 'react-native';
+import { View, StyleSheet, Modal } from 'react-native';
 import { CallWaitingRoom } from '@clinicez/comms-sdk/native-ui';
 import { useClinicComms } from '../../context/ClinicCommsContext';
 import { useAuth } from '../../context/AuthContext';
 import { notify } from '../../utils/feedback';
 import { theme } from '../../constants/theme';
+import Button from '../ui/Button';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 
@@ -83,14 +84,14 @@ export default function TeleconsultWaitingRoomModal() {
                 Teleconsultation Staging Room
               </ThemedText>
             </View>
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="close"
+              iconOnly
               onPress={handleCancelCall}
-              style={styles.closeBtn}
-              accessibilityRole="button"
               accessibilityLabel="Close teleconsult waiting room"
-            >
-              <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-            </Pressable>
+            />
           </View>
 
           <View style={styles.body}>
@@ -103,17 +104,14 @@ export default function TeleconsultWaitingRoomModal() {
                 <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.activeCallSub}>
                   Connected with {teleconsultSession.patientName} (Attending: {teleconsultSession.clinicianName})
                 </ThemedText>
-                <Pressable
+                <Button
+                  title="End Teleconsultation"
+                  variant="danger"
+                  size="md"
+                  icon="phone"
                   onPress={handleCancelCall}
-                  style={styles.endCallButton}
-                  accessibilityRole="button"
                   accessibilityLabel="End consultation call"
-                >
-                  <Icon name="phone" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
-                  <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
-                    End Teleconsultation
-                  </ThemedText>
-                </Pressable>
+                />
               </View>
             ) : (
               <CallWaitingRoom
@@ -180,16 +178,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  closeBtn: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    borderRadius: theme.radii.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
   body: {
     flex: 1,
     minHeight: 520,
@@ -207,14 +195,5 @@ const styles = StyleSheet.create({
   activeCallSub: {
     textAlign: 'center',
     marginBottom: theme.spacing.lg,
-  },
-  endCallButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.emergency,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xl,
-    borderRadius: theme.radii.md,
   },
 });

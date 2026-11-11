@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
 import RejectionReasonModal from './RejectionReasonModal';
 import type {
   ClinicPatient,
@@ -194,16 +194,16 @@ export default function ExternalDocumentVaultTab({
               </ScrollView>
             </View>
 
-            <Pressable
+            <Button
               testID="attach-external-document-btn"
+              variant="primary"
+              size="sm"
+              icon="upload"
+              title="Attach External Document"
+              numberOfLines={1}
               onPress={handleUpload}
               style={styles.uploadBtn}
-            >
-              <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
-              <ThemedText variant="captionBold" color={theme.colors.onPrimary} numberOfLines={1}>
-                Attach External Document
-              </ThemedText>
-            </Pressable>
+            />
           </View>
 
           {/* ========================================================================= */}
@@ -326,39 +326,33 @@ export default function ExternalDocumentVaultTab({
                     {/* Action Buttons */}
                     <View style={styles.cardFooter}>
                       {onDownloadAttachment ? (
-                        <Pressable
+                        <Button
+                          variant="subtle"
+                          size="xs"
+                          icon="download"
+                          title="View / Download"
                           onPress={() => onDownloadAttachment(att.id)}
-                          style={styles.actionBtn}
-                        >
-                          <Icon name="download" size={14} color={theme.colors.primaryDark} />
-                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                            View / Download
-                          </ThemedText>
-                        </Pressable>
+                        />
                       ) : null}
 
                       {isPending && onVerifyAttachment ? (
                         <View style={styles.reviewActions}>
-                          <Pressable
+                          <Button
+                            variant="successOutline"
+                            size="xs"
+                            icon="checkCircle"
+                            title="Verify & Accept"
+                            disabled={verifyingId === att.id}
                             onPress={() => handleVerify(att.id, true)}
-                            style={[styles.actionBtn, styles.actionBtn_success]}
+                          />
+                          <Button
+                            variant="dangerOutline"
+                            size="xs"
+                            icon="close"
+                            title="Reject"
                             disabled={verifyingId === att.id}
-                          >
-                            <Icon name="checkCircle" size={14} color={theme.colors.successText} />
-                            <ThemedText variant="captionBold" color={theme.colors.successText}>
-                              Verify & Accept
-                            </ThemedText>
-                          </Pressable>
-                          <Pressable
                             onPress={() => handleOpenRejectModal(att)}
-                            style={[styles.actionBtn, styles.actionBtn_danger]}
-                            disabled={verifyingId === att.id}
-                          >
-                            <Icon name="close" size={14} color={theme.colors.emergencyText} />
-                            <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                              Reject
-                            </ThemedText>
-                          </Pressable>
+                          />
                         </View>
                       ) : null}
                     </View>
@@ -442,15 +436,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.warningBg,
   },
   uploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
     flexShrink: 0,
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.radii.sm,
-    minHeight: theme.sizes.controlSm,
   },
   attachmentsList: {
     gap: theme.spacing.sm,
@@ -524,29 +510,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
   },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
   reviewActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  actionBtn_success: {
-    backgroundColor: theme.colors.successBg,
-    borderColor: theme.colors.successBorder,
-  },
-  actionBtn_danger: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderColor: theme.colors.emergencyBorder,
   },
   quarantineBanner: {
     backgroundColor: theme.colors.warningBg,

@@ -209,15 +209,14 @@ export default function DiagnosticLabTab({
                   ) : null}
                 </View>
               </View>
-              <Pressable
+              <Button
+                variant="danger"
+                size="xs"
+                icon="checkCircle"
+                title="Acknowledge & Document Verbal Readback"
                 onPress={() => handleOpenPanicModal(pOrder)}
                 style={styles.acknowledgeBtn}
-              >
-                <Icon name="checkCircle" size={14} color={theme.colors.onPrimary} />
-                <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                  Acknowledge & Document Verbal Readback
-                </ThemedText>
-              </Pressable>
+              />
             </View>
           ))}
         </View>
@@ -298,20 +297,20 @@ export default function DiagnosticLabTab({
         </View>
 
         {canOrderDiagnostic ? (
-          <Pressable
+          <Button
             testID="order-diagnostic-button"
+            variant="primary"
+            size="sm"
+            icon="plus"
+            title="Order Diagnostic"
+            numberOfLines={1}
             onPress={() => onOrderDiagnostic?.()}
             style={styles.orderDiagnosticBtn}
-          >
-            <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
-            <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.onPrimary}>
-              Order Diagnostic
-            </ThemedText>
-          </Pressable>
+          />
         ) : isDoctor && (user ? hasLabOrdersWrite : true) && !hasPrcLicense ? (
           <View
             testID="order-diagnostic-prc-required"
-            style={[styles.orderDiagnosticBtn, styles.orderDiagnosticBtn_disabled]}
+            style={styles.orderDiagnosticBtn_disabled}
           >
             <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
             <ThemedText variant="captionBold" numberOfLines={1} color={theme.colors.emergencyText}>
@@ -415,52 +414,44 @@ export default function DiagnosticLabTab({
 
                 {/* Actions */}
                 <View style={styles.orderFooter}>
-                  <Pressable
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    icon="file"
+                    title="View Lab Slip & QR"
                     onPress={() => handleSlipAction(order)}
-                    style={styles.actionBtn}
-                  >
-                    <Icon name="file" size={14} color={theme.colors.primaryDark} />
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      View Lab Slip & QR
-                    </ThemedText>
-                  </Pressable>
+                  />
 
                   {!isCompleted && order.status !== 'Cancelled' ? (
-                    <Pressable
+                    <Button
                       testID={`attach-external-result-${order.id}`}
+                      variant="outline"
+                      size="xs"
+                      icon="upload"
+                      title="Attach External Result"
                       onPress={() => handleAttachAction(order.id)}
-                      style={styles.actionBtn}
-                    >
-                      <Icon name="upload" size={14} color={theme.colors.primaryDark} />
-                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                        Attach External Result
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : null}
 
                   {!isCompleted && order.status === 'Ordered' ? (
-                    <Pressable
+                    <Button
                       testID={`cancel-lab-order-${order.id}`}
+                      variant="dangerOutline"
+                      size="xs"
+                      icon="close"
+                      title="Cancel Requisition"
                       onPress={() => handleCancelLabOrder(order)}
-                      style={[styles.actionBtn, styles.actionBtn_emergency]}
-                    >
-                      <Icon name="close" size={14} color={theme.colors.emergencyText} />
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                        Cancel Requisition
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : null}
 
                   {isPanic && !order.isPanicAcknowledged ? (
-                    <Pressable
+                    <Button
+                      variant="dangerOutline"
+                      size="xs"
+                      icon="checkCircle"
+                      title="Document Readback"
                       onPress={() => handleOpenPanicModal(order)}
-                      style={[styles.actionBtn, styles.actionBtn_emergency]}
-                    >
-                      <Icon name="checkCircle" size={14} color={theme.colors.emergencyText} />
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                        Document Readback
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : null}
                 </View>
               </View>
@@ -569,14 +560,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   acknowledgeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.emergency,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.sm,
     alignSelf: 'flex-start',
   },
   filterScrollWrap: {
@@ -686,25 +669,11 @@ const styles = StyleSheet.create({
   orderFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
     paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  actionBtn_emergency: {
-    backgroundColor: theme.colors.emergencyBg,
-    borderColor: theme.colors.emergencyBorder,
   },
   modalOverlay: {
     flex: 1,
@@ -755,29 +724,20 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   orderDiagnosticBtn: {
+    flexShrink: 0,
+  },
+  orderDiagnosticBtn_disabled: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
     gap: theme.spacing.xs,
-    backgroundColor: theme.colors.primary,
     paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.sm,
     minHeight: theme.sizes.controlSm,
-  },
-  orderDiagnosticBtn_disabled: {
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: theme.colors.emergencyBorder,
-  },
-  intakeSpecimenBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: theme.radii.sm,
   },
   modalContent: {
     padding: theme.spacing.md,
@@ -839,22 +799,6 @@ const styles = StyleSheet.create({
   pickedFileActions: {
     flexDirection: 'row',
     gap: 6,
-  },
-  changeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  clearFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: 1,
-    borderColor: theme.colors.emergencyBorder,
   },
   pickFileBtn: {
     alignItems: 'center',
@@ -1085,24 +1029,20 @@ export function AttachExternalLabModal({
                   </View>
                 </View>
                 <View style={styles.pickedFileActions}>
-                  <Pressable
-                    style={styles.changeFileBtn}
-                    onPress={handlePick}
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    title="Change"
                     disabled={picking || saving}
-                  >
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      Change
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={styles.clearFileBtn}
-                    onPress={() => setPickedFile(null)}
+                    onPress={handlePick}
+                  />
+                  <Button
+                    variant="dangerOutline"
+                    size="xs"
+                    title="Remove"
                     disabled={saving}
-                  >
-                    <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
-                      Remove
-                    </ThemedText>
-                  </Pressable>
+                    onPress={() => setPickedFile(null)}
+                  />
                 </View>
               </View>
 

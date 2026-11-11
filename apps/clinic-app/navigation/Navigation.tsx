@@ -1,10 +1,16 @@
 import React from 'react';
 import { ColorValue } from 'react-native';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { createStaticNavigation, DefaultTheme, type StaticParamList } from '@react-navigation/native';
+import {
+  createStaticNavigation,
+  DarkTheme,
+  DefaultTheme,
+  type StaticParamList,
+  type Theme as ReactNavigationTheme,
+} from '@react-navigation/native';
 import Icon, { IconName } from '../components/ui/Icon';
 import { applyFontFamily } from '../constants/fonts';
-import { theme } from '../constants/theme';
+import { getActiveThemeState, theme } from '../constants/theme';
 import { useBreakpoint } from '../utils/useBreakpoint';
 import MobileBottomTabBar from '../components/layout/MobileBottomTabBar';
 import DashboardScreen from './screens/Dashboard.screen';
@@ -126,7 +132,12 @@ const Tab = createBottomTabNavigator({
     },
     Settings: {
       screen: SettingsScreen,
-      linking: 'settings',
+      linking: {
+        path: 'settings',
+        parse: {
+          tab: String,
+        },
+      },
       options: {
         title: 'Settings',
         tabBarIcon: tabIcon('settings'),
@@ -142,7 +153,12 @@ const Tab = createBottomTabNavigator({
     },
     Profile: {
       screen: ProfileScreen,
-      linking: 'profile',
+      linking: {
+        path: 'profile',
+        parse: {
+          tab: String,
+        },
+      },
       options: {
         title: 'My Profile',
         tabBarIcon: tabIcon('staff'),
@@ -170,17 +186,31 @@ export const linkingOptions = {
   ],
 };
 
+/** Builds a reactive React Navigation theme aligned with the active Light/Dark scheme and brand palette. */
+export function buildNavigationTheme(
+  isDark: boolean = false,
+  resolvedColors?: Partial<Record<string, string>>,
+): ReactNavigationTheme {
+  const baseTheme = isDark ? DarkTheme : DefaultTheme;
+  const fallbackColors = getActiveThemeState().resolvedColors;
+  const source = resolvedColors ?? fallbackColors;
+
+  return {
+    ...baseTheme,
+    dark: isDark,
+    colors: {
+      ...baseTheme.colors,
+      primary: source.primary ?? fallbackColors.primary,
+      background: source.background ?? fallbackColors.background,
+      card: source.surface ?? fallbackColors.surface,
+      text: source.text ?? fallbackColors.text,
+      border: source.border ?? fallbackColors.border,
+      notification: source.emergency ?? fallbackColors.emergency,
+    },
+  };
+}
+
 /** Navigation container theme so React Navigation chrome matches the Clinic EZ tokens. */
-export const navigationTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    primary: theme.colors.primary,
-    background: theme.colors.background,
-    card: theme.colors.surface,
-    text: theme.colors.text,
-    border: theme.colors.border,
-  },
-};
+export const navigationTheme: ReactNavigationTheme = buildNavigationTheme(false);
 
 export const Navigation = createStaticNavigation(Tab);

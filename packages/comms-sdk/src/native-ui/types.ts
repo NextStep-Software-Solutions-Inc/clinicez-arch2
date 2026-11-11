@@ -1,4 +1,7 @@
 import { ViewStyle } from 'react-native';
+import type { lightColors } from '@clinicez/design-tokens';
+
+export type CommsThemeColors = Partial<Record<keyof typeof lightColors, string>>;
 
 export type ConversationScopeFilter =
   | 'All'
@@ -40,6 +43,7 @@ export interface ChatDrawerProps {
   renderScopeIcon?: (scope: ChatDrawerItem['scope']) => React.ReactNode;
   renderEmptyState?: () => React.ReactNode;
   renderSearchIcon?: () => React.ReactNode;
+  colors?: CommsThemeColors;
   style?: ViewStyle;
 }
 
@@ -92,6 +96,7 @@ export interface MessageThreadProps {
   error?: string | null;
   hasMoreHistory?: boolean;
   onLoadMoreHistory?: () => void;
+  colors?: CommsThemeColors;
   style?: ViewStyle;
 }
 
@@ -137,6 +142,7 @@ export interface TriageQueueViewProps {
   error?: string | null;
   activeFilter?: 'All' | 'Emergency' | 'Urgent' | 'Routine';
   onFilterChange?: (filter: 'All' | 'Emergency' | 'Urgent' | 'Routine') => void;
+  colors?: CommsThemeColors;
   style?: ViewStyle;
 }
 

@@ -214,7 +214,7 @@ export default function ResultReviewScreen() {
   const actionable = selected ? canReviewResult(selected) : false;
 
   return (
-    <ResponsiveLayout headerTitle="Result review" headerSubtitle="Lab results awaiting doctor verification">
+    <ResponsiveLayout headerTitle="Result review">
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}

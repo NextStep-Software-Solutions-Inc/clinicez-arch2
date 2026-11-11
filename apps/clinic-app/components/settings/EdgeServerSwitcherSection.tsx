@@ -94,6 +94,8 @@ export default function EdgeServerSwitcherSection() {
   };
 
   const isCustomEdge = !!storedUrl;
+  const baselineUrl = storedUrl ?? activeUrl ?? '';
+  const isDirty = inputUrl.trim() !== baselineUrl.trim() && Boolean(inputUrl.trim());
 
   return (
     <Card>
@@ -169,14 +171,16 @@ export default function EdgeServerSwitcherSection() {
                   loading={probing}
                   onPress={testConnection}
                 />
-                <Button
-                  title="Save Address"
-                  variant="primary"
-                  icon="check"
-                  disabled={probing || saving || !inputUrl.trim()}
-                  loading={saving}
-                  onPress={handleSave}
-                />
+                {isDirty || saving ? (
+                  <Button
+                    title="Save Address"
+                    variant="primary"
+                    icon="check"
+                    disabled={probing || saving || !inputUrl.trim()}
+                    loading={saving}
+                    onPress={handleSave}
+                  />
+                ) : null}
                 <Button
                   title="Cancel"
                   variant="ghost"

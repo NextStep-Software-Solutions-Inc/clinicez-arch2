@@ -1599,6 +1599,52 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenSrc).toContain("rightIcon={searchTerm ? 'close' : (canImportPatient ? 'scan' : undefined)}");
     expect(screenSrc).toContain("navigation.navigate('ShareImport')");
   });
+
+  test('45. Patients.screen.tsx header primary action displays "New Patient" while EmptyState retains "Register patient"', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const screenSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+
+    expect(screenSrc).toContain("label: 'New Patient'");
+    expect(screenSrc).toContain("shortLabel: 'New Patient'");
+    expect(screenSrc).toContain("actionTitle={searchTerm || filterMode !== 'ALL' ? 'Clear search & filters' : 'Register patient'}");
+  });
+
+  test('46. Patients.screen.tsx uses server-side filtration across all tabs without stale-cache error masking or client-side MY_PATIENTS discarding, and Audit/ResultReview omit headerSubtitle', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const patientsSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
+    const auditSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/Audit.screen.tsx'),
+      'utf8'
+    );
+    const resultReviewSrc = fs.readFileSync(
+      path.resolve(__dirname, '../navigation/screens/ResultReview.screen.tsx'),
+      'utf8'
+    );
+
+    // Server-side filter mode & stale-cache error clearing
+    expect(patientsSrc).toContain("const serverFilterMode = activeFilter !== 'ALL' ? activeFilter : undefined;");
+    expect(patientsSrc).toMatch(/const handleFilterModeChange = \(mode: PatientFilter\) => \{[\s\S]*?setPatientsError\(null\);[\s\S]*?setPatients\(null\);/);
+    expect(patientsSrc).toMatch(/if \(err\) \{[\s\S]*?setPatients\(null\);[\s\S]*?setPatientsError\(err\.message \|\| 'Unable to load patients\.'\);/);
+
+    // Trusts server-filtered patients list directly without discarding historical MY_PATIENTS rows
+    expect(patientsSrc).toContain('const filteredPatients = useMemo(() => patients ?? [], [patients]);');
+    expect(patientsSrc).not.toMatch(/const filteredPatients = \(patients \?\? \[\]\)\.filter/);
+    expect(patientsSrc).toContain("myPatients: filterMode === 'MY_PATIENTS' ? patients.length : myPatients,");
+
+    // Audit & ResultReview omit headerSubtitle
+    expect(auditSrc).not.toContain('headerSubtitle');
+    expect(resultReviewSrc).not.toContain('headerSubtitle');
+  });
 });
 
 

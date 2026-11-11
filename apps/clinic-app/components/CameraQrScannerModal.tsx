@@ -337,29 +337,27 @@ export default function CameraQrScannerModal({
                   </ThemedText>
                 </Pressable>
 
-                <Pressable
-                  style={styles.controlIconBtn}
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  icon="refresh"
+                  iconOnly
                   onPress={() => triggerFocusPulse()}
-                  accessibilityRole="button"
                   accessibilityLabel="Trigger Refocus"
-                >
-                  <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textInverted} />
-                </Pressable>
+                  style={styles.controlIconBtn}
+                />
               </View>
 
               <View style={styles.controlGroup}>
-                <Pressable
-                  style={[styles.controlIconBtn, torch && styles.controlIconBtnActive]}
+                <Button
+                  variant={torch ? 'primary' : 'secondary'}
+                  size="xs"
+                  icon="zap"
+                  iconOnly
                   onPress={() => setTorch((prev) => !prev)}
-                  accessibilityRole="button"
                   accessibilityLabel="Toggle Torch"
-                >
-                  <Icon
-                    name="zap"
-                    size={theme.sizes.iconSm}
-                    color={torch ? theme.colors.warning : theme.colors.textInverted}
-                  />
-                </Pressable>
+                  style={styles.controlIconBtn}
+                />
 
                 <Pressable
                   style={[styles.controlPill, zoom > 0 && styles.controlPillActive]}
@@ -381,11 +379,13 @@ export default function CameraQrScannerModal({
 
         {/* Footer Actions */}
         <View style={styles.footer}>
-          <Pressable style={styles.cancelButton} onPress={onClose} accessibilityRole="button">
-            <ThemedText variant="bodyBold" color={theme.colors.surfaceInverse}>
-              Close Scanner
-            </ThemedText>
-          </Pressable>
+          <Button
+            title="Close Scanner"
+            variant="secondary"
+            size="lg"
+            onPress={onClose}
+            style={styles.cancelButton}
+          />
         </View>
       </View>
     </Modal>
@@ -500,12 +500,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   controlIconBtn: {
-    padding: theme.spacing.xs,
     borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.transparent,
-  },
-  controlIconBtnActive: {
-    backgroundColor: theme.colors.surfaceHighlight,
   },
   footer: {
     paddingVertical: theme.spacing.xl,
@@ -515,9 +510,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   cancelButton: {
-    backgroundColor: theme.colors.surface,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing['2xl'],
     borderRadius: theme.radii.lg,
   },
 });

@@ -4,11 +4,10 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
 import { TextInput } from '../ui/Text';
 import { Alert, notify } from '../../utils/feedback';
-import { ThemedText, Icon, ValidatedDateInput, validateDateString, Modal } from '../ui';
+import { ThemedText, Icon, ValidatedDateInput, validateDateString, Modal, Button } from '../ui';
 import { theme } from '../../constants/theme';
 import { useStaff } from '../../context/StaffContext';
 import { useAuth } from '../../context/AuthContext';
@@ -241,9 +240,14 @@ export default function AttachExternalDocumentModal({
         <View style={[styles.modalContent, { maxWidth: 500 }]}>
           <View style={styles.modalHeader}>
             <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
-            <Pressable onPress={onClose} hitSlop={theme.spacing.sm}>
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+            <Button
+              variant="ghost"
+              size="xs"
+              icon="close"
+              iconOnly
+              accessibilityLabel="Close"
+              onPress={onClose}
+            />
           </View>
           <ThemedText style={styles.modalSub}>
             Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {patientDisplayName}&apos;s profile.
@@ -335,21 +339,28 @@ export default function AttachExternalDocumentModal({
                     </View>
                   </View>
                   <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <Pressable style={styles.changeFileBtn} onPress={handlePickDocument}>
-                      <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
-                    </Pressable>
-                    <Pressable style={styles.removeFileBtn} onPress={() => setPickedDocFile(null)}>
-                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
-                    </Pressable>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      title="Change"
+                      onPress={handlePickDocument}
+                    />
+                    <Button
+                      variant="dangerOutline"
+                      size="xs"
+                      title="Clear"
+                      onPress={() => setPickedDocFile(null)}
+                    />
                   </View>
                 </View>
               ) : (
-                <Pressable style={styles.pickFileBtn} onPress={handlePickDocument}>
-                  <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                  <ThemedText variant="captionBold" color={theme.colors.primary}>
-                    Select Document File (PDF, JPEG, PNG)
-                  </ThemedText>
-                </Pressable>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon="upload"
+                  title="Select Document File (PDF, JPEG, PNG)"
+                  onPress={handlePickDocument}
+                />
               )}
             </View>
 
@@ -367,24 +378,21 @@ export default function AttachExternalDocumentModal({
           </ScrollView>
 
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
-            <Pressable
-              style={styles.cancelModalBtn}
+            <Button
+              variant="subtle"
+              size="sm"
+              title="Cancel"
+              disabled={uploadingDoc}
               onPress={onClose}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              title="Save & Attach to Profile"
+              loading={uploadingDoc}
               disabled={uploadingDoc}
-            >
-              <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.confirmAttachBtn}
               onPress={handleUploadDocument}
-              disabled={uploadingDoc}
-            >
-              {uploadingDoc ? (
-                <ActivityIndicator color={theme.colors.textInverted} />
-              ) : (
-                <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
-              )}
-            </Pressable>
+            />
           </View>
         </View>
       </View>
@@ -483,54 +491,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     flex: 1,
-  },
-  changeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  removeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: 1,
-    borderColor: theme.colors.emergencyBorder,
-  },
-  pickFileBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.xs,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-    borderRadius: theme.radii.md,
-  },
-  cancelModalBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-  },
-  cancelModalText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  confirmAttachBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primary,
-  },
-  confirmAttachText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
   },
 });

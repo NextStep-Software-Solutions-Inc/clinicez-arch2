@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ViewStyle, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Icon, { IconName } from '../ui/Icon';
@@ -6,7 +6,7 @@ import Button, { ButtonVariant, ButtonSize } from '../ui/Button';
 import UserMenu from './UserMenu';
 import ClinicNotificationCenterModal from '../notifications/ClinicNotificationCenterModal';
 import { useClinicNotifications } from '../../hooks/useClinicNotifications';
-import { theme } from '../../constants/theme';
+import { theme, subscribeActiveTheme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useSafeInsets } from '../../utils/useSafeInsets';
 import { useUiDensity } from '../../context/UiDensityContext';
@@ -47,6 +47,14 @@ function CommsChatButtonContent() {
   const { unreadCount } = useConversations();
   const { user, can } = useAuth();
   const { facilityId } = useCommsContext();
+  const [isHovered, setIsHovered] = useState(false);
+  const [, setThemeTick] = useState(0);
+
+  useEffect(() => {
+    return subscribeActiveTheme(() => {
+      setThemeTick((v) => v + 1);
+    });
+  }, []);
 
   const canViewTriage = can(PERMISSIONS.triageRead) || can('messaging:triage') || user?.role === 'Admin';
   const { pendingCount, urgentCount } = useTriageQueue(facilityId);
@@ -64,15 +72,42 @@ function CommsChatButtonContent() {
   return (
     <Pressable
       onPress={toggleChatDrawer}
-      style={({ pressed }) => [
+      onHoverIn={() => setIsHovered(true)}
+      onHoverOut={() => setIsHovered(false)}
+      style={({ hovered, pressed }: any) => [
         styles.chatButton,
-        pressed && styles.chatButtonPressed,
+        {
+          backgroundColor: theme.colors.primarySubtle,
+          borderColor: theme.colors.primaryBorder,
+        },
+        theme.shadows.brandSubtle,
+        (hovered || isHovered) &&
+          !pressed && [
+            styles.chatButtonHovered,
+            {
+              backgroundColor: theme.colors.primaryLight,
+              borderColor: theme.colors.primary,
+            },
+            theme.shadows.brandSm,
+          ],
+        pressed && [
+          styles.chatButtonPressed,
+          {
+            backgroundColor: theme.colors.primaryLight,
+            borderColor: theme.colors.primaryDark,
+          },
+          theme.shadows.none,
+        ],
       ]}
       hitSlop={theme.spacing.xs}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
     >
-      <Icon name="message" size={theme.sizes.iconMd} color={theme.colors.text} />
+      <Icon
+        name="message"
+        size={theme.sizes.iconMd}
+        color={isHovered ? theme.colors.primaryHover : theme.colors.primary}
+      />
       {triageCount > 0 ? (
         <View
           style={[
@@ -82,7 +117,7 @@ function CommsChatButtonContent() {
         />
       ) : null}
       {unreadCount > 0 ? (
-        <View style={styles.badgePill}>
+        <View style={[styles.badgePill, { backgroundColor: theme.colors.primary }]}>
           <ThemedText variant="badge" color={theme.colors.onPrimary}>
             {unreadCount > 99 ? '99+' : unreadCount}
           </ThemedText>
@@ -110,6 +145,14 @@ export default function ClinicHeaderBar({
   const { isCompact, width } = useBreakpoint();
   const { multiplier, headerHeight } = useUiDensity();
   const [modalVisible, setModalVisible] = useState(false);
+  const [isBellHovered, setIsBellHovered] = useState(false);
+  const [, setThemeTick] = useState(0);
+
+  useEffect(() => {
+    return subscribeActiveTheme(() => {
+      setThemeTick((v) => v + 1);
+    });
+  }, []);
 
   const {
     notifications,
@@ -168,6 +211,7 @@ export default function ClinicHeaderBar({
         <View style={styles.titleBlock}>
           <ThemedText
             variant={isCompact ? 'title' : 'h2'}
+            color={theme.colors.primary}
             numberOfLines={1}
             style={isCompact && styles.titleTextCompact}
           >
@@ -196,25 +240,53 @@ export default function ClinicHeaderBar({
             onPress={() => onOpenSearch()}
             style={({ pressed, hovered }: any) => [
               styles.searchTriggerPill,
-              hovered && styles.searchTriggerPillHovered,
-              pressed && styles.searchTriggerPillPressed,
+              {
+                backgroundColor: theme.colors.primarySubtle,
+                borderColor: theme.colors.primaryBorder,
+              },
+              theme.shadows.brandSubtle,
+              hovered &&
+                !pressed && [
+                  styles.searchTriggerPillHovered,
+                  {
+                    backgroundColor: theme.colors.primaryLight,
+                    borderColor: theme.colors.primary,
+                  },
+                  theme.shadows.brandSm,
+                ],
+              pressed && [
+                styles.searchTriggerPillPressed,
+                {
+                  backgroundColor: theme.colors.primaryLight,
+                  borderColor: theme.colors.primaryDark,
+                },
+                theme.shadows.none,
+              ],
             ]}
             accessibilityRole="button"
             accessibilityLabel="Search clinic records and settings (Cmd+K)"
           >
             <View style={styles.searchTriggerContent}>
-              <Icon name="search" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+              <Icon name="search" size={theme.sizes.iconSm} color={theme.colors.primary} />
               <ThemedText
                 variant="small"
-                color={theme.colors.textMuted}
+                color={theme.colors.primaryDark}
                 numberOfLines={1}
                 style={styles.searchPlaceholderText}
               >
                 Search records...
               </ThemedText>
             </View>
-            <View style={styles.shortcutBadge}>
-              <ThemedText variant="code" color={theme.colors.textSecondary} style={styles.shortcutText}>
+            <View
+              style={[
+                styles.shortcutBadge,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.primaryBorder,
+                },
+              ]}
+            >
+              <ThemedText variant="code" color={theme.colors.primary} style={styles.shortcutText}>
                 {isMac ? '⌘K' : 'Ctrl+K'}
               </ThemedText>
             </View>
@@ -280,28 +352,60 @@ export default function ClinicHeaderBar({
         {/* Utility cluster: Search (mobile) + Bell + User avatar */}
         <View style={styles.utilityCluster}>
           {isCompact && onOpenSearch ? (
-            <Pressable
-              onPress={() => onOpenSearch()}
-              style={({ pressed }) => [
-                styles.searchIconButton,
-                pressed && styles.searchIconButtonPressed,
-              ]}
-              hitSlop={theme.spacing.xs}
-              accessibilityRole="button"
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="search"
+              iconOnly
               accessibilityLabel="Search clinic records"
-            >
-              <Icon name="search" size={theme.sizes.iconMd} color={theme.colors.text} />
-            </Pressable>
+              tooltip="Search clinic records"
+              onPress={() => onOpenSearch()}
+            />
           ) : null}
 
           <CommsChatButton />
 
           <Pressable
             onPress={() => setModalVisible(true)}
-            style={({ pressed }) => [
+            onHoverIn={() => setIsBellHovered(true)}
+            onHoverOut={() => setIsBellHovered(false)}
+            style={({ hovered, pressed }: any) => [
               styles.bellButton,
-              hasStatAlert && styles.bellButtonStat,
-              pressed && styles.bellButtonPressed,
+              hasStatAlert
+                ? [
+                    styles.bellButtonStat,
+                    {
+                      backgroundColor: theme.colors.emergencyBg,
+                      borderColor: theme.colors.emergencyBorder,
+                    },
+                    theme.shadows.dangerSm,
+                    (hovered || isBellHovered) && !pressed && theme.shadows.dangerMd,
+                    pressed && theme.shadows.none,
+                  ]
+                : [
+                    {
+                      backgroundColor: theme.colors.primarySubtle,
+                      borderColor: theme.colors.primaryBorder,
+                    },
+                    theme.shadows.brandSubtle,
+                    (hovered || isBellHovered) &&
+                      !pressed && [
+                        styles.bellButtonHovered,
+                        {
+                          backgroundColor: theme.colors.primaryLight,
+                          borderColor: theme.colors.primary,
+                        },
+                        theme.shadows.brandSm,
+                      ],
+                    pressed && [
+                      styles.bellButtonPressed,
+                      {
+                        backgroundColor: theme.colors.primaryLight,
+                        borderColor: theme.colors.primaryDark,
+                      },
+                      theme.shadows.none,
+                    ],
+                  ],
             ]}
             hitSlop={theme.spacing.xs}
             accessibilityRole="button"
@@ -310,10 +414,22 @@ export default function ClinicHeaderBar({
             <Icon
               name="bell"
               size={theme.sizes.iconMd}
-              color={hasStatAlert ? theme.colors.emergencyText : theme.colors.text}
+              color={
+                hasStatAlert
+                  ? theme.colors.emergencyText
+                  : isBellHovered
+                  ? theme.colors.primaryHover
+                  : theme.colors.primary
+              }
             />
             {unreadCount > 0 ? (
-              <View style={[styles.badgePill, hasStatAlert && styles.badgePillStat]}>
+              <View
+                style={[
+                  styles.badgePill,
+                  { backgroundColor: theme.colors.primary },
+                  hasStatAlert && [styles.badgePillStat, { backgroundColor: theme.colors.emergency }],
+                ]}
+              >
                 <ThemedText
                   variant="badge"
                   color={theme.colors.onPrimary}
@@ -428,32 +544,47 @@ const styles = StyleSheet.create({
     width: theme.sizes.controlSm,
     height: theme.sizes.controlSm,
     borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
+    ...theme.shadows.brandSubtle,
+  },
+  chatButtonHovered: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+    ...theme.shadows.brandSm,
   },
   chatButtonPressed: {
-    opacity: 0.7,
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryDark,
   },
   bellButton: {
     position: 'relative',
     width: theme.sizes.controlSm,
     height: theme.sizes.controlSm,
     borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
+    ...theme.shadows.brandSubtle,
+  },
+  bellButtonHovered: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+    ...theme.shadows.brandSm,
   },
   bellButtonStat: {
     backgroundColor: theme.colors.emergencyBg,
     borderColor: theme.colors.emergencyBorder,
+    ...theme.shadows.dangerSm,
   },
   bellButtonPressed: {
-    opacity: 0.7,
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryDark,
   },
   badgePill: {
     position: 'absolute',
@@ -490,9 +621,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primaryBorder,
     borderRadius: theme.radii.full,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
@@ -502,13 +633,16 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minHeight: 34,
     gap: theme.spacing.sm,
+    ...theme.shadows.brandSubtle,
   },
   searchTriggerPillHovered: {
-    borderColor: theme.colors.borderDark,
-    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+    ...theme.shadows.brandSm,
   },
   searchTriggerPillPressed: {
-    opacity: 0.8,
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryDark,
   },
   searchTriggerContent: {
     flexDirection: 'row',
@@ -523,25 +657,12 @@ const styles = StyleSheet.create({
   shortcutBadge: {
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primaryBorder,
     borderRadius: theme.radii.sm,
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 1,
   },
   shortcutText: {
     lineHeight: 14,
-  },
-  searchIconButton: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchIconButtonPressed: {
-    opacity: 0.7,
   },
 });

@@ -1469,22 +1469,19 @@ export default function DashboardScreen() {
                   ytd: 'Year to Date',
                 };
                 return (
-                  <Pressable
+                  <Button
                     key={preset}
-                    style={styles.presetChip}
+                    variant="subtle"
+                    size="xs"
+                    title={labelMap[preset]}
                     onPress={() => {
                       const range = computeDatePresetRange(preset);
                       setAnalyticsStartDate(range.start);
                       setAnalyticsEndDate(range.end);
                       loadAnalytics(range.start, range.end);
                     }}
-                    accessibilityRole="button"
                     accessibilityLabel={`Select ${labelMap[preset]}`}
-                  >
-                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                      {labelMap[preset]}
-                    </ThemedText>
-                  </Pressable>
+                  />
                 );
               })}
             </View>
@@ -2288,20 +2285,17 @@ export default function DashboardScreen() {
                                       />
                                     ))}
                                     {allCustomItems.length > 2 && (
-                                      <Pressable
+                                      <Button
+                                        variant="ghost"
+                                        size="xs"
+                                        title={isExpanded ? 'See less' : `+${hiddenCount} more`}
                                         onPress={() => toggleCustomRow(rowKey)}
-                                        style={styles.seeMorePill}
-                                        accessibilityRole="button"
                                         accessibilityLabel={
                                           isExpanded
                                             ? 'Collapse custom fields'
                                             : `Show ${hiddenCount} more custom fields`
                                         }
-                                      >
-                                        <ThemedText style={styles.seeMoreText}>
-                                          {isExpanded ? 'See less' : `+${hiddenCount} more`}
-                                        </ThemedText>
-                                      </Pressable>
+                                      />
                                     )}
                                   </>
                                 )}
@@ -2644,22 +2638,21 @@ export default function DashboardScreen() {
             </Pressable>
 
             <View style={styles.presetChipsRow}>
-              <Pressable
-                style={styles.presetChip}
+              <Button
+                variant="subtle"
+                size="xs"
+                title="Today"
                 onPress={() => {
                   const today = getManilaTodayStr();
                   setEodDate(today);
                   loadReports('DAILY_EOD', undefined, undefined, today);
                 }}
-                accessibilityRole="button"
                 accessibilityLabel="Select Today for EOD"
-              >
-                <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                  Today
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                style={styles.presetChip}
+              />
+              <Button
+                variant="subtle"
+                size="xs"
+                title="Yesterday"
                 onPress={() => {
                   const now = new Date();
                   const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -2668,13 +2661,8 @@ export default function DashboardScreen() {
                   setEodDate(yStr);
                   loadReports('DAILY_EOD', undefined, undefined, yStr);
                 }}
-                accessibilityRole="button"
                 accessibilityLabel="Select Yesterday for EOD"
-              >
-                <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                  Yesterday
-                </ThemedText>
-              </Pressable>
+              />
             </View>
           </>
         ) : (
@@ -2704,22 +2692,19 @@ export default function DashboardScreen() {
                   '30d': 'This Month',
                 };
                 return (
-                  <Pressable
+                  <Button
                     key={preset}
-                    style={styles.presetChip}
+                    variant="subtle"
+                    size="xs"
+                    title={labelMap[preset]}
                     onPress={() => {
                       const range = computeDatePresetRange(preset);
                       setReportsStartDate(range.start);
                       setReportsEndDate(range.end);
                       loadReports(reportType, range.start, range.end);
                     }}
-                    accessibilityRole="button"
                     accessibilityLabel={`Select ${labelMap[preset]}`}
-                  >
-                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                      {labelMap[preset]}
-                    </ThemedText>
-                  </Pressable>
+                  />
                 );
               })}
             </View>
@@ -2795,8 +2780,8 @@ export default function DashboardScreen() {
       actions={[
         {
           id: 'new-patient',
-          label: 'New patient',
-          shortLabel: 'New',
+          label: 'New Patient',
+          shortLabel: 'New Patient',
           icon: 'plus' as const,
           variant: 'primary' as const,
           primary: true,
@@ -3525,14 +3510,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     flexWrap: 'wrap',
   },
-  presetChip: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-    borderRadius: theme.radii.full,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
-  },
   demographicGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -3669,23 +3646,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.xs,
-  },
-  seeMorePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 1,
-    paddingHorizontal: theme.spacing.xs + 2,
-    borderRadius: theme.radii.xs,
-    backgroundColor: theme.colors.primaryLight,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    alignSelf: 'flex-start',
-  },
-  seeMoreText: {
-    fontSize: theme.fontSizes.xs - 2,
-    fontWeight: '700',
-    color: theme.colors.primaryDark,
-    lineHeight: 12,
-    letterSpacing: 0.4,
   },
 });

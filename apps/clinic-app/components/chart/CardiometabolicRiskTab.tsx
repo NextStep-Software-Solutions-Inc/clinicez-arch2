@@ -1065,9 +1065,14 @@ export default function CardiometabolicRiskTab({
     }
     if (autoSaveStatus === 'error') {
       return (
-        <Pressable onPress={() => void performAutoSave()} accessibilityRole="button" accessibilityLabel="Retry saving changes">
-          <Badge label="Autosave failed • Retry" variant="emergency" size="sm" icon="alertCircle" />
-        </Pressable>
+        <Button
+          variant="dangerOutline"
+          size="xs"
+          icon="alertCircle"
+          title="Autosave failed • Retry"
+          accessibilityLabel="Retry saving changes"
+          onPress={() => void performAutoSave()}
+        />
       );
     }
     if (lastSavedBadgeLabel) {
@@ -2167,16 +2172,14 @@ export default function CardiometabolicRiskTab({
               </ThemedText>
             </View>
             {isManuallyOverridden && (
-              <Pressable
-                style={styles.autoSyncBtn}
+              <Button
+                variant="outline"
+                size="xs"
+                icon="refresh"
+                title="Auto-Calculate"
                 disabled={!canWritePatients}
                 onPress={handleApplyCalculatedRisk}
-              >
-                <Icon name="refresh" size={12} color={theme.colors.primary} />
-                <ThemedText variant="captionBold" color={theme.colors.primary}>
-                  Auto-Calculate
-                </ThemedText>
-              </Pressable>
+              />
             )}
           </View>
         </View>
@@ -2375,22 +2378,18 @@ export default function CardiometabolicRiskTab({
           {/* Voided Assessments Section (Collapsible) */}
           {voidedAssessments.length > 0 && (
             <View style={styles.voidedSectionContainer}>
-              <Pressable
-                style={styles.toggleVoidedBtn}
-                onPress={() => setShowVoided((prev) => !prev)}
-                accessibilityRole="button"
-              >
-                <Icon
-                  name={showVoided ? 'chevronUp' : 'chevronDown'}
-                  size={16}
-                  color={theme.colors.textSecondary}
-                />
-                <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                  {showVoided
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={showVoided ? 'chevronUp' : 'chevronDown'}
+                title={
+                  showVoided
                     ? `Hide ${voidedAssessments.length} retracted / voided ${voidedAssessments.length === 1 ? 'entry' : 'entries'}`
-                    : `Show ${voidedAssessments.length} retracted / voided ${voidedAssessments.length === 1 ? 'entry' : 'entries'}`}
-                </ThemedText>
-              </Pressable>
+                    : `Show ${voidedAssessments.length} retracted / voided ${voidedAssessments.length === 1 ? 'entry' : 'entries'}`
+                }
+                onPress={() => setShowVoided((prev) => !prev)}
+                style={styles.toggleVoidedBtn}
+              />
 
               {showVoided &&
                 voidedAssessments.map((a) => {
@@ -2636,17 +2635,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     flex: 1,
   },
-  autoSyncBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    borderRadius: theme.radii.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
   sectionCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.lg,
@@ -2798,10 +2786,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   toggleVoidedBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
+    alignSelf: 'flex-start',
   },
   modalBody: {
     gap: theme.spacing.md,

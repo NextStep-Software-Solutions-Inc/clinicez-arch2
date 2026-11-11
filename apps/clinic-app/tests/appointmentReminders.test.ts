@@ -463,7 +463,8 @@ describe('Milestone 5: Calendar Appointment Push Notifications & Reminders', () 
       expect(html).toContain('data-testid="switch-reminder-24h"');
       expect(html).toContain('data-testid="switch-reminder-2h"');
       expect(html).toContain('data-testid="switch-staff-notifications"');
-      expect(html).toContain('data-testid="btn-save-reminder-settings"');
+      // Save button is hidden when reminder switches match saved settings (!isDirty)
+      expect(html).not.toContain('data-testid="btn-save-reminder-settings"');
     });
 
     test('renders disabled badge when master toggle is off', () => {

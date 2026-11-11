@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { View, StyleSheet, Pressable, Animated } from 'react-native';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
 import {
   ThemedText,
   Badge,
@@ -248,28 +248,10 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
 
   const passedCount = statutoryConditions.filter((c) => c.isValid).length;
 
-  let spinAnim: any;
-  try {
-    spinAnim = useRef(new Animated.Value(0)).current;
-  } catch {
-    spinAnim = new Animated.Value(0);
-  }
-
   const handleRevalidate = () => {
-    spinAnim.setValue(0);
-    Animated.timing(spinAnim, {
-      toValue: 1,
-      duration: 650,
-      useNativeDriver: false,
-    }).start();
     notify.info('PhilHealth Yakap claim readiness checklist revalidated.');
     onRevalidate();
   };
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
 
   const resolveMissingSection = (text: string): StatutorySectionKey => {
     if (!text || typeof text !== 'string') return 'atc';
@@ -320,23 +302,16 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
         rightAction={
           <View style={styles.headerRight}>
             {!isSigned && (
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                title="Revalidate"
+                variant="outline"
+                size="sm"
+                icon="refresh"
+                loading={Boolean(isValidating)}
+                disabled={Boolean(isValidating)}
                 accessibilityLabel="Revalidate checklist"
-                disabled={isValidating}
                 onPress={handleRevalidate}
-                style={({ pressed }: any) => [
-                  styles.revalidateButton,
-                  pressed && styles.revalidateButtonPressed,
-                ]}
-              >
-                <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                  <Icon name="refresh" size={16} color={theme.colors.primary} />
-                </Animated.View>
-                <ThemedText variant="smallBold" color={theme.colors.primary}>
-                  Revalidate
-                </ThemedText>
-              </Pressable>
+              />
             )}
           </View>
         }
@@ -421,14 +396,13 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
                   {formatMissingRequirement(field)}
                 </ThemedText>
                 {!isSigned && (
-                  <Pressable
-                    style={styles.jumpLink}
+                  <Button
+                    title="Jump to section"
+                    variant="ghost"
+                    size="xs"
+                    rightIcon="arrowRight"
                     onPress={() => onJumpToSection(resolveMissingSection(field))}
-                  >
-                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                      Jump to section →
-                    </ThemedText>
-                  </Pressable>
+                  />
                 )}
               </View>
             ))}
@@ -493,21 +467,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-  },
-  revalidateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  revalidateButtonPressed: {
-    backgroundColor: theme.colors.primaryLighter,
-    borderColor: theme.colors.primary,
   },
   progressContainer: {
     marginBottom: theme.spacing.md,
@@ -593,10 +552,6 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
-  },
-  jumpLink: {
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
   },
   gatekeeperBar: {
     marginTop: theme.spacing.md,

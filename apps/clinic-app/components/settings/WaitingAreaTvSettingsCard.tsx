@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Linking, Pressable } from 'react-native';
+import { View, StyleSheet, Linking, Pressable, Platform } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -85,6 +85,7 @@ export default function WaitingAreaTvSettingsCard({
 
   const activePin = savedPin ?? settings?.tvDisplayPin ?? null;
   const isPinConfigured = Boolean(activePin && activePin.trim().length > 0);
+  const isPinDirty = pinInput.trim() !== (activePin || '');
 
   const publicCloudTvUrl = useMemo<string>(() => {
     const effectiveSettings = settings ? { ...settings, tvDisplayPin: activePin } : { tvDisplayPin: activePin };
@@ -492,14 +493,16 @@ export default function WaitingAreaTvSettingsCard({
                   />
                 </View>
                 <View style={styles.pinActionButtons}>
-                  <Button
-                    title="Save Passcode"
-                    variant="primary"
-                    icon="check"
-                    loading={savingPin}
-                    disabled={savingPin || pinInput.trim() === (activePin || '')}
-                    onPress={() => handleSavePin(pinInput)}
-                  />
+                  {isPinDirty || savingPin ? (
+                    <Button
+                      title="Save Passcode"
+                      variant="primary"
+                      icon="check"
+                      loading={savingPin}
+                      disabled={savingPin}
+                      onPress={() => handleSavePin(pinInput)}
+                    />
+                  ) : null}
                   <Button
                     title="Generate 6-Digit PIN"
                     variant="secondary"
@@ -543,9 +546,25 @@ export default function WaitingAreaTvSettingsCard({
               </View>
 
               <View style={styles.urlBadge}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
+                <ThemedText
+                  variant="captionBold"
+                  color={theme.colors.textSecondary}
+                  numberOfLines={2}
+                  style={styles.urlText}
+                >
                   {publicCloudTvUrl || 'Portal display link will appear once facility is configured.'}
                 </ThemedText>
+                <Button
+                  icon={copiedCloud ? 'check' : 'copy'}
+                  iconOnly
+                  variant={copiedCloud ? 'successOutline' : 'secondary'}
+                  size="sm"
+                  disabled={!publicCloudTvUrl}
+                  accessibilityLabel={copiedCloud ? 'Copied!' : 'Copy Portal Link'}
+                  tooltip={copiedCloud ? 'Copied!' : 'Copy Portal Link'}
+                  testID="copy-portal-tv-link-btn"
+                  onPress={() => publicCloudTvUrl && copyToClipboard(publicCloudTvUrl, 'cloud')}
+                />
               </View>
 
               <View style={styles.actionRow}>
@@ -555,13 +574,6 @@ export default function WaitingAreaTvSettingsCard({
                   icon="maximize"
                   disabled={!publicCloudTvUrl}
                   onPress={() => publicCloudTvUrl && openUrl(publicCloudTvUrl)}
-                />
-                <Button
-                  title={copiedCloud ? 'Copied' : 'Copy Portal Link'}
-                  variant="outline"
-                  icon="copy"
-                  disabled={!publicCloudTvUrl}
-                  onPress={() => publicCloudTvUrl && copyToClipboard(publicCloudTvUrl, 'cloud')}
                 />
               </View>
             </View>
@@ -589,9 +601,24 @@ export default function WaitingAreaTvSettingsCard({
               </View>
 
               <View style={styles.urlBadge}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
+                <ThemedText
+                  variant="captionBold"
+                  color={theme.colors.textSecondary}
+                  numberOfLines={2}
+                  style={styles.urlText}
+                >
                   {localLanUrl}
                 </ThemedText>
+                <Button
+                  icon={copiedLan ? 'check' : 'copy'}
+                  iconOnly
+                  variant={copiedLan ? 'successOutline' : 'secondary'}
+                  size="sm"
+                  accessibilityLabel={copiedLan ? 'Copied!' : 'Copy LAN Link'}
+                  tooltip={copiedLan ? 'Copied!' : 'Copy LAN Link'}
+                  testID="copy-lan-tv-link-btn"
+                  onPress={() => copyToClipboard(localLanUrl, 'lan')}
+                />
               </View>
 
               <View style={styles.actionRow}>
@@ -600,12 +627,6 @@ export default function WaitingAreaTvSettingsCard({
                   variant="primary"
                   icon="maximize"
                   onPress={() => openUrl(localLanUrl)}
-                />
-                <Button
-                  title={copiedLan ? 'Copied' : 'Copy LAN Link'}
-                  variant="outline"
-                  icon="copy"
-                  onPress={() => copyToClipboard(localLanUrl, 'lan')}
                 />
               </View>
             </View>
@@ -674,6 +695,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: theme.spacing.md,
     gap: theme.spacing.md,
+    minWidth: 0,
+    maxWidth: '100%',
+    overflow: 'hidden',
   },
   urlHeader: {
     flexDirection: 'row',
@@ -698,6 +722,7 @@ const styles = StyleSheet.create({
   },
   urlInfo: {
     flex: 1,
+    minWidth: 0,
     gap: theme.spacing.xs,
   },
   cardTitleBadgeRow: {
@@ -710,12 +735,25 @@ const styles = StyleSheet.create({
     lineHeight: theme.spacing.md,
   },
   urlBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    minWidth: 0,
+    maxWidth: '100%',
+    overflow: 'hidden',
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.sm,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
+  },
+  urlText: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: 'monospace',
+    ...(Platform.OS === 'web' ? ({ wordBreak: 'break-all' } as any) : {}),
   },
   actionRow: {
     flexDirection: 'row',

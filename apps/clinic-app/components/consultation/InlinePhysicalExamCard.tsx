@@ -346,23 +346,14 @@ const PhysicalExamSystemRow: React.FC<PhysicalExamSystemRowProps> = ({
           </ThemedText>
         </View>
 
-        <Pressable
+        <Button
+          title={isAbnormal ? 'Set Normal' : 'Set Abnormal'}
+          variant={isAbnormal ? 'subtle' : 'outline'}
+          size="xs"
           disabled={disabled}
-          onPress={() => onToggleSystem(sys, resolvedOptions)}
-          accessibilityRole="button"
           accessibilityLabel={`Toggle ${sys.label} status`}
-          style={[
-            styles.toggleButton,
-            isAbnormal ? styles.toggleButtonAbnormal : styles.toggleButtonNormal,
-          ]}
-        >
-          <ThemedText
-            variant="smallBold"
-            color={isAbnormal ? theme.colors.warning : theme.colors.primary}
-          >
-            {isAbnormal ? 'Set Normal' : 'Set Abnormal'}
-          </ThemedText>
-        </Pressable>
+          onPress={() => onToggleSystem(sys, resolvedOptions)}
+        />
       </View>
 
       {resolvedOptions.length > 0 ? (
@@ -731,20 +722,6 @@ const styles = StyleSheet.create({
   },
   systemLabel: {
     marginRight: theme.spacing.xs,
-  },
-  toggleButton: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    borderWidth: 1,
-  },
-  toggleButtonNormal: {
-    borderColor: theme.colors.primary,
-    backgroundColor: 'transparent',
-  },
-  toggleButtonAbnormal: {
-    borderColor: theme.colors.warning,
-    backgroundColor: theme.colors.warningBg,
   },
   chipsScroll: {
     marginTop: theme.spacing.xs,

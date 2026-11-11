@@ -231,25 +231,27 @@ export default function ClinicNotificationCenterModal({
 
         <View style={styles.headerRight}>
           {onRefresh ? (
-            <Pressable
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="refresh"
+              iconOnly
               onPress={onRefresh}
-              style={styles.headerIconButton}
-              accessibilityRole="button"
               accessibilityLabel="Refresh notifications"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-            </Pressable>
+            </Button>
           ) : null}
-          <Pressable
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="close"
+            iconOnly
             onPress={handleClose}
-            style={styles.closeBtn}
-            accessibilityRole="button"
             accessibilityLabel="Close notifications panel"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
+          </Button>
         </View>
       </View>
 
@@ -329,15 +331,14 @@ export default function ClinicNotificationCenterModal({
         </ScrollView>
 
         {unreadCount > 0 ? (
-          <Pressable
+          <Button
+            title="Mark all read"
+            variant="ghost"
+            size="xs"
             onPress={handleMarkAllRead}
             disabled={markingAll}
-            style={({ pressed }) => [styles.markAllBtn, pressed && styles.markAllBtnPressed]}
-          >
-            <ThemedText variant="smallBold" color={theme.colors.primary}>
-              Mark all read
-            </ThemedText>
-          </Pressable>
+            loading={markingAll}
+          />
         ) : null}
       </View>
 
@@ -420,16 +421,14 @@ export default function ClinicNotificationCenterModal({
                   ) : null}
 
                   {!item.isRead ? (
-                    <Pressable
+                    <Button
+                      title="Mark read"
+                      variant="ghost"
+                      size="xs"
+                      icon="check"
                       onPress={() => onMarkRead(item.id)}
-                      style={({ pressed }) => [styles.markReadBtn, pressed && styles.markReadBtnPressed]}
                       accessibilityLabel="Mark as read"
-                    >
-                      <Icon name="check" size={14} color={theme.colors.textMuted} />
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Mark read
-                      </ThemedText>
-                    </Pressable>
+                    />
                   ) : (
                     <View style={styles.readIndicator}>
                       <Icon name="check" size={14} color={theme.colors.success} />
@@ -583,22 +582,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  headerIconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-  },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -623,19 +606,12 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     backgroundColor: theme.colors.primaryLight,
+    ...theme.shadows.brandSubtle,
   },
   tabWithBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  markAllBtn: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-  },
-  markAllBtnPressed: {
-    opacity: 0.7,
   },
   scrollList: {
     flex: 1,
@@ -697,16 +673,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: theme.spacing.xs,
-  },
-  markReadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-  },
-  markReadBtnPressed: {
-    opacity: 0.6,
   },
   readIndicator: {
     flexDirection: 'row',

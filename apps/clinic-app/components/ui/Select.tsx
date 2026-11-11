@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, Pressable, ViewStyle, ScrollView, TextInput } from 'react-native';
 import ThemedText from './ThemedText';
-import Icon, { IconName, IconSlot } from './Icon';
+import Icon, { IconName } from './Icon';
+import Button from './Button';
 import Modal from './Modal';
 import Badge from './Badge';
 import { theme } from '../../constants/theme';
@@ -55,6 +56,8 @@ export default function Select({
   const [searchQuery, setSearchQuery] = useState('');
   const [customValue, setCustomValue] = useState('');
   const [isEnteringCustom, setIsEnteringCustom] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isCustomFocused, setIsCustomFocused] = useState(false);
 
   const displayValue = value?.trim() || '';
   const selectedOption = options.find((o) => o.value === displayValue || o.label === displayValue);
@@ -111,8 +114,9 @@ export default function Select({
 
       <Pressable
         onPress={() => !disabled && setModalVisible(true)}
-        style={({ pressed }) => [
+        style={({ pressed, hovered }: any) => [
           styles.trigger,
+          hovered && !disabled && !modalVisible && !error ? styles.triggerHovered : null,
           error ? styles.triggerError : null,
           modalVisible ? styles.triggerActive : null,
           disabled ? styles.triggerDisabled : null,
@@ -168,13 +172,19 @@ export default function Select({
       >
         <View style={styles.modalContent}>
           {options.length > 5 && !isEnteringCustom && (
-            <View style={styles.searchWrapper}>
-              <Icon name="search" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+            <View style={[styles.searchWrapper, isSearchFocused && styles.searchWrapperFocused]}>
+              <Icon
+                name="search"
+                size={theme.sizes.iconSm}
+                color={isSearchFocused ? theme.colors.primary : theme.colors.textMuted}
+              />
               <TextInput
                 placeholder="Search..."
                 placeholderTextColor={theme.colors.textLight}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
                 style={styles.searchInput}
                 autoCorrect={false}
               />
@@ -196,26 +206,24 @@ export default function Select({
                 placeholderTextColor={theme.colors.textLight}
                 value={customValue}
                 onChangeText={setCustomValue}
-                style={styles.customInput}
+                onFocus={() => setIsCustomFocused(true)}
+                onBlur={() => setIsCustomFocused(false)}
+                style={[styles.customInput, isCustomFocused && styles.customInputFocused]}
                 autoFocus
               />
               <View style={styles.customActions}>
-                <Pressable
-                  style={[styles.customBtn, styles.customCancelBtn]}
+                <Button
+                  title="Back"
+                  variant="subtle"
+                  size="sm"
                   onPress={() => setIsEnteringCustom(false)}
-                >
-                  <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                    Back
-                  </ThemedText>
-                </Pressable>
-                <Pressable
-                  style={[styles.customBtn, styles.customSaveBtn]}
+                />
+                <Button
+                  title="Save"
+                  variant="primary"
+                  size="sm"
                   onPress={handleApplyCustom}
-                >
-                  <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
-                    Save
-                  </ThemedText>
-                </Pressable>
+                />
               </View>
             </View>
           ) : (
@@ -233,7 +241,12 @@ export default function Select({
                     <Pressable
                       key={opt.value}
                       onPress={() => handleSelect(opt.value)}
-                      style={[styles.optionRow, isSelected && styles.optionRowSelected]}
+                      style={({ pressed, hovered }: any) => [
+                        styles.optionRow,
+                        hovered && !isSelected && styles.optionRowHovered,
+                        isSelected && styles.optionRowSelected,
+                        pressed && !isSelected && styles.optionRowPressed,
+                      ]}
                       accessibilityRole="radio"
                       accessibilityState={{ selected: isSelected }}
                     >
@@ -274,25 +287,24 @@ export default function Select({
           {/* Modal Footer Controls */}
           <View style={styles.modalFooter}>
             {allowClear && displayValue ? (
-              <Pressable onPress={handleClear} style={styles.clearBtn}>
-                <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                <ThemedText variant="small" color={theme.colors.textMuted}>
-                  Clear Selection
-                </ThemedText>
-              </Pressable>
+              <Button
+                title="Clear Selection"
+                icon="trash"
+                variant="ghost"
+                size="sm"
+                onPress={handleClear}
+              />
             ) : null}
             <View style={{ flex: 1 }} />
-            <Pressable
+            <Button
+              title="Close"
+              variant="ghost"
+              size="sm"
               onPress={() => {
                 setModalVisible(false);
                 setIsEnteringCustom(false);
               }}
-              style={styles.closeBtn}
-            >
-              <ThemedText variant="smallBold" color={theme.colors.primary}>
-                Close
-              </ThemedText>
-            </Pressable>
+            />
           </View>
         </View>
       </Modal>
@@ -319,12 +331,16 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.controlMd,
     gap: theme.spacing.sm,
   },
+  triggerHovered: {
+    borderColor: theme.colors.primaryBorder,
+  },
   triggerActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.surface,
   },
   triggerPressed: {
-    backgroundColor: theme.colors.surfaceSubtle,
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
   },
   triggerDisabled: {
     opacity: 0.6,
@@ -347,13 +363,17 @@ const styles = StyleSheet.create({
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     borderRadius: theme.radii.md,
     paddingHorizontal: theme.spacing.sm,
     backgroundColor: theme.colors.surfaceSubtle,
     minHeight: 40,
     gap: theme.spacing.xs,
+  },
+  searchWrapperFocused: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surface,
   },
   searchInput: {
     flex: 1,
@@ -371,9 +391,16 @@ const styles = StyleSheet.create({
   optionRow: {
     padding: theme.spacing.sm,
     borderRadius: theme.radii.md,
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surface,
+  },
+  optionRowHovered: {
+    borderColor: theme.colors.primaryBorder,
+    backgroundColor: theme.colors.primarySubtle,
+  },
+  optionRowPressed: {
+    backgroundColor: theme.colors.primaryLight,
   },
   optionRowSelected: {
     borderColor: theme.colors.primary,
@@ -420,7 +447,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   customInput: {
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderDark,
     borderRadius: theme.radii.md,
     paddingHorizontal: theme.spacing.md,
@@ -430,39 +457,21 @@ const styles = StyleSheet.create({
     minHeight: 44,
     backgroundColor: theme.colors.surface,
   },
+  customInputFocused: {
+    borderColor: theme.colors.primary,
+  },
   customActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
     marginTop: theme.spacing.xs,
   },
-  customBtn: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radii.md,
-  },
-  customCancelBtn: {
-    backgroundColor: theme.colors.surfaceSubtle,
-  },
-  customSaveBtn: {
-    backgroundColor: theme.colors.primary,
-  },
   modalFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: theme.spacing.sm,
-    borderTopWidth: 1,
+    borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
-  },
-  clearBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    padding: theme.spacing.xs,
-  },
-  closeBtn: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
   },
 });

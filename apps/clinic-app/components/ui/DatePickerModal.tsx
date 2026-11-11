@@ -3,7 +3,6 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from './ThemedText';
 import Button from './Button';
-import { IconSlot } from './Icon';
 import Modal from './Modal';
 import { getDaysInMonth } from './ValidatedDateInput';
 
@@ -218,55 +217,45 @@ export default function DatePickerModal({
       <View style={styles.body}>
         {/* Navigation Header */}
         <View style={styles.navRow}>
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            title="-1Y"
+            variant="subtle"
+            size="xs"
             accessibilityLabel="Previous year"
             onPress={() => setCurrentYear((y) => y - 1)}
-            style={styles.yearStepBtn}
-            hitSlop={theme.spacing.xs}
-          >
-            <ThemedText style={styles.yearStepText}>-1Y</ThemedText>
-          </Pressable>
+          />
 
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="chevronLeft"
+            iconOnly
             accessibilityLabel="Previous month"
             onPress={handlePrevMonth}
-            style={styles.navBtn}
-            hitSlop={theme.spacing.xs}
-          >
-            <IconSlot value="chevronLeft" size={theme.sizes.iconMd} color={theme.colors.text} />
-          </Pressable>
+          />
 
           <ThemedText style={styles.monthTitleText}>
             {monthName} {currentYear}
           </ThemedText>
 
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="chevronRight"
+            iconOnly
             accessibilityLabel="Next month"
-            onPress={handleNextMonth}
             disabled={isNextMonthDisabled}
-            style={[styles.navBtn, isNextMonthDisabled && styles.navBtnDisabled]}
-            hitSlop={theme.spacing.xs}
-          >
-            <IconSlot
-              value="chevronRight"
-              size={theme.sizes.iconMd}
-              color={isNextMonthDisabled ? theme.colors.textLight : theme.colors.text}
-            />
-          </Pressable>
+            onPress={handleNextMonth}
+          />
 
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            title="+1Y"
+            variant="subtle"
+            size="xs"
             accessibilityLabel="Next year"
-            onPress={() => setCurrentYear((y) => y + 1)}
             disabled={isNextYearDisabled}
-            style={[styles.yearStepBtn, isNextYearDisabled && styles.navBtnDisabled]}
-            hitSlop={theme.spacing.xs}
-          >
-            <ThemedText style={styles.yearStepText}>+1Y</ThemedText>
-          </Pressable>
+            onPress={() => setCurrentYear((y) => y + 1)}
+          />
         </View>
 
         {/* Weekday Labels */}

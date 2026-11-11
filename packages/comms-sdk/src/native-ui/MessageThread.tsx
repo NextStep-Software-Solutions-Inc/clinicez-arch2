@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -39,8 +39,15 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   error = null,
   hasMoreHistory = false,
   onLoadMoreHistory,
+  colors,
   style
 }) => {
+  const colorsKey = colors
+    ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.text ?? ''}`
+    : '';
+  const c = useMemo<ResolvedCommsColors>(() => ({ ...lightColors, ...colors }), [colors, colorsKey]);
+  const styles = useMemo(() => createStyles(c), [c]);
+
   const [inputText, setInputText] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [peekingMessageId, setPeekingMessageId] = useState<string | null>(null);
@@ -110,19 +117,19 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
       case 'Sending':
         return (
           <View style={styles.deliveryRow} accessibilityLabel="Sending">
-            <Text style={styles.deliveryIconMuted}>◷</Text>
+            <Text style={styles.deliveryIconMuted}>• Sending</Text>
           </View>
         );
       case 'Waiting':
         return (
           <View style={styles.deliveryRow} accessibilityLabel="Sent">
-            <Text style={styles.deliveryIconMuted}>✓</Text>
+            <Text style={styles.deliveryIconMuted}>• Sent</Text>
           </View>
         );
       case 'Received':
         return (
           <View style={styles.deliveryRow} accessibilityLabel="Delivered">
-            <Text style={styles.deliveryIconTeal}>✓✓</Text>
+            <Text style={styles.deliveryIconTeal}>• Delivered</Text>
           </View>
         );
       case 'NotReceived':
@@ -203,7 +210,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         ) : (
           <View style={styles.stateContainer}>
             <View style={styles.emptyShieldBadge}>
-              <Text style={styles.emptyShieldGlyph}>✓</Text>
+              <View style={styles.emptyShieldCheckGlyph} />
             </View>
             <Text style={styles.emptyTitle}>Secure Communication</Text>
             <Text style={styles.emptySubtitle}>
@@ -320,7 +327,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             accessibilityRole="button"
             accessibilityLabel="Scroll to new messages"
           >
-            <Text style={styles.newMessagesPillText}>New messages ↓</Text>
+            <Text style={styles.newMessagesPillText}>New messages</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -345,7 +352,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             value={inputText}
             onChangeText={setInputText}
             placeholder={isInternal ? 'Type internal note for care team...' : 'Type message...'}
-            placeholderTextColor={lightColors.textMuted}
+            placeholderTextColor={c.textMuted}
             multiline
             onKeyPress={handleKeyPress}
             onSubmitEditing={handleSend}
@@ -359,11 +366,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             disabled={!inputText.trim() || isSubmitting}
             accessibilityLabel="Send message"
           >
-            {renderSendIcon ? (
-              renderSendIcon()
-            ) : (
-              <Text style={styles.sendIconText}>➤</Text>
-            )}
+            {renderSendIcon ? renderSendIcon() : null}
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
@@ -372,447 +375,461 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: lightColors.background
-  },
-  header: {
-    padding: spaceScale.md,
-    backgroundColor: lightColors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: lightColors.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  headerInfo: {
-    flex: 1
-  },
-  headerTitle: {
-    fontSize: fontSizeScale.lg,
-    fontWeight: '700',
-    color: lightColors.text
-  },
-  headerSubtitle: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.textMuted,
-    marginTop: 2
-  },
-  privacyButton: {
-    minHeight: sizes.touchTarget,
-    paddingHorizontal: spaceScale.md,
-    borderRadius: radiusScale.sm,
-    backgroundColor: lightColors.surfaceSubtle,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  privacyButtonActive: {
-    backgroundColor: lightColors.warningBg,
-    borderColor: lightColors.warningBorder,
-    borderWidth: 1
-  },
-  privacyButtonText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '600',
-    color: lightColors.textSecondary
-  },
-  privacyButtonTextActive: {
-    color: lightColors.warningText
-  },
-  messageList: {
-    flex: 1
-  },
-  newMessagesPillContainer: {
-    position: 'absolute',
-    bottom: 84,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  newMessagesPill: {
-    backgroundColor: lightColors.primary,
-    paddingHorizontal: spaceScale.md,
-    paddingVertical: spaceScale.xs,
-    borderRadius: radiusScale.full,
-    shadowColor: lightColors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  newMessagesPillText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.surface,
-  },
-  messageListContent: {
-    padding: spaceScale.md
-  },
-  loadMoreButton: {
-    minHeight: sizes.touchTarget,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spaceScale.md
-  },
-  loadMoreText: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.primary,
-    fontWeight: '600'
-  },
-  bubbleWrapper: {
-    marginBottom: spaceScale.md,
-    maxWidth: '80%'
-  },
-  bubbleWrapperMe: {
-    alignSelf: 'flex-end'
-  },
-  bubbleWrapperOther: {
-    alignSelf: 'flex-start'
-  },
-  senderName: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.textSecondary,
-    marginBottom: 2,
-    marginLeft: spaceScale.xs
-  },
-  bubble: {
-    padding: spaceScale.md,
-    borderRadius: radiusScale.md
-  },
-  bubbleMe: {
-    backgroundColor: lightColors.primary,
-    borderBottomRightRadius: radiusScale.xs
-  },
-  bubbleOther: {
-    backgroundColor: lightColors.surface,
-    borderColor: lightColors.border,
-    borderWidth: 1,
-    borderBottomLeftRadius: radiusScale.xs
-  },
-  bubbleTextMe: {
-    color: lightColors.onPrimary,
-    fontSize: fontSizeScale.md,
-    lineHeight: 20
-  },
-  bubbleTextOther: {
-    color: lightColors.text,
-    fontSize: fontSizeScale.md,
-    lineHeight: 20
-  },
-  obscuredText: {
-    letterSpacing: 2,
-    opacity: 0.6
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: spaceScale.xs,
-    gap: spaceScale.xs
-  },
-  timeTextMe: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary,
-    opacity: 0.8
-  },
-  timeTextOther: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.textMuted
-  },
-  deliveryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2
-  },
-  deliveryIconMuted: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary,
-    opacity: 0.8,
-    marginLeft: 2,
-  },
-  deliveryIconTeal: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary,
-    fontWeight: '700',
-    marginLeft: 2,
-  },
-  deliveryIconRed: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.emergencyBg,
-    fontWeight: '700',
-    marginLeft: 2,
-  },
-  deliveryTextMuted: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary,
-    opacity: 0.8
-  },
-  deliveryTextTeal: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary,
-    fontWeight: '600'
-  },
-  deliveryTextRed: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.onPrimary,
-    fontWeight: '700'
-  },
-  resendButton: {
-    minHeight: 24,
-    marginLeft: 4,
-    backgroundColor: lightColors.onPrimary,
-    paddingHorizontal: spaceScale.xs,
-    borderRadius: radiusScale.xs,
-    justifyContent: 'center'
-  },
-  resendButtonText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.emergencyText
-  },
-  internalContainer: {
-    width: '100%',
-    padding: spaceScale.md,
-    backgroundColor: lightColors.warningBg,
-    borderColor: lightColors.warningBorder,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: radiusScale.md,
-    marginBottom: spaceScale.md
-  },
-  internalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spaceScale.xs,
-    gap: spaceScale.xs
-  },
-  internalHeaderIcon: {
-    fontSize: fontSizeScale.xs
-  },
-  internalHeaderText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.warningText
-  },
-  internalText: {
-    fontSize: fontSizeScale.sm,
-    color: lightColors.warningText,
-    lineHeight: 18
-  },
-  internalMeta: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.warningText,
-    marginTop: spaceScale.xs,
-    opacity: 0.8
-  },
-  ackBox: {
-    marginTop: spaceScale.xs,
-    paddingTop: spaceScale.xs,
-    borderTopWidth: 1,
-    borderTopColor: lightColors.border
-  },
-  ackButton: {
-    minHeight: sizes.touchTarget,
-    backgroundColor: lightColors.routineBg,
-    borderColor: lightColors.routineBorder,
-    borderWidth: 1,
-    borderRadius: radiusScale.sm,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  ackButtonText: {
-    color: lightColors.routineText,
-    fontSize: fontSizeScale.xs,
-    fontWeight: '600'
-  },
-  ackConfirmedText: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.routineText,
-    fontWeight: '600'
-  },
-  ackPendingText: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.textMuted
-  },
-  inputContainer: {
-    padding: spaceScale.sm,
-    backgroundColor: lightColors.surface,
-    borderTopWidth: 1,
-    borderTopColor: lightColors.border
-  },
-  internalToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spaceScale.xs,
-    paddingHorizontal: spaceScale.sm,
-    borderRadius: radiusScale.full,
-    backgroundColor: lightColors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    alignSelf: 'flex-start',
-    marginBottom: spaceScale.xs,
-    gap: spaceScale.xs,
-  },
-  internalToggleActive: {
-    backgroundColor: lightColors.warningBg,
-    borderColor: lightColors.warningBorder,
-  },
-  internalToggleText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '600',
-    color: lightColors.textSecondary,
-  },
-  internalToggleTextActive: {
-    color: lightColors.warningText,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spaceScale.sm,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: lightColors.surfaceSubtle,
-    borderRadius: radiusScale.md,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    paddingHorizontal: spaceScale.md,
-    paddingVertical: spaceScale.sm,
-    minHeight: sizes.touchTarget,
-    maxHeight: 120,
-    fontSize: fontSizeScale.sm,
-    color: lightColors.text,
-  },
-  inputInternal: {
-    backgroundColor: lightColors.warningBg,
-    borderColor: lightColors.warningBorder,
-    borderWidth: 1,
-    color: lightColors.warningText,
-  },
-  sendButton: {
-    minWidth: 76,
-    minHeight: sizes.touchTarget,
-    paddingHorizontal: spaceScale.md,
-    backgroundColor: lightColors.primary,
-    borderRadius: radiusScale.md,
-    flexDirection: 'row',
-    gap: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: lightColors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendIconText: {
-    color: lightColors.onPrimary,
-    fontSize: 13,
-  },
-  sendButtonText: {
-    color: lightColors.onPrimary,
-    fontWeight: '600',
-    fontSize: fontSizeScale.sm,
-  },
-  stateContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spaceScale.xl,
-  },
-  emptyShieldBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: radiusScale.full,
-    backgroundColor: lightColors.primarySubtle,
-    borderWidth: 1,
-    borderColor: lightColors.primaryBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spaceScale.md,
-  },
-  emptyShieldGlyph: {
-    fontSize: fontSizeScale['2xl'],
-  },
-  stateText: {
-    marginTop: spaceScale.sm,
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted
-  },
-  emptyIcon: {
-    fontSize: fontSizeScale['3xl'],
-    marginBottom: spaceScale.sm
-  },
-  emptyTitle: {
-    fontSize: fontSizeScale.lg,
-    fontWeight: '600',
-    color: lightColors.text,
-    marginBottom: spaceScale.xs
-  },
-  emptySubtitle: {
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted,
-    textAlign: 'center'
-  },
-  errorIcon: {
-    fontSize: fontSizeScale['3xl'],
-    marginBottom: spaceScale.sm
-  },
-  errorTitle: {
-    fontSize: fontSizeScale.lg,
-    fontWeight: '600',
-    color: lightColors.emergencyText,
-    marginBottom: spaceScale.xs
-  },
-  errorSubtitle: {
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted,
-    textAlign: 'center'
-  },
-  skeletonContainer: {
-    flex: 1,
-    padding: spaceScale.md,
-    gap: spaceScale.md,
-  },
-  skeletonBubble: {
-    padding: spaceScale.md,
-    borderRadius: radiusScale.lg,
-    gap: spaceScale.xs,
-  },
-  skeletonBubbleLeft: {
-    alignSelf: 'flex-start',
-    backgroundColor: lightColors.surfaceSubtle,
-    borderBottomLeftRadius: radiusScale.xs,
-  },
-  skeletonBubbleRight: {
-    alignSelf: 'flex-end',
-    backgroundColor: lightColors.primarySubtle,
-    borderBottomRightRadius: radiusScale.xs,
-  },
-  skeletonBarLong: {
-    height: 12,
-    width: '90%',
-    backgroundColor: lightColors.border,
-    borderRadius: radiusScale.xs,
-    opacity: 0.6,
-  },
-  skeletonBarMedium: {
-    height: 12,
-    width: '65%',
-    backgroundColor: lightColors.border,
-    borderRadius: radiusScale.xs,
-    opacity: 0.5,
-  },
-  skeletonBarShort: {
-    height: 12,
-    width: '40%',
-    backgroundColor: lightColors.border,
-    borderRadius: radiusScale.xs,
-    opacity: 0.4,
-  }
-});
+type ResolvedCommsColors = Record<keyof typeof lightColors, string>;
+
+function createStyles(c: ResolvedCommsColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background
+    },
+    header: {
+      padding: spaceScale.md,
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    headerInfo: {
+      flex: 1
+    },
+    headerTitle: {
+      fontSize: fontSizeScale.lg,
+      fontWeight: '700',
+      color: c.text
+    },
+    headerSubtitle: {
+      fontSize: fontSizeScale.xs,
+      color: c.textMuted,
+      marginTop: 2
+    },
+    privacyButton: {
+      minHeight: sizes.touchTarget,
+      paddingHorizontal: spaceScale.md,
+      borderRadius: radiusScale.sm,
+      backgroundColor: c.surfaceSubtle,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    privacyButtonActive: {
+      backgroundColor: c.warningBg,
+      borderColor: c.warningBorder,
+      borderWidth: 1
+    },
+    privacyButtonText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600',
+      color: c.textSecondary
+    },
+    privacyButtonTextActive: {
+      color: c.warningText
+    },
+    messageList: {
+      flex: 1
+    },
+    newMessagesPillContainer: {
+      position: 'absolute',
+      bottom: 84,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      zIndex: 10,
+    },
+    newMessagesPill: {
+      backgroundColor: c.primary,
+      paddingHorizontal: spaceScale.md,
+      paddingVertical: spaceScale.xs,
+      borderRadius: radiusScale.full,
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 4,
+    },
+    newMessagesPillText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '700',
+      color: c.onPrimary,
+    },
+    messageListContent: {
+      padding: spaceScale.md
+    },
+    loadMoreButton: {
+      minHeight: sizes.touchTarget,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spaceScale.md
+    },
+    loadMoreText: {
+      fontSize: fontSizeScale.xs,
+      color: c.primary,
+      fontWeight: '600'
+    },
+    bubbleWrapper: {
+      marginBottom: spaceScale.md,
+      maxWidth: '80%'
+    },
+    bubbleWrapperMe: {
+      alignSelf: 'flex-end'
+    },
+    bubbleWrapperOther: {
+      alignSelf: 'flex-start'
+    },
+    senderName: {
+      fontSize: fontSizeScale.xs,
+      color: c.textSecondary,
+      marginBottom: 2,
+      marginLeft: spaceScale.xs
+    },
+    bubble: {
+      padding: spaceScale.md,
+      borderRadius: radiusScale.md
+    },
+    bubbleMe: {
+      backgroundColor: c.primaryLight,
+      borderColor: c.primaryBorder,
+      borderWidth: 1,
+      borderBottomRightRadius: radiusScale.xs
+    },
+    bubbleOther: {
+      backgroundColor: c.surface,
+      borderColor: c.border,
+      borderWidth: 1,
+      borderBottomLeftRadius: radiusScale.xs
+    },
+    bubbleTextMe: {
+      color: c.text,
+      fontSize: fontSizeScale.md,
+      lineHeight: 20
+    },
+    bubbleTextOther: {
+      color: c.text,
+      fontSize: fontSizeScale.md,
+      lineHeight: 20
+    },
+    obscuredText: {
+      letterSpacing: 2,
+      opacity: 0.6
+    },
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      marginTop: spaceScale.xs,
+      gap: spaceScale.xs
+    },
+    timeTextMe: {
+      fontSize: fontSizeScale.xs,
+      color: c.primaryDark,
+      opacity: 0.8
+    },
+    timeTextOther: {
+      fontSize: fontSizeScale.xs,
+      color: c.textMuted
+    },
+    deliveryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2
+    },
+    deliveryIconMuted: {
+      fontSize: fontSizeScale.xs,
+      color: c.textMuted,
+      marginLeft: 2,
+    },
+    deliveryIconTeal: {
+      fontSize: fontSizeScale.xs,
+      color: c.primary,
+      fontWeight: '700',
+      marginLeft: 2,
+    },
+    deliveryIconRed: {
+      fontSize: fontSizeScale.xs,
+      color: c.emergencyText,
+      fontWeight: '700',
+      marginLeft: 2,
+    },
+    deliveryTextMuted: {
+      fontSize: fontSizeScale.xs,
+      color: c.textMuted,
+    },
+    deliveryTextTeal: {
+      fontSize: fontSizeScale.xs,
+      color: c.primary,
+      fontWeight: '600'
+    },
+    deliveryTextRed: {
+      fontSize: fontSizeScale.xs,
+      color: c.emergencyText,
+      fontWeight: '700'
+    },
+    resendButton: {
+      minHeight: 24,
+      marginLeft: 4,
+      backgroundColor: c.emergencyBg,
+      borderColor: c.emergencyBorder,
+      borderWidth: 1,
+      paddingHorizontal: spaceScale.xs,
+      borderRadius: radiusScale.xs,
+      justifyContent: 'center'
+    },
+    resendButtonText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '700',
+      color: c.emergencyText
+    },
+    internalContainer: {
+      width: '100%',
+      padding: spaceScale.md,
+      backgroundColor: c.warningBg,
+      borderColor: c.warningBorder,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderRadius: radiusScale.md,
+      marginBottom: spaceScale.md
+    },
+    internalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: spaceScale.xs,
+      gap: spaceScale.xs
+    },
+    internalHeaderIcon: {
+      fontSize: fontSizeScale.xs,
+      color: c.warningText
+    },
+    internalHeaderText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '700',
+      color: c.warningText
+    },
+    internalText: {
+      fontSize: fontSizeScale.sm,
+      color: c.warningText,
+      lineHeight: 18
+    },
+    internalMeta: {
+      fontSize: fontSizeScale.xs,
+      color: c.warningText,
+      marginTop: spaceScale.xs,
+      opacity: 0.8
+    },
+    ackBox: {
+      marginTop: spaceScale.xs,
+      paddingTop: spaceScale.xs,
+      borderTopWidth: 1,
+      borderTopColor: c.border
+    },
+    ackButton: {
+      minHeight: sizes.touchTarget,
+      backgroundColor: c.routineBg,
+      borderColor: c.routineBorder,
+      borderWidth: 1,
+      borderRadius: radiusScale.sm,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    ackButtonText: {
+      color: c.routineText,
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600'
+    },
+    ackConfirmedText: {
+      fontSize: fontSizeScale.xs,
+      color: c.routineText,
+      fontWeight: '600'
+    },
+    ackPendingText: {
+      fontSize: fontSizeScale.xs,
+      color: c.textMuted
+    },
+    inputContainer: {
+      padding: spaceScale.sm,
+      backgroundColor: c.surface,
+      borderTopWidth: 1,
+      borderTopColor: c.border
+    },
+    internalToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spaceScale.xs,
+      paddingHorizontal: spaceScale.sm,
+      borderRadius: radiusScale.full,
+      backgroundColor: c.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignSelf: 'flex-start',
+      marginBottom: spaceScale.xs,
+      gap: spaceScale.xs,
+    },
+    internalToggleActive: {
+      backgroundColor: c.warningBg,
+      borderColor: c.warningBorder,
+    },
+    internalToggleText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600',
+      color: c.textSecondary,
+    },
+    internalToggleTextActive: {
+      color: c.warningText,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: spaceScale.sm,
+    },
+    input: {
+      flex: 1,
+      backgroundColor: c.surfaceSubtle,
+      borderRadius: radiusScale.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      paddingHorizontal: spaceScale.md,
+      paddingVertical: spaceScale.sm,
+      minHeight: sizes.touchTarget,
+      maxHeight: 120,
+      fontSize: fontSizeScale.sm,
+      color: c.text,
+    },
+    inputInternal: {
+      backgroundColor: c.warningBg,
+      borderColor: c.warningBorder,
+      borderWidth: 1,
+      color: c.warningText,
+    },
+    sendButton: {
+      minWidth: 76,
+      minHeight: sizes.touchTarget,
+      paddingHorizontal: spaceScale.md,
+      backgroundColor: c.primary,
+      borderRadius: radiusScale.md,
+      flexDirection: 'row',
+      gap: 4,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    sendButtonDisabled: {
+      opacity: 0.5,
+    },
+    sendIconText: {
+      color: c.onPrimary,
+      fontSize: fontSizeScale.xs,
+    },
+    sendButtonText: {
+      color: c.onPrimary,
+      fontWeight: '600',
+      fontSize: fontSizeScale.sm,
+    },
+    stateContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spaceScale.xl,
+    },
+    emptyShieldBadge: {
+      width: 56,
+      height: 56,
+      borderRadius: radiusScale.full,
+      backgroundColor: c.primarySubtle,
+      borderWidth: 1,
+      borderColor: c.primaryBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spaceScale.md,
+    },
+    emptyShieldCheckGlyph: {
+      width: 12,
+      height: 20,
+      borderBottomWidth: 2.5,
+      borderRightWidth: 2.5,
+      borderColor: c.primary,
+      transform: [{ rotate: '45deg' }],
+      marginBottom: spaceScale.xxs,
+    },
+    stateText: {
+      marginTop: spaceScale.sm,
+      fontSize: fontSizeScale.sm,
+      color: c.textMuted
+    },
+    emptyIcon: {
+      fontSize: fontSizeScale['3xl'],
+      marginBottom: spaceScale.sm
+    },
+    emptyTitle: {
+      fontSize: fontSizeScale.lg,
+      fontWeight: '600',
+      color: c.text,
+      marginBottom: spaceScale.xs
+    },
+    emptySubtitle: {
+      fontSize: fontSizeScale.sm,
+      color: c.textMuted,
+      textAlign: 'center'
+    },
+    errorIcon: {
+      fontSize: fontSizeScale['3xl'],
+      marginBottom: spaceScale.sm,
+      color: c.emergencyText
+    },
+    errorTitle: {
+      fontSize: fontSizeScale.lg,
+      fontWeight: '600',
+      color: c.emergencyText,
+      marginBottom: spaceScale.xs
+    },
+    errorSubtitle: {
+      fontSize: fontSizeScale.sm,
+      color: c.textMuted,
+      textAlign: 'center'
+    },
+    skeletonContainer: {
+      flex: 1,
+      padding: spaceScale.md,
+      gap: spaceScale.md,
+    },
+    skeletonBubble: {
+      padding: spaceScale.md,
+      borderRadius: radiusScale.lg,
+      gap: spaceScale.xs,
+    },
+    skeletonBubbleLeft: {
+      alignSelf: 'flex-start',
+      backgroundColor: c.surfaceSubtle,
+      borderBottomLeftRadius: radiusScale.xs,
+    },
+    skeletonBubbleRight: {
+      alignSelf: 'flex-end',
+      backgroundColor: c.primarySubtle,
+      borderBottomRightRadius: radiusScale.xs,
+    },
+    skeletonBarLong: {
+      height: 12,
+      width: '90%',
+      backgroundColor: c.border,
+      borderRadius: radiusScale.xs,
+      opacity: 0.6,
+    },
+    skeletonBarMedium: {
+      height: 12,
+      width: '65%',
+      backgroundColor: c.border,
+      borderRadius: radiusScale.xs,
+      opacity: 0.5,
+    },
+    skeletonBarShort: {
+      height: 12,
+      width: '40%',
+      backgroundColor: c.border,
+      borderRadius: radiusScale.xs,
+      opacity: 0.4,
+    }
+  });
+}

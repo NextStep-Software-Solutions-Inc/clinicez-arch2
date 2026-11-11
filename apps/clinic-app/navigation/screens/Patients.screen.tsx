@@ -251,6 +251,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   }, [searchTerm]);
 
   const handleFilterModeChange = (mode: PatientFilter) => {
+    setPatientsError(null);
+    if (mode !== filterMode) {
+      setPatients(null);
+      setLoading(true);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }
     setFilterMode(mode);
     setSessionItem('clinicez_patients_filter_mode', mode);
   };
@@ -634,20 +640,28 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const lastScrollYRef = useRef(0);
   const viewportHeightRef = useRef(800);
   const scrollViewRef = useRef<ScrollView>(null);
+  const fetchRequestIdRef = useRef(0);
 
   const fetchPatients = useCallback(async (termOverride?: string, filterOverride?: PatientFilter) => {
+    const requestId = ++fetchRequestIdRef.current;
     const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
     const activeFilter = filterOverride !== undefined ? filterOverride : filterMode;
     const hasAlertsFilter = activeFilter === 'ALERTS' ? true : undefined;
     const serverFilterMode = activeFilter !== 'ALL' ? activeFilter : undefined;
-    const staffId = currentStaff?.id;
-    const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
+    const staffId = currentStaff?.id || actorStaffId;
+    const doctorId =
+      currentStaff?.role === 'Doctor'
+        ? currentStaff?.id
+        : authUser?.role === 'Doctor'
+          ? actorStaffId
+          : undefined;
 
+    setPatientsError(null);
     setPage(1);
     setScrollY(0);
     lastScrollYRef.current = 0;
     clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId).then(([countsData]) => {
-      if (countsData) {
+      if (requestId === fetchRequestIdRef.current && countsData) {
         setTotalCounts(countsData);
       }
     });
@@ -661,7 +675,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       staffId,
       doctorId
     );
+    if (requestId !== fetchRequestIdRef.current) {
+      return;
+    }
     if (err) {
+      setPatients(null);
+      setHasMore(false);
       setPatientsError(err.message || 'Unable to load patients.');
       return;
     }
@@ -669,7 +688,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const items = data ?? [];
     setPatients(items);
     setHasMore(items.length === PAGE_SIZE);
-  }, [debouncedSearchTerm, filterMode, currentStaff]);
+  }, [debouncedSearchTerm, filterMode, currentStaff, actorStaffId, authUser?.role]);
 
   const loadMorePatients = useCallback(async () => {
     if (isLoadingMoreRef.current || loadingMore || loading || !hasMore) return;
@@ -680,8 +699,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const activeSearch = debouncedSearchTerm;
     const hasAlertsFilter = filterMode === 'ALERTS' ? true : undefined;
     const serverFilterMode = filterMode !== 'ALL' ? filterMode : undefined;
-    const staffId = currentStaff?.id;
-    const doctorId = currentStaff?.role === 'Doctor' ? currentStaff?.id : undefined;
+    const staffId = currentStaff?.id || actorStaffId;
+    const doctorId =
+      currentStaff?.role === 'Doctor'
+        ? currentStaff?.id
+        : authUser?.role === 'Doctor'
+          ? actorStaffId
+          : undefined;
 
     const [data, err] = await clinicService.getPatients(
       activeSearch || undefined,
@@ -715,7 +739,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     if (newItems.length < PAGE_SIZE) {
       setHasMore(false);
     }
-  }, [page, hasMore, loadingMore, loading, debouncedSearchTerm, filterMode]);
+  }, [page, hasMore, loadingMore, loading, debouncedSearchTerm, filterMode, currentStaff, actorStaffId, authUser?.role]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -742,8 +766,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   );
 
   useEffect(() => {
+    let active = true;
+    setPatientsError(null);
     setLoading(true);
-    fetchPatients().finally(() => setLoading(false));
+    fetchPatients().finally(() => {
+      if (active) {
+        setLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchPatients]);
+
+  useEffect(() => {
     clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
       if (fields && fields.length > 0) {
         setTenantCustomFields(fields);
@@ -755,7 +791,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       setOfflineFailedCount(offlineSyncService.getFailedCount());
     });
     return unsub;
-  }, [fetchPatients]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -1803,14 +1839,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       if (
         p.customFields?.classification === 'Student' ||
         p.customFields?.category === 'Student' ||
-        !!p.customFields?.student_id
+        (typeof p.customFields?.student_id === 'string'
+          ? p.customFields.student_id.trim().length > 0
+          : !!p.customFields?.student_id)
       ) {
         students++;
       }
       if (
         p.customFields?.classification === 'Employee' ||
         p.customFields?.category === 'Employee' ||
-        !!p.customFields?.employee_id
+        (typeof p.customFields?.employee_id === 'string'
+          ? p.customFields.employee_id.trim().length > 0
+          : !!p.customFields?.employee_id)
       ) {
         employees++;
       }
@@ -1823,40 +1863,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
     return {
       all: patients.length,
-      myPatients,
-      students,
-      employees,
-      alerts,
-      seniorPwd,
+      myPatients: filterMode === 'MY_PATIENTS' ? patients.length : myPatients,
+      students: filterMode === 'STUDENTS' ? patients.length : students,
+      employees: filterMode === 'EMPLOYEES' ? patients.length : employees,
+      alerts: filterMode === 'ALERTS' ? patients.length : alerts,
+      seniorPwd: filterMode === 'SENIOR_PWD' ? patients.length : seniorPwd,
     };
-  }, [patients, currentStaff]);
+  }, [patients, currentStaff, filterMode]);
 
-  const filteredPatients = (patients ?? []).filter((p) => {
-    if (filterMode === 'MY_PATIENTS') {
-      return isMyPatient(p, currentStaff);
-    }
-    if (filterMode === 'ALERTS') {
-      return hasKnownAllergies(p.allergies) || !!(p.alerts && p.alerts.trim().length > 0);
-    }
-    if (filterMode === 'SENIOR_PWD') {
-      return !!p.seniorCitizenId || !!p.pwdId || p.age >= 60;
-    }
-    if (filterMode === 'STUDENTS') {
-      return (
-        p.customFields?.classification === 'Student' ||
-        p.customFields?.category === 'Student' ||
-        !!p.customFields?.student_id
-      );
-    }
-    if (filterMode === 'EMPLOYEES') {
-      return (
-        p.customFields?.classification === 'Employee' ||
-        p.customFields?.category === 'Employee' ||
-        !!p.customFields?.employee_id
-      );
-    }
-    return true;
-  });
+  const filteredPatients = useMemo(() => patients ?? [], [patients]);
 
 
   const formatTabCount = useCallback(
@@ -1925,6 +1940,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   };
 
   const retryPatients = () => {
+    setPatientsError(null);
     setLoading(true);
     fetchPatients().finally(() => setLoading(false));
   };
@@ -1937,8 +1953,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       actions={[
         {
           id: 'register',
-          label: 'Register patient',
-          shortLabel: 'Register',
+          label: 'New Patient',
+          shortLabel: 'New Patient',
           icon: 'plus' as const,
           variant: 'primary' as const,
           primary: true,
@@ -2209,9 +2225,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Register Walk-In Patient</ThemedText>
-              <Pressable onPress={() => setRegisterVisible(false)}>
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="close"
+                iconOnly
+                accessibilityLabel="Close"
+                onPress={() => setRegisterVisible(false)}
+              />
             </View>
 
             <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 12 }}>
@@ -2789,29 +2810,26 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               {/* Dual Submission Action Buttons */}
               <View style={styles.dualActionRow}>
                 {/* Secondary: Save & Register Patient */}
-                <Pressable
-                  style={[styles.secondaryRegisterBtn, savingPatient && styles.disabledBtn]}
-                  onPress={() => handleRegisterPatient({ sendToTriage: false })}
+                <Button
+                  title="Save & Register Patient"
+                  variant="secondary"
+                  size="md"
                   disabled={savingPatient}
-                >
-                  <ThemedText style={styles.secondaryRegisterBtnText}>Save & Register Patient</ThemedText>
-                </Pressable>
+                  onPress={() => handleRegisterPatient({ sendToTriage: false })}
+                  style={styles.dualActionBtn}
+                />
 
                 {/* Primary Teal: Register & Send to Triage */}
-                <Pressable
-                  style={[styles.primaryTriageBtn, savingPatient && styles.disabledBtn]}
-                  onPress={() => handleRegisterPatient({ sendToTriage: true })}
+                <Button
+                  title="Register & Send to Triage"
+                  variant="primary"
+                  size="md"
+                  icon="arrowRight"
+                  loading={savingPatient}
                   disabled={savingPatient}
-                >
-                  {savingPatient ? (
-                    <ActivityIndicator color={theme.colors.onPrimary} />
-                  ) : (
-                    <View style={styles.triageBtnContent}>
-                      <Icon name="arrowRight" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
-                      <ThemedText style={styles.primaryTriageBtnText}>Register & Send to Triage</ThemedText>
-                    </View>
-                  )}
-                </Pressable>
+                  onPress={() => handleRegisterPatient({ sendToTriage: true })}
+                  style={styles.dualActionBtn}
+                />
               </View>
             </ScrollView>
           </View>
@@ -2980,8 +2998,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
               {selectedSlip?.orderId && (
-                <Pressable
-                  style={[styles.closeSlipBtn, { backgroundColor: theme.colors.successText }]}
+                <Button
+                  title="Download Official Requisition PDF"
+                  variant="success"
+                  size="md"
+                  icon="download"
                   onPress={async () => {
                     const url = clinicService.getLabOrderSlipPdfUrl(selectedSlip.orderId);
                     try {
@@ -2990,16 +3011,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       Alert.alert('Download Error', 'Could not open requisition slip PDF. Please check connection and try again.');
                     }
                   }}
-                >
-                  <ThemedText style={styles.closeSlipBtnText}>Download Official Requisition PDF</ThemedText>
-                </Pressable>
+                />
               )}
-              <Pressable
-                style={styles.closeSlipBtn}
+              <Button
+                title="Close"
+                variant="secondary"
+                size="md"
                 onPress={() => setSlipModalVisible(false)}
-              >
-                <ThemedText style={styles.closeSlipBtnText}>Close</ThemedText>
-              </Pressable>
+              />
             </View>
           </View>
         </View>
@@ -3011,9 +3030,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           <View style={[styles.modalContent, { maxWidth: 480 }]}>
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Attach External Lab Result (Path B)</ThemedText>
-              <Pressable onPress={() => setAttachModalVisible(false)} hitSlop={theme.spacing.sm}>
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="close"
+                iconOnly
+                accessibilityLabel="Close"
+                onPress={() => setAttachModalVisible(false)}
+              />
             </View>
             <ThemedText style={styles.modalSub}>
               Attach test reports from outside diagnostic centers to complete the electronic health record.
@@ -3057,20 +3081,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                         </View>
                       </View>
                       <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <Pressable
-                          style={styles.changeFileBtn}
+                        <Button
+                          title="Change"
+                          variant="outline"
+                          size="xs"
                           onPress={handlePickExternalFile}
                           disabled={pickingExternalFile || attaching}
-                        >
-                          <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
-                        </Pressable>
-                        <Pressable
-                          style={styles.removeFileBtn}
+                        />
+                        <Button
+                          title="Clear"
+                          variant="dangerOutline"
+                          size="xs"
                           onPress={() => setPickedExternalFile(null)}
                           disabled={attaching}
-                        >
-                          <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
-                        </Pressable>
+                        />
                       </View>
                     </View>
 
@@ -3101,16 +3125,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     </View>
                   </View>
                 ) : (
-                  <Pressable
-                    style={styles.pickFileBtn}
+                  <Button
+                    title={pickingExternalFile ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
+                    variant="outline"
+                    size="md"
+                    icon="upload"
                     onPress={handlePickExternalFile}
                     disabled={pickingExternalFile || attaching}
-                  >
-                    <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    <ThemedText variant="captionBold" color={theme.colors.primary}>
-                      {pickingExternalFile ? 'Opening File Browser...' : 'Select Result Document (PDF / Photo)'}
-                    </ThemedText>
-                  </Pressable>
+                  />
                 )}
               </View>
 
@@ -3126,25 +3148,22 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             </ScrollView>
 
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
-              <Pressable
-                style={styles.cancelModalBtn}
+              <Button
+                title="Cancel"
+                variant="secondary"
+                size="md"
                 onPress={() => setAttachModalVisible(false)}
                 disabled={attaching}
-              >
-                <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
-              </Pressable>
+              />
 
-              <Pressable
-                style={styles.confirmAttachBtn}
-                onPress={handleConfirmAttach}
+              <Button
+                title="Confirm & Mark Completed"
+                variant="primary"
+                size="md"
+                loading={attaching}
                 disabled={attaching}
-              >
-                {attaching ? (
-                  <ActivityIndicator color={theme.colors.textInverted} />
-                ) : (
-                  <ThemedText style={styles.confirmAttachText}>Confirm & Mark Completed</ThemedText>
-                )}
-              </Pressable>
+                onPress={handleConfirmAttach}
+              />
             </View>
           </View>
         </View>
@@ -3176,9 +3195,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           <View style={[styles.modalContent, { maxWidth: 500 }]}>
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
-              <Pressable onPress={() => setUploadDocModalVisible(false)} hitSlop={theme.spacing.sm}>
-                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-              </Pressable>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="close"
+                iconOnly
+                accessibilityLabel="Close"
+                onPress={() => setUploadDocModalVisible(false)}
+              />
             </View>
             <ThemedText style={styles.modalSub}>
               Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {selectedPatient?.fullName}'s profile.
@@ -3270,21 +3294,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                       </View>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <Pressable style={styles.changeFileBtn} onPress={handlePickDocument}>
-                        <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
-                      </Pressable>
-                      <Pressable style={styles.removeFileBtn} onPress={() => setPickedDocFile(null)}>
-                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
-                      </Pressable>
+                      <Button title="Change" variant="outline" size="xs" onPress={handlePickDocument} />
+                      <Button title="Clear" variant="dangerOutline" size="xs" onPress={() => setPickedDocFile(null)} />
                     </View>
                   </View>
                 ) : (
-                  <Pressable style={styles.pickFileBtn} onPress={handlePickDocument}>
-                    <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                    <ThemedText variant="captionBold" color={theme.colors.primary}>
-                      Select Document File (PDF, JPEG, PNG)
-                    </ThemedText>
-                  </Pressable>
+                  <Button
+                    title="Select Document File (PDF, JPEG, PNG)"
+                    variant="outline"
+                    size="md"
+                    icon="upload"
+                    onPress={handlePickDocument}
+                  />
                 )}
               </View>
 
@@ -3302,24 +3323,21 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             </ScrollView>
 
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
-              <Pressable
-                style={styles.cancelModalBtn}
+              <Button
+                title="Cancel"
+                variant="secondary"
+                size="md"
                 onPress={() => setUploadDocModalVisible(false)}
                 disabled={uploadingDoc}
-              >
-                <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                style={styles.confirmAttachBtn}
-                onPress={handleUploadDocument}
+              />
+              <Button
+                title="Save & Attach to Profile"
+                variant="primary"
+                size="md"
+                loading={uploadingDoc}
                 disabled={uploadingDoc}
-              >
-                {uploadingDoc ? (
-                  <ActivityIndicator color={theme.colors.textInverted} />
-                ) : (
-                  <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
-                )}
-              </Pressable>
+                onPress={handleUploadDocument}
+              />
             </View>
           </View>
         </View>
@@ -3645,19 +3663,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSizes.md,
     color: theme.colors.text,
   },
-  saveBtn: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radii.md,
-    minHeight: theme.sizes.controlLg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: theme.spacing.sm,
-  },
-  saveBtnText: {
-    color: theme.colors.textInverted,
-    fontSize: theme.fontSizes.md,
-    fontWeight: '700',
-  },
   chartSummaryBar: {
     flexDirection: 'row',
     backgroundColor: theme.colors.surfaceMuted,
@@ -3789,28 +3794,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
   },
-  viewSlipBtn: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  viewSlipBtnText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  attachResultBtn: {
-    backgroundColor: theme.colors.infoBg,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  attachResultBtnText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '700',
-    color: theme.colors.infoText,
-  },
   slipHeader: {
     alignItems: 'center',
     gap: 2,
@@ -3916,17 +3899,6 @@ const styles = StyleSheet.create({
     color: theme.colors.info,
     textAlign: 'center',
   },
-  closeSlipBtn: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-  },
-  closeSlipBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   formatChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -3947,28 +3919,6 @@ const styles = StyleSheet.create({
   formatChipTextActive: {
     color: theme.colors.infoText,
   },
-  cancelModalBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-  },
-  cancelModalText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  confirmAttachBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primary,
-  },
-  confirmAttachText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   pickedFileBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3985,33 +3935,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     flex: 1,
-  },
-  changeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  removeFileBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.emergencyBg,
-    borderWidth: 1,
-    borderColor: theme.colors.emergencyBorder,
-  },
-  pickFileBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.xs,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-    borderRadius: theme.radii.md,
   },
   categoryRow: {
     flexDirection: 'row',
@@ -4118,19 +4041,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.text,
   },
-  addDocBtn: {
-    backgroundColor: theme.colors.primaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorder,
-  },
-  addDocBtnText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   attachmentCard: {
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
@@ -4203,42 +4113,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
-  verifyBtn: {
-    backgroundColor: theme.colors.success,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  verifyBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
-  rejectBtn: {
-    backgroundColor: theme.colors.emergency,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-  },
-  rejectBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
-  viewDocBtn: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radii.sm,
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  viewDocBtnText: {
-    color: theme.colors.textInverted,
-    fontWeight: '700',
-    fontSize: theme.fontSizes.xs,
-  },
   allergySectionCard: {
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
@@ -4279,41 +4153,8 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
     paddingBottom: theme.spacing.md,
   },
-  secondaryRegisterBtn: {
+  dualActionBtn: {
     flex: 1,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderDark,
-    paddingVertical: theme.spacing.sm + 4,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryRegisterBtnText: {
-    color: theme.colors.text,
-    fontSize: theme.fontSizes.sm,
-    fontWeight: '600',
-  },
-  primaryTriageBtn: {
-    flex: 1,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: theme.spacing.sm + 4,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  triageBtnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  primaryTriageBtnText: {
-    color: theme.colors.onPrimary,
-    fontSize: theme.fontSizes.sm,
-    fontWeight: '700',
-  },
-  disabledBtn: {
-    opacity: 0.6,
   },
   formSectionBox: {
     gap: theme.spacing.xs,

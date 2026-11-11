@@ -11,7 +11,7 @@ import {
   DimensionValue,
 } from 'react-native';
 import ThemedText from './ThemedText';
-import Icon from './Icon';
+import Button from './Button';
 import { theme } from '../../constants/theme';
 import {
   useModalStack,
@@ -159,22 +159,14 @@ export default function Modal({
                   </View>
 
                   {onClose ? (
-                    <Pressable
-                      onPress={onClose}
-                      style={({ pressed }) => [
-                        styles.closeBtn,
-                        pressed && styles.closeBtnPressed,
-                      ]}
-                      hitSlop={theme.spacing.sm}
-                      accessibilityRole="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon="close"
+                      iconOnly
                       accessibilityLabel="Close"
-                    >
-                      <Icon
-                        name="close"
-                        size={theme.sizes.iconMd}
-                        color={theme.colors.textMuted}
-                      />
-                    </Pressable>
+                      onPress={onClose}
+                    />
                   ) : null}
                 </View>
               ) : null}
@@ -223,6 +215,8 @@ const styles = StyleSheet.create({
   dialog: {
     width: '100%',
     backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
     borderRadius: theme.radii.xl,
     overflow: 'hidden',
     maxHeight: '95%',
@@ -232,7 +226,7 @@ const styles = StyleSheet.create({
   },
   nestedDialog: {
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
+    borderColor: theme.colors.primaryBorder,
     ...theme.shadows.lg,
     elevation: 20,
   },
@@ -269,8 +263,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: theme.radii.md,
   },
+  closeBtnHover: {
+    backgroundColor: theme.colors.primarySubtle,
+  },
   closeBtnPressed: {
-    backgroundColor: theme.colors.surfaceSubtle,
+    backgroundColor: theme.colors.primaryLight,
   },
   body: {
     padding: theme.spacing['2xl'],

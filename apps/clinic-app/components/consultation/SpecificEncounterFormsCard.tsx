@@ -361,6 +361,7 @@ export default function SpecificEncounterFormsCard({
                       paddingHorizontal: theme.spacing.md,
                       paddingVertical: theme.spacing.xs,
                     },
+                    selected && theme.shadows.brandSubtle,
                   ]}
                 >
                   {tab.hasData ? (

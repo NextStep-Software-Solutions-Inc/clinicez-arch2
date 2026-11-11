@@ -549,11 +549,12 @@ export function OrderCatalogSearchModal({
             Matching Catalog Items ({filteredCatalog.length})
           </ThemedText>
           {selectedItem && (
-            <Pressable onPress={() => setSelectedItem(null)} hitSlop={theme.spacing.xs}>
-              <ThemedText variant="captionBold" color={theme.colors.primary}>
-                Clear Selection
-              </ThemedText>
-            </Pressable>
+            <Button
+              title="Clear Selection"
+              variant="ghost"
+              size="xs"
+              onPress={() => setSelectedItem(null)}
+            />
           )}
         </View>
 

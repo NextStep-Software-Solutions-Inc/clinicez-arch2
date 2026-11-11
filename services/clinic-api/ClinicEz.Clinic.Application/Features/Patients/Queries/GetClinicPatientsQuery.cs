@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Helpers;
@@ -61,53 +62,12 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
 
     public async Task<IReadOnlyList<ClinicPatientDto>> Handle(GetClinicPatientsQuery request, CancellationToken ct)
     {
-        IQueryable<Patient> query = _patientRepo.Query().AsNoTracking();
+        IQueryable<Patient> baseQuery = ApplyRelationalBaseFilters(_patientRepo.Query().AsNoTracking(), request);
 
-        query = query.WhereMatchesSearchTerm(request.SearchTerm);
-
-        if (request.HasAlerts == true || string.Equals(request.FilterMode, "ALERTS", StringComparison.OrdinalIgnoreCase))
-        {
-            query = query.Where(p =>
-                p.HasActiveSafetyAlert ||
-                p.Alerts.Any(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active) ||
-                p.Allergies!.Any(a => !a.IsDeleted && a.Status == AllergyStatus.Active));
-        }
-
-        if (string.Equals(request.FilterMode, "SENIOR_PWD", StringComparison.OrdinalIgnoreCase))
-        {
-            var seniorCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-60));
-            query = query.Where(p =>
-                (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
-                (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
-                p.DateOfBirth <= seniorCutoff);
-        }
-
-        if (string.Equals(request.FilterMode, "STUDENTS", StringComparison.OrdinalIgnoreCase))
-        {
-            query = query.Where(p =>
-                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Student\"}") ||
-                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Student\"}") ||
-                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"Student\"%") ||
-                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"student_id\"%"));
-        }
-
-        if (string.Equals(request.FilterMode, "EMPLOYEES", StringComparison.OrdinalIgnoreCase))
-        {
-            query = query.Where(p =>
-                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Employee\"}") ||
-                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Employee\"}") ||
-                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"Employee\"%") ||
-                EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"employee_id\"%"));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.VerificationStatus) && Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var filterVs))
-        {
-            query = query.Where(p => p.VerificationStatus == filterVs);
-        }
-
+        var isMyPatients = string.Equals(request.FilterMode, "MY_PATIENTS", StringComparison.OrdinalIgnoreCase);
         var effectiveStaffId = request.StaffId ?? request.DoctorId;
         var relatedPatientIds = new List<Guid>();
-        if (effectiveStaffId.HasValue)
+        if (isMyPatients && effectiveStaffId.HasValue)
         {
             var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
             var localToday = request.QueueDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
@@ -141,34 +101,13 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
 
         try
         {
-            var pgQuery = query;
-            if (string.Equals(request.FilterMode, "MY_PATIENTS", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!effectiveStaffId.HasValue)
-                {
-                    pgQuery = pgQuery.Where(_ => false);
-                }
-                else
-                {
-                    var staffId = effectiveStaffId.Value;
-                    var staffIdStr = staffId.ToString();
-                    pgQuery = pgQuery.Where(p =>
-                        (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
-                        p.Vitals.Any(v => !v.IsDeleted && v.NurseId == staffId) ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"assigned_doctor_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"doctor_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"nurse_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"assigned_nurse_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), $"%{staffIdStr}%"));
-                }
-            }
-
+            var pgQuery = ApplyPostgresFilterMode(baseQuery, request.FilterMode, effectiveStaffId, relatedPatientIds);
             return await ExecuteProjectedQuery(pgQuery, request, _queueRepo, _encounterRepo, _invoiceRepo, ct);
         }
         catch
         {
-            var memQuery = query;
-            if (string.Equals(request.FilterMode, "MY_PATIENTS", StringComparison.OrdinalIgnoreCase))
+            var memQuery = baseQuery;
+            if (isMyPatients)
             {
                 if (!effectiveStaffId.HasValue)
                 {
@@ -179,7 +118,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                     var staffId = effectiveStaffId.Value;
                     var staffIdStr = staffId.ToString();
 
-                    var patientVitalsAndCustom = await query
+                    var patientVitalsAndCustom = await baseQuery
                         .Select(p => new
                         {
                             p.Id,
@@ -192,43 +131,27 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                         .Where(p =>
                             (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
                             p.HasNurseVitals ||
-                            (p.CustomFields != null && (
-                                (p.CustomFields.TryGetValue("assigned_doctor_id", out var ad) && string.Equals(ad?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                                (p.CustomFields.TryGetValue("doctor_id", out var d) && string.Equals(d?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                                (p.CustomFields.TryGetValue("nurse_id", out var n) && string.Equals(n?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                                (p.CustomFields.TryGetValue("assigned_nurse_id", out var an) && string.Equals(an?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                                p.CustomFields.Values.Any(v => v != null && v.ToString()!.Contains(staffIdStr, StringComparison.OrdinalIgnoreCase))
-                            )))
+                            IsStaffAssignedCustomFields(p.CustomFields, staffIdStr))
                         .Select(p => p.Id)
                         .ToHashSet();
 
                     memQuery = memQuery.Where(p => matchedIds.Contains(p.Id));
                 }
             }
-
-            if (string.Equals(request.FilterMode, "STUDENTS", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(request.FilterMode, "STUDENTS", StringComparison.OrdinalIgnoreCase))
             {
-                var patientCustoms = await query.Select(p => new { p.Id, p.CustomFields }).ToListAsync(ct);
+                var patientCustoms = await baseQuery.Select(p => new { p.Id, p.CustomFields }).ToListAsync(ct);
                 var studentIds = patientCustoms
-                    .Where(p => p.CustomFields != null && (
-                        (p.CustomFields.TryGetValue("classification", out var c) && string.Equals(c?.ToString(), "Student", StringComparison.OrdinalIgnoreCase)) ||
-                        (p.CustomFields.TryGetValue("category", out var cat) && string.Equals(cat?.ToString(), "Student", StringComparison.OrdinalIgnoreCase)) ||
-                        p.CustomFields.ContainsKey("student_id")
-                    ))
+                    .Where(p => IsStudentCustomFields(p.CustomFields))
                     .Select(p => p.Id)
                     .ToHashSet();
                 memQuery = memQuery.Where(p => studentIds.Contains(p.Id));
             }
-
-            if (string.Equals(request.FilterMode, "EMPLOYEES", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(request.FilterMode, "EMPLOYEES", StringComparison.OrdinalIgnoreCase))
             {
-                var patientCustoms = await query.Select(p => new { p.Id, p.CustomFields }).ToListAsync(ct);
+                var patientCustoms = await baseQuery.Select(p => new { p.Id, p.CustomFields }).ToListAsync(ct);
                 var empIds = patientCustoms
-                    .Where(p => p.CustomFields != null && (
-                        (p.CustomFields.TryGetValue("classification", out var c) && string.Equals(c?.ToString(), "Employee", StringComparison.OrdinalIgnoreCase)) ||
-                        (p.CustomFields.TryGetValue("category", out var cat) && string.Equals(cat?.ToString(), "Employee", StringComparison.OrdinalIgnoreCase)) ||
-                        p.CustomFields.ContainsKey("employee_id")
-                    ))
+                    .Where(p => IsEmployeeCustomFields(p.CustomFields))
                     .Select(p => p.Id)
                     .ToHashSet();
                 memQuery = memQuery.Where(p => empIds.Contains(p.Id));
@@ -236,16 +159,144 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
 
             return await ExecuteProjectedQuery(memQuery, request, _queueRepo, _encounterRepo, _invoiceRepo, ct);
         }
-
     }
 
-    private static async Task<IReadOnlyList<ClinicPatientDto>> ExecuteProjectedQuery(
-        IQueryable<Patient> query,
-        GetClinicPatientsQuery request,
-        IRepository<QueueItem>? queueRepo,
-        IRepository<ConsultationEncounter>? encounterRepo,
-        IRepository<Invoice>? invoiceRepo,
-        CancellationToken ct)
+    public static IQueryable<Patient> ApplyRelationalBaseFilters(IQueryable<Patient> query, GetClinicPatientsQuery request)
+    {
+        query = query.WhereMatchesSearchTerm(request.SearchTerm);
+
+        if (request.HasAlerts == true || string.Equals(request.FilterMode, "ALERTS", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(p =>
+                p.HasActiveSafetyAlert ||
+                p.Alerts.Any(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active) ||
+                p.Allergies!.Any(a => !a.IsDeleted && a.Status == AllergyStatus.Active));
+        }
+
+        if (string.Equals(request.FilterMode, "SENIOR_PWD", StringComparison.OrdinalIgnoreCase))
+        {
+            var seniorCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-60));
+            query = query.Where(p =>
+                (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
+                (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
+                p.DateOfBirth <= seniorCutoff);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.VerificationStatus) && Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var filterVs))
+        {
+            query = query.Where(p => p.VerificationStatus == filterVs);
+        }
+
+        return query;
+    }
+
+    public static IQueryable<Patient> ApplyPostgresFilterMode(
+        IQueryable<Patient> baseQuery,
+        string? filterMode,
+        Guid? effectiveStaffId,
+        IReadOnlyList<Guid> relatedPatientIds)
+    {
+        if (string.Equals(filterMode, "STUDENTS", StringComparison.OrdinalIgnoreCase))
+        {
+            return baseQuery.Where(p =>
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Student\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"student\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"STUDENT\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Student\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"student\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"STUDENT\"}") ||
+                (EF.Functions.JsonExists(p.CustomFields, "student_id") &&
+                 !EF.Functions.JsonContains(p.CustomFields, "{\"student_id\":\"\"}") &&
+                 !EF.Functions.JsonContains(p.CustomFields, "{\"student_id\":null}")));
+        }
+
+        if (string.Equals(filterMode, "EMPLOYEES", StringComparison.OrdinalIgnoreCase))
+        {
+            return baseQuery.Where(p =>
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Employee\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"employee\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"EMPLOYEE\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Employee\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"employee\"}") ||
+                EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"EMPLOYEE\"}") ||
+                (EF.Functions.JsonExists(p.CustomFields, "employee_id") &&
+                 !EF.Functions.JsonContains(p.CustomFields, "{\"employee_id\":\"\"}") &&
+                 !EF.Functions.JsonContains(p.CustomFields, "{\"employee_id\":null}")));
+        }
+
+        if (string.Equals(filterMode, "MY_PATIENTS", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!effectiveStaffId.HasValue)
+            {
+                return baseQuery.Where(_ => false);
+            }
+
+            var staffId = effectiveStaffId.Value;
+            var staffIdStr = staffId.ToString();
+            var assignedDoctorJson = $"{{\"assigned_doctor_id\":\"{staffIdStr}\"}}";
+            var doctorJson = $"{{\"doctor_id\":\"{staffIdStr}\"}}";
+            var nurseJson = $"{{\"nurse_id\":\"{staffIdStr}\"}}";
+            var assignedNurseJson = $"{{\"assigned_nurse_id\":\"{staffIdStr}\"}}";
+
+            return baseQuery.Where(p =>
+                (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
+                p.Vitals.Any(v => !v.IsDeleted && v.NurseId == staffId) ||
+                EF.Functions.JsonContains(p.CustomFields, assignedDoctorJson) ||
+                EF.Functions.JsonContains(p.CustomFields, doctorJson) ||
+                EF.Functions.JsonContains(p.CustomFields, nurseJson) ||
+                EF.Functions.JsonContains(p.CustomFields, assignedNurseJson));
+        }
+
+        return baseQuery;
+    }
+
+    public static bool IsStudentCustomFields(IReadOnlyDictionary<string, object?>? cf)
+    {
+        if (cf == null || cf.Count == 0) return false;
+        if (cf.TryGetValue("classification", out var c) && string.Equals(c?.ToString()?.Trim(), "Student", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (cf.TryGetValue("category", out var cat) && string.Equals(cat?.ToString()?.Trim(), "Student", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (cf.TryGetValue("student_id", out var sid) && HasNonWhitespaceCustomFieldValue(sid))
+            return true;
+        return false;
+    }
+
+    public static bool IsEmployeeCustomFields(IReadOnlyDictionary<string, object?>? cf)
+    {
+        if (cf == null || cf.Count == 0) return false;
+        if (cf.TryGetValue("classification", out var c) && string.Equals(c?.ToString()?.Trim(), "Employee", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (cf.TryGetValue("category", out var cat) && string.Equals(cat?.ToString()?.Trim(), "Employee", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (cf.TryGetValue("employee_id", out var eid) && HasNonWhitespaceCustomFieldValue(eid))
+            return true;
+        return false;
+    }
+
+    public static bool IsStaffAssignedCustomFields(IReadOnlyDictionary<string, object?>? cf, string staffIdStr)
+    {
+        if (cf == null || cf.Count == 0 || string.IsNullOrWhiteSpace(staffIdStr)) return false;
+        if (cf.TryGetValue("assigned_doctor_id", out var ad) && string.Equals(ad?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (cf.TryGetValue("doctor_id", out var d) && string.Equals(d?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (cf.TryGetValue("nurse_id", out var n) && string.Equals(n?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (cf.TryGetValue("assigned_nurse_id", out var an) && string.Equals(an?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return cf.Values.Any(v => HasNonWhitespaceCustomFieldValue(v) && v!.ToString()!.Contains(staffIdStr, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasNonWhitespaceCustomFieldValue(object? raw)
+    {
+        if (raw == null) return false;
+        if (raw is JsonElement je && (je.ValueKind == JsonValueKind.Null || je.ValueKind == JsonValueKind.Undefined))
+            return false;
+        return !string.IsNullOrWhiteSpace(raw.ToString());
+    }
+
+    public static IQueryable<Patient> ApplyOrderingAndPagination(IQueryable<Patient> query, GetClinicPatientsQuery request)
     {
         var pageSize = Math.Max(1, request.PageSize);
         var cursorLastName = request.EffectiveCursorLastName;
@@ -280,22 +331,31 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 query = query.Where(p => p.Id.CompareTo(cId) > 0);
             }
 
-            query = query
+            return query
                 .OrderBy(p => p.LastName)
                 .ThenBy(p => p.FirstName)
                 .ThenBy(p => p.Id)
                 .Take(pageSize);
         }
-        else
-        {
-            var pageNumber = Math.Max(1, request.PageNumber);
-            query = query
-                .OrderBy(p => p.LastName)
-                .ThenBy(p => p.FirstName)
-                .ThenBy(p => p.Id)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize);
-        }
+
+        var pageNumber = Math.Max(1, request.PageNumber);
+        return query
+            .OrderBy(p => p.LastName)
+            .ThenBy(p => p.FirstName)
+            .ThenBy(p => p.Id)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize);
+    }
+
+    private static async Task<IReadOnlyList<ClinicPatientDto>> ExecuteProjectedQuery(
+        IQueryable<Patient> query,
+        GetClinicPatientsQuery request,
+        IRepository<QueueItem>? queueRepo,
+        IRepository<ConsultationEncounter>? encounterRepo,
+        IRepository<Invoice>? invoiceRepo,
+        CancellationToken ct)
+    {
+        query = ApplyOrderingAndPagination(query, request);
 
         var projected = await query
             .Select(p => new

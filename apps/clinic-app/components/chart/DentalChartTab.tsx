@@ -689,18 +689,15 @@ export default function DentalChartTab({
                             ) : null}
                           </View>
                           {canVoidRecords ? (
-                            <Pressable
-                              accessibilityRole="button"
+                            <Button
+                              variant="dangerGhost"
+                              size="xs"
+                              icon="close"
+                              title="Void"
                               accessibilityLabel={`Void ${cond.status} on Tooth #${selectedToothNumber}`}
-                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
                               testID={`tab-void-condition-${recKey}`}
-                              style={styles.removeConditionBtn}
-                            >
-                              <Icon name="close" size={14} color={theme.colors.warningText} />
-                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
-                                Void
-                              </ThemedText>
-                            </Pressable>
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                            />
                           ) : null}
                         </View>
 
@@ -759,18 +756,15 @@ export default function DentalChartTab({
                             </ThemedText>
                           </View>
                           {canVoidRecords ? (
-                            <Pressable
-                              accessibilityRole="button"
+                            <Button
+                              variant="dangerGhost"
+                              size="xs"
+                              icon="close"
+                              title="Void"
                               accessibilityLabel={`Void historical ${cond.status} on Tooth #${selectedToothNumber}`}
-                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
                               testID={`tab-void-condition-${recKey}`}
-                              style={styles.removeConditionBtn}
-                            >
-                              <Icon name="close" size={14} color={theme.colors.warningText} />
-                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
-                                Void
-                              </ThemedText>
-                            </Pressable>
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                            />
                           ) : null}
                         </View>
 
@@ -1130,13 +1124,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-  },
-  removeConditionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: theme.spacing.xs,
   },
   conditionNotes: {
     fontStyle: 'italic',

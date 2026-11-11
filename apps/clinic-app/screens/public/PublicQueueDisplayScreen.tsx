@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   ScrollView,
   Platform,
   Image,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { darkColors } from '@clinicez/design-tokens';
 import { theme } from '../../constants/theme';
+import Button from '../../components/ui/Button';
 import Icon from '../../components/ui/Icon';
 import { clinicService } from '../../services/clinicService';
 import { isAudioMuted, setAudioMuted, playAlertChime, playQueueCallAlert, unlockAudio } from '../../utils/audioChime';
@@ -474,20 +475,24 @@ export default function PublicQueueDisplayScreen() {
           <View style={styles.actionsBox}>
             {/* Lock / Relock Button */}
             {!isLocked && data?.isPinRequired && (
-              <TouchableOpacity
-                style={styles.controlBtn}
+              <Button
+                variant="subtle"
+                size="md"
+                icon="lock"
+                iconOnly
                 onPress={handleLockBoard}
                 accessibilityLabel="Lock TV Display Board"
-              >
-                <Icon
-                  name="lock"
-                  size={20}
-                  color={darkColors.textSecondary}
-                />
-              </TouchableOpacity>
+                style={styles.controlBtn}
+              />
             )}
 
-            <TouchableOpacity
+            <Button
+              variant={muted ? 'subtle' : 'outline'}
+              size="md"
+              icon={muted ? 'volumeX' : 'volume2'}
+              iconOnly
+              onPress={handleToggleMute}
+              accessibilityLabel={muted ? 'Unmute Audio' : 'Mute Audio'}
               style={[
                 styles.controlBtn,
                 {
@@ -495,28 +500,18 @@ export default function PublicQueueDisplayScreen() {
                   borderColor: muted ? darkColors.border : darkColors.primaryBorder,
                 },
               ]}
-              onPress={handleToggleMute}
-              accessibilityLabel={muted ? 'Unmute Audio' : 'Mute Audio'}
-            >
-              <Icon
-                name={muted ? 'volumeX' : 'volume2'}
-                size={22}
-                color={muted ? darkColors.textMuted : darkColors.primary}
-              />
-            </TouchableOpacity>
+            />
 
             {Platform.OS === 'web' && (
-              <TouchableOpacity
-                style={styles.controlBtn}
+              <Button
+                variant="subtle"
+                size="md"
+                icon={isFullscreen ? 'minimize' : 'maximize'}
+                iconOnly
                 onPress={handleToggleFullscreen}
                 accessibilityLabel={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-              >
-                <Icon
-                  name={isFullscreen ? 'minimize' : 'maximize'}
-                  size={22}
-                  color={darkColors.textSecondary}
-                />
-              </TouchableOpacity>
+                style={styles.controlBtn}
+              />
             )}
           </View>
         </View>
@@ -570,8 +565,10 @@ export default function PublicQueueDisplayScreen() {
             {/* Numeric Keypad */}
             <View style={styles.keypadGrid}>
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-                <TouchableOpacity
+                <Pressable
                   key={digit}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Digit ${digit}`}
                   style={styles.keypadBtn}
                   onPress={() => {
                     setPinEntry((prev) => {
@@ -586,9 +583,11 @@ export default function PublicQueueDisplayScreen() {
                   }}
                 >
                   <Text style={styles.keypadDigit}>{digit}</Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
-              <TouchableOpacity
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear passcode"
                 style={styles.keypadActionBtn}
                 onPress={() => {
                   setPinEntry('');
@@ -596,8 +595,10 @@ export default function PublicQueueDisplayScreen() {
                 }}
               >
                 <Text style={styles.keypadActionText}>Clear</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Digit 0"
                 style={styles.keypadBtn}
                 onPress={() => {
                   setPinEntry((prev) => {
@@ -612,31 +613,30 @@ export default function PublicQueueDisplayScreen() {
                 }}
               >
                 <Text style={styles.keypadDigit}>0</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Backspace"
                 style={styles.keypadActionBtn}
                 onPress={() => {
                   setPinEntry((prev) => prev.slice(0, -1));
                   setPinError(null);
                 }}
               >
-                <Text style={styles.keypadActionText}>⌫</Text>
-              </TouchableOpacity>
+                <Icon name="arrowLeft" size={20} color={darkColors.textSecondary} />
+              </Pressable>
             </View>
 
             {/* Submit / Unlock Button */}
-            <TouchableOpacity
-              style={[
-                styles.unlockBtn,
-                (pinEntry.length === 0 || unlocking) && styles.unlockBtnDisabled,
-              ]}
+            <Button
+              title={unlocking ? 'Verifying Passcode...' : 'Unlock TV Display'}
+              variant="primary"
+              size="lg"
+              loading={unlocking}
               disabled={pinEntry.length === 0 || unlocking}
               onPress={() => handleUnlock(pinEntry)}
-            >
-              <Text style={styles.unlockBtnText}>
-                {unlocking ? 'Verifying Passcode...' : 'Unlock TV Display'}
-              </Text>
-            </TouchableOpacity>
+              style={styles.unlockBtn}
+            />
           </View>
         </View>
       ) : (
@@ -909,9 +909,14 @@ export default function PublicQueueDisplayScreen() {
             <View style={styles.refreshDot} />
             <Text style={styles.autoRefreshText}>Live</Text>
           </View>
-          <TouchableOpacity onPress={handleExitKiosk} style={styles.staffLink}>
-            <Text style={styles.staffLinkText}>Staff Sign In</Text>
-          </TouchableOpacity>
+          <Button
+            title="Staff Sign In"
+            variant="ghost"
+            size="xs"
+            onPress={handleExitKiosk}
+            style={styles.staffLink}
+            textStyle={styles.staffLinkText}
+          />
         </View>
       </View>
     </View>
@@ -1609,18 +1614,5 @@ const styles = StyleSheet.create({
   },
   unlockBtn: {
     width: '100%',
-    backgroundColor: darkColors.primary,
-    paddingVertical: 14,
-    borderRadius: theme.radii.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unlockBtnDisabled: {
-    opacity: 0.5,
-  },
-  unlockBtnText: {
-    fontSize: theme.fontSizes.md,
-    fontWeight: '700',
-    color: darkColors.text,
   },
 });

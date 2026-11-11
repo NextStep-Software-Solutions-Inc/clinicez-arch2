@@ -619,7 +619,7 @@ describe('Feature 13: Duplicate Patient Safeguard & Warning Workflow Interceptio
 });
 
 describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
-  test('Dashboard "New patient" action navigates to Patients with openRegister: true and Patients.screen handles it', async () => {
+  test('Dashboard "New Patient" action navigates to Patients with openRegister: true and Patients.screen handles it', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const dashboardSrc = fs.readFileSync(
@@ -631,6 +631,9 @@ describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
       'utf8'
     );
 
+    expect(dashboardSrc).toContain("label: 'New Patient'");
+    expect(dashboardSrc).toContain("shortLabel: 'New Patient'");
+    expect(dashboardSrc).not.toContain("label: 'New patient'");
     expect(dashboardSrc).toContain("navigation.navigate('Patients', { openRegister: true })");
     expect(patientsSrc).toContain('openRegister?: boolean');
     expect(patientsSrc).toContain('navigation.setParams({ openRegister: undefined })');

@@ -101,6 +101,31 @@ const PAPER_SIZE_OPTIONS: SegmentedOption<PaperSize>[] = [
   { value: 'A5', label: 'A5' },
 ];
 
+const DEFAULT_STATUTORY_FOOTER =
+  'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.';
+
+function deriveStationeryFormValues(record: ClinicSettingsRecord | null | undefined) {
+  const docAccent =
+    record?.letterheadAccentColorHex ||
+    record?.documentAccentColorHex ||
+    record?.primaryColorHex ||
+    DEFAULT_CLINIC_BRAND_COLOR;
+  return {
+    letterheadHeader: record?.letterheadHeader || record?.clinicName || '',
+    letterheadSubHeader: record?.letterheadSubHeader || '',
+    letterheadAddress: record?.letterheadAddress || '',
+    letterheadContact: record?.letterheadContact || '',
+    dohLicenseToOperate: record?.dohLicenseToOperate || record?.letterheadDohLto || '',
+    accreditationNumber: record?.accreditationNumber || '',
+    primaryLogoUrl: record?.primaryLogoUrl ?? null,
+    letterheadAccentColorHex: docAccent,
+    paperSize: ((record?.paperSize as PaperSize) || 'Letter') as PaperSize,
+    letterheadFooter: record?.letterheadFooter || DEFAULT_STATUTORY_FOOTER,
+    defaultApproverName: record?.defaultApproverName || '',
+    defaultApproverTitle: record?.defaultApproverTitle || '',
+  };
+}
+
 export default function DocumentTemplatesSettingsTab({
   settings: initialSettings,
   showSkeletons = false,
@@ -109,6 +134,7 @@ export default function DocumentTemplatesSettingsTab({
   onRefreshSettings,
 }: DocumentTemplatesSettingsTabProps) {
   const { isDesktop } = useBreakpoint();
+  const initialForm = deriveStationeryFormValues(initialSettings);
 
   // Internal state for self-loading if props are omitted (e.g. standalone rendering in tests)
   const [internalSettings, setInternalSettings] = useState<ClinicSettingsRecord | null>(initialSettings ?? null);
@@ -116,29 +142,23 @@ export default function DocumentTemplatesSettingsTab({
   const [loadError, setLoadError] = useState<string | null>(settingsLoadError);
 
   // Form Fields
-  const [letterheadHeader, setLetterheadHeader] = useState(initialSettings?.letterheadHeader || initialSettings?.clinicName || '');
-  const [letterheadSubHeader, setLetterheadSubHeader] = useState(initialSettings?.letterheadSubHeader || '');
-  const [letterheadAddress, setLetterheadAddress] = useState(initialSettings?.letterheadAddress || '');
-  const [letterheadContact, setLetterheadContact] = useState(initialSettings?.letterheadContact || '');
-  const [dohLicenseToOperate, setDohLicenseToOperate] = useState(initialSettings?.dohLicenseToOperate || initialSettings?.letterheadDohLto || '');
-  const [accreditationNumber, setAccreditationNumber] = useState(initialSettings?.accreditationNumber || '');
-  const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(initialSettings?.primaryLogoUrl ?? null);
+  const [letterheadHeader, setLetterheadHeader] = useState(initialForm.letterheadHeader);
+  const [letterheadSubHeader, setLetterheadSubHeader] = useState(initialForm.letterheadSubHeader);
+  const [letterheadAddress, setLetterheadAddress] = useState(initialForm.letterheadAddress);
+  const [letterheadContact, setLetterheadContact] = useState(initialForm.letterheadContact);
+  const [dohLicenseToOperate, setDohLicenseToOperate] = useState(initialForm.dohLicenseToOperate);
+  const [accreditationNumber, setAccreditationNumber] = useState(initialForm.accreditationNumber);
+  const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(initialForm.primaryLogoUrl);
   const [letterheadAccentColorHex, setLetterheadAccentColorHex] = useState<string>(
-    initialSettings?.letterheadAccentColorHex ||
-      initialSettings?.documentAccentColorHex ||
-      initialSettings?.primaryColorHex ||
-      DEFAULT_CLINIC_BRAND_COLOR
+    initialForm.letterheadAccentColorHex
   );
   const [customHexInput, setCustomHexInput] = useState<string>(
-    initialSettings?.letterheadAccentColorHex ||
-      initialSettings?.documentAccentColorHex ||
-      initialSettings?.primaryColorHex ||
-      DEFAULT_CLINIC_BRAND_COLOR
+    initialForm.letterheadAccentColorHex
   );
-  const [paperSize, setPaperSize] = useState<PaperSize>((initialSettings?.paperSize as PaperSize) || 'Letter');
-  const [letterheadFooter, setLetterheadFooter] = useState(initialSettings?.letterheadFooter || '');
-  const [defaultApproverName, setDefaultApproverName] = useState(initialSettings?.defaultApproverName || '');
-  const [defaultApproverTitle, setDefaultApproverTitle] = useState(initialSettings?.defaultApproverTitle || '');
+  const [paperSize, setPaperSize] = useState<PaperSize>(initialForm.paperSize);
+  const [letterheadFooter, setLetterheadFooter] = useState(initialForm.letterheadFooter);
+  const [defaultApproverName, setDefaultApproverName] = useState(initialForm.defaultApproverName);
+  const [defaultApproverTitle, setDefaultApproverTitle] = useState(initialForm.defaultApproverTitle);
 
   // Right column live studio state
   const [docCategory, setDocCategory] = useState<StudioCategory>('Clinical');
@@ -181,29 +201,20 @@ export default function DocumentTemplatesSettingsTab({
   };
 
   const populateForm = useCallback((record: ClinicSettingsRecord) => {
-    setLetterheadHeader(record.letterheadHeader || record.clinicName || '');
-    setLetterheadSubHeader(record.letterheadSubHeader || '');
-    setLetterheadAddress(record.letterheadAddress || '');
-    setLetterheadContact(record.letterheadContact || '');
-    setDohLicenseToOperate(record.dohLicenseToOperate || record.letterheadDohLto || '');
-    setAccreditationNumber(record.accreditationNumber || '');
-    setPrimaryLogoUrl(record.primaryLogoUrl ?? null);
-    // Document Accent Color is completely independent of Workstation Color Branding (primaryColorHex).
-    // Falls back to record.primaryColorHex only if not explicitly set.
-    const docAccent =
-      record.letterheadAccentColorHex ||
-      record.documentAccentColorHex ||
-      record.primaryColorHex ||
-      DEFAULT_CLINIC_BRAND_COLOR;
-    setLetterheadAccentColorHex(docAccent);
-    setCustomHexInput(docAccent);
-    setPaperSize((record.paperSize as PaperSize) || 'Letter');
-    setLetterheadFooter(
-      record.letterheadFooter ||
-        'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
-    );
-    setDefaultApproverName(record.defaultApproverName || '');
-    setDefaultApproverTitle(record.defaultApproverTitle || '');
+    const next = deriveStationeryFormValues(record);
+    setLetterheadHeader(next.letterheadHeader);
+    setLetterheadSubHeader(next.letterheadSubHeader);
+    setLetterheadAddress(next.letterheadAddress);
+    setLetterheadContact(next.letterheadContact);
+    setDohLicenseToOperate(next.dohLicenseToOperate);
+    setAccreditationNumber(next.accreditationNumber);
+    setPrimaryLogoUrl(next.primaryLogoUrl);
+    setLetterheadAccentColorHex(next.letterheadAccentColorHex);
+    setCustomHexInput(next.letterheadAccentColorHex);
+    setPaperSize(next.paperSize);
+    setLetterheadFooter(next.letterheadFooter);
+    setDefaultApproverName(next.defaultApproverName);
+    setDefaultApproverTitle(next.defaultApproverTitle);
   }, []);
 
   // Sync when initialSettings or settingsLoadError changes
@@ -426,6 +437,23 @@ export default function DocumentTemplatesSettingsTab({
   }
 
   // State 4: Active Full Workstation Studio
+  const savedBaseline = deriveStationeryFormValues(internalSettings);
+  const isDirty =
+    internalSettings.id === 'new' ||
+    letterheadHeader !== savedBaseline.letterheadHeader ||
+    letterheadSubHeader !== savedBaseline.letterheadSubHeader ||
+    letterheadAddress !== savedBaseline.letterheadAddress ||
+    letterheadContact !== savedBaseline.letterheadContact ||
+    dohLicenseToOperate !== savedBaseline.dohLicenseToOperate ||
+    accreditationNumber !== savedBaseline.accreditationNumber ||
+    primaryLogoUrl !== savedBaseline.primaryLogoUrl ||
+    letterheadAccentColorHex.toUpperCase() !== savedBaseline.letterheadAccentColorHex.toUpperCase() ||
+    customHexInput.toUpperCase() !== savedBaseline.letterheadAccentColorHex.toUpperCase() ||
+    paperSize !== savedBaseline.paperSize ||
+    letterheadFooter !== savedBaseline.letterheadFooter ||
+    defaultApproverName !== savedBaseline.defaultApproverName ||
+    defaultApproverTitle !== savedBaseline.defaultApproverTitle;
+
   return (
     <View testID="document-studio-active" style={styles.container}>
       <View style={[styles.workstationLayout, isDesktop ? styles.rowLayout : styles.columnLayout]}>
@@ -628,16 +656,18 @@ export default function DocumentTemplatesSettingsTab({
           </Card>
 
           {/* Save Action Bar */}
-          <View style={styles.saveActionBar}>
-            <Button
-              title={saving ? 'Saving Changes...' : 'Save Changes'}
-              icon="save"
-              variant="primary"
-              loading={saving}
-              onPress={handleSaveSettings}
-              testID="btn-save-settings"
-            />
-          </View>
+          {isDirty || saving ? (
+            <View style={styles.saveActionBar}>
+              <Button
+                title={saving ? 'Saving Changes...' : 'Save Changes'}
+                icon="save"
+                variant="primary"
+                loading={saving}
+                onPress={handleSaveSettings}
+                testID="btn-save-settings"
+              />
+            </View>
+          ) : null}
         </View>
 
         {/* Right Column: Interactive Live Canvas Previewer */}

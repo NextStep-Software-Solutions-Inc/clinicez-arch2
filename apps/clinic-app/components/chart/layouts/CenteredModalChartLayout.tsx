@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { theme } from '../../../constants/theme';
 import {
   ThemedText,
   Badge,
-  Icon,
   SegmentedControl,
+  Button,
 } from '../../ui';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
 import { formatLongAge } from '../../../utils/age';
@@ -91,59 +91,47 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
               onSwitchLayout={onSwitchLayout}
             />
 
-            <Pressable
-              onPress={onEditDemographics}
-              hitSlop={8}
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="sm"
+              icon="edit"
+              iconOnly
               accessibilityLabel="Edit Demographics"
-            >
-              <Icon name="edit" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onEditDemographics}
+            />
 
             {onRefreshChart ? (
-              <Pressable
-                onPress={onRefreshChart}
-                hitSlop={8}
-                style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-                accessibilityRole="button"
+              <Button
+                variant="subtle"
+                size="sm"
+                icon="refresh"
+                iconOnly
                 accessibilityLabel="Refresh patient chart"
+                loading={loadingChart}
                 disabled={loadingChart}
-              >
-                <Icon
-                  name="refresh"
-                  size={theme.sizes.iconMd}
-                  color={loadingChart ? theme.colors.primary : theme.colors.textSecondary}
-                  spin={loadingChart}
-                />
-              </Pressable>
+                onPress={onRefreshChart}
+              />
             ) : null}
 
             {!isCompact ? (
-              <Pressable
-                onPress={() => setIsMaximized(!isMaximized)}
-                hitSlop={8}
-                style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-                accessibilityRole="button"
+              <Button
+                variant="subtle"
+                size="sm"
+                icon={isMaximized ? 'minimize' : 'maximize'}
+                iconOnly
                 accessibilityLabel={isMaximized ? 'Restore chart window' : 'Maximize chart window'}
-              >
-                <Icon
-                  name={isMaximized ? 'minimize' : 'maximize'}
-                  size={theme.sizes.iconMd}
-                  color={theme.colors.textSecondary}
-                />
-              </Pressable>
+                onPress={() => setIsMaximized(!isMaximized)}
+              />
             ) : null}
 
-            <Pressable
-              onPress={onClose}
-              hitSlop={8}
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="sm"
+              icon="close"
+              iconOnly
               accessibilityLabel="Close medical chart"
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={onClose}
+            />
           </View>
         </View>
 
@@ -167,18 +155,18 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
         {/* ========================================================================= */}
         <View style={styles.tabBarContainer}>
           {props.canGoBackTab && props.onBackTab ? (
-            <Pressable
-              onPress={props.onBackTab}
-              style={({ pressed }) => [styles.backSectionBtn, pressed && styles.actionBtnPressed]}
-              accessibilityRole="button"
+            <Button
+              variant="subtle"
+              size="sm"
+              icon="arrowLeft"
+              iconOnly
               accessibilityLabel={
                 props.previousTabLabel
                   ? `Back to ${props.previousTabLabel}`
                   : 'Back to previous section'
               }
-            >
-              <Icon name="arrowLeft" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-            </Pressable>
+              onPress={props.onBackTab}
+            />
           ) : null}
           <View style={styles.tabBarScrollWrap}>
             <SegmentedControl
@@ -263,19 +251,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  actionBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surfaceHighlight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionBtnPressed: {
-    backgroundColor: theme.colors.borderLight,
-    opacity: 0.8,
-  },
   spineWrapper: {
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.sm,
@@ -297,20 +272,6 @@ const styles = StyleSheet.create({
   tabBarScrollWrap: {
     flex: 1,
     minWidth: 0,
-  },
-  backSectionBtn: {
-    minWidth: theme.sizes.controlSm,
-    minHeight: theme.sizes.controlSm,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
   viewport: {
     flex: 1,

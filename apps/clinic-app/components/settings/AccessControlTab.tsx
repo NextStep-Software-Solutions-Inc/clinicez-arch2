@@ -243,7 +243,7 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
                             <Button
                               title="Delete"
                               icon="trash"
-                              variant="ghost"
+                              variant="dangerGhost"
                               size="sm"
                               disabled={isOwnCustomRole}
                               onPress={() => {

@@ -37,9 +37,9 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
 
     public async Task<PatientDirectoryCountsDto> Handle(GetClinicPatientCountsQuery request, CancellationToken ct)
     {
-        IQueryable<Patient> query = _patientRepo.Query().AsNoTracking();
+        IQueryable<Patient> baseQuery = _patientRepo.Query().AsNoTracking();
 
-        query = query.WhereMatchesSearchTerm(request.SearchTerm);
+        baseQuery = baseQuery.WhereMatchesSearchTerm(request.SearchTerm);
 
         var seniorCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-60));
         var effectiveStaffId = request.StaffId ?? request.DoctorId;
@@ -52,7 +52,11 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
                 ? await _queueRepo.Query()
                     .AsNoTracking()
                     .Where(q => (q.DoctorId == staffId || (request.RoomIds != null && q.RoomId.HasValue && request.RoomIds.Contains(q.RoomId.Value))) &&
-                                q.Status != QueueStatus.Completed && q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow)
+                                q.Status != QueueStatus.Completed &&
+                                q.Status != QueueStatus.Cancelled &&
+                                q.Status != QueueStatus.NoShow &&
+                                q.Status != QueueStatus.DischargedNonDoctor &&
+                                q.Status != QueueStatus.Diverted)
                     .Select(q => q.PatientId)
                     .Distinct()
                     .ToListAsync(ct)
@@ -72,51 +76,12 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
 
         try
         {
-            var staffId = effectiveStaffId ?? Guid.Empty;
-            var staffIdStr = effectiveStaffId?.ToString() ?? string.Empty;
-            var hasStaff = effectiveStaffId.HasValue;
-
-            // 10M-scale single-pass conditional aggregation + HasActiveSafetyAlert boolean column + native JSONB @>
-            var aggregated = await query
-                .GroupBy(_ => 1)
-                .Select(g => new
-                {
-                    All = g.Count(),
-                    Alerts = g.Count(p => p.HasActiveSafetyAlert),
-                    SeniorPwd = g.Count(p =>
-                        (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
-                        (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
-                        p.DateOfBirth <= seniorCutoff),
-                    Students = g.Count(p =>
-                        EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Student\"}") ||
-                        EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Student\"}") ||
-                        EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"Student\"%") ||
-                        EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"student_id\"%")),
-                    Employees = g.Count(p =>
-                        EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Employee\"}") ||
-                        EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Employee\"}") ||
-                        EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"Employee\"%") ||
-                        EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), "%\"employee_id\"%")),
-                    MyPatients = !hasStaff ? 0 : g.Count(p =>
-                        (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
-                        p.Vitals.Any(v => !v.IsDeleted && v.NurseId == staffId) ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"assigned_doctor_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"doctor_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"nurse_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.JsonContains(p.CustomFields, $"{{\"assigned_nurse_id\":\"{staffIdStr}\"}}") ||
-                        EF.Functions.ILike(EF.Property<string>(p, "CustomFields"), $"%{staffIdStr}%"))
-                })
+            var aggregated = await BuildPostgresCountsQuery(baseQuery, seniorCutoff, effectiveStaffId, relatedPatientIds)
                 .FirstOrDefaultAsync(ct);
 
             if (aggregated != null)
             {
-                return new PatientDirectoryCountsDto(
-                    All: aggregated.All,
-                    Students: aggregated.Students,
-                    Employees: aggregated.Employees,
-                    Alerts: aggregated.Alerts,
-                    SeniorPwd: aggregated.SeniorPwd,
-                    MyPatients: aggregated.MyPatients);
+                return aggregated;
             }
 
             return new PatientDirectoryCountsDto(0, 0, 0, 0, 0, 0);
@@ -124,35 +89,24 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
         catch
         {
             // In-memory fallback for EF InMemory provider and mock repositories in unit tests
-            var allCount = await query.CountAsync(ct);
+            var allCount = await baseQuery.CountAsync(ct);
 
-            var alertsCount = await query.Where(p =>
+            var alertsCount = await baseQuery.Where(p =>
                 p.HasActiveSafetyAlert ||
                 p.Alerts.Any(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active) ||
                 p.Allergies!.Any(a => !a.IsDeleted && a.Status == AllergyStatus.Active))
                 .CountAsync(ct);
 
-            var seniorPwdCount = await query.Where(p =>
+            var seniorPwdCount = await baseQuery.Where(p =>
                 (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
                 (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
                 p.DateOfBirth <= seniorCutoff)
                 .CountAsync(ct);
 
-            var list = await query.Select(p => p.CustomFields).ToListAsync(ct);
+            var list = await baseQuery.Select(p => p.CustomFields).ToListAsync(ct);
 
-            var studentsCount = list.Count(cf =>
-                cf != null && (
-                    (cf.TryGetValue("classification", out var c) && string.Equals(c?.ToString(), "Student", StringComparison.OrdinalIgnoreCase)) ||
-                    (cf.TryGetValue("category", out var cat) && string.Equals(cat?.ToString(), "Student", StringComparison.OrdinalIgnoreCase)) ||
-                    cf.ContainsKey("student_id")
-                ));
-
-            var employeesCount = list.Count(cf =>
-                cf != null && (
-                    (cf.TryGetValue("classification", out var c) && string.Equals(c?.ToString(), "Employee", StringComparison.OrdinalIgnoreCase)) ||
-                    (cf.TryGetValue("category", out var cat) && string.Equals(cat?.ToString(), "Employee", StringComparison.OrdinalIgnoreCase)) ||
-                    cf.ContainsKey("employee_id")
-                ));
+            var studentsCount = list.Count(GetClinicPatientsQueryHandler.IsStudentCustomFields);
+            var employeesCount = list.Count(GetClinicPatientsQueryHandler.IsEmployeeCustomFields);
 
             var myPatientsCount = 0;
             if (effectiveStaffId.HasValue)
@@ -160,7 +114,7 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
                 var staffId = effectiveStaffId.Value;
                 var staffIdStr = staffId.ToString();
 
-                var patientVitalsAndCustom = await query
+                var patientVitalsAndCustom = await baseQuery
                     .Select(p => new
                     {
                         p.Id,
@@ -172,15 +126,8 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
                 myPatientsCount = patientVitalsAndCustom.Count(p =>
                     (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
                     p.HasNurseVitals ||
-                    (p.CustomFields != null && (
-                        (p.CustomFields.TryGetValue("assigned_doctor_id", out var ad) && string.Equals(ad?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                        (p.CustomFields.TryGetValue("doctor_id", out var d) && string.Equals(d?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                        (p.CustomFields.TryGetValue("nurse_id", out var n) && string.Equals(n?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                        (p.CustomFields.TryGetValue("assigned_nurse_id", out var an) && string.Equals(an?.ToString(), staffIdStr, StringComparison.OrdinalIgnoreCase)) ||
-                        p.CustomFields.Values.Any(v => v != null && v.ToString()!.Contains(staffIdStr, StringComparison.OrdinalIgnoreCase))
-                    )));
+                    GetClinicPatientsQueryHandler.IsStaffAssignedCustomFields(p.CustomFields, staffIdStr));
             }
-
 
             return new PatientDirectoryCountsDto(
                 All: allCount,
@@ -190,6 +137,62 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
                 SeniorPwd: seniorPwdCount,
                 MyPatients: myPatientsCount);
         }
+    }
+
+    public static IQueryable<PatientDirectoryCountsDto> BuildPostgresCountsQuery(
+        IQueryable<Patient> baseQuery,
+        DateOnly seniorCutoff,
+        Guid? effectiveStaffId,
+        IReadOnlyList<Guid> relatedPatientIds)
+    {
+        var staffId = effectiveStaffId ?? Guid.Empty;
+        var staffIdStr = effectiveStaffId?.ToString() ?? string.Empty;
+        var hasStaff = effectiveStaffId.HasValue;
+        var assignedDoctorJson = $"{{\"assigned_doctor_id\":\"{staffIdStr}\"}}";
+        var doctorJson = $"{{\"doctor_id\":\"{staffIdStr}\"}}";
+        var nurseJson = $"{{\"nurse_id\":\"{staffIdStr}\"}}";
+        var assignedNurseJson = $"{{\"assigned_nurse_id\":\"{staffIdStr}\"}}";
+
+        // 10M-scale single-pass conditional aggregation + native JSONB @> / ? operators
+        return baseQuery
+            .GroupBy(_ => 1)
+            .Select(g => new PatientDirectoryCountsDto(
+                g.Count(),
+                g.Count(p =>
+                    EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Student\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"student\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"STUDENT\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Student\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"student\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"STUDENT\"}") ||
+                    (EF.Functions.JsonExists(p.CustomFields, "student_id") &&
+                     !EF.Functions.JsonContains(p.CustomFields, "{\"student_id\":\"\"}") &&
+                     !EF.Functions.JsonContains(p.CustomFields, "{\"student_id\":null}"))),
+                g.Count(p =>
+                    EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"Employee\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"employee\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"classification\":\"EMPLOYEE\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"Employee\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"employee\"}") ||
+                    EF.Functions.JsonContains(p.CustomFields, "{\"category\":\"EMPLOYEE\"}") ||
+                    (EF.Functions.JsonExists(p.CustomFields, "employee_id") &&
+                     !EF.Functions.JsonContains(p.CustomFields, "{\"employee_id\":\"\"}") &&
+                     !EF.Functions.JsonContains(p.CustomFields, "{\"employee_id\":null}"))),
+                g.Count(p =>
+                    p.HasActiveSafetyAlert ||
+                    p.Alerts.Any(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active) ||
+                    p.Allergies!.Any(a => !a.IsDeleted && a.Status == AllergyStatus.Active)),
+                g.Count(p =>
+                    (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
+                    (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
+                    p.DateOfBirth <= seniorCutoff),
+                !hasStaff ? 0 : g.Count(p =>
+                    (relatedPatientIds.Count > 0 && relatedPatientIds.Contains(p.Id)) ||
+                    p.Vitals.Any(v => !v.IsDeleted && v.NurseId == staffId) ||
+                    EF.Functions.JsonContains(p.CustomFields, assignedDoctorJson) ||
+                    EF.Functions.JsonContains(p.CustomFields, doctorJson) ||
+                    EF.Functions.JsonContains(p.CustomFields, nurseJson) ||
+                    EF.Functions.JsonContains(p.CustomFields, assignedNurseJson))));
     }
 }
 

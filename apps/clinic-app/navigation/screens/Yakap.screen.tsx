@@ -664,6 +664,7 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     borderBottomColor: theme.colors.primary,
+    ...theme.shadows.brandSubtle,
   },
   tabBody: {
     gap: theme.spacing.lg,

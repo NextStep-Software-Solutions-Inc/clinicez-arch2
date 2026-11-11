@@ -1,96 +1,190 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Image,
-  Platform,
-} from 'react-native';
-import {
-  ThemedText,
-  Badge,
-  Button,
-  Input,
-  Card,
-  CardContent,
-  CardHeader,
-  Icon,
-  SegmentedControl,
-} from '@ui';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { Input, Card, CardContent, SkeletonList } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import { HEX_COLOR } from '../../constants/color';
 import { useAuth } from '../../context/AuthContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useConnection } from '../../components/connection/ConnectionGate';
 import { clinicService, SignatureMode, StaffMember } from '../../services/clinicService';
-import SignatureSpecimenModal from '../../components/settings/SignatureSpecimenModal';
 import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
-import { useTextScale, TEXT_SCALE_OPTIONS } from '../../context/TextScaleContext';
-import { useUiDensity, UI_DENSITY_OPTIONS } from '../../context/UiDensityContext';
+import { useTextScale } from '../../context/TextScaleContext';
+import {
+  THEME_MODE_OPTIONS,
+  useThemeMode,
+  type ThemeMode,
+} from '../../context/ThemeModeContext';
+import { useUiDensity } from '../../context/UiDensityContext';
+import { usePersistedScrollPosition } from '../../hooks/usePersistedScrollPosition';
 import {
   SoundTheme,
   UserAudioPreferences,
-  SOUND_THEME_PRESETS,
   playAlertTone,
   validateAudioFile,
   setActiveAudioPreferences,
   getActiveAudioPreferences,
 } from '../../utils/alertSounds';
-import { ToggleSwitch } from '../../components/settings/AddEditFieldModal';
+import {
+  type ProfileTabKey,
+  type ProfileRouteParams,
+  type PreferencesSyncState,
+  type PersonalChartLayoutMode,
+  type ExistingCredentialsInput,
+  type ProfileCredentialVisibility,
+  PROFILE_TAB_CATALOG,
+  initialsOf,
+  resolveProfileCredentialVisibility,
+  getVisibleProfileTabs,
+  resolveProfileTabIntent,
+  ProfileHeroCard,
+  ProfileTabBar,
+  ProfileContactTab,
+  ProfileCredentialsTab,
+  ProfilePreferencesTab,
+  ProfileSecurityTab,
+  ProfileSessionFooter,
+} from '../../components/profile';
 
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = `${parts[0]?.[0] ?? ''}${parts.length > 1 ? parts[parts.length - 1][0] : ''}`;
-  return letters.toUpperCase() || '?';
+export {
+  type ProfileTabKey,
+  type ProfileRouteParams,
+  type PreferencesSyncState,
+  type PersonalChartLayoutMode,
+  type ExistingCredentialsInput,
+  type ProfileCredentialVisibility,
+  PROFILE_TAB_CATALOG,
+  initialsOf,
+  resolveProfileCredentialVisibility,
+  getVisibleProfileTabs,
+  resolveProfileTabIntent,
+};
+
+export interface ProfileScreenProps {
+  route?: {
+    params?: ProfileRouteParams;
+  };
 }
 
-export default function ProfileScreen() {
-  const { user, offline, logout, changePassword } = useAuth();
-  const { current: staffCurrent, reload: reloadStaff } = useStaff();
-  const { facilityName, planTier } = useClinic();
-  const { serverLabel } = useConnection();
+function useOptionalNavigation(): any {
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useNavigation<any>();
+  } catch {
+    return null;
+  }
+}
+
+function useOptionalRoute(): { params?: ProfileRouteParams } | null {
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useRoute<any>();
+  } catch {
+    return null;
+  }
+}
+
+function getWebLocationSearch(): string | null {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return window.location?.search ?? null;
+  }
+  return null;
+}
+
+function syncWebHistoryTabParam(nextTab: ProfileTabKey): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    const loc = window.location;
+    if (!loc?.href || !loc.pathname?.toLowerCase().includes('profile')) return;
+    const url = new URL(loc.href);
+    if (url.searchParams.get('tab') !== nextTab) {
+      url.searchParams.set('tab', nextTab);
+      window.history?.replaceState?.(window.history.state, '', url.toString());
+    }
+  } catch {
+    // Ignore URL sync errors in restricted or non-DOM test environments
+  }
+}
+
+export function serializeAudioPreferences(prefs: UserAudioPreferences): string {
+  const layout = prefs.preferredChartLayout as PersonalChartLayoutMode | undefined;
+  const cleanUserHex =
+    typeof prefs.userBrandColorHex === 'string' && HEX_COLOR.test(prefs.userBrandColorHex.trim())
+      ? prefs.userBrandColorHex.trim().toUpperCase()
+      : null;
+  return JSON.stringify({
+    soundTheme: prefs.soundTheme || 'gentleBell',
+    customAudioDataUri: prefs.soundTheme === 'custom' ? prefs.customAudioDataUri || null : null,
+    customAudioFileName: prefs.soundTheme === 'custom' ? prefs.customAudioFileName || null : null,
+    isMuted: Boolean(prefs.isMuted),
+    preferredChartLayout: layout && layout !== 'default' ? layout : undefined,
+    themeMode: prefs.themeMode || 'light',
+    userBrandColorHex: cleanUserHex,
+  });
+}
+
+export default function ProfileScreen({ route: propRoute }: ProfileScreenProps = {}) {
+  const navigation = useOptionalNavigation();
+  const navRoute = useOptionalRoute();
+  const { state: authState, user, offline, logout, changePassword } = useAuth();
+  const { current: staffCurrent, loading: staffLoading, reload: reloadStaff } = useStaff();
+  const { facilityName, planTier, primaryColorHex, loading: clinicLoading } = useClinic();
+  const { serverLabel, serverUrl, changeServer } = useConnection();
   const { density, setDensity } = useUiDensity();
   const { preset, scale, setPreset, stepDown, stepUp } = useTextScale();
+  const {
+    themeMode,
+    isDark,
+    setThemeMode,
+    userBrandColorHex,
+    setUserBrandColorHex,
+  } = useThemeMode();
 
   // Authoritative profile record fetched directly from GET /staff/me
   const [selfStaff, setSelfStaff] = useState<StaffMember | null>(null);
   const effectiveStaff = (selfStaff && selfStaff.id === user?.id ? selfStaff : null) ?? staffCurrent;
 
-  const resolveDefaultNames = (s: StaffMember | null, u: typeof user) => {
-    const parts = (u?.name || '').trim().split(/\s+/).filter(Boolean);
-    const defaultLastName = parts.length > 1 ? parts[parts.length - 1] : '';
-    const defaultFirstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] ?? '';
-    return {
-      firstName: s?.firstName || defaultFirstName,
-      lastName: s?.lastName || defaultLastName,
-    };
-  };
+  const resolveDefaultNames = useCallback(
+    (s: StaffMember | null, u: typeof user) => {
+      const parts = (u?.name || '').trim().split(/\s+/).filter(Boolean);
+      const defaultLastName = parts.length > 1 ? parts[parts.length - 1] : '';
+      const defaultFirstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] ?? '';
+      return {
+        firstName: s?.firstName || defaultFirstName,
+        lastName: s?.lastName || defaultLastName,
+      };
+    },
+    [],
+  );
 
-  // Profile Form State (pre-populated from effectiveStaff to avoid empty flash)
-  const [title, setTitle] = useState(() => effectiveStaff?.title || (user?.role === 'Doctor' ? 'Dr.' : ''));
+  // Profile & Contact Form State
+  const [title, setTitle] = useState(() => effectiveStaff?.title || '');
   const [firstName, setFirstName] = useState(() => resolveDefaultNames(effectiveStaff, user).firstName);
   const [middleName, setMiddleName] = useState(() => effectiveStaff?.middleName || '');
   const [lastName, setLastName] = useState(() => resolveDefaultNames(effectiveStaff, user).lastName);
   const [phone, setPhone] = useState(() => effectiveStaff?.phoneNumber || '');
   const [specialty, setSpecialty] = useState(() => effectiveStaff?.specialty || '');
+
+  // Clinical Credentials & Signature Specimen State
   const [prc, setPrc] = useState(() => effectiveStaff?.prcLicenseNumber || '');
   const [ptr, setPtr] = useState(() => effectiveStaff?.ptrNumber || '');
   const [s2, setS2] = useState(() => effectiveStaff?.s2LicenseNumber || '');
   const [pan, setPan] = useState(() => effectiveStaff?.philHealthPan || '');
-
-  // Clinician E-Signature Specimen State
-  const [signatureSpecimen, setSignatureSpecimen] = useState<string | null>(() => effectiveStaff?.signatureSpecimen || null);
+  const [signatureSpecimen, setSignatureSpecimen] = useState<string | null>(
+    () => effectiveStaff?.signatureSpecimen || null,
+  );
   const [defaultSignatureMode, setDefaultSignatureMode] = useState<SignatureMode>(
     () => effectiveStaff?.defaultSignatureMode || 'ESignatureSpecimen',
   );
-  const [signatureModalVisible, setSignatureModalVisible] = useState(false);
 
-  // Status & Feedback States
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
+  // Independent Save & Error States
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [savingCredentials, setSavingCredentials] = useState(false);
+  const [credentialsError, setCredentialsError] = useState<string | null>(null);
 
   // Password Change State
   const [currentPassword, setCurrentPassword] = useState('');
@@ -99,24 +193,170 @@ export default function ProfileScreen() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  // Personal Alert Audio & Sound Preferences State
-  const [soundTheme, setSoundTheme] = useState<SoundTheme>(() => {
-    return getActiveAudioPreferences().soundTheme || 'gentleBell';
-  });
-  const [customAudioDataUri, setCustomAudioDataUri] = useState<string | null>(() => {
-    return getActiveAudioPreferences().customAudioDataUri || null;
-  });
-  const [customAudioFileName, setCustomAudioFileName] = useState<string | null>(() => {
-    return getActiveAudioPreferences().customAudioFileName || null;
-  });
-  const [isAlertMuted, setIsAlertMuted] = useState<boolean>(() => {
-    return Boolean(getActiveAudioPreferences().isMuted);
-  });
-  const [personalChartLayout, setPersonalChartLayout] = useState<'default' | 'modal' | 'split' | 'drawer'>(() => {
-    return (getActiveAudioPreferences().preferredChartLayout as any) || 'default';
-  });
+  // Personal Workstation & Alert Audio Preferences State
+  const [soundTheme, setSoundTheme] = useState<SoundTheme>(
+    () => getActiveAudioPreferences().soundTheme || 'gentleBell',
+  );
+  const [customAudioDataUri, setCustomAudioDataUri] = useState<string | null>(
+    () => getActiveAudioPreferences().customAudioDataUri || null,
+  );
+  const [customAudioFileName, setCustomAudioFileName] = useState<string | null>(
+    () => getActiveAudioPreferences().customAudioFileName || null,
+  );
+  const [isAlertMuted, setIsAlertMuted] = useState<boolean>(() =>
+    Boolean(getActiveAudioPreferences().isMuted),
+  );
+  const [personalChartLayout, setPersonalChartLayout] = useState<PersonalChartLayoutMode>(
+    () => (getActiveAudioPreferences().preferredChartLayout as PersonalChartLayoutMode) || 'default',
+  );
+  const [selectedThemeMode, setSelectedThemeMode] = useState<ThemeMode>(() => themeMode);
+  const [selectedUserBrandColorHex, setSelectedUserBrandColorHex] = useState<string | null>(
+    () => userBrandColorHex ?? null,
+  );
   const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
-  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [syncState, setSyncState] = useState<PreferencesSyncState>(() =>
+    offline ? 'offline' : 'synced',
+  );
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
+
+  const hydratedStaffIdRef = useRef<string | null>(effectiveStaff?.id ?? null);
+  const lastSyncedPrefsJsonRef = useRef<string>(
+    serializeAudioPreferences({
+      ...getActiveAudioPreferences(),
+      themeMode,
+      userBrandColorHex: userBrandColorHex ?? null,
+    }),
+  );
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setSelectedThemeMode(themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    setSelectedUserBrandColorHex(userBrandColorHex ?? null);
+  }, [userBrandColorHex]);
+
+  // Role-aware credential visibility
+  const roleArchetype =
+    effectiveStaff?.role === 'Doctor' || user?.role === 'Doctor'
+      ? 'Doctor'
+      : effectiveStaff?.role || user?.role || '';
+
+  const credentialVisibility = useMemo(
+    () =>
+      resolveProfileCredentialVisibility(roleArchetype, {
+        prcLicenseNumber: effectiveStaff?.prcLicenseNumber || prc,
+        ptrNumber: effectiveStaff?.ptrNumber || ptr,
+        philHealthPan: effectiveStaff?.philHealthPan || pan,
+        s2LicenseNumber: effectiveStaff?.s2LicenseNumber || s2,
+      }),
+    [
+      roleArchetype,
+      effectiveStaff?.prcLicenseNumber,
+      effectiveStaff?.ptrNumber,
+      effectiveStaff?.philHealthPan,
+      effectiveStaff?.s2LicenseNumber,
+      prc,
+      ptr,
+      pan,
+      s2,
+    ],
+  );
+
+  const visibleTabs = useMemo(
+    () => getVisibleProfileTabs(credentialVisibility),
+    [credentialVisibility],
+  );
+
+  const incomingRouteParams = propRoute?.params ?? navRoute?.params;
+  const prevObservedRouteTabRef = useRef<string | undefined>(incomingRouteParams?.tab);
+  const lastIncomingTabRef = useRef<string | undefined>(incomingRouteParams?.tab);
+  const hasUserSelectedTabRef = useRef(false);
+
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>(() =>
+    resolveProfileTabIntent(
+      incomingRouteParams,
+      getWebLocationSearch(),
+      credentialVisibility.showCredentialsTab,
+    ),
+  );
+  const activeTabRef = useRef<ProfileTabKey>(activeTab);
+  activeTabRef.current = activeTab;
+
+  const showProfileSkeletons = !user || (Boolean(staffLoading) && !effectiveStaff);
+  const {
+    scrollViewRef,
+    onScroll,
+    onContentSizeChange,
+    resetScrollPosition,
+  } = usePersistedScrollPosition({
+    storageKey: `clinicez.scroll.profile.${activeTab}`,
+    ready: !showProfileSkeletons,
+  });
+
+  // Sync activeTab ONLY on genuine external route changes (or initial /staff/me role hydration),
+  // never including activeTab in deps so user clicks do not ping-pong while navigation.setParams lags.
+  useEffect(() => {
+    const nextRawTab = incomingRouteParams?.tab;
+    const prevObserved = prevObservedRouteTabRef.current;
+    prevObservedRouteTabRef.current = nextRawTab;
+
+    if (nextRawTab === undefined) return;
+
+    if (nextRawTab !== prevObserved && nextRawTab !== lastIncomingTabRef.current) {
+      lastIncomingTabRef.current = nextRawTab;
+      hasUserSelectedTabRef.current = false;
+      const next = resolveProfileTabIntent(
+        incomingRouteParams,
+        null,
+        credentialVisibility.showCredentialsTab,
+      );
+      if (next !== activeTabRef.current) {
+        activeTabRef.current = next;
+        resetScrollPosition(`clinicez.scroll.profile.${next}`);
+      }
+      setActiveTab(next);
+    } else if (!hasUserSelectedTabRef.current && nextRawTab === lastIncomingTabRef.current) {
+      const next = resolveProfileTabIntent(
+        incomingRouteParams,
+        null,
+        credentialVisibility.showCredentialsTab,
+      );
+      setActiveTab(next);
+    }
+  }, [incomingRouteParams?.tab, credentialVisibility.showCredentialsTab, resetScrollPosition]);
+
+  // Dedicated role-visibility fallback when credentials tab becomes disallowed
+  useEffect(() => {
+    if (!credentialVisibility.showCredentialsTab) {
+      if (activeTabRef.current === 'credentials') {
+        activeTabRef.current = 'profile';
+        lastIncomingTabRef.current = 'profile';
+        navigation?.setParams?.({ tab: 'profile' });
+        syncWebHistoryTabParam('profile');
+        resetScrollPosition('clinicez.scroll.profile.profile');
+        setActiveTab('profile');
+      }
+    }
+  }, [credentialVisibility.showCredentialsTab, navigation, resetScrollPosition]);
+
+  const handleSelectTab = useCallback(
+    (nextTab: ProfileTabKey) => {
+      const allowedTab =
+        nextTab === 'credentials' && !credentialVisibility.showCredentialsTab ? 'profile' : nextTab;
+      hasUserSelectedTabRef.current = true;
+      lastIncomingTabRef.current = allowedTab;
+      if (allowedTab !== activeTabRef.current) {
+        activeTabRef.current = allowedTab;
+        resetScrollPosition(`clinicez.scroll.profile.${allowedTab}`);
+      }
+      setActiveTab(allowedTab);
+      navigation?.setParams?.({ tab: allowedTab });
+      syncWebHistoryTabParam(allowedTab);
+    },
+    [credentialVisibility.showCredentialsTab, navigation, resetScrollPosition],
+  );
 
   // Load authoritative staff record from GET /staff/me on mount / user switch
   const loadMyProfile = useCallback(async () => {
@@ -134,50 +374,370 @@ export default function ProfileScreen() {
 
   // Sync personal audio & workstation preferences from authoritative staff record
   useEffect(() => {
+    const prevStaffId = hydratedStaffIdRef.current;
+    const nextStaffId = effectiveStaff?.id ?? null;
+    const switchedStaffAccount =
+      prevStaffId !== null && nextStaffId !== null && prevStaffId !== nextStaffId;
+    hydratedStaffIdRef.current = nextStaffId;
+
     if (effectiveStaff?.preferencesJson) {
       try {
         const prefs: UserAudioPreferences = JSON.parse(effectiveStaff.preferencesJson);
-        if (prefs.soundTheme) setSoundTheme(prefs.soundTheme);
-        if (prefs.customAudioDataUri) setCustomAudioDataUri(prefs.customAudioDataUri);
-        if (prefs.customAudioFileName) setCustomAudioFileName(prefs.customAudioFileName);
-        if (typeof prefs.isMuted === 'boolean') setIsAlertMuted(prefs.isMuted);
-        if (prefs.preferredChartLayout) setPersonalChartLayout(prefs.preferredChartLayout);
-        setActiveAudioPreferences(prefs);
+        const nextTheme = prefs.soundTheme || 'gentleBell';
+        const nextDataUri = prefs.customAudioDataUri || null;
+        const nextFileName = prefs.customAudioFileName || null;
+        const nextMuted = typeof prefs.isMuted === 'boolean' ? prefs.isMuted : false;
+        const nextLayout: PersonalChartLayoutMode = prefs.preferredChartLayout || 'default';
+        const savedThemeMode =
+          prefs.themeMode === 'light' || prefs.themeMode === 'dark' || prefs.themeMode === 'system'
+            ? prefs.themeMode
+            : null;
+        const savedUserColor =
+          typeof prefs.userBrandColorHex === 'string' &&
+          HEX_COLOR.test(prefs.userBrandColorHex.trim())
+            ? prefs.userBrandColorHex.trim().toUpperCase()
+            : null;
+
+        setSoundTheme(nextTheme);
+        setCustomAudioDataUri(nextDataUri);
+        setCustomAudioFileName(nextFileName);
+        setIsAlertMuted(nextMuted);
+        setPersonalChartLayout(nextLayout);
+        if (savedThemeMode) {
+          setSelectedThemeMode(savedThemeMode);
+          setThemeMode(savedThemeMode);
+        }
+        setSelectedUserBrandColorHex(savedUserColor);
+        setUserBrandColorHex(savedUserColor);
+
+        const resolvedMode = savedThemeMode ?? selectedThemeMode;
+        const normalizedPrefs: UserAudioPreferences = {
+          soundTheme: nextTheme,
+          customAudioDataUri: nextTheme === 'custom' ? nextDataUri : null,
+          customAudioFileName: nextTheme === 'custom' ? nextFileName : null,
+          isMuted: nextMuted,
+          preferredChartLayout: nextLayout !== 'default' ? nextLayout : undefined,
+          themeMode: resolvedMode,
+          userBrandColorHex: savedUserColor,
+        };
+        lastSyncedPrefsJsonRef.current = serializeAudioPreferences(normalizedPrefs);
+        setActiveAudioPreferences(normalizedPrefs);
       } catch {
-        // Ignore JSON parse error
+        // Ignore malformed preferencesJson
       }
+    } else if (switchedStaffAccount) {
+      setSelectedUserBrandColorHex(null);
+      setUserBrandColorHex(null);
     }
-  }, [effectiveStaff?.preferencesJson]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveStaff?.id, effectiveStaff?.preferencesJson, setThemeMode, setUserBrandColorHex]);
 
-  // Sync form with authoritative staff record
+  // Sync form fields with authoritative staff record
+  const syncFormFromStaff = useCallback(
+    (s: StaffMember | null) => {
+      const { firstName: nextFirst, lastName: nextLast } = resolveDefaultNames(s, user);
+      setTitle(s?.title || '');
+      setFirstName(nextFirst);
+      setLastName(nextLast);
+      setMiddleName(s?.middleName || '');
+      setPhone(s?.phoneNumber || '');
+      setSpecialty(s?.specialty || '');
+      setPrc(s?.prcLicenseNumber || '');
+      setPtr(s?.ptrNumber || '');
+      setS2(s?.s2LicenseNumber || '');
+      setPan(s?.philHealthPan || '');
+      setSignatureSpecimen(s?.signatureSpecimen || null);
+      setDefaultSignatureMode(s?.defaultSignatureMode || 'ESignatureSpecimen');
+    },
+    [resolveDefaultNames, user],
+  );
+
   useEffect(() => {
-    const s = effectiveStaff;
-    const { firstName: nextFirst, lastName: nextLast } = resolveDefaultNames(s, user);
+    syncFormFromStaff(effectiveStaff);
+  }, [effectiveStaff, syncFormFromStaff]);
 
-    setTitle(s?.title || (user?.role === 'Doctor' ? 'Dr.' : ''));
-    setFirstName(nextFirst);
-    setLastName(nextLast);
-    setMiddleName(s?.middleName || '');
-    setPhone(s?.phoneNumber || '');
-    setSpecialty(s?.specialty || '');
-    setPrc(s?.prcLicenseNumber || '');
-    setPtr(s?.ptrNumber || '');
-    setS2(s?.s2LicenseNumber || '');
-    setPan(s?.philHealthPan || '');
-    setSignatureSpecimen(s?.signatureSpecimen || null);
-    setDefaultSignatureMode(s?.defaultSignatureMode || 'ESignatureSpecimen');
-  }, [effectiveStaff, user]);
+  const currentPreferencesPayload = useMemo<UserAudioPreferences>(
+    () => ({
+      soundTheme,
+      customAudioDataUri: soundTheme === 'custom' ? customAudioDataUri : null,
+      customAudioFileName: soundTheme === 'custom' ? customAudioFileName : null,
+      isMuted: isAlertMuted,
+      preferredChartLayout: personalChartLayout !== 'default' ? personalChartLayout : undefined,
+      themeMode: selectedThemeMode,
+      userBrandColorHex: selectedUserBrandColorHex,
+    }),
+    [
+      soundTheme,
+      customAudioDataUri,
+      customAudioFileName,
+      isAlertMuted,
+      personalChartLayout,
+      selectedThemeMode,
+      selectedUserBrandColorHex,
+    ],
+  );
 
-  if (!user) return null;
+  const syncPreferencesToServer = useCallback(
+    async (payload: UserAudioPreferences) => {
+      setActiveAudioPreferences(payload);
+      if (!user || offline) {
+        setSyncState('offline');
+        return;
+      }
 
-  const role = user.roleName || user.role;
+      setSyncState('syncing');
+      setSyncErrorMessage(null);
+
+      const defaults = resolveDefaultNames(effectiveStaff, user);
+      const isDoc = user.role === 'Doctor' || effectiveStaff?.role === 'Doctor';
+      const serialized = serializeAudioPreferences(payload);
+
+      const [updated, err] = await clinicService.updateMyProfile({
+        firstName: firstName.trim() || defaults.firstName,
+        lastName: lastName.trim() || defaults.lastName,
+        middleName: middleName.trim() || effectiveStaff?.middleName || undefined,
+        title: title.trim() || effectiveStaff?.title || undefined,
+        phoneNumber: phone.trim() || effectiveStaff?.phoneNumber || undefined,
+        specialty: specialty.trim() || effectiveStaff?.specialty || undefined,
+        prcLicenseNumber: isDoc
+          ? prc.trim() || effectiveStaff?.prcLicenseNumber || undefined
+          : prc.trim() || effectiveStaff?.prcLicenseNumber || undefined,
+        ptrNumber: ptr.trim() || effectiveStaff?.ptrNumber || undefined,
+        s2LicenseNumber: s2.trim() || effectiveStaff?.s2LicenseNumber || undefined,
+        philHealthPan: pan.trim() || effectiveStaff?.philHealthPan || undefined,
+        signatureSpecimen: isDoc ? signatureSpecimen : effectiveStaff?.signatureSpecimen,
+        defaultSignatureMode: isDoc ? defaultSignatureMode : effectiveStaff?.defaultSignatureMode,
+        preferencesJson: serialized,
+      });
+
+      if (err || !updated) {
+        setSyncState('error');
+        setSyncErrorMessage(err?.message || 'Could not save your preferences online.');
+        return;
+      }
+
+      lastSyncedPrefsJsonRef.current = serialized;
+      setSelfStaff(updated);
+      await reloadStaff();
+      setSyncState('synced');
+      setSyncErrorMessage(null);
+    },
+    [
+      user,
+      offline,
+      resolveDefaultNames,
+      effectiveStaff,
+      firstName,
+      lastName,
+      middleName,
+      title,
+      phone,
+      specialty,
+      prc,
+      ptr,
+      s2,
+      pan,
+      signatureSpecimen,
+      defaultSignatureMode,
+      reloadStaff,
+    ],
+  );
+
+  // Automatic debounced unified persistence for Workstation & Alert preferences
+  useEffect(() => {
+    setActiveAudioPreferences(currentPreferencesPayload);
+    const serialized = serializeAudioPreferences(currentPreferencesPayload);
+
+    if (offline) {
+      setSyncState('offline');
+      return;
+    }
+
+    if (serialized === lastSyncedPrefsJsonRef.current) {
+      if (syncState !== 'error') {
+        setSyncState('synced');
+      }
+      return;
+    }
+
+    setSyncState('syncing');
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+    }
+    syncTimerRef.current = setTimeout(() => {
+      void syncPreferencesToServer(currentPreferencesPayload);
+    }, 450);
+
+    return () => {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+      }
+    };
+  }, [currentPreferencesPayload, offline, syncPreferencesToServer, syncState]);
+
+  if (!user) {
+    if (authState === 'booting') {
+      return (
+        <ResponsiveLayout
+          headerTitle="My Profile & Preferences"
+          headerSubtitle="Update your personal details, professional licenses, display and sound settings, and password"
+        >
+          <ScrollView
+            style={[styles.scrollContainer, { backgroundColor: theme.colors.background }]}
+            contentContainerStyle={styles.content}
+          >
+            <Card>
+              <CardContent>
+                <SkeletonList rows={4} />
+              </CardContent>
+            </Card>
+          </ScrollView>
+        </ResponsiveLayout>
+      );
+    }
+    return null;
+  }
+
+  const resolvedFacilityName = (facilityName || user.clinicName || '').trim();
+  const isClinicMetaLoading = Boolean(clinicLoading) && !resolvedFacilityName;
+
   const isDoctor = user.role === 'Doctor' || effectiveStaff?.role === 'Doctor';
-  const displayName = effectiveStaff ? formatStaffName(effectiveStaff) : user.name;
+  const baselineNames = resolveDefaultNames(effectiveStaff, user);
+  const baselineTitle = effectiveStaff?.title || '';
+
+  const isContactDirty =
+    title.trim() !== baselineTitle.trim() ||
+    firstName.trim() !== (baselineNames.firstName || '').trim() ||
+    middleName.trim() !== (effectiveStaff?.middleName || '').trim() ||
+    lastName.trim() !== (baselineNames.lastName || '').trim() ||
+    phone.trim() !== (effectiveStaff?.phoneNumber || '').trim() ||
+    specialty.trim() !== (effectiveStaff?.specialty || '').trim();
+
+  const isCredentialsDirty =
+    prc.trim() !== (effectiveStaff?.prcLicenseNumber || '').trim() ||
+    ptr.trim() !== (effectiveStaff?.ptrNumber || '').trim() ||
+    pan.trim() !== (effectiveStaff?.philHealthPan || '').trim() ||
+    s2.trim() !== (effectiveStaff?.s2LicenseNumber || '').trim() ||
+    (signatureSpecimen || null) !== (effectiveStaff?.signatureSpecimen || null) ||
+    defaultSignatureMode !== (effectiveStaff?.defaultSignatureMode || 'ESignatureSpecimen');
+
+  const displayName = (effectiveStaff ? formatStaffName(effectiveStaff) : user.name || '').trim();
   const accountEmail = effectiveStaff?.email?.trim() || user.email?.trim() || '';
+  const permissionProfileLabel = effectiveStaff?.roleName || user.roleName || null;
+  const roleSummaryLabel = permissionProfileLabel || roleArchetype;
+
+  const handleResetContact = () => {
+    setContactError(null);
+    setTitle(baselineTitle);
+    setFirstName(baselineNames.firstName);
+    setMiddleName(effectiveStaff?.middleName || '');
+    setLastName(baselineNames.lastName);
+    setPhone(effectiveStaff?.phoneNumber || '');
+    setSpecialty(effectiveStaff?.specialty || '');
+  };
+
+  const handleResetCredentials = () => {
+    setCredentialsError(null);
+    setPrc(effectiveStaff?.prcLicenseNumber || '');
+    setPtr(effectiveStaff?.ptrNumber || '');
+    setPan(effectiveStaff?.philHealthPan || '');
+    setS2(effectiveStaff?.s2LicenseNumber || '');
+    setSignatureSpecimen(effectiveStaff?.signatureSpecimen || null);
+    setDefaultSignatureMode(effectiveStaff?.defaultSignatureMode || 'ESignatureSpecimen');
+  };
+
+  const handleSaveContactProfile = async () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setContactError('First and last name are required.');
+      return;
+    }
+
+    setSavingContact(true);
+    setContactError(null);
+
+    const serializedPrefs = serializeAudioPreferences(currentPreferencesPayload);
+    setActiveAudioPreferences(currentPreferencesPayload);
+
+    const [updated, err] = await clinicService.updateMyProfile({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      middleName: middleName.trim() || undefined,
+      title: title.trim() || undefined,
+      phoneNumber: phone.trim() || undefined,
+      specialty: specialty.trim() || undefined,
+      prcLicenseNumber: prc.trim() || effectiveStaff?.prcLicenseNumber || undefined,
+      ptrNumber: ptr.trim() || effectiveStaff?.ptrNumber || undefined,
+      s2LicenseNumber: s2.trim() || effectiveStaff?.s2LicenseNumber || undefined,
+      philHealthPan: pan.trim() || effectiveStaff?.philHealthPan || undefined,
+      signatureSpecimen: isDoctor ? signatureSpecimen : effectiveStaff?.signatureSpecimen,
+      defaultSignatureMode: isDoctor ? defaultSignatureMode : effectiveStaff?.defaultSignatureMode,
+      preferencesJson: serializedPrefs,
+    });
+
+    setSavingContact(false);
+
+    if (err || !updated) {
+      setContactError(err?.message || 'Could not save profile.');
+      return;
+    }
+
+    lastSyncedPrefsJsonRef.current = serializedPrefs;
+    setSelfStaff(updated);
+    syncFormFromStaff(updated);
+    await reloadStaff();
+    notify.success('Personal information saved.');
+  };
+
+  const handleSaveCredentials = async () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setCredentialsError('First and last name are required before saving licenses.');
+      return;
+    }
+
+    if (credentialVisibility.requirePrc && !prc.trim()) {
+      setCredentialsError('PRC License Number is required for Doctors.');
+      return;
+    }
+
+    setSavingCredentials(true);
+    setCredentialsError(null);
+
+    const serializedPrefs = serializeAudioPreferences(currentPreferencesPayload);
+    setActiveAudioPreferences(currentPreferencesPayload);
+
+    const [updated, err] = await clinicService.updateMyProfile({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      middleName: middleName.trim() || undefined,
+      title: title.trim() || undefined,
+      phoneNumber: phone.trim() || undefined,
+      prcLicenseNumber: credentialVisibility.showPrc ? prc.trim() || undefined : undefined,
+      ptrNumber: isDoctor ? ptr.trim() || undefined : ptr.trim() || undefined,
+      s2LicenseNumber: isDoctor ? s2.trim() || undefined : undefined,
+      philHealthPan: isDoctor ? pan.trim() || undefined : undefined,
+      specialty: specialty.trim() || undefined,
+      signatureSpecimen: isDoctor ? signatureSpecimen : undefined,
+      defaultSignatureMode: isDoctor ? defaultSignatureMode : undefined,
+      preferencesJson: serializedPrefs,
+    });
+
+    setSavingCredentials(false);
+
+    if (err || !updated) {
+      setCredentialsError(err?.message || 'Could not save license details.');
+      return;
+    }
+
+    lastSyncedPrefsJsonRef.current = serializedPrefs;
+    setSelfStaff(updated);
+    syncFormFromStaff(updated);
+    await reloadStaff();
+    notify.success('Licenses and signature saved.');
+  };
 
   const handleSelectCustomAudio = () => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
-      notify.info('Custom audio upload is supported on web workstations.');
+      notify.info('Custom sound upload is available in your web browser.');
       return;
     }
 
@@ -208,7 +768,7 @@ export default function ProfileScreen() {
         setCustomAudioFileName(file.name);
         setSoundTheme('custom');
         playAlertTone('custom', base64Uri);
-        notify.success(`Loaded custom audio: ${file.name}`);
+        notify.success(`Loaded custom sound: ${file.name}`);
       };
       reader.onerror = () => {
         notify.error('Failed to read audio file.');
@@ -216,89 +776,6 @@ export default function ProfileScreen() {
       reader.readAsDataURL(file);
     };
     input.click();
-  };
-
-  const handleSavePersonalPreferences = async () => {
-    setSavingPreferences(true);
-    const preferencesPayload: UserAudioPreferences = {
-      soundTheme,
-      customAudioDataUri: soundTheme === 'custom' ? customAudioDataUri : null,
-      customAudioFileName: soundTheme === 'custom' ? customAudioFileName : null,
-      isMuted: isAlertMuted,
-      preferredChartLayout: personalChartLayout !== 'default' ? personalChartLayout : undefined,
-    };
-
-    setActiveAudioPreferences(preferencesPayload);
-
-    const [updated, err] = await clinicService.updateMyProfile({
-      firstName: firstName.trim() || resolveDefaultNames(effectiveStaff, user).firstName,
-      lastName: lastName.trim() || resolveDefaultNames(effectiveStaff, user).lastName,
-      middleName: middleName.trim() || undefined,
-      title: title.trim() || undefined,
-      phoneNumber: phone.trim() || undefined,
-      preferencesJson: JSON.stringify(preferencesPayload),
-    });
-    setSavingPreferences(false);
-
-    if (err || !updated) {
-      notify.error(err?.message || 'Could not sync preferences to server.');
-      return;
-    }
-
-    setSelfStaff(updated);
-    await reloadStaff();
-    notify.success('Personal alert and workstation preferences saved successfully.');
-  };
-
-  const handleSaveProfile = async () => {
-    if (!firstName.trim() || !lastName.trim()) {
-      setProfileError('First and last name are required.');
-      return;
-    }
-
-    if (isDoctor && !prc.trim()) {
-      setProfileError('PRC License Number is mandatory for Doctors.');
-      return;
-    }
-
-    setSavingProfile(true);
-    setProfileError(null);
-
-    const preferencesPayload: UserAudioPreferences = {
-      soundTheme,
-      customAudioDataUri: soundTheme === 'custom' ? customAudioDataUri : null,
-      customAudioFileName: soundTheme === 'custom' ? customAudioFileName : null,
-      isMuted: isAlertMuted,
-      preferredChartLayout: personalChartLayout !== 'default' ? personalChartLayout : undefined,
-    };
-    setActiveAudioPreferences(preferencesPayload);
-
-    const [updated, err] = await clinicService.updateMyProfile({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      middleName: middleName.trim() || undefined,
-      title: title.trim() || undefined,
-      phoneNumber: phone.trim() || undefined,
-      prcLicenseNumber: isDoctor ? prc.trim() : undefined,
-      ptrNumber: isDoctor ? ptr.trim() || undefined : undefined,
-      s2LicenseNumber: isDoctor ? s2.trim() || undefined : undefined,
-      philHealthPan: isDoctor ? pan.trim() || undefined : undefined,
-      specialty: specialty.trim() || undefined,
-      signatureSpecimen: isDoctor ? signatureSpecimen : undefined,
-      defaultSignatureMode: isDoctor ? defaultSignatureMode : undefined,
-      preferencesJson: JSON.stringify(preferencesPayload),
-    });
-
-    setSavingProfile(false);
-
-    if (err || !updated) {
-      setProfileError(err?.message || 'Could not save profile.');
-      return;
-    }
-
-    setSelfStaff(updated);
-    await reloadStaff();
-    notify.success('Profile and credentials updated successfully.');
   };
 
   const handleUpdatePassword = async () => {
@@ -327,920 +804,231 @@ export default function ProfileScreen() {
       return;
     }
 
-    notify.success('Workstation password changed successfully.');
+    notify.success('Password updated successfully.');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
   };
 
+  const panInputSlot = (
+    <Input
+      containerStyle={styles.panSlotCol}
+      label="PhilHealth Accreditation Number (PAN)"
+      value={pan}
+      onChangeText={setPan}
+      placeholder="PhilHealth accreditation number"
+      helperText="Filled in automatically on PhilHealth consultations."
+    />
+  );
+
   return (
     <ResponsiveLayout
-      headerTitle="My Profile & Credentials"
-      headerSubtitle="Manage your contact details, clinical credentials, and workstation account"
+      headerTitle="My Profile & Preferences"
+      headerSubtitle="Update your personal details, professional licenses, display and sound settings, and password"
     >
-      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.content}>
-        {/* Profile Hero / Header Banner */}
-        <Card>
-          <CardContent style={styles.heroCard}>
-            <View style={styles.heroRow}>
-              <View style={styles.avatarLarge}>
-                <ThemedText variant="h2" color={theme.colors.onPrimary}>
-                  {initialsOf(displayName)}
-                </ThemedText>
-              </View>
+      <ScrollView
+        ref={scrollViewRef}
+        style={[styles.scrollContainer, { backgroundColor: theme.colors.background }]}
+        contentContainerStyle={styles.content}
+        onScroll={onScroll}
+        onContentSizeChange={onContentSizeChange}
+        scrollEventThrottle={100}
+      >
+        <ProfileHeroCard
+          displayName={displayName}
+          roleArchetype={roleArchetype}
+          permissionProfileLabel={permissionProfileLabel}
+          specialty={specialty}
+          facilityName={resolvedFacilityName}
+          planTier={planTier}
+          accountEmail={accountEmail}
+          offline={offline}
+          isPhysician={credentialVisibility.isPhysician}
+          showSkeletons={showProfileSkeletons}
+          clinicLoading={isClinicMetaLoading}
+        />
 
-              <View style={styles.heroDetails}>
-                <View style={styles.heroNameRow}>
-                  <ThemedText variant="title">
-                    {displayName}
-                  </ThemedText>
-                  <Badge
-                    label={role}
-                    variant={isDoctor ? 'primary' : 'purple'}
-                    size="md"
-                  />
-                  {effectiveStaff?.roleName && effectiveStaff.roleName !== role ? (
-                    <Badge
-                      label={effectiveStaff.roleName}
-                      variant="neutral"
-                      size="sm"
-                    />
-                  ) : null}
-                </View>
+        <ProfileTabBar
+          tabs={visibleTabs}
+          activeTab={activeTab}
+          onSelectTab={handleSelectTab}
+        />
 
-                <View style={styles.heroMetaRow}>
-                  <ThemedText variant="small" color={theme.colors.textSecondary}>
-                    {facilityName || 'Clinic EZ Workstation'}
-                    {planTier ? ` · ${planTier} Tier` : ''}
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    ·
-                  </ThemedText>
-                  <View style={styles.statusRow}>
-                    <Badge
-                      label={offline ? 'Offline Workstation' : 'Live Connected'}
-                      variant={offline ? 'warning' : 'success'}
-                      size="sm"
-                    />
-                  </View>
-                </View>
+        {activeTab === 'profile' ? (
+          <ProfileContactTab
+            title={title}
+            firstName={firstName}
+            middleName={middleName}
+            lastName={lastName}
+            accountEmail={accountEmail}
+            phone={phone}
+            specialty={specialty}
+            isPhysician={credentialVisibility.isPhysician}
+            isDirty={isContactDirty}
+            saving={savingContact}
+            offline={offline}
+            showSkeletons={showProfileSkeletons}
+            error={contactError}
+            onChangeTitle={setTitle}
+            onChangeFirstName={setFirstName}
+            onChangeMiddleName={setMiddleName}
+            onChangeLastName={setLastName}
+            onChangePhone={setPhone}
+            onChangeSpecialty={setSpecialty}
+            onSave={handleSaveContactProfile}
+            onReset={handleResetContact}
+          />
+        ) : null}
 
-                {accountEmail ? (
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Account: {accountEmail}
-                  </ThemedText>
-                ) : null}
-              </View>
-            </View>
-          </CardContent>
-        </Card>
-
-        {/* Form Error Banner */}
-        {profileError ? (
-          <View style={styles.errorBox}>
-            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
-            <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
-              {profileError}
-            </ThemedText>
+        {credentialVisibility.showCredentialsTab &&
+        (activeTab === 'credentials' || activeTab === 'profile') ? (
+          <View
+            style={activeTab === 'credentials' ? styles.activeTabPanel : styles.hiddenTabPanel}
+            pointerEvents={activeTab === 'credentials' ? 'auto' : 'none'}
+          >
+            <ProfileCredentialsTab
+              visibility={credentialVisibility}
+              title={title}
+              firstName={firstName}
+              lastName={lastName}
+              specialty={specialty}
+              prc={prc}
+              ptr={ptr}
+              pan={pan}
+              s2={s2}
+              signatureSpecimen={signatureSpecimen}
+              defaultSignatureMode={defaultSignatureMode}
+              isDirty={isCredentialsDirty}
+              saving={savingCredentials}
+              offline={offline}
+              showSkeletons={showProfileSkeletons}
+              error={credentialsError}
+              panInputSlot={panInputSlot}
+              onChangePrc={setPrc}
+              onChangePtr={setPtr}
+              onChangePan={setPan}
+              onChangeS2={setS2}
+              onChangeSignature={(nextSig, nextMode) => {
+                setSignatureSpecimen(nextSig);
+                setDefaultSignatureMode(nextMode);
+              }}
+              onChangeSignatureMode={setDefaultSignatureMode}
+              onSave={handleSaveCredentials}
+              onReset={handleResetCredentials}
+            />
           </View>
         ) : null}
 
-        {/* Section 1: Personal & Contact Information */}
-        <Card>
-          <CardHeader
-            title="Personal & Contact Information"
-            subtitle="Your basic staff directory and contact profile"
+        {activeTab === 'preferences' ? (
+          <ProfilePreferencesTab
+            density={density}
+            scale={scale}
+            textPreset={preset}
+            personalChartLayout={personalChartLayout}
+            themeMode={selectedThemeMode}
+            isDark={isDark}
+            userBrandColorHex={selectedUserBrandColorHex}
+            clinicPrimaryColorHex={primaryColorHex}
+            soundTheme={soundTheme}
+            isAlertMuted={isAlertMuted}
+            customAudioDataUri={customAudioDataUri}
+            customAudioFileName={customAudioFileName}
+            audioUploadError={audioUploadError}
+            syncState={syncState}
+            syncErrorMessage={syncErrorMessage}
+            showSkeletons={showProfileSkeletons}
+            onSelectThemeMode={(nextMode) => {
+              setSelectedThemeMode(nextMode);
+              setThemeMode(nextMode);
+              const meta = THEME_MODE_OPTIONS.find((opt) => opt.mode === nextMode);
+              notify.info(`Color theme updated to ${meta?.badgeLabel || nextMode}`);
+            }}
+            onSelectUserBrandColor={(nextHex, label) => {
+              const normalized =
+                typeof nextHex === 'string' && HEX_COLOR.test(nextHex.trim())
+                  ? nextHex.trim().toUpperCase()
+                  : null;
+              setSelectedUserBrandColorHex(normalized);
+              setUserBrandColorHex(normalized);
+              if (normalized) {
+                notify.info(`Personal accent color updated to ${label || normalized}`);
+              } else {
+                notify.info('Personal accent color reset to clinic default.');
+              }
+            }}
+            onSelectDensity={(nextDensity, label) => {
+              setDensity(nextDensity);
+              notify.info(`Screen spacing updated to ${label}`);
+            }}
+            onSelectTextPreset={(nextPreset, label) => {
+              setPreset(nextPreset);
+              notify.info(`Text size updated to ${label}`);
+            }}
+            onStepScaleDown={stepDown}
+            onStepScaleUp={stepUp}
+            onSelectChartLayout={(nextLayout) => {
+              setPersonalChartLayout(nextLayout);
+            }}
+            onToggleAlertMute={(muted) => {
+              setIsAlertMuted(muted);
+              if (muted) {
+                notify.info('Notification sounds muted on this device.');
+              } else {
+                playAlertTone(soundTheme, customAudioDataUri);
+                notify.info('Notification sounds turned on.');
+              }
+            }}
+            onSelectSoundTheme={(nextTheme) => {
+              setSoundTheme(nextTheme);
+              if (!isAlertMuted && nextTheme !== 'silent') {
+                playAlertTone(nextTheme, customAudioDataUri);
+              }
+            }}
+            onPreviewTone={(themeId) => {
+              playAlertTone(themeId, customAudioDataUri);
+            }}
+            onSelectCustomAudio={handleSelectCustomAudio}
+            onRetrySync={() => {
+              void syncPreferencesToServer(currentPreferencesPayload);
+            }}
           />
-          <CardContent style={styles.cardSection}>
-            <View style={styles.formRow}>
-              <Input
-                containerStyle={styles.flexNarrow}
-                label="Title"
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Dr. / RN / MD"
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="First name *"
-                required
-                value={firstName}
-                onChangeText={setFirstName}
-                placeholder="First name"
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="Middle name"
-                value={middleName}
-                onChangeText={setMiddleName}
-                placeholder="Middle name"
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="Last name *"
-                required
-                value={lastName}
-                onChangeText={setLastName}
-                placeholder="Last name"
-              />
-            </View>
+        ) : null}
 
-            <View style={styles.formRow}>
-              <Input
-                containerStyle={styles.flexWide}
-                label="Sign-in email address"
-                value={accountEmail}
-                editable={false}
-                placeholder="doctor@clinic.com"
-                helperText="Primary workstation account login identity (managed by administrator)."
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="Contact phone number"
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="0917-123-4567"
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <Input
-              label="Specialty or clinical designation"
-              value={specialty}
-              onChangeText={setSpecialty}
-              placeholder={isDoctor ? 'e.g. Pediatrics, Internal Medicine, Cardiology' : 'e.g. Triage Nursing, Billing Officer'}
-              helperText="Appears on consult summaries, patient receipts, and official clinical paperwork."
-            />
-          </CardContent>
-        </Card>
-
-        {/* Section 2: Clinical Credentials & Live Doctor Stamp Specimen */}
-        <Card>
-          <CardHeader
-            title="Professional & Clinical Credentials"
-            subtitle="Philippine regulatory credentials required for e-prescriptions, diagnostic orders, and PhilHealth claims"
+        {activeTab === 'security' ? (
+          <ProfileSecurityTab
+            currentPassword={currentPassword}
+            newPassword={newPassword}
+            confirmPassword={confirmPassword}
+            savingPassword={savingPassword}
+            passwordError={passwordError}
+            offline={offline}
+            serverLabel={serverLabel}
+            serverUrl={serverUrl}
+            facilityName={resolvedFacilityName}
+            planTier={planTier}
+            showSkeletons={showProfileSkeletons}
+            clinicLoading={isClinicMetaLoading}
+            onChangeCurrentPassword={setCurrentPassword}
+            onChangeNewPassword={setNewPassword}
+            onChangeConfirmPassword={setConfirmPassword}
+            onUpdatePassword={handleUpdatePassword}
+            onChangeServer={changeServer}
           />
-          <CardContent style={styles.cardSection}>
-            <View style={styles.formRow}>
-              <Input
-                containerStyle={styles.flexWide}
-                label={isDoctor ? 'PRC License Number *' : 'PRC / Professional License Number'}
-                required={isDoctor}
-                value={prc}
-                onChangeText={setPrc}
-                placeholder="e.g. 0108924"
-                helperText={isDoctor ? 'Mandatory for doctors under the Philippine Medical Act of 1959.' : 'Optional for non-physicians.'}
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="Professional Tax Receipt (PTR)"
-                value={ptr}
-                onChangeText={setPtr}
-                placeholder="e.g. PTR No. 8941203 / Taguig City"
-                helperText="Annual PTR number and issuing local government unit."
-              />
-            </View>
+        ) : null}
 
-            <View style={styles.formRow}>
-              <Input
-                containerStyle={styles.flexWide}
-                label="PhilHealth Accreditation Number (PAN)"
-                value={pan}
-                onChangeText={setPan}
-                placeholder="e.g. 1200-9876543-2"
-                helperText="Auto-prefilled on PhilHealth Konsulta / YAKAP consultations."
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="PDEA S2 Dangerous Drug License Number"
-                value={s2}
-                onChangeText={setS2}
-                placeholder="e.g. S2 No. 0918-99214-A1 (Optional)"
-                helperText="Required by Philippine PDEA to prescribe yellow pad dangerous drugs."
-              />
-            </View>
-
-            {/* Official Doctor Stamp & E-Signature Specimen Preview */}
-            <View style={styles.stampCard}>
-              <View style={styles.stampHeaderRow}>
-                <View style={styles.stampTitleGroup}>
-                  <ThemedText variant="smallBold" color={theme.colors.primary}>
-                    Official Physician Stamp & E-Signature Specimen
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    This official stamp specimen is automatically rendered on printed prescriptions, lab referral slips, and clinical summaries.
-                  </ThemedText>
-                </View>
-                {defaultSignatureMode === 'ESignatureSpecimen' ? (
-                  <Badge label="Digitally Certified & Locked" variant="success" icon="check" />
-                ) : defaultSignatureMode === 'DigitalSealOnly' ? (
-                  <Badge label="Digital Verification Seal" variant="primary" icon="shield" />
-                ) : (
-                  <Badge label="Wet Signature (Pen Signing)" variant="neutral" />
-                )}
-              </View>
-
-              <View style={styles.stampControlsRow}>
-                <View style={styles.segmentedWrapper}>
-                  <SegmentedControl<SignatureMode>
-                    value={defaultSignatureMode}
-                    onChange={(mode) => setDefaultSignatureMode(mode)}
-                    options={[
-                      { value: 'ESignatureSpecimen', label: 'E-Signature' },
-                      { value: 'DigitalSealOnly', label: 'Digital Seal' },
-                      { value: 'WetSignature', label: 'Wet Signature' },
-                    ]}
-                  />
-                </View>
-                <Button
-                  title={signatureSpecimen ? 'Manage Signature' : 'Upload / Draw Signature'}
-                  variant="outline"
-                  size="sm"
-                  icon="edit"
-                  onPress={() => setSignatureModalVisible(true)}
-                />
-              </View>
-
-              <View style={styles.stampBox}>
-                {/* E-Signature Specimen Overlay */}
-                {defaultSignatureMode === 'ESignatureSpecimen' ? (
-                  signatureSpecimen ? (
-                    <View style={styles.stampSignatureOverlay}>
-                      <Image
-                        source={{ uri: signatureSpecimen }}
-                        style={styles.stampSignatureImage}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  ) : (
-                    <View style={styles.stampSignatureEmpty}>
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        [No E-Signature specimen configured — Click 'Upload / Draw Signature']
-                      </ThemedText>
-                    </View>
-                  )
-                ) : defaultSignatureMode === 'WetSignature' ? (
-                  <View style={styles.stampWetSignatureBox}>
-                    <View style={styles.stampWetLine} />
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Physician Wet Signature (Pen)
-                    </ThemedText>
-                  </View>
-                ) : null}
-
-                <ThemedText variant="bodyBold" color={theme.colors.primary} style={styles.stampName}>
-                  {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
-                </ThemedText>
-                <ThemedText variant="small" color={theme.colors.textSecondary}>
-                  {specialty || 'General / Primary Care Medicine'}
-                </ThemedText>
-                <View style={styles.stampDivider} />
-                <ThemedText variant="small" color={theme.colors.text}>
-                  {prc ? `PRC License No. ${prc}` : 'PRC License No. [Required for Prescriptions]'}
-                </ThemedText>
-                {ptr ? (
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    {ptr}
-                  </ThemedText>
-                ) : null}
-                {pan ? (
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    {`PhilHealth PAN: ${pan}`}
-                  </ThemedText>
-                ) : null}
-                {s2 ? (
-                  <ThemedText variant="captionBold" color={theme.colors.emergency}>
-                    {s2}
-                  </ThemedText>
-                ) : null}
-              </View>
-            </View>
-
-            <SignatureSpecimenModal
-              visible={signatureModalVisible}
-              onClose={() => setSignatureModalVisible(false)}
-              initialSignature={signatureSpecimen}
-              initialMode={defaultSignatureMode}
-              doctorName={`${title ? `${title} ` : 'Dr. '}${firstName || 'First'} ${lastName || 'Last'}`}
-              credentials={{
-                specialty,
-                prc,
-                ptr,
-                s2,
-                pan,
-              }}
-              onSave={async (newSig, newMode) => {
-                setSignatureSpecimen(newSig);
-                setDefaultSignatureMode(newMode);
-              }}
-            />
-
-            <View style={styles.saveActionsRow}>
-              <Button
-                title="Save Profile & Credentials"
-                variant="primary"
-                onPress={handleSaveProfile}
-                loading={savingProfile}
-                disabled={offline}
-              />
-            </View>
-          </CardContent>
-        </Card>
-
-        {/* Section 3: Workstation Account Security */}
-        <Card>
-          <CardHeader
-            title="Workstation Security"
-            subtitle="Change your password and manage sign-in credentials"
-          />
-          <CardContent style={styles.cardSection}>
-            {passwordError ? (
-              <View style={styles.errorBox}>
-                <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
-                <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
-                  {passwordError}
-                </ThemedText>
-              </View>
-            ) : null}
-
-            <View style={styles.formRow}>
-              <Input
-                containerStyle={styles.flexWide}
-                label="Current password"
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                placeholder="Enter current password"
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="New password"
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                placeholder="Minimum 10 characters"
-                helperText="Must have at least 10 characters with numbers and letters."
-              />
-              <Input
-                containerStyle={styles.flexWide}
-                label="Confirm new password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                placeholder="Re-type new password"
-              />
-            </View>
-
-            <View style={styles.saveActionsRow}>
-              <Button
-                title="Update Password"
-                variant="secondary"
-                icon="key"
-                onPress={handleUpdatePassword}
-                loading={savingPassword}
-                disabled={offline}
-              />
-            </View>
-          </CardContent>
-        </Card>
-
-        {/* Section: Notification & Personal Alert Sounds */}
-        <Card>
-          <CardHeader
-            title="Notification & Personal Alert Sounds"
-            subtitle="Personalize your alert chimes and override clinic-wide notification sounds for your workstation"
-          />
-          <CardContent style={styles.cardSection}>
-            {/* Master Sound Alert Toggle */}
-            <View style={styles.audioToggleRow}>
-              <View style={styles.audioToggleInfo}>
-                <View style={styles.inlineHeader}>
-                  <Icon
-                    name={isAlertMuted ? 'volumeX' : 'volume2'}
-                    size={20}
-                    color={isAlertMuted ? theme.colors.emergency : theme.colors.primary}
-                  />
-                  <ThemedText variant="bodyBold" color={theme.colors.text}>
-                    Mute All Alert Sounds
-                  </ThemedText>
-                  {isAlertMuted && (
-                    <Badge label="Muted" variant="emergency" size="xs" />
-                  )}
-                </View>
-                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  Silence incoming triage announcements and direct chat sound alerts on this workstation.
-                </ThemedText>
-              </View>
-              <ToggleSwitch
-                value={isAlertMuted}
-                onValueChange={(muted) => {
-                  setIsAlertMuted(muted);
-                  if (muted) {
-                    notify.info('Sound alerts muted on this workstation.');
-                  } else {
-                    playAlertTone(soundTheme, customAudioDataUri);
-                    notify.info('Sound alerts enabled.');
-                  }
-                }}
-                accessibilityLabel="Mute All Alert Sounds"
-              />
-            </View>
-
-            {/* Sound Preset Theme Selection */}
-            <View style={styles.soundPresetsSection}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  ALERT CHIME PRESET
-                </ThemedText>
-                <Badge
-                  label={
-                    soundTheme === 'custom'
-                      ? 'Custom Audio File'
-                      : SOUND_THEME_PRESETS.find((p) => p.id === soundTheme)?.name || 'Gentle Bell'
-                  }
-                  variant="primary"
-                  size="xs"
-                />
-              </View>
-
-              <View style={styles.presetOptionsGrid}>
-                {SOUND_THEME_PRESETS.map((presetItem) => {
-                  const isSelected = soundTheme === presetItem.id;
-                  const isPresetMuted = presetItem.id === 'silent';
-                  const isCustomTheme = presetItem.id === 'custom';
-
-                  return (
-                    <Pressable
-                      key={presetItem.id}
-                      onPress={() => {
-                        setSoundTheme(presetItem.id);
-                        if (!isAlertMuted && !isPresetMuted) {
-                          playAlertTone(presetItem.id, customAudioDataUri);
-                        }
-                      }}
-                      style={[
-                        styles.presetCard,
-                        isSelected && styles.presetCardActive,
-                        isAlertMuted && styles.presetCardMuted,
-                      ]}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: isSelected }}
-                      accessibilityLabel={presetItem.name}
-                    >
-                      <View style={styles.presetHeader}>
-                        <View style={styles.inlineHeader}>
-                          <Icon
-                            name={
-                              isPresetMuted
-                                ? 'volumeX'
-                                : isCustomTheme
-                                ? 'upload'
-                                : isSelected
-                                ? 'volume2'
-                                : 'bell'
-                            }
-                            size={16}
-                            color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
-                          />
-                          <ThemedText
-                            variant="bodyBold"
-                            color={isSelected ? theme.colors.primary : theme.colors.text}
-                          >
-                            {presetItem.name}
-                          </ThemedText>
-                        </View>
-                        {isSelected && (
-                          <Badge label="Selected" variant="primary" size="xs" />
-                        )}
-                      </View>
-
-                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                        {presetItem.description}
-                      </ThemedText>
-
-                      {!isPresetMuted && (!isCustomTheme || customAudioDataUri) && (
-                        <View style={styles.presetActionRow}>
-                          <Button
-                            title="Preview Tone"
-                            variant="ghost"
-                            size="sm"
-                            icon="volume2"
-                            onPress={() => {
-                              playAlertTone(presetItem.id, customAudioDataUri);
-                            }}
-                          />
-                        </View>
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Custom Audio File Upload Card */}
-            <View style={styles.customAudioSection}>
-              <View style={styles.customAudioCard}>
-                <View style={styles.customAudioHeader}>
-                  <Icon name="upload" size={20} color={theme.colors.primary} />
-                  <View style={styles.customAudioInfo}>
-                    <ThemedText variant="bodyBold" color={theme.colors.text}>
-                      Custom Audio Alert File
-                    </ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Strictly supports MP3, WAV, or OGG files up to 500 KB. Follows your account across devices.
-                    </ThemedText>
-                  </View>
-                </View>
-
-                {customAudioFileName ? (
-                  <View style={styles.customAudioLoadedRow}>
-                    <View style={styles.selectedFilePill}>
-                      <Icon name="volume2" size={16} color={theme.colors.primary} />
-                      <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
-                        {customAudioFileName}
-                      </ThemedText>
-                      <Badge label="Saved to Profile" variant="success" size="xs" />
-                    </View>
-                    <View style={styles.customAudioButtons}>
-                      <Button
-                        title="Test Play"
-                        variant="secondary"
-                        size="sm"
-                        icon="volume2"
-                        onPress={() => {
-                          if (customAudioDataUri) {
-                            playAlertTone('custom', customAudioDataUri);
-                          }
-                        }}
-                      />
-                      <Button
-                        title="Replace Audio"
-                        variant="ghost"
-                        size="sm"
-                        icon="upload"
-                        onPress={handleSelectCustomAudio}
-                      />
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.customAudioUploadRow}>
-                    <Button
-                      title="Upload Audio File (.mp3, .wav, .ogg)"
-                      variant="secondary"
-                      icon="upload"
-                      onPress={handleSelectCustomAudio}
-                    />
-                  </View>
-                )}
-
-                {audioUploadError && (
-                  <ThemedText variant="caption" color={theme.colors.emergency}>
-                    {audioUploadError}
-                  </ThemedText>
-                )}
-              </View>
-            </View>
-
-            {/* Patient Chart Personal Layout Mode Override */}
-            <View style={styles.chartLayoutSection}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  PATIENT CHART WORKSTATION VIEW (OVERRIDE CLINIC DEFAULT)
-                </ThemedText>
-                <Badge
-                  label={
-                    personalChartLayout === 'default'
-                      ? 'Clinic Default'
-                      : personalChartLayout === 'split'
-                      ? 'Split View'
-                      : personalChartLayout === 'modal'
-                      ? 'Modal'
-                      : 'Side Drawer'
-                  }
-                  variant="neutral"
-                  size="xs"
-                />
-              </View>
-              <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                Choose how patient medical charts open during consultations on your workstation.
-              </ThemedText>
-              <View style={styles.presetOptionsGrid}>
-                {[
-                  {
-                    id: 'default' as const,
-                    name: 'Clinic Default',
-                    desc: 'Follow the standard layout configured in Clinic Settings',
-                    icon: 'clinic' as const,
-                  },
-                  {
-                    id: 'split' as const,
-                    name: 'Split Screen View',
-                    desc: 'Persistent side-by-side split screen for wide monitors',
-                    icon: 'layoutSplit' as const,
-                  },
-                  {
-                    id: 'modal' as const,
-                    name: 'Centered Modal',
-                    desc: 'Classic centered dialog with backdrop blur',
-                    icon: 'layoutModal' as const,
-                  },
-                  {
-                    id: 'drawer' as const,
-                    name: 'Right Slide Drawer',
-                    desc: 'Sleek right drawer that slides in over the queue',
-                    icon: 'layoutDrawer' as const,
-                  },
-                ].map((layoutOpt) => {
-                  const isSelected = personalChartLayout === layoutOpt.id;
-                  return (
-                    <Pressable
-                      key={layoutOpt.id}
-                      onPress={() => setPersonalChartLayout(layoutOpt.id)}
-                      style={[styles.presetCard, isSelected && styles.presetCardActive]}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: isSelected }}
-                      accessibilityLabel={layoutOpt.name}
-                    >
-                      <View style={styles.presetHeader}>
-                        <View style={styles.inlineHeader}>
-                          <Icon
-                            name={layoutOpt.icon}
-                            size={16}
-                            color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
-                          />
-                          <ThemedText
-                            variant="bodyBold"
-                            color={isSelected ? theme.colors.primary : theme.colors.text}
-                          >
-                            {layoutOpt.name}
-                          </ThemedText>
-                        </View>
-                        {isSelected && (
-                          <Badge label="Active" variant="primary" size="xs" />
-                        )}
-                      </View>
-                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                        {layoutOpt.desc}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Save Preferences Action Button */}
-            <View style={styles.saveActionsRow}>
-              <Button
-                title="Save Personal Preferences"
-                variant="primary"
-                icon="check"
-                onPress={handleSavePersonalPreferences}
-                loading={savingPreferences}
-                disabled={offline}
-              />
-            </View>
-          </CardContent>
-        </Card>
-
-        {/* Section: Workstation Display & Ergonomics */}
-        <Card>
-          <CardHeader
-            title="Workstation Display & Ergonomics"
-            subtitle="Configure UI layout density (cards, buttons, sidebar) and text scaling for your device"
-          />
-          <CardContent style={styles.cardSection}>
-            {/* Subsection 1: Layout Density */}
-            <View style={styles.densitySection}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  WORKSTATION UI DENSITY (CARDS, BUTTONS & SIDEBAR)
-                </ThemedText>
-                <Badge
-                  label={
-                    density === 'ultraCompact'
-                      ? 'Ultra Compact (70%)'
-                      : density === 'compact'
-                      ? 'Compact (85%)'
-                      : 'Standard (100%)'
-                  }
-                  variant="primary"
-                  size="xs"
-                />
-              </View>
-
-              <View style={styles.presetOptionsGrid}>
-                {UI_DENSITY_OPTIONS.map((opt) => {
-                  const isSelected = density === opt.density;
-                  return (
-                    <Pressable
-                      key={opt.density}
-                      onPress={() => {
-                        setDensity(opt.density);
-                        notify.info(`Workstation layout density updated to ${opt.label}`);
-                      }}
-                      style={[styles.presetCard, isSelected && styles.presetCardActive]}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: isSelected }}
-                      accessibilityLabel={opt.label}
-                    >
-                      <View style={styles.presetHeader}>
-                        <ThemedText
-                          variant="bodyBold"
-                          color={isSelected ? theme.colors.primary : theme.colors.text}
-                        >
-                          {opt.label}
-                        </ThemedText>
-                        {isSelected ? <Badge label="Active" variant="primary" size="xs" /> : null}
-                      </View>
-                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                        {opt.description}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View style={styles.densityDivider} />
-
-            {/* Subsection 2: Text Size Scale */}
-            <View style={styles.densitySection}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  WORKSTATION TEXT SIZE SCALING
-                </ThemedText>
-                <Badge label={`${Math.round(scale * 100)}% Font Scale`} variant="neutral" size="xs" />
-              </View>
-
-              {/* Fine adjustment stepper */}
-              <View style={styles.stepperContainer}>
-                <View style={styles.stepperInfo}>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                    FINE ADJUSTMENT (5% STEPS)
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Scale text from 60% (Ultra Compact) to 130% (Extra Large)
-                  </ThemedText>
-                </View>
-
-                <View style={styles.stepperControls}>
-                  <Button
-                    title="-5%"
-                    variant="outline"
-                    size="sm"
-                    icon="minus"
-                    onPress={stepDown}
-                    disabled={scale <= 0.601}
-                  />
-                  <View style={styles.stepperValueBadge}>
-                    <ThemedText variant="bodyBold" color={theme.colors.primary}>
-                      {Math.round(scale * 100)}%
-                    </ThemedText>
-                  </View>
-                  <Button
-                    title="+5%"
-                    variant="outline"
-                    size="sm"
-                    icon="plus"
-                    onPress={stepUp}
-                    disabled={scale >= 1.299}
-                  />
-                  <Button
-                    title="Reset (100%)"
-                    variant="ghost"
-                    size="sm"
-                    onPress={() => setPreset('standard')}
-                    disabled={scale === 1.0}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.presetOptionsGrid}>
-                {TEXT_SCALE_OPTIONS.map((opt) => {
-                  const isSelected = preset === opt.preset;
-                  return (
-                    <Pressable
-                      key={opt.preset}
-                      onPress={() => {
-                        setPreset(opt.preset);
-                        notify.info(`Workstation text size updated to ${opt.label}`);
-                      }}
-                      style={[styles.presetCard, isSelected && styles.presetCardActive]}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: isSelected }}
-                      accessibilityLabel={opt.label}
-                    >
-                      <View style={styles.presetHeader}>
-                        <ThemedText
-                          variant="bodyBold"
-                          color={isSelected ? theme.colors.primary : theme.colors.text}
-                        >
-                          {opt.label}
-                        </ThemedText>
-                        {isSelected ? <Badge label="Active" variant="primary" size="xs" /> : null}
-                      </View>
-                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                        {opt.description}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Live Typography Preview */}
-            <View style={styles.previewBox}>
-              <View style={styles.previewHeaderRow}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  LIVE WORKSTATION PREVIEW (DENSITY & TEXT)
-                </ThemedText>
-                <View style={styles.stepperControls}>
-                  <Badge
-                    label={
-                      density === 'ultraCompact'
-                        ? '70% Density'
-                        : density === 'compact'
-                        ? '85% Density'
-                        : '100% Density'
-                    }
-                    variant="primary"
-                    size="xs"
-                  />
-                  <Badge label={`${Math.round(scale * 100)}% Font`} variant="neutral" size="xs" />
-                </View>
-              </View>
-
-              <View style={styles.previewCard}>
-                <View style={styles.previewTopRow}>
-                  <Badge label="Q-001" variant="primary" size="sm" />
-                  <ThemedText variant="bodyBold" numberOfLines={1}>
-                    Bernardo, Carlo V.
-                  </ThemedText>
-                  <ThemedText variant="small" color={theme.colors.textMuted}>
-                    · Dr. Wave Ambray
-                  </ThemedText>
-                </View>
-                <ThemedText variant="small" color={theme.colors.textSecondary}>
-                  General consultation · Vitals: BP 120/80 mmHg · HR 72 bpm · Room 1
-                </ThemedText>
-              </View>
-            </View>
-          </CardContent>
-        </Card>
-
-        {/* Section 4: Workstation Session & System Info */}
-        <Card>
-          <CardHeader
-            title="Workstation Session & Connectivity"
-            subtitle="Active clinic node and sign-out controls"
-          />
-          <CardContent style={styles.cardSection}>
-            <View style={styles.sessionGrid}>
-              <View style={styles.sessionItem}>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Connected Server Node
-                </ThemedText>
-                <ThemedText variant="smallBold" color={theme.colors.text}>
-                  {serverLabel || 'Local Clinic Server'}
-                </ThemedText>
-              </View>
-
-              <View style={styles.sessionItem}>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Workstation State
-                </ThemedText>
-                <Badge
-                  label={offline ? 'Offline Mode' : 'Connected to Server'}
-                  variant={offline ? 'warning' : 'success'}
-                  size="sm"
-                />
-              </View>
-
-              <View style={styles.sessionItem}>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Facility Affiliation
-                </ThemedText>
-                <ThemedText variant="smallBold" color={theme.colors.text}>
-                  {facilityName || 'Clinic EZ'}
-                </ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.signOutRow}>
-              <Button
-                title="Sign Out of Workstation"
-                variant="danger"
-                icon="logout"
-                onPress={async () => {
-                  await logout();
-                }}
-              />
-            </View>
-          </CardContent>
-        </Card>
+        <ProfileSessionFooter
+          displayName={displayName}
+          roleLabel={roleSummaryLabel}
+          accountEmail={accountEmail}
+          facilityName={resolvedFacilityName}
+          serverLabel={serverLabel}
+          offline={offline}
+          showSkeletons={showProfileSkeletons}
+          clinicLoading={isClinicMetaLoading}
+          onSignOut={async () => {
+            await logout();
+          }}
+        />
       </ScrollView>
     </ResponsiveLayout>
   );
@@ -1250,362 +1038,23 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,
+    ...(Platform.OS === 'web' ? ({ scrollbarGutter: 'stable' } as any) : {}),
   },
   content: {
     padding: theme.spacing.xl,
     gap: theme.spacing.lg,
-    maxWidth: 960,
     width: '100%',
-    alignSelf: 'center',
+    alignSelf: 'stretch',
   },
-  heroCard: {
-    padding: theme.spacing.xl,
-  },
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.lg,
-    flexWrap: 'wrap',
-  },
-  avatarLarge: {
-    width: 64,
-    height: 64,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroDetails: {
-    flex: 1,
-    minWidth: 240,
-    gap: theme.spacing.xs,
-  },
-  heroNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  heroMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cardSection: {
-    gap: theme.spacing.md,
-  },
-  formRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-  },
-  flexNarrow: {
-    flex: 1,
-    minWidth: 120,
-  },
-  flexWide: {
-    flex: 2,
-    minWidth: 200,
-  },
-  flex1: {
-    flex: 1,
-  },
-  stampCard: {
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.md,
-    gap: theme.spacing.sm,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
-  stampHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  stampTitleGroup: {
-    gap: 2,
+  panSlotCol: {
     flex: 1,
     minWidth: 200,
   },
-  stampControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    marginVertical: theme.spacing.xs,
-  },
-  segmentedWrapper: {
-    flex: 1,
-    minWidth: 260,
-  },
-  stampBox: {
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: theme.colors.primary,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.lg,
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    gap: 4,
-  },
-  stampSignatureOverlay: {
+  activeTabPanel: {
     width: '100%',
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xs,
+    alignSelf: 'stretch',
   },
-  stampSignatureImage: {
-    width: 220,
-    height: 54,
-  },
-  stampSignatureEmpty: {
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xs,
-  },
-  stampWetSignatureBox: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xs,
-    paddingTop: theme.spacing.sm,
-    gap: theme.spacing.xs,
-  },
-  stampWetLine: {
-    width: 200,
-    height: theme.sizes.borderWidth,
-    backgroundColor: theme.colors.textMuted,
-  },
-  stampName: {
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  stampDivider: {
-    width: '60%',
-    height: 1,
-    backgroundColor: theme.colors.border,
-    marginVertical: theme.spacing.xs,
-  },
-  saveActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: theme.spacing.sm,
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.emergencySubtle,
-    borderRadius: theme.radii.md,
-  },
-  sessionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-  },
-  sessionItem: {
-    flex: 1,
-    minWidth: 160,
-    gap: 4,
-  },
-  signOutRow: {
-    borderTopWidth: theme.sizes.borderWidth,
-    borderTopColor: theme.colors.border,
-    paddingTop: theme.spacing.md,
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  densitySection: {
-    gap: theme.spacing.sm,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  densityDivider: {
-    height: theme.sizes.borderWidth,
-    backgroundColor: theme.colors.borderLight,
-    marginVertical: theme.spacing.sm,
-  },
-  stepperContainer: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  stepperInfo: {
-    gap: 2,
-  },
-  stepperControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  stepperValueBadge: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    minWidth: 64,
-    alignItems: 'center',
-  },
-  presetOptionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-  },
-  presetCard: {
-    flex: 1,
-    minWidth: 200,
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    gap: theme.spacing.xs,
-  },
-  presetCardActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primarySubtle,
-  },
-  presetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-  },
-  previewBox: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    gap: theme.spacing.sm,
-  },
-  previewHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  previewCard: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    gap: theme.spacing.xs,
-  },
-  previewTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  audioToggleRow: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.md,
-  },
-  audioToggleInfo: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  inlineHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  soundPresetsSection: {
-    gap: theme.spacing.sm,
-  },
-  presetActionRow: {
-    marginTop: theme.spacing.xs,
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  presetCardMuted: {
-    opacity: 0.65,
-  },
-  customAudioSection: {
-    gap: theme.spacing.sm,
-  },
-  customAudioCard: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    gap: theme.spacing.sm,
-  },
-  customAudioHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  customAudioInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  customAudioLoadedRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-  },
-  selectedFilePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    maxWidth: 320,
-  },
-  customAudioButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  customAudioUploadRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  chartLayoutSection: {
-    gap: theme.spacing.sm,
+  hiddenTabPanel: {
+    display: 'none',
   },
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -55,8 +55,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   renderScopeIcon,
   renderEmptyState,
   renderSearchIcon,
+  colors,
   style
 }) => {
+  const colorsKey = colors
+    ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.text ?? ''}`
+    : '';
+  const c = useMemo<ResolvedCommsColors>(() => ({ ...lightColors, ...colors }), [colors, colorsKey]);
+  const styles = useMemo(() => createStyles(c), [c]);
+
   if (isCollapsed) {
     return (
       <View style={[styles.collapsedContainer, style]}>
@@ -86,14 +93,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             {renderSearchIcon ? (
               renderSearchIcon()
             ) : (
-              <Text style={styles.searchIcon}>🔍</Text>
+              <View style={styles.searchIconWrap}>
+                <View style={styles.searchIconLens} />
+                <View style={styles.searchIconStem} />
+              </View>
             )}
             <TextInput
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={onSearchChange}
               placeholder="Search conversations..."
-              placeholderTextColor={lightColors.textMuted}
+              placeholderTextColor={c.textMuted}
               accessibilityLabel="Search conversations"
             />
           </View>
@@ -114,7 +124,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               onPress={onToggleCollapse}
               accessibilityLabel="Collapse drawer"
             >
-              <Text style={styles.headerButtonText}>◀</Text>
+              <Text style={styles.headerButtonText}>&lt;</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -147,7 +157,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       {/* Content States */}
       {loading ? (
         <View style={styles.stateContainer}>
-          <ActivityIndicator size="small" color={lightColors.primary} />
+          <ActivityIndicator size="small" color={c.primary} />
           <Text style={styles.stateText}>Loading conversations...</Text>
         </View>
       ) : error ? (
@@ -217,8 +227,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                       <Text
                         style={[
                           styles.cardTitle,
-                          isActive && styles.cardTitleActive,
                           item.unreadCount > 0 && styles.cardTitleUnread,
+                          isActive && styles.cardTitleActive,
                         ]}
                         numberOfLines={1}
                       >
@@ -286,385 +296,409 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: lightColors.surface,
-    borderRightWidth: 1,
-    borderRightColor: lightColors.border
-  },
-  collapsedContainer: {
-    width: 64,
-    backgroundColor: lightColors.surface,
-    alignItems: 'center',
-    paddingTop: spaceScale.md,
-    borderRightWidth: 1,
-    borderRightColor: lightColors.border
-  },
-  touchTarget: {
-    minWidth: sizes.touchTarget,
-    minHeight: sizes.touchTarget,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  collapsedBadge: {
-    marginTop: spaceScale.xs,
-    backgroundColor: lightColors.emergency,
-    borderRadius: radiusScale.full,
-    paddingHorizontal: spaceScale.xs
-  },
-  collapsedBadgeText: {
-    color: lightColors.onPrimary,
-    fontWeight: '700'
-  },
-  header: {
-    padding: spaceScale.md,
-    borderBottomWidth: 1,
-    borderBottomColor: lightColors.border
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spaceScale.sm
-  },
-  headerTitle: {
-    fontSize: fontSizeScale.xl,
-    fontWeight: '700',
-    color: lightColors.text
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spaceScale.xs
-  },
-  headerButton: {
-    minWidth: sizes.touchTarget,
-    minHeight: sizes.touchTarget,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radiusScale.sm,
-    backgroundColor: lightColors.surfaceSubtle
-  },
-  headerButtonText: {
-    color: lightColors.textSecondary,
-    fontSize: fontSizeScale.md
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spaceScale.sm,
-    marginBottom: spaceScale.sm,
-  },
-  primaryIconButton: {
-    minHeight: 38,
-    paddingHorizontal: spaceScale.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radiusScale.full,
-    backgroundColor: lightColors.primary,
-    shadowColor: lightColors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  primaryIconButtonText: {
-    color: lightColors.onPrimary,
-    fontSize: fontSizeScale.sm,
-    fontWeight: '600'
-  },
-  connectionBanner: {
-    paddingVertical: spaceScale.xs,
-    paddingHorizontal: spaceScale.sm,
-    borderRadius: radiusScale.xs,
-    marginBottom: spaceScale.xs
-  },
-  reconnectingBanner: {
-    backgroundColor: lightColors.warningBg,
-    borderColor: lightColors.warningBorder,
-    borderWidth: 1
-  },
-  disconnectedBanner: {
-    backgroundColor: lightColors.emergencyBg,
-    borderColor: lightColors.emergencyBorder,
-    borderWidth: 1
-  },
-  connectionText: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.text
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: lightColors.surfaceSubtle,
-    borderRadius: radiusScale.full,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    paddingHorizontal: spaceScale.md,
-    minHeight: 38,
-  },
-  searchIcon: {
-    marginRight: spaceScale.xs,
-    fontSize: 14,
-    opacity: 0.6,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: fontSizeScale.sm,
-    color: lightColors.text
-  },
-  scopesScroll: {
-    flexDirection: 'row'
-  },
-  scopePill: {
-    minHeight: 34,
-    paddingHorizontal: spaceScale.md,
-    paddingVertical: spaceScale.xs,
-    borderRadius: radiusScale.full,
-    backgroundColor: lightColors.surface,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    marginRight: spaceScale.xs,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  scopePillActive: {
-    backgroundColor: lightColors.primary,
-    borderColor: lightColors.primary,
-  },
-  scopePillText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '500',
-    color: lightColors.textSecondary
-  },
-  scopePillTextActive: {
-    color: lightColors.onPrimary,
-    fontWeight: '600'
-  },
-  listContainer: {
-    flex: 1
-  },
-  card: {
-    padding: spaceScale.md,
-    borderBottomWidth: 1,
-    borderBottomColor: lightColors.borderLight,
-    minHeight: sizes.touchTarget
-  },
-  cardActive: {
-    backgroundColor: lightColors.primarySubtle,
-    borderLeftWidth: 4,
-    borderLeftColor: lightColors.primary
-  },
-  cardContentRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spaceScale.sm,
-  },
-  cardContentRowCentered: {
-    alignItems: 'center',
-  },
-  cardAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: radiusScale.full,
-    backgroundColor: lightColors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  cardAvatarCentered: {
-    marginTop: 0,
-  },
-  cardAvatarDirect: {
-    backgroundColor: lightColors.primarySubtle,
-    borderColor: lightColors.primaryBorder,
-  },
-  cardAvatarCareTeam: {
-    backgroundColor: lightColors.surfaceSubtle,
-    borderColor: lightColors.border,
-  },
-  cardAvatarFacility: {
-    backgroundColor: lightColors.surfaceSubtle,
-    borderColor: lightColors.border,
-  },
-  cardAvatarTriage: {
-    backgroundColor: lightColors.warningBg,
-    borderColor: lightColors.warningBorder,
-  },
-  cardAvatarText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: lightColors.primary,
-  },
-  cardAvatarMonogramText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.primary,
-  },
-  cardMain: {
-    flex: 1,
-  },
-  cardMainCentered: {
-    justifyContent: 'center',
-  },
-  scopeTag: {
-    backgroundColor: lightColors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: lightColors.borderLight,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radiusScale.xs,
-  },
-  scopeTagText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: lightColors.textSecondary,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spaceScale.xs,
-    gap: spaceScale.xs,
-  },
-  cardHeaderCentered: {
-    marginBottom: 0,
-  },
-  cardTitle: {
-    fontSize: fontSizeScale.md,
-    fontWeight: '600',
-    color: lightColors.text,
-    flex: 1
-  },
-  cardTitleActive: {
-    color: lightColors.primary
-  },
-  cardTitleUnread: {
-    fontWeight: '700',
-    color: lightColors.text
-  },
-  cardHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spaceScale.xs,
-    flexShrink: 0,
-  },
-  cardTime: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.textMuted,
-  },
-  cardSnippet: {
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textSecondary,
-    marginBottom: spaceScale.xs
-  },
-  cardSnippetUnread: {
-    fontWeight: '600',
-    color: lightColors.text
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spaceScale.xs
-  },
-  statBadge: {
-    backgroundColor: lightColors.emergencyBg,
-    borderColor: lightColors.emergencyBorder,
-    borderWidth: 1,
-    paddingHorizontal: spaceScale.xs,
-    paddingVertical: 2,
-    borderRadius: radiusScale.xs
-  },
-  statBadgeText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.emergencyText
-  },
-  urgentBadge: {
-    backgroundColor: lightColors.urgentBg,
-    borderColor: lightColors.urgentBorder,
-    borderWidth: 1,
-    paddingHorizontal: spaceScale.xs,
-    paddingVertical: 2,
-    borderRadius: radiusScale.xs
-  },
-  urgentBadgeText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.urgentText
-  },
-  unreadBadge: {
-    backgroundColor: lightColors.primary,
-    paddingHorizontal: spaceScale.sm,
-    paddingVertical: 2,
-    borderRadius: radiusScale.full,
-    marginLeft: 'auto'
-  },
-  unreadBadgeText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.onPrimary
-  },
-  stateContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spaceScale.xl
-  },
-  stateText: {
-    marginTop: spaceScale.sm,
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted
-  },
-  emptyIcon: {
-    fontSize: fontSizeScale['3xl'],
-    marginBottom: spaceScale.sm
-  },
-  emptyTitle: {
-    fontSize: fontSizeScale.lg,
-    fontWeight: '600',
-    color: lightColors.text,
-    marginBottom: spaceScale.xs
-  },
-  emptySubtitle: {
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted,
-    textAlign: 'center',
-    marginBottom: spaceScale.md
-  },
-  emptyCta: {
-    minHeight: sizes.touchTarget,
-    paddingHorizontal: spaceScale.lg,
-    borderRadius: radiusScale.sm,
-    backgroundColor: lightColors.primary,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  emptyCtaText: {
-    color: lightColors.onPrimary,
-    fontWeight: '600',
-    fontSize: fontSizeScale.sm
-  },
-  errorIcon: {
-    fontSize: fontSizeScale['3xl'],
-    marginBottom: spaceScale.sm
-  },
-  errorTitle: {
-    fontSize: fontSizeScale.lg,
-    fontWeight: '600',
-    color: lightColors.emergencyText,
-    marginBottom: spaceScale.xs
-  },
-  errorSubtitle: {
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted,
-    textAlign: 'center'
-  },
-  iconText: {
-    fontSize: fontSizeScale['2xl']
-  }
-});
+type ResolvedCommsColors = Record<keyof typeof lightColors, string>;
+
+function createStyles(c: ResolvedCommsColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.surface,
+      borderRightWidth: 1,
+      borderRightColor: c.border
+    },
+    collapsedContainer: {
+      width: 64,
+      backgroundColor: c.surface,
+      alignItems: 'center',
+      paddingTop: spaceScale.md,
+      borderRightWidth: 1,
+      borderRightColor: c.border
+    },
+    touchTarget: {
+      minWidth: sizes.touchTarget,
+      minHeight: sizes.touchTarget,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    collapsedBadge: {
+      marginTop: spaceScale.xs,
+      backgroundColor: c.emergency,
+      borderRadius: radiusScale.full,
+      paddingHorizontal: spaceScale.xs
+    },
+    collapsedBadgeText: {
+      color: c.onPrimary,
+      fontWeight: '700'
+    },
+    header: {
+      padding: spaceScale.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border
+    },
+    headerTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spaceScale.sm
+    },
+    headerTitle: {
+      fontSize: fontSizeScale.xl,
+      fontWeight: '700',
+      color: c.text
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spaceScale.xs
+    },
+    headerButton: {
+      minWidth: sizes.touchTarget,
+      minHeight: sizes.touchTarget,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radiusScale.sm,
+      backgroundColor: c.surfaceSubtle
+    },
+    headerButtonText: {
+      color: c.textSecondary,
+      fontSize: fontSizeScale.md
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spaceScale.sm,
+      marginBottom: spaceScale.sm,
+    },
+    primaryIconButton: {
+      minHeight: 38,
+      paddingHorizontal: spaceScale.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radiusScale.full,
+      backgroundColor: c.primary,
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.12,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    primaryIconButtonText: {
+      color: c.onPrimary,
+      fontSize: fontSizeScale.sm,
+      fontWeight: '600'
+    },
+    connectionBanner: {
+      paddingVertical: spaceScale.xs,
+      paddingHorizontal: spaceScale.sm,
+      borderRadius: radiusScale.xs,
+      marginBottom: spaceScale.xs
+    },
+    reconnectingBanner: {
+      backgroundColor: c.warningBg,
+      borderColor: c.warningBorder,
+      borderWidth: 1
+    },
+    disconnectedBanner: {
+      backgroundColor: c.emergencyBg,
+      borderColor: c.emergencyBorder,
+      borderWidth: 1
+    },
+    connectionText: {
+      fontSize: fontSizeScale.xs,
+      color: c.text
+    },
+    searchContainer: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.surfaceSubtle,
+      borderRadius: radiusScale.full,
+      borderWidth: 1,
+      borderColor: c.border,
+      paddingHorizontal: spaceScale.md,
+      minHeight: 38,
+    },
+    searchIconWrap: {
+      width: 14,
+      height: 14,
+      marginRight: spaceScale.xs,
+      position: 'relative',
+      opacity: 0.7,
+    },
+    searchIconLens: {
+      width: 10,
+      height: 10,
+      borderRadius: radiusScale.full,
+      borderWidth: 1.5,
+      borderColor: c.textMuted,
+    },
+    searchIconStem: {
+      position: 'absolute',
+      right: 1,
+      bottom: 1,
+      width: 5,
+      height: 1.5,
+      backgroundColor: c.textMuted,
+      transform: [{ rotate: '45deg' }],
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: fontSizeScale.sm,
+      color: c.text
+    },
+    scopesScroll: {
+      flexDirection: 'row'
+    },
+    scopePill: {
+      minHeight: 34,
+      paddingHorizontal: spaceScale.md,
+      paddingVertical: spaceScale.xs,
+      borderRadius: radiusScale.full,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      marginRight: spaceScale.xs,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    scopePillActive: {
+      backgroundColor: c.primaryLight,
+      borderColor: c.primaryBorder,
+    },
+    scopePillText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '500',
+      color: c.textSecondary
+    },
+    scopePillTextActive: {
+      color: c.primaryDark,
+      fontWeight: '700'
+    },
+    listContainer: {
+      flex: 1
+    },
+    card: {
+      padding: spaceScale.md,
+      borderBottomWidth: 1,
+      borderBottomColor: c.borderLight,
+      minHeight: sizes.touchTarget
+    },
+    cardActive: {
+      backgroundColor: c.primarySubtle,
+      borderLeftWidth: 4,
+      borderLeftColor: c.primary
+    },
+    cardContentRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spaceScale.sm,
+    },
+    cardContentRowCentered: {
+      alignItems: 'center',
+    },
+    cardAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: radiusScale.full,
+      backgroundColor: c.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
+    },
+    cardAvatarCentered: {
+      marginTop: 0,
+    },
+    cardAvatarDirect: {
+      backgroundColor: c.primarySubtle,
+      borderColor: c.primaryBorder,
+    },
+    cardAvatarCareTeam: {
+      backgroundColor: c.surfaceSubtle,
+      borderColor: c.border,
+    },
+    cardAvatarFacility: {
+      backgroundColor: c.surfaceSubtle,
+      borderColor: c.border,
+    },
+    cardAvatarTriage: {
+      backgroundColor: c.warningBg,
+      borderColor: c.warningBorder,
+    },
+    cardAvatarText: {
+      fontSize: fontSizeScale.sm,
+      fontWeight: '600',
+      color: c.primary,
+    },
+    cardAvatarMonogramText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '700',
+      color: c.primary,
+    },
+    cardMain: {
+      flex: 1,
+    },
+    cardMainCentered: {
+      justifyContent: 'center',
+    },
+    scopeTag: {
+      backgroundColor: c.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: c.borderLight,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: radiusScale.xs,
+    },
+    scopeTagText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '600',
+      color: c.textSecondary,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spaceScale.xs,
+      gap: spaceScale.xs,
+    },
+    cardHeaderCentered: {
+      marginBottom: 0,
+    },
+    cardTitle: {
+      fontSize: fontSizeScale.md,
+      fontWeight: '600',
+      color: c.text,
+      flex: 1
+    },
+    cardTitleActive: {
+      color: c.primary
+    },
+    cardTitleUnread: {
+      fontWeight: '700',
+      color: c.text
+    },
+    cardHeaderRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spaceScale.xs,
+      flexShrink: 0,
+    },
+    cardTime: {
+      fontSize: fontSizeScale.xs,
+      color: c.textMuted,
+    },
+    cardSnippet: {
+      fontSize: fontSizeScale.sm,
+      color: c.textSecondary,
+      marginBottom: spaceScale.xs
+    },
+    cardSnippetUnread: {
+      fontWeight: '600',
+      color: c.text
+    },
+    cardMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spaceScale.xs
+    },
+    statBadge: {
+      backgroundColor: c.emergencyBg,
+      borderColor: c.emergencyBorder,
+      borderWidth: 1,
+      paddingHorizontal: spaceScale.xs,
+      paddingVertical: 2,
+      borderRadius: radiusScale.xs
+    },
+    statBadgeText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '700',
+      color: c.emergencyText
+    },
+    urgentBadge: {
+      backgroundColor: c.urgentBg,
+      borderColor: c.urgentBorder,
+      borderWidth: 1,
+      paddingHorizontal: spaceScale.xs,
+      paddingVertical: 2,
+      borderRadius: radiusScale.xs
+    },
+    urgentBadgeText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '700',
+      color: c.urgentText
+    },
+    unreadBadge: {
+      backgroundColor: c.primary,
+      paddingHorizontal: spaceScale.sm,
+      paddingVertical: 2,
+      borderRadius: radiusScale.full,
+      marginLeft: 'auto'
+    },
+    unreadBadgeText: {
+      fontSize: fontSizeScale.xs,
+      fontWeight: '700',
+      color: c.onPrimary
+    },
+    stateContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spaceScale.xl
+    },
+    stateText: {
+      marginTop: spaceScale.sm,
+      fontSize: fontSizeScale.sm,
+      color: c.textMuted
+    },
+    emptyIcon: {
+      fontSize: fontSizeScale['3xl'],
+      marginBottom: spaceScale.sm
+    },
+    emptyTitle: {
+      fontSize: fontSizeScale.lg,
+      fontWeight: '600',
+      color: c.text,
+      marginBottom: spaceScale.xs
+    },
+    emptySubtitle: {
+      fontSize: fontSizeScale.sm,
+      color: c.textMuted,
+      textAlign: 'center',
+      marginBottom: spaceScale.md
+    },
+    emptyCta: {
+      minHeight: sizes.touchTarget,
+      paddingHorizontal: spaceScale.lg,
+      borderRadius: radiusScale.sm,
+      backgroundColor: c.primary,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    emptyCtaText: {
+      color: c.onPrimary,
+      fontWeight: '600',
+      fontSize: fontSizeScale.sm
+    },
+    errorIcon: {
+      fontSize: fontSizeScale['3xl'],
+      marginBottom: spaceScale.sm,
+      color: c.emergencyText
+    },
+    errorTitle: {
+      fontSize: fontSizeScale.lg,
+      fontWeight: '600',
+      color: c.emergencyText,
+      marginBottom: spaceScale.xs
+    },
+    errorSubtitle: {
+      fontSize: fontSizeScale.sm,
+      color: c.textMuted,
+      textAlign: 'center'
+    },
+    iconText: {
+      fontSize: fontSizeScale['2xl'],
+      color: c.primary
+    }
+  });
+}

@@ -520,13 +520,14 @@ export default function LifestyleSocialTab({
             {canWritePatients && autoSaveStatus === 'saving' ? (
               <Badge label="Saving changes…" variant="warning" size="sm" icon="clock" />
             ) : canWritePatients && autoSaveStatus === 'error' ? (
-              <Pressable
-                onPress={() => void performAutoSave()}
-                accessibilityRole="button"
+              <Button
+                variant="dangerOutline"
+                size="xs"
+                icon="alertCircle"
+                title="Autosave failed • Retry"
                 accessibilityLabel="Retry saving lifestyle changes"
-              >
-                <Badge label="Autosave failed • Retry" variant="emergency" size="sm" icon="alertCircle" />
-              </Pressable>
+                onPress={() => void performAutoSave()}
+              />
             ) : lastSavedBadgeLabel ? (
               <Badge
                 label={lastSavedBadgeLabel}

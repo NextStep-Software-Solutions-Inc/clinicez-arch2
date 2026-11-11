@@ -1039,6 +1039,7 @@ const styles = StyleSheet.create({
   cohortTabActive: {
     backgroundColor: theme.colors.primarySubtle,
     borderColor: theme.colors.primary,
+    ...theme.shadows.brandSubtle,
   },
   cohortCountPill: {
     paddingHorizontal: theme.spacing.xs,
@@ -1071,6 +1072,7 @@ const styles = StyleSheet.create({
   },
   segmentBtnActive: {
     backgroundColor: theme.colors.primaryLight,
+    ...theme.shadows.brandSubtle,
   },
   dispositionList: {
     gap: theme.spacing.xs,

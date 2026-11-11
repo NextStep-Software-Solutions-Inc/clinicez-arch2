@@ -3,7 +3,6 @@ import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from './ThemedText';
 import Button from './Button';
-import { IconSlot } from './Icon';
 import Modal from './Modal';
 import { getDaysInMonth, formatDateMask, validateDateString } from './ValidatedDateInput';
 
@@ -306,32 +305,26 @@ export default function DateRangePickerModal({
 
         {/* Month Navigation Header */}
         <View style={styles.monthHeader}>
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="chevronLeft"
+            iconOnly
             accessibilityLabel="Previous month"
             onPress={handlePrevMonth}
-            style={styles.navButton}
-            hitSlop={theme.spacing.sm}
-          >
-            <IconSlot value="chevronLeft" size={theme.sizes.iconMd} color={theme.colors.text} />
-          </Pressable>
+          />
 
           <ThemedText style={styles.monthTitleText}>{monthName}</ThemedText>
 
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            icon="chevronRight"
+            iconOnly
             accessibilityLabel="Next month"
-            onPress={handleNextMonth}
             disabled={isNextMonthDisabled}
-            style={[styles.navButton, isNextMonthDisabled && styles.navButtonDisabled]}
-            hitSlop={theme.spacing.sm}
-          >
-            <IconSlot
-              value="chevronRight"
-              size={theme.sizes.iconMd}
-              color={isNextMonthDisabled ? theme.colors.textLight : theme.colors.text}
-            />
-          </Pressable>
+            onPress={handleNextMonth}
+          />
         </View>
 
         {/* Day of Week Row */}

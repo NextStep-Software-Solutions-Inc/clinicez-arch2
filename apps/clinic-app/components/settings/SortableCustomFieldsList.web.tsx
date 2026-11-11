@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import {
   DndContext,
   closestCenter,
@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
+import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
@@ -137,40 +138,24 @@ export function SortableFieldRow({
 
           {showArrows && (
             <View style={styles.reorderButtonPair}>
-              <Pressable
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="arrowUp"
+                iconOnly
                 onPress={() => onMoveUp(field.id)}
                 disabled={isFirst || isReordering}
-                accessibilityRole="button"
                 accessibilityLabel={`Move "${field.label}" up`}
-                hitSlop={{ top: 9, bottom: 9, left: 9, right: 9 }}
-                style={[
-                  styles.subtleArrowBtn,
-                  (isFirst || isReordering) && styles.subtleArrowBtnDisabled,
-                ]}
-              >
-                <Icon
-                  name="arrowUp"
-                  size={14}
-                  color={isFirst || isReordering ? theme.colors.textLight : theme.colors.textMuted}
-                />
-              </Pressable>
-              <Pressable
+              />
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="arrowDown"
+                iconOnly
                 onPress={() => onMoveDown(field.id)}
                 disabled={isLast || isReordering}
-                accessibilityRole="button"
                 accessibilityLabel={`Move "${field.label}" down`}
-                hitSlop={{ top: 9, bottom: 9, left: 9, right: 9 }}
-                style={[
-                  styles.subtleArrowBtn,
-                  (isLast || isReordering) && styles.subtleArrowBtnDisabled,
-                ]}
-              >
-                <Icon
-                  name="arrowDown"
-                  size={14}
-                  color={isLast || isReordering ? theme.colors.textLight : theme.colors.textMuted}
-                />
-              </Pressable>
+              />
             </View>
           )}
         </View>

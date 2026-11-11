@@ -37,6 +37,7 @@ export const CASHIER_MODE_OPTIONS: CashierModeOption[] = [
 
 export interface CashierStationSettingsCardProps {
   cashierMode: 'ClinicDesk' | 'CashierCounter';
+  savedCashierMode?: 'ClinicDesk' | 'CashierCounter' | null;
   onChangeCashierMode: (mode: 'ClinicDesk' | 'CashierCounter') => void;
   onSave?: () => Promise<void> | void;
   saving?: boolean;
@@ -45,11 +46,16 @@ export interface CashierStationSettingsCardProps {
 
 export default function CashierStationSettingsCard({
   cashierMode,
+  savedCashierMode,
   onChangeCashierMode,
   onSave,
   saving = false,
   showSkeletons = false,
 }: CashierStationSettingsCardProps) {
+  const isDirty =
+    savedCashierMode !== undefined && savedCashierMode !== null
+      ? cashierMode !== savedCashierMode
+      : false;
   return (
     <Card>
       <CardHeader
@@ -118,7 +124,7 @@ export default function CashierStationSettingsCard({
               })}
             </View>
 
-            {onSave && (
+            {onSave && (isDirty || saving) ? (
               <View style={styles.actionsEnd}>
                 <Button
                   title="Save billing station preferences"
@@ -126,7 +132,7 @@ export default function CashierStationSettingsCard({
                   loading={saving}
                 />
               </View>
-            )}
+            ) : null}
           </View>
         )}
       </CardContent>

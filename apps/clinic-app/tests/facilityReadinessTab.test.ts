@@ -7,18 +7,22 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 // Mock React Native modules for Bun environment
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress }: any) =>
-    React.createElement(
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, testID, style }: any) => {
+    const resolvedStyle = typeof style === 'function' ? style({ pressed: false, hovered: false }) : style;
+    return React.createElement(
       'div',
       {
         'data-component': name,
+        ...(testID ? { 'data-testid': testID } : {}),
         ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
         ...(accessibilityRole ? { role: accessibilityRole } : {}),
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
+        ...(resolvedStyle ? { 'data-style': JSON.stringify(resolvedStyle) } : {}),
       },
       placeholder,
       children
     );
+  };
   Comp.displayName = name;
   return Comp;
 };
@@ -96,6 +100,8 @@ mock.module('../constants/fonts', () => ({
 }));
 
 const { default: FacilityReadinessTab } = await import('../components/settings/FacilityReadinessTab');
+const { syncActiveTheme, subscribeActiveTheme, theme } = await import('../constants/theme');
+const { DEFAULT_CLINIC_BRAND_COLOR } = await import('../constants/color');
 
 const mockActiveLicense = {
   status: 'Active' as const,
@@ -431,5 +437,143 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
     );
 
     expect(markupConfigured).toContain('Accreditation number PHIC-1234 configured for Konsulta primary care benefits.');
+  });
+
+  test('9. Ready hero card reacts dynamically to Clinic Brand Color and Personal Accent Color overrides with brandSubtle shadow', () => {
+    let notifiedCount = 0;
+    const unsubscribe = subscribeActiveTheme(() => {
+      notifiedCount += 1;
+    });
+
+    try {
+      const violetResolved = syncActiveTheme({
+        brandColorHex: '#7C3AED',
+        userBrandColorHex: null,
+        scheme: 'light',
+      });
+      expect(notifiedCount).toBeGreaterThanOrEqual(1);
+
+      const markupViolet = renderToStaticMarkup(
+        React.createElement(FacilityReadinessTab, {
+          license: mockActiveLicense as any,
+          clinicName: 'St. Jude Health Hub',
+          letterheadAddress: '123 Rizal Ave, Manila',
+          letterheadContact: '0917-000-0000',
+          accreditationNumber: 'PHIC-1234',
+          operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+          staff: mockStaff as any,
+          services: mockServices as any,
+          roles: mockRoles as any,
+          isDirectoryPublished: false,
+          isOnlineBookingPaused: false,
+          isWorkspaceEligible: true,
+          onNavigateTab: () => {},
+          onOpenAddStaff: () => {},
+          onOpenAddService: () => {},
+          onOpenLicenseModal: () => {},
+        })
+      );
+
+      expect(markupViolet).toContain('Facility Ready for Operations');
+      expect(markupViolet).toContain('Ready to Open');
+
+      const heroSliceViolet = markupViolet.split('Facility Pre-Flight Checklist')[0].replace(/&quot;/g, '"');
+      // Hero card reflects Violet brand tokens + brandSubtle translucent rgba shadow (never hardcoded successBg)
+      expect(heroSliceViolet).toContain(
+        `"backgroundColor":"${violetResolved.primarySubtle}","borderColor":"${violetResolved.primaryBorder}"`
+      );
+      expect(heroSliceViolet).toContain(`"shadowColor":"${violetResolved.primaryShadowSubtle}"`);
+      expect(heroSliceViolet).toContain(violetResolved.primaryDark);
+      expect(heroSliceViolet).toContain(violetResolved.primary);
+      expect(heroSliceViolet).not.toContain(violetResolved.successBg);
+
+      // Personal user accent override (#E11D48 Rose) updates hero card dynamically without remounting module
+      const roseResolved = syncActiveTheme({ userBrandColorHex: '#E11D48' });
+      const markupRose = renderToStaticMarkup(
+        React.createElement(FacilityReadinessTab, {
+          license: mockActiveLicense as any,
+          clinicName: 'St. Jude Health Hub',
+          letterheadAddress: '123 Rizal Ave, Manila',
+          letterheadContact: '0917-000-0000',
+          accreditationNumber: 'PHIC-1234',
+          operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+          staff: mockStaff as any,
+          services: mockServices as any,
+          roles: mockRoles as any,
+          isDirectoryPublished: false,
+          isOnlineBookingPaused: false,
+          isWorkspaceEligible: true,
+          onNavigateTab: () => {},
+          onOpenAddStaff: () => {},
+          onOpenAddService: () => {},
+          onOpenLicenseModal: () => {},
+        })
+      );
+
+      const heroSliceRose = markupRose.split('Facility Pre-Flight Checklist')[0].replace(/&quot;/g, '"');
+      expect(heroSliceRose).toContain(roseResolved.primarySubtle);
+      expect(heroSliceRose).toContain(`"shadowColor":"${roseResolved.primaryShadowSubtle}"`);
+      expect(heroSliceRose).toContain(roseResolved.primary);
+    } finally {
+      unsubscribe();
+      syncActiveTheme({
+        brandColorHex: DEFAULT_CLINIC_BRAND_COLOR,
+        userBrandColorHex: null,
+        scheme: 'light',
+      });
+    }
+  });
+
+  test('10. Not-Ready hero card uses neutral surfaceSubtle tint + amber warningBorder/warning badge without clashing with Rose brand color', () => {
+    try {
+      const roseResolved = syncActiveTheme({
+        brandColorHex: '#E11D48',
+        userBrandColorHex: null,
+        scheme: 'light',
+      });
+
+      const markupIncomplete = renderToStaticMarkup(
+        React.createElement(FacilityReadinessTab, {
+          license: mockActiveLicense as any,
+          clinicName: 'St. Jude Health Hub',
+          letterheadAddress: '123 Rizal Ave, Manila',
+          letterheadContact: '0917-000-0000',
+          accreditationNumber: 'PHIC-1234',
+          operatingHours: '', // Mandatory item missing -> 5/6 Required
+          staff: mockStaff as any,
+          services: mockServices as any,
+          roles: mockRoles as any,
+          isDirectoryPublished: false,
+          isOnlineBookingPaused: false,
+          isWorkspaceEligible: true,
+          onNavigateTab: () => {},
+          onOpenAddStaff: () => {},
+          onOpenAddService: () => {},
+          onOpenLicenseModal: () => {},
+        })
+      );
+
+      expect(markupIncomplete).toContain('Facility Setup Required');
+      expect(markupIncomplete).toContain('5/6 Required');
+
+      const heroSliceIncomplete = markupIncomplete.split('Facility Pre-Flight Checklist')[0].replace(/&quot;/g, '"');
+      // Neutral tint + amber warning border + sm shadow on hero card (no clash with Rose primarySubtle/emergencyBg)
+      expect(heroSliceIncomplete).toContain(
+        `"backgroundColor":"${theme.colors.surfaceSubtle}","borderColor":"${theme.colors.warningBorder}"`
+      );
+      expect(heroSliceIncomplete).toContain(`"shadowColor":"${roseResolved.shadowSmColor}"`);
+      expect(heroSliceIncomplete).toContain(theme.colors.warningBg);
+      expect(heroSliceIncomplete).toContain(theme.colors.warningText);
+      expect(heroSliceIncomplete).not.toContain(roseResolved.primarySubtle);
+      expect(heroSliceIncomplete).not.toContain(roseResolved.emergencyBg);
+      // Progress bar fill still follows active brand primary
+      expect(heroSliceIncomplete).toContain(`"backgroundColor":"${roseResolved.primary}"`);
+    } finally {
+      syncActiveTheme({
+        brandColorHex: DEFAULT_CLINIC_BRAND_COLOR,
+        userBrandColorHex: null,
+        scheme: 'light',
+      });
+    }
   });
 });

@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Pressable,
   Modal,
 } from 'react-native';
 import ThemedText from '../ui/ThemedText';
@@ -57,14 +56,15 @@ export default function DuplicatePatientWarningModal({
                 One or more existing patient records closely match the details you entered. Please verify whether this patient already has an existing chart in Clinic EZ.
               </ThemedText>
             </View>
-            <Pressable
+            <Button
+              icon="close"
+              iconOnly
+              variant="ghost"
+              size="sm"
+              accessibilityLabel="Close"
               onPress={onClose}
-              style={styles.closeBtn}
-              hitSlop={theme.spacing.sm}
               testID="close-duplicate-warning-modal-btn"
-            >
-              <IconSlot value="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-            </Pressable>
+            />
           </View>
 
           {/* Matches List */}
@@ -195,9 +195,6 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: theme.spacing.xs,
-  },
-  closeBtn: {
-    padding: theme.spacing.xs,
   },
   listScrollView: {
     maxHeight: 320,

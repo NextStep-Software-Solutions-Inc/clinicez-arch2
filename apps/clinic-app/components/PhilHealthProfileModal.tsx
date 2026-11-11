@@ -1126,14 +1126,18 @@ export default function PhilHealthProfileModal({
               />
             )}
 
-            <Pressable
+            <Button
+              variant="ghost"
+              size="xs"
+              icon={showAllVaccines ? undefined : 'plus'}
+              title={
+                showAllVaccines
+                  ? 'Show only recommended / recorded categories'
+                  : 'Show all vaccine categories'
+              }
               onPress={() => setShowAllVaccines((prev) => !prev)}
               style={styles.showAllVaccinesBtn}
-            >
-              <ThemedText variant="smallBold" color={theme.colors.primary}>
-                {showAllVaccines ? 'Show only recommended / recorded categories' : '+ Show all vaccine categories'}
-              </ThemedText>
-            </Pressable>
+            />
           </View>
         );
         })()}
@@ -1429,6 +1433,7 @@ const styles = StyleSheet.create({
   },
   tabItemActive: {
     borderBottomColor: theme.colors.primary,
+    ...theme.shadows.brandSubtle,
   },
   sectionTitle: {
     marginBottom: theme.spacing.sm,
@@ -1620,8 +1625,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   showAllVaccinesBtn: {
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xs,
     marginTop: theme.spacing.sm,
     alignSelf: 'flex-start',
   },

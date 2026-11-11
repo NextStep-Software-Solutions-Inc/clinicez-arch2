@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '@constants/theme';
 import {
   ThemedText,
@@ -1735,13 +1735,14 @@ export default function ClinicalHistoryTab({
                     ) : null}
                   </View>
                   {canWritePatients ? (
-                    <Pressable
-                      style={styles.actionIconBtn}
-                      onPress={() => handleDeleteAllergy(allergy)}
+                    <Button
+                      variant="dangerGhost"
+                      size="xs"
+                      icon="trash"
+                      iconOnly
                       accessibilityLabel="Delete allergy"
-                    >
-                      <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                    </Pressable>
+                      onPress={() => handleDeleteAllergy(allergy)}
+                    />
                   ) : null}
                 </View>
               </View>
@@ -2026,25 +2027,24 @@ export default function ClinicalHistoryTab({
                   </View>
                   {canWritePatients ? (
                     <View style={styles.cardActions}>
-                      <Pressable
-                        style={styles.actionIconBtn}
-                        onPress={() => openEditModal(item)}
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon="edit"
+                        iconOnly
                         accessibilityLabel="Edit procedure"
-                      >
-                        <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                      </Pressable>
-                      <Pressable
-                        style={styles.actionIconBtn}
-                        onPress={() => handleDelete(item)}
-                        disabled={deletingId === item.id}
+                        onPress={() => openEditModal(item)}
+                      />
+                      <Button
+                        variant="dangerGhost"
+                        size="xs"
+                        icon="trash"
+                        iconOnly
                         accessibilityLabel="Delete procedure"
-                      >
-                        {deletingId === item.id ? (
-                          <ActivityIndicator size="small" color={theme.colors.emergencyText} />
-                        ) : (
-                          <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                        )}
-                      </Pressable>
+                        loading={deletingId === item.id}
+                        disabled={deletingId === item.id}
+                        onPress={() => handleDelete(item)}
+                      />
                     </View>
                   ) : null}
                 </View>
@@ -2397,10 +2397,6 @@ const styles = StyleSheet.create({
   cardActions: {
     flexDirection: 'row',
     gap: theme.spacing.xs,
-  },
-  actionIconBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
   },
   detailRow: {
     flexDirection: 'row',

@@ -19,7 +19,7 @@ export interface AlertRequest {
   cancelable: boolean;
 }
 
-export type ToastKind = 'success' | 'error' | 'info';
+export type ToastKind = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastAction {
   label: string;
@@ -114,7 +114,7 @@ export const notify = {
   info: (message: string, options?: number | ToastOptions) =>
     showToast('info', message, options),
   warning: (message: string, options?: number | ToastOptions) =>
-    showToast('info', message, options),
+    showToast('warning', message, options),
 };
 
 export const Alert = {

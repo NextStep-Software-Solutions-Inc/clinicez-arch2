@@ -4523,31 +4523,26 @@ export default function ConsultationsScreen() {
                               </ThemedText>
                             </View>
                             {!isSigned ? (
-                              <Pressable
-                                accessibilityRole="button"
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                icon="edit"
+                                title={lab.instructions ? 'Edit Notes' : '+ Add Notes'}
                                 accessibilityLabel={`Edit instructions for ${lab.name}`}
                                 onPress={() => handleOpenEditInstructions(lab, 'lab')}
-                                hitSlop={theme.spacing.xs}
-                                style={styles.editNotesInlineBtn}
-                              >
-                                <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                                <ThemedText variant="captionBold" color={theme.colors.primary}>
-                                  {lab.instructions ? 'Edit Notes' : '+ Add Notes'}
-                                </ThemedText>
-                              </Pressable>
+                              />
                             ) : null}
                           </View>
                         </View>
                         {!isSigned ? (
-                          <Pressable
-                            accessibilityRole="button"
+                          <Button
+                            variant="dangerGhost"
+                            size="xs"
+                            icon="close"
+                            iconOnly
                             accessibilityLabel={`Remove ${lab.name}`}
                             onPress={() => handleRemoveLab(lab.name)}
-                            hitSlop={theme.spacing.sm}
-                            style={styles.orderedDeleteBtn}
-                          >
-                            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                          </Pressable>
+                          />
                         ) : null}
                       </View>
                     );
@@ -4750,18 +4745,14 @@ export default function ConsultationsScreen() {
                                 </ThemedText>
                               </View>
                               {!isSigned ? (
-                                <Pressable
-                                  accessibilityRole="button"
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  icon="edit"
+                                  title={proc.instructions ? 'Edit Notes' : 'Add Notes'}
                                   accessibilityLabel={`Edit instructions for ${proc.name}`}
                                   onPress={() => handleOpenEditInstructions(proc, 'procedure')}
-                                  hitSlop={theme.spacing.xs}
-                                  style={styles.editNotesInlineBtn}
-                                >
-                                  <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                                  <ThemedText variant="captionBold" color={theme.colors.primary}>
-                                    {proc.instructions ? 'Edit Notes' : 'Add Notes'}
-                                  </ThemedText>
-                                </Pressable>
+                                />
                               ) : null}
                             </View>
                             {!isSigned && !isSent ? (
@@ -4778,15 +4769,14 @@ export default function ConsultationsScreen() {
                           </View>
                         </View>
                         {!isSigned ? (
-                          <Pressable
-                            accessibilityRole="button"
+                          <Button
+                            variant="dangerGhost"
+                            size="xs"
+                            icon="close"
+                            iconOnly
                             accessibilityLabel={`Remove ${proc.name}`}
                             onPress={() => handleRemoveProcedure(proc.name, proc.toothNumber)}
-                            hitSlop={theme.spacing.sm}
-                            style={styles.orderedDeleteBtn}
-                          >
-                            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                          </Pressable>
+                          />
                         ) : null}
                       </View>
                     );
@@ -5071,14 +5061,14 @@ export default function ConsultationsScreen() {
                         ) : null}
                       </View>
                       {!isSigned ? (
-                        <Pressable
-                          accessibilityRole="button"
+                        <Button
+                          variant="dangerGhost"
+                          size="xs"
+                          icon="close"
+                          iconOnly
                           accessibilityLabel={`Remove ${rx.genericName}`}
                           onPress={() => handleRemovePrescription(rx.id)}
-                          hitSlop={theme.spacing.sm}
-                        >
-                          <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-                        </Pressable>
+                        />
                       ) : null}
                     </View>
                   ))}
@@ -5208,19 +5198,18 @@ export default function ConsultationsScreen() {
                         'Strict Medication Compliance: Complete the full course as prescribed',
                         'Wound Care: Keep area clean, dry, and change dressing daily',
                       ].map((preset) => (
-                        <Pressable
+                        <Button
                           key={preset}
+                          variant="subtle"
+                          size="xs"
+                          icon="plus"
+                          title={preset.split(':')[0].split('(')[0].trim()}
                           onPress={() => {
                             setHomeInstructions((prev) =>
                               prev.trim() ? `${prev.trim()}\n• ${preset}` : `• ${preset}`
                             );
                           }}
-                          style={styles.presetChip}
-                        >
-                          <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                            + {preset.split(':')[0].split('(')[0].trim()}
-                          </ThemedText>
-                        </Pressable>
+                        />
                       ))}
                     </View>
                   </View>
@@ -5701,20 +5690,17 @@ export default function ConsultationsScreen() {
                       <Badge label={statusInfo.label} variant={statusInfo.variant} size="sm" />
                     ) : null}
                     {allowChipLevelCalling && ['Triaged', 'ReEvaluation', 'Waiting'].includes(p.status) ? (
-                      <Pressable
-                        accessibilityRole="button"
+                      <Button
+                        variant="primary"
+                        size="xs"
+                        icon="bell"
+                        title="Call"
                         accessibilityLabel={`Call ${p.patientName} to room`}
                         onPress={(e) => {
                           e.stopPropagation?.();
                           handleOpenCallModal(p);
                         }}
-                        style={styles.chipCallBtn}
-                      >
-                        <Icon name="bell" size={11} color={theme.colors.onPrimary} />
-                        <ThemedText variant="captionBold" color={theme.colors.onPrimary} style={styles.chipCallBtnText}>
-                          Call
-                        </ThemedText>
-                      </Pressable>
+                      />
                     ) : null}
                   </Pressable>
                 );
@@ -7014,13 +7000,6 @@ const styles = StyleSheet.create({
   flexOne: {
     flex: 1,
   },
-  editNotesInlineBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: 2,
-    paddingHorizontal: theme.spacing.xs,
-  },
   procedureCardActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7050,9 +7029,6 @@ const styles = StyleSheet.create({
   roomPillActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
-  },
-  orderedDeleteBtn: {
-    padding: theme.spacing.xs,
   },
   procedureHandoffCard: {
     marginTop: theme.spacing.md,
@@ -7129,9 +7105,6 @@ const styles = StyleSheet.create({
   orderedLabNotes: {
     fontStyle: 'italic',
   },
-  orderedLabDeleteBtn: {
-    padding: theme.spacing.xs,
-  },
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -7184,20 +7157,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-  },
-  chipCallBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radii.xs,
-    backgroundColor: theme.colors.primary,
-    marginLeft: 4,
-  },
-  chipCallBtnText: {
-    fontSize: theme.typography.caption.fontSize,
-    lineHeight: theme.typography.caption.lineHeight,
   },
   callModalContent: {
     gap: theme.spacing.md,
@@ -7654,6 +7613,7 @@ const styles = StyleSheet.create({
   chartTabButtonActive: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+    ...theme.shadows.brandSubtle,
   },
   credentialBadgesRow: {
     flexDirection: 'row',
@@ -7675,14 +7635,6 @@ const styles = StyleSheet.create({
   },
   presetsSection: {
     marginVertical: theme.spacing.xs,
-  },
-  presetChip: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 5,
-    borderRadius: theme.radii.full,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
   },
   postEncounterContainer: {
     gap: theme.spacing.md,
@@ -7849,28 +7801,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
   },
-  soaDeleteButton: {
-    width: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: theme.sizes.touchTarget,
-  },
   soaQtyStepper: {
     flex: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-  },
-  soaStepperBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   soaQtyText: {
     minWidth: 20,

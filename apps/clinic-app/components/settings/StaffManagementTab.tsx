@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -41,6 +41,49 @@ import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
 import { resolveStaffBadge, getAvailableStaffActions } from '../../utils/staffStatus';
 import { buildStaffCreationPayload, validateStaffEmailNotInClinic } from '../../utils/staffManagement';
 
+export const DUPLICATE_STAFF_EMAIL_ERROR =
+  'This email address already belongs to an existing staff member in this clinic.';
+
+/**
+ * Finds an existing staff member in the clinic whose email matches `email`
+ * (case-insensitive, trimmed), optionally excluding `excludeStaffId` (Issue 113).
+ */
+export function findDuplicateStaffByEmail<T extends { id?: string; email?: string | null }>(
+  email: string,
+  staffList: Array<T>,
+  excludeStaffId?: string
+): T | null {
+  const normalized = (email ?? '').trim().toLowerCase();
+  if (!normalized || !Array.isArray(staffList)) {
+    return null;
+  }
+
+  for (const member of staffList) {
+    if (!member) continue;
+    if (excludeStaffId && member.id === excludeStaffId) continue;
+    const candidate = (member.email ?? '').trim().toLowerCase();
+    if (candidate && candidate === normalized) {
+      return member;
+    }
+  }
+
+  return null;
+}
+
+export function validateAddStaffDuplicateEmail(
+  email: string,
+  staffList: Array<{ id?: string; email?: string | null }>,
+  inviteDeliveryMode: 'email' | 'link' | 'password' | 'none' = 'email'
+): string | null {
+  if (inviteDeliveryMode === 'none') {
+    return null;
+  }
+  if (!email || !email.trim()) {
+    return null;
+  }
+  return findDuplicateStaffByEmail(email, staffList) ? DUPLICATE_STAFF_EMAIL_ERROR : null;
+}
+
 interface StaffManagementTabProps {
   staff: StaffMember[];
   setStaff: React.Dispatch<React.SetStateAction<StaffMember[]>>;
@@ -71,7 +114,7 @@ export default function StaffManagementTab({
   const { isCompact } = useBreakpoint();
   const { user } = useAuth();
   const { current: currentStaff, reload: refreshGlobalStaff } = useStaff();
-  const { rooms = [], refreshRooms } = useClinic();
+  const { facilityName, rooms = [], refreshRooms } = useClinic();
 
   const isSelf = (target: StaffMember | null | undefined): boolean =>
     isSelfStaffMember(target, user) || isSelfStaffMember(target, currentStaff);
@@ -231,20 +274,13 @@ export default function StaffManagementTab({
     if (newRole !== 'Doctor' && newRole !== 'Nurse') {
       setAssignedRoomIds([]);
     }
-    if (newRole === 'Doctor') {
-      if (!title || title === 'RN' || title === 'Ms.' || title === 'Mr.') setTitle('Dr.');
-    } else if (newRole === 'Nurse') {
-      if (!title || title === 'Dr.') setTitle('RN');
-    } else if (title === 'Dr.' || title === 'RN') {
-      setTitle('');
-    }
   };
 
   const handleOpenAddModal = () => {
     setFirstName('');
     setLastName('');
     setMiddleName('');
-    setTitle('Dr.');
+    setTitle('');
     const defaultDoctor =
       systemRoleOptions.find((r) => r.staffRole === 'Doctor') ||
       systemRoleOptions[0] ||
@@ -271,7 +307,6 @@ export default function StaffManagementTab({
 
   useEffect(() => {
     if (showAddModal && !temporaryPassword) {
-      setTitle((prev) => prev || 'Dr.');
       const defaultDoctor =
         systemRoleOptions.find((r) => r.staffRole === 'Doctor') ||
         systemRoleOptions[0] ||
@@ -290,7 +325,7 @@ export default function StaffManagementTab({
       setFirstName('');
       setLastName('');
       setMiddleName('');
-      setTitle('Dr.');
+      setTitle('');
       const defaultDoctor =
         systemRoleOptions.find((r) => r.staffRole === 'Doctor') ||
         systemRoleOptions[0] ||
@@ -438,6 +473,13 @@ export default function StaffManagementTab({
       return;
     }
 
+    const preflightDuplicateError = validateAddStaffDuplicateEmail(email, staff, inviteDeliveryMode);
+    if (preflightDuplicateError) {
+      setEmailFieldError(preflightDuplicateError);
+      setAddError(preflightDuplicateError);
+      return;
+    }
+
     let deliveryPayload: ReturnType<typeof buildStaffCreationPayload>;
     try {
       deliveryPayload = buildStaffCreationPayload(
@@ -450,7 +492,10 @@ export default function StaffManagementTab({
       return;
     }
 
-    const duplicateAddEmailError = validateStaffEmailNotInClinic(deliveryPayload.email, staff);
+    const duplicateAddEmailError =
+      (deliveryPayload.email && findDuplicateStaffByEmail(deliveryPayload.email, staff)
+        ? DUPLICATE_STAFF_EMAIL_ERROR
+        : null) || validateStaffEmailNotInClinic(deliveryPayload.email, staff);
     if (duplicateAddEmailError) {
       setEmailFieldError(duplicateAddEmailError);
       setAddError(duplicateAddEmailError);
@@ -790,20 +835,24 @@ export default function StaffManagementTab({
     }
   };
 
+  const previewDoctorName = [title.trim(), firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+
   return (
     <View style={styles.container}>
       <Card>
         <CardHeader
-          title="Staff Directory & Roster"
+          title="Clinic Staff & Schedules"
           subtitle={
-            maxStaffSeats != null
-              ? `Operational seats: ${activeStaffCount} of ${maxStaffSeats} currently assigned`
+            showSkeletons
+              ? undefined
+              : maxStaffSeats != null
+              ? `Staff seats used: ${activeStaffCount} of ${maxStaffSeats}`
               : `Active staff members: ${activeStaffCount}`
           }
           rightAction={
             <View style={[styles.headerActionsRow, isCompact && styles.headerActionsRowMobile]}>
               <Button
-                title="Doctor Rosters & Schedules"
+                title="Weekly Schedules"
                 icon="calendar"
                 variant="outline"
                 size="sm"
@@ -828,12 +877,12 @@ export default function StaffManagementTab({
           {showSkeletons ? (
             <SkeletonList rows={3} />
           ) : staffLoadError ? (
-            <ErrorState compact title="Could not load staff roster" message={staffLoadError} onRetry={onRefreshStaff} />
+            <ErrorState compact title="Could not load clinic staff" message={staffLoadError} onRetry={onRefreshStaff} />
           ) : staff.length === 0 ? (
             <EmptyState
               icon="staff"
-              title="No staff members registered"
-              description="Add doctors, nurses, receptionists and cashiers so they can log in to the workstation."
+              title="No staff members added yet"
+              description="Add doctors, nurses, receptionists, and cashiers so they can sign in and care for patients."
               actionTitle="Add first staff member"
               onAction={handleOpenAddModal}
             />
@@ -966,7 +1015,7 @@ export default function StaffManagementTab({
                                     id: 'resend-invite',
                                     label: 'Resend Invitation Email',
                                     icon: 'mail' as const,
-                                    hint: 'Generate new token & send email',
+                                    hint: 'Send a fresh invitation email',
                                     onPress: () => handleResendInvite(s),
                                   },
                                 ]
@@ -977,7 +1026,7 @@ export default function StaffManagementTab({
                                     id: 'reinvite-staff',
                                     label: 'Re-invite Staff Member',
                                     icon: 'mail' as const,
-                                    hint: 'Generate fresh 7-day token & send email',
+                                    hint: 'Send a new 7-day invitation email',
                                     onPress: () => handleReinviteStaff(s),
                                   },
                                 ]
@@ -1087,11 +1136,12 @@ export default function StaffManagementTab({
                   : inviteDeliveryMode === 'link'
                   ? 'Generate Invite Link'
                   : inviteDeliveryMode === 'password'
-                  ? 'Create & Provision'
+                  ? 'Create Account'
                   : 'Add Staff Member'
               }
               onPress={handleCreateStaff}
               loading={addingStaff}
+              disabled={addingStaff || Boolean(validateAddStaffDuplicateEmail(email, staff, inviteDeliveryMode))}
             />
           </View>
         }
@@ -1105,11 +1155,11 @@ export default function StaffManagementTab({
           </View>
         ) : null}
 
-        {/* 1. Professional Archetype (Statutory Qualification) */}
+        {/* 1. Staff Role */}
         <View style={styles.roleSelectionGroup}>
-          <FieldGroup label="Professional Archetype *">
+          <FieldGroup label="Staff Role *">
             <ThemedText variant="caption" color={theme.colors.textMuted}>
-              Determines statutory credentials (e.g. PRC license for Doctors, consultation/triage room stationing).
+              Choose their clinic role (doctors require a PRC license number; doctors and nurses can be assigned to rooms).
             </ThemedText>
             <ScrollView
               horizontal
@@ -1129,17 +1179,17 @@ export default function StaffManagementTab({
           </FieldGroup>
         </View>
 
-        {/* 2. Assigned Permission Profile */}
+        {/* 2. Access Level */}
         <View style={styles.roleSelectionGroup}>
-          <FieldGroup label="Permission Profile *">
+          <FieldGroup label="Access Level *">
             <ThemedText variant="caption" color={theme.colors.textMuted}>
-              Select a standard system profile or custom permission profile for operational access.
+              Choose what this staff member can view and manage in the clinic.
             </ThemedText>
 
-            {/* Standard Permission Profiles */}
+            {/* Standard Roles */}
             <View style={styles.roleSubgroup}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Standard Permission Profiles
+                Standard Roles
               </ThemedText>
               <ScrollView
                 horizontal
@@ -1158,12 +1208,12 @@ export default function StaffManagementTab({
               </ScrollView>
             </View>
 
-            {/* Custom Permission Profiles */}
+            {/* Custom Roles */}
             {customRoleOptions.length > 0 ? (
               <View style={styles.roleSubgroup}>
                 <View style={styles.customRoleHeader}>
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                    Custom Permission Profiles
+                    Custom Roles
                   </ThemedText>
                   <Badge label={`${customRoleOptions.length} Custom`} variant="purple" size="sm" />
                 </View>
@@ -1203,7 +1253,7 @@ export default function StaffManagementTab({
             label="Title"
             value={title}
             onChangeText={setTitle}
-            placeholder="Dr. / RN / Ms."
+            placeholder="Title (optional)"
           />
           <Input
             containerStyle={styles.flexWide}
@@ -1234,7 +1284,7 @@ export default function StaffManagementTab({
           label="Contact phone number"
           value={phone}
           onChangeText={setPhone}
-          placeholder="e.g. 0917-123-4567"
+          placeholder="Phone number"
           keyboardType="phone-pad"
         />
 
@@ -1247,14 +1297,14 @@ export default function StaffManagementTab({
                 required
                 value={prc}
                 onChangeText={setPrc}
-                placeholder="e.g. 0108924 (Mandatory for doctors)"
+                placeholder="PRC license number"
               />
               <Input
                 containerStyle={styles.flexWide}
                 label="PhilHealth Accreditation Number (PAN)"
                 value={pan}
                 onChangeText={setPan}
-                placeholder="e.g. 1200-9876543-2 (Konsulta)"
+                placeholder="PhilHealth accreditation number"
               />
             </View>
             <View style={styles.formRow}>
@@ -1263,29 +1313,29 @@ export default function StaffManagementTab({
                 label="Professional Tax Receipt (PTR)"
                 value={ptr}
                 onChangeText={setPtr}
-                placeholder="e.g. PTR No. 8941203 / Taguig City"
+                placeholder="PTR number"
               />
               <Input
                 containerStyle={styles.flexWide}
                 label="PDEA S2 dangerous drug license"
                 value={s2}
                 onChangeText={setS2}
-                placeholder="e.g. S2 No. 0918-99214-A1 (Optional)"
+                placeholder="S2 license number (optional)"
               />
             </View>
 
-            {/* Official Doctor Stamp & Signature Live Specimen */}
+            {/* Prescription Stamp & Signature Preview */}
             <View style={styles.stampPreviewCard}>
               <View style={styles.stampHeaderRow}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  Official Doctor Stamp & Signature Preview
+                  Prescription Stamp & Signature Preview
                 </ThemedText>
                 {defaultSignatureMode === 'ESignatureSpecimen' ? (
-                  <Badge label="Digitally Certified" variant="success" icon="check" size="sm" />
+                  <Badge label="Signed" variant="success" icon="check" size="sm" />
                 ) : defaultSignatureMode === 'DigitalSealOnly' ? (
                   <Badge label="Digital Seal" variant="primary" icon="shield" size="sm" />
                 ) : (
-                  <Badge label="Wet Signature" variant="neutral" size="sm" />
+                  <Badge label="Handwritten Signature" variant="neutral" size="sm" />
                 )}
               </View>
 
@@ -1297,12 +1347,12 @@ export default function StaffManagementTab({
                     options={[
                       { value: 'ESignatureSpecimen', label: 'E-Sign' },
                       { value: 'DigitalSealOnly', label: 'Seal' },
-                      { value: 'WetSignature', label: 'Wet' },
+                      { value: 'WetSignature', label: 'Pen' },
                     ]}
                   />
                 </View>
                 <Button
-                  title={signatureSpecimen ? 'Edit Specimen' : 'Upload / Draw'}
+                  title={signatureSpecimen ? 'Edit Signature' : 'Upload / Draw'}
                   variant="outline"
                   size="sm"
                   icon="edit"
@@ -1323,7 +1373,7 @@ export default function StaffManagementTab({
                   ) : (
                     <View style={styles.stampSignatureEmpty}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        [No E-Signature specimen configured]
+                        [No signature uploaded yet]
                       </ThemedText>
                     </View>
                   )
@@ -1331,17 +1381,19 @@ export default function StaffManagementTab({
                   <View style={styles.stampWetSignatureBox}>
                     <View style={styles.stampWetLine} />
                     <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      Physician Wet Signature (Pen)
+                      Handwritten Signature (Pen)
                     </ThemedText>
                   </View>
                 ) : null}
 
                 <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.stampName}>
-                  {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
+                  {previewDoctorName ? previewDoctorName.toUpperCase() : 'Doctor name not entered'}
                 </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  {specialty || 'General / Primary Care Medicine'}
-                </ThemedText>
+                {specialty.trim() ? (
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {specialty.trim()}
+                  </ThemedText>
+                ) : null}
                 <View style={styles.stampDivider} />
                 <ThemedText variant="caption" color={theme.colors.text}>
                   {prc ? `PRC No. ${prc}` : 'PRC No. [Required for Prescriptions]'}
@@ -1370,7 +1422,7 @@ export default function StaffManagementTab({
           label="Specialty or clinical designation"
           value={specialty}
           onChangeText={setSpecialty}
-          placeholder="e.g. Pediatrics, Triage Nursing, Billing Officer"
+          placeholder="Specialty or clinical role"
         />
 
         {(role === 'Doctor' || role === 'Nurse') && activeRoomsForRole.length > 0 ? (
@@ -1445,11 +1497,11 @@ export default function StaffManagementTab({
           </FieldGroup>
         ) : null}
 
-        {/* Workstation Account & Delivery Mode */}
+        {/* Sign-In & Invitation Method */}
         <View style={styles.credentialSection}>
           <View style={styles.credentialHeaderRow}>
             <ThemedText variant="smallBold" color={theme.colors.text}>
-              Workstation Login & Invitation Mode
+              Sign-In & Invitation Method
             </ThemedText>
           </View>
 
@@ -1461,6 +1513,8 @@ export default function StaffManagementTab({
                 if (mode === 'none') {
                   setEmailFieldError(null);
                   setAddError(null);
+                } else {
+                  setEmailFieldError(validateAddStaffDuplicateEmail(email, staff, mode));
                 }
               }}
               options={[
@@ -1480,12 +1534,12 @@ export default function StaffManagementTab({
                 value={email}
                 onChangeText={(val) => {
                   setEmail(val);
-                  if (emailFieldError) setEmailFieldError(null);
+                  setEmailFieldError(validateAddStaffDuplicateEmail(val, staff, 'email'));
                   if (addError) setAddError(null);
                 }}
-                onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff))}
+                onBlur={() => setEmailFieldError(validateAddStaffDuplicateEmail(email, staff, 'email'))}
                 error={emailFieldError || undefined}
-                placeholder="doctor@clinic.com"
+                placeholder="Email address"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 helperText="An invitation email with a secure setup link will be sent to this address (valid for 7 days)."
@@ -1498,12 +1552,12 @@ export default function StaffManagementTab({
                 value={email}
                 onChangeText={(val) => {
                   setEmail(val);
-                  if (emailFieldError) setEmailFieldError(null);
+                  setEmailFieldError(validateAddStaffDuplicateEmail(val, staff, 'link'));
                   if (addError) setAddError(null);
                 }}
-                onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff))}
+                onBlur={() => setEmailFieldError(validateAddStaffDuplicateEmail(email, staff, 'link'))}
                 error={emailFieldError || undefined}
-                placeholder="doctor@clinic.com"
+                placeholder="Email address"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 helperText="A shareable invitation link will be created. You can copy and share it via chat or SMS."
@@ -1517,12 +1571,12 @@ export default function StaffManagementTab({
                 value={email}
                 onChangeText={(val) => {
                   setEmail(val);
-                  if (emailFieldError) setEmailFieldError(null);
+                  setEmailFieldError(validateAddStaffDuplicateEmail(val, staff, 'password'));
                   if (addError) setAddError(null);
                 }}
-                onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff))}
+                onBlur={() => setEmailFieldError(validateAddStaffDuplicateEmail(email, staff, 'password'))}
                 error={emailFieldError || undefined}
-                placeholder="doctor@clinic.com"
+                placeholder="Email address"
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
@@ -1549,7 +1603,7 @@ export default function StaffManagementTab({
             </>
           ) : (
             <ThemedText variant="caption" color={theme.colors.textMuted}>
-              This staff member will exist on the roster but will not be able to log in to the workstation.
+              This staff member will appear on the clinic roster without a sign-in account.
             </ThemedText>
           )}
         </View>
@@ -1588,19 +1642,19 @@ export default function StaffManagementTab({
             </View>
           ) : null}
 
-          {/* 1. Professional Archetype (Statutory Qualification) */}
+          {/* 1. Staff Role */}
           <View style={styles.roleSelectionGroup}>
-            <FieldGroup label="Professional Archetype *">
+            <FieldGroup label="Staff Role *">
               {isEditingSelf ? (
                 <View style={styles.selfRoleNoticeBox}>
                   <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
                   <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
-                    You cannot change or downgrade your own clinic role. Ask another clinic administrator to update your role assignment.
+                    You cannot change your own clinic role. Ask another clinic administrator to update your role.
                   </ThemedText>
                 </View>
               ) : (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Determines statutory credentials (e.g. PRC license for Doctors, consultation/triage room stationing).
+                  Choose their clinic role (doctors require a PRC license number; doctors and nurses can be assigned to rooms).
                 </ThemedText>
               )}
               <ScrollView
@@ -1622,26 +1676,26 @@ export default function StaffManagementTab({
             </FieldGroup>
           </View>
 
-          {/* 2. Assigned Permission Profile */}
+          {/* 2. Access Level */}
           <View style={styles.roleSelectionGroup}>
-            <FieldGroup label="Permission Profile *">
+            <FieldGroup label="Access Level *">
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Select a standard system profile or custom permission profile for operational software access.
+                Choose what this staff member can view and manage in the clinic.
               </ThemedText>
 
               {isSoleActiveAdmin ? (
                 <View style={styles.systemNotice}>
                   <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
                   <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
-                    Primary System Administrator: A facility must always maintain at least one active staff member assigned to the built-in Clinic Administrator role.
+                    Primary Clinic Administrator: Each clinic must keep at least one active Clinic Administrator.
                   </ThemedText>
                 </View>
               ) : null}
 
-              {/* Standard Permission Profiles */}
+              {/* Standard Roles */}
               <View style={styles.roleSubgroup}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  Standard Permission Profiles
+                  Standard Roles
                 </ThemedText>
                 <ScrollView
                   horizontal
@@ -1661,12 +1715,12 @@ export default function StaffManagementTab({
                 </ScrollView>
               </View>
 
-              {/* Custom Permission Profiles */}
+              {/* Custom Roles */}
               {customRoleOptions.length > 0 ? (
                 <View style={styles.roleSubgroup}>
                   <View style={styles.customRoleHeader}>
                     <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                      Custom Permission Profiles
+                      Custom Roles
                     </ThemedText>
                     <Badge label={`${customRoleOptions.length} Custom`} variant="purple" size="sm" />
                   </View>
@@ -1708,7 +1762,7 @@ export default function StaffManagementTab({
               label="Title"
               value={title}
               onChangeText={setTitle}
-              placeholder="Dr. / RN / Ms."
+              placeholder="Title (optional)"
             />
             <Input
               containerStyle={styles.flexWide}
@@ -1748,7 +1802,7 @@ export default function StaffManagementTab({
               }}
               onBlur={() => setEmailFieldError(validateStaffEmailNotInClinic(email, staff, editingStaff.id))}
               error={emailFieldError || undefined}
-              placeholder="doctor@clinic.com"
+              placeholder="Email address"
               keyboardType="email-address"
               autoCapitalize="none"
             />
@@ -1757,7 +1811,7 @@ export default function StaffManagementTab({
               label="Phone number"
               value={phone}
               onChangeText={setPhone}
-              placeholder="0917-123-4567"
+              placeholder="Phone number"
               keyboardType="phone-pad"
             />
           </View>
@@ -1799,14 +1853,14 @@ export default function StaffManagementTab({
                   required
                   value={prc}
                   onChangeText={setPrc}
-                  placeholder="e.g. 0108924 (Mandatory for doctors)"
+                  placeholder="PRC license number"
                 />
                 <Input
                   containerStyle={styles.flexWide}
                   label="PhilHealth Accreditation Number (PAN)"
                   value={pan}
                   onChangeText={setPan}
-                  placeholder="e.g. 1200-9876543-2 (Konsulta)"
+                  placeholder="PhilHealth accreditation number"
                 />
               </View>
               <View style={styles.formRow}>
@@ -1815,29 +1869,29 @@ export default function StaffManagementTab({
                   label="Professional Tax Receipt (PTR)"
                   value={ptr}
                   onChangeText={setPtr}
-                  placeholder="e.g. PTR No. 8941203 / Taguig City"
+                  placeholder="PTR number"
                 />
                 <Input
                   containerStyle={styles.flexWide}
                   label="PDEA S2 dangerous drug license"
                   value={s2}
                   onChangeText={setS2}
-                  placeholder="e.g. S2 No. 0918-99214-A1 (Optional)"
+                  placeholder="S2 license number (optional)"
                 />
               </View>
 
-              {/* Official Doctor Stamp & Signature Live Specimen */}
+              {/* Prescription Stamp & Signature Preview */}
               <View style={styles.stampPreviewCard}>
                 <View style={styles.stampHeaderRow}>
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                    Official Doctor Stamp & Signature Preview
+                    Prescription Stamp & Signature Preview
                   </ThemedText>
                   {defaultSignatureMode === 'ESignatureSpecimen' ? (
-                    <Badge label="Digitally Certified" variant="success" icon="check" size="sm" />
+                    <Badge label="Signed" variant="success" icon="check" size="sm" />
                   ) : defaultSignatureMode === 'DigitalSealOnly' ? (
                     <Badge label="Digital Seal" variant="primary" icon="shield" size="sm" />
                   ) : (
-                    <Badge label="Wet Signature" variant="neutral" size="sm" />
+                    <Badge label="Handwritten Signature" variant="neutral" size="sm" />
                   )}
                 </View>
 
@@ -1849,12 +1903,12 @@ export default function StaffManagementTab({
                       options={[
                         { value: 'ESignatureSpecimen', label: 'E-Sign' },
                         { value: 'DigitalSealOnly', label: 'Seal' },
-                        { value: 'WetSignature', label: 'Wet' },
+                        { value: 'WetSignature', label: 'Pen' },
                       ]}
                     />
                   </View>
                   <Button
-                    title={signatureSpecimen ? 'Edit Specimen' : 'Upload / Draw'}
+                    title={signatureSpecimen ? 'Edit Signature' : 'Upload / Draw'}
                     variant="outline"
                     size="sm"
                     icon="edit"
@@ -1875,7 +1929,7 @@ export default function StaffManagementTab({
                     ) : (
                       <View style={styles.stampSignatureEmpty}>
                         <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          [No E-Signature specimen configured]
+                          [No signature uploaded yet]
                         </ThemedText>
                       </View>
                     )
@@ -1883,17 +1937,19 @@ export default function StaffManagementTab({
                     <View style={styles.stampWetSignatureBox}>
                       <View style={styles.stampWetLine} />
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Physician Wet Signature (Pen)
+                        Handwritten Signature (Pen)
                       </ThemedText>
                     </View>
                   ) : null}
 
                   <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.stampName}>
-                    {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
+                    {previewDoctorName ? previewDoctorName.toUpperCase() : 'Doctor name not entered'}
                   </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {specialty || 'General / Primary Care Medicine'}
-                  </ThemedText>
+                  {specialty.trim() ? (
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      {specialty.trim()}
+                    </ThemedText>
+                  ) : null}
                   <View style={styles.stampDivider} />
                   <ThemedText variant="caption" color={theme.colors.text}>
                     {prc ? `PRC No. ${prc}` : 'PRC No. [Required for Prescriptions]'}
@@ -1922,7 +1978,7 @@ export default function StaffManagementTab({
             label="Specialty or clinical designation"
             value={specialty}
             onChangeText={setSpecialty}
-            placeholder="e.g. Pediatrics, Triage Nursing, Billing Officer"
+            placeholder="Specialty or clinical role"
           />
 
           {(role === 'Doctor' || role === 'Nurse') && activeRoomsForRole.length > 0 ? (
@@ -2218,7 +2274,7 @@ export default function StaffManagementTab({
             variant="outline"
             onPress={() =>
               copyToClipboard(
-                `Clinic EZ Login\nName: ${credentialsModal.name}\nEmail: ${credentialsModal.email}\nTemporary Password: ${credentialsModal.temporaryPassword}\n\nPlease change your password upon initial login.`
+                `${facilityName?.trim() ? `${facilityName.trim()} Login` : 'Staff Login'}\nName: ${credentialsModal.name}\nEmail: ${credentialsModal.email}\nTemporary Password: ${credentialsModal.temporaryPassword}\n\nPlease change your password upon initial login.`
               )
             }
           />
@@ -2230,8 +2286,8 @@ export default function StaffManagementTab({
         <Modal
           visible
           onClose={() => setStampModalStaff(null)}
-          title="Physician Stamp & Credentials"
-          subtitle={`Official Philippine medical stamp for ${stampModalStaff.firstName} ${stampModalStaff.lastName}`}
+          title="Prescription Stamp & Signature"
+          subtitle={`Printed stamp and license details for ${stampModalStaff.firstName} ${stampModalStaff.lastName}`}
           maxWidth={460}
           footer={
             <View style={styles.modalFooter}>
@@ -2241,7 +2297,7 @@ export default function StaffManagementTab({
         >
           <View style={styles.stampModalContent}>
             <View style={styles.stampBoxLarge}>
-              {/* Signature Specimen Overlay or Mode Indicator */}
+              {/* Signature Overlay or Mode Indicator */}
               {stampModalStaff.defaultSignatureMode === 'ESignatureSpecimen' || (!stampModalStaff.defaultSignatureMode && stampModalStaff.signatureSpecimen) ? (
                 stampModalStaff.signatureSpecimen ? (
                   <View style={styles.stampSignatureOverlayLarge}>
@@ -2254,7 +2310,7 @@ export default function StaffManagementTab({
                 ) : (
                   <View style={styles.stampSignatureEmptyLarge}>
                     <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      [No E-Signature specimen uploaded]
+                      [No signature uploaded yet]
                     </ThemedText>
                   </View>
                 )
@@ -2262,21 +2318,23 @@ export default function StaffManagementTab({
                 <View style={styles.stampWetSignatureBox}>
                   <View style={styles.stampWetLine} />
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Physician Wet Signature (Pen)
+                    Handwritten Signature (Pen)
                   </ThemedText>
                 </View>
               ) : (
                 <View style={styles.stampSealBox}>
-                  <Badge label="Digital Verification Seal" variant="primary" icon="shield" size="sm" />
+                  <Badge label="Digital Seal" variant="primary" icon="shield" size="sm" />
                 </View>
               )}
 
               <ThemedText variant="bodyBold" color={theme.colors.primary} style={styles.stampNameLarge}>
-                {`${stampModalStaff.title ? `${stampModalStaff.title} ` : 'DR. '}${stampModalStaff.firstName} ${stampModalStaff.lastName}`.toUpperCase()}
+                {[stampModalStaff.title, stampModalStaff.firstName, stampModalStaff.lastName].filter(Boolean).join(' ').toUpperCase()}
               </ThemedText>
-              <ThemedText variant="small" color={theme.colors.textSecondary}>
-                {stampModalStaff.specialty || 'General / Outpatient Medicine'}
-              </ThemedText>
+              {stampModalStaff.specialty ? (
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  {stampModalStaff.specialty}
+                </ThemedText>
+              ) : null}
               <View style={styles.stampDivider} />
               <ThemedText variant="smallBold" color={theme.colors.text}>
                 {stampModalStaff.prcLicenseNumber ? `PRC No. ${stampModalStaff.prcLicenseNumber}` : 'PRC: Not configured'}
@@ -2300,16 +2358,16 @@ export default function StaffManagementTab({
 
             <View style={styles.stampModalBadgeRow}>
               {stampModalStaff.defaultSignatureMode === 'ESignatureSpecimen' || (!stampModalStaff.defaultSignatureMode && stampModalStaff.signatureSpecimen) ? (
-                <Badge label="Digitally Certified & Locked" variant="success" icon="check" />
+                <Badge label="Signed" variant="success" icon="check" />
               ) : stampModalStaff.defaultSignatureMode === 'DigitalSealOnly' ? (
-                <Badge label="Digital Verification Seal" variant="primary" icon="shield" />
+                <Badge label="Digital Seal" variant="primary" icon="shield" />
               ) : (
-                <Badge label="Wet Signature Mode" variant="neutral" />
+                <Badge label="Handwritten Signature" variant="neutral" />
               )}
             </View>
 
             <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.stampNotice}>
-              This official statutory stamp is applied to digital consultation slips, e-prescriptions, laboratory orders, and official medical certificates.
+              This stamp appears on printed prescriptions, lab requests, referrals, and medical certificates.
             </ThemedText>
           </View>
         </Modal>
@@ -2322,7 +2380,7 @@ export default function StaffManagementTab({
           onClose={() => setSignatureModalVisible(false)}
           initialSignature={signatureSpecimen}
           initialMode={defaultSignatureMode}
-          doctorName={`${title ? `${title} ` : 'Dr. '}${firstName || 'First'} ${lastName || 'Last'}`}
+          doctorName={previewDoctorName}
           credentials={{
             specialty,
             prc,

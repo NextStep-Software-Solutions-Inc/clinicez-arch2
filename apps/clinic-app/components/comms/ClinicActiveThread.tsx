@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
 import { useConversation, useSendMessage } from '@clinicez/comms-sdk/react';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
@@ -9,7 +9,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { useStaff, formatStaffName, staffInitials } from '../../context/StaffContext';
 import { useAuth } from '../../context/AuthContext';
-import { theme } from '../../constants/theme';
+import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { playMessageChime } from '../../utils/alertSounds';
 import type { ConversationDto } from '@clinicez/comms-sdk/core';
@@ -54,6 +54,11 @@ function getCategoryLabel(scope?: string): string {
   }
 }
 
+function getActiveThemeSnapshot(): string {
+  const s = getActiveThemeState();
+  return `${s.brandColorHex}|${s.clinicBrandColorHex}|${s.userBrandColorHex ?? ''}|${s.scheme}`;
+}
+
 export default function ClinicActiveThread({
   conversationId,
   initialConversation,
@@ -63,6 +68,14 @@ export default function ClinicActiveThread({
   initialActionMenuOpen,
   pinnedAlerts,
 }: ClinicActiveThreadProps) {
+  const themeSnapshot = useSyncExternalStore(
+    subscribeActiveTheme,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
+  );
+  const resolvedCommsColors = useMemo(() => getActiveThemeState().resolvedColors, [themeSnapshot]);
+  const styles = useMemo(() => createStyles(), [themeSnapshot]);
+
   const { conversation: hookConv, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
   const conversation = hookConv || initialConversation || null;
   const { sendMessage, resendMessage } = useSendMessage();
@@ -279,15 +292,15 @@ export default function ClinicActiveThread({
       {/* Active Thread Header */}
       <View style={styles.threadHeader}>
         {/* Left: Icon-only back button */}
-        <Pressable
+        <Button
+          variant="secondary"
+          size="sm"
+          icon="arrowLeft"
+          iconOnly
           onPress={onBack}
-          style={styles.backButton}
-          accessibilityRole="button"
           accessibilityLabel="Back to conversations"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="arrowLeft" size={theme.sizes.iconSm} color={theme.colors.text} />
-        </Pressable>
+          style={styles.backButton}
+        />
 
         {/* Center: Title + Edit Pencil + Category Badge */}
         <View style={styles.headerCenter}>
@@ -324,44 +337,34 @@ export default function ClinicActiveThread({
         {/* Right Controls in exact order: 1. Members 2. Privacy Blur 3. Action Menu */}
         <View style={styles.headerRightControls}>
           {/* 1. Care Team / Members Counter Button */}
-          <Pressable
+          <Button
+            title={String(members.length)}
+            variant="secondary"
+            size="sm"
+            icon="users"
             onPress={() => setIsMembersModalOpen(true)}
-            style={styles.headerIconButton}
-            accessibilityRole="button"
             accessibilityLabel={`Care team members: ${members.length}`}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Icon name="users" size={theme.sizes.iconSm} color={theme.colors.text} />
-            <ThemedText variant="captionBold" color={theme.colors.text}>
-              {members.length}
-            </ThemedText>
-          </Pressable>
+          />
 
           {/* 2. Medical Privacy Blur Icon-Only Button */}
-          <Pressable
+          <Button
+            variant={privacyBlur ? 'outline' : 'secondary'}
+            size="sm"
+            icon={privacyBlur ? 'eyeOff' : 'eye'}
+            iconOnly
             onPress={() => setPrivacyBlur((prev) => !prev)}
-            style={[styles.headerIconButton, privacyBlur && styles.headerIconButtonActive]}
-            accessibilityRole="button"
             accessibilityLabel="Toggle medical privacy blur"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Icon
-              name={privacyBlur ? 'eyeOff' : 'eye'}
-              size={theme.sizes.iconSm}
-              color={privacyBlur ? theme.colors.primary : theme.colors.text}
-            />
-          </Pressable>
+          />
 
           {/* 3. Action Menu (••• at rightmost edge) */}
-          <Pressable
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="moreVertical"
+            iconOnly
             onPress={() => setIsActionMenuOpen(true)}
-            style={styles.headerIconButton}
-            accessibilityRole="button"
             accessibilityLabel="Conversation action menu"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Icon name="moreVertical" size={theme.sizes.iconSm} color={theme.colors.text} />
-          </Pressable>
+          />
         </View>
       </View>
 
@@ -399,7 +402,7 @@ export default function ClinicActiveThread({
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search in conversation..."
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={resolvedCommsColors.textMuted}
             style={styles.searchInput}
             autoFocus
           />
@@ -408,18 +411,17 @@ export default function ClinicActiveThread({
               {filteredMessages.length} match{filteredMessages.length === 1 ? '' : 'es'}
             </ThemedText>
           ) : null}
-          <Pressable
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="close"
+            iconOnly
             onPress={() => {
               setSearchQuery('');
               setIsSearchOpen(false);
             }}
-            style={styles.searchCloseBtn}
-            accessibilityRole="button"
             accessibilityLabel="Close search in conversation"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
+          />
         </View>
       )}
 
@@ -435,7 +437,7 @@ export default function ClinicActiveThread({
               accessibilityLabel={`Quick clinical response ${pill}`}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <ThemedText variant="captionBold" color={theme.colors.primary}>
+              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
                 {pill}
               </ThemedText>
             </Pressable>
@@ -462,6 +464,7 @@ export default function ClinicActiveThread({
           canWriteInternalNotes={true}
           isLoading={isLoading}
           error={error ? error.message : null}
+          colors={resolvedCommsColors}
           renderSendIcon={() => <Icon name="send" size={14} color={theme.colors.onPrimary} />}
           renderEmptyState={() => (
             <View style={styles.emptyStateContainer}>
@@ -511,7 +514,7 @@ export default function ClinicActiveThread({
               value={renameInput}
               onChangeText={setRenameInput}
               placeholder="Enter new conversation title..."
-              placeholderTextColor={theme.colors.textMuted}
+              placeholderTextColor={resolvedCommsColors.textMuted}
               style={styles.textInput}
               autoFocus
             />
@@ -655,15 +658,14 @@ export default function ClinicActiveThread({
                   </ThemedText>
                 </View>
                 {m.id !== effectiveUserId ? (
-                  <Pressable
+                  <Button
+                    variant="dangerGhost"
+                    size="sm"
+                    icon="trash"
+                    iconOnly
                     onPress={() => handleRemoveMember(m.id)}
-                    style={styles.removeBtn}
-                    accessibilityRole="button"
                     accessibilityLabel={`Remove ${m.name}`}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergency} />
-                  </Pressable>
+                  />
                 ) : null}
               </View>
             ))}
@@ -737,7 +739,7 @@ export default function ClinicActiveThread({
             value={handoffInstructions}
             onChangeText={setHandoffInstructions}
             placeholder="Add specific instructions for incoming staff..."
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={resolvedCommsColors.textMuted}
             style={styles.handoffInput}
             multiline
             numberOfLines={2}
@@ -756,322 +758,278 @@ export default function ClinicActiveThread({
   );
 }
 
-const styles = StyleSheet.create({
-  threadContainer: {
-    flex: 1,
-    backgroundColor: theme.colors.surface,
-  },
-  threadHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceSubtle,
-    gap: theme.spacing.sm,
-  },
-  backButton: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  headerCenter: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 0,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  pencilBtn: {
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  threadTitle: {
-    flexShrink: 1,
-  },
-  scopeBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    paddingHorizontal: 4,
-    paddingVertical: 0,
-    borderRadius: theme.radii.xs,
-    marginTop: 1,
-  },
-  scopeBadgeText: {
-    fontSize: theme.typography.caption.fontSize,
-    lineHeight: 14,
-  },
-  headerRightControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  headerIconButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 34,
-    minWidth: 34,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.borderLight,
-    gap: 4,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  headerIconButtonActive: {
-    backgroundColor: theme.colors.primarySubtle,
-    borderColor: theme.colors.primary,
-  },
-  pinnedBanner: {
-    backgroundColor: theme.colors.emergencySubtle,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.emergency,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.emergencyBorder,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  pinnedAlertRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  pinnedTextGroup: {
-    flex: 1,
-  },
-  searchBarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-    gap: theme.spacing.xs,
-  },
-  searchInput: {
-    flex: 1,
-    color: theme.colors.text,
-    paddingVertical: theme.spacing.xs,
-    minHeight: 36,
-  },
-  searchCloseBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing.xs,
-  },
-  skeletonTitle: {
-    width: 140,
-    height: 18,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surfaceMuted,
-    marginBottom: 2,
-  },
-  skeletonSubtitle: {
-    width: 80,
-    height: 14,
-    borderRadius: theme.radii.xs,
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  speedPillsContainer: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.border,
-    paddingVertical: 4,
-  },
-  speedPillsScroll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.sm,
-    gap: 6,
-  },
-  speedPill: {
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    minHeight: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.radii.full,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 1,
-    elevation: 1,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  threadBody: {
-    flex: 1,
-  },
-  emptyStateContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing.xl,
-    gap: theme.spacing.xs,
-  },
-  emptyShieldBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primarySubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.xs,
-  },
-  emptyTitle: {
-    ...theme.typography.bodyBold,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    maxWidth: 280,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  modalContent: {
-    gap: theme.spacing.sm,
-  },
-  inputBox: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    paddingHorizontal: theme.spacing.md,
-    minHeight: theme.sizes.controlMd,
-    justifyContent: 'center',
-  },
-  textInput: {
-    color: theme.colors.text,
-    paddingVertical: theme.spacing.xs,
-  },
-  modalFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: theme.spacing.sm,
-  },
-  modalFooterBtn: {
-    minWidth: 100,
-    minHeight: 44,
-  },
-  actionMenuList: {
-    gap: theme.spacing.xs,
-  },
-  actionMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    minHeight: 48,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.sm,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.borderLight,
-    borderRadius: theme.radii.sm,
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
-  },
-  membersListScroll: {
-    maxHeight: 180,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-  },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 48,
-    padding: theme.spacing.sm,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.borderLight,
-    gap: theme.spacing.sm,
-  },
-  memberAvatar: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.primaryBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  memberInfo: {
-    flex: 1,
-  },
-  removeBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing.xs,
-  },
-  sectionHeader: {
-    marginTop: theme.spacing.sm,
-  },
-  addColleagueList: {
-    maxHeight: 140,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.surface,
-  },
-  addColleagueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 48,
-    padding: theme.spacing.sm,
-    borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.borderLight,
-    gap: theme.spacing.sm,
-  },
-  handoffContainer: {
-    maxHeight: 360,
-  },
-  handoffSectionLabel: {
-    marginBottom: theme.spacing.xs,
-    marginTop: theme.spacing.sm,
-  },
-  handoffInput: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
-    color: theme.colors.text,
-    minHeight: 64,
-  },
-  handoffPreviewBox: {
-    backgroundColor: theme.colors.surfaceSubtle,
-    padding: theme.spacing.md,
-    borderRadius: theme.radii.md,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-  },
-  handoffText: {
-    lineHeight: 20,
-  },
-});
+function createStyles() {
+  return StyleSheet.create({
+    threadContainer: {
+      flex: 1,
+      backgroundColor: theme.colors.surface,
+    },
+    threadHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceSubtle,
+      gap: theme.spacing.sm,
+    },
+    backButton: {
+      borderRadius: theme.radii.full,
+    },
+    headerCenter: {
+      flex: 1,
+      justifyContent: 'center',
+      gap: 0,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+    },
+    pencilBtn: {
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    threadTitle: {
+      flexShrink: 1,
+    },
+    scopeBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: theme.colors.primarySubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.primaryBorder,
+      paddingHorizontal: 4,
+      paddingVertical: 0,
+      borderRadius: theme.radii.xs,
+      marginTop: 1,
+    },
+    scopeBadgeText: {
+      fontSize: theme.typography.caption.fontSize,
+      lineHeight: 14,
+    },
+    headerRightControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    pinnedBanner: {
+      backgroundColor: theme.colors.emergencySubtle,
+      borderLeftWidth: 4,
+      borderLeftColor: theme.colors.emergency,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.emergencyBorder,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+    },
+    pinnedAlertRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    pinnedTextGroup: {
+      flex: 1,
+    },
+    searchBarRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      backgroundColor: theme.colors.surfaceMuted,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.border,
+      gap: theme.spacing.xs,
+    },
+    searchInput: {
+      flex: 1,
+      color: theme.colors.text,
+      paddingVertical: theme.spacing.xs,
+      minHeight: 36,
+    },
+    skeletonTitle: {
+      width: 140,
+      height: 18,
+      borderRadius: theme.radii.sm,
+      backgroundColor: theme.colors.surfaceMuted,
+      marginBottom: 2,
+    },
+    skeletonSubtitle: {
+      width: 80,
+      height: 14,
+      borderRadius: theme.radii.xs,
+      backgroundColor: theme.colors.surfaceMuted,
+    },
+    speedPillsContainer: {
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.border,
+      paddingVertical: 4,
+    },
+    speedPillsScroll: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.sm,
+      gap: 6,
+    },
+    speedPill: {
+      backgroundColor: theme.colors.primarySubtle,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      minHeight: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.radii.full,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.primaryBorder,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+    },
+    threadBody: {
+      flex: 1,
+    },
+    emptyStateContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.xl,
+      gap: theme.spacing.xs,
+    },
+    emptyShieldBadge: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.primarySubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.primaryBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: theme.spacing.xs,
+    },
+    emptyTitle: {
+      ...theme.typography.bodyBold,
+      color: theme.colors.text,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      maxWidth: 280,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    modalContent: {
+      gap: theme.spacing.sm,
+    },
+    inputBox: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.md,
+      paddingHorizontal: theme.spacing.md,
+      minHeight: theme.sizes.controlMd,
+      justifyContent: 'center',
+    },
+    textInput: {
+      color: theme.colors.text,
+      paddingVertical: theme.spacing.xs,
+    },
+    modalFooterRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: theme.spacing.sm,
+    },
+    modalFooterBtn: {
+      minWidth: 100,
+      minHeight: 44,
+    },
+    actionMenuList: {
+      gap: theme.spacing.xs,
+    },
+    actionMenuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      minHeight: 48,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.sm,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.borderLight,
+      borderRadius: theme.radii.sm,
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+    },
+    membersListScroll: {
+      maxHeight: 180,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+    },
+    memberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 48,
+      padding: theme.spacing.sm,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.borderLight,
+      gap: theme.spacing.sm,
+    },
+    memberAvatar: {
+      width: theme.sizes.controlSm,
+      height: theme.sizes.controlSm,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.primarySubtle,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.primaryBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    memberInfo: {
+      flex: 1,
+    },
+    sectionHeader: {
+      marginTop: theme.spacing.sm,
+    },
+    addColleagueList: {
+      maxHeight: 140,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.md,
+      backgroundColor: theme.colors.surface,
+    },
+    addColleagueRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 48,
+      padding: theme.spacing.sm,
+      borderBottomWidth: theme.sizes.borderWidth,
+      borderBottomColor: theme.colors.borderLight,
+      gap: theme.spacing.sm,
+    },
+    handoffContainer: {
+      maxHeight: 360,
+    },
+    handoffSectionLabel: {
+      marginBottom: theme.spacing.xs,
+      marginTop: theme.spacing.sm,
+    },
+    handoffInput: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radii.md,
+      padding: theme.spacing.sm,
+      color: theme.colors.text,
+      minHeight: 64,
+    },
+    handoffPreviewBox: {
+      backgroundColor: theme.colors.surfaceSubtle,
+      padding: theme.spacing.md,
+      borderRadius: theme.radii.md,
+      borderWidth: theme.sizes.borderWidth,
+      borderColor: theme.colors.border,
+    },
+    handoffText: {
+      lineHeight: 20,
+    },
+  });
+}

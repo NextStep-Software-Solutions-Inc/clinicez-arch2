@@ -5,7 +5,7 @@ import Badge from '../ui/Badge';
 import Icon, { IconName } from '../ui/Icon';
 import { ClinicEzMark } from '../ui/ClinicEzLogo';
 import UserMenu from './UserMenu';
-import { theme } from '../../constants/theme';
+import { subscribeActiveTheme, theme } from '../../constants/theme';
 import { useClinic } from '../../context/ClinicContext';
 import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
@@ -57,7 +57,7 @@ export default function WorkstationSidebar({
   mode = 'open',
   onToggleMode,
 }: WorkstationSidebarProps) {
-  const { facilityName, planTier, clinicLogo, primaryColorHex } = useClinic();
+  const { facilityName, planTier, clinicLogo } = useClinic();
   const { user, can } = useAuth();
   const insets = useSafeInsets();
   const { sidebarWidth: densitySidebarWidth, multiplier } = useUiDensity();
@@ -65,7 +65,11 @@ export default function WorkstationSidebar({
   const isIconMode = mode === 'icon' || width === theme.sizes.sidebarCollapsedWidth;
   const resolvedWidth = width ?? (isIconMode ? theme.sizes.sidebarCollapsedWidth : densitySidebarWidth);
 
+  const [, setThemeTick] = useState(0);
+  const [handleHovered, setHandleHovered] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<TooltipData | null>(null);
+
+  useEffect(() => subscribeActiveTheme(() => setThemeTick((t) => t + 1)), []);
 
   useEffect(() => {
     if (!isIconMode) {
@@ -131,7 +135,11 @@ export default function WorkstationSidebar({
     <View
       style={[
         styles.container,
-        { width: resolvedWidth },
+        {
+          width: resolvedWidth,
+          backgroundColor: theme.colors.surface,
+          borderRightColor: theme.colors.border,
+        },
         isIconMode && styles.containerIconMode,
         Platform.select({
           web: {
@@ -141,60 +149,66 @@ export default function WorkstationSidebar({
         }),
       ]}
     >
-      {/* Brand Header */}
-      <View
-        style={[
-          styles.brandHeader,
-          isIconMode && styles.brandHeaderIconMode,
-          multiplier !== 1 && {
-            minHeight: baseHeaderMinH,
-            paddingHorizontal: Math.max(8, Math.round(theme.spacing.md * multiplier)),
-          },
-          insets.top > 0 && {
-            paddingTop: insets.top,
-            minHeight: baseHeaderMinH + insets.top,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => {
-            setActiveTooltip(null);
-            if (isIconMode && onToggleMode) onToggleMode();
-          }}
-          onHoverIn={(e) => handleHoverIn('Expand sidebar', undefined, e)}
-          onHoverOut={handleHoverOut}
-          disabled={!isIconMode}
-          accessibilityRole={isIconMode ? 'button' : undefined}
-          accessibilityLabel={isIconMode ? 'Expand sidebar' : `${displayName} logo`}
-          style={(state: InteractionState) => [
-            styles.logoBadge,
-            { backgroundColor: clinicLogo ? 'transparent' : (primaryColorHex || theme.colors.primary) },
-            isIconMode && styles.logoBadgeClickable,
-            isIconMode && state.hovered && styles.logoBadgeHover,
-            isIconMode && state.pressed && styles.logoBadgePressed,
+      <View style={styles.sidebarInner}>
+        {/* Brand Header */}
+        <View
+          style={[
+            styles.brandHeader,
+            { borderBottomColor: theme.colors.border },
+            isIconMode && styles.brandHeaderIconMode,
+            multiplier !== 1 && {
+              minHeight: baseHeaderMinH,
+              paddingHorizontal: Math.max(8, Math.round(theme.spacing.md * multiplier)),
+            },
+            insets.top > 0 && {
+              paddingTop: insets.top,
+              minHeight: baseHeaderMinH + insets.top,
+            },
           ]}
-          {...(isIconMode ? ({ title: 'Expand sidebar' } as any) : {})}
         >
-          {clinicLogo ? (
-            <Image
-              source={{ uri: clinicLogo }}
-              style={styles.logoImage}
-              resizeMode="contain"
-              accessibilityLabel={`${displayName} logo`}
-            />
-          ) : (
-            <ClinicEzMark
-              size={theme.sizes.controlMd}
-              variant="squircle"
-              bgColor={primaryColorHex || theme.colors.primary}
-            />
-          )}
-        </Pressable>
+          <Pressable
+            onPress={() => {
+              setActiveTooltip(null);
+              if (isIconMode && onToggleMode) onToggleMode();
+            }}
+            onHoverIn={(e) => handleHoverIn('Expand sidebar', undefined, e)}
+            onHoverOut={handleHoverOut}
+            disabled={!isIconMode}
+            accessibilityRole={isIconMode ? 'button' : undefined}
+            accessibilityLabel={isIconMode ? 'Expand sidebar' : `${displayName} logo`}
+            style={(state: InteractionState) => [
+              styles.logoBadge,
+              { backgroundColor: clinicLogo ? theme.colors.transparent : theme.colors.primary },
+              isIconMode && styles.logoBadgeClickable,
+              isIconMode && state.hovered && styles.logoBadgeHover,
+              isIconMode && state.pressed && styles.logoBadgePressed,
+            ]}
+            {...(isIconMode ? ({ title: 'Expand sidebar' } as any) : {})}
+          >
+            {clinicLogo ? (
+              <Image
+                source={{ uri: clinicLogo }}
+                style={styles.logoImage}
+                resizeMode="contain"
+                accessibilityLabel={`${displayName} logo`}
+              />
+            ) : (
+              <ClinicEzMark
+                size={theme.sizes.controlMd}
+                variant="squircle"
+                bgColor={theme.colors.primary}
+              />
+            )}
+          </Pressable>
 
-        {isIconMode ? null : (
-          <View style={styles.brandText}>
-            <View style={styles.brandTitleRow}>
-              <ThemedText variant="title" style={styles.brandTitle} numberOfLines={1}>
+          {isIconMode ? null : (
+            <View style={styles.brandText}>
+              <ThemedText
+                variant="title"
+                color={theme.colors.primary}
+                style={styles.brandTitle}
+                numberOfLines={1}
+              >
                 {displayName}
               </ThemedText>
               {planTier ? (
@@ -206,120 +220,162 @@ export default function WorkstationSidebar({
                 />
               ) : null}
             </View>
-          </View>
-        )}
+          )}
+        </View>
 
-        {isIconMode ? null : onToggleMode ? (
-          <Pressable
-            onPress={onToggleMode}
-            accessibilityRole="button"
-            accessibilityLabel="Collapse sidebar to icon rail"
-            style={(state: InteractionState) => [
-              styles.collapseButton,
-              state.hovered && styles.collapseButtonHover,
-              state.pressed && styles.collapseButtonPressed,
-            ]}
-          >
-            <Icon name="chevronLeft" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
-        ) : null}
-      </View>
+        {/* Nav Items */}
+        <ScrollView
+          style={styles.navList}
+          contentContainerStyle={[styles.navContent, isIconMode && styles.navContentIconMode]}
+          onScroll={handleHoverOut}
+          scrollEventThrottle={16}
+        >
+          {visibleNavItems.map((item) => {
+            const isActive = currentRoute === item.key;
 
-      {/* Nav Items */}
-      <ScrollView
-        style={styles.navList}
-        contentContainerStyle={[styles.navContent, isIconMode && styles.navContentIconMode]}
-        onScroll={handleHoverOut}
-        scrollEventThrottle={16}
-      >
-        {visibleNavItems.map((item) => {
-          const isActive = currentRoute === item.key;
+            if (isIconMode) {
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => {
+                    setActiveTooltip(null);
+                    onNavigate(item.key);
+                  }}
+                  onHoverIn={(e) => handleHoverIn(item.label, item.badge, e)}
+                  onHoverOut={handleHoverOut}
+                  accessibilityRole="link"
+                  accessibilityLabel={item.label}
+                  accessibilityState={{ selected: isActive }}
+                  style={(state: InteractionState) => [
+                    styles.navItemIconOnly,
+                    densityIconOnlyStyle,
+                    state.hovered && !isActive && [
+                      styles.navItemHover,
+                      { backgroundColor: theme.colors.primarySubtle },
+                    ],
+                    isActive && [
+                      styles.navItemActive,
+                      {
+                        backgroundColor: theme.colors.primaryLight,
+                        borderColor: theme.colors.primaryBorder,
+                      },
+                      theme.shadows.brandSubtle,
+                    ],
+                    state.pressed && styles.navItemPressed,
+                  ]}
+                  {...({ title: item.label } as any)}
+                >
+                  <View style={styles.iconWrapper}>
+                    <Icon
+                      name={item.icon}
+                      size={theme.sizes.iconMd}
+                      color={isActive ? theme.colors.primaryDark : theme.colors.textMuted}
+                    />
+                    {item.badge ? (
+                      <View style={[styles.badgeDot, { backgroundColor: theme.colors.primary }]} />
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            }
 
-          if (isIconMode) {
             return (
               <Pressable
                 key={item.key}
-                onPress={() => {
-                  setActiveTooltip(null);
-                  onNavigate(item.key);
-                }}
-                onHoverIn={(e) => handleHoverIn(item.label, item.badge, e)}
-                onHoverOut={handleHoverOut}
+                onPress={() => onNavigate(item.key)}
                 accessibilityRole="link"
-                accessibilityLabel={item.label}
                 accessibilityState={{ selected: isActive }}
                 style={(state: InteractionState) => [
-                  styles.navItemIconOnly,
-                  densityIconOnlyStyle,
-                  state.hovered && !isActive && styles.navItemHover,
-                  isActive && styles.navItemActive,
+                  styles.navItem,
+                  densityNavItemStyle,
+                  state.hovered && !isActive && [
+                    styles.navItemHover,
+                    { backgroundColor: theme.colors.primarySubtle },
+                  ],
+                  isActive && [
+                    styles.navItemActive,
+                    {
+                      backgroundColor: theme.colors.primaryLight,
+                      borderColor: theme.colors.primaryBorder,
+                    },
+                    theme.shadows.brandSubtle,
+                  ],
                   state.pressed && styles.navItemPressed,
                 ]}
-                {...({ title: item.label } as any)}
               >
-                <View style={styles.iconWrapper}>
-                  <Icon
-                    name={item.icon}
-                    size={theme.sizes.iconMd}
-                    color={isActive ? (primaryColorHex || theme.colors.primary) : theme.colors.textMuted}
-                  />
-                  {item.badge ? (
-                    <View style={[styles.badgeDot, { backgroundColor: primaryColorHex || theme.colors.primary }]} />
-                  ) : null}
-                </View>
+                <Icon
+                  name={item.icon}
+                  size={theme.sizes.iconMd}
+                  color={isActive ? theme.colors.primaryDark : theme.colors.textMuted}
+                />
+                <ThemedText
+                  variant={isActive ? 'bodyBold' : 'body'}
+                  color={isActive ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  style={styles.navLabel}
+                >
+                  {item.label}
+                </ThemedText>
+                {item.badge ? (
+                  <Badge label={String(item.badge)} variant={isActive ? 'primary' : 'neutral'} size="sm" />
+                ) : null}
               </Pressable>
             );
-          }
+          })}
+        </ScrollView>
 
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => onNavigate(item.key)}
-              accessibilityRole="link"
-              accessibilityState={{ selected: isActive }}
-              style={(state: InteractionState) => [
-                styles.navItem,
-                densityNavItemStyle,
-                state.hovered && !isActive && styles.navItemHover,
-                isActive && styles.navItemActive,
-                state.pressed && styles.navItemPressed,
-              ]}
-            >
-              <Icon
-                name={item.icon}
-                size={theme.sizes.iconMd}
-                color={isActive ? (primaryColorHex || theme.colors.primary) : theme.colors.textMuted}
-              />
-              <ThemedText
-                variant={isActive ? 'bodyBold' : 'body'}
-                color={isActive ? (primaryColorHex || theme.colors.primary) : theme.colors.textSecondary}
-                style={styles.navLabel}
-              >
-                {item.label}
-              </ThemedText>
-              {item.badge ? (
-                <Badge label={String(item.badge)} variant={isActive ? 'primary' : 'neutral'} size="sm" />
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* Footer: User Profile */}
-      <View
-        style={[
-          styles.footer,
-          isIconMode && styles.footerIconMode,
-          insets.bottom > 0 && { paddingBottom: insets.bottom + theme.spacing.xs },
-        ]}
-      >
-        <UserMenu
-          variant="card"
-          compact={isIconMode}
-          onNavigate={onNavigate}
-          currentRoute={currentRoute}
-        />
+        {/* Footer: User Profile */}
+        <View
+          style={[
+            styles.footer,
+            { borderTopColor: theme.colors.border },
+            isIconMode && styles.footerIconMode,
+            insets.bottom > 0 && { paddingBottom: insets.bottom + theme.spacing.xs },
+          ]}
+        >
+          <UserMenu
+            variant="card"
+            compact={isIconMode}
+            onNavigate={onNavigate}
+            currentRoute={currentRoute}
+          />
+        </View>
       </View>
+
+      {/* Mid-Edge Hover-Scaling Collapsible Handle */}
+      {onToggleMode ? (
+        <Pressable
+          testID="sidebar-edge-toggle-handle"
+          hitSlop={10}
+          onPress={() => {
+            setActiveTooltip(null);
+            setHandleHovered(false);
+            onToggleMode();
+          }}
+          onHoverIn={() => setHandleHovered(true)}
+          onHoverOut={() => setHandleHovered(false)}
+          accessibilityRole="button"
+          accessibilityLabel={isIconMode ? 'Expand sidebar' : 'Collapse sidebar to icon rail'}
+          style={(state: InteractionState) => {
+            const isHovered = Boolean(state.hovered || handleHovered);
+            return [
+              styles.edgeToggleHandle,
+              {
+                backgroundColor: isHovered ? theme.colors.primaryLight : theme.colors.surface,
+                borderColor: isHovered ? theme.colors.primaryBorder : theme.colors.border,
+              },
+              isHovered ? theme.shadows.brandSm : theme.shadows.sm,
+              isHovered && styles.edgeToggleHandleHover,
+              state.pressed && styles.edgeToggleHandlePressed,
+            ];
+          }}
+        >
+          <Icon
+            name={isIconMode ? 'chevronRight' : 'chevronLeft'}
+            size={14}
+            color={handleHovered ? theme.colors.primaryDark : theme.colors.textMuted}
+          />
+        </Pressable>
+      ) : null}
 
       {/* Floating Tooltip in Icon Mode */}
       {isIconMode && activeTooltip ? (
@@ -348,21 +404,29 @@ export default function WorkstationSidebar({
 
 const styles = StyleSheet.create({
   container: {
+    position: 'relative',
     height: '100%',
     backgroundColor: theme.colors.surface,
     borderRightWidth: theme.sizes.borderWidth,
     borderRightColor: theme.colors.border,
     flexDirection: 'column',
-    overflow: 'hidden',
+    overflow: 'visible',
     zIndex: 100,
   },
   containerIconMode: {
     overflow: 'visible',
   },
+  sidebarInner: {
+    flex: 1,
+    width: '100%',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
   brandHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xs,
     minHeight: theme.sizes.headerHeight,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.border,
@@ -378,7 +442,7 @@ const styles = StyleSheet.create({
     width: theme.sizes.controlMd,
     height: theme.sizes.controlMd,
     borderRadius: theme.radii.md,
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.transparent,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -406,39 +470,53 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     overflow: 'hidden',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 2,
     ...Platform.select({
       web: {
         whiteSpace: 'nowrap',
       } as any,
     }),
   },
-  brandTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    overflow: 'hidden',
-  },
   brandTitle: {
-    color: theme.colors.text,
+    width: '100%',
     letterSpacing: -0.3,
     flexShrink: 1,
   },
   planTierBadge: {
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
     flexShrink: 0,
   },
-  collapseButton: {
-    width: theme.sizes.controlSm,
-    height: theme.sizes.controlSm,
-    borderRadius: theme.radii.md,
+  edgeToggleHandle: {
+    position: 'absolute',
+    right: -11,
+    top: '50%',
+    width: 22,
+    height: 36,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 120,
+    transform: [{ translateY: -18 }, { scale: 1 }],
+    ...theme.shadows.sm,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition:
+          'transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+      } as any,
+    }),
   },
-  collapseButtonHover: {
-    backgroundColor: theme.colors.surfaceSubtle,
+  edgeToggleHandleHover: {
+    transform: [{ translateY: -18 }, { scale: 1.25 }],
   },
-  collapseButtonPressed: {
-    opacity: 0.8,
+  edgeToggleHandlePressed: {
+    transform: [{ translateY: -18 }, { scale: 1.08 }],
   },
   navList: {
     flex: 1,
@@ -459,6 +537,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     minHeight: theme.sizes.controlMd,
     borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.transparent,
     overflow: 'hidden',
   },
   navItemIconOnly: {
@@ -467,6 +547,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.transparent,
   },
   iconWrapper: {
     position: 'relative',
@@ -483,10 +565,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   navItemHover: {
-    backgroundColor: theme.colors.surfaceSubtle,
+    backgroundColor: theme.colors.primarySubtle,
   },
   navItemActive: {
     backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryBorder,
+    ...theme.shadows.brandSubtle,
   },
   navItemPressed: {
     opacity: 0.85,

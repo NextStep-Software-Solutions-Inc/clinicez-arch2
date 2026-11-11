@@ -383,10 +383,10 @@ describe('Milestone M4: Clinic Admin Audit Workstation E2E Verification Suite', 
   // WORKFLOW 1: Standalone /audit Route Loading & Navigation Registration
   // ===========================================================================
   describe('Workflow 1: Standalone Route Loading & Navigation Architecture', () => {
-    test('1.1 AuditScreen mounts cleanly with ResponsiveLayout header and subtitle', () => {
+    test('1.1 AuditScreen mounts cleanly with ResponsiveLayout header without subtitle', () => {
       const html = renderToStaticMarkup(React.createElement(AuditScreen));
       expect(html).toContain('Audit Log');
-      expect(html).toContain('Clinic-wide forensic activity trail &amp; privacy compliance');
+      expect(html).not.toContain('Clinic-wide forensic activity trail');
     });
 
     test('1.2 Audit route is registered with linking path "audit" in main navigation', () => {

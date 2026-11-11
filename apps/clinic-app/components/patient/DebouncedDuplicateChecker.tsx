@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  Pressable,
   ActivityIndicator,
   StyleProp,
   ViewStyle,
@@ -10,6 +9,7 @@ import {
 import ThemedText from '../ui/ThemedText';
 import { IconSlot } from '../ui/Icon';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 import { theme } from '../../constants/theme';
 import { clinicService, DuplicateMatch } from '../../services/clinicService';
 
@@ -131,15 +131,12 @@ export default function DebouncedDuplicateChecker({
           {checking ? <ActivityIndicator size="small" color={theme.colors.warning} style={styles.inlineSpinner} /> : null}
         </View>
 
-        <Pressable
+        <Button
+          title={collapsed ? 'Show' : 'Hide'}
+          variant="ghost"
+          size="xs"
           onPress={() => setCollapsed(!collapsed)}
-          style={styles.collapseToggle}
-          hitSlop={theme.spacing.sm}
-        >
-          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-            {collapsed ? 'Show' : 'Hide'}
-          </ThemedText>
-        </Pressable>
+        />
       </View>
 
       {/* Matched Records */}
@@ -174,17 +171,15 @@ export default function DebouncedDuplicateChecker({
               </View>
 
               {/* Action shortcut to open existing patient */}
-              <Pressable
-                style={styles.viewPatientBtn}
+              <Button
+                title="View Chart"
+                variant="outline"
+                size="xs"
+                icon="eye"
+                rightIcon="arrowRight"
                 onPress={() => handleSelect(item.patientId, item)}
                 testID={`view-existing-patient-${item.patientId}`}
-              >
-                <IconSlot value="eye" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                <ThemedText variant="smallBold" color={theme.colors.primary}>
-                  View Chart
-                </ThemedText>
-                <IconSlot value="arrowRight" size={theme.sizes.iconSm} color={theme.colors.primary} />
-              </Pressable>
+              />
             </View>
           ))}
         </View>
@@ -223,10 +218,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  collapseToggle: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
   matchesList: {
     gap: theme.spacing.sm,
   },
@@ -254,14 +245,5 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-  viewPatientBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    backgroundColor: theme.colors.primaryLight,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radii.sm,
   },
 });
