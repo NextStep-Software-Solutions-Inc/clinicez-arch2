@@ -124,6 +124,7 @@ export interface CreateConversationRequest {
   contextType?: string;
   contextId?: string;
   category?: MessageCategory;
+  department?: string;
   isLocalOnly?: boolean;
   participantIds?: string[];
   participantStaffIds?: string[];

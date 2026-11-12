@@ -555,11 +555,15 @@ export default function ClinicChatDrawerHost() {
         visible={isNewConvModalOpen}
         onClose={() => setIsNewConvModalOpen(false)}
         onCreateConversation={async (params) => {
+          const isFacility = params.scope === 'Facility';
+          const isStaffContext = params.scope === 'StaffContext';
+
           const created = await createConversation({
             scope: params.scope,
             title: params.title,
-            contextId: params.patientId,
-            category: params.department as any,
+            contextType: isFacility && params.department ? 'Department' : isStaffContext && params.patientId ? 'Patient' : undefined,
+            contextId: isFacility ? params.department : isStaffContext ? params.patientId : undefined,
+            department: isFacility ? params.department : undefined,
             participantStaffIds: params.participantStaffIds,
           });
           setActiveConversationId(created.id);
