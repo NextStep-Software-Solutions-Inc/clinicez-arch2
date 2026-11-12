@@ -549,6 +549,10 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
     expect(dashboardSrc).toContain('usePersistedTab<DashboardTab>');
     expect(dashboardSrc).toContain('usePersistedTab<ReportType>');
     expect(dashboardSrc).toContain('usePersistedTab<QueueFilter>');
+    expect(dashboardSrc).toContain('cleanupParamsByValue:');
+    expect(dashboardSrc).toContain('omitDefaultFromUrl: true');
+    expect(dashboardSrc).toContain('clearUrlOnInactive: true');
+    expect(dashboardSrc).not.toContain('const syncDashboardRouteAndUrl =');
     expect(dashboardSrc).toContain('DASHBOARD_ACTIVE_TAB_STORAGE_KEY');
     expect(dashboardSrc).toContain('DASHBOARD_REPORT_TYPE_STORAGE_KEY');
     expect(dashboardSrc).toContain('DASHBOARD_QUEUE_FILTER_STORAGE_KEY');
@@ -557,5 +561,111 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
     expect(navSrc).toContain('report: String');
     expect(navSrc).toContain('status: String');
     expect(navSrc).toContain('queueStatus: String');
+  });
+
+  test('5. Automatic URL parameter cleanup across tabs and filters without manual screen logic', () => {
+    const navParamsLog: Array<Record<string, any>> = [];
+    const mockNavigation = {
+      setParams: (p: Record<string, any>) => {
+        navParamsLog.push(p);
+      },
+    };
+
+    const harness = createHookHarness(
+      () => {
+        const [activeTab, setActiveTab] = usePersistedTab<DashboardTab>({
+          storageKey: DASHBOARD_ACTIVE_TAB_STORAGE_KEY,
+          allowedValues: DASHBOARD_TABS,
+          defaultValue: 'QUEUE',
+          queryParam: 'tab',
+          pathnameMatcher: isDashboardPathname,
+          navigation: mockNavigation,
+          cleanupParamsByValue: {
+            QUEUE: ['report', 'subTab', 'reportType'],
+            REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter'],
+            ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType'],
+          },
+        });
+        const [reportType, setReportType] = usePersistedTab<ReportType>({
+          storageKey: DASHBOARD_REPORT_TYPE_STORAGE_KEY,
+          allowedValues: REPORT_TYPES,
+          defaultValue: 'DAILY_EOD',
+          queryParam: 'report',
+          queryParamAliases: ['subTab', 'reportType'],
+          pathnameMatcher: isDashboardPathname,
+          syncUrl: activeTab === 'REPORTS',
+          clearUrlOnInactive: true,
+          navigation: mockNavigation,
+        });
+        const [queueFilter, setQueueFilter] = usePersistedTab<QueueFilter>({
+          storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+          allowedValues: QUEUE_FILTERS,
+          defaultValue: 'ALL',
+          omitDefaultFromUrl: true,
+          queryParam: 'status',
+          queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+          valueAliases: QUEUE_FILTER_VALUE_ALIASES,
+          pathnameMatcher: isDashboardPathname,
+          syncUrl: activeTab === 'QUEUE',
+          clearUrlOnInactive: true,
+          navigation: mockNavigation,
+        });
+        return { activeTab, setActiveTab, reportType, setReportType, queueFilter, setQueueFilter };
+      },
+      {},
+    );
+
+    // Initial state: defaults, omitDefaultFromUrl keeps status clean
+    expect(harness.result.activeTab).toBe('QUEUE');
+    expect(harness.result.queueFilter).toBe('ALL');
+    expect(currentHref).not.toContain('status=');
+    expect(currentHref).not.toContain('report=');
+
+    // 1. Select a non-default queue filter: status=Waiting appears in URL
+    harness.result.setQueueFilter('Waiting');
+    harness.rerender();
+    expect(harness.result.queueFilter).toBe('Waiting');
+    expect(currentHref).toContain('status=Waiting');
+    expect(navParamsLog.some((p) => p.status === 'Waiting')).toBe(true);
+
+    // 2. Switch tab to REPORTS: status must be automatically removed from URL by cleanupParamsByValue + clearUrlOnInactive
+    harness.result.setActiveTab('REPORTS');
+    harness.rerender();
+    expect(harness.result.activeTab).toBe('REPORTS');
+    expect(currentHref).toContain('tab=REPORTS');
+    expect(currentHref).not.toContain('status=');
+    expect(currentHref).not.toContain('Waiting');
+    expect(navParamsLog.some((p) => p.status === undefined)).toBe(true);
+
+    // 3. Set report sub-tab to CENSUS: report=CENSUS is synced
+    harness.result.setReportType('CENSUS');
+    harness.rerender();
+    expect(harness.result.reportType).toBe('CENSUS');
+    expect(currentHref).toContain('report=CENSUS');
+
+    // 4. Switch to ANALYTICS tab: both report and status are stripped
+    harness.result.setActiveTab('ANALYTICS');
+    harness.rerender();
+    expect(harness.result.activeTab).toBe('ANALYTICS');
+    expect(currentHref).toContain('tab=ANALYTICS');
+    expect(currentHref).not.toContain('report=');
+    expect(currentHref).not.toContain('status=');
+
+    // 5. Switch back to QUEUE: report is stripped, previous queue filter (Waiting) is restored to URL!
+    harness.result.setActiveTab('QUEUE');
+    harness.rerender();
+    expect(harness.result.activeTab).toBe('QUEUE');
+    expect(harness.result.queueFilter).toBe('Waiting');
+    expect(currentHref).toContain('tab=QUEUE');
+    expect(currentHref).toContain('status=Waiting');
+    expect(currentHref).not.toContain('report=');
+
+    // 6. Reset queue filter to ALL: omitDefaultFromUrl deletes status from URL
+    harness.result.setQueueFilter('ALL');
+    harness.rerender();
+    expect(harness.result.queueFilter).toBe('ALL');
+    expect(currentHref).not.toContain('status=');
+
+    harness.unmount();
   });
 });

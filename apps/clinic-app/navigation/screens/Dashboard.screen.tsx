@@ -115,6 +115,32 @@ export const DASHBOARD_ACTIVE_TAB_STORAGE_KEY = 'clinicez_dashboard_active_tab';
 export const DASHBOARD_REPORT_TYPE_STORAGE_KEY = 'clinicez_dashboard_report_type';
 export const DASHBOARD_QUEUE_FILTER_STORAGE_KEY = 'clinicez_dashboard_queue_filter';
 
+export const QUEUE_FILTER_VALUE_ALIASES: Record<string, QueueFilter> = {
+  all: 'ALL',
+  waiting: 'Waiting',
+  triage: 'Triaged',
+  triaged: 'Triaged',
+  in_consultation: 'InConsultation',
+  'in-consultation': 'InConsultation',
+  inconsultation: 'InConsultation',
+  consultation: 'InConsultation',
+  procedure: 'PendingProcedure',
+  procedure_bay: 'PendingProcedure',
+  'procedure-bay': 'PendingProcedure',
+  procedurebay: 'PendingProcedure',
+  pending_procedure: 'PendingProcedure',
+  'pending-procedure': 'PendingProcedure',
+  pendingprocedure: 'PendingProcedure',
+  on_hold: 'OnHold',
+  'on-hold': 'OnHold',
+  onhold: 'OnHold',
+  no_show: 'NoShow',
+  'no-show': 'NoShow',
+  noshow: 'NoShow',
+  completed: 'Completed',
+  done: 'Completed',
+};
+
 export interface DashboardRouteParams {
   tab?: string;
   report?: string;
@@ -372,54 +398,6 @@ export default function DashboardScreen({
   const queueFilterRef = useRef<QueueFilter>('ALL');
   const resetScrollRef = useRef<((targetKey?: string) => void) | null>(null);
 
-  const syncDashboardRouteAndUrl = useCallback(
-    (nextTab: DashboardTab, nextReport: ReportType, nextQueueFilter: QueueFilter) => {
-      navigation?.setParams?.({
-        tab: nextTab,
-        report: nextTab === 'REPORTS' ? nextReport : undefined,
-        status: nextTab === 'QUEUE' && nextQueueFilter !== 'ALL' ? nextQueueFilter : undefined,
-      });
-      if (
-        Platform.OS === 'web' &&
-        typeof window !== 'undefined' &&
-        window.location?.href &&
-        typeof window.history?.replaceState === 'function' &&
-        isDashboardPathname(window.location.pathname)
-      ) {
-        try {
-          const url = new URL(window.location.href);
-          url.searchParams.set('tab', nextTab);
-          if (nextTab === 'REPORTS') {
-            url.searchParams.set('report', nextReport);
-            url.searchParams.delete('status');
-            url.searchParams.delete('queueStatus');
-            url.searchParams.delete('queueFilter');
-          } else if (nextTab === 'QUEUE') {
-            url.searchParams.delete('report');
-            if (nextQueueFilter !== 'ALL') {
-              url.searchParams.set('status', nextQueueFilter);
-            } else {
-              url.searchParams.delete('status');
-              url.searchParams.delete('queueStatus');
-              url.searchParams.delete('queueFilter');
-            }
-          } else {
-            url.searchParams.delete('report');
-            url.searchParams.delete('status');
-            url.searchParams.delete('queueStatus');
-            url.searchParams.delete('queueFilter');
-          }
-          if (url.toString() !== window.location.href) {
-            window.history.replaceState(window.history.state ?? null, '', url.toString());
-          }
-        } catch {
-          // Ignore URL sync errors in restricted or headless test environments
-        }
-      }
-    },
-    [navigation],
-  );
-
   const [activeTab, setActiveTab] = usePersistedTab<DashboardTab>({
     storageKey: DASHBOARD_ACTIVE_TAB_STORAGE_KEY,
     allowedValues: DASHBOARD_TABS,
@@ -427,6 +405,12 @@ export default function DashboardScreen({
     routeParam: routeParams?.tab,
     queryParam: 'tab',
     pathnameMatcher: isDashboardPathname,
+    navigation,
+    cleanupParamsByValue: {
+      QUEUE: ['report', 'subTab', 'reportType'],
+      REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter'],
+      ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType'],
+    },
     onPersist: (nextTab) => {
       activeTabRef.current = nextTab;
       const scrollKey =
@@ -436,7 +420,6 @@ export default function DashboardScreen({
             ? `clinicez.scroll.dashboard.QUEUE.${queueFilterRef.current}`
             : `clinicez.scroll.dashboard.${nextTab}`;
       resetScrollRef.current?.(scrollKey);
-      syncDashboardRouteAndUrl(nextTab, reportTypeRef.current, queueFilterRef.current);
     },
   });
   activeTabRef.current = activeTab;
@@ -454,40 +437,18 @@ export default function DashboardScreen({
     storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
     allowedValues: QUEUE_FILTERS,
     defaultValue: 'ALL',
+    omitDefaultFromUrl: true,
     routeParam: routeParams?.status || routeParams?.queueStatus || routeParams?.queueFilter,
     queryParam: 'status',
     queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
-    valueAliases: {
-      all: 'ALL',
-      waiting: 'Waiting',
-      triage: 'Triaged',
-      triaged: 'Triaged',
-      in_consultation: 'InConsultation',
-      'in-consultation': 'InConsultation',
-      inconsultation: 'InConsultation',
-      consultation: 'InConsultation',
-      procedure: 'PendingProcedure',
-      procedure_bay: 'PendingProcedure',
-      'procedure-bay': 'PendingProcedure',
-      procedurebay: 'PendingProcedure',
-      pending_procedure: 'PendingProcedure',
-      'pending-procedure': 'PendingProcedure',
-      pendingprocedure: 'PendingProcedure',
-      on_hold: 'OnHold',
-      'on-hold': 'OnHold',
-      onhold: 'OnHold',
-      no_show: 'NoShow',
-      'no-show': 'NoShow',
-      noshow: 'NoShow',
-      completed: 'Completed',
-      done: 'Completed',
-    },
+    valueAliases: QUEUE_FILTER_VALUE_ALIASES,
     pathnameMatcher: isDashboardPathname,
     syncUrl: activeTab === 'QUEUE',
+    clearUrlOnInactive: true,
+    navigation,
     onPersist: (nextFilter) => {
       queueFilterRef.current = nextFilter;
       resetScrollRef.current?.(`clinicez.scroll.dashboard.QUEUE.${nextFilter}`);
-      syncDashboardRouteAndUrl(activeTabRef.current, reportTypeRef.current, nextFilter);
     },
   });
   queueFilterRef.current = queueFilter;
@@ -524,10 +485,11 @@ export default function DashboardScreen({
     queryParamAliases: ['subTab', 'reportType'],
     pathnameMatcher: isDashboardPathname,
     syncUrl: activeTab === 'REPORTS',
+    clearUrlOnInactive: true,
+    navigation,
     onPersist: (nextReport) => {
       reportTypeRef.current = nextReport;
       resetScrollRef.current?.(`clinicez.scroll.dashboard.REPORTS.${nextReport}`);
-      syncDashboardRouteAndUrl(activeTabRef.current, nextReport, queueFilterRef.current);
     },
   });
   reportTypeRef.current = reportType;
