@@ -5,8 +5,8 @@ import { getSessionItem, setSessionItem } from '../utils/deviceStorage';
 export interface UsePersistedTabOptions<T extends string> {
   /** Storage key persisted via `deviceStorage` (`sessionStorage` + `localStorage` on web, SQLite on native). */
   storageKey: string;
-  /** Whitelist of valid tab identifiers. */
-  allowedValues: readonly T[];
+  /** Whitelist of valid tab identifiers. If omitted or empty, any non-empty string is accepted. */
+  allowedValues?: readonly T[];
   /** Fallback tab when no valid route, URL, or storage value exists. */
   defaultValue: T;
   /** Optional incoming React Navigation route param (`route?.params?.tab`). */
@@ -31,6 +31,8 @@ export interface UsePersistedTabOptions<T extends string> {
    * equals `defaultValue`, keeping the URL clean (e.g. `status=ALL` is omitted).
    */
   omitDefaultFromUrl?: boolean;
+  /** Whether empty string `""` is treated as a valid value rather than falling back to default. */
+  allowEmpty?: boolean;
   /**
    * Specific query parameters to delete from the URL mapped per target tab value.
    * e.g. when tab switches to `REPORTS`, cleanup `['status', 'queueStatus', 'queueFilter', 'filter']`.
@@ -46,12 +48,20 @@ export interface UsePersistedTabOptions<T extends string> {
 
 export function normalizePersistedTabValue<T extends string>(
   raw: string | null | undefined,
-  allowedValues: readonly T[],
+  allowedValues?: readonly T[],
   valueAliases?: Record<string, T>,
+  allowEmpty?: boolean,
 ): T | null {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return allowEmpty || (allowedValues && (allowedValues as readonly string[]).includes(''))
+      ? ('' as T)
+      : null;
+  }
+  if (!allowedValues || allowedValues.length === 0) {
+    return trimmed as T;
+  }
   const exact = allowedValues.find((candidate) => candidate === trimmed);
   if (exact) return exact;
   const upper = trimmed.toUpperCase();
@@ -79,18 +89,22 @@ export function normalizePersistedTabValue<T extends string>(
 
 export function readPersistedTabFromSearch<T extends string>(
   search: string | null | undefined,
-  allowedValues: readonly T[],
+  allowedValues?: readonly T[],
   queryParam?: string,
   queryParamAliases?: readonly string[],
   valueAliases?: Record<string, T>,
+  allowEmpty?: boolean,
 ): T | null {
   if (!search || !queryParam) return null;
   try {
     const params = new URLSearchParams(search);
     const keys = [queryParam, ...(queryParamAliases ?? [])];
     for (const key of keys) {
-      const candidate = normalizePersistedTabValue(params.get(key), allowedValues, valueAliases);
-      if (candidate) return candidate;
+      const rawVal = params.get(key);
+      if (rawVal !== null) {
+        const candidate = normalizePersistedTabValue(rawVal, allowedValues, valueAliases, allowEmpty);
+        if (candidate !== null) return candidate;
+      }
     }
   } catch {
     // Ignore malformed query strings in restricted or non-browser environments
@@ -107,6 +121,7 @@ export function resolveInitialPersistedTab<T extends string>({
   queryParamAliases,
   valueAliases,
   pathnameMatcher,
+  allowEmpty,
 }: Pick<
   UsePersistedTabOptions<T>,
   | 'storageKey'
@@ -117,9 +132,11 @@ export function resolveInitialPersistedTab<T extends string>({
   | 'queryParamAliases'
   | 'valueAliases'
   | 'pathnameMatcher'
+  | 'allowEmpty'
 >): T {
-  const fromRoute = normalizePersistedTabValue(routeParam, allowedValues, valueAliases);
-  if (fromRoute) return fromRoute;
+  const effectiveAllowEmpty = allowEmpty ?? (defaultValue === ('' as T));
+  const fromRoute = normalizePersistedTabValue(routeParam, allowedValues, valueAliases, effectiveAllowEmpty);
+  if (fromRoute !== null) return fromRoute;
 
   if (Platform.OS === 'web' && typeof window !== 'undefined' && queryParam) {
     const pathname = window.location?.pathname ?? '';
@@ -131,13 +148,16 @@ export function resolveInitialPersistedTab<T extends string>({
         queryParam,
         queryParamAliases,
         valueAliases,
+        effectiveAllowEmpty,
       );
-      if (fromUrl) return fromUrl;
+      if (fromUrl !== null) return fromUrl;
     }
   }
 
-  const fromStorage = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues, valueAliases);
-  if (fromStorage) return fromStorage;
+  if (storageKey) {
+    const fromStorage = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues, valueAliases, effectiveAllowEmpty);
+    if (fromStorage !== null) return fromStorage;
+  }
 
   return defaultValue;
 }
@@ -161,7 +181,7 @@ export function syncSearchParamsAndHistory(options: WebHistorySyncOptions): void
       let hasNavUpdates = false;
 
       if (queryParam) {
-        if (value === null || value === undefined || omitValue) {
+        if (value === null || value === undefined || value === '' || omitValue) {
           navUpdates[queryParam] = undefined;
           hasNavUpdates = true;
         } else {
@@ -215,7 +235,7 @@ export function syncSearchParamsAndHistory(options: WebHistorySyncOptions): void
 
     // Set or delete primary queryParam
     if (queryParam) {
-      if (value === null || value === undefined || omitValue) {
+      if (value === null || value === undefined || value === '' || omitValue) {
         if (url.searchParams.has(queryParam)) {
           url.searchParams.delete(queryParam);
           changed = true;
@@ -268,11 +288,14 @@ export function usePersistedTab<T extends string>(
     syncUrl = true,
     clearUrlOnInactive,
     omitDefaultFromUrl,
+    allowEmpty,
     cleanupParamsByValue,
     cleanupParams,
     navigation,
     onPersist,
   } = options;
+
+  const effectiveAllowEmpty = allowEmpty ?? (defaultValue === ('' as T));
 
   const [value, setValueState] = useState<T>(() =>
     resolveInitialPersistedTab({
@@ -284,6 +307,7 @@ export function usePersistedTab<T extends string>(
       queryParamAliases,
       valueAliases,
       pathnameMatcher,
+      allowEmpty: effectiveAllowEmpty,
     }),
   );
 
@@ -358,9 +382,11 @@ export function usePersistedTab<T extends string>(
   useEffect(() => {
     if (didHydrateSyncRef.current) return;
     didHydrateSyncRef.current = true;
-    const stored = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues, valueAliases);
-    if (stored !== valueRef.current && (valueRef.current !== defaultValue || stored !== null)) {
-      setSessionItem(storageKey, valueRef.current);
+    if (storageKey) {
+      const stored = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues, valueAliases, effectiveAllowEmpty);
+      if (stored !== valueRef.current && (valueRef.current !== defaultValue || stored !== null)) {
+        setSessionItem(storageKey, valueRef.current);
+      }
     }
     if (syncUrl) {
       const shouldOmit = Boolean(omitDefaultFromUrl && valueRef.current === defaultValue);
@@ -387,6 +413,7 @@ export function usePersistedTab<T extends string>(
     allowedValues,
     clearUrlOnInactive,
     defaultValue,
+    effectiveAllowEmpty,
     getCleanupKeys,
     omitDefaultFromUrl,
     queryParam,
@@ -402,7 +429,7 @@ export function usePersistedTab<T extends string>(
       return;
     }
     prevRouteParamRef.current = routeParam;
-    const incoming = normalizePersistedTabValue(routeParam, allowedValues, valueAliases);
+    const incoming = normalizePersistedTabValue(routeParam, allowedValues, valueAliases, effectiveAllowEmpty);
     if (!incoming) return;
 
     const pendingIdx = pendingSyncedValuesRef.current.indexOf(incoming);
@@ -415,7 +442,9 @@ export function usePersistedTab<T extends string>(
       const prev = valueRef.current;
       valueRef.current = incoming;
       setValueState(incoming);
-      setSessionItem(storageKey, incoming);
+      if (storageKey) {
+        setSessionItem(storageKey, incoming);
+      }
       if (syncUrl) {
         const shouldOmit = Boolean(omitDefaultFromUrl && incoming === defaultValue);
         syncSearchParamsAndHistory({
@@ -432,6 +461,7 @@ export function usePersistedTab<T extends string>(
   }, [
     allowedValues,
     defaultValue,
+    effectiveAllowEmpty,
     getCleanupKeys,
     omitDefaultFromUrl,
     queryParam,
@@ -445,11 +475,13 @@ export function usePersistedTab<T extends string>(
     (updater: T | ((prev: T) => T)) => {
       const prev = valueRef.current;
       const rawNext = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
-      const validated = normalizePersistedTabValue(rawNext, allowedValues, valueAliases) ?? prev;
+      const validated = normalizePersistedTabValue(rawNext, allowedValues, valueAliases, effectiveAllowEmpty) ?? prev;
       valueRef.current = validated;
       pendingSyncedValuesRef.current = [...pendingSyncedValuesRef.current.slice(-4), validated];
       setValueState(validated);
-      setSessionItem(storageKey, validated);
+      if (storageKey) {
+        setSessionItem(storageKey, validated);
+      }
       if (syncUrl) {
         const shouldOmit = Boolean(omitDefaultFromUrl && validated === defaultValue);
         syncSearchParamsAndHistory({
@@ -468,6 +500,7 @@ export function usePersistedTab<T extends string>(
     [
       allowedValues,
       defaultValue,
+      effectiveAllowEmpty,
       getCleanupKeys,
       omitDefaultFromUrl,
       queryParam,

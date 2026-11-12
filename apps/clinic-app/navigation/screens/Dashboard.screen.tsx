@@ -150,6 +150,10 @@ export interface DashboardRouteParams {
   preset?: string;
   acuity?: string;
   visitType?: string;
+  repPreset?: string;
+  repStart?: string;
+  repEnd?: string;
+  eodDate?: string;
 }
 
 export function isDashboardPathname(pathname?: string | null): boolean {
@@ -410,9 +414,9 @@ export default function DashboardScreen({
     pathnameMatcher: isDashboardPathname,
     navigation,
     cleanupParamsByValue: {
-      QUEUE: ['report', 'subTab', 'reportType'],
-      REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter'],
-      ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType'],
+      QUEUE: ['report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter', 'preset', 'period', 'analyticsPreset'],
+      ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
     },
     onPersist: (nextTab) => {
       activeTabRef.current = nextTab;
@@ -490,6 +494,14 @@ export default function DashboardScreen({
     syncUrl: activeTab === 'REPORTS',
     clearUrlOnInactive: true,
     navigation,
+    cleanupParamsByValue: {
+      DAILY_EOD: ['repPreset', 'repStart', 'repEnd', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      CENSUS: ['eodDate'],
+      DISPENSING_LEDGER: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      MORBIDITY: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      TAX_DISCOUNT: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      DOCTOR_SHARES: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+    },
     onPersist: (nextReport) => {
       reportTypeRef.current = nextReport;
       resetScrollRef.current?.(`clinicez.scroll.dashboard.REPORTS.${nextReport}`);
@@ -593,9 +605,56 @@ export default function DashboardScreen({
   const initialAnalyticsRange = useMemo(() => computeDatePresetRange(analyticsPreset), [analyticsPreset]);
   const [analyticsStartDate, setAnalyticsStartDate] = useState(initialAnalyticsRange.start);
   const [analyticsEndDate, setAnalyticsEndDate] = useState(initialAnalyticsRange.end);
-  const [reportsStartDate, setReportsStartDate] = useState('');
-  const [reportsEndDate, setReportsEndDate] = useState('');
-  const [eodDate, setEodDate] = useState('');
+  const [reportsPreset, setReportsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'custom'>({
+    storageKey: 'clinicez_dashboard_reports_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'custom'],
+    defaultValue: 'today',
+    routeParam: routeParams?.repPreset as any,
+    queryParam: 'repPreset',
+    queryParamAliases: ['reportPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const defaultReportsRange = useMemo(() => {
+    return reportsPreset === 'custom'
+      ? { start: getManilaTodayStr(), end: getManilaTodayStr() }
+      : computeDatePresetRange(reportsPreset);
+  }, [reportsPreset]);
+  const [reportsStartDate, setReportsStartDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_start',
+    defaultValue: defaultReportsRange.start,
+    routeParam: routeParams?.repStart,
+    queryParam: 'repStart',
+    queryParamAliases: ['reportStart', 'startDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [reportsEndDate, setReportsEndDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_end',
+    defaultValue: defaultReportsRange.end,
+    routeParam: routeParams?.repEnd,
+    queryParam: 'repEnd',
+    queryParamAliases: ['reportEnd', 'endDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [eodDate, setEodDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_eod_date',
+    defaultValue: getManilaTodayStr(),
+    routeParam: routeParams?.eodDate,
+    queryParam: 'eodDate',
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
   const [isAnalyticsDateRangeModalOpen, setIsAnalyticsDateRangeModalOpen] = useState(false);
   const [isReportsDateRangeModalOpen, setIsReportsDateRangeModalOpen] = useState(false);
   const [isEodDatePickerModalOpen, setIsEodDatePickerModalOpen] = useState(false);
@@ -4148,13 +4207,15 @@ export default function DashboardScreen({
                   '7d': 'Last 7 Days',
                   '30d': 'This Month',
                 };
+                const isActive = reportsPreset === preset;
                 return (
                   <Button
                     key={preset}
-                    variant="subtle"
+                    variant={isActive ? 'primary' : 'subtle'}
                     size="xs"
                     title={labelMap[preset]}
                     onPress={() => {
+                      setReportsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setReportsStartDate(range.start);
                       setReportsEndDate(range.end);
@@ -4204,6 +4265,7 @@ export default function DashboardScreen({
         endDate={reportsEndDate}
         boundaryMode="pastOrToday"
         onApply={(start, end) => {
+          setReportsPreset('custom');
           setReportsStartDate(start);
           setReportsEndDate(end);
           setIsReportsDateRangeModalOpen(false);

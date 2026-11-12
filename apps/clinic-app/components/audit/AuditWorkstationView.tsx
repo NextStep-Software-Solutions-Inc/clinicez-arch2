@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,20 +15,23 @@ import { useAuth, usePermission } from '../../context/AuthContext';
 import { useClinic } from '../../context/ClinicContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import { useAuditLogs } from '../../hooks/useAuditLogs';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import AuditFilterBar from './AuditFilterBar';
 import AuditTable from './AuditTable';
 import AuditInspectionDrawer from './AuditInspectionDrawer';
 import AuditExportModal from './AuditExportModal';
 import AuditFilterMoreSheet from './AuditFilterMoreSheet';
 import DateRangePickerModal from '../ui/DateRangePickerModal';
-import type { ClinicAuditEntryDto } from '../../services/clinicService';
+import type { ClinicAuditEntryDto, AuditDatePreset } from '../../services/clinicService';
 
 export interface AuditWorkstationViewProps {
   embeddedInSettings?: boolean;
+  navigation?: any;
 }
 
 export function AuditWorkstationView({
   embeddedInSettings = false,
+  navigation,
 }: AuditWorkstationViewProps) {
   const { user } = useAuth();
   const { dateFormat, timeFormat, timeZoneId } = useClinic();
@@ -47,6 +50,70 @@ export function AuditWorkstationView({
   const lastScrollYRef = useRef(0);
   const viewportHeightRef = useRef(800);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Unified Persistence & Deep Linking for Audit Filters
+  const [persistedCategory, setPersistedCategory] = usePersistedTab<string>({
+    storageKey: 'clinicez_audit_category',
+    allowedValues: ['All', 'Security', 'Operations', 'Billing', 'Clinical Access', 'PhilHealth Yakap', 'Clinical', 'PhilHealth'],
+    defaultValue: 'All',
+    queryParam: 'category',
+    pathnameMatcher: (p) => (p || '').includes('audit') || (p || '').includes('settings'),
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+
+  const [persistedSeverity, setPersistedSeverity] = usePersistedTab<string>({
+    storageKey: 'clinicez_audit_severity',
+    allowedValues: ['All', 'Emergency', 'Urgent', 'Routine'],
+    defaultValue: 'All',
+    queryParam: 'severity',
+    pathnameMatcher: (p) => (p || '').includes('audit') || (p || '').includes('settings'),
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+
+  const [persistedSearch, setPersistedSearch] = usePersistedTab<string>({
+    storageKey: 'clinicez_audit_search',
+    defaultValue: '',
+    queryParam: 'q',
+    queryParamAliases: ['search'],
+    pathnameMatcher: (p) => (p || '').includes('audit') || (p || '').includes('settings'),
+    omitDefaultFromUrl: true,
+    allowEmpty: true,
+    navigation,
+  });
+
+  const [persistedDatePreset, setPersistedDatePreset] = usePersistedTab<AuditDatePreset>({
+    storageKey: 'clinicez_audit_date_preset',
+    allowedValues: ['today', '24h', '7d', '30d', 'all', 'custom'],
+    defaultValue: '7d',
+    queryParam: 'preset',
+    pathnameMatcher: (p) => (p || '').includes('audit') || (p || '').includes('settings'),
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+
+  const [persistedStartDate, setPersistedStartDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_audit_start_date',
+    defaultValue: '',
+    queryParam: 'start',
+    queryParamAliases: ['startDate'],
+    pathnameMatcher: (p) => (p || '').includes('audit') || (p || '').includes('settings'),
+    omitDefaultFromUrl: true,
+    allowEmpty: true,
+    navigation,
+  });
+
+  const [persistedEndDate, setPersistedEndDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_audit_end_date',
+    defaultValue: '',
+    queryParam: 'end',
+    queryParamAliases: ['endDate'],
+    pathnameMatcher: (p) => (p || '').includes('audit') || (p || '').includes('settings'),
+    omitDefaultFromUrl: true,
+    allowEmpty: true,
+    navigation,
+  });
 
   const {
     items,
@@ -85,7 +152,95 @@ export function AuditWorkstationView({
     exportLogs,
   } = useAuditLogs({
     canRead,
+    initialCategory: persistedCategory,
+    initialSeverity: persistedSeverity,
+    initialDatePreset: persistedDatePreset,
   });
+
+  const didSyncDatesRef = useRef(false);
+  useEffect(() => {
+    if (didSyncDatesRef.current) return;
+    didSyncDatesRef.current = true;
+    if (persistedDatePreset === 'custom') {
+      if (persistedStartDate) setStartDate(persistedStartDate);
+      if (persistedEndDate) setEndDate(persistedEndDate);
+    }
+    if (persistedSearch && persistedSearch !== search) {
+      setSearch(persistedSearch);
+    }
+  }, []);
+
+  const handleSelectCategory = useCallback(
+    (cat: string) => {
+      setCategory(cat);
+      setPersistedCategory(cat);
+    },
+    [setCategory, setPersistedCategory],
+  );
+
+  const handleSeverityFilterChange = useCallback(
+    (sev: string) => {
+      setSeverity(sev);
+      setPersistedSeverity(sev);
+    },
+    [setSeverity, setPersistedSeverity],
+  );
+
+  const handleSearchChange = useCallback(
+    (text: string) => {
+      setSearch(text);
+      setPersistedSearch(text);
+    },
+    [setSearch, setPersistedSearch],
+  );
+
+  const handleDatePresetChange = useCallback(
+    (preset: AuditDatePreset) => {
+      applyDatePreset(preset);
+      setPersistedDatePreset(preset);
+      if (preset !== 'custom') {
+        setPersistedStartDate('');
+        setPersistedEndDate('');
+      }
+    },
+    [applyDatePreset, setPersistedDatePreset, setPersistedStartDate, setPersistedEndDate],
+  );
+
+  const handleStartDateChange = useCallback(
+    (d: string) => {
+      setStartDate(d);
+      setPersistedDatePreset('custom');
+      setPersistedStartDate(d);
+    },
+    [setStartDate, setPersistedDatePreset, setPersistedStartDate],
+  );
+
+  const handleEndDateChange = useCallback(
+    (d: string) => {
+      setEndDate(d);
+      setPersistedDatePreset('custom');
+      setPersistedEndDate(d);
+    },
+    [setEndDate, setPersistedDatePreset, setPersistedEndDate],
+  );
+
+  const handleResetFilters = useCallback(() => {
+    resetFilters();
+    setPersistedCategory('All');
+    setPersistedSeverity('All');
+    setPersistedSearch('');
+    setPersistedDatePreset('7d');
+    setPersistedStartDate('');
+    setPersistedEndDate('');
+  }, [
+    resetFilters,
+    setPersistedCategory,
+    setPersistedSeverity,
+    setPersistedSearch,
+    setPersistedDatePreset,
+    setPersistedStartDate,
+    setPersistedEndDate,
+  ]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -139,19 +294,19 @@ export function AuditWorkstationView({
         {/* Filter Controls Bar */}
         <AuditFilterBar
           selectedCategory={category}
-          onSelectCategory={setCategory}
+          onSelectCategory={handleSelectCategory}
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           startDate={startDate}
-          onStartDateChange={setStartDate}
+          onStartDateChange={handleStartDateChange}
           endDate={endDate}
-          onEndDateChange={setEndDate}
+          onEndDateChange={handleEndDateChange}
           severityFilter={severity}
-          onSeverityFilterChange={setSeverity}
+          onSeverityFilterChange={handleSeverityFilterChange}
           datePreset={datePreset}
-          onDatePresetChange={applyDatePreset}
+          onDatePresetChange={handleDatePresetChange}
           dateRangeError={dateRangeError}
-          onResetFilters={resetFilters}
+          onResetFilters={handleResetFilters}
           onOpenExport={canExport ? () => setIsExportModalOpen(true) : undefined}
           isExporting={isExporting}
           onRefresh={refresh}
@@ -236,9 +391,8 @@ export function AuditWorkstationView({
           startDate={startDate}
           endDate={endDate}
           onApply={(start, end) => {
-            setStartDate(start);
-            setEndDate(end);
-            applyDatePreset('custom');
+            handleStartDateChange(start);
+            handleEndDateChange(end);
           }}
           boundaryMode="pastOrToday"
         />
@@ -248,13 +402,13 @@ export function AuditWorkstationView({
           visible={isMoreFiltersSheetOpen}
           onClose={() => setIsMoreFiltersSheetOpen(false)}
           selectedCategory={category}
-          onSelectCategory={setCategory}
+          onSelectCategory={handleSelectCategory}
           severityFilter={severity}
-          onSeverityFilterChange={setSeverity}
+          onSeverityFilterChange={handleSeverityFilterChange}
           startDate={startDate}
           endDate={endDate}
           onOpenDateRangePicker={() => setIsDateRangeModalOpen(true)}
-          onResetFilters={resetFilters}
+          onResetFilters={handleResetFilters}
         />
       </View>
     );
@@ -280,19 +434,19 @@ export function AuditWorkstationView({
         {/* Filter Controls Bar */}
         <AuditFilterBar
           selectedCategory={category}
-          onSelectCategory={setCategory}
+          onSelectCategory={handleSelectCategory}
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           startDate={startDate}
-          onStartDateChange={setStartDate}
+          onStartDateChange={handleStartDateChange}
           endDate={endDate}
-          onEndDateChange={setEndDate}
+          onEndDateChange={handleEndDateChange}
           severityFilter={severity}
-          onSeverityFilterChange={setSeverity}
+          onSeverityFilterChange={handleSeverityFilterChange}
           datePreset={datePreset}
-          onDatePresetChange={applyDatePreset}
+          onDatePresetChange={handleDatePresetChange}
           dateRangeError={dateRangeError}
-          onResetFilters={resetFilters}
+          onResetFilters={handleResetFilters}
           onOpenExport={canExport ? () => setIsExportModalOpen(true) : undefined}
           isExporting={isExporting}
           onRefresh={refresh}
@@ -378,9 +532,8 @@ export function AuditWorkstationView({
         startDate={startDate}
         endDate={endDate}
         onApply={(start, end) => {
-          setStartDate(start);
-          setEndDate(end);
-          applyDatePreset('custom');
+          handleStartDateChange(start);
+          handleEndDateChange(end);
         }}
         boundaryMode="pastOrToday"
       />
@@ -390,13 +543,13 @@ export function AuditWorkstationView({
         visible={isMoreFiltersSheetOpen}
         onClose={() => setIsMoreFiltersSheetOpen(false)}
         selectedCategory={category}
-        onSelectCategory={setCategory}
+        onSelectCategory={handleSelectCategory}
         severityFilter={severity}
-        onSeverityFilterChange={setSeverity}
+        onSeverityFilterChange={handleSeverityFilterChange}
         startDate={startDate}
         endDate={endDate}
         onOpenDateRangePicker={() => setIsDateRangeModalOpen(true)}
-        onResetFilters={resetFilters}
+        onResetFilters={handleResetFilters}
       />
     </View>
   );

@@ -71,6 +71,10 @@ const Tab = createBottomTabNavigator({
           preset: String,
           acuity: String,
           visitType: String,
+          repPreset: String,
+          repStart: String,
+          repEnd: String,
+          eodDate: String,
         },
       },
       options: {
@@ -101,6 +105,7 @@ const Tab = createBottomTabNavigator({
         parse: {
           chartTab: String,
           queueView: String,
+          station: String,
           forceSeparateVisit: parseBooleanRouteParam,
         },
       },
@@ -117,6 +122,8 @@ const Tab = createBottomTabNavigator({
         parse: {
           view: String,
           status: String,
+          doctorId: String,
+          date: String,
         },
       },
       options: {

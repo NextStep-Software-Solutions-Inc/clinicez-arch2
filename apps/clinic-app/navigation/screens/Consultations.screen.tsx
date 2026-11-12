@@ -515,14 +515,24 @@ export default function ConsultationsScreen() {
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
 
-  const [queueViewFilter, setQueueViewFilter] = useState<QueueView>(() => {
-    const saved = getDeviceItem(`${staffKey}:queueView`);
-    return saved === 'WaitingForDoctor' || saved === 'MyRoom' || saved === 'PendingProcedure' || saved === 'Completed' || saved === 'All'
-      ? saved
-      : 'WaitingForDoctor';
+  const [queueViewFilter, setQueueViewFilter] = usePersistedTab<QueueView>({
+    storageKey: `${staffKey}:queueView`,
+    allowedValues: ['WaitingForDoctor', 'MyRoom', 'PendingProcedure', 'Completed', 'All'],
+    defaultValue: 'WaitingForDoctor',
+    routeParam: (route?.params as any)?.queueView,
+    queryParam: 'queueView',
+    queryParamAliases: ['view', 'status'],
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
+    navigation,
   });
-  const [selectedStationFilter, setSelectedStationFilter] = useState<string>(() => {
-    return getDeviceItem(`${staffKey}:station`) || 'ALL';
+  const [selectedStationFilter, setSelectedStationFilter] = usePersistedTab<string>({
+    storageKey: `${staffKey}:station`,
+    defaultValue: 'ALL',
+    routeParam: (route?.params as any)?.station,
+    queryParam: 'station',
+    omitDefaultFromUrl: true,
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
+    navigation,
   });
   const didApplyStaffRoomDefaults = useRef(false);
 
