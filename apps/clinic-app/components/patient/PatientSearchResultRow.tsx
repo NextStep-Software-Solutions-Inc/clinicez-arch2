@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import { theme } from '../../constants/theme';
+import { formatBloodTypeLabel } from '../../constants/bloodTypes';
 import { ClinicPatient, ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { computePatientLocation } from './patientLocation';
 
@@ -71,8 +72,10 @@ export default function PatientSearchResultRow({
         return patient.contactNumber ? { value: patient.contactNumber } : null;
       case 'philHealthNumber':
         return patient.philHealthNumber ? { label: 'PhilHealth', value: patient.philHealthNumber } : null;
-      case 'bloodType':
-        return patient.bloodType ? { label: 'Blood', value: patient.bloodType } : null;
+      case 'bloodType': {
+        const formatted = formatBloodTypeLabel(patient.bloodType);
+        return formatted ? { label: 'Blood', value: formatted } : null;
+      }
       case 'civilStatus':
         return patient.civilStatus ? { value: patient.civilStatus } : null;
       case 'barangay': {

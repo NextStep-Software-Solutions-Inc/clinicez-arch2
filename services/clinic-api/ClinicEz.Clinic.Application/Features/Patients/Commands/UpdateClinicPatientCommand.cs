@@ -194,7 +194,14 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         }
         patient.SeniorCitizenId = request.SeniorCitizenId?.Trim();
         patient.PwdId = request.PwdId?.Trim();
-        if (Enum.TryParse<BloodType>(request.BloodType, true, out var bt)) patient.BloodType = bt; else if (request.BloodType == null) patient.BloodType = null;
+        if (BloodTypeParser.TryParse(request.BloodType, out var bt))
+        {
+            patient.BloodType = bt;
+        }
+        else if (string.IsNullOrWhiteSpace(request.BloodType))
+        {
+            patient.BloodType = null;
+        }
         patient.CustomFields = nextCustomFields;
 
         if (!string.IsNullOrWhiteSpace(request.VerificationStatus) && Enum.TryParse<PatientVerificationStatus>(request.VerificationStatus, true, out var vs))

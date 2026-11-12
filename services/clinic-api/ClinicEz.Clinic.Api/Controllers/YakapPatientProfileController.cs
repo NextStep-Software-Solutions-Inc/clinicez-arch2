@@ -241,7 +241,7 @@ public sealed class YakapPatientProfileController : ControllerBase
             DependentRelationship = isDependentDefault ? "C" : null,
             Atc = "A",
             IsWalkedIn = "Y",
-            BloodType = patient.BloodType?.ToString(),
+            BloodType = BloodTypeParser.Format(patient.BloodType),
             MedicalHistories = defaultMedHistories,
             SurgicalHistories = [],
             FamilyHistories = defaultFamHistories,
@@ -392,7 +392,7 @@ public sealed class YakapPatientProfileController : ControllerBase
         }
 
         if (!string.IsNullOrWhiteSpace(updatedProfile.BloodType) &&
-            Enum.TryParse<ClinicEz.Clinic.Domain.Enums.BloodType>(updatedProfile.BloodType, true, out var parsedBloodType))
+            BloodTypeParser.TryParse(updatedProfile.BloodType, out var parsedBloodType))
         {
             patient.BloodType = parsedBloodType;
         }

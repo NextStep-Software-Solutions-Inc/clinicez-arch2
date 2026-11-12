@@ -548,7 +548,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.PhilHealthNumber,
                 p.SeniorCitizenId,
                 p.PwdId,
-                p.BloodType?.ToString(),
+                BloodTypeParser.Format(p.BloodType),
                 p.CreatedAt,
                 customFields.Count > 0 ? customFields : null,
                 p.VerificationStatus.ToString(),

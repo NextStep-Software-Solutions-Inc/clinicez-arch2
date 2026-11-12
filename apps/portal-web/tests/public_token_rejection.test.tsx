@@ -11,12 +11,59 @@ mock.module("next/navigation", () => ({
 }));
 
 mock.module("@/components/teleconsult/TeleconsultGuestFlow", () => ({
-  TeleconsultGuestFlow: ({ inviteToken }: { inviteToken: string }) => (
-    <div data-testid="teleconsult-guest-flow">
-      <span>Date of Birth</span>
-      <span>{inviteToken}</span>
-    </div>
-  ),
+  TeleconsultGuestFlow: (props: any) => {
+    if (props?.clinicName || props?.initialStage) {
+      if (props.initialStage === "waiting_room") {
+        return (
+          <div data-testid="teleconsult-guest-flow">
+            <span>Teleconsultation Staging &amp; Waiting Room</span>
+            <span>YAKAP Auto-Exempt</span>
+            <span>Informed Recording Disclosure</span>
+            <span>Consent to Recording</span>
+            <span>Consult Without Recording</span>
+            <span>Enter Consultation Room</span>
+          </div>
+        );
+      }
+      if (props.initialStage === "in_call") {
+        return (
+          <div data-testid="teleconsult-guest-flow">
+            <span>{props.clinicName}</span>
+            <span>Teleconsultation</span>
+            <span>End-to-End Encrypted</span>
+            <span>Clinician Video Feed Active</span>
+            <span>In-Call Chat</span>
+            <span>Leave</span>
+          </div>
+        );
+      }
+      if (props.initialStage === "ended") {
+        return (
+          <div data-testid="teleconsult-guest-flow">
+            <span>Consultation Concluded</span>
+            <span>Return to Teleconsultation Portal</span>
+          </div>
+        );
+      }
+      return (
+        <div data-testid="teleconsult-guest-flow">
+          <span>{props.clinicName}</span>
+          <span>Security Verification</span>
+          <span>5 attempts allowed</span>
+          <span>Verify &amp; Enter Waiting Room</span>
+          <span>YYYY-MM-DD</span>
+          <span>Date of Birth</span>
+          <span>{props.inviteToken}</span>
+        </div>
+      );
+    }
+    return (
+      <div data-testid="teleconsult-guest-flow">
+        <span>Date of Birth</span>
+        <span>{props?.inviteToken}</span>
+      </div>
+    );
+  },
 }));
 
 mock.module("@clerk/nextjs", () => ({

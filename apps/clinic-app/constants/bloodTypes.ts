@@ -7,6 +7,7 @@ export {
   getBloodTypeMeta,
   normalizeBloodTypeOption,
   toBloodTypeOptionDescriptor,
+  formatBloodTypeLabel,
 } from '@shared/safe';
 
 export interface BloodTypeOption {

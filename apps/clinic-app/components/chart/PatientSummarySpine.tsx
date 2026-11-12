@@ -177,24 +177,12 @@ export function formatPhilHealthPin(pin?: string): string {
   return `${digits.slice(0, 2)}-${digits.slice(2, 11)}-${digits.slice(11)}`;
 }
 
-const BLOOD_TYPE_ENUM_LABELS: Record<string, string> = {
-  APOSITIVE: 'A+',
-  ANEGATIVE: 'A-',
-  BPOSITIVE: 'B+',
-  BNEGATIVE: 'B-',
-  ABPOSITIVE: 'AB+',
-  ABNEGATIVE: 'AB-',
-  OPOSITIVE: 'O+',
-  ONEGATIVE: 'O-',
-};
+import { formatBloodTypeLabel as sharedFormatBloodTypeLabel } from '../../constants/bloodTypes';
 
 export function formatBloodTypeLabel(raw?: string | null): string | undefined {
-  if (!raw) return undefined;
-  const trimmed = raw.trim();
-  if (!trimmed) return undefined;
-  const upper = trimmed.toUpperCase();
-  if (upper === 'UNKNOWN') return undefined;
-  return BLOOD_TYPE_ENUM_LABELS[upper] || trimmed;
+  const formatted = sharedFormatBloodTypeLabel(raw);
+  if (formatted === 'Unknown') return undefined;
+  return formatted;
 }
 
 /**

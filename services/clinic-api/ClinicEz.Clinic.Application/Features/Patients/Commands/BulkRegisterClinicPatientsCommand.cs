@@ -164,7 +164,7 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                 PhilHealthNumber = item.PhilHealthNumber?.Trim(),
                 SeniorCitizenId = item.SeniorCitizenId?.Trim(),
                 PwdId = item.PwdId?.Trim(),
-                BloodType = Enum.TryParse<BloodType>(item.BloodType, true, out var bt) ? bt : null,
+                BloodType = BloodTypeParser.TryParse(item.BloodType, out var bt) ? bt : null,
                 CustomFields = customFields,
                 VerificationStatus = Enum.TryParse<PatientVerificationStatus>(item.VerificationStatus, true, out var vs) ? vs : PatientVerificationStatus.PendingVerification,
                 CreatedAt = DateTime.UtcNow,
