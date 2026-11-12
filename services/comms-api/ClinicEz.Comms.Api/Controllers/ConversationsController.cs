@@ -36,6 +36,7 @@ public class ConversationsController : ControllerBase
         var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? request.TenantId;
         var facilityId = User.FindFirstValue("facility_id") ?? User.FindFirstValue("FacilityId") ?? request.FacilityId;
         var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "system";
+        var staffName = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("name") ?? "Staff Member";
 
         var command = new CreateConversationCommand(
             tenantId,
@@ -50,7 +51,8 @@ public class ConversationsController : ControllerBase
             request.IsEmergencyConfirmed,
             request.IsLocalOnly,
             staffId,
-            request.Participants);
+            request.Participants,
+            staffName);
 
         var result = await _mediator.Send(command, ct);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);

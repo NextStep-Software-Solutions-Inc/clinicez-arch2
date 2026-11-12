@@ -561,6 +561,7 @@ export default function ClinicChatDrawerHost() {
             contextId: params.patientId,
             category: params.department as any,
             participantStaffIds: params.participantStaffIds,
+            participants: params.participants,
           });
           setActiveConversationId(created.id);
           setIsNewConvModalOpen(false);

@@ -17,6 +17,7 @@ export function useConversations(
     facilityId,
     tenantId,
     staffId,
+    staffDisplayName,
     baseUrl,
     activeTicket,
     refreshTicket,
@@ -97,7 +98,41 @@ export function useConversations(
           ? crypto.randomUUID()
           : `conv-${Date.now()}`;
       const effectiveCreatedBy = staffId || 'staff';
-      const participantsList = request.participantIds || request.participantStaffIds || [];
+
+      // 1. Resolve participant inputs
+      let participantsList: Array<{
+        participantType: string;
+        participantId: string;
+        displayName: string;
+        role: string;
+      }> = [];
+
+      if (request.participants && request.participants.length > 0) {
+        participantsList = request.participants.map((p) => ({
+          participantType: p.participantType || 'Staff',
+          participantId: p.participantId,
+          displayName: p.displayName || 'Staff',
+          role: p.role || 'Member',
+        }));
+      } else {
+        const rawIds = request.participantIds || request.participantStaffIds || [];
+        participantsList = rawIds.map((id) => ({
+          participantType: 'Staff',
+          participantId: id,
+          displayName: 'Staff',
+          role: 'Member',
+        }));
+      }
+
+      // 2. If creator is authenticated and not yet enrolled in the participants list, prepend creator
+      if (staffId && !participantsList.some((p) => p.participantId === staffId)) {
+        participantsList.unshift({
+          participantType: 'Staff',
+          participantId: staffId,
+          displayName: staffDisplayName || 'Staff Member',
+          role: 'Owner',
+        });
+      }
 
       const newConv: ConversationDto = {
         id: optimisticId,
@@ -118,10 +153,10 @@ export function useConversations(
         createdAtUtc: new Date().toISOString(),
         createdBy: effectiveCreatedBy,
         participants: participantsList.map((p) => ({
-          id: p,
-          userId: p,
-          displayName: p,
-          role: 'Member',
+          id: p.participantId,
+          userId: p.participantId,
+          displayName: p.displayName,
+          role: p.role,
           joinedAtUtc: new Date().toISOString(),
         })),
       };
@@ -155,12 +190,7 @@ export function useConversations(
           category: request.category || null,
           isEmergencyConfirmed: false,
           isLocalOnly: request.isLocalOnly ?? false,
-          participants: participantsList.length > 0 ? participantsList.map((id) => ({
-            participantType: 'Staff',
-            participantId: id,
-            displayName: 'Staff',
-            role: 'Member'
-          })) : null
+          participants: participantsList.length > 0 ? participantsList : null
         };
 
         const res = await fetch(url, {
@@ -183,7 +213,7 @@ export function useConversations(
       client.events.emit('conversationCreated', newConv);
       return newConv;
     },
-    [activeTicket?.ticket, baseUrl, client, facilityId, refreshTicket, staffId, tenantId]
+    [activeTicket?.ticket, baseUrl, client, facilityId, refreshTicket, staffDisplayName, staffId, tenantId]
   );
 
   // Real-time synchronization

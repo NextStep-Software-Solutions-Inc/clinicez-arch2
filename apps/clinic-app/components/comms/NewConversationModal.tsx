@@ -17,6 +17,12 @@ export interface NewConversationModalProps {
     scope: 'Direct' | 'StaffContext' | 'Facility';
     title: string;
     participantStaffIds?: string[];
+    participants?: Array<{
+      participantType: string;
+      participantId: string;
+      displayName: string;
+      role?: string;
+    }>;
     patientId?: string;
     department?: string;
   }) => Promise<void>;
@@ -224,10 +230,36 @@ export default function NewConversationModal({
     setValidationError(null);
     setIsSubmitting(true);
     try {
+      const found = selectedStaffId ? staff.find((s) => s.id === selectedStaffId) : null;
+      const recipientName = found ? formatStaffName(found) : 'Staff Member';
+      const creatorName = current ? formatStaffName(current) : 'Staff Member';
+
+      const directParticipants = activeTab === 'Direct' && selectedStaffId
+        ? [
+            ...(current?.id
+              ? [
+                  {
+                    participantType: 'Staff',
+                    participantId: current.id,
+                    displayName: creatorName,
+                    role: 'Owner',
+                  },
+                ]
+              : []),
+            {
+              participantType: 'Staff',
+              participantId: selectedStaffId,
+              displayName: recipientName,
+              role: 'Member',
+            },
+          ]
+        : undefined;
+
       await onCreateConversation({
         scope: activeTab,
         title: title.trim(),
         participantStaffIds: selectedStaffId ? [selectedStaffId] : undefined,
+        participants: directParticipants,
         patientId: selectedPatient?.id,
         department: activeTab === 'Facility' ? selectedDepartment : undefined,
       });

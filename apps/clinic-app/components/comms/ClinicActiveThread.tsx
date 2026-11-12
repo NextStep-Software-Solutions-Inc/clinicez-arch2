@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
 import { useConversation, useSendMessage } from '@clinicez/comms-sdk/react';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
@@ -106,6 +106,26 @@ export default function ClinicActiveThread({
   const [members, setMembers] = useState<Array<{ id: string; name: string; role: string }>>([
     { id: effectiveUserId, name: auth?.user?.name || 'Current Clinician', role: auth?.user?.role || 'Clinician' },
   ]);
+
+  // Synchronize members from conversation participants whenever loaded or updated
+  useEffect(() => {
+    if (conversation?.participants && conversation.participants.length > 0) {
+      setMembers(
+        conversation.participants.map((p: any) => {
+          const participantId = p.participantId || p.userId || p.id;
+          const staffMatch = staff.find((s) => s.id === participantId);
+          return {
+            id: participantId,
+            name:
+              p.displayName && p.displayName !== 'Staff'
+                ? p.displayName
+                : (staffMatch ? formatStaffName(staffMatch) : p.displayName || 'Staff Member'),
+            role: p.role || (staffMatch?.role ?? 'Clinician'),
+          };
+        }),
+      );
+    }
+  }, [conversation?.participants, staff]);
 
   // Pinned Alerts & Clinical Orders Resolution (No fake hardcoded alerts)
   const activeAlerts = useMemo<PinnedAlertItem[]>(() => {
