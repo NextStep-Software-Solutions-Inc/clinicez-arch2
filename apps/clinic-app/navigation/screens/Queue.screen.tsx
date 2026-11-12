@@ -37,6 +37,9 @@ import {
   QueueMetrics,
   ClinicalProcedureRecord,
   ClinicRoom,
+  mapCensusVisitTypeLabel,
+  isNurseAssessmentVisitType,
+  isPhysicianConsultationVisitType,
 } from '../../services/clinicService';
 import { ProcedureExecutionModal } from '../../components/chart/NursingProceduresTab';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
@@ -426,9 +429,9 @@ export default function QueueScreen() {
                           variant={getPriorityVariant(ticket.priority)}
                           size="sm"
                         />
-                        {ticket.visitType && ticket.visitType !== 'Consultation' ? (
+                        {ticket.visitType ? (
                           <Badge
-                            label={ticket.visitType}
+                            label={mapCensusVisitTypeLabel(ticket.visitType)}
                             variant="neutral"
                             size="sm"
                           />
@@ -490,7 +493,7 @@ export default function QueueScreen() {
                           />
                         )}
 
-                      {ticket.visitType === 'VitalsCheckOnly' &&
+                      {isNurseAssessmentVisitType(ticket.visitType) &&
                         ticket.status !== 'Diverted' &&
                         ticket.status !== 'Cancelled' &&
                         ticket.status !== 'NoShow' && (
@@ -507,7 +510,7 @@ export default function QueueScreen() {
                           />
                         )}
 
-                      {(ticket.status === 'Triaged' || (ticket.visitType && ticket.visitType !== 'Consultation')) &&
+                      {(ticket.status === 'Triaged' || (ticket.visitType && !isPhysicianConsultationVisitType(ticket.visitType))) &&
                         ticket.status !== 'Completed' &&
                         ticket.status !== 'DischargedNonDoctor' &&
                         ticket.status !== 'Diverted' &&

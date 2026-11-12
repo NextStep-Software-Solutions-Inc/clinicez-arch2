@@ -332,7 +332,7 @@ public class ClinicCensusChallengerEmpiricalTests
         // Item 2: Standalone procedure -> Should NOT bleed doctor or vitals or invoice from item 1
         item2.IsNewPatient.Should().BeFalse();
         item2.AttendingDoctor.Should().Be("—");
-        item2.DoctorDiagnosis.Should().Be("N/A - Non-doctor visit");
+        item2.DoctorDiagnosis.Should().BeEmpty();
         item2.AttendingNurse.Should().Be("Nurse Juan");
         item2.ProceduresPerformed.Should().Be("Complex Wound Dressing");
         item2.VitalsSnapshot.Should().Be("No vitals recorded");
@@ -343,7 +343,7 @@ public class ClinicCensusChallengerEmpiricalTests
         // Item 3: Lab Specimen -> Should NOT bleed anything from item 1 or 2
         item3.IsNewPatient.Should().BeFalse();
         item3.AttendingDoctor.Should().Be("—");
-        item3.DoctorDiagnosis.Should().Be("N/A - Non-doctor visit");
+        item3.DoctorDiagnosis.Should().BeEmpty();
         item3.AttendingNurse.Should().Be("—");
         item3.ProceduresPerformed.Should().Be("None");
         item3.VitalsSnapshot.Should().Be("No vitals recorded");

@@ -27,7 +27,7 @@ public sealed record QueueItemDto(
     string? VitalsSummary,
     string? RoomOrStation = null,
     Guid? RoomId = null,
-    VisitType VisitType = VisitType.Consultation,
+    VisitType VisitType = VisitType.RoutineCheckup,
     string? DischargeNotes = null,
     DateTime? DischargedAt = null,
     Guid? DischargedByStaffId = null,

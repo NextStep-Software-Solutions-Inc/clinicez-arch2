@@ -215,7 +215,7 @@ public sealed class CompleteQueueItemCommandHandler : IRequestHandler<CompleteQu
             throw new NotFoundException($"Queue item '{request.Id}' was not found in this clinic.");
         }
 
-        if (item.VisitType == VisitType.Consultation)
+        if (item.VisitType.IsPhysicianConsultation())
         {
             var hasUnsignedEncounter = _consultationRepository != null &&
                 await _consultationRepository

@@ -130,6 +130,9 @@ const {
   clinicService,
   ROS_CATEGORY_OPTIONS,
   resolveCensusLedgerEntryMeta,
+  resolveCensusVisitServiceRows,
+  mapCensusVisitTypeLabel,
+  normalizeCensusDisplayField,
 } = await import('../services/clinicService');
 const { clinicApiClient } = await import('../services/apiClient');
 const { buildPatientOverflowMenuItems } = await import('../components/patient/PatientDirectoryCard');
@@ -373,18 +376,19 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
       expect(html).toContain('2 Pack');
     });
 
-    test('3.6 Two-Scenario Rule in Vitals Modal: OTC dispensing logger is enabled ONLY for Consultation and VitalsCheckOnly visits', async () => {
+    test('3.6 Vitals Modal OTC dispensing logger is enabled for the 5 outpatient VisitTypes and disabled for unrecognized values', async () => {
       const {
         NurseCareAndOtcDispensingSection,
         isVisitTypeEligibleForOtcDispensing,
       } = await import('../components/consultation/VitalsFormFields');
 
-      expect(isVisitTypeEligibleForOtcDispensing('Consultation')).toBe(true);
-      expect(isVisitTypeEligibleForOtcDispensing('VitalsCheckOnly')).toBe(true);
+      expect(isVisitTypeEligibleForOtcDispensing('RoutineCheckup')).toBe(true);
+      expect(isVisitTypeEligibleForOtcDispensing('AcuteIllnessConsultation')).toBe(true);
+      expect(isVisitTypeEligibleForOtcDispensing('ChronicDiseaseFollowUp')).toBe(true);
+      expect(isVisitTypeEligibleForOtcDispensing('PreventiveHealthAssessment')).toBe(true);
+      expect(isVisitTypeEligibleForOtcDispensing('UrgentCareVisit')).toBe(true);
       expect(isVisitTypeEligibleForOtcDispensing(undefined)).toBe(true);
       expect(isVisitTypeEligibleForOtcDispensing('StandaloneProcedure')).toBe(false);
-      expect(isVisitTypeEligibleForOtcDispensing('AdministrativeDocument')).toBe(false);
-      expect(isVisitTypeEligibleForOtcDispensing('LaboratorySpecimen')).toBe(false);
       expect(isVisitTypeEligibleForOtcDispensing('RetailPurchase')).toBe(false);
 
       const nonEligibleHtml = renderToStaticMarkup(
@@ -1071,6 +1075,89 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
       expect(consultationsSource).toContain('External purchase: ${remainingForPurchase} pcs');
       expect(consultationsSource).toContain('Clinic stock: ${dispensedInClinic} pcs');
       expect(timelineSource).toContain('Clinic stock: ${dispensedQty}/${rx.quantity} (${remainingQty} ext.)');
+    });
+
+    test('6.6 Census Register keeps parent visit main row intact, emits per-service sub-rows with providing staff, and leaves non-diagnosis and unrecognized VisitTypes blank', () => {
+      expect(mapCensusVisitTypeLabel('RoutineCheckup')).toBe('Routine Checkup');
+      expect(mapCensusVisitTypeLabel('PreventiveHealthAssessment')).toBe('Preventive Health Assessment');
+      expect(mapCensusVisitTypeLabel('UrgentCareVisit')).toBe('Urgent Care Visit');
+      expect(mapCensusVisitTypeLabel('StandaloneProcedure')).toBe('');
+      expect(mapCensusVisitTypeLabel('0')).toBe('');
+
+      expect(normalizeCensusDisplayField('N/A - Non-doctor visit')).toBe('');
+      expect(normalizeCensusDisplayField('—')).toBe('');
+      expect(normalizeCensusDisplayField('None recorded')).toBe('');
+      expect(normalizeCensusDisplayField('[J06.9] Acute URTI')).toBe('[J06.9] Acute URTI');
+
+      const multiServiceVisit = {
+        id: 'q-c001',
+        queueNumber: 'Q-001',
+        visitType: 'RoutineCheckup' as const,
+        acuity: 'Routine',
+        checkInTime: '2026-11-11T08:00:00Z',
+        completedTime: '2026-11-11T08:35:00Z',
+        patientCode: 'PAT-001',
+        patientName: 'Dela Cruz, Miguel',
+        age: 24,
+        sex: 'Male',
+        attendingDoctor: 'Dr. Ana Cruz (PRC: 0123456)',
+        attendingNurse: 'Nurse Clara, RN',
+        doctorDiagnosis: '[J20.9] Acute Bronchitis (Primary)',
+        servicesAvailed: [
+          'Routine Checkup',
+          'In-Clinic Procedure',
+          'Medicine Dispensing',
+          'Prescription',
+          'Medical Certificate',
+          'Laboratory Requisition',
+        ],
+        proceduresPerformed: 'Salbutamol Nebulization',
+        prescriptionsCount: 2,
+        medicalCertificatesCount: 1,
+        labRequisitionsCount: 1,
+      };
+
+      const subRows = resolveCensusVisitServiceRows(multiServiceVisit, [
+        {
+          id: 'disp-1',
+          dispensedAt: '2026-11-11T08:25:00Z',
+          queueItemId: 'q-c001',
+          queueNumber: 'C-001',
+          patientName: 'Dela Cruz, Miguel',
+          source: 'NurseVitalsCheck',
+          itemName: 'Paracetamol',
+          itemCategory: 'Medicine',
+          dosageOrSpec: '500mg',
+          formOrUnit: 'Tablet',
+          quantityDispensed: 2,
+          rosCategory: 'Respiratory',
+          dispensedByStaffName: 'Nurse Joy, RN',
+          dispensedByRole: 'Nurse',
+        },
+      ]);
+
+      expect(subRows.map((r) => r.serviceName)).toEqual([
+        'In-Clinic Procedure',
+        'Medicine Dispensing',
+        'Prescription',
+        'Medical Certificate',
+        'Laboratory Requisition',
+      ]);
+      expect(subRows[0].attendingNurse).toBe('Nurse Clara, RN');
+      expect(subRows[0].serviceDetails).toContain('Salbutamol Nebulization');
+      expect(subRows[1].attendingNurse).toBe('Nurse Joy, RN');
+      expect(subRows[1].serviceDetails).toContain('Paracetamol 500mg x2 Tablet');
+      expect(subRows[2].attendingDoctor).toContain('Dr. Ana Cruz');
+      expect(subRows.every((r) => r.doctorDiagnosis === '')).toBe(true);
+
+      const dashboardSource = fs.readFileSync(
+        path.join(APP_ROOT, 'navigation/screens/Dashboard.screen.tsx'),
+        'utf-8',
+      );
+      expect(dashboardSource).toContain('Service Availed');
+      expect(dashboardSource).toContain('Ticket, Date &amp; Time');
+      expect(dashboardSource).not.toContain('Ticket, Visit &amp; Services Availed');
+      expect(dashboardSource).toContain('resolveCensusVisitServiceRows(item, dispensingLedger)');
     });
   });
 });

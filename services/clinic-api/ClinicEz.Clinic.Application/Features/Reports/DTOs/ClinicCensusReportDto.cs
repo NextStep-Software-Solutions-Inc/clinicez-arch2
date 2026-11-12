@@ -145,7 +145,27 @@ public sealed record CensusItemDto(
     int PrescriptionsCount = 0,
     int MedicalCertificatesCount = 0,
     int ReferralsCount = 0,
-    int LabRequisitionsCount = 0
+    int LabRequisitionsCount = 0,
+    IReadOnlyList<CensusServiceRowDto>? ServiceRows = null
+);
+
+public sealed record CensusServiceRowDto(
+    int SubRowIndex,
+    string ServiceName,
+    DateTime? ServiceTime,
+    string? ReferenceNumber,
+    string? AttendingDoctor,
+    string? AttendingNurse,
+    string? ChiefComplaint,
+    string? NurseAssessment,
+    string? VitalsSnapshot,
+    string? DoctorDiagnosis,
+    string? ClinicalAssessment,
+    string? RosCategory,
+    string? SystemsReviewed,
+    string? ServiceDetails,
+    string? Acuity,
+    string? Disposition
 );
 
 public sealed record CensusDispensingLedgerItemDto(
@@ -189,11 +209,13 @@ public static class ClinicCensusBreakdownResolver
             (!string.IsNullOrWhiteSpace(item.ServicesAvailedSummary) && item.ServicesAvailedSummary.Contains(svc, StringComparison.OrdinalIgnoreCase));
 
         int consultVisits = items.Count > 0
-            ? items.Count(i => HasService(i, "Consultation") || i.VisitType.Equals("Consultation", StringComparison.OrdinalIgnoreCase))
+            ? items.Count(i => HasService(i, "Consultation") || VisitTypeExtensions.IsPhysicianConsultationString(i.VisitType))
             : report.Summary.Consultations;
 
         int vitalsCheckVisits = items.Count > 0
-            ? items.Count(i => HasService(i, "Vitals Check") || i.VisitType.Equals("VitalsCheckOnly", StringComparison.OrdinalIgnoreCase))
+            ? items.Count(i => HasService(i, "Vitals Check") ||
+                               HasService(i, "Preventive Health Assessment") ||
+                               i.VisitType.Equals(nameof(VisitType.PreventiveHealthAssessment), StringComparison.OrdinalIgnoreCase))
             : report.Summary.VitalsCheckVisits;
 
         int dispensingVisits = report.Summary.VisitsWithMedicineDispensing > 0
@@ -294,5 +316,113 @@ public static class ClinicCensusBreakdownResolver
             .ThenByDescending(x => x.DispensingCount)
             .ThenBy(x => x.RosCategory, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    public static string MapVisitTypeToPrimaryServiceLabel(string? visitType) => (visitType ?? string.Empty).Trim() switch
+    {
+        nameof(VisitType.RoutineCheckup) => "Routine Checkup",
+        nameof(VisitType.AcuteIllnessConsultation) => "Acute Illness Consultation",
+        nameof(VisitType.ChronicDiseaseFollowUp) => "Chronic Disease Follow-Up",
+        nameof(VisitType.PreventiveHealthAssessment) => "Preventive Health Assessment",
+        nameof(VisitType.UrgentCareVisit) => "Urgent Care Visit",
+        "Consultation" => "Routine Checkup",
+        "VitalsCheckOnly" => "Preventive Health Assessment",
+        var other => string.IsNullOrWhiteSpace(other) ? "Clinic Visit" : other
+    };
+
+    public static string NormalizeCensusDisplayValue(string? val, params string[] extraEmptySentinels)
+    {
+        if (string.IsNullOrWhiteSpace(val)) return string.Empty;
+        var trimmed = val.Trim();
+        if (trimmed is "—" or "-" ||
+            trimmed.Equals("N/A", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("N/A - Non-doctor visit", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("Non-doctor visit", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("No vitals recorded", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("None recorded", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        foreach (var sentinel in extraEmptySentinels)
+        {
+            if (trimmed.Equals(sentinel, StringComparison.OrdinalIgnoreCase))
+                return string.Empty;
+        }
+
+        return trimmed;
+    }
+
+    /// <summary>
+    /// Resolves additional per-service sub-rows availed on top of the parent visit row.
+    /// Keeps the parent visit row (with main attending MD &amp; RN, triage vitals, diagnosis, and billing) intact,
+    /// and emits dedicated sub-rows for auxiliary services (dispensing, prescriptions, certificates, referrals,
+    /// lab requisitions, and procedures performed on top of the base visit).
+    /// </summary>
+    public static IReadOnlyList<CensusServiceRowDto> ResolveServiceRows(CensusItemDto item)
+    {
+        if (item.ServiceRows != null)
+        {
+            return item.ServiceRows;
+        }
+
+        var primaryLabel = MapVisitTypeToPrimaryServiceLabel(item.VisitType);
+        if (item.ServicesAvailed is not { Count: > 0 })
+        {
+            return Array.Empty<CensusServiceRowDto>();
+        }
+
+        var doc = NormalizeCensusDisplayValue(item.AttendingDoctor);
+        var nurse = NormalizeCensusDisplayValue(item.AttendingNurse);
+        var procs = NormalizeCensusDisplayValue(item.ProceduresPerformed);
+        var dispensed = NormalizeCensusDisplayValue(item.DispensedMedicinesSummary);
+
+        var rows = new List<CensusServiceRowDto>();
+        int subIdx = 0;
+
+        foreach (var svc in item.ServicesAvailed)
+        {
+            if (svc.Equals(primaryLabel, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            bool isProc = svc.Equals("In-Clinic Procedure", StringComparison.OrdinalIgnoreCase);
+            bool isDisp = svc.Equals("Medicine Dispensing", StringComparison.OrdinalIgnoreCase);
+            bool isReferral = svc.Equals("Referral", StringComparison.OrdinalIgnoreCase);
+
+            string details = svc switch
+            {
+                _ when isProc => procs,
+                _ when isDisp => !string.IsNullOrEmpty(dispensed) ? $"Dispensed: {dispensed}" : string.Empty,
+                _ => string.Empty
+            };
+
+            string disposition = isDisp
+                ? "Dispensed"
+                : (isReferral ? "Referred" : (isProc ? "Completed" : "Issued"));
+
+            rows.Add(new CensusServiceRowDto(
+                SubRowIndex: subIdx++,
+                ServiceName: svc,
+                ServiceTime: item.CompletedTime ?? item.CalledTime ?? item.CheckInTime,
+                ReferenceNumber: null,
+                AttendingDoctor: isDisp && !VisitTypeExtensions.IsPhysicianConsultationString(item.VisitType) ? string.Empty : (isProc ? string.Empty : doc),
+                AttendingNurse: isProc || (isDisp && !VisitTypeExtensions.IsPhysicianConsultationString(item.VisitType)) ? nurse : string.Empty,
+                ChiefComplaint: string.Empty,
+                NurseAssessment: string.Empty,
+                VitalsSnapshot: string.Empty,
+                DoctorDiagnosis: string.Empty,
+                ClinicalAssessment: string.Empty,
+                RosCategory: string.Empty,
+                SystemsReviewed: string.Empty,
+                ServiceDetails: details,
+                Acuity: item.Acuity,
+                Disposition: disposition
+            ));
+        }
+
+        return rows;
     }
 }

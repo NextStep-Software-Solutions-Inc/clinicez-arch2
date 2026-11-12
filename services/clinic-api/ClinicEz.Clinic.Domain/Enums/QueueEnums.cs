@@ -2,13 +2,43 @@ namespace ClinicEz.Clinic.Domain.Enums;
 
 public enum VisitType
 {
-    Consultation = 1,
-    VitalsCheckOnly = 2,
-    RetailPurchase = 3,
-    StandaloneProcedure = 4,
-    LaboratorySpecimen = 5,
-    AdministrativeDocument = 6,
-    CashierSettlement = 7
+    RoutineCheckup = 1,
+    AcuteIllnessConsultation = 2,
+    ChronicDiseaseFollowUp = 3,
+    PreventiveHealthAssessment = 4,
+    UrgentCareVisit = 5
+}
+
+public static class VisitTypeExtensions
+{
+    public static bool IsPhysicianConsultation(this VisitType visitType) => visitType switch
+    {
+        VisitType.RoutineCheckup => true,
+        VisitType.AcuteIllnessConsultation => true,
+        VisitType.ChronicDiseaseFollowUp => true,
+        VisitType.UrgentCareVisit => true,
+        _ => false
+    };
+
+    public static bool IsPhysicianConsultationString(string? visitType) => (visitType ?? string.Empty).Trim() switch
+    {
+        nameof(VisitType.RoutineCheckup) => true,
+        nameof(VisitType.AcuteIllnessConsultation) => true,
+        nameof(VisitType.ChronicDiseaseFollowUp) => true,
+        nameof(VisitType.UrgentCareVisit) => true,
+        "Consultation" => true,
+        _ => false
+    };
+
+    public static string ToDisplayLabel(this VisitType visitType) => visitType switch
+    {
+        VisitType.RoutineCheckup => "Routine Checkup",
+        VisitType.AcuteIllnessConsultation => "Acute Illness Consultation",
+        VisitType.ChronicDiseaseFollowUp => "Chronic Disease Follow-Up",
+        VisitType.PreventiveHealthAssessment => "Preventive Health Assessment",
+        VisitType.UrgentCareVisit => "Urgent Care Visit",
+        _ => string.Empty
+    };
 }
 
 public enum QueuePriority

@@ -192,7 +192,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
                 var upNext = allTickets
                     .Where(q => q.Status != QueueStatus.Diverted &&
                                 q.Status != QueueStatus.DischargedNonDoctor &&
-                                ((q.VisitType == VisitType.Consultation &&
+                                ((q.VisitType.IsPhysicianConsultation() &&
                                   (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.OnHold))
                                  || q.Status == QueueStatus.PendingProcedure
                                  || q.Status == QueueStatus.ReEvaluation))

@@ -152,7 +152,7 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
         var upNext = queueItems
             .Where(q => q.Status != QueueStatus.Diverted &&
                         q.Status != QueueStatus.DischargedNonDoctor &&
-                        ((q.VisitType == VisitType.Consultation &&
+                        ((q.VisitType.IsPhysicianConsultation() &&
                           (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.OnHold))
                          || q.Status == QueueStatus.PendingProcedure
                          || q.Status == QueueStatus.ReEvaluation))

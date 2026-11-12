@@ -439,9 +439,6 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 .AsNoTracking()
                 .Where(q => pIds.Contains(q.PatientId) &&
                             q.QueueDate == localToday &&
-                            q.VisitType != VisitType.RetailPurchase &&
-                            q.VisitType != VisitType.CashierSettlement &&
-                            q.VisitType != VisitType.LaboratorySpecimen &&
                             q.Status != QueueStatus.Completed &&
                             q.Status != QueueStatus.Cancelled &&
                             q.Status != QueueStatus.NoShow &&

@@ -440,7 +440,7 @@ export default function EditVitalsModal({
             onPress={onClose}
             disabled={saving}
           />
-          {(visitType === 'VitalsCheckOnly' || form.triagePriority === 'Emergency') && (
+          {(visitType === 'PreventiveHealthAssessment' || form.triagePriority === 'Emergency') && (
             <Button
               title="Update & Escalate to MD"
               variant="dangerOutline"

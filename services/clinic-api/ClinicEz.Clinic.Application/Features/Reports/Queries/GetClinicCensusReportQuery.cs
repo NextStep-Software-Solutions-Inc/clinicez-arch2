@@ -206,6 +206,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         ((o.QueueItemId.HasValue && queueItemIds.Contains(o.QueueItemId.Value)) ||
                          (o.ConsultationId.HasValue && signedConsultIds.Contains(o.ConsultationId.Value)) ||
                          (!o.QueueItemId.HasValue && !o.ConsultationId.HasValue && patientIds.Contains(o.PatientId) && o.OrderDate >= start && o.OrderDate < end)))
+                    .Include(o => o.Items)
                     .ToListAsync(cancellationToken);
             }
 
@@ -242,7 +243,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             .ToLookup(x => x.QueueId!.Value, x => x.Vital);
 
         var consultByQueueId = consultations
-            .Select(c => (QueueId: c.QueueItemId ?? PickClosestVisitQueueId(c.PatientId, c.EncounterDate, q => q.VisitType == VisitType.Consultation), Consult: c))
+            .Select(c => (QueueId: c.QueueItemId ?? PickClosestVisitQueueId(c.PatientId, c.EncounterDate, q => q.VisitType.IsPhysicianConsultation()), Consult: c))
             .Where(x => x.QueueId.HasValue)
             .ToLookup(x => x.QueueId!.Value, x => x.Consult);
 
@@ -261,21 +262,21 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
 
         var medCertByQueueId = medCerts
             .Where(m => m.QueueItemId.HasValue || !m.ConsultationId.HasValue)
-            .Select(m => (QueueId: m.QueueItemId ?? PickClosestVisitQueueId(m.PatientId, m.CreatedAt, q => q.VisitType == VisitType.AdministrativeDocument || q.VisitType == VisitType.Consultation), Cert: m))
+            .Select(m => (QueueId: m.QueueItemId ?? PickClosestVisitQueueId(m.PatientId, m.CreatedAt), Cert: m))
             .Where(x => x.QueueId.HasValue)
             .ToLookup(x => x.QueueId!.Value, x => x.Cert);
         var medCertByConsultId = medCerts.Where(m => !m.QueueItemId.HasValue && m.ConsultationId.HasValue).ToLookup(m => m.ConsultationId!.Value);
 
         var refByQueueId = referrals
             .Where(r => r.QueueItemId.HasValue || !r.ConsultationId.HasValue)
-            .Select(r => (QueueId: r.QueueItemId ?? PickClosestVisitQueueId(r.PatientId, r.CreatedAt, q => q.VisitType == VisitType.Consultation), Ref: r))
+            .Select(r => (QueueId: r.QueueItemId ?? PickClosestVisitQueueId(r.PatientId, r.CreatedAt, q => q.VisitType.IsPhysicianConsultation()), Ref: r))
             .Where(x => x.QueueId.HasValue)
             .ToLookup(x => x.QueueId!.Value, x => x.Ref);
         var refByConsultId = referrals.Where(r => !r.QueueItemId.HasValue && r.ConsultationId.HasValue).ToLookup(r => r.ConsultationId!.Value);
 
         var labByQueueId = labOrders
             .Where(o => o.QueueItemId.HasValue || !o.ConsultationId.HasValue)
-            .Select(o => (QueueId: o.QueueItemId ?? PickClosestVisitQueueId(o.PatientId, o.OrderDate, q => q.VisitType == VisitType.Consultation || q.VisitType == VisitType.LaboratorySpecimen), Lab: o))
+            .Select(o => (QueueId: o.QueueItemId ?? PickClosestVisitQueueId(o.PatientId, o.OrderDate), Lab: o))
             .Where(x => x.QueueId.HasValue)
             .ToLookup(x => x.QueueId!.Value, x => x.Lab);
         var labByConsultId = labOrders.Where(o => !o.QueueItemId.HasValue && o.ConsultationId.HasValue).ToLookup(o => o.ConsultationId!.Value);
@@ -375,18 +376,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             int prescriptionsCount = consult?.Prescriptions?.Count ?? 0;
 
             var servicesAvailed = new List<string>();
-            var baseServiceLabel = q.VisitType switch
-            {
-                VisitType.Consultation => "Consultation",
-                VisitType.VitalsCheckOnly => "Vitals Check",
-                VisitType.StandaloneProcedure => "In-Clinic Procedure",
-                VisitType.LaboratorySpecimen => "Laboratory Specimen",
-                VisitType.AdministrativeDocument => "Administrative Document",
-                VisitType.RetailPurchase => "Retail Purchase",
-                VisitType.CashierSettlement => "Cashier Settlement",
-                _ => q.VisitType.ToString()
-            };
-            servicesAvailed.Add(baseServiceLabel);
+            var baseServiceLabel = q.VisitType.ToDisplayLabel();
+            if (!string.IsNullOrWhiteSpace(baseServiceLabel))
+                servicesAvailed.Add(baseServiceLabel);
 
             if (visitDispensings.Count > 0)
                 servicesAvailed.Add("Medicine Dispensing");
@@ -469,9 +461,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     .OrderByDescending(d => d.IsPrimary)
                     .Select(d => $"[{d.Icd10Code}] {d.Description}{(d.IsPrimary ? " (Primary)" : "")}"));
             }
-            else if (q.VisitType != VisitType.Consultation)
+            else if (!q.VisitType.IsPhysicianConsultation())
             {
-                docDiagnoses = "N/A - Non-doctor visit";
+                docDiagnoses = string.Empty;
             }
             else
             {
@@ -479,23 +471,28 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             }
 
             // Review of Systems (ROS) Category & Systems Reviewed
-            string? rosCategoryLabel = null;
+            string? consultRosLabel = null;
             if (consult?.RosCategory.HasValue == true)
             {
-                rosCategoryLabel = RosCategoryHelper.ToDisplayLabel(consult.RosCategory.Value);
-            }
-            else if (vital?.RosCategory.HasValue == true)
-            {
-                rosCategoryLabel = RosCategoryHelper.ToDisplayLabel(vital.RosCategory.Value);
-            }
-            else if (visitDispensings.Count > 0)
-            {
-                rosCategoryLabel = RosCategoryHelper.ToDisplayLabel(visitDispensings[0].RosCategory);
+                consultRosLabel = RosCategoryHelper.ToDisplayLabel(consult.RosCategory.Value);
             }
             else if (consult?.ReviewOfSystemsItems is { Count: > 0 })
             {
                 var firstAbnormal = consult.ReviewOfSystemsItems.FirstOrDefault(r => !r.IsNormal);
-                rosCategoryLabel = RosCategoryHelper.ToDisplayLabel((firstAbnormal ?? consult.ReviewOfSystemsItems.First()).System);
+                consultRosLabel = RosCategoryHelper.ToDisplayLabel((firstAbnormal ?? consult.ReviewOfSystemsItems.First()).System);
+            }
+
+            string? rosCategoryLabel = consultRosLabel;
+            if (string.IsNullOrWhiteSpace(rosCategoryLabel))
+            {
+                if (vital?.RosCategory.HasValue == true)
+                {
+                    rosCategoryLabel = RosCategoryHelper.ToDisplayLabel(vital.RosCategory.Value);
+                }
+                else if (visitDispensings.Count > 0)
+                {
+                    rosCategoryLabel = RosCategoryHelper.ToDisplayLabel(visitDispensings[0].RosCategory);
+                }
             }
 
             RecordVisitRos(q.Id, rosCategoryLabel);
@@ -519,13 +516,14 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 RecordVisitRos(q.Id, RosCategoryHelper.ToDisplayLabel(disp.RosCategory));
             }
 
+            var consultSysParts = new List<string>();
             var sysParts = new List<string>();
             if (consult != null)
             {
                 if (consult.RosCategory.HasValue &&
                     (consult.ReviewOfSystemsItems == null || consult.ReviewOfSystemsItems.All(r => r.System != consult.RosCategory.Value)))
                 {
-                    sysParts.Add($"ROS Category: {RosCategoryHelper.ToDisplayLabel(consult.RosCategory.Value)}");
+                    consultSysParts.Add($"ROS Category: {RosCategoryHelper.ToDisplayLabel(consult.RosCategory.Value)}");
                 }
 
                 if (consult.ReviewOfSystemsItems != null)
@@ -535,7 +533,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         var label = ros.System == RosSystem.EssentiallyNormal
                             ? "Essentially Normal"
                             : $"{ros.System}: {(ros.IsNormal ? "Normal" : (ros.Remarks ?? ros.SymptomTitle ?? "Abnormal"))}";
-                        sysParts.Add(label);
+                        consultSysParts.Add(label);
                     }
                 }
                 if (consult.PhysicalExams != null)
@@ -546,11 +544,12 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         {
                             foreach (var f in pe.Findings.Where(x => !x.IsNormal && !string.IsNullOrWhiteSpace(x.Remarks)))
                             {
-                                sysParts.Add($"{f.System}: {f.Remarks}");
+                                consultSysParts.Add($"{f.System}: {f.Remarks}");
                             }
                         }
                     }
                 }
+                sysParts.AddRange(consultSysParts);
             }
             else if (vital?.RosCategory.HasValue == true)
             {
@@ -645,6 +644,201 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 ));
             }
 
+            // Build additional per-service sub-rows availed on top of the parent visit row
+            // (Parent visit row retains main attending MD, main attending RN, triage vitals, diagnosis, outcome, and billing)
+            var serviceRows = new List<CensusServiceRowDto>();
+            int subRowIdx = 0;
+
+            // 1. In-Clinic Procedure sub-rows (each procedure availed during the visit)
+            var additionalProcs = procs;
+            foreach (var p in additionalProcs)
+            {
+                var procDetailParts = new List<string> { p.ProcedureName };
+                if (!string.IsNullOrWhiteSpace(p.Category))
+                    procDetailParts.Add($"({p.Category})");
+                if (!string.IsNullOrWhiteSpace(p.MedicationAdministered))
+                    procDetailParts.Add($"Med: {p.MedicationAdministered}");
+                if (!string.IsNullOrWhiteSpace(p.SiteRoute))
+                    procDetailParts.Add($"Site: {p.SiteRoute}");
+                if (!string.IsNullOrWhiteSpace(p.TargetRoomName))
+                    procDetailParts.Add($"Room: {p.TargetRoomName}");
+                if (!string.IsNullOrWhiteSpace(p.ClinicalNotes))
+                    procDetailParts.Add(p.ClinicalNotes);
+
+                serviceRows.Add(new CensusServiceRowDto(
+                    SubRowIndex: subRowIdx++,
+                    ServiceName: "In-Clinic Procedure",
+                    ServiceTime: p.PerformedAt ?? p.ScheduledAt,
+                    ReferenceNumber: !string.IsNullOrWhiteSpace(p.ProcedureCode) ? p.ProcedureCode : null,
+                    AttendingDoctor: p.OrderedByDoctorName ?? string.Empty,
+                    AttendingNurse: p.PerformedByStaffName ?? string.Empty,
+                    ChiefComplaint: string.Empty,
+                    NurseAssessment: string.Empty,
+                    VitalsSnapshot: string.Empty,
+                    DoctorDiagnosis: string.Empty,
+                    ClinicalAssessment: string.Empty,
+                    RosCategory: string.Empty,
+                    SystemsReviewed: string.Empty,
+                    ServiceDetails: string.Join(" • ", procDetailParts),
+                    Acuity: q.Priority.ToString(),
+                    Disposition: p.Status.ToString()
+                ));
+            }
+
+            // 2. Medicine Dispensing sub-rows (1 sub-row per dispensed item with dispensing staff; blank diagnosis)
+            foreach (var d in visitDispensings)
+            {
+                bool dispensedByDoctor = d.DispensedByRole.Contains("Doctor", StringComparison.OrdinalIgnoreCase);
+                var dispDetail = $"{d.ItemName}{(!string.IsNullOrWhiteSpace(d.DosageOrSpec) ? " " + d.DosageOrSpec : "")} x{d.QuantityDispensed} {d.FormOrUnit}" +
+                                 $"{(!string.IsNullOrWhiteSpace(d.DirectionsOrInstructions) ? " • " + d.DirectionsOrInstructions : "")}" +
+                                 $" • ROS: {RosCategoryHelper.ToDisplayLabel(d.RosCategory)}";
+
+                serviceRows.Add(new CensusServiceRowDto(
+                    SubRowIndex: subRowIdx++,
+                    ServiceName: "Medicine Dispensing",
+                    ServiceTime: d.DispensedAt,
+                    ReferenceNumber: null,
+                    AttendingDoctor: dispensedByDoctor ? d.DispensedByStaffName : (d.ReviewedByDoctorName ?? string.Empty),
+                    AttendingNurse: !dispensedByDoctor ? d.DispensedByStaffName : string.Empty,
+                    ChiefComplaint: string.Empty,
+                    NurseAssessment: string.Empty,
+                    VitalsSnapshot: string.Empty,
+                    DoctorDiagnosis: string.Empty,
+                    ClinicalAssessment: string.Empty,
+                    RosCategory: string.Empty,
+                    SystemsReviewed: string.Empty,
+                    ServiceDetails: dispDetail,
+                    Acuity: q.Priority.ToString(),
+                    Disposition: "Dispensed"
+                ));
+            }
+
+            // 3. Prescription sub-row (when signed Rx items were issued; blank diagnosis)
+            if (consult?.Prescriptions is { Count: > 0 })
+            {
+                var rxSummary = string.Join("; ", consult.Prescriptions.Select(rx =>
+                    $"{rx.GenericName}{(!string.IsNullOrWhiteSpace(rx.Dosage) ? " " + rx.Dosage : "")} {rx.Form} #{rx.Quantity}" +
+                    $"{(!string.IsNullOrWhiteSpace(rx.Sig) ? " (" + rx.Sig + ")" : "")}"));
+
+                serviceRows.Add(new CensusServiceRowDto(
+                    SubRowIndex: subRowIdx++,
+                    ServiceName: "Prescription",
+                    ServiceTime: consult.SignedAt ?? consult.EncounterDate,
+                    ReferenceNumber: !string.IsNullOrWhiteSpace(consult.PrescriptionNumber) ? consult.PrescriptionNumber : null,
+                    AttendingDoctor: attendingDoc ?? string.Empty,
+                    AttendingNurse: string.Empty,
+                    ChiefComplaint: string.Empty,
+                    NurseAssessment: string.Empty,
+                    VitalsSnapshot: string.Empty,
+                    DoctorDiagnosis: string.Empty,
+                    ClinicalAssessment: string.Empty,
+                    RosCategory: string.Empty,
+                    SystemsReviewed: string.Empty,
+                    ServiceDetails: rxSummary,
+                    Acuity: q.Priority.ToString(),
+                    Disposition: "Issued"
+                ));
+            }
+
+            // 4. Medical Certificate sub-rows (1 sub-row per signed certificate; blank diagnosis)
+            foreach (var mc in visitMedCerts)
+            {
+                var mcDoctor = !string.IsNullOrWhiteSpace(mc.PrcLicenseNumber)
+                    ? $"{mc.DoctorName} (PRC: {mc.PrcLicenseNumber})"
+                    : mc.DoctorName;
+                var mcParts = new List<string>();
+                var formattedFitness = MedicalCertificate.FormatFitnessStatus(mc.FitnessStatus);
+                if (!string.IsNullOrWhiteSpace(formattedFitness))
+                    mcParts.Add(formattedFitness);
+                if (mc.RecommendedRestDays is > 0)
+                    mcParts.Add($"{mc.RecommendedRestDays} rest day(s)");
+                if (!string.IsNullOrWhiteSpace(mc.Purpose))
+                    mcParts.Add($"Purpose: {mc.Purpose}");
+                if (!string.IsNullOrWhiteSpace(mc.Remarks))
+                    mcParts.Add(mc.Remarks);
+
+                serviceRows.Add(new CensusServiceRowDto(
+                    SubRowIndex: subRowIdx++,
+                    ServiceName: "Medical Certificate",
+                    ServiceTime: mc.SignedAt ?? mc.CreatedAt,
+                    ReferenceNumber: mc.CertificateNumber,
+                    AttendingDoctor: mcDoctor,
+                    AttendingNurse: string.Empty,
+                    ChiefComplaint: string.Empty,
+                    NurseAssessment: string.Empty,
+                    VitalsSnapshot: string.Empty,
+                    DoctorDiagnosis: string.Empty,
+                    ClinicalAssessment: string.Empty,
+                    RosCategory: string.Empty,
+                    SystemsReviewed: string.Empty,
+                    ServiceDetails: string.Join(" • ", mcParts),
+                    Acuity: q.Priority.ToString(),
+                    Disposition: "Issued"
+                ));
+            }
+
+            // 5. Referral sub-rows (1 sub-row per signed referral; blank diagnosis)
+            foreach (var rf in visitReferrals)
+            {
+                var rfDoctor = !string.IsNullOrWhiteSpace(rf.ReferringDoctorPrcNumber)
+                    ? $"{rf.ReferringDoctorName} (PRC: {rf.ReferringDoctorPrcNumber})"
+                    : rf.ReferringDoctorName;
+                var rfDetail = $"{rf.ReferredToFacility} ({rf.ReferredDepartment}) • [{rf.Urgency}] {rf.ReasonForReferral}";
+
+                serviceRows.Add(new CensusServiceRowDto(
+                    SubRowIndex: subRowIdx++,
+                    ServiceName: "Referral",
+                    ServiceTime: rf.SignedAt ?? rf.CreatedAt,
+                    ReferenceNumber: rf.ReferralNumber,
+                    AttendingDoctor: rfDoctor,
+                    AttendingNurse: string.Empty,
+                    ChiefComplaint: string.Empty,
+                    NurseAssessment: string.Empty,
+                    VitalsSnapshot: string.Empty,
+                    DoctorDiagnosis: string.Empty,
+                    ClinicalAssessment: string.Empty,
+                    RosCategory: string.Empty,
+                    SystemsReviewed: string.Empty,
+                    ServiceDetails: rfDetail,
+                    Acuity: q.Priority.ToString(),
+                    Disposition: "Referred"
+                ));
+            }
+
+            // 6. Laboratory Requisition sub-rows (1 sub-row per signed diagnostic order; blank diagnosis)
+            foreach (var lo in visitLabOrders)
+            {
+                var loDoctor = !string.IsNullOrWhiteSpace(lo.OrderedByDoctorName)
+                    ? lo.OrderedByDoctorName
+                    : (!string.IsNullOrWhiteSpace(lo.RequestingPhysicianName) ? lo.RequestingPhysicianName : (attendingDoc ?? string.Empty));
+                var loTests = lo.Items is { Count: > 0 }
+                    ? string.Join(", ", lo.Items.Select(it => it.TestName))
+                    : (!string.IsNullOrWhiteSpace(lo.Notes) ? lo.Notes : "Diagnostic Requisition");
+                var loTargetLab = !string.IsNullOrWhiteSpace(lo.LaboratoryName)
+                    ? lo.LaboratoryName
+                    : lo.ExternalLabName;
+                var loDetail = !string.IsNullOrWhiteSpace(loTargetLab) ? $"{loTests} • {loTargetLab}" : loTests;
+
+                serviceRows.Add(new CensusServiceRowDto(
+                    SubRowIndex: subRowIdx++,
+                    ServiceName: "Laboratory Requisition",
+                    ServiceTime: lo.OrderDate,
+                    ReferenceNumber: lo.OrderNumber,
+                    AttendingDoctor: loDoctor,
+                    AttendingNurse: string.Empty,
+                    ChiefComplaint: string.Empty,
+                    NurseAssessment: string.Empty,
+                    VitalsSnapshot: string.Empty,
+                    DoctorDiagnosis: string.Empty,
+                    ClinicalAssessment: string.Empty,
+                    RosCategory: string.Empty,
+                    SystemsReviewed: string.Empty,
+                    ServiceDetails: loDetail,
+                    Acuity: q.Priority.ToString(),
+                    Disposition: lo.Stage.ToString()
+                ));
+            }
+
             items.Add(new CensusItemDto(
                 SequenceNumber: seq++,
                 CheckInTime: q.CheckInTime,
@@ -687,7 +881,8 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 PrescriptionsCount: prescriptionsCount,
                 MedicalCertificatesCount: visitMedCerts.Count,
                 ReferralsCount: visitReferrals.Count,
-                LabRequisitionsCount: visitLabOrders.Count
+                LabRequisitionsCount: visitLabOrders.Count,
+                ServiceRows: serviceRows
             ));
         }
 
@@ -695,9 +890,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         int totalCensus = items.Count;
         int newPatients = items.Count(i => i.IsNewPatient);
         int returningPatients = totalCensus - newPatients;
-        int consultationCount = items.Count(i => i.VisitType == "Consultation");
-        int standaloneProcedures = items.Count(i => i.VisitType == "StandaloneProcedure");
-        int diagnosticsOrLab = items.Count(i => i.VisitType == "LaboratorySpecimen");
+        int consultationCount = items.Count(i => VisitTypeExtensions.IsPhysicianConsultationString(i.VisitType));
+        int standaloneProcedures = items.Count(i => i.ServicesAvailed != null && i.ServicesAvailed.Contains("In-Clinic Procedure") && !VisitTypeExtensions.IsPhysicianConsultationString(i.VisitType));
+        int diagnosticsOrLab = items.Count(i => i.LabRequisitionsCount > 0);
         int nonDoctorVisits = totalCensus - consultationCount;
         int completedVisits = items.Count(i => i.CompletedTime.HasValue);
         int inConsultOrWaiting = items.Count(i => !i.CompletedTime.HasValue && (i.Disposition == "Waiting" || i.Disposition == "InConsultation" || i.Disposition == "Triaged"));
@@ -718,7 +913,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         int medCertsIssued = items.Sum(i => i.MedicalCertificatesCount);
         int referralsIssued = items.Sum(i => i.ReferralsCount);
         int labRequisitionsIssued = items.Sum(i => i.LabRequisitionsCount);
-        int vitalsCheckVisits = items.Count(i => i.VisitType == "VitalsCheckOnly");
+        int vitalsCheckVisits = items.Count(i => i.VisitType == nameof(VisitType.PreventiveHealthAssessment));
         int inClinicProcedureVisits = items.Count(i => i.ServicesAvailed != null && i.ServicesAvailed.Contains("In-Clinic Procedure"));
         int inClinicProceduresCount = Math.Max(inClinicProcedureVisits, totalProceduresPerformedCount);
 

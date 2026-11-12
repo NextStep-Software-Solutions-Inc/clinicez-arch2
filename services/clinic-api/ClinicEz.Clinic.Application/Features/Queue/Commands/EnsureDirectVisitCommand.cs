@@ -25,7 +25,7 @@ public sealed record EnsureDirectVisitCommand(
     string? DoctorName = null,
     string? RoomOrStation = null,
     Guid? RoomId = null,
-    VisitType VisitType = VisitType.Consultation,
+    VisitType VisitType = VisitType.RoutineCheckup,
     VisitWorkflowMode VisitWorkflowMode = VisitWorkflowMode.Regular,
     QueueStatus? InitialStatus = null,
     string? ChiefComplaint = null,
@@ -103,9 +103,6 @@ public sealed class EnsureDirectVisitCommandHandler : IRequestHandler<EnsureDire
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today &&
                 q.PatientId == request.PatientId &&
-                q.VisitType != VisitType.RetailPurchase &&
-                q.VisitType != VisitType.CashierSettlement &&
-                q.VisitType != VisitType.LaboratorySpecimen &&
                 nonTerminalStatuses.Contains(q.Status))
                 .Include(q => q.PatientVitals)
                 .OrderBy(q => q.CheckInTime)

@@ -4,7 +4,7 @@ import { ThemedText, Badge, Button, Card, Icon, ActionMenu, type ActionMenuItem 
 import { theme } from '@constants/theme';
 import { formatBloodTypeLabel } from '../../constants/bloodTypes';
 import { formatLongAge } from '../../utils/age';
-import type { ClinicPatient, StaffMember } from '../../services/clinicService';
+import type { ClinicPatient, StaffMember, VisitType } from '../../services/clinicService';
 import { computePatientLocation } from './patientLocation';
 
 export { computePatientLocation };
@@ -58,12 +58,6 @@ export function isMyPatient(
 
 export type PatientDirectoryViewMode = 'cards' | 'table';
 
-export type ClinicalServiceType =
-  | 'Doctor Consultation'
-  | 'Vitals Check'
-  | 'Clinical Procedure'
-  | 'Administrative & Clearance';
-
 export interface PatientDirectoryCardProps {
   patient: ClinicPatient;
   mode?: 'card' | 'table';
@@ -77,9 +71,9 @@ export interface PatientDirectoryCardProps {
   onOpenPhilHealth?: (patient: ClinicPatient) => void;
   onScheduleVisit?: (patient: ClinicPatient) => void;
   onBookAppointment?: (patient: ClinicPatient) => void;
-  onAddToQueue?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
-  onQueuePatient?: (patient: ClinicPatient, serviceType?: ClinicalServiceType) => void;
-  onSelectService?: (patient: ClinicPatient, serviceType: ClinicalServiceType) => void;
+  onAddToQueue?: (patient: ClinicPatient, visitType?: VisitType) => void;
+  onQueuePatient?: (patient: ClinicPatient, visitType?: VisitType) => void;
+  onSelectService?: (patient: ClinicPatient, visitType: VisitType) => void;
   onStartConsultation?: (patient: ClinicPatient) => void;
   onStartProfiling?: (patient: ClinicPatient) => void;
   onRecordVitals?: (patient: ClinicPatient) => void;
@@ -167,9 +161,9 @@ export function buildPatientOverflowMenuItems(
     onOpenChart?: (p: ClinicPatient) => void;
     onScheduleVisit?: (p: ClinicPatient) => void;
     onBookAppointment?: (p: ClinicPatient) => void;
-    onSelectService?: (p: ClinicPatient, serviceType: ClinicalServiceType) => void;
-    onQueuePatient?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
-    onAddToQueue?: (p: ClinicPatient, serviceType?: ClinicalServiceType) => void;
+    onSelectService?: (p: ClinicPatient, visitType: VisitType) => void;
+    onQueuePatient?: (p: ClinicPatient, visitType?: VisitType) => void;
+    onAddToQueue?: (p: ClinicPatient, visitType?: VisitType) => void;
     onStartConsultation?: (p: ClinicPatient) => void;
     onStartProfiling?: (p: ClinicPatient) => void;
     onRecordVitals?: (p: ClinicPatient) => void;
@@ -265,32 +259,38 @@ export function buildPatientOverflowMenuItems(
       });
     }
   } else {
-    const serviceHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
-    if (serviceHandler) {
+    const queueHandler = handlers.onSelectService || handlers.onQueuePatient || handlers.onAddToQueue;
+    if (queueHandler) {
       items.push({
-        id: 'service-consultation',
-        label: 'Consult',
+        id: 'visit-routine-checkup',
+        label: 'Routine Checkup',
         icon: 'stethoscope',
         dividerBefore: true,
-        onPress: () => serviceHandler(patient, 'Doctor Consultation'),
+        onPress: () => queueHandler(patient, 'RoutineCheckup'),
       });
       items.push({
-        id: 'service-vitals',
-        label: 'Vitals',
+        id: 'visit-acute-illness',
+        label: 'Acute Illness Consultation',
         icon: 'activity',
-        onPress: () => serviceHandler(patient, 'Vitals Check'),
+        onPress: () => queueHandler(patient, 'AcuteIllnessConsultation'),
       });
       items.push({
-        id: 'service-procedure',
-        label: 'Start procedure',
-        icon: 'syringe',
-        onPress: () => serviceHandler(patient, 'Clinical Procedure'),
+        id: 'visit-chronic-followup',
+        label: 'Chronic Disease Follow-Up',
+        icon: 'refresh',
+        onPress: () => queueHandler(patient, 'ChronicDiseaseFollowUp'),
       });
       items.push({
-        id: 'service-administrative',
-        label: 'Medical certificate',
-        icon: 'file',
-        onPress: () => serviceHandler(patient, 'Administrative & Clearance'),
+        id: 'visit-preventive-assessment',
+        label: 'Preventive Health Assessment',
+        icon: 'heartPulse',
+        onPress: () => queueHandler(patient, 'PreventiveHealthAssessment'),
+      });
+      items.push({
+        id: 'visit-urgent-care',
+        label: 'Urgent Care Visit',
+        icon: 'emergency',
+        onPress: () => queueHandler(patient, 'UrgentCareVisit'),
       });
     }
   }

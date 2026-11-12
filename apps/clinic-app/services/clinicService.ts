@@ -18,13 +18,29 @@ export type QueueStatus =
   | 'Diverted';
 
 export type VisitType =
-  | 'Consultation'
-  | 'VitalsCheckOnly'
-  | 'RetailPurchase'
-  | 'StandaloneProcedure'
-  | 'LaboratorySpecimen'
-  | 'AdministrativeDocument'
-  | 'CashierSettlement';
+  | 'RoutineCheckup'
+  | 'AcuteIllnessConsultation'
+  | 'ChronicDiseaseFollowUp'
+  | 'PreventiveHealthAssessment'
+  | 'UrgentCareVisit';
+
+export function isPhysicianConsultationVisitType(visitType?: string | null): boolean {
+  switch ((visitType || '').trim()) {
+    case 'RoutineCheckup':
+    case 'AcuteIllnessConsultation':
+    case 'ChronicDiseaseFollowUp':
+    case 'UrgentCareVisit':
+    case 'Consultation':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function isNurseAssessmentVisitType(visitType?: string | null): boolean {
+  const normalized = (visitType || '').trim();
+  return normalized === 'PreventiveHealthAssessment' || normalized === 'VitalsCheckOnly';
+}
 export type QueueView =
   | 'All'
   | 'MyRoom'
@@ -1462,6 +1478,25 @@ export interface CensusProviderBreakdown {
   completedEncounters: number;
 }
 
+export interface CensusServiceRow {
+  subRowIndex: number;
+  serviceName: string;
+  serviceTime?: string | null;
+  referenceNumber?: string | null;
+  attendingDoctor?: string | null;
+  attendingNurse?: string | null;
+  chiefComplaint?: string | null;
+  nurseAssessment?: string | null;
+  vitalsSnapshot?: string | null;
+  doctorDiagnosis?: string | null;
+  clinicalAssessment?: string | null;
+  rosCategory?: string | null;
+  systemsReviewed?: string | null;
+  serviceDetails?: string | null;
+  acuity?: string | null;
+  disposition?: string | null;
+}
+
 export interface CensusItem {
   id?: string;
   sequenceNumber?: number;
@@ -1510,6 +1545,355 @@ export interface CensusItem {
   medicalCertificatesCount?: number;
   referralsCount?: number;
   labRequisitionsCount?: number;
+  serviceRows?: CensusServiceRow[];
+}
+
+const CENSUS_EMPTY_SENTINELS = new Set([
+  '—',
+  '-',
+  'n/a',
+  'n/a - non-doctor visit',
+  'non-doctor visit',
+  'pending diagnosis',
+  'no vitals recorded',
+  'none recorded',
+  'none',
+]);
+
+function normalizeCensusField(value?: string | null): string {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (CENSUS_EMPTY_SENTINELS.has(trimmed.toLowerCase())) return '';
+  return trimmed;
+}
+
+export function mapCensusVisitTypeLabel(visitType?: string | null): string {
+  switch ((visitType || '').trim()) {
+    case 'RoutineCheckup':
+    case 'Routine Checkup':
+      return 'Routine Checkup';
+    case 'AcuteIllnessConsultation':
+    case 'Acute Illness Consultation':
+      return 'Acute Illness Consultation';
+    case 'ChronicDiseaseFollowUp':
+    case 'Chronic Disease Follow-Up':
+      return 'Chronic Disease Follow-Up';
+    case 'PreventiveHealthAssessment':
+    case 'Preventive Health Assessment':
+      return 'Preventive Health Assessment';
+    case 'UrgentCareVisit':
+    case 'Urgent Care Visit':
+      return 'Urgent Care Visit';
+    default:
+      return '';
+  }
+}
+
+export function normalizeCensusDisplayField(value?: string | null): string {
+  return normalizeCensusField(value);
+}
+
+/**
+ * Resolves additional per-service sub-rows availed on top of the parent visit row.
+ * Keeps the parent visit row (with its primary visit purpose, main attending MD & RN,
+ * triage vitals, consultation diagnosis, outcome, and billing) intact, and emits
+ * sub-rows only for additional services availed during that visit, each with its
+ * providing staff and service-specific details.
+ */
+export function resolveCensusVisitServiceRows(
+  item: CensusItem,
+  dispensingLedger?: CensusDispensingLedgerEntry[],
+): CensusServiceRow[] {
+  const primaryService = mapCensusVisitTypeLabel(item.visitType);
+
+  if (item.serviceRows) {
+    return item.serviceRows
+      .filter((row) => row.serviceName.trim().toLowerCase() !== primaryService.toLowerCase() || item.serviceRows!.length > 1 || row.subRowIndex >= 0)
+      .filter((row) => {
+        // Backend ServiceRows already contains only additional services on top of the visit;
+        // guard against any legacy synthetic single-row echo of the primary visit with no extra details.
+        if (
+          item.serviceRows!.length === 1 &&
+          row.serviceName.trim().toLowerCase() === primaryService.toLowerCase() &&
+          !normalizeCensusField(row.referenceNumber) &&
+          !normalizeCensusField(row.serviceDetails)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .map((row, idx) => ({
+        subRowIndex: row.subRowIndex ?? idx,
+        serviceName: row.serviceName,
+        serviceTime: row.serviceTime ?? null,
+        referenceNumber: normalizeCensusField(row.referenceNumber) || null,
+        attendingDoctor: normalizeCensusField(row.attendingDoctor),
+        attendingNurse: normalizeCensusField(row.attendingNurse),
+        chiefComplaint: '',
+        nurseAssessment: '',
+        vitalsSnapshot: '',
+        doctorDiagnosis: '',
+        clinicalAssessment: '',
+        rosCategory: '',
+        systemsReviewed: '',
+        serviceDetails: normalizeCensusField(row.serviceDetails),
+        acuity: row.acuity || item.acuity || 'Routine',
+        disposition: normalizeCensusField(row.disposition) || 'Completed',
+      }));
+  }
+
+  const doc = normalizeCensusField(item.attendingDoctor);
+  const nurse = normalizeCensusField(item.attendingNurse);
+  const procs = normalizeCensusField(item.proceduresPerformed);
+  const dispensedSummary = normalizeCensusField(item.dispensedMedicinesSummary);
+
+  const rawServices =
+    item.servicesAvailed && item.servicesAvailed.length > 0 ? [...item.servicesAvailed] : [];
+
+  const matchingLedger = (dispensingLedger || []).filter(
+    (entry) =>
+      (item.id && entry.queueItemId && entry.queueItemId === item.id) ||
+      (entry.queueNumber && entry.queueNumber === item.queueNumber),
+  );
+
+  const resolved: CensusServiceRow[] = [];
+  let nextIdx = 0;
+
+  for (const svc of rawServices) {
+    const norm = svc.trim().toLowerCase();
+    if (norm === primaryService.toLowerCase()) {
+      // Primary visit is already displayed on the main visit row;
+      // only emit extra procedure sub-rows if StandaloneProcedure had multiple comma-separated procedures.
+      if (norm === 'in-clinic procedure' && procs.includes(',')) {
+        const extraProcs = procs
+          .split(',')
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .slice(1);
+        for (const extraProc of extraProcs) {
+          resolved.push({
+            subRowIndex: nextIdx++,
+            serviceName: 'In-Clinic Procedure',
+            serviceTime: item.completedTime || item.calledTime || item.checkInTime,
+            referenceNumber: null,
+            attendingDoctor: '',
+            attendingNurse: nurse,
+            chiefComplaint: '',
+            nurseAssessment: '',
+            vitalsSnapshot: '',
+            doctorDiagnosis: '',
+            clinicalAssessment: '',
+            rosCategory: '',
+            systemsReviewed: '',
+            serviceDetails: extraProc,
+            acuity: item.acuity || 'Routine',
+            disposition: 'Completed',
+          });
+        }
+      }
+      continue;
+    }
+
+    if (norm === 'in-clinic procedure') {
+      const procParts = procs ? procs.split(',').map((p) => p.trim()).filter(Boolean) : [''];
+      for (const procName of procParts) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'In-Clinic Procedure',
+          serviceTime: item.calledTime || item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: isPhysicianConsultationVisitType(item.visitType) ? doc : '',
+          attendingNurse: nurse,
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: procName,
+          acuity: item.acuity || 'Routine',
+          disposition: 'Completed',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'medicine dispensing') {
+      if (matchingLedger.length > 0) {
+        for (const entry of matchingLedger) {
+          const isDoctorDisp = (entry.dispensedByRole || '').toLowerCase().includes('doctor');
+          const categoryTag = (entry.itemCategory || '').toLowerCase().includes('supply')
+            ? '[Supply]'
+            : '[Medicine]';
+          const detailParts = [
+            `${categoryTag} ${entry.itemName}${entry.dosageOrSpec ? ` ${entry.dosageOrSpec}` : ''} x${entry.quantityDispensed} ${entry.formOrUnit || 'pcs'}`,
+            entry.directionsOrInstructions ? entry.directionsOrInstructions : '',
+          ].filter(Boolean);
+          resolved.push({
+            subRowIndex: nextIdx++,
+            serviceName: 'Medicine Dispensing',
+            serviceTime: entry.dispensedAt,
+            referenceNumber: null,
+            attendingDoctor: isDoctorDisp
+              ? entry.dispensedByStaffName
+              : entry.reviewedByDoctorName || '',
+            attendingNurse: !isDoctorDisp ? entry.dispensedByStaffName : '',
+            chiefComplaint: '',
+            nurseAssessment: '',
+            vitalsSnapshot: '',
+            doctorDiagnosis: '',
+            clinicalAssessment: '',
+            rosCategory: '',
+            systemsReviewed: '',
+            serviceDetails: detailParts.join(' • '),
+            acuity: item.acuity || 'Routine',
+            disposition: 'Dispensed',
+          });
+        }
+      } else {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Medicine Dispensing',
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: isPhysicianConsultationVisitType(item.visitType) ? doc : '',
+          attendingNurse: !isPhysicianConsultationVisitType(item.visitType) ? nurse : '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: dispensedSummary ? `Dispensed: ${dispensedSummary}` : '',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Dispensed',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'prescription') {
+      const rxCount = item.prescriptionsCount || 1;
+      resolved.push({
+        subRowIndex: nextIdx++,
+        serviceName: 'Prescription',
+        serviceTime: item.completedTime || item.checkInTime,
+        referenceNumber: null,
+        attendingDoctor: doc,
+        attendingNurse: '',
+        chiefComplaint: '',
+        nurseAssessment: '',
+        vitalsSnapshot: '',
+        doctorDiagnosis: '',
+        clinicalAssessment: '',
+        rosCategory: '',
+        systemsReviewed: '',
+        serviceDetails: `${rxCount} signed prescription item(s)`,
+        acuity: item.acuity || 'Routine',
+        disposition: 'Issued',
+      });
+      continue;
+    }
+
+    if (norm === 'medical certificate') {
+      const certCount = Math.max(1, item.medicalCertificatesCount || 1);
+      for (let cIdx = 0; cIdx < certCount; cIdx++) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Medical Certificate',
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: doc,
+          attendingNurse: '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: 'Signed Medical Certificate',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Issued',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'referral') {
+      const refCount = Math.max(1, item.referralsCount || 1);
+      for (let rIdx = 0; rIdx < refCount; rIdx++) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Referral',
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: doc,
+          attendingNurse: '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: 'Signed Clinical Referral',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Referred',
+        });
+      }
+      continue;
+    }
+
+    if (norm === 'laboratory requisition') {
+      const labCount = Math.max(1, item.labRequisitionsCount || 1);
+      for (let lIdx = 0; lIdx < labCount; lIdx++) {
+        resolved.push({
+          subRowIndex: nextIdx++,
+          serviceName: 'Laboratory Requisition',
+          serviceTime: item.completedTime || item.checkInTime,
+          referenceNumber: null,
+          attendingDoctor: doc,
+          attendingNurse: '',
+          chiefComplaint: '',
+          nurseAssessment: '',
+          vitalsSnapshot: '',
+          doctorDiagnosis: '',
+          clinicalAssessment: '',
+          rosCategory: '',
+          systemsReviewed: '',
+          serviceDetails: 'Signed Diagnostic Requisition',
+          acuity: item.acuity || 'Routine',
+          disposition: 'Issued',
+        });
+      }
+      continue;
+    }
+
+    resolved.push({
+      subRowIndex: nextIdx++,
+      serviceName: svc,
+      serviceTime: item.calledTime || item.completedTime || item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: doc,
+      attendingNurse: nurse,
+      chiefComplaint: '',
+      nurseAssessment: '',
+      vitalsSnapshot: '',
+      doctorDiagnosis: '',
+      clinicalAssessment: '',
+      rosCategory: '',
+      systemsReviewed: '',
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: 'Completed',
+    });
+  }
+
+  return resolved;
 }
 
 export interface CensusDispensingLedgerEntry {

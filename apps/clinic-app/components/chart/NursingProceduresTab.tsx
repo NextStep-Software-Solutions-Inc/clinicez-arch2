@@ -185,7 +185,7 @@ export default function NursingProceduresTab({
         const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
           patientId: targetPatId,
           patientName: resolvedPatientName,
-          visitType: isDiagOrder ? 'Consultation' : 'StandaloneProcedure',
+          visitType: 'RoutineCheckup',
           initialStatus: isDiagOrder ? 'InConsultation' : 'PendingProcedure',
           doctorId: order.orderedByDoctorId,
           doctorName: order.orderedByDoctorName,

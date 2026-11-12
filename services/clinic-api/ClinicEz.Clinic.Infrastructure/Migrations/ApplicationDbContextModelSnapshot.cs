@@ -7811,7 +7811,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
-                        .HasDefaultValue("Consultation");
+                        .HasDefaultValue("RoutineCheckup");
 
                     b.Property<string>("VisitWorkflowMode")
                         .IsRequired()

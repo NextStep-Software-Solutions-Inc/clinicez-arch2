@@ -32,8 +32,7 @@ import PatientSearchResultRow, {
 } from '../../components/patient/PatientSearchResultRow';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
-import { isSeniorOrPwdEligible, resolveTicketPrefix } from '../../components/patient/ServiceCheckInModal';
-import type { ClinicalServiceType } from '../../components/patient/PatientDirectoryCard';
+import { isSeniorOrPwdEligible, resolveTicketPrefix, type VisitType } from '../../components/patient/ServiceCheckInModal';
 import {
   clinicService,
   AppointmentItem,
@@ -704,8 +703,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       const [patient] = await clinicService.getPatientById(item.patientId);
       if (patient) {
         const isPriority = isSeniorOrPwdEligible(patient);
-        const serviceType = (item.serviceType as ClinicalServiceType) || 'Doctor Consultation';
-        seriesPrefix = resolveTicketPrefix(serviceType, isPriority);
+        const visitType = (item.serviceType as VisitType) || 'RoutineCheckup';
+        seriesPrefix = resolveTicketPrefix(visitType, isPriority);
       }
 
       const isUrgent = item.reason?.toLowerCase().includes('chest') || item.reason?.toLowerCase().includes('pain');

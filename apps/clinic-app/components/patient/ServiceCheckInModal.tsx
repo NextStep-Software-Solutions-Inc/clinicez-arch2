@@ -30,10 +30,9 @@ import { notify } from '../../utils/feedback';
 import { printThermalQueueTicket } from '../../utils/printHelper';
 import {
   formatPatientDemographicsLine,
-  type ClinicalServiceType,
 } from './PatientDirectoryCard';
 
-export { ClinicalServiceType };
+export type { VisitType };
 
 export interface ServiceCheckInPayload {
   patientId: string;
@@ -43,7 +42,7 @@ export interface ServiceCheckInPayload {
   roomId?: string;
   roomOrStation?: string;
   priority: QueuePriority;
-  visitType: VisitType | string;
+  visitType: VisitType;
   chiefComplaint: string;
   seriesPrefix: string;
   queueDate?: string;
@@ -62,7 +61,7 @@ export interface ConflictActiveTicketSummary {
 export interface ServiceCheckInModalProps {
   visible: boolean;
   patient: ClinicPatient | null;
-  initialService?: ClinicalServiceType;
+  initialVisitType?: VisitType;
   activeDoctors?: StaffMember[];
   activeRooms?: Array<{ id: string; name: string; isActive?: boolean }>;
   onClose: () => void;
@@ -116,20 +115,26 @@ export function isSeniorOrPwdEligible(
 }
 
 /**
- * Resolves Ticket Prefix based on Service Type and Priority Status.
- * Regular: Q, V, P, A
- * Priority (Senior & PWD): SQ, SV, SP, SA
+ * Resolves Ticket Prefix based on VisitType and Priority Status.
+ * Regular: Q, F, V, U
+ * Priority (Senior & PWD): SQ, SF, SV, SU
  */
-export function resolveTicketPrefix(serviceType: ClinicalServiceType, isPriority: boolean): string {
-  switch (serviceType) {
-    case 'Doctor Consultation':
+export function resolveTicketPrefix(visitType: VisitType | string, isPriority: boolean): string {
+  switch (visitType) {
+    case 'RoutineCheckup':
+    case 'Routine Checkup':
+    case 'AcuteIllnessConsultation':
+    case 'Acute Illness Consultation':
       return isPriority ? 'SQ' : 'Q';
-    case 'Vitals Check':
+    case 'ChronicDiseaseFollowUp':
+    case 'Chronic Disease Follow-Up':
+      return isPriority ? 'SF' : 'F';
+    case 'PreventiveHealthAssessment':
+    case 'Preventive Health Assessment':
       return isPriority ? 'SV' : 'V';
-    case 'Clinical Procedure':
-      return isPriority ? 'SP' : 'P';
-    case 'Administrative & Clearance':
-      return isPriority ? 'SA' : 'A';
+    case 'UrgentCareVisit':
+    case 'Urgent Care Visit':
+      return isPriority ? 'SU' : 'U';
     default:
       return isPriority ? 'SQ' : 'Q';
   }
@@ -177,42 +182,37 @@ export function formatQueueStatusMeta(status?: string | null): {
 }
 
 /**
- * Maps VisitType enum strings or service names to human-readable clinical labels and icons.
+ * Maps VisitType enum strings to human-readable clinical purpose labels and icons.
  */
 export function formatVisitTypeMeta(visitType?: string | null): {
   label: string;
   icon: IconName;
 } {
-  const normalized = String(visitType || 'Consultation').trim();
+  const normalized = String(visitType || 'RoutineCheckup').trim();
   switch (normalized) {
-    case 'Consultation':
-    case 'Doctor Consultation':
-      return { label: 'Doctor Consultation', icon: 'stethoscope' };
-    case 'FollowUp':
-      return { label: 'Follow-Up Consultation', icon: 'stethoscope' };
-    case 'UrgentCare':
-    case 'Emergency':
-      return { label: 'Urgent Consultation', icon: 'emergency' };
-    case 'VitalsCheckOnly':
-    case 'Vitals Check':
-      return { label: 'Vitals Check', icon: 'heartPulse' };
-    case 'StandaloneProcedure':
-    case 'ProcedureOnly':
-    case 'Clinical Procedure':
-      return { label: 'Clinical Procedure', icon: 'syringe' };
-    case 'AdministrativeDocument':
-    case 'Administrative & Clearance':
-      return { label: 'Administrative & Clearance', icon: 'file' };
-    default: {
-      const humanized = normalized.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
-      return { label: humanized || 'Clinical Visit', icon: 'clipboard' };
-    }
+    case 'RoutineCheckup':
+    case 'Routine Checkup':
+      return { label: 'Routine Checkup', icon: 'stethoscope' };
+    case 'AcuteIllnessConsultation':
+    case 'Acute Illness Consultation':
+      return { label: 'Acute Illness Consultation', icon: 'activity' };
+    case 'ChronicDiseaseFollowUp':
+    case 'Chronic Disease Follow-Up':
+      return { label: 'Chronic Disease Follow-Up', icon: 'refresh' };
+    case 'PreventiveHealthAssessment':
+    case 'Preventive Health Assessment':
+      return { label: 'Preventive Health Assessment', icon: 'heartPulse' };
+    case 'UrgentCareVisit':
+    case 'Urgent Care Visit':
+      return { label: 'Urgent Care Visit', icon: 'emergency' };
+    default:
+      return { label: '', icon: 'clipboard' };
   }
 }
 
 /**
  * Builds non-redundant secondary metadata for an active ticket card
- * (chief complaint if distinct from generic service label, assigned clinician, check-in time).
+ * (chief complaint if distinct from generic visit purpose label, assigned clinician, check-in time).
  */
 export function formatTicketSubtext(
   ticket: {
@@ -222,18 +222,19 @@ export function formatTicketSubtext(
     checkInTime?: string | null;
     status?: string | null;
   },
-  resolvedServiceLabel: string
+  resolvedVisitLabel: string
 ): string {
   const parts: string[] = [];
   const rawComplaint = (ticket.chiefComplaint || '').trim();
   const genericLabels = new Set([
-    resolvedServiceLabel.toLowerCase(),
+    resolvedVisitLabel.toLowerCase(),
     String(ticket.visitType || '').trim().toLowerCase(),
+    'routine checkup',
+    'acute illness consultation',
+    'chronic disease follow-up',
+    'preventive health assessment',
+    'urgent care visit',
     'general consultation',
-    'doctor consultation',
-    'vitals check',
-    'clinical procedure',
-    'administrative & clearance',
     'clinical',
   ]);
 
@@ -271,57 +272,60 @@ export function formatTicketSubtext(
   return 'Waiting in queue';
 }
 
-export const CLINICAL_SERVICES: Array<{
-  type: ClinicalServiceType;
+export const VISIT_TYPE_OPTIONS: Array<{
+  visitType: VisitType;
   label: string;
   icon: IconName;
   hint: string;
-  visitType: VisitType | string;
   defaultPrefixRegular: string;
   defaultPrefixPriority: string;
 }> = [
   {
-    type: 'Doctor Consultation',
-    label: 'Doctor Consultation',
+    visitType: 'RoutineCheckup',
+    label: 'Routine Checkup',
     icon: 'stethoscope',
-    hint: 'Check-up and prescription',
-    visitType: 'Consultation',
+    hint: 'General wellness exam, physical checkup, or clearance',
     defaultPrefixRegular: 'Q',
     defaultPrefixPriority: 'SQ',
   },
   {
-    type: 'Vitals Check',
-    label: 'Vitals Check',
+    visitType: 'AcuteIllnessConsultation',
+    label: 'Acute Illness Consultation',
     icon: 'activity',
-    hint: 'Blood pressure, weight, and temperature',
-    visitType: 'VitalsCheckOnly',
+    hint: 'New symptoms, fever, cough, pain, or sudden illness',
+    defaultPrefixRegular: 'Q',
+    defaultPrefixPriority: 'SQ',
+  },
+  {
+    visitType: 'ChronicDiseaseFollowUp',
+    label: 'Chronic Disease Follow-Up',
+    icon: 'refresh',
+    hint: 'Ongoing condition monitoring, lab review, or refill',
+    defaultPrefixRegular: 'F',
+    defaultPrefixPriority: 'SF',
+  },
+  {
+    visitType: 'PreventiveHealthAssessment',
+    label: 'Preventive Health Assessment',
+    icon: 'heartPulse',
+    hint: 'Vital signs monitoring, health screening, or nursing care',
     defaultPrefixRegular: 'V',
     defaultPrefixPriority: 'SV',
   },
   {
-    type: 'Clinical Procedure',
-    label: 'Clinical Procedure',
-    icon: 'syringe',
-    hint: 'Wound care, dressing, or injection',
-    visitType: 'StandaloneProcedure',
-    defaultPrefixRegular: 'P',
-    defaultPrefixPriority: 'SP',
-  },
-  {
-    type: 'Administrative & Clearance',
-    label: 'Administrative & Clearance',
-    icon: 'file',
-    hint: 'Medical certificate or clearance',
-    visitType: 'AdministrativeDocument',
-    defaultPrefixRegular: 'A',
-    defaultPrefixPriority: 'SA',
+    visitType: 'UrgentCareVisit',
+    label: 'Urgent Care Visit',
+    icon: 'emergency',
+    hint: 'Immediate clinical evaluation for urgent symptoms or injury',
+    defaultPrefixRegular: 'U',
+    defaultPrefixPriority: 'SU',
   },
 ];
 
 export default function ServiceCheckInModal({
   visible,
   patient,
-  initialService = 'Doctor Consultation',
+  initialVisitType = 'RoutineCheckup',
   activeDoctors,
   activeRooms,
   onClose,
@@ -335,8 +339,8 @@ export default function ServiceCheckInModal({
   // Priority series evaluation
   const isSeniorOrPwd = useMemo(() => isSeniorOrPwdEligible(patient), [patient]);
 
-  // Selected Service
-  const [selectedService, setSelectedService] = useState<ClinicalServiceType>(initialService);
+  // Selected VisitType (purpose of the visit)
+  const [selectedVisitType, setSelectedVisitType] = useState<VisitType>(initialVisitType);
 
   // Ticket Series Preference: defaults to Priority series if Senior/PWD eligible
   const [isPrioritySeries, setIsPrioritySeries] = useState<boolean>(isSeniorOrPwd);
@@ -356,25 +360,26 @@ export default function ServiceCheckInModal({
   // Issued Ticket Confirmation State (Post-Queue Dialog)
   const [issuedTicket, setIssuedTicket] = useState<{
     queueNumber: string;
-    serviceType: ClinicalServiceType;
+    visitType: VisitType;
+    visitLabel: string;
     patientName: string;
   } | null>(null);
 
-  // Reset or initialize state whenever patient or initialService changes
+  // Reset or initialize state whenever patient or initialVisitType changes
   useEffect(() => {
     if (visible && patient) {
       const eligible = isSeniorOrPwdEligible(patient);
       setIsPrioritySeries(eligible);
-      setSelectedService(initialService);
+      setSelectedVisitType(initialVisitType);
       setConflictWarning(initialConflictWarning ?? null);
       setIssuedTicket(null);
     }
-  }, [visible, patient, initialService, initialConflictWarning]);
+  }, [visible, patient, initialVisitType, initialConflictWarning]);
 
   // Ticket prefix
   const currentPrefix = useMemo(() => {
-    return resolveTicketPrefix(selectedService, isPrioritySeries);
-  }, [selectedService, isPrioritySeries]);
+    return resolveTicketPrefix(selectedVisitType, isPrioritySeries);
+  }, [selectedVisitType, isPrioritySeries]);
 
   const handleCloseAll = useCallback(() => {
     setConflictWarning(null);
@@ -392,7 +397,7 @@ export default function ServiceCheckInModal({
         patientName: issuedTicket.patientName,
         patientCode: patient.patientCode,
         demographics: formatPatientDemographicsLine(patient),
-        serviceType: issuedTicket.serviceType,
+        serviceType: issuedTicket.visitLabel,
         priorityLabel: isPrioritySeries ? 'Senior & PWD Priority' : 'Regular',
         issuedAt,
       },
@@ -404,13 +409,14 @@ export default function ServiceCheckInModal({
   const handleConfirm = async (overridePayload?: ServiceCheckInPayload, allowDuplicate = false) => {
     if (!patient || submitting) return;
 
-    const serviceConfig = CLINICAL_SERVICES.find((s) => s.type === selectedService)!;
+    const visitConfig =
+      VISIT_TYPE_OPTIONS.find((v) => v.visitType === selectedVisitType) ?? VISIT_TYPE_OPTIONS[0];
     const basePayload = overridePayload || {
       patientId: patient.id,
       patientName: patient.fullName,
-      priority: 'Routine' as QueuePriority,
-      visitType: serviceConfig.visitType,
-      chiefComplaint: serviceConfig.label,
+      priority: (visitConfig.visitType === 'UrgentCareVisit' ? 'Urgent' : 'Routine') as QueuePriority,
+      visitType: visitConfig.visitType,
+      chiefComplaint: visitConfig.label,
       seriesPrefix: currentPrefix,
     };
     const payload: ServiceCheckInPayload = {
@@ -427,7 +433,7 @@ export default function ServiceCheckInModal({
         return patient.activeQueueTickets.map((t) => ({
           queueNumber: t.queueNumber,
           status: String(t.status),
-          visitType: String(t.visitType || 'Consultation'),
+          visitType: String(t.visitType || 'RoutineCheckup'),
           chiefComplaint: t.chiefComplaint || undefined,
           doctorName: t.doctorName || undefined,
           checkInTime: t.checkInTime || undefined,
@@ -447,7 +453,7 @@ export default function ServiceCheckInModal({
       const tickets = buildActiveTicketSummaries(
         patient.activeQueueTicket || 'Existing Ticket',
         (patient as any).activeQueueStatus || (patient as any).verificationStatus || 'Waiting',
-        serviceConfig.label
+        visitConfig.visitType
       );
 
       setConflictWarning({
@@ -515,7 +521,7 @@ export default function ServiceCheckInModal({
           status: queueStatus,
           patientName: patient.fullName,
           payload,
-          activeTickets: buildActiveTicketSummaries(ticketNumber, queueStatus, serviceConfig.label),
+          activeTickets: buildActiveTicketSummaries(ticketNumber, queueStatus, visitConfig.visitType),
         });
         return;
       }
@@ -524,7 +530,8 @@ export default function ServiceCheckInModal({
         setConflictWarning(null);
         setIssuedTicket({
           queueNumber: result.queueNumber,
-          serviceType: selectedService,
+          visitType: visitConfig.visitType,
+          visitLabel: visitConfig.label,
           patientName: patient.fullName,
         });
         onSuccess?.(result.queueNumber);
@@ -547,7 +554,7 @@ export default function ServiceCheckInModal({
           status: queueStatus,
           patientName: patient.fullName,
           payload,
-          activeTickets: buildActiveTicketSummaries(ticketNumber, queueStatus, serviceConfig.label),
+          activeTickets: buildActiveTicketSummaries(ticketNumber, queueStatus, visitConfig.visitType),
         });
       } else {
         notify.error(e?.message || 'Check-in failed. Please try again.');
@@ -561,7 +568,7 @@ export default function ServiceCheckInModal({
 
   // 1. Post-Queue Confirmation Dialog
   if (issuedTicket) {
-    const issuedServiceMeta = formatVisitTypeMeta(issuedTicket.serviceType);
+    const issuedVisitMeta = formatVisitTypeMeta(issuedTicket.visitType);
     const postQueueFooter = (
       <View style={styles.postQueueFooter}>
         <Button
@@ -622,10 +629,10 @@ export default function ServiceCheckInModal({
 
             <View style={styles.postQueueBadgeRow}>
               <Badge
-                label={issuedTicket.serviceType}
+                label={issuedTicket.visitLabel}
                 variant="neutral"
                 size="md"
-                icon={issuedServiceMeta.icon}
+                icon={issuedVisitMeta.icon}
                 style={styles.postQueueServiceBadge}
               />
               {isPrioritySeries ? (
@@ -655,13 +662,13 @@ export default function ServiceCheckInModal({
             {
               queueNumber: conflictWarning.queueNumber,
               status: conflictWarning.status,
-              visitType: String(conflictWarning.payload.visitType || selectedService),
+              visitType: String(conflictWarning.payload.visitType || selectedVisitType),
               chiefComplaint: conflictWarning.payload.chiefComplaint,
             },
           ];
 
     const pendingServiceMeta = formatVisitTypeMeta(
-      String(conflictWarning.payload.visitType || selectedService)
+      String(conflictWarning.payload.visitType || selectedVisitType)
     );
     const pendingSeriesPrefix = (conflictWarning.payload.seriesPrefix || currentPrefix).toUpperCase();
     const isPendingPriority = pendingSeriesPrefix.startsWith('S') && pendingSeriesPrefix.length > 1;
@@ -799,21 +806,21 @@ export default function ServiceCheckInModal({
       testID="service-checkin-modal"
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* 1. Service Selector */}
+        {/* 1. Visit Type (Purpose of Visit) Selector */}
         <View style={styles.formSection}>
           <ThemedText variant="bodyBold" color={theme.colors.text}>
-            What service would the patient like to avail?
+            What is the purpose of the patient&apos;s visit?
           </ThemedText>
           <View style={styles.serviceCardsGrid}>
-            {CLINICAL_SERVICES.map((srv) => {
-              const isSelected = selectedService === srv.type;
+            {VISIT_TYPE_OPTIONS.map((vt) => {
+              const isSelected = selectedVisitType === vt.visitType;
               return (
                 <Pressable
-                  key={srv.type}
+                  key={vt.visitType}
                   accessibilityRole="button"
-                  accessibilityLabel={srv.label}
-                  testID={`service-tab-${srv.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                  onPress={() => setSelectedService(srv.type)}
+                  accessibilityLabel={vt.label}
+                  testID={`visit-type-tab-${vt.visitType.toLowerCase()}`}
+                  onPress={() => setSelectedVisitType(vt.visitType)}
                   style={[
                     styles.serviceCard,
                     isSelected ? styles.serviceCardSelected : styles.serviceCardUnselected,
@@ -827,22 +834,23 @@ export default function ServiceCheckInModal({
                       ]}
                     >
                       <Icon
-                        name={srv.icon}
+                        name={vt.icon}
                         size={theme.sizes.iconMd}
                         color={isSelected ? theme.colors.primaryDark : theme.colors.textMuted}
                       />
                     </View>
-                    <ThemedText
-                      variant="smallBold"
-                      color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      style={styles.serviceCardTitle}
-                    >
-                      {srv.label}
-                    </ThemedText>
+                    <View style={styles.serviceCardTextCol}>
+                      <ThemedText
+                        variant="smallBold"
+                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                      >
+                        {vt.label}
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary} numberOfLines={2}>
+                        {vt.hint}
+                      </ThemedText>
+                    </View>
                   </View>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary} numberOfLines={2}>
-                    {srv.hint}
-                  </ThemedText>
                 </Pressable>
               );
             })}
@@ -921,18 +929,16 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   serviceCardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
+    width: '100%',
     gap: theme.spacing.sm,
   },
   serviceCard: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    minWidth: 180,
-    padding: theme.spacing.md,
+    width: '100%',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.md,
-    borderWidth: 1.5,
-    gap: theme.spacing.xs,
+    borderWidth: theme.sizes.borderWidth,
   },
   serviceCardSelected: {
     borderColor: theme.colors.primaryDark,
@@ -945,10 +951,11 @@ const styles = StyleSheet.create({
   serviceCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
-  serviceCardTitle: {
+  serviceCardTextCol: {
     flex: 1,
+    gap: theme.spacing.xs,
   },
   serviceIconWrap: {
     width: 28,

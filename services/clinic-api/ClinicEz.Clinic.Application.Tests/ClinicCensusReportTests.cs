@@ -629,7 +629,7 @@ public class ClinicCensusReportTests
         item3.VisitType.Should().Be("StandaloneProcedure");
         item3.ProceduresPerformed.Should().Be("Wound Debridement and Sterile Dressing");
         item3.AttendingNurse.Should().Be("Nurse Clara Bautista");
-        item3.DoctorDiagnosis.Should().Be("N/A - Non-doctor visit");
+        item3.DoctorDiagnosis.Should().BeEmpty();
         item3.BillingStatus.Should().Be("Unsettled / Promissory");
         item3.BalanceDue.Should().Be(360m);
         item3.AmountPaid.Should().Be(0m);
@@ -885,7 +885,7 @@ public class ClinicCensusReportTests
             "Age / Sex / Civil Status",
             "Classification",
             "Custom Fields",
-            "Visit Type",
+            "Service Availed",
             "Chief Complaint",
             "Nurse Assessment / Impression",
             "Attending Nurse",
@@ -894,7 +894,7 @@ public class ClinicCensusReportTests
             "Doctor Diagnosis & ICD-10",
             "Clinical Assessment",
             "Systems Reviewed & Physical Findings",
-            "In-Clinic Procedures Performed",
+            "Service & Procedure Details",
             "Acuity / Priority",
             "Disposition / Outcome",
             "Billing Status / OR # / Amount Paid"

@@ -2353,21 +2353,21 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         sBox.Item().PaddingTop(1).Text(rosText).FontSize(7f).FontColor("#1E293B");
                     });
 
-                    // Patient Encounter Census Register (Landscape Table)
+                    // Patient Encounter Census Register (Landscape Table: Grouped Visit + Per-Service Sub-Rows)
                     ComposeSectionTitle(col, "PATIENT ENCOUNTER CENSUS REGISTER", primaryColor);
                     col.Item().Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
-                            columns.ConstantColumn(22);   // 1. #
-                            columns.ConstantColumn(60);   // 2. Ticket, Date & Times
-                            columns.RelativeColumn(2.0f); // 3. Patient & Demographics
-                            columns.RelativeColumn(1.8f); // 4. Attending Staff
-                            columns.RelativeColumn(2.2f); // 5. Nurse Impression & Vitals
-                            columns.RelativeColumn(3.0f); // 6. Doctor Dx & Assessment
-                            columns.RelativeColumn(1.8f); // 7. Systems & Physical Findings
-                            columns.RelativeColumn(1.6f); // 8. Procedures & Disposition
-                            columns.RelativeColumn(1.4f); // 9. Status & Billing
+                            columns.ConstantColumn(20);   // 1. #
+                            columns.ConstantColumn(58);   // 2. Ticket, Date & Times
+                            columns.RelativeColumn(1.9f); // 3. Patient & Demographics
+                            columns.RelativeColumn(1.5f); // 4. Service Availed (Dedicated sub-row column)
+                            columns.RelativeColumn(1.6f); // 5. Attending Staff (Per-service performer)
+                            columns.RelativeColumn(2.0f); // 6. Triage & Vitals
+                            columns.RelativeColumn(2.6f); // 7. Doctor Dx & Systems (Blank on non-diagnosis services)
+                            columns.RelativeColumn(2.0f); // 8. Service Details & Outcome
+                            columns.RelativeColumn(1.3f); // 9. Status & Billing
                         });
 
                         table.Header(h =>
@@ -2375,11 +2375,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             TableHeaderCell(h.Cell(), "#");
                             TableHeaderCell(h.Cell(), "TICKET / DATE / TIME");
                             TableHeaderCell(h.Cell(), "PATIENT & DEMOGRAPHICS");
+                            TableHeaderCell(h.Cell(), "SERVICE AVAILED");
                             TableHeaderCell(h.Cell(), "ATTENDING STAFF");
-                            TableHeaderCell(h.Cell(), "NURSE IMPRESSION & VITALS");
-                            TableHeaderCell(h.Cell(), "DOCTOR DX & ASSESSMENT");
-                            TableHeaderCell(h.Cell(), "SYSTEMS & FINDINGS");
-                            TableHeaderCell(h.Cell(), "PROCEDURES & DISP");
+                            TableHeaderCell(h.Cell(), "TRIAGE & VITALS");
+                            TableHeaderCell(h.Cell(), "DOCTOR DX & SYSTEMS");
+                            TableHeaderCell(h.Cell(), "SERVICE DETAILS & OUTCOME");
                             TableHeaderCell(h.Cell(), "STATUS / BILLING");
                         });
 
@@ -2394,14 +2394,30 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             foreach (var item in report.Items)
                             {
                                 var rowBg = (idx++ % 2 == 1) ? "#F8FAFC" : "#FFFFFF";
+                                var additionalSubRows = ClinicCensusBreakdownResolver.ResolveServiceRows(item);
+                                bool hasSubRows = additionalSubRows.Count > 0;
+                                bool isConsultationVisit = ClinicEz.Clinic.Domain.Enums.VisitTypeExtensions.IsPhysicianConsultationString(item.VisitType) || !string.IsNullOrWhiteSpace(item.DoctorDiagnosis);
 
-                                IContainer CellContainer(IContainer c) => c.Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(3f).PaddingHorizontal(3f);
+                                IContainer MainGroupedCell(IContainer c) => c
+                                    .Background(rowBg)
+                                    .BorderBottom(hasSubRows ? 0f : 0.65f)
+                                    .BorderColor("#CBD5E1")
+                                    .PaddingVertical(3f)
+                                    .PaddingHorizontal(3f);
 
+                                IContainer MainServiceCell(IContainer c) => c
+                                    .Background(rowBg)
+                                    .BorderBottom(hasSubRows ? 0.35f : 0.65f)
+                                    .BorderColor(hasSubRows ? "#E2E8F0" : "#CBD5E1")
+                                    .PaddingVertical(3f)
+                                    .PaddingHorizontal(3f);
+
+                                // --- Main Parent Visit Row ---
                                 // 1. Seq #
-                                CellContainer(table.Cell()).AlignCenter().Text(item.SequenceNumber.ToString()).FontSize(7f).FontColor("#64748B");
+                                MainGroupedCell(table.Cell()).AlignCenter().Text(item.SequenceNumber.ToString()).FontSize(7f).FontColor("#64748B");
 
-                                // 2. Ticket & Times
-                                CellContainer(table.Cell()).Column(c =>
+                                // 2. Ticket, Date & Time
+                                MainGroupedCell(table.Cell()).Column(c =>
                                 {
                                     c.Item().Text(item.QueueNumber).FontSize(7.5f).Bold().FontColor("#0F172A");
                                     c.Item().Text(item.CheckInTime.ToString("yyyy-MM-dd")).FontSize(6f).SemiBold().FontColor("#475569");
@@ -2414,7 +2430,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                 });
 
                                 // 3. Patient & Demographics
-                                CellContainer(table.Cell()).Column(c =>
+                                MainGroupedCell(table.Cell()).Column(c =>
                                 {
                                     c.Item().Text(item.PatientName).FontSize(7.5f).Bold().FontColor("#0F172A");
                                     c.Item().Text($"{item.PatientCode} • {item.Age}y/{item.Sex}").FontSize(6.5f).FontColor("#475569");
@@ -2425,56 +2441,85 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                     }
                                 });
 
-                                // 4. Attending Staff
-                                CellContainer(table.Cell()).Column(c =>
+                                // 4. Primary Service Availed
+                                MainServiceCell(table.Cell()).Column(c =>
                                 {
-                                    c.Item().Text($"MD: {item.AttendingDoctor ?? "—"}").FontSize(6.5f).SemiBold().FontColor("#1E293B");
-                                    c.Item().Text($"RN: {item.AttendingNurse ?? "—"}").FontSize(6.5f).FontColor("#475569");
-                                    var serviceLine = item.ServicesAvailed is { Count: > 1 } && !string.IsNullOrWhiteSpace(item.ServicesAvailedSummary)
-                                        ? item.ServicesAvailedSummary
-                                        : item.VisitType;
-                                    c.Item().Text($"Services: {serviceLine}").FontSize(6f).FontColor("#0D6963");
-                                });
-
-                                // 5. Nurse Impression & Vitals
-                                CellContainer(table.Cell()).Column(c =>
-                                {
-                                    c.Item().Text(item.NurseAssessment ?? "—").FontSize(6.5f).FontColor("#1E293B");
-                                    c.Item().Text(item.VitalsSnapshot ?? "—").FontSize(6f).SemiBold().FontColor("#0369A1");
-                                });
-
-                                // 6. Doctor Dx & Assessment
-                                CellContainer(table.Cell()).Column(c =>
-                                {
-                                    c.Item().Text(item.DoctorDiagnosis ?? "—").FontSize(6.5f).Bold().FontColor("#0F172A");
-                                    if (!string.IsNullOrWhiteSpace(item.ClinicalAssessment) && item.ClinicalAssessment != "—")
+                                    var primaryLabel = ClinicCensusBreakdownResolver.MapVisitTypeToPrimaryServiceLabel(item.VisitType);
+                                    c.Item().Text(primaryLabel).FontSize(6.5f).Bold().FontColor("#0D6963");
+                                    if (item.CalledTime.HasValue)
                                     {
-                                        c.Item().Text(item.ClinicalAssessment).FontSize(6f).FontColor("#475569");
+                                        c.Item().Text(item.CalledTime.Value.ToString("HH:mm")).FontSize(6f).FontColor("#64748B");
                                     }
                                 });
 
-                                // 7. Systems & Physical Findings
-                                CellContainer(table.Cell()).Column(c =>
+                                // 5. Main Attending Staff (MD & RN)
+                                MainServiceCell(table.Cell()).Column(c =>
                                 {
-                                    c.Item().Text(item.SystemsReviewed ?? "—").FontSize(6.5f).FontColor("#334155");
+                                    var mainDoc = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.AttendingDoctor);
+                                    var mainNurse = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.AttendingNurse);
+                                    c.Item().Text($"MD: {(!string.IsNullOrEmpty(mainDoc) ? mainDoc : "—")}").FontSize(6.5f).SemiBold().FontColor("#1E293B");
+                                    c.Item().Text($"RN: {(!string.IsNullOrEmpty(mainNurse) ? mainNurse : "—")}").FontSize(6.5f).FontColor("#475569");
                                 });
 
-                                // 8. Procedures & Disposition
-                                CellContainer(table.Cell()).Column(c =>
+                                // 6. Triage & Vitals
+                                MainServiceCell(table.Cell()).Column(c =>
                                 {
-                                    if (!string.IsNullOrWhiteSpace(item.ProceduresPerformed) && item.ProceduresPerformed != "None")
+                                    var mainCc = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ChiefComplaint);
+                                    var mainNurseAssess = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.NurseAssessment);
+                                    var mainVitals = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.VitalsSnapshot);
+                                    if (!string.IsNullOrEmpty(mainCc))
                                     {
-                                        c.Item().Text($"Proc: {item.ProceduresPerformed}").FontSize(6.5f).SemiBold().FontColor("#4338CA");
+                                        c.Item().Text($"CC: {mainCc}").FontSize(6f).FontColor("#334155");
                                     }
-                                    if (!string.IsNullOrWhiteSpace(item.DispensedMedicinesSummary))
+                                    if (!string.IsNullOrEmpty(mainNurseAssess) && mainNurseAssess != mainCc)
                                     {
-                                        c.Item().Text($"Dispensed: {item.DispensedMedicinesSummary}").FontSize(6f).SemiBold().FontColor("#0D6963");
+                                        c.Item().Text(mainNurseAssess).FontSize(6.5f).FontColor("#1E293B");
+                                    }
+                                    if (!string.IsNullOrEmpty(mainVitals))
+                                    {
+                                        c.Item().Text(mainVitals).FontSize(6f).SemiBold().FontColor("#0369A1");
+                                    }
+                                });
+
+                                // 7. Doctor Dx & Systems (Strictly blank when visit has no diagnosis)
+                                MainServiceCell(table.Cell()).Column(c =>
+                                {
+                                    if (isConsultationVisit)
+                                    {
+                                        var mainDx = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.DoctorDiagnosis, "Pending diagnosis");
+                                        var mainAssess = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ClinicalAssessment);
+                                        var mainSystems = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.SystemsReviewed);
+                                        if (!string.IsNullOrEmpty(mainDx))
+                                        {
+                                            c.Item().Text(mainDx).FontSize(6.5f).Bold().FontColor("#0F172A");
+                                        }
+                                        if (!string.IsNullOrEmpty(mainAssess))
+                                        {
+                                            c.Item().Text(mainAssess).FontSize(6f).FontColor("#475569");
+                                        }
+                                        if (!string.IsNullOrEmpty(mainSystems))
+                                        {
+                                            c.Item().Text(mainSystems).FontSize(6f).FontColor("#334155");
+                                        }
+                                    }
+                                });
+
+                                // 8. Service Details & Outcome
+                                MainServiceCell(table.Cell()).Column(c =>
+                                {
+                                    if (item.VisitType.Equals("StandaloneProcedure", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var mainProc = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ProceduresPerformed);
+                                        if (!string.IsNullOrEmpty(mainProc))
+                                        {
+                                            c.Item().Text(mainProc).FontSize(6.5f).SemiBold().FontColor("#4338CA");
+                                        }
                                     }
                                     c.Item().Text(item.Disposition).FontSize(6.5f).FontColor("#1E293B");
                                 });
 
                                 // 9. Status & Billing
-                                CellContainer(table.Cell()).Column(c =>
+                                MainGroupedCell(table.Cell()).Column(c =>
                                 {
                                     var (acuityColor, acuityBg) = item.Acuity.ToLowerInvariant() switch
                                     {
@@ -2490,6 +2535,85 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                         c.Item().Text($"OR: {item.OfficialReceiptNumber}").FontSize(5.5f).FontColor("#64748B");
                                     }
                                 });
+
+                                // --- Additional Per-Service Sub-Rows (availed on top of the visit) ---
+                                for (int sIdx = 0; sIdx < additionalSubRows.Count; sIdx++)
+                                {
+                                    var sub = additionalSubRows[sIdx];
+                                    bool isLastSub = sIdx == additionalSubRows.Count - 1;
+
+                                    IContainer SubGroupedEmptyCell(IContainer c) => c
+                                        .Background(rowBg)
+                                        .BorderBottom(isLastSub ? 0.65f : 0f)
+                                        .BorderColor("#CBD5E1")
+                                        .PaddingVertical(2f)
+                                        .PaddingHorizontal(3f);
+
+                                    IContainer SubServiceCell(IContainer c) => c
+                                        .Background(rowBg)
+                                        .BorderBottom(isLastSub ? 0.65f : 0.35f)
+                                        .BorderColor(isLastSub ? "#CBD5E1" : "#E2E8F0")
+                                        .PaddingVertical(2.5f)
+                                        .PaddingHorizontal(3f);
+
+                                    // 1-3. Grouped parent columns left blank on sub-rows
+                                    SubGroupedEmptyCell(table.Cell());
+                                    SubGroupedEmptyCell(table.Cell());
+                                    SubGroupedEmptyCell(table.Cell());
+
+                                    // 4. Additional Service Availed
+                                    SubServiceCell(table.Cell()).Column(c =>
+                                    {
+                                        c.Item().Text($"↳ {sub.ServiceName}").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                                        if (!string.IsNullOrWhiteSpace(sub.ReferenceNumber))
+                                        {
+                                            c.Item().Text(sub.ReferenceNumber).FontSize(5.8f).SemiBold().FontColor("#475569");
+                                        }
+                                        if (sub.ServiceTime.HasValue)
+                                        {
+                                            c.Item().Text(sub.ServiceTime.Value.ToString("HH:mm")).FontSize(5.8f).FontColor("#64748B");
+                                        }
+                                    });
+
+                                    // 5. Providing Staff for this Service
+                                    SubServiceCell(table.Cell()).Column(c =>
+                                    {
+                                        bool hasDoc = !string.IsNullOrWhiteSpace(sub.AttendingDoctor);
+                                        bool hasNurse = !string.IsNullOrWhiteSpace(sub.AttendingNurse);
+                                        if (hasDoc)
+                                        {
+                                            c.Item().Text($"MD: {sub.AttendingDoctor}").FontSize(6f).SemiBold().FontColor("#1E293B");
+                                        }
+                                        if (hasNurse)
+                                        {
+                                            c.Item().Text($"RN: {sub.AttendingNurse}").FontSize(6f).FontColor("#475569");
+                                        }
+                                        if (!hasDoc && !hasNurse)
+                                        {
+                                            c.Item().Text("—").FontSize(6f).FontColor("#94A3B8");
+                                        }
+                                    });
+
+                                    // 6-7. Triage & Doctor Dx strictly blank on auxiliary service sub-rows
+                                    SubServiceCell(table.Cell());
+                                    SubServiceCell(table.Cell());
+
+                                    // 8. Service Details & Outcome
+                                    SubServiceCell(table.Cell()).Column(c =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(sub.ServiceDetails))
+                                        {
+                                            c.Item().Text(sub.ServiceDetails).FontSize(6f).SemiBold().FontColor("#1E293B");
+                                        }
+                                        if (!string.IsNullOrWhiteSpace(sub.Disposition))
+                                        {
+                                            c.Item().Text(sub.Disposition).FontSize(5.8f).FontColor("#475569");
+                                        }
+                                    });
+
+                                    // 9. Grouped billing left blank on sub-rows
+                                    SubGroupedEmptyCell(table.Cell());
+                                }
                             }
                         }
                     });

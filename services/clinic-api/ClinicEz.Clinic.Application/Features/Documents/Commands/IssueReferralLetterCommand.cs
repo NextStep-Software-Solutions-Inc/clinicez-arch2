@@ -85,7 +85,7 @@ public sealed class IssueReferralLetterCommandHandler : IRequestHandler<IssueRef
                 .Query(q => q.Id == resolvedQueueItemId.Value && q.ClinicId == _clinicContext.ClinicId)
                 .FirstOrDefaultAsync(ct);
 
-            if (queueItem != null && queueItem.VisitType == VisitType.Consultation)
+            if (queueItem != null && queueItem.VisitType.IsPhysicianConsultation())
             {
                 if (_consultationRepo != null)
                 {

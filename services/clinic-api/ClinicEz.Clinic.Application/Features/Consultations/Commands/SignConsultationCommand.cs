@@ -258,7 +258,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                 DoctorName = encounter.DoctorName,
                 Priority = QueuePriority.Routine,
                 Status = QueueStatus.Completed,
-                VisitType = VisitType.Consultation,
+                VisitType = VisitType.RoutineCheckup,
                 IsDirectVisit = true,
                 CheckInTime = encounter.EncounterDate,
                 CalledTime = encounter.EncounterDate,

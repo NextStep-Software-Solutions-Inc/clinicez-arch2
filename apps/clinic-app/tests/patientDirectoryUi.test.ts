@@ -942,7 +942,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenCode).toContain('onClose={() => setScheduleModalPatient(null)}');
   });
 
-  test('21. buildPatientOverflowMenuItems includes 4 direct clinical service intents under Services & Queue when onSelectService is provided', () => {
+  test('21. buildPatientOverflowMenuItems includes 5 visit purpose intents under Queue when onSelectService is provided', () => {
     let selectedService: string | null = null;
     let targetPatientId: string | null = null;
 
@@ -954,31 +954,36 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
 
     const itemLabels = items.map((i) => i.label);
-    expect(itemLabels).toContain('Consult');
-    expect(itemLabels).toContain('Vitals');
-    expect(itemLabels).toContain('Start procedure');
-    expect(itemLabels).toContain('Medical certificate');
+    expect(itemLabels).toContain('Routine Checkup');
+    expect(itemLabels).toContain('Acute Illness Consultation');
+    expect(itemLabels).toContain('Chronic Disease Follow-Up');
+    expect(itemLabels).toContain('Preventive Health Assessment');
+    expect(itemLabels).toContain('Urgent Care Visit');
     expect(items.every((i) => i.hint === undefined)).toBe(true);
 
-    const consultItem = items.find((i) => i.id === 'service-consultation')!;
-    consultItem.onPress();
+    const routineItem = items.find((i) => i.id === 'visit-routine-checkup')!;
+    routineItem.onPress();
     expect(targetPatientId).toBe('pat-cassandra');
-    expect(selectedService).toBe('Doctor Consultation');
+    expect(selectedService).toBe('RoutineCheckup');
 
-    const vitalsItem = items.find((i) => i.id === 'service-vitals')!;
-    vitalsItem.onPress();
-    expect(selectedService).toBe('Vitals Check');
+    const acuteItem = items.find((i) => i.id === 'visit-acute-illness')!;
+    acuteItem.onPress();
+    expect(selectedService).toBe('AcuteIllnessConsultation');
 
-    const procedureItem = items.find((i) => i.id === 'service-procedure')!;
-    procedureItem.onPress();
-    expect(selectedService).toBe('Clinical Procedure');
+    const followUpItem = items.find((i) => i.id === 'visit-chronic-followup')!;
+    followUpItem.onPress();
+    expect(selectedService).toBe('ChronicDiseaseFollowUp');
 
-    const adminItem = items.find((i) => i.id === 'service-administrative')!;
-    adminItem.onPress();
-    expect(selectedService).toBe('Administrative & Clearance');
+    const preventiveItem = items.find((i) => i.id === 'visit-preventive-assessment')!;
+    preventiveItem.onPress();
+    expect(selectedService).toBe('PreventiveHealthAssessment');
+
+    const urgentItem = items.find((i) => i.id === 'visit-urgent-care')!;
+    urgentItem.onPress();
+    expect(selectedService).toBe('UrgentCareVisit');
   });
 
-  test('22. ServiceCheckInModal renders concise patient subtitle, plain-language service cards, and omits patient banner & series badge', () => {
+  test('22. ServiceCheckInModal renders concise patient subtitle, vertical stack visit purpose options, and omits patient banner & series badge', () => {
     const markup = renderToStaticMarkup(
       React.createElement(ServiceCheckInModal, {
         visible: true,
@@ -995,15 +1000,17 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).not.toContain('SOAP');
     expect(markup).not.toContain('SpO2');
 
-    // Conversational question prompts
-    expect(markup).toContain('What service would the patient like to avail?');
+    // Conversational question prompts & vertical stack layout
+    expect(markup).toContain('What is the purpose of the patient&#x27;s visit?');
     expect(markup).toContain('Does this patient need a priority lane?');
+    expect(markup).toContain('&quot;flexDirection&quot;:&quot;column&quot;');
 
-    // 4 Clinical Services
-    expect(markup).toContain('Doctor Consultation');
-    expect(markup).toContain('Vitals Check');
-    expect(markup).toContain('Clinical Procedure');
-    expect(markup).toContain('Administrative &amp; Clearance');
+    // 5 Visit Types
+    expect(markup).toContain('Routine Checkup');
+    expect(markup).toContain('Acute Illness Consultation');
+    expect(markup).toContain('Chronic Disease Follow-Up');
+    expect(markup).toContain('Preventive Health Assessment');
+    expect(markup).toContain('Urgent Care Visit');
 
     // Footer actions
     expect(markup).toContain('Continue');
@@ -1058,22 +1065,24 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
   });
 
   test('24. resolveTicketPrefix and formatQueueTicketNumber produce accurate regular and priority ticket numbers', () => {
-    expect(resolveTicketPrefix('Doctor Consultation', false)).toBe('Q');
-    expect(resolveTicketPrefix('Doctor Consultation', true)).toBe('SQ');
+    expect(resolveTicketPrefix('RoutineCheckup', false)).toBe('Q');
+    expect(resolveTicketPrefix('RoutineCheckup', true)).toBe('SQ');
+    expect(resolveTicketPrefix('AcuteIllnessConsultation', false)).toBe('Q');
+    expect(resolveTicketPrefix('AcuteIllnessConsultation', true)).toBe('SQ');
 
-    expect(resolveTicketPrefix('Vitals Check', false)).toBe('V');
-    expect(resolveTicketPrefix('Vitals Check', true)).toBe('SV');
+    expect(resolveTicketPrefix('ChronicDiseaseFollowUp', false)).toBe('F');
+    expect(resolveTicketPrefix('ChronicDiseaseFollowUp', true)).toBe('SF');
 
-    expect(resolveTicketPrefix('Clinical Procedure', false)).toBe('P');
-    expect(resolveTicketPrefix('Clinical Procedure', true)).toBe('SP');
+    expect(resolveTicketPrefix('PreventiveHealthAssessment', false)).toBe('V');
+    expect(resolveTicketPrefix('PreventiveHealthAssessment', true)).toBe('SV');
 
-    expect(resolveTicketPrefix('Administrative & Clearance', false)).toBe('A');
-    expect(resolveTicketPrefix('Administrative & Clearance', true)).toBe('SA');
+    expect(resolveTicketPrefix('UrgentCareVisit', false)).toBe('U');
+    expect(resolveTicketPrefix('UrgentCareVisit', true)).toBe('SU');
 
     expect(formatQueueTicketNumber('Q', 1)).toBe('Q-001');
     expect(formatQueueTicketNumber('SQ', 42)).toBe('SQ-042');
     expect(formatQueueTicketNumber('SV', 9)).toBe('SV-009');
-    expect(formatQueueTicketNumber('P', 105)).toBe('P-105');
+    expect(formatQueueTicketNumber('U', 105)).toBe('U-105');
   });
 
   test('25. Patients.screen.tsx wires onQueuePatient, onSelectService and mounts ServiceCheckInModal', async () => {
@@ -1087,8 +1096,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     // Declares serviceModalPatient state
     expect(screenCode).toContain('const [serviceModalPatient, setServiceModalPatient] = useState<ClinicPatient | null>(null)');
 
-    // Declares selectedServiceIntent state
-    expect(screenCode).toContain('const [selectedServiceIntent, setSelectedServiceIntent] = useState<ClinicalServiceType>');
+    // Declares selectedVisitTypeIntent state
+    expect(screenCode).toContain('const [selectedVisitTypeIntent, setSelectedVisitTypeIntent] = useState<VisitType>');
 
     // Wires onQueuePatient and onSelectService
     expect(screenCode).toContain('onQueuePatient={handleQueueCheckIn}');
@@ -1098,7 +1107,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenCode).toContain('<ServiceCheckInModal');
     expect(screenCode).toContain('visible={!!serviceModalPatient}');
     expect(screenCode).toContain('patient={serviceModalPatient}');
-    expect(screenCode).toContain('initialService={selectedServiceIntent}');
+    expect(screenCode).toContain('initialVisitType={selectedVisitTypeIntent}');
     expect(screenCode).toContain('onClose={() => setServiceModalPatient(null)}');
     expect(screenCode).toContain('onConfirm={handleConfirmServiceCheckIn}');
   });
@@ -1381,15 +1390,15 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
           status: 'InConsultation',
           patientName: conflictPatient.fullName,
           activeTickets: [
-            { queueNumber: 'Q-001', status: 'InConsultation', visitType: 'Consultation', chiefComplaint: 'Doctor Consultation' },
-            { queueNumber: 'Q-004', status: 'Waiting', visitType: 'Consultation', chiefComplaint: 'Fever and cough' },
+            { queueNumber: 'Q-001', status: 'InConsultation', visitType: 'RoutineCheckup', chiefComplaint: 'Routine Checkup' },
+            { queueNumber: 'Q-004', status: 'Waiting', visitType: 'AcuteIllnessConsultation', chiefComplaint: 'Fever and cough' },
           ],
           payload: {
             patientId: conflictPatient.id,
             patientName: conflictPatient.fullName,
-            visitType: 'Consultation',
+            visitType: 'RoutineCheckup',
             priority: 'Routine',
-            chiefComplaint: 'Doctor Consultation',
+            chiefComplaint: 'Routine Checkup',
             seriesPrefix: 'Q',
           },
         },
@@ -1398,7 +1407,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     expect(markup).toContain('Patient Already in Queue');
     expect(markup).toContain('This patient already has 2 active tickets today.');
-    expect(markup).toContain('Do you want to continue and add a new Doctor Consultation ticket?');
+    expect(markup).toContain('Do you want to continue and add a new Routine Checkup ticket?');
     expect(markup).toContain('conflict-tickets-list');
     expect(markup).toContain('Q-001');
     expect(markup).toContain('Q-004');
@@ -1478,24 +1487,26 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     });
     expect(formatQueueStatusMeta('InTriage').label).toBe('In Triage');
 
-    expect(formatVisitTypeMeta('Consultation').label).toBe('Doctor Consultation');
-    expect(formatVisitTypeMeta('VitalsCheckOnly').label).toBe('Vitals Check');
-    expect(formatVisitTypeMeta('StandaloneProcedure').label).toBe('Clinical Procedure');
-    expect(formatVisitTypeMeta('AdministrativeDocument').label).toBe('Administrative & Clearance');
+    expect(formatVisitTypeMeta('RoutineCheckup').label).toBe('Routine Checkup');
+    expect(formatVisitTypeMeta('AcuteIllnessConsultation').label).toBe('Acute Illness Consultation');
+    expect(formatVisitTypeMeta('ChronicDiseaseFollowUp').label).toBe('Chronic Disease Follow-Up');
+    expect(formatVisitTypeMeta('PreventiveHealthAssessment').label).toBe('Preventive Health Assessment');
+    expect(formatVisitTypeMeta('UrgentCareVisit').label).toBe('Urgent Care Visit');
+    expect(formatVisitTypeMeta('StandaloneProcedure').label).toBe('');
 
-    // Deduplicates generic service label stored in chiefComplaint
+    // Deduplicates generic visit label stored in chiefComplaint
     expect(
       formatTicketSubtext(
-        { visitType: 'Consultation', chiefComplaint: 'Doctor Consultation', status: 'InConsultation' },
-        'Doctor Consultation'
+        { visitType: 'RoutineCheckup', chiefComplaint: 'Routine Checkup', status: 'InConsultation' },
+        'Routine Checkup'
       )
     ).toBe('With doctor');
 
     // Preserves distinct clinical chief complaint and assigned clinician
     expect(
       formatTicketSubtext(
-        { visitType: 'Consultation', chiefComplaint: 'Acute migraine', doctorName: 'Maria Santos', status: 'Waiting' },
-        'Doctor Consultation'
+        { visitType: 'AcuteIllnessConsultation', chiefComplaint: 'Acute migraine', doctorName: 'Maria Santos', status: 'Waiting' },
+        'Acute Illness Consultation'
       )
     ).toBe('Acute migraine • Dr. Maria Santos');
   });

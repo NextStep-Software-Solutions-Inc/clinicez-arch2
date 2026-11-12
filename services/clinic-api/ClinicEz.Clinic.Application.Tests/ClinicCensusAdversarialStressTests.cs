@@ -268,7 +268,7 @@ public class ClinicCensusAdversarialStressTests
         var procItem = report.Items.First(i => i.QueueNumber == "Q-PRC");
         procItem.TurnaroundMinutes.Should().Be(20);
         procItem.VitalsSnapshot.Should().Be("No vitals recorded");
-        procItem.DoctorDiagnosis.Should().Be("N/A - Non-doctor visit");
+        procItem.DoctorDiagnosis.Should().BeEmpty();
         procItem.AttendingNurse.Should().Be("Nurse Specialist Rosa");
         procItem.ProceduresPerformed.Should().Be("Suture Removal");
 
@@ -414,7 +414,7 @@ public class ClinicCensusAdversarialStressTests
             "Age / Sex / Civil Status",
             "Classification",
             "Custom Fields",
-            "Visit Type",
+            "Service Availed",
             "Chief Complaint",
             "Nurse Assessment / Impression",
             "Attending Nurse",
@@ -423,7 +423,7 @@ public class ClinicCensusAdversarialStressTests
             "Doctor Diagnosis & ICD-10",
             "Clinical Assessment",
             "Systems Reviewed & Physical Findings",
-            "In-Clinic Procedures Performed",
+            "Service & Procedure Details",
             "Acuity / Priority",
             "Disposition / Outcome",
             "Billing Status / OR # / Amount Paid"
@@ -705,7 +705,7 @@ public class ClinicCensusAdversarialStressTests
         item2.VisitType.Should().Be("StandaloneProcedure");
         item2.ProceduresPerformed.Should().Be("Tetanus Toxoid Injection");
         item2.AttendingDoctor.Should().Be("—", "Visit 2 was a standalone nursing procedure and should not inherit Visit 1's doctor");
-        item2.DoctorDiagnosis.Should().Be("N/A - Non-doctor visit", "Visit 2 was not a doctor consultation");
+        item2.DoctorDiagnosis.Should().BeEmpty("Visit 2 was not a doctor consultation and non-diagnosis cells must remain blank");
         item2.BillingStatus.Should().Be("Unbilled", "Visit 2 has no invoice");
         item2.AmountPaid.Should().Be(0m);
     }

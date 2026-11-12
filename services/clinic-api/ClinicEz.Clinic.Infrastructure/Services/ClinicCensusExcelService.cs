@@ -69,7 +69,7 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             "Age / Sex / Civil Status",
             "Classification",
             "Custom Fields",
-            "Visit Type",
+            "Service Availed",
             "Chief Complaint",
             "Nurse Assessment / Impression",
             "Attending Nurse",
@@ -78,7 +78,7 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             "Doctor Diagnosis & ICD-10",
             "Clinical Assessment",
             "Systems Reviewed & Physical Findings",
-            "In-Clinic Procedures Performed",
+            "Service & Procedure Details",
             "Acuity / Priority",
             "Disposition / Outcome",
             "Billing Status / OR # / Amount Paid"
@@ -97,127 +97,181 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             cell.Style.Alignment.WrapText = true;
         }
 
-        // Data Rows
+        // Data Rows: Grouped Parent Visit Columns + Per-Service Sub-Rows
         int currentRow = 7;
+        int[] groupedVisitCols = { 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 23, 25 };
+
         foreach (var item in report.Items)
         {
-            var bg = (currentRow % 2 == 0) ? AltRowBg : XLColor.White;
-            ws1.Row(currentRow).Height = 20;
+            var additionalSubRows = ClinicCensusBreakdownResolver.ResolveServiceRows(item);
+            var bg = (item.SequenceNumber % 2 == 0) ? AltRowBg : XLColor.White;
+            int visitStartRow = currentRow;
+            int visitEndRow = visitStartRow + additionalSubRows.Count;
+            bool isConsultationVisit = ClinicEz.Clinic.Domain.Enums.VisitTypeExtensions.IsPhysicianConsultationString(item.VisitType) || !string.IsNullOrWhiteSpace(item.DoctorDiagnosis);
 
+            ws1.Row(visitStartRow).Height = 20;
+
+            // Parent Visit Main Row (retains main attending physician, main attending nurse, triage vitals, diagnosis, outcome, and billing)
             // 1. Seq #
-            ws1.Cell(currentRow, 1).SetValue(item.SequenceNumber);
-            ws1.Cell(currentRow, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 1).SetValue(item.SequenceNumber);
+            ws1.Cell(visitStartRow, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 2. Check-In Time
-            ws1.Cell(currentRow, 2).SetValue(item.CheckInTime.ToString("yyyy-MM-dd HH:mm"));
-            ws1.Cell(currentRow, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 2).SetValue(item.CheckInTime.ToString("yyyy-MM-dd HH:mm"));
+            ws1.Cell(visitStartRow, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 3. Triage Time
-            ws1.Cell(currentRow, 3).SetValue(item.TriageTime.HasValue ? item.TriageTime.Value.ToString("yyyy-MM-dd HH:mm") : "—");
-            ws1.Cell(currentRow, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 3).SetValue(item.TriageTime.HasValue ? item.TriageTime.Value.ToString("yyyy-MM-dd HH:mm") : "—");
+            ws1.Cell(visitStartRow, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 4. Call Time
-            ws1.Cell(currentRow, 4).SetValue(item.CalledTime.HasValue ? item.CalledTime.Value.ToString("yyyy-MM-dd HH:mm") : "—");
-            ws1.Cell(currentRow, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 4).SetValue(item.CalledTime.HasValue ? item.CalledTime.Value.ToString("yyyy-MM-dd HH:mm") : "—");
+            ws1.Cell(visitStartRow, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 5. Completed Time
-            ws1.Cell(currentRow, 5).SetValue(item.CompletedTime.HasValue ? item.CompletedTime.Value.ToString("yyyy-MM-dd HH:mm") : "—");
-            ws1.Cell(currentRow, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 5).SetValue(item.CompletedTime.HasValue ? item.CompletedTime.Value.ToString("yyyy-MM-dd HH:mm") : "—");
+            ws1.Cell(visitStartRow, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 6. Turnaround (Mins)
             if (item.TurnaroundMinutes.HasValue)
-                ws1.Cell(currentRow, 6).SetValue(item.TurnaroundMinutes.Value);
+                ws1.Cell(visitStartRow, 6).SetValue(item.TurnaroundMinutes.Value);
             else
-                ws1.Cell(currentRow, 6).SetValue("—");
-            ws1.Cell(currentRow, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws1.Cell(visitStartRow, 6).SetValue("—");
+            ws1.Cell(visitStartRow, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 7. Ticket No.
-            ws1.Cell(currentRow, 7).SetValue(item.QueueNumber);
-            ws1.Cell(currentRow, 7).Style.Font.Bold = true;
-            ws1.Cell(currentRow, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 7).SetValue(item.QueueNumber);
+            ws1.Cell(visitStartRow, 7).Style.Font.Bold = true;
+            ws1.Cell(visitStartRow, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 8. Patient Code
-            ws1.Cell(currentRow, 8).SetValue(item.PatientCode);
-            ws1.Cell(currentRow, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 8).SetValue(item.PatientCode);
+            ws1.Cell(visitStartRow, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 9. Patient Name
-            ws1.Cell(currentRow, 9).SetValue(item.PatientName);
-            ws1.Cell(currentRow, 9).Style.Font.Bold = true;
+            ws1.Cell(visitStartRow, 9).SetValue(item.PatientName);
+            ws1.Cell(visitStartRow, 9).Style.Font.Bold = true;
 
             // 10. Age / Sex / Civil Status
-            ws1.Cell(currentRow, 10).SetValue($"{item.Age}y / {item.Sex} / {item.CivilStatus}");
-            ws1.Cell(currentRow, 10).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 10).SetValue($"{item.Age}y / {item.Sex} / {item.CivilStatus}");
+            ws1.Cell(visitStartRow, 10).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 11. Classification
-            ws1.Cell(currentRow, 11).SetValue(item.Classification);
-            ws1.Cell(currentRow, 11).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 11).SetValue(item.Classification);
+            ws1.Cell(visitStartRow, 11).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 12. Custom Fields
-            ws1.Cell(currentRow, 12).SetValue(item.CustomFieldsSummary);
+            ws1.Cell(visitStartRow, 12).SetValue(item.CustomFieldsSummary);
 
-            // 13. Visit Type (shows composite Services Availed when multiple services were rendered in the visit)
-            var visitTypeDisplay = item.ServicesAvailed is { Count: > 1 } && !string.IsNullOrWhiteSpace(item.ServicesAvailedSummary)
-                ? item.ServicesAvailedSummary
-                : item.VisitType;
-            ws1.Cell(currentRow, 13).SetValue(visitTypeDisplay);
-            ws1.Cell(currentRow, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            // 13. Primary Service Availed on Main Visit Row
+            var primaryServiceLabel = ClinicCensusBreakdownResolver.MapVisitTypeToPrimaryServiceLabel(item.VisitType);
+            ws1.Cell(visitStartRow, 13).SetValue(primaryServiceLabel);
+            ws1.Cell(visitStartRow, 13).Style.Font.Bold = true;
+            ws1.Cell(visitStartRow, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 14. Chief Complaint
-            ws1.Cell(currentRow, 14).SetValue(item.ChiefComplaint ?? "—");
+            ws1.Cell(visitStartRow, 14).SetValue(ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ChiefComplaint));
 
             // 15. Nurse Assessment / Impression
-            ws1.Cell(currentRow, 15).SetValue(item.NurseAssessment ?? "—");
+            ws1.Cell(visitStartRow, 15).SetValue(ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.NurseAssessment));
 
-            // 16. Attending Nurse
-            ws1.Cell(currentRow, 16).SetValue(item.AttendingNurse ?? "—");
+            // 16. Main Attending Nurse
+            var mainNurse = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.AttendingNurse);
+            ws1.Cell(visitStartRow, 16).SetValue(!string.IsNullOrEmpty(mainNurse) ? mainNurse : "—");
 
             // 17. Vitals Snapshot
-            ws1.Cell(currentRow, 17).SetValue(item.VitalsSnapshot ?? "—");
+            ws1.Cell(visitStartRow, 17).SetValue(ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.VitalsSnapshot));
 
-            // 18. Attending Doctor
-            ws1.Cell(currentRow, 18).SetValue(item.AttendingDoctor ?? "—");
+            // 18. Main Attending Doctor
+            var mainDoc = ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.AttendingDoctor);
+            ws1.Cell(visitStartRow, 18).SetValue(!string.IsNullOrEmpty(mainDoc) ? mainDoc : "—");
 
-            // 19. Doctor Diagnosis & ICD-10
-            ws1.Cell(currentRow, 19).SetValue(item.DoctorDiagnosis ?? "—");
+            // 19-21. Doctor Diagnosis, Clinical Assessment & Systems Reviewed (Strictly blank when service/visit has no diagnosis)
+            var mainDx = isConsultationVisit
+                ? ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.DoctorDiagnosis, "Pending diagnosis")
+                : string.Empty;
+            var mainAssess = isConsultationVisit
+                ? ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ClinicalAssessment)
+                : string.Empty;
+            var mainSystems = isConsultationVisit
+                ? ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.SystemsReviewed)
+                : string.Empty;
 
-            // 20. Clinical Assessment
-            ws1.Cell(currentRow, 20).SetValue(item.ClinicalAssessment ?? "—");
+            ws1.Cell(visitStartRow, 19).SetValue(mainDx);
+            ws1.Cell(visitStartRow, 20).SetValue(mainAssess);
+            ws1.Cell(visitStartRow, 21).SetValue(mainSystems);
 
-            // 21. Systems Reviewed & Physical Findings
-            ws1.Cell(currentRow, 21).SetValue(item.SystemsReviewed ?? "—");
-
-            // 22. In-Clinic Procedures Performed (+ Clinic Medicine / Supply Dispensing)
-            var procDisplay = item.ProceduresPerformed ?? "—";
-            if (!string.IsNullOrWhiteSpace(item.DispensedMedicinesSummary))
-            {
-                procDisplay = string.IsNullOrWhiteSpace(item.ProceduresPerformed) || item.ProceduresPerformed == "None"
-                    ? $"Dispensed: {item.DispensedMedicinesSummary}"
-                    : $"{item.ProceduresPerformed} | Dispensed: {item.DispensedMedicinesSummary}";
-            }
-            ws1.Cell(currentRow, 22).SetValue(procDisplay);
+            // 22. Service & Procedure Details (primary procedure on StandaloneProcedure; additional services appear in sub-rows below)
+            var mainProcDetails = item.VisitType.Equals("StandaloneProcedure", StringComparison.OrdinalIgnoreCase)
+                ? ClinicCensusBreakdownResolver.NormalizeCensusDisplayValue(item.ProceduresPerformed)
+                : string.Empty;
+            ws1.Cell(visitStartRow, 22).SetValue(mainProcDetails);
 
             // 23. Acuity / Priority
-            ws1.Cell(currentRow, 23).SetValue(item.Acuity);
-            ws1.Cell(currentRow, 23).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws1.Cell(visitStartRow, 23).SetValue(item.Acuity);
+            ws1.Cell(visitStartRow, 23).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 24. Disposition / Outcome
-            ws1.Cell(currentRow, 24).SetValue(item.Disposition);
+            ws1.Cell(visitStartRow, 24).SetValue(item.Disposition);
 
             // 25. Billing Status / OR # / Amount Paid
             var billingText = item.BillingStatus;
             if (!string.IsNullOrWhiteSpace(item.OfficialReceiptNumber))
                 billingText += $" ({item.OfficialReceiptNumber})";
             billingText += $" - ₱{item.AmountPaid:N2}";
-            ws1.Cell(currentRow, 25).SetValue(billingText);
+            ws1.Cell(visitStartRow, 25).SetValue(billingText);
 
-            var rowRange = ws1.Range(currentRow, 1, currentRow, 25);
-            rowRange.Style.Fill.BackgroundColor = bg;
-            rowRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
-            rowRange.Style.Border.InsideBorderColor = LightBorder;
-            rowRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-            rowRange.Style.Border.OutsideBorderColor = BorderColor;
+            // Additional Per-Service Sub-Rows (availed on top of the visit, with performing staff & service details)
+            for (int sIdx = 0; sIdx < additionalSubRows.Count; sIdx++)
+            {
+                var sub = additionalSubRows[sIdx];
+                int r = visitStartRow + 1 + sIdx;
+                ws1.Row(r).Height = 19;
 
-            currentRow++;
+                ws1.Cell(r, 3).SetValue(string.Empty);
+                ws1.Cell(r, 4).SetValue(sub.ServiceTime.HasValue ? sub.ServiceTime.Value.ToString("yyyy-MM-dd HH:mm") : "—");
+                ws1.Cell(r, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                var subServiceDisplay = !string.IsNullOrWhiteSpace(sub.ReferenceNumber)
+                    ? $"↳ {sub.ServiceName} ({sub.ReferenceNumber})"
+                    : $"↳ {sub.ServiceName}";
+                ws1.Cell(r, 13).SetValue(subServiceDisplay);
+                ws1.Cell(r, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+
+                ws1.Cell(r, 14).SetValue(string.Empty);
+                ws1.Cell(r, 15).SetValue(string.Empty);
+                ws1.Cell(r, 16).SetValue(!string.IsNullOrWhiteSpace(sub.AttendingNurse) ? sub.AttendingNurse : "—");
+                ws1.Cell(r, 17).SetValue(string.Empty);
+                ws1.Cell(r, 18).SetValue(!string.IsNullOrWhiteSpace(sub.AttendingDoctor) ? sub.AttendingDoctor : "—");
+
+                // Strictly blank diagnosis/assessment/systems on all auxiliary service sub-rows
+                ws1.Cell(r, 19).SetValue(string.Empty);
+                ws1.Cell(r, 20).SetValue(string.Empty);
+                ws1.Cell(r, 21).SetValue(string.Empty);
+
+                ws1.Cell(r, 22).SetValue(sub.ServiceDetails ?? string.Empty);
+                ws1.Cell(r, 24).SetValue(!string.IsNullOrWhiteSpace(sub.Disposition) ? sub.Disposition : "Completed");
+            }
+
+            if (additionalSubRows.Count > 0)
+            {
+                foreach (int col in groupedVisitCols)
+                {
+                    var mergeRange = ws1.Range(visitStartRow, col, visitEndRow, col);
+                    mergeRange.Merge();
+                    mergeRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
+                }
+            }
+
+            var visitRange = ws1.Range(visitStartRow, 1, visitEndRow, 25);
+            visitRange.Style.Fill.BackgroundColor = bg;
+            visitRange.Style.Alignment.WrapText = true;
+            visitRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            visitRange.Style.Border.InsideBorderColor = LightBorder;
+            visitRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            visitRange.Style.Border.OutsideBorderColor = BorderColor;
+
+            currentRow = visitEndRow + 1;
         }
 
         // Freeze header row 6

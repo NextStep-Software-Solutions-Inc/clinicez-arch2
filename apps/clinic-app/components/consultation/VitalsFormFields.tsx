@@ -1648,7 +1648,17 @@ export function RosCategorySelectorSection({
 }
 
 export function isVisitTypeEligibleForOtcDispensing(visitType?: string | null): boolean {
-  return !visitType || visitType === 'Consultation' || visitType === 'VitalsCheckOnly';
+  if (!visitType) return true;
+  switch (visitType.trim()) {
+    case 'RoutineCheckup':
+    case 'AcuteIllnessConsultation':
+    case 'ChronicDiseaseFollowUp':
+    case 'PreventiveHealthAssessment':
+    case 'UrgentCareVisit':
+      return true;
+    default:
+      return false;
+  }
 }
 
 export interface NurseCareAndOtcDispensingSectionProps {

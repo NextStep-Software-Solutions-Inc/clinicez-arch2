@@ -948,15 +948,36 @@ public class ClinicDispensingAndVisitValidityTests
         report.DispensingLedger.Should().NotBeNull();
         report.DispensingLedger!.Should().HaveCount(2);
 
-        // Verify Excel export generates 3 tabs (including Dispensing Ledger) and PDF renders cleanly
+        // Verify Excel export generates 3 tabs (including Dispensing Ledger), merges parent visit columns,
+        // emits dedicated sub-rows for additional services with providing staff, and leaves non-diagnosis cells blank
+        row1.ServiceRows.Should().NotBeNull();
+        row1.ServiceRows!.Select(sr => sr.ServiceName).Should().Equal(
+            "Medicine Dispensing",
+            "Prescription",
+            "Medical Certificate",
+            "Referral",
+            "Laboratory Requisition");
+        row1.ServiceRows.Should().OnlyContain(sr => string.IsNullOrEmpty(sr.DoctorDiagnosis));
+        row2.DoctorDiagnosis.Should().BeEmpty();
+        row2.ServiceRows.Should().ContainSingle(sr => sr.ServiceName == "Medicine Dispensing" && string.IsNullOrEmpty(sr.DoctorDiagnosis));
+
         var settings = new FacilitySettings { TenantId = TenantId, ClinicId = _clinicId, ClinicName = "University Health Services" };
         var excelBytes = new ClinicCensusExcelService().GenerateClinicCensusExcel(report, settings);
         using var ms = new MemoryStream(excelBytes);
         using var wb = new XLWorkbook(ms);
         wb.Worksheets.Count.Should().Be(3);
         wb.Worksheets.Should().Contain(w => w.Name == "Dispensing Ledger");
-        wb.Worksheet("Census Register").Cell(7, 13).GetString().Should().Contain("Consultation + Medicine Dispensing");
-        wb.Worksheet("Census Register").Cell(8, 13).GetString().Should().Be("Vitals Check + Medicine Dispensing");
+        var wsReg = wb.Worksheet("Census Register");
+        wsReg.Cell(7, 13).GetString().Should().Be("Consultation");
+        wsReg.Cell(8, 13).GetString().Should().Contain("↳ Medicine Dispensing");
+        wsReg.Cell(8, 19).GetString().Should().BeEmpty();
+        wsReg.Cell(9, 13).GetString().Should().Contain("↳ Prescription");
+        wsReg.Cell(10, 13).GetString().Should().Contain("↳ Medical Certificate (MC-20261110-0001)");
+        wsReg.Cell(11, 13).GetString().Should().Contain("↳ Referral (REF-20261110-0001)");
+        wsReg.Cell(12, 13).GetString().Should().Contain("↳ Laboratory Requisition (LAB-20261110-0001)");
+        wsReg.Cell(13, 13).GetString().Should().Be("Vitals Check");
+        wsReg.Cell(13, 19).GetString().Should().BeEmpty();
+        wsReg.Cell(14, 13).GetString().Should().Contain("↳ Medicine Dispensing");
 
         var pdfBytes = new ClinicDocumentPdfService().GenerateClinicCensusReportPdf(report, settings, "Nurse Clara");
         Encoding.ASCII.GetString(pdfBytes, 0, 5).Should().Be("%PDF-");

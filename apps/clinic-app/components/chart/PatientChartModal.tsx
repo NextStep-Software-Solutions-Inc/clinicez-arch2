@@ -305,7 +305,7 @@ export default function PatientChartModal({
           patientName: patientFullName,
           doctorId: order.orderedByDoctorId,
           doctorName: order.orderedByDoctorName,
-          visitType: isDiag ? 'Consultation' : 'StandaloneProcedure',
+          visitType: 'RoutineCheckup',
           initialStatus: isDiag ? 'InConsultation' : 'PendingProcedure',
           allowDuplicateActive: allowDuplicateActive && !materializedQueueItemId,
         });

@@ -73,7 +73,6 @@ import PatientDirectoryCard, {
   PatientDirectoryTableHeader,
   type PatientDirectoryViewMode,
   hasKnownAllergies,
-  type ClinicalServiceType,
 } from '../../components/patient/PatientDirectoryCard';
 import ScheduleVisitModal from '../../components/patient/ScheduleVisitModal';
 import ServiceCheckInModal, {
@@ -125,13 +124,11 @@ import { getSetting } from '../../services/runtimeConfig';
 import { shouldQueueOffline } from '../../services/outboxPolicy';
 
 const VISIT_TYPE_OPTIONS: Array<{ key: VisitType; label: string }> = [
-  { key: 'Consultation', label: 'Consultation' },
-  { key: 'VitalsCheckOnly', label: 'Vitals Check' },
-  { key: 'RetailPurchase', label: 'Retail OTC' },
-  { key: 'StandaloneProcedure', label: 'Procedure' },
-  { key: 'LaboratorySpecimen', label: 'Specimen Drop-Off' },
-  { key: 'AdministrativeDocument', label: 'Administrative' },
-  { key: 'CashierSettlement', label: 'Cashier' },
+  { key: 'RoutineCheckup', label: 'Routine Checkup' },
+  { key: 'AcuteIllnessConsultation', label: 'Acute Illness Consultation' },
+  { key: 'ChronicDiseaseFollowUp', label: 'Chronic Disease Follow-Up' },
+  { key: 'PreventiveHealthAssessment', label: 'Preventive Health Assessment' },
+  { key: 'UrgentCareVisit', label: 'Urgent Care Visit' },
 ];
 
 const humanizeKey = (key: string) => {
@@ -529,12 +526,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const isFirstFocusRef = useRef(true);
   const [checkingInPatientId, setCheckingInPatientId] = useState<string | null>(null);
   const [serviceModalPatient, setServiceModalPatient] = useState<ClinicPatient | null>(null);
-  const [selectedServiceIntent, setSelectedServiceIntent] = useState<ClinicalServiceType>('Doctor Consultation');
+  const [selectedVisitTypeIntent, setSelectedVisitTypeIntent] = useState<VisitType>('RoutineCheckup');
   const [checkInModalPatient, setCheckInModalPatient] = useState<ClinicPatient | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
   const [checkInPriority, setCheckInPriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
-  const [checkInVisitType, setCheckInVisitType] = useState<VisitType>('Consultation');
+  const [checkInVisitType, setCheckInVisitType] = useState<VisitType>('RoutineCheckup');
   const [checkInComplaint, setCheckInComplaint] = useState<string>('');
   const [conflictModal, setConflictModal] = useState<{
     visible: boolean;
@@ -1703,16 +1700,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setSelectedRxSlip(updatedSlip);
   };
 
-  const handleQueueCheckIn = (patient: ClinicPatient, serviceType?: ClinicalServiceType) => {
+  const handleQueueCheckIn = (patient: ClinicPatient, visitType?: VisitType) => {
     if (isCheckingInRef.current || checkingInPatientId) return;
     setServiceModalPatient(patient);
-    setSelectedServiceIntent(serviceType || 'Doctor Consultation');
+    setSelectedVisitTypeIntent(visitType || 'RoutineCheckup');
   };
 
-  const handleSelectService = (patient: ClinicPatient, serviceType: ClinicalServiceType) => {
+  const handleSelectService = (patient: ClinicPatient, visitType: VisitType) => {
     if (isCheckingInRef.current || checkingInPatientId) return;
     setServiceModalPatient(patient);
-    setSelectedServiceIntent(serviceType);
+    setSelectedVisitTypeIntent(visitType);
   };
 
   const handleConfirmServiceCheckIn = async (payload: ServiceCheckInPayload) => {
@@ -3417,11 +3414,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
       />
 
-      {/* Multi-Service Queueing Modal */}
+      {/* Visit Purpose Queueing Modal */}
       <ServiceCheckInModal
         visible={!!serviceModalPatient}
         patient={serviceModalPatient}
-        initialService={selectedServiceIntent}
+        initialVisitType={selectedVisitTypeIntent}
         activeDoctors={activeDoctors}
         activeRooms={activeRooms}
         onClose={() => setServiceModalPatient(null)}

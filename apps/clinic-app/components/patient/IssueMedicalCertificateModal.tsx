@@ -125,7 +125,7 @@ export default function IssueMedicalCertificateModal({
           patientName: patient.fullName,
           doctorId: doctorId || undefined,
           doctorName: doctorName || undefined,
-          visitType: 'AdministrativeDocument',
+          visitType: 'RoutineCheckup',
           initialStatus: 'Completed',
           allowDuplicateActive,
         });

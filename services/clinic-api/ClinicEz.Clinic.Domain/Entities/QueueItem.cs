@@ -73,9 +73,9 @@ public sealed class QueueItem : ClinicScopedEntity
     public bool CalledNotificationSent { get; set; } = false;
 
     /// <summary>
-    /// Outpatient visit intent classification: Consultation, VitalsCheckOnly, RetailPurchase, StandaloneProcedure, LaboratorySpecimen, AdministrativeDocument, CashierSettlement
+    /// Outpatient visit purpose classification: RoutineCheckup, AcuteIllnessConsultation, ChronicDiseaseFollowUp, PreventiveHealthAssessment, UrgentCareVisit
     /// </summary>
-    public VisitType VisitType { get; set; } = VisitType.Consultation;
+    public VisitType VisitType { get; set; } = VisitType.RoutineCheckup;
 
     /// <summary>
     /// Optional clinical or administrative remarks upon non-doctor discharge or cancellation

@@ -315,9 +315,9 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             throw new BadRequestException($"Cannot dispense OTC medicine or supplies for a visit with status '{queueItem.Status}'.");
         }
 
-        if (queueItem.VisitType != VisitType.VitalsCheckOnly && queueItem.VisitType != VisitType.Consultation)
+        if (!Enum.IsDefined(queueItem.VisitType))
         {
-            throw new BadRequestException("No medicine or medical supply may be dispensed unless the patient undergoes a Consultation or a Vitals Check.");
+            throw new BadRequestException("No medicine or medical supply may be dispensed unless the patient is checked in under a valid clinical VisitType.");
         }
 
         foreach (var item in dispensedItems)

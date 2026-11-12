@@ -33,9 +33,11 @@ public sealed class QueueItemConfiguration : IEntityTypeConfiguration<QueueItem>
 
             entity.Property(e => e.VisitWorkflowMode).IsRequired().HasConversion<string>().HasMaxLength(50);
             entity.Property(e => e.VisitType)
-                .HasConversion<string>()
+                .HasConversion(
+                    v => v.ToString(),
+                    v => ParseVisitType(v))
                 .HasMaxLength(50)
-                .HasDefaultValue(VisitType.Consultation)
+                .HasDefaultValue(VisitType.RoutineCheckup)
                 .HasSentinel((VisitType)0);
             entity.Property(e => e.DischargeNotes).HasMaxLength(1000);
             entity.Property(e => e.DivertedToFacility).HasMaxLength(255);
@@ -74,4 +76,11 @@ public sealed class QueueItemConfiguration : IEntityTypeConfiguration<QueueItem>
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.QueueDate, e.Status });
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.VisitType });
     }
+
+    private static VisitType ParseVisitType(string? raw) =>
+        !string.IsNullOrWhiteSpace(raw) &&
+        Enum.TryParse<VisitType>(raw.Trim(), ignoreCase: true, out var parsed) &&
+        Enum.IsDefined(parsed)
+            ? parsed
+            : default;
 }

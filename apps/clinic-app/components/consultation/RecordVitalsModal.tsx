@@ -205,7 +205,7 @@ export default function RecordVitalsModal({
       const [directVisit, visitErr] = await clinicService.ensureDirectVisit({
         patientId: patient.id,
         patientName: patient.fullName,
-        visitType: completeVisitOnly && !escalateToDoctor ? 'VitalsCheckOnly' : 'Consultation',
+        visitType: completeVisitOnly && !escalateToDoctor ? 'PreventiveHealthAssessment' : 'RoutineCheckup',
         initialStatus,
         allowDuplicateActive,
       });
@@ -316,7 +316,7 @@ export default function RecordVitalsModal({
             onPress={onClose}
             disabled={saving}
           />
-          {(visitType === 'VitalsCheckOnly' || form.triagePriority === 'Emergency') && (
+          {(visitType === 'PreventiveHealthAssessment' || form.triagePriority === 'Emergency') && (
             <Button
               title="Save & Escalate to MD"
               variant="dangerOutline"

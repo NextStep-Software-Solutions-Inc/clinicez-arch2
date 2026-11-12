@@ -64,9 +64,9 @@ public static class PatientPriorityHelper
 
         return visitType switch
         {
-            VisitType.VitalsCheckOnly => isPriority ? "SV" : "V",
-            VisitType.StandaloneProcedure => isPriority ? "SP" : "P",
-            VisitType.AdministrativeDocument => isPriority ? "SA" : "A",
+            VisitType.PreventiveHealthAssessment => isPriority ? "SV" : "V",
+            VisitType.ChronicDiseaseFollowUp => isPriority ? "SF" : "F",
+            VisitType.UrgentCareVisit => isPriority ? "SU" : "U",
             _ => isPriority ? "SQ" : "Q"
         };
     }

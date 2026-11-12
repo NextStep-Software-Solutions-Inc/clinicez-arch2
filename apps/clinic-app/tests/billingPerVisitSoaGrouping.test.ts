@@ -81,10 +81,8 @@ describe('Per-Visit Cashier SOA Grouping & Add-on Unbilled Flow', () => {
       expect(billingContent).toContain('!selectedPatient.hasAddOnUnbilled');
     });
 
-    test('2.6 Does NOT auto-charge false consultation fee on StandaloneProcedure, AdministrativeDocument, or VitalsCheckOnly visits', () => {
-      expect(billingContent).toContain("p.visitType !== 'StandaloneProcedure'");
-      expect(billingContent).toContain("p.visitType !== 'AdministrativeDocument'");
-      expect(billingContent).toContain("p.visitType !== 'VitalsCheckOnly'");
+    test('2.6 Does NOT auto-charge false consultation fee on PreventiveHealthAssessment visits', () => {
+      expect(billingContent).toContain("p.visitType !== 'PreventiveHealthAssessment'");
     });
 
     test('2.7 Decrements paidItemCodeCounts so a 2nd procedure of the same code after partial settlement registers as Add-on Unbilled', () => {

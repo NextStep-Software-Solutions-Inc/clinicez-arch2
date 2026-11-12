@@ -139,7 +139,7 @@ public sealed class ReconcileEodCommandHandler : IRequestHandler<ReconcileEodCom
 
             // Shield DischargedNonDoctor and Diverted (already terminal, excluded by query)
             // Differentiate consultation vs non-consultation visits:
-            if (item.VisitType == VisitType.Consultation)
+            if (item.VisitType.IsPhysicianConsultation())
             {
                 item.Status = QueueStatus.NoShow;
             }

@@ -424,10 +424,7 @@ export default function BillingScreen() {
         : [];
       const isConsultationVisit =
         visitConsultations.length > 0 ||
-        (Boolean(p.doctorId) &&
-          p.visitType !== 'StandaloneProcedure' &&
-          p.visitType !== 'AdministrativeDocument' &&
-          p.visitType !== 'VitalsCheckOnly');
+        (Boolean(p.doctorId) && p.visitType !== 'PreventiveHealthAssessment');
 
       // Ensure consultation service fee is present if not already billed on THIS visit
       const hasConsultationItem = updatedItems.some(
@@ -1137,7 +1134,6 @@ export default function BillingScreen() {
         patientName: effWalkInName,
         isWalkInRetail: isRetail,
         walkInCustomerName: isRetail ? effWalkInName : undefined,
-        visitType: isRetail ? ('RetailPurchase' as const) : undefined,
         queueItemId: selectedPatient.queueItemId,
         attendingDoctorId: selectedPatient.doctorId,
         discountType,

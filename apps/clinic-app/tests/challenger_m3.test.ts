@@ -156,7 +156,7 @@ const {
   formatQueueTicketNumber,
   isSeniorOrPwdEligible,
   calculateAge,
-  CLINICAL_SERVICES,
+  VISIT_TYPE_OPTIONS,
 } = await import('../components/patient/ServiceCheckInModal');
 
 import type { ClinicPatient } from '../services/clinicService';
@@ -277,20 +277,21 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
     });
   });
 
-  describe('2. ActionMenu Direct Service Intents', () => {
-    test('2.1 ActionMenu contains all 4 clinical services with concise single-line labels', () => {
+  describe('2. ActionMenu Direct Visit Purpose Intents', () => {
+    test('2.1 ActionMenu contains all 5 visit purpose options with concise single-line labels', () => {
       const items = buildPatientOverflowMenuItems(youngPatient, {
         onSelectService: () => {},
       });
 
       const labels = items.map((i) => i.label);
-      expect(labels).toContain('Consult');
-      expect(labels).toContain('Vitals');
-      expect(labels).toContain('Start procedure');
-      expect(labels).toContain('Medical certificate');
+      expect(labels).toContain('Routine Checkup');
+      expect(labels).toContain('Acute Illness Consultation');
+      expect(labels).toContain('Chronic Disease Follow-Up');
+      expect(labels).toContain('Preventive Health Assessment');
+      expect(labels).toContain('Urgent Care Visit');
     });
 
-    test('2.2 Invoking ActionMenu direct intents triggers onSelectService with patient and exact service key', () => {
+    test('2.2 Invoking ActionMenu direct intents triggers onSelectService with patient and exact VisitType key', () => {
       const captured: Array<{ patientId: string; service: string }> = [];
       const items = buildPatientOverflowMenuItems(youngPatient, {
         onSelectService: (p, s) => {
@@ -298,25 +299,28 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
         },
       });
 
-      const srvConsult = items.find((i) => i.id === 'service-consultation')!;
-      const srvVitals = items.find((i) => i.id === 'service-vitals')!;
-      const srvProc = items.find((i) => i.id === 'service-procedure')!;
-      const srvAdmin = items.find((i) => i.id === 'service-administrative')!;
+      const routine = items.find((i) => i.id === 'visit-routine-checkup')!;
+      const acute = items.find((i) => i.id === 'visit-acute-illness')!;
+      const followUp = items.find((i) => i.id === 'visit-chronic-followup')!;
+      const preventive = items.find((i) => i.id === 'visit-preventive-assessment')!;
+      const urgent = items.find((i) => i.id === 'visit-urgent-care')!;
 
-      srvConsult.onPress();
-      srvVitals.onPress();
-      srvProc.onPress();
-      srvAdmin.onPress();
+      routine.onPress();
+      acute.onPress();
+      followUp.onPress();
+      preventive.onPress();
+      urgent.onPress();
 
       expect(captured).toEqual([
-        { patientId: youngPatient.id, service: 'Doctor Consultation' },
-        { patientId: youngPatient.id, service: 'Vitals Check' },
-        { patientId: youngPatient.id, service: 'Clinical Procedure' },
-        { patientId: youngPatient.id, service: 'Administrative & Clearance' },
+        { patientId: youngPatient.id, service: 'RoutineCheckup' },
+        { patientId: youngPatient.id, service: 'AcuteIllnessConsultation' },
+        { patientId: youngPatient.id, service: 'ChronicDiseaseFollowUp' },
+        { patientId: youngPatient.id, service: 'PreventiveHealthAssessment' },
+        { patientId: youngPatient.id, service: 'UrgentCareVisit' },
       ]);
     });
 
-    test('2.3 If onSelectService is missing but onQueuePatient is provided, direct intents fallback to onQueuePatient(p, service)', () => {
+    test('2.3 If onSelectService is missing but onQueuePatient is provided, direct intents fallback to onQueuePatient(p, visitType)', () => {
       const captured: Array<{ patientId: string; service?: string }> = [];
       const items = buildPatientOverflowMenuItems(youngPatient, {
         onQueuePatient: (p, s) => {
@@ -324,50 +328,53 @@ describe('Adversarial Verification Suite for Milestone 3', () => {
         },
       });
 
-      const srvConsult = items.find((i) => i.id === 'service-consultation')!;
-      srvConsult.onPress();
-      expect(captured[0]).toEqual({ patientId: youngPatient.id, service: 'Doctor Consultation' });
+      const routine = items.find((i) => i.id === 'visit-routine-checkup')!;
+      routine.onPress();
+      expect(captured[0]).toEqual({ patientId: youngPatient.id, service: 'RoutineCheckup' });
     });
   });
 
   describe('3. Ticket Series Resolution Matrix', () => {
-    test('3.1 Full 8-combination series matrix (Regular vs Priority)', () => {
-      // 1. Consultation
-      expect(resolveTicketPrefix('Doctor Consultation', false)).toBe('Q');
-      expect(resolveTicketPrefix('Doctor Consultation', true)).toBe('SQ');
+    test('3.1 Full 10-combination series matrix (Regular vs Priority)', () => {
+      expect(resolveTicketPrefix('RoutineCheckup', false)).toBe('Q');
+      expect(resolveTicketPrefix('RoutineCheckup', true)).toBe('SQ');
 
-      // 2. Vitals Check
-      expect(resolveTicketPrefix('Vitals Check', false)).toBe('V');
-      expect(resolveTicketPrefix('Vitals Check', true)).toBe('SV');
+      expect(resolveTicketPrefix('AcuteIllnessConsultation', false)).toBe('Q');
+      expect(resolveTicketPrefix('AcuteIllnessConsultation', true)).toBe('SQ');
 
-      // 3. Clinical Procedure
-      expect(resolveTicketPrefix('Clinical Procedure', false)).toBe('P');
-      expect(resolveTicketPrefix('Clinical Procedure', true)).toBe('SP');
+      expect(resolveTicketPrefix('ChronicDiseaseFollowUp', false)).toBe('F');
+      expect(resolveTicketPrefix('ChronicDiseaseFollowUp', true)).toBe('SF');
 
-      // 4. Administrative & Clearance
-      expect(resolveTicketPrefix('Administrative & Clearance', false)).toBe('A');
-      expect(resolveTicketPrefix('Administrative & Clearance', true)).toBe('SA');
+      expect(resolveTicketPrefix('PreventiveHealthAssessment', false)).toBe('V');
+      expect(resolveTicketPrefix('PreventiveHealthAssessment', true)).toBe('SV');
+
+      expect(resolveTicketPrefix('UrgentCareVisit', false)).toBe('U');
+      expect(resolveTicketPrefix('UrgentCareVisit', true)).toBe('SU');
     });
 
-    test('3.2 CLINICAL_SERVICES configuration matches the ticket prefixes', () => {
-      const config = CLINICAL_SERVICES;
-      expect(config).toHaveLength(4);
+    test('3.2 VISIT_TYPE_OPTIONS configuration matches the ticket prefixes', () => {
+      const config = VISIT_TYPE_OPTIONS;
+      expect(config).toHaveLength(5);
 
-      const consult = config.find((c) => c.type === 'Doctor Consultation')!;
-      expect(consult.defaultPrefixRegular).toBe('Q');
-      expect(consult.defaultPrefixPriority).toBe('SQ');
+      const routine = config.find((c) => c.visitType === 'RoutineCheckup')!;
+      expect(routine.defaultPrefixRegular).toBe('Q');
+      expect(routine.defaultPrefixPriority).toBe('SQ');
 
-      const vitals = config.find((c) => c.type === 'Vitals Check')!;
-      expect(vitals.defaultPrefixRegular).toBe('V');
-      expect(vitals.defaultPrefixPriority).toBe('SV');
+      const acute = config.find((c) => c.visitType === 'AcuteIllnessConsultation')!;
+      expect(acute.defaultPrefixRegular).toBe('Q');
+      expect(acute.defaultPrefixPriority).toBe('SQ');
 
-      const proc = config.find((c) => c.type === 'Clinical Procedure')!;
-      expect(proc.defaultPrefixRegular).toBe('P');
-      expect(proc.defaultPrefixPriority).toBe('SP');
+      const followUp = config.find((c) => c.visitType === 'ChronicDiseaseFollowUp')!;
+      expect(followUp.defaultPrefixRegular).toBe('F');
+      expect(followUp.defaultPrefixPriority).toBe('SF');
 
-      const admin = config.find((c) => c.type === 'Administrative & Clearance')!;
-      expect(admin.defaultPrefixRegular).toBe('A');
-      expect(admin.defaultPrefixPriority).toBe('SA');
+      const preventive = config.find((c) => c.visitType === 'PreventiveHealthAssessment')!;
+      expect(preventive.defaultPrefixRegular).toBe('V');
+      expect(preventive.defaultPrefixPriority).toBe('SV');
+
+      const urgent = config.find((c) => c.visitType === 'UrgentCareVisit')!;
+      expect(urgent.defaultPrefixRegular).toBe('U');
+      expect(urgent.defaultPrefixPriority).toBe('SU');
     });
 
     test('3.3 formatQueueTicketNumber formatting across single, double, triple, and quad digits', () => {

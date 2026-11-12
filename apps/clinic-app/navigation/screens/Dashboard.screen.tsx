@@ -63,6 +63,11 @@ import {
   VisitType,
   ClinicDispensingLogRecord,
   resolveCensusLedgerEntryMeta,
+  resolveCensusVisitServiceRows,
+  mapCensusVisitTypeLabel,
+  normalizeCensusDisplayField,
+  isPhysicianConsultationVisitType,
+  isNurseAssessmentVisitType,
   RosCategoryCode,
   TriageDispensedItemInput,
   getManilaTodayStr,
@@ -147,15 +152,18 @@ const getServiceBadge = (
   visitType?: VisitType | string
 ): { label: string; variant: BadgeVariant; icon?: string } => {
   switch (visitType) {
+    case 'PreventiveHealthAssessment':
     case 'VitalsCheckOnly':
-      return { label: 'Vitals Check', variant: 'info', icon: 'activity' };
-    case 'StandaloneProcedure':
-      return { label: 'Procedure', variant: 'primary', icon: 'syringe' };
-    case 'AdministrativeDocument':
-      return { label: 'Administrative', variant: 'neutral', icon: 'file' };
-    case 'Consultation':
+      return { label: 'Preventive Health Assessment', variant: 'info', icon: 'heartPulse' };
+    case 'AcuteIllnessConsultation':
+      return { label: 'Acute Illness Consultation', variant: 'primary', icon: 'activity' };
+    case 'ChronicDiseaseFollowUp':
+      return { label: 'Chronic Disease Follow-Up', variant: 'primary', icon: 'refresh' };
+    case 'UrgentCareVisit':
+      return { label: 'Urgent Care Visit', variant: 'urgent', icon: 'emergency' };
+    case 'RoutineCheckup':
     default:
-      return { label: 'Consultation', variant: 'primary', icon: 'stethoscope' };
+      return { label: 'Routine Checkup', variant: 'primary', icon: 'stethoscope' };
   }
 };
 
@@ -1406,7 +1414,7 @@ export default function DashboardScreen() {
                                   }}
                                 />
                               ) : null}
-                              {item.visitType === 'VitalsCheckOnly' &&
+                              {isNurseAssessmentVisitType(item.visitType) &&
                               item.status !== 'Cancelled' &&
                               item.status !== 'NoShow' &&
                               item.status !== 'Diverted' ? (
@@ -2062,6 +2070,8 @@ export default function DashboardScreen() {
         return 'routine';
       };
 
+      const dispensingLedger = censusReport.dispensingLedger || [];
+
       const q = censusSearchQuery.trim().toLowerCase();
       const filteredItems = (censusReport.items || []).filter((item) => {
         if (censusAcuityFilter !== 'ALL' && (item.acuity || '').toLowerCase() !== censusAcuityFilter.toLowerCase()) {
@@ -2073,6 +2083,19 @@ export default function DashboardScreen() {
         if (!q) return true;
 
         const pills = formatCustomFieldPills(item.customFields).join(' ').toLowerCase();
+        const subRowsBlob = resolveCensusVisitServiceRows(item, dispensingLedger)
+          .map((sr) =>
+            [
+              sr.serviceName,
+              sr.referenceNumber ?? '',
+              sr.attendingDoctor ?? '',
+              sr.attendingNurse ?? '',
+              sr.doctorDiagnosis ?? '',
+              sr.serviceDetails ?? '',
+              sr.disposition ?? '',
+            ].join(' '),
+          )
+          .join(' ');
         const searchableBlob = [
           item.patientName,
           item.patientCode,
@@ -2089,6 +2112,7 @@ export default function DashboardScreen() {
           item.chiefComplaint ?? '',
           item.systemsReviewed ?? '',
           item.proceduresPerformed ?? '',
+          subRowsBlob,
           pills,
         ]
           .join(' ')
@@ -2096,8 +2120,6 @@ export default function DashboardScreen() {
 
         return searchableBlob.includes(q);
       });
-
-      const dispensingLedger = censusReport.dispensingLedger || [];
 
       return (
         <View style={styles.listGap}>
@@ -2228,7 +2250,7 @@ export default function DashboardScreen() {
                     'Vitals Check',
                     censusReport.summary.vitalsCheckVisits ??
                       censusReport.summary.vitalsCheckOnlyCount ??
-                      itemsList.filter((i) => i.visitType === 'VitalsCheckOnly' || i.servicesAvailed?.includes('Vitals Check')).length,
+                      itemsList.filter((i) => isNurseAssessmentVisitType(i.visitType) || i.servicesAvailed?.includes('Preventive Health Assessment') || i.servicesAvailed?.includes('Vitals Check')).length,
                   );
                   const procCnt = getSvcValue(
                     'In-Clinic Procedure',
@@ -2383,9 +2405,20 @@ export default function DashboardScreen() {
                   <ThemedText variant="captionBold" color={theme.colors.textMuted}>
                     Visit:
                   </ThemedText>
-                  {(['ALL', 'Consultation', 'StandaloneProcedure', 'VitalsCheckOnly', 'AdministrativeDocument'] as const).map((vt) => {
+                  {(['ALL', 'RoutineCheckup', 'AcuteIllnessConsultation', 'ChronicDiseaseFollowUp', 'PreventiveHealthAssessment', 'UrgentCareVisit'] as const).map((vt) => {
                     const active = censusVisitTypeFilter === vt;
-                    const label = vt === 'ALL' ? 'ALL' : vt === 'StandaloneProcedure' ? 'Procedure' : vt === 'VitalsCheckOnly' ? 'Vitals' : vt === 'AdministrativeDocument' ? 'Admin' : 'Consult';
+                    const label =
+                      vt === 'ALL'
+                        ? 'ALL'
+                        : vt === 'RoutineCheckup'
+                        ? 'Routine Checkup'
+                        : vt === 'AcuteIllnessConsultation'
+                        ? 'Acute Illness'
+                        : vt === 'ChronicDiseaseFollowUp'
+                        ? 'Follow-Up'
+                        : vt === 'PreventiveHealthAssessment'
+                        ? 'Health Assessment'
+                        : 'Urgent Care';
                     return (
                       <Pressable
                         key={vt}
@@ -2460,17 +2493,22 @@ export default function DashboardScreen() {
                   <View style={styles.censusTableHeaderRow}>
                     <View style={styles.colTicket}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Ticket, Visit &amp; Services Availed
+                        Ticket, Date &amp; Time
                       </ThemedText>
                     </View>
                     <View style={styles.colPatient}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Patient & Demographics
+                        Patient &amp; Demographics
                       </ThemedText>
                     </View>
                     <View style={styles.colCustom}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Classifications & Custom Fields
+                        Classifications &amp; Custom Fields
+                      </ThemedText>
+                    </View>
+                    <View style={styles.colService}>
+                      <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+                        Service Availed
                       </ThemedText>
                     </View>
                     <View style={styles.colStaff}>
@@ -2480,32 +2518,47 @@ export default function DashboardScreen() {
                     </View>
                     <View style={styles.colNurse}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Triage & Nurse Assessment
+                        Triage &amp; Vitals
                       </ThemedText>
                     </View>
                     <View style={styles.colDoctor}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Doctor Diagnosis & Systems
+                        Doctor Diagnosis &amp; Systems
                       </ThemedText>
                     </View>
                     <View style={styles.colOutcome}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Procedures & Outcome
+                        Service Details &amp; Outcome
                       </ThemedText>
                     </View>
                     <View style={styles.colBilling}>
                       <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-                        Billing & Payment
+                        Billing &amp; Payment
                       </ThemedText>
                     </View>
                   </View>
 
-                  {/* Table Data Rows */}
+                  {/* Table Data Rows: Main Parent Visit Row + Additional Per-Service Sub-Rows */}
                   {filteredItems.map((item, idx) => {
                     const customPills = formatCustomFieldPills(item.customFields);
                     const classifications = item.classifications || (item.classification ? [item.classification] : []);
                     const rowKey = item.id || `census-row-${item.queueNumber}-${idx}`;
                     const isEven = idx % 2 === 0;
+                    const primaryServiceLabel = mapCensusVisitTypeLabel(item.visitType);
+                    const isConsultationVisit =
+                      isPhysicianConsultationVisitType(item.visitType) ||
+                      Boolean(normalizeCensusDisplayField(item.doctorDiagnosis));
+                    const mainDoc = normalizeCensusDisplayField(item.attendingDoctor);
+                    const mainNurse = normalizeCensusDisplayField(item.attendingNurse);
+                    const mainCc = normalizeCensusDisplayField(item.chiefComplaint);
+                    const mainImpression = normalizeCensusDisplayField(item.nurseImpression || item.nurseAssessment);
+                    const mainVitals = normalizeCensusDisplayField(item.vitalsSnapshot);
+                    const mainDx = isConsultationVisit ? normalizeCensusDisplayField(item.doctorDiagnosis) : '';
+                    const mainRos = isConsultationVisit ? normalizeCensusDisplayField(item.rosCategory) : '';
+                    const mainAssessment = isConsultationVisit ? normalizeCensusDisplayField(item.clinicalAssessment) : '';
+                    const mainSystems = isConsultationVisit ? normalizeCensusDisplayField(item.systemsReviewed) : '';
+                    const mainProc = '';
+                    const additionalSubRows = resolveCensusVisitServiceRows(item, dispensingLedger);
 
                     return (
                       <View
@@ -2515,212 +2568,311 @@ export default function DashboardScreen() {
                           !isEven && styles.censusTableRowAlt,
                         ]}
                       >
-                        {/* 1. Ticket, Visit & Services Availed */}
-                        <View style={styles.colTicket}>
-                          <View style={styles.rowBetween}>
-                            <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
-                              {item.queueNumber}
-                            </ThemedText>
-                            <Badge
-                              label={formatTurnaroundBadge(item.turnaroundMinutes)}
-                              variant="neutral"
-                              size="xs"
-                            />
-                          </View>
-                          <ThemedText variant="captionBold" color={theme.colors.text}>
-                            {formatClinicDate(item.checkInTime)}
-                          </ThemedText>
-                          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                            {item.servicesAvailedSummary || item.visitType}
-                          </ThemedText>
-                          {item.servicesAvailed && item.servicesAvailed.length > 1 ? (
-                            <View style={styles.badgeWrapRow}>
-                              {item.servicesAvailed.map((svc, sIdx) => (
-                                <Badge
-                                  key={`${rowKey}-svc-${sIdx}`}
-                                  label={svc}
-                                  variant={svc.includes('Dispensing') ? 'primary' : 'outline'}
-                                  size="xs"
-                                />
-                              ))}
-                            </View>
-                          ) : null}
-                          <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            In: {formatTimeOnly(item.checkInTime)}
-                            {item.completedTime ? ` • Out: ${formatTimeOnly(item.completedTime)}` : ''}
-                          </ThemedText>
-                        </View>
-
-                        {/* 2. Patient & Demographics */}
-                        <View style={styles.colPatient}>
-                          <ThemedText variant="bodyBold" color={theme.colors.text}>
-                            {item.patientName}
-                          </ThemedText>
-                          <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            {item.patientCode} • {item.age} yo • {item.sex}
-                            {item.civilStatus ? ` • ${item.civilStatus}` : ''}
-                          </ThemedText>
-                        </View>
-
-                        {/* 3. Classifications & Custom Fields */}
-                        <View style={styles.colCustom}>
-                          {(() => {
-                            const allCustomItems = [
-                              ...classifications.map((c, i) => ({
-                                key: `cls-${i}`,
-                                label: c,
-                                variant: 'outline' as const,
-                              })),
-                              ...customPills.map((p, i) => ({
-                                key: `cp-${i}`,
-                                label: p,
-                                variant: 'neutral' as const,
-                              })),
-                            ];
-                            const isExpanded = !!expandedCustomRows[rowKey];
-                            const visibleItems =
-                              isExpanded || allCustomItems.length <= 2
-                                ? allCustomItems
-                                : allCustomItems.slice(0, 2);
-                            const hiddenCount = allCustomItems.length - 2;
-
-                            return (
-                              <View style={styles.badgeWrapRow}>
-                                {allCustomItems.length === 0 ? (
-                                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                                    None
-                                  </ThemedText>
-                                ) : (
-                                  <>
-                                    {visibleItems.map((ci) => (
-                                      <Badge
-                                        key={ci.key}
-                                        label={ci.label}
-                                        variant={ci.variant}
-                                        size="xs"
-                                      />
-                                    ))}
-                                    {allCustomItems.length > 2 && (
-                                      <Button
-                                        variant="ghost"
-                                        size="xs"
-                                        title={isExpanded ? 'See less' : `+${hiddenCount} more`}
-                                        onPress={() => toggleCustomRow(rowKey)}
-                                        accessibilityLabel={
-                                          isExpanded
-                                            ? 'Collapse custom fields'
-                                            : `Show ${hiddenCount} more custom fields`
-                                        }
-                                      />
-                                    )}
-                                  </>
-                                )}
-                              </View>
-                            );
-                          })()}
-                        </View>
-
-                        {/* 4. Attending Staff */}
-                        <View style={styles.colStaff}>
-                          <ThemedText variant="captionBold" color={theme.colors.text}>
-                            MD: {item.attendingDoctor || '—'}
-                          </ThemedText>
-                          <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            RN: {item.attendingNurse || '—'}
-                          </ThemedText>
-                        </View>
-
-                        {/* 5. Triage & Nurse Assessment */}
-                        <View style={styles.colNurse}>
-                          {item.chiefComplaint ? (
-                            <ThemedText variant="caption" color={theme.colors.text}>
-                              CC: {item.chiefComplaint}
-                            </ThemedText>
-                          ) : null}
-                          <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            Impression: {item.nurseImpression || item.nurseAssessment || '—'}
-                          </ThemedText>
-                          {item.vitalsSnapshot ? (
-                            <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                              Vitals: {item.vitalsSnapshot}
-                            </ThemedText>
-                          ) : null}
-                        </View>
-
-                        {/* 6. Doctor Diagnosis & Systems */}
-                        <View style={styles.colDoctor}>
-                          <ThemedText variant="captionBold" color={theme.colors.text}>
-                            {item.doctorDiagnosis || '—'}
-                          </ThemedText>
-                          {item.rosCategory ? (
-                            <Badge
-                              label={`ROS: ${getRosShortLabel(item.rosCategory)}`}
-                              variant={
-                                item.rosCategory === 'EssentiallyNormal' ||
-                                item.rosCategory === 'Essentially Normal'
-                                  ? 'success'
-                                  : 'info'
-                              }
-                              size="xs"
-                            />
-                          ) : null}
-                          {item.clinicalAssessment ? (
-                            <ThemedText variant="caption" color={theme.colors.textMuted}>
-                              {item.clinicalAssessment}
-                            </ThemedText>
-                          ) : null}
-                          {item.systemsReviewed ? (
-                            <ThemedText variant="caption" color={theme.colors.textMuted}>
-                              Systems: {item.systemsReviewed}
-                            </ThemedText>
-                          ) : null}
-                        </View>
-
-                        {/* 7. Procedures, Dispensing & Outcome */}
-                        <View style={styles.colOutcome}>
-                          <View style={styles.rowBetween}>
-                            <Badge
-                              label={item.acuity || 'Routine'}
-                              variant={getAcuityVariant(item.acuity)}
-                              size="xs"
-                            />
-                            {item.disposition ? (
+                        {/* Grouped Visit Common Properties */}
+                        <View style={styles.visitCommonGroup}>
+                          {/* 1. Ticket, Date & Time */}
+                          <View style={styles.colTicket}>
+                            <View style={styles.rowBetween}>
+                              <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                                {item.queueNumber}
+                              </ThemedText>
                               <Badge
-                                label={item.disposition}
-                                variant={item.disposition.includes('Transfer') ? 'emergency' : 'outline'}
+                                label={formatTurnaroundBadge(item.turnaroundMinutes)}
+                                variant="neutral"
                                 size="xs"
                               />
-                            ) : null}
+                            </View>
+                            <ThemedText variant="captionBold" color={theme.colors.text}>
+                              {formatClinicDate(item.checkInTime)}
+                            </ThemedText>
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              In: {formatTimeOnly(item.checkInTime)}
+                              {item.completedTime ? ` • Out: ${formatTimeOnly(item.completedTime)}` : ''}
+                            </ThemedText>
                           </View>
-                          {item.dispensedMedicinesSummary ? (
-                            <ThemedText variant="caption" color={theme.colors.primaryDark}>
-                              Dispensed: {item.dispensedMedicinesSummary}
+
+                          {/* 2. Patient & Demographics */}
+                          <View style={styles.colPatient}>
+                            <ThemedText variant="bodyBold" color={theme.colors.text}>
+                              {item.patientName}
                             </ThemedText>
-                          ) : null}
-                          {item.proceduresPerformed ? (
-                            <ThemedText variant="caption" color={theme.colors.text}>
-                              Proc: {item.proceduresPerformed}
+                            <ThemedText variant="caption" color={theme.colors.textMuted}>
+                              {item.patientCode} • {item.age} yo • {item.sex}
+                              {item.civilStatus ? ` • ${item.civilStatus}` : ''}
                             </ThemedText>
-                          ) : null}
+                          </View>
+
+                          {/* 3. Classifications & Custom Fields */}
+                          <View style={styles.colCustom}>
+                            {(() => {
+                              const allCustomItems = [
+                                ...classifications.map((c, i) => ({
+                                  key: `cls-${i}`,
+                                  label: c,
+                                  variant: 'outline' as const,
+                                })),
+                                ...customPills.map((p, i) => ({
+                                  key: `cp-${i}`,
+                                  label: p,
+                                  variant: 'neutral' as const,
+                                })),
+                              ];
+                              const isExpanded = !!expandedCustomRows[rowKey];
+                              const visibleItems =
+                                isExpanded || allCustomItems.length <= 2
+                                  ? allCustomItems
+                                  : allCustomItems.slice(0, 2);
+                              const hiddenCount = allCustomItems.length - 2;
+
+                              return (
+                                <View style={styles.badgeWrapRow}>
+                                  {allCustomItems.length === 0 ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      None
+                                    </ThemedText>
+                                  ) : (
+                                    <>
+                                      {visibleItems.map((ci) => (
+                                        <Badge
+                                          key={ci.key}
+                                          label={ci.label}
+                                          variant={ci.variant}
+                                          size="xs"
+                                        />
+                                      ))}
+                                      {allCustomItems.length > 2 && (
+                                        <Button
+                                          variant="ghost"
+                                          size="xs"
+                                          title={isExpanded ? 'See less' : `+${hiddenCount} more`}
+                                          onPress={() => toggleCustomRow(rowKey)}
+                                          accessibilityLabel={
+                                            isExpanded
+                                              ? 'Collapse custom fields'
+                                              : `Show ${hiddenCount} more custom fields`
+                                          }
+                                        />
+                                      )}
+                                    </>
+                                  )}
+                                </View>
+                              );
+                            })()}
+                          </View>
                         </View>
 
-                        {/* 8. Billing & Payment */}
-                        <View style={styles.colBilling}>
-                          <View style={styles.rowBetween}>
-                            <Badge
-                              label={item.billingStatus || 'Unbilled'}
-                              variant={item.billingStatus === 'Paid' ? 'success' : 'neutral'}
-                              size="xs"
-                            />
-                            <ThemedText variant="smallBold" color={theme.colors.text}>
-                              {peso(item.amountPaid)}
-                            </ThemedText>
+                        {/* Main Visit Clinical Row + Additional Per-Service Sub-Rows Underneath */}
+                        <View style={styles.serviceSubRowsGroup}>
+                          {/* Main Visit Row (primary visit purpose, main attending MD & RN, triage vitals, diagnosis, outcome) */}
+                          <View style={styles.serviceSubRow}>
+                            {/* 4. Primary Service / Visit Purpose */}
+                            <View style={styles.colService}>
+                              <View style={styles.badgeWrapRow}>
+                                <Badge
+                                  label={primaryServiceLabel}
+                                  variant={isConsultationVisit ? 'primary' : 'outline'}
+                                  size="xs"
+                                />
+                              </View>
+                              {item.calledTime ? (
+                                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                  {formatTimeOnly(item.calledTime)}
+                                </ThemedText>
+                              ) : null}
+                            </View>
+
+                            {/* 5. Main Attending Staff */}
+                            <View style={styles.colStaff}>
+                              <ThemedText variant="captionBold" color={theme.colors.text}>
+                                MD: {mainDoc || '—'}
+                              </ThemedText>
+                              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                RN: {mainNurse || '—'}
+                              </ThemedText>
+                            </View>
+
+                            {/* 6. Triage & Vitals */}
+                            <View style={styles.colNurse}>
+                              {mainCc ? (
+                                <ThemedText variant="caption" color={theme.colors.text}>
+                                  CC: {mainCc}
+                                </ThemedText>
+                              ) : null}
+                              {mainImpression && mainImpression !== mainCc ? (
+                                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                  Impression: {mainImpression}
+                                </ThemedText>
+                              ) : null}
+                              {mainVitals ? (
+                                <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                                  Vitals: {mainVitals}
+                                </ThemedText>
+                              ) : null}
+                            </View>
+
+                            {/* 7. Doctor Diagnosis & Systems (Strictly blank when visit has no diagnosis) */}
+                            <View style={styles.colDoctor}>
+                              {mainDx ? (
+                                <ThemedText variant="captionBold" color={theme.colors.text}>
+                                  {mainDx}
+                                </ThemedText>
+                              ) : null}
+                              {mainRos ? (
+                                <View style={styles.badgeWrapRow}>
+                                  <Badge
+                                    label={`ROS: ${getRosShortLabel(mainRos)}`}
+                                    variant={
+                                      mainRos === 'EssentiallyNormal' ||
+                                      mainRos === 'Essentially Normal'
+                                        ? 'success'
+                                        : 'info'
+                                    }
+                                    size="xs"
+                                  />
+                                </View>
+                              ) : null}
+                              {mainAssessment ? (
+                                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                  {mainAssessment}
+                                </ThemedText>
+                              ) : null}
+                              {mainSystems ? (
+                                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                  Systems: {mainSystems}
+                                </ThemedText>
+                              ) : null}
+                            </View>
+
+                            {/* 8. Service Details & Outcome */}
+                            <View style={styles.colOutcome}>
+                              <View style={styles.rowBetween}>
+                                <Badge
+                                  label={item.acuity || 'Routine'}
+                                  variant={getAcuityVariant(item.acuity)}
+                                  size="xs"
+                                />
+                                {item.disposition ? (
+                                  <Badge
+                                    label={item.disposition}
+                                    variant={
+                                      item.disposition.includes('Transfer') ||
+                                      item.disposition.includes('Diversion')
+                                        ? 'emergency'
+                                        : 'outline'
+                                    }
+                                    size="xs"
+                                  />
+                                ) : null}
+                              </View>
+                              {mainProc ? (
+                                <ThemedText variant="caption" color={theme.colors.text}>
+                                  {mainProc}
+                                </ThemedText>
+                              ) : null}
+                            </View>
                           </View>
-                          {item.officialReceiptNumber ? (
-                            <ThemedText variant="caption" color={theme.colors.textMuted}>
-                              {item.officialReceiptNumber}
-                            </ThemedText>
-                          ) : null}
+
+                          {/* Additional Services Availed Sub-Rows (each with providing staff & service details) */}
+                          {additionalSubRows.map((sub, sIdx) => {
+                            const subBadgeVariant: BadgeVariant = sub.serviceName.includes('Dispensing')
+                              ? 'info'
+                              : 'outline';
+
+                            return (
+                              <View
+                                key={`${rowKey}-sub-${sub.subRowIndex}-${sIdx}`}
+                                style={[styles.serviceSubRow, styles.serviceSubRowDivider]}
+                              >
+                                {/* 4. Additional Service Availed */}
+                                <View style={styles.colService}>
+                                  <View style={styles.badgeWrapRow}>
+                                    <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                                      ↳
+                                    </ThemedText>
+                                    <Badge
+                                      label={sub.serviceName}
+                                      variant={subBadgeVariant}
+                                      size="xs"
+                                    />
+                                  </View>
+                                  {sub.referenceNumber ? (
+                                    <ThemedText variant="captionBold" color={theme.colors.text}>
+                                      {sub.referenceNumber}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.serviceTime ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      {formatTimeOnly(sub.serviceTime)}
+                                    </ThemedText>
+                                  ) : null}
+                                </View>
+
+                                {/* 5. Providing Staff */}
+                                <View style={styles.colStaff}>
+                                  {sub.attendingDoctor ? (
+                                    <ThemedText variant="captionBold" color={theme.colors.text}>
+                                      MD: {sub.attendingDoctor}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.attendingNurse ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      RN: {sub.attendingNurse}
+                                    </ThemedText>
+                                  ) : null}
+                                  {!sub.attendingDoctor && !sub.attendingNurse ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      —
+                                    </ThemedText>
+                                  ) : null}
+                                </View>
+
+                                {/* 6. Triage & Vitals (blank on auxiliary service sub-row) */}
+                                <View style={styles.colNurse} />
+
+                                {/* 7. Doctor Diagnosis & Systems (strictly blank on auxiliary service sub-row) */}
+                                <View style={styles.colDoctor} />
+
+                                {/* 8. Service Details & Outcome */}
+                                <View style={styles.colOutcome}>
+                                  {sub.serviceDetails ? (
+                                    <ThemedText variant="caption" color={theme.colors.text}>
+                                      {sub.serviceDetails}
+                                    </ThemedText>
+                                  ) : null}
+                                  {sub.disposition ? (
+                                    <View style={styles.badgeWrapRow}>
+                                      <Badge
+                                        label={sub.disposition}
+                                        variant="outline"
+                                        size="xs"
+                                      />
+                                    </View>
+                                  ) : null}
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
+
+                        {/* 9. Grouped Visit Billing & Payment */}
+                        <View style={styles.visitBillingGroup}>
+                          <View style={styles.colBilling}>
+                            <View style={styles.rowBetween}>
+                              <Badge
+                                label={item.billingStatus || 'Unbilled'}
+                                variant={item.billingStatus === 'Paid' ? 'success' : 'neutral'}
+                                size="xs"
+                              />
+                              <ThemedText variant="smallBold" color={theme.colors.text}>
+                                {peso(item.amountPaid)}
+                              </ThemedText>
+                            </View>
+                            {item.officialReceiptNumber ? (
+                              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                {item.officialReceiptNumber}
+                              </ThemedText>
+                            ) : null}
+                          </View>
                         </View>
                       </View>
                     );
@@ -3305,7 +3457,7 @@ export default function DashboardScreen() {
               }}
               disabled={savingTriage}
             />
-            {(triageItem?.visitType === 'VitalsCheckOnly' || triage.priority === 'Emergency') ? (
+            {(isNurseAssessmentVisitType(triageItem?.visitType) || triage.priority === 'Emergency') ? (
               <Button
                 title="Save & Escalate to MD"
                 variant="dangerOutline"
@@ -4276,7 +4428,7 @@ const styles = StyleSheet.create({
   },
   censusTableInner: {
     width: '100%',
-    minWidth: 1550,
+    minWidth: 1780,
   },
   censusTableHeaderRow: {
     flexDirection: 'row',
@@ -4289,38 +4441,71 @@ const styles = StyleSheet.create({
   },
   censusTableRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: theme.spacing.sm,
+    alignItems: 'stretch',
     paddingHorizontal: theme.spacing.md,
     borderBottomWidth: theme.sizes.borderWidth,
-    borderBottomColor: theme.colors.borderLight,
+    borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
   },
   censusTableRowAlt: {
     backgroundColor: theme.colors.surfaceMuted,
   },
+  visitCommonGroup: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    borderRightWidth: theme.sizes.borderWidth,
+    borderRightColor: theme.colors.borderLight,
+  },
+  serviceSubRowsGroup: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+  },
+  serviceSubRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    paddingLeft: theme.spacing.sm,
+  },
+  serviceSubRowDivider: {
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  visitBillingGroup: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    paddingLeft: theme.spacing.sm,
+    borderLeftWidth: theme.sizes.borderWidth,
+    borderLeftColor: theme.colors.borderLight,
+  },
   colTicket: {
-    width: 150,
+    width: 155,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
   colPatient: {
-    width: 220,
+    width: 210,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
   colCustom: {
-    width: 220,
+    width: 200,
+    paddingRight: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  colService: {
+    width: 175,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
   colStaff: {
-    width: 180,
+    width: 185,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
   colNurse: {
-    width: 240,
+    width: 225,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
@@ -4330,12 +4515,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   colOutcome: {
-    width: 180,
+    width: 220,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
   colBilling: {
-    width: 120,
+    width: 135,
     gap: theme.spacing.xs,
   },
   demographicsCardContent: {

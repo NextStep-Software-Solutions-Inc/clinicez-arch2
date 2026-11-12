@@ -195,7 +195,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
                 .Query(q => q.ClinicId == _clinicContext.ClinicId && q.Id == resolvedQueueItemId.Value)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (queueItem != null && queueItem.VisitType == VisitType.Consultation)
+            if (queueItem != null && queueItem.VisitType.IsPhysicianConsultation())
             {
                 if (_encounterRepo != null)
                 {

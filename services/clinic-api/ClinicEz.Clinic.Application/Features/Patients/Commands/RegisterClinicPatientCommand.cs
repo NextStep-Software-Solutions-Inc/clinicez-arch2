@@ -460,7 +460,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct, _settingsRepo);
             var isSeniorOrPwd = PatientPriorityHelper.IsSeniorOrPwd(patient, today);
             var seriesPrefix = PatientPriorityHelper.ResolveSeriesPrefix(
-                VisitType.Consultation,
+                VisitType.RoutineCheckup,
                 isSeniorOrPwd,
                 request.SeriesPrefix);
 

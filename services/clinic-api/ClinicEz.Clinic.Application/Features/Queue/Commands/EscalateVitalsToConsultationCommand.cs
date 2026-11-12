@@ -67,7 +67,7 @@ public sealed class EscalateVitalsToConsultationCommandHandler : IRequestHandler
         }
 
         if (queueItem.Status is QueueStatus.Cancelled or QueueStatus.NoShow or QueueStatus.Diverted
-            || (queueItem.Status == QueueStatus.Completed && queueItem.VisitType == VisitType.Consultation))
+            || (queueItem.Status == QueueStatus.Completed && queueItem.VisitType.IsPhysicianConsultation()))
         {
             throw new BadRequestException($"Cannot escalate a visit that is already closed with status '{queueItem.Status}'.");
         }
@@ -76,7 +76,9 @@ public sealed class EscalateVitalsToConsultationCommandHandler : IRequestHandler
         var staffActor = _clinicContext.StaffId?.ToString() ?? "Nurse";
         var hasCompletedTriage = queueItem.Status == QueueStatus.Triaged || queueItem.PatientVitals != null;
 
-        queueItem.VisitType = VisitType.Consultation;
+        queueItem.VisitType = request.Priority is QueuePriority.Emergency or QueuePriority.Urgent
+            ? VisitType.UrgentCareVisit
+            : VisitType.AcuteIllnessConsultation;
         queueItem.Priority = request.Priority;
 
         if (request.DoctorId.HasValue)
