@@ -208,4 +208,81 @@ describe('useConversations Hook Backend Wireup', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('auto-enrolls creator with staffDisplayName and preserves recipient in Direct conversations', async () => {
+    const originalFetch = globalThis.fetch;
+    const postCalls: Array<{ url: string; options: any }> = [];
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      if (options?.method === 'POST') {
+        postCalls.push({ url, options });
+        const body = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          id: 'conv-direct-101',
+          tenantId: body.tenantId,
+          facilityId: body.facilityId,
+          scope: body.scope,
+          kind: body.kind,
+          title: body.title,
+          status: 'Submitted',
+          isEmergencyConfirmed: false,
+          isLocalOnly: false,
+          reopenCount: 0,
+          messageCount: 0,
+          lastSeq: 0,
+          createdAtUtc: new Date().toISOString(),
+          createdBy: 'staff-nurse-1',
+          participants: body.participants || []
+        }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as any;
+
+    try {
+      const client = new MockCommsClient();
+      const store = new OptimisticStore();
+      const mockContext = createMockContext(client, store, 'https://comms.local');
+
+      const contextMap = new Map();
+      contextMap.set(CommsContext, mockContext);
+
+      const harness = createHookHarness(() => useConversations(), {
+        contextValues: contextMap
+      });
+
+      // Pass only recipient ID in participantStaffIds
+      const created = await harness.result.current.createConversation({
+        scope: 'Direct',
+        title: 'Chat with Wave Ambray',
+        participantStaffIds: ['staff-wave-2']
+      });
+
+      expect(postCalls.length).toBe(1);
+      const payload = JSON.parse(postCalls[0].options.body);
+
+      // Verify payload has BOTH creator (staff-nurse-1 / Nurse Joy) and recipient (staff-wave-2)
+      expect(payload.participants).toBeDefined();
+      expect(payload.participants.length).toBe(2);
+
+      const creatorInPayload = payload.participants.find((p: any) => p.participantId === 'staff-nurse-1');
+      expect(creatorInPayload).toBeDefined();
+      expect(creatorInPayload.displayName).toBe('Nurse Joy');
+      expect(creatorInPayload.role).toBe('Owner');
+
+      const recipientInPayload = payload.participants.find((p: any) => p.participantId === 'staff-wave-2');
+      expect(recipientInPayload).toBeDefined();
+      expect(recipientInPayload.role).toBe('Member');
+
+      // Verify created result also contains both participants
+      expect(created.participants.length).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

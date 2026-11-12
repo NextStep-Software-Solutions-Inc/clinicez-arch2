@@ -118,6 +118,13 @@ export interface ConversationsFilterOptions {
   autoSubscribe?: boolean;
 }
 
+export interface ParticipantInputDto {
+  participantType?: string;
+  participantId: string;
+  displayName?: string;
+  role?: string;
+}
+
 export interface CreateConversationRequest {
   scope: ConversationScope;
   title: string;
@@ -127,6 +134,7 @@ export interface CreateConversationRequest {
   isLocalOnly?: boolean;
   participantIds?: string[];
   participantStaffIds?: string[];
+  participants?: ParticipantInputDto[];
 }
 
 export interface UseConversationsResult {
