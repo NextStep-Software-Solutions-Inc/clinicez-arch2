@@ -38,11 +38,25 @@ export function getCommsApiBaseUrl(): string {
       url.port = '5247';
       return url.origin;
     }
-    return `${url.protocol}//comms.${url.host}`;
+    if (url.hostname.includes('clinicez-billing')) {
+      url.hostname = url.hostname.replace('clinicez-billing', 'clinicez-comms');
+      return url.origin;
+    }
+    if (url.hostname.includes('billing-api')) {
+      url.hostname = url.hostname.replace('billing-api', 'comms-api');
+      return url.origin;
+    }
+    if (url.hostname.startsWith('billing.') || url.hostname.startsWith('cashier.')) {
+      url.hostname = url.hostname.replace(/^(billing|cashier)\./, 'comms.');
+      return url.origin;
+    }
+    if (url.hostname.includes('comms')) {
+      return url.origin;
+    }
   } catch {
     // fallback
   }
-  return resolveServiceApiUrl({ fallbackPort: 5247 });
+  return resolveServiceApiUrl({ serviceSubdomain: 'comms', fallbackPort: 5247 }).replace(/\/+$/, '');
 }
 
 export function CashierCommsProvider({ children }: { children: React.ReactNode }) {

@@ -38,11 +38,25 @@ export function getCommsApiBaseUrl(): string {
       url.port = '5247';
       return url.origin;
     }
-    return `${url.protocol}//comms.${url.host}`;
+    if (url.hostname.includes('clinicez-pharmacy')) {
+      url.hostname = url.hostname.replace('clinicez-pharmacy', 'clinicez-comms');
+      return url.origin;
+    }
+    if (url.hostname.includes('pharmacy-api')) {
+      url.hostname = url.hostname.replace('pharmacy-api', 'comms-api');
+      return url.origin;
+    }
+    if (url.hostname.startsWith('pharmacy.')) {
+      url.hostname = url.hostname.replace(/^pharmacy\./, 'comms.');
+      return url.origin;
+    }
+    if (url.hostname.includes('comms')) {
+      return url.origin;
+    }
   } catch {
     // fallback
   }
-  return resolveServiceApiUrl({ fallbackPort: 5247 });
+  return resolveServiceApiUrl({ serviceSubdomain: 'comms', fallbackPort: 5247 }).replace(/\/+$/, '');
 }
 
 export function PharmacyCommsProvider({ children }: { children: React.ReactNode }) {

@@ -54,6 +54,22 @@ function getCategoryLabel(scope?: string): string {
   }
 }
 
+function getDefaultChannelTitle(scope?: string): string {
+  switch (scope) {
+    case 'PatientFacility':
+      return 'Patient Request';
+    case 'StaffContext':
+    case 'PatientContext':
+      return 'Care Team';
+    case 'Direct':
+      return 'Direct Message';
+    case 'Facility':
+      return 'Facility Channel';
+    default:
+      return scope ? `${scope} Channel` : 'Facility Channel';
+  }
+}
+
 function getActiveThemeSnapshot(): string {
   const s = getActiveThemeState();
   return `${s.brandColorHex}|${s.clinicBrandColorHex}|${s.userBrandColorHex ?? ''}|${s.scheme}`;
@@ -85,7 +101,11 @@ export default function ClinicActiveThread({
 
   // Header and View State
   const [customTitle, setCustomTitle] = useState<string | null>(null);
-  const activeTitle = customTitle ?? (conversation?.title || initialConversation?.title || '');
+  const rawTitle = customTitle ?? conversation?.title ?? initialConversation?.title ?? '';
+  const isGenericPlaceholder = !rawTitle.trim() || rawTitle.trim().toLowerCase() === 'conversation';
+  const activeTitle = isGenericPlaceholder
+    ? getDefaultChannelTitle(conversation?.scope || initialConversation?.scope)
+    : rawTitle.trim();
   const [privacyBlur, setPrivacyBlur] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -336,7 +356,7 @@ export default function ClinicActiveThread({
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <ThemedText variant="bodyBold" numberOfLines={1} style={styles.threadTitle}>
-                {activeTitle || 'Clinical Thread'}
+                {activeTitle}
               </ThemedText>
               <View style={styles.pencilBtn}>
                 <Icon name="edit" size={14} color={theme.colors.textMuted} />

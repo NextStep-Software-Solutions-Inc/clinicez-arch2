@@ -38,11 +38,25 @@ export function getCommsApiBaseUrl(): string {
       url.port = '5247';
       return url.origin;
     }
-    return `${url.protocol}//comms.${url.host}`;
+    if (url.hostname.includes('clinicez-laboratory') || url.hostname.includes('clinicez-lab')) {
+      url.hostname = url.hostname.replace(/clinicez-(laboratory|lab)/, 'clinicez-comms');
+      return url.origin;
+    }
+    if (url.hostname.includes('laboratory-api') || url.hostname.includes('lab-api')) {
+      url.hostname = url.hostname.replace(/(laboratory|lab)-api/, 'comms-api');
+      return url.origin;
+    }
+    if (url.hostname.startsWith('laboratory.') || url.hostname.startsWith('lab.')) {
+      url.hostname = url.hostname.replace(/^(laboratory|lab)\./, 'comms.');
+      return url.origin;
+    }
+    if (url.hostname.includes('comms')) {
+      return url.origin;
+    }
   } catch {
     // fallback
   }
-  return resolveServiceApiUrl({ fallbackPort: 5247 });
+  return resolveServiceApiUrl({ serviceSubdomain: 'comms', fallbackPort: 5247 }).replace(/\/+$/, '');
 }
 
 export function LabCommsProvider({ children }: { children: React.ReactNode }) {

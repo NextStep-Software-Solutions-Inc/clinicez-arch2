@@ -14,6 +14,7 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
   onFileToChart,
   privacyBlurEnabled,
   onTogglePrivacyBlur,
+  showHeader = true,
   canWriteInternalNotes = false,
   isLoading = false,
   error = null,
@@ -81,34 +82,50 @@ export const MessageThread: React.FC<WebMessageThreadProps> = ({
   return (
     <div className={`flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <h1 className="text-base font-bold truncate">{conversationTitle}</h1>
-          <p className="text-xs text-slate-500">
-            {conversationScope === 'PatientFacility'
-              ? 'Patient Request'
-              : conversationScope === 'StaffContext'
-                ? 'Care Team'
-                : conversationScope === 'Facility'
-                  ? 'Facility Channel'
-                  : conversationScope}
-          </p>
-        </div>
+      {showHeader && (
+        <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div>
+            <h1 className="text-base font-bold truncate">
+              {!conversationTitle || conversationTitle.toLowerCase() === 'conversation'
+                ? (conversationScope === 'PatientFacility'
+                    ? 'Patient Request'
+                    : conversationScope === 'StaffContext' || conversationScope === 'PatientContext'
+                      ? 'Care Team'
+                      : conversationScope === 'Direct'
+                        ? 'Direct Message'
+                        : conversationScope === 'Facility'
+                          ? 'Facility Channel'
+                          : conversationScope || 'Facility Channel')
+                : conversationTitle}
+            </h1>
+            <p className="text-xs text-slate-500">
+              {conversationScope === 'PatientFacility'
+                ? 'Patient Request'
+                : conversationScope === 'StaffContext' || conversationScope === 'PatientContext'
+                  ? 'Care Team'
+                  : conversationScope === 'Direct'
+                    ? 'Direct Message'
+                    : conversationScope === 'Facility'
+                      ? 'Facility Channel'
+                      : conversationScope}
+            </p>
+          </div>
 
-        <button
-          type="button"
-          onClick={onTogglePrivacyBlur}
-          className={`min-h-[44px] px-3.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition-colors ${
-            privacyBlurEnabled
-              ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-300'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
-          }`}
-          aria-label={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
-        >
-          <span>{privacyBlurEnabled ? 'ON' : 'LOCK'}</span>
-          <span>{privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={onTogglePrivacyBlur}
+            className={`min-h-[44px] px-3.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition-colors ${
+              privacyBlurEnabled
+                ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-300'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+            }`}
+            aria-label={privacyBlurEnabled ? 'Disable patient privacy blur' : 'Enable patient privacy blur'}
+          >
+            <span>{privacyBlurEnabled ? 'ON' : 'LOCK'}</span>
+            <span>{privacyBlurEnabled ? 'Peek Mode: ON' : 'Privacy Blur'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Content States */}
       {isLoading ? (

@@ -45,6 +45,7 @@ export interface WebMessageThreadProps {
   onFileToChart?: (messageId: string, fileKey: string) => Promise<void>;
   privacyBlurEnabled: boolean;
   onTogglePrivacyBlur: () => void;
+  showHeader?: boolean;
   canWriteInternalNotes?: boolean;
   isLoading?: boolean;
   error?: string | null;
