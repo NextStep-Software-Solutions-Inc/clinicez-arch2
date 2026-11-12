@@ -45,9 +45,10 @@ public sealed class LabOrdersController : ControllerBase
         [FromQuery] Guid? patientId,
         [FromQuery] LabOrderStatus? status,
         [FromQuery] DateTime? date,
-        CancellationToken ct)
+        [FromQuery] bool includeUnsigned = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicLabOrdersQuery(patientId, status, date), ct);
+        var result = await _sender.Send(new GetClinicLabOrdersQuery(patientId, status, date, includeUnsigned), ct);
         return Ok(ApiResponse<List<ClinicLabOrderDto>>.Success(result));
     }
 

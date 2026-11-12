@@ -254,6 +254,13 @@ export default function EncountersTimelineTab({
                     </View>
 
                     <View style={styles.cardHeaderRight}>
+                      {enc.rosCategoryLabel || enc.rosCategory ? (
+                        <Badge
+                          label={`ROS: ${enc.rosCategoryLabel || enc.rosCategory}`}
+                          variant="info"
+                          size="sm"
+                        />
+                      ) : null}
                       {enc.isYakapEligible ? (
                         <Badge label="YAKAP" variant="purple" size="sm" />
                       ) : (
@@ -378,6 +385,21 @@ export default function EncountersTimelineTab({
                                   Qty: {rx.quantity} • Sig: {rx.sig}
                                 </ThemedText>
                               </View>
+                              {enc.isSigned && rx.isClinicDispensed && rx.clinicDispensedQuantity ? (() => {
+                                const dispensedQty = Math.min(rx.quantity, Math.max(0, rx.clinicDispensedQuantity));
+                                const remainingQty = Math.max(0, rx.quantity - dispensedQty);
+                                return (
+                                  <Badge
+                                    label={
+                                      remainingQty > 0
+                                        ? `Clinic stock: ${dispensedQty}/${rx.quantity} (${remainingQty} ext.)`
+                                        : `Clinic stock: all ${rx.quantity} pcs`
+                                    }
+                                    variant="routine"
+                                    size="xs"
+                                  />
+                                );
+                              })() : null}
                             </View>
                           ))}
                         </View>
@@ -439,22 +461,32 @@ export default function EncountersTimelineTab({
 
                       {/* Action Bar */}
                       <View style={styles.actionBar}>
-                        {onViewPrescriptionSlip ? (
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            icon="file"
-                            title="View E-Rx Slip"
-                            onPress={() => onViewPrescriptionSlip(enc)}
-                          />
-                        ) : null}
-                        {onOpenExternalDispense ? (
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            icon="check"
-                            title="Log External Dispense"
-                            onPress={() => onOpenExternalDispense(enc)}
+                        {enc.isSigned ? (
+                          <>
+                            {onViewPrescriptionSlip ? (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                icon="file"
+                                title="View E-Rx Slip"
+                                onPress={() => onViewPrescriptionSlip(enc)}
+                              />
+                            ) : null}
+                            {onOpenExternalDispense ? (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                icon="check"
+                                title="Log External Dispense"
+                                onPress={() => onOpenExternalDispense(enc)}
+                              />
+                            ) : null}
+                          </>
+                        ) : (enc.prescriptions || []).length > 0 ? (
+                          <Badge
+                            label="Draft — Sign encounter to validate Rx"
+                            variant="warning"
+                            size="sm"
                           />
                         ) : null}
                       </View>

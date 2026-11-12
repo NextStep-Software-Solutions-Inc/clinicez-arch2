@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Features.Dispensing.DTOs;
 using ClinicEz.Clinic.Application.Features.Queue.Commands;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Application.Features.Queue.Queries;
@@ -115,7 +116,11 @@ public sealed class QueueController : ControllerBase
             request.PreAssessmentNotes,
             request.PreAssessmentRemarks,
             request.TriageAcuityReason,
-            request.Priority);
+            request.Priority,
+            request.HomeInstructions,
+            request.RosCategory,
+            request.ChiefComplaint,
+            request.DispensedItems);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals recorded successfully."));
@@ -164,10 +169,34 @@ public sealed class QueueController : ControllerBase
             request.TriageAcuityReason,
             request.Priority,
             request.ClearHeight,
-            request.ClearWeight);
+            request.ClearWeight,
+            request.HomeInstructions,
+            request.RosCategory,
+            request.ChiefComplaint,
+            request.DispensedItems);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals updated successfully."));
+    }
+
+    [HttpPost("{id:guid}/escalate-to-consultation")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> EscalateToConsultation(
+        Guid id,
+        [FromBody] EscalateToConsultationRequest? request,
+        CancellationToken ct)
+    {
+        var command = new EscalateVitalsToConsultationCommand(
+            id,
+            request?.Priority ?? QueuePriority.Emergency,
+            request?.EscalationReason,
+            request?.DoctorId,
+            request?.DoctorName,
+            request?.RoomId,
+            request?.RoomOrStation);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Visit escalated to physician consultation."));
     }
 
     [HttpPost("{id:guid}/escalate-priority")]
@@ -347,7 +376,11 @@ public sealed record RecordTriageRequest(
     string? PreAssessmentNotes = null,
     string? PreAssessmentRemarks = null,
     string? TriageAcuityReason = null,
-    QueuePriority? Priority = null);
+    QueuePriority? Priority = null,
+    string? HomeInstructions = null,
+    string? RosCategory = null,
+    string? ChiefComplaint = null,
+    List<TriageDispensedItemInput>? DispensedItems = null);
 
 public sealed record UpdateTriageRequest(
     Guid? NurseId = null,
@@ -384,7 +417,19 @@ public sealed record UpdateTriageRequest(
     string? TriageAcuityReason = null,
     QueuePriority? Priority = null,
     bool ClearHeight = false,
-    bool ClearWeight = false);
+    bool ClearWeight = false,
+    string? HomeInstructions = null,
+    string? RosCategory = null,
+    string? ChiefComplaint = null,
+    List<TriageDispensedItemInput>? DispensedItems = null);
+
+public sealed record EscalateToConsultationRequest(
+    QueuePriority Priority = QueuePriority.Emergency,
+    string? EscalationReason = null,
+    Guid? DoctorId = null,
+    string? DoctorName = null,
+    Guid? RoomId = null,
+    string? RoomOrStation = null);
 
 public sealed record EscalatePriorityRequest(
     QueuePriority NewPriority,

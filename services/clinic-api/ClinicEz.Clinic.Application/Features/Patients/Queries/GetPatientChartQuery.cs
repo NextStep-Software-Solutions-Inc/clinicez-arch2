@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Dental.DTOs;
+using ClinicEz.Clinic.Application.Features.Dispensing.DTOs;
 using ClinicEz.Clinic.Application.Features.Documents.DTOs;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
@@ -17,6 +18,7 @@ using ClinicEz.Clinic.Application.Features.Problems.Dtos;
 using ClinicEz.Clinic.Application.Features.Procedures.DTOs;
 using ClinicEz.Clinic.Application.Features.Records.DTOs;
 using ClinicEz.Clinic.Application.Features.Triage.DTOs;
+using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -52,6 +54,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     private readonly IRepository<PatientPhilHealthMembership>? _membershipRepo;
     private readonly IRepository<PatientYakapEnlistment>? _enlistmentRepo;
     private readonly IRepository<PatientAlert>? _alertRepo;
+    private readonly IRepository<ClinicDispensingLog>? _dispensingLogRepo;
+    private readonly IRepository<QueueItem>? _queueRepo;
 
     public GetPatientChartQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
@@ -76,7 +80,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         IRepository<PatientPhilHealthMembership>? membershipRepo = null,
         IRepository<PatientYakapEnlistment>? enlistmentRepo = null,
         IRepository<PatientAlert>? alertRepo = null,
-        IRepository<PatientMedicalHistory>? problemRepo = null)
+        IRepository<PatientMedicalHistory>? problemRepo = null,
+        IRepository<ClinicDispensingLog>? dispensingLogRepo = null,
+        IRepository<QueueItem>? queueRepo = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -100,6 +106,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _membershipRepo = membershipRepo;
         _enlistmentRepo = enlistmentRepo;
         _alertRepo = alertRepo;
+        _dispensingLogRepo = dispensingLogRepo;
+        _queueRepo = queueRepo;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -113,6 +121,16 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         var consultations = await _consultationRepo.Query(c => c.PatientId == request.PatientId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.ReviewOfSystemsItems)
+            .Include(c => c.PhysicalExams)
+                .ThenInclude(p => p.Findings)
+            .Include(c => c.ObGyneExam)
+            .Include(c => c.PediatricMilestones)
+                .ThenInclude(m => m.DangerSigns)
+            .Include(c => c.AdolescentAssessment)
+            .Include(c => c.HeadsssAssessments)
+            .Include(c => c.BpMonitoringLogs)
+                .ThenInclude(b => b.Days)
             .OrderByDescending(c => c.EncounterDate)
             .ToListAsync(cancellationToken);
 
@@ -126,8 +144,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             .OrderByDescending(p => p.ScheduledAt)
             .ToListAsync(cancellationToken);
 
-        // Lab Orders
-        var labOrders = await _labOrderRepo.Query(l => l.PatientId == request.PatientId)
+        // Lab Orders (exclude unsigned consultation-staged lab orders until physician sign-off)
+        var labOrders = await _labOrderRepo.Query(l => l.PatientId == request.PatientId && l.IsSigned)
             .Include(l => l.Items)
             .OrderByDescending(l => l.OrderDate)
             .ToListAsync(cancellationToken);
@@ -561,110 +579,112 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 .Where(d => !d.ConsultationId.HasValue && DateOnly.FromDateTime(d.CreatedAt) == DateOnly.FromDateTime(c.EncounterDate));
             encounterFindings.AddRange(dateMatches);
 
-            return new ConsultationEncounterDto(
-                c.Id,
-                c.TenantId ?? _clinicContext.TenantId,
-                c.ClinicId,
-                c.QueueItemId,
-                c.AppointmentId,
-                c.PatientId,
-                c.PatientName,
-                c.DoctorId,
-                c.DoctorName,
-                c.EncounterDate,
-                c.Subjective,
-                c.Objective,
-                c.Assessment,
-                c.Plan,
-                c.HomeInstructions,
-                c.DoctorPrcLicense,
-                c.DoctorPtr,
-                c.DoctorS2License,
-                c.IsSigned,
-                c.SignedAt,
-                c.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-                c.Prescriptions.Select(p => new PrescriptionItemDto(
-                    p.Id,
-                    p.GenericName,
-                    p.BrandName,
-                    p.Dosage,
-                    p.Form,
-                    p.Sig,
-                    p.Quantity,
-                    p.DurationDays,
-                    p.Refills,
-                    p.IsDangerousDrug,
-                    p.Remarks,
-                    p.PhilHealthDrugCode
-                )).ToList(),
-                c.IsYakapEligible,
-                c.PhilHealthSignSympCode,
-                c.PhilHealthOtherComplaint,
-                c.PhilHealthPainSite,
-                c.PhilHealthCaseNo,
-                c.PhilHealthSoapTransNo,
-                c.DoctorPhilHealthPan,
-                c.PhilHealthAtc,
-                DentalFindings: encounterFindings.Count > 0 ? encounterFindings : null,
-                CounselingCodes: c.CounselingCodes,
-                RoutineVaccineName: c.RoutineVaccineName,
-                RoutineVaccineDate: c.RoutineVaccineDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-                AdultsRoutineScreeningCode: c.AdultsRoutineScreeningCode,
-                PediatricRoutineScreeningCode: c.PediatricRoutineScreeningCode,
-                PrenatalScreeningServicesCode: c.PrenatalScreeningServicesCode,
-                CancerScreeningCodes: c.PhilHealthManagementCodes,
-                DiagnosticServicesOption: c.DiagnosticServicesOption,
-                HasMedicationPrescription: c.HasMedicationPrescription || c.Prescriptions.Count > 0,
-                HasReferral: c.HasReferral,
-                OtherMedicalAdviceSpec: c.OtherMedicalAdviceSpec,
-                HasFollowUp: c.HasFollowUp,
-                FollowUpDate: c.FollowUpDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-                FollowUpScheduleText: c.FollowUpScheduleText,
-                FollowUpReason: c.FollowUpReason,
-                FollowUpVaccineName: c.FollowUpVaccineName,
-                FollowUpVaccineNextDate: c.FollowUpVaccineNextDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
-            );
+            return ConsultationPlanManagementMapper.ToDto(
+                c,
+                dentalFindings: encounterFindings.Count > 0 ? encounterFindings : null,
+                tenantIdOverride: c.TenantId ?? _clinicContext.TenantId);
         }).ToList();
 
-        var vitalsDtos = vitals.Select(v => new TriageVitalsDto(
-            v.Id,
-            v.TenantId ?? _clinicContext.TenantId,
-            v.ClinicId,
-            v.QueueItemId,
-            v.PatientId,
-            v.NurseId,
-            v.RecordedByNurseName,
-            v.RecordedAt,
-            v.SystolicBp,
-            v.DiastolicBp,
-            v.HeartRateBpm,
-            v.TemperatureCelsius,
-            v.RespiratoryRateBreathsPerMin,
-            v.OxygenSaturationPercent,
-            v.HeightCm,
-            v.WeightKg,
-            v.Bmi,
-            v.PainScore,
-            v.Notes,
-            v.VisualAcuityLeft,
-            v.VisualAcuityRight,
-            v.HeadCircumferenceCm,
-            v.MidUpperArmCircumferenceCm,
-            v.IsMeasuredRecumbent,
-            v.ZScoreWeightForAge,
-            v.ZScoreLengthForAge,
-            v.ZScoreWeightForLength,
-            v.GrowthZScoreCategory,
-            v.GrowthZScoreCode,
-            v.WaistCircumferenceCm,
-            v.HipCircumferenceCm,
-            v.BodyLengthCm,
-            v.SkinfoldThicknessMm,
-            v.LimbsCircumferenceCm,
-            v.PreAssessmentNotes,
-            v.PreAssessmentRemarks,
-            v.TriageAcuityReason
-        )).ToList();
+        var vitalsQueueIds = vitals.Where(v => v.QueueItemId.HasValue).Select(v => v.QueueItemId!.Value).Distinct().ToList();
+        var vitalsQueueMap = new Dictionary<Guid, QueueItem>();
+        if (_queueRepo != null && vitalsQueueIds.Count > 0)
+        {
+            var qItems = await _queueRepo.Query(q => vitalsQueueIds.Contains(q.Id)).AsNoTracking().ToListAsync(cancellationToken);
+            vitalsQueueMap = qItems.ToDictionary(q => q.Id);
+        }
+
+        ILookup<Guid, ClinicDispensingLog>? nurseDispByQueueId = null;
+        ILookup<Guid, ClinicDispensingLog>? nurseDispByVitalsId = null;
+        if (_dispensingLogRepo != null && vitals.Count > 0)
+        {
+            var vitalsIds = vitals.Select(v => v.Id).ToList();
+            var nurseLogs = await _dispensingLogRepo
+                .Query(d => d.PatientId == request.PatientId &&
+                            d.Source == ClinicDispenseSource.NurseVitalsCheck &&
+                            (vitalsQueueIds.Contains(d.QueueItemId) ||
+                             (d.PatientVitalsId.HasValue && vitalsIds.Contains(d.PatientVitalsId.Value))))
+                .OrderBy(d => d.DispensedAt)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+            nurseDispByQueueId = nurseLogs.ToLookup(d => d.QueueItemId);
+            nurseDispByVitalsId = nurseLogs.Where(d => d.PatientVitalsId.HasValue).ToLookup(d => d.PatientVitalsId!.Value);
+        }
+
+        var vitalsDtos = vitals.Select(v =>
+        {
+            QueueItem? qItem = null;
+            if (v.QueueItemId.HasValue)
+            {
+                vitalsQueueMap.TryGetValue(v.QueueItemId.Value, out qItem);
+            }
+
+            IReadOnlyList<ClinicDispensingLogDto>? dispensedDtos = null;
+            if (nurseDispByQueueId != null || nurseDispByVitalsId != null)
+            {
+                var matchedLogs = new List<ClinicDispensingLog>();
+                if (v.QueueItemId.HasValue && nurseDispByQueueId != null)
+                {
+                    matchedLogs.AddRange(nurseDispByQueueId[v.QueueItemId.Value]);
+                }
+                if (nurseDispByVitalsId != null)
+                {
+                    foreach (var vl in nurseDispByVitalsId[v.Id])
+                    {
+                        if (matchedLogs.All(existing => existing.Id != vl.Id))
+                            matchedLogs.Add(vl);
+                    }
+                }
+                dispensedDtos = matchedLogs
+                    .Select(l => ClinicDispensingLogMapper.ToDto(l, qItem, v))
+                    .ToList()
+                    .AsReadOnly();
+            }
+
+            return new TriageVitalsDto(
+                v.Id,
+                v.TenantId ?? _clinicContext.TenantId,
+                v.ClinicId,
+                v.QueueItemId,
+                v.PatientId,
+                v.NurseId,
+                v.RecordedByNurseName,
+                v.RecordedAt,
+                v.SystolicBp,
+                v.DiastolicBp,
+                v.HeartRateBpm,
+                v.TemperatureCelsius,
+                v.RespiratoryRateBreathsPerMin,
+                v.OxygenSaturationPercent,
+                v.HeightCm,
+                v.WeightKg,
+                v.Bmi,
+                v.PainScore,
+                v.Notes,
+                v.VisualAcuityLeft,
+                v.VisualAcuityRight,
+                v.HeadCircumferenceCm,
+                v.MidUpperArmCircumferenceCm,
+                v.IsMeasuredRecumbent,
+                v.ZScoreWeightForAge,
+                v.ZScoreLengthForAge,
+                v.ZScoreWeightForLength,
+                v.GrowthZScoreCategory,
+                v.GrowthZScoreCode,
+                v.WaistCircumferenceCm,
+                v.HipCircumferenceCm,
+                v.BodyLengthCm,
+                v.SkinfoldThicknessMm,
+                v.LimbsCircumferenceCm,
+                v.PreAssessmentNotes,
+                v.PreAssessmentRemarks,
+                v.TriageAcuityReason,
+                HomeInstructions: v.HomeInstructions,
+                RosCategory: v.RosCategory?.ToString(),
+                RosCategoryLabel: v.RosCategory.HasValue ? RosCategoryHelper.ToDisplayLabel(v.RosCategory.Value) : null,
+                ChiefComplaint: qItem?.ChiefComplaint,
+                DispensedItems: dispensedDtos
+            );
+        }).ToList();
 
         var procedureDtos = procedures.Select(p => new ClinicalProcedureDto(
             p.Id,
@@ -890,7 +910,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         List<MedicalCertificateDto>? medicalCertificateDtos = null;
         if (_medCertRepo != null)
         {
-            var medCerts = await _medCertRepo.Query(m => m.PatientId == request.PatientId)
+            var medCerts = await _medCertRepo.Query(m =>
+                    m.PatientId == request.PatientId &&
+                    (m.IsSigned || (!m.ConsultationId.HasValue && !m.QueueItemId.HasValue)))
                 .OrderByDescending(m => m.CreatedAt)
                 .ToListAsync(cancellationToken);
 
@@ -918,14 +940,17 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 cert.IsSigned,
                 cert.SignedAt,
                 cert.CreatedAt,
-                cert.SecurityDigest
+                cert.SecurityDigest,
+                cert.QueueItemId
             )).ToList();
         }
 
         List<ReferralLetterDto>? referralLetterDtos = null;
         if (_referralRepo != null)
         {
-            var referrals = await _referralRepo.Query(r => r.PatientId == request.PatientId)
+            var referrals = await _referralRepo.Query(r =>
+                    r.PatientId == request.PatientId &&
+                    (r.IsSigned || (!r.ConsultationId.HasValue && !r.QueueItemId.HasValue)))
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync(cancellationToken);
 
@@ -952,7 +977,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 referral.IsSigned,
                 referral.SignedAt,
                 referral.CreatedAt,
-                referral.SecurityDigest
+                referral.SecurityDigest,
+                referral.QueueItemId
             )).ToList();
         }
 

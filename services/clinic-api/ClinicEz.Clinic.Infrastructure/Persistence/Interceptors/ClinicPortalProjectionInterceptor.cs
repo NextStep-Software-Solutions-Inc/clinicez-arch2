@@ -239,7 +239,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in medCertEntries)
         {
             var cert = entry.Entity;
-            if (!cert.IsSigned && !cert.IsDeleted) continue;
+            if (!WasEverSigned(entry, cert.IsSigned)) continue;
 
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, cert.Id))) continue;
 
@@ -295,7 +295,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in referralEntries)
         {
             var referral = entry.Entity;
-            if (!referral.IsSigned && !referral.IsDeleted) continue;
+            if (!WasEverSigned(entry, referral.IsSigned)) continue;
 
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, referral.Id))) continue;
 
@@ -351,7 +351,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in encounterEntries)
         {
             var encounter = entry.Entity;
-            if (!encounter.IsSigned && !encounter.IsDeleted) continue;
+            if (!WasEverSigned(entry, encounter.IsSigned)) continue;
             if (string.IsNullOrWhiteSpace(encounter.PrescriptionNumber) && encounter.Prescriptions.Count == 0) continue;
 
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, encounter.Id))) continue;
@@ -418,6 +418,7 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
         foreach (var entry in labOrderEntries)
         {
             var order = entry.Entity;
+            if (!WasEverSigned(entry, order.IsSigned)) continue;
             if (alreadyStaged.Contains((InteropTypes.DocumentAttestationPublished, order.Id))) continue;
 
             var settings = await GetClinicSettingsAsync(db, order.ClinicId, clinicSettingsCache, cancellationToken);
@@ -547,5 +548,16 @@ public sealed class ClinicPortalProjectionInterceptor : SaveChangesInterceptor
 
         if (loaded != null) cache[clinicId] = loaded;
         return loaded;
+    }
+
+    private static bool WasEverSigned(EntityEntry entry, bool currentIsSigned)
+    {
+        if (currentIsSigned) return true;
+        if (entry.State == EntityState.Added) return false;
+
+        var prop = entry.Metadata.FindProperty("IsSigned");
+        if (prop == null) return false;
+
+        return entry.OriginalValues[prop] is true;
     }
 }

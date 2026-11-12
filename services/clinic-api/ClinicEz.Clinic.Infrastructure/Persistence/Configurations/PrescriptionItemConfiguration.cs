@@ -43,6 +43,7 @@ public sealed class PrescriptionItemConfiguration : IEntityTypeConfiguration<Pre
             entity.Property(e => e.PackageCode).HasMaxLength(20);
             entity.Property(e => e.CategoryCode).HasMaxLength(20);
             entity.Property(e => e.DrugGroupingCode).HasMaxLength(20);
+            entity.Property(e => e.ClinicDispensedBy).HasMaxLength(150);
             entity.HasIndex(e => new { e.ClinicId, e.ConsultationEncounterId });
     }
 }

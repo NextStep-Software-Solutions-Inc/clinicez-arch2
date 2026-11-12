@@ -65,6 +65,11 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
             throw new NotFoundException("Clinical consultation or electronic prescription was not found.");
         }
 
+        if (!encounter.IsSigned)
+        {
+            throw new BadRequestException("Prescription is pending physician sign-off and is not valid until the consultation encounter is signed.");
+        }
+
         var patient = await _patientRepo.GetByIdAsync(encounter.PatientId, cancellationToken);
         var staffDoctor = await _staffRepo.Query(s => s.Id == encounter.DoctorId).FirstOrDefaultAsync(cancellationToken);
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
@@ -127,7 +132,9 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
                 p.DurationDays,
                 p.Refills,
                 p.IsDangerousDrug,
-                p.Remarks
+                p.Remarks,
+                p.IsClinicDispensed,
+                p.ClinicDispensedQuantity
             )).ToList(),
             token,
             uploadUrl,

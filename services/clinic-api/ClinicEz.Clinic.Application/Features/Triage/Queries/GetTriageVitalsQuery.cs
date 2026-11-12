@@ -1,8 +1,13 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.Dispensing.DTOs;
+using ClinicEz.Clinic.Application.Features.Triage.Commands;
 using ClinicEz.Clinic.Application.Features.Triage.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
@@ -16,13 +21,19 @@ public sealed class GetTriageVitalsQueryHandler : IRequestHandler<GetTriageVital
 {
     private readonly IRepository<PatientVitals> _vitalsRepository;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<QueueItem>? _queueRepository;
+    private readonly IRepository<ClinicDispensingLog>? _dispensingLogRepository;
 
     public GetTriageVitalsQueryHandler(
         IRepository<PatientVitals> vitalsRepository,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<QueueItem>? queueRepository = null,
+        IRepository<ClinicDispensingLog>? dispensingLogRepository = null)
     {
         _vitalsRepository = vitalsRepository;
         _clinicContext = clinicContext;
+        _queueRepository = queueRepository;
+        _dispensingLogRepository = dispensingLogRepository;
     }
 
     public async Task<TriageVitalsDto?> Handle(GetTriageVitalsQuery request, CancellationToken cancellationToken)
@@ -34,43 +45,32 @@ public sealed class GetTriageVitalsQueryHandler : IRequestHandler<GetTriageVital
 
         if (vitals == null) return null;
 
-        return new TriageVitalsDto(
-            vitals.Id,
-            vitals.TenantId,
-            vitals.ClinicId,
-            vitals.QueueItemId,
-            vitals.PatientId,
-            vitals.NurseId,
-            vitals.RecordedByNurseName,
-            vitals.RecordedAt,
-            vitals.SystolicBp,
-            vitals.DiastolicBp,
-            vitals.HeartRateBpm,
-            vitals.TemperatureCelsius,
-            vitals.RespiratoryRateBreathsPerMin,
-            vitals.OxygenSaturationPercent,
-            vitals.HeightCm,
-            vitals.WeightKg,
-            vitals.Bmi,
-            vitals.PainScore,
-            vitals.Notes,
-            vitals.VisualAcuityLeft,
-            vitals.VisualAcuityRight,
-            vitals.HeadCircumferenceCm,
-            vitals.MidUpperArmCircumferenceCm,
-            vitals.IsMeasuredRecumbent,
-            vitals.ZScoreWeightForAge,
-            vitals.ZScoreLengthForAge,
-            vitals.ZScoreWeightForLength,
-            vitals.GrowthZScoreCategory,
-            vitals.GrowthZScoreCode,
-            vitals.WaistCircumferenceCm,
-            vitals.HipCircumferenceCm,
-            vitals.BodyLengthCm,
-            vitals.SkinfoldThicknessMm,
-            vitals.LimbsCircumferenceCm,
-            vitals.PreAssessmentNotes,
-            vitals.PreAssessmentRemarks,
-            vitals.TriageAcuityReason);
+        QueueItem? queueItem = null;
+        if (_queueRepository != null)
+        {
+            queueItem = await _queueRepository
+                .Query(q => q.Id == request.QueueItemId && q.ClinicId == _clinicContext.ClinicId)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        IReadOnlyList<ClinicDispensingLogDto>? dispensedItems = null;
+        if (_dispensingLogRepository != null)
+        {
+            var logs = await _dispensingLogRepository
+                .Query(d => d.ClinicId == _clinicContext.ClinicId &&
+                            d.QueueItemId == request.QueueItemId &&
+                            d.Source == ClinicDispenseSource.NurseVitalsCheck)
+                .OrderBy(d => d.DispensedAt)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+
+            dispensedItems = logs
+                .Select(l => ClinicDispensingLogMapper.ToDto(l, queueItem, vitals))
+                .ToList()
+                .AsReadOnly();
+        }
+
+        return RecordTriageVitalsCommandHandler.MapToDto(vitals, queueItem, dispensedItems);
     }
 }

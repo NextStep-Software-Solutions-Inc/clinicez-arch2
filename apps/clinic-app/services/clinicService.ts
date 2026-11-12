@@ -233,6 +233,7 @@ export interface PatientQueueItem {
   roomOrStation?: string;
   roomId?: string | null;
   visitType?: VisitType | string;
+  visitWorkflowMode?: VisitWorkflowMode;
   dischargeNotes?: string;
   dischargedAt?: string;
   dischargedByStaffId?: string;
@@ -280,6 +281,93 @@ export interface QueueMetrics {
   averageWaitTimeMinutes?: number;
 }
 
+export type RosCategoryCode =
+  | 'EssentiallyNormal'
+  | 'General'
+  | 'Dermatologic'
+  | 'Heent'
+  | 'Respiratory'
+  | 'Cardiovascular'
+  | 'Gastrointestinal'
+  | 'Genitourinary'
+  | 'Musculoskeletal'
+  | 'Neurological'
+  | 'PsychiatricNeurodevelopmental'
+  | 'EndocrineMetabolic'
+  | 'HematologicLymphatic'
+  | 'AllergicImmunologic';
+
+export const ROS_CATEGORY_OPTIONS: ReadonlyArray<{ code: RosCategoryCode; label: string; shortLabel: string }> = [
+  { code: 'EssentiallyNormal', label: 'Essentially Normal', shortLabel: 'Essentially Normal' },
+  { code: 'General', label: 'General / Constitutional', shortLabel: 'General' },
+  { code: 'Dermatologic', label: 'Dermatologic', shortLabel: 'Derma' },
+  { code: 'Heent', label: 'HEENT', shortLabel: 'HEENT' },
+  { code: 'Respiratory', label: 'Respiratory', shortLabel: 'Respi' },
+  { code: 'Cardiovascular', label: 'Cardiovascular', shortLabel: 'Cardio' },
+  { code: 'Gastrointestinal', label: 'Gastrointestinal', shortLabel: 'GI' },
+  { code: 'Genitourinary', label: 'Genitourinary / OB-GYN', shortLabel: 'GU / OB-GYN' },
+  { code: 'Musculoskeletal', label: 'Musculoskeletal', shortLabel: 'MSK' },
+  { code: 'Neurological', label: 'Neurological', shortLabel: 'Neuro' },
+  { code: 'PsychiatricNeurodevelopmental', label: 'Psychiatric / Neurodevelopmental', shortLabel: 'Psych' },
+  { code: 'EndocrineMetabolic', label: 'Endocrine / Metabolic', shortLabel: 'Endocrine' },
+  { code: 'HematologicLymphatic', label: 'Hematologic / Lymphatic', shortLabel: 'Heme' },
+  { code: 'AllergicImmunologic', label: 'Allergic / Immunologic', shortLabel: 'Allergy / Immuno' },
+];
+
+export type ClinicDispenseSource = 'DoctorConsultation' | 'NurseVitalsCheck';
+export type ClinicDispenseItemCategory = 'Medicine' | 'MedicalSupply';
+
+export interface TriageDispensedItemInput {
+  id?: string;
+  itemName: string;
+  itemCategory?: ClinicDispenseItemCategory | string;
+  dosageOrSpec?: string;
+  formOrUnit?: string;
+  quantityDispensed: number;
+  directionsOrInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
+  isDoctorReviewed?: boolean;
+  reviewedByDoctorName?: string | null;
+}
+
+export interface ClinicDispensingLogRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  patientId: string;
+  patientName: string;
+  queueItemId: string;
+  queueNumber?: string | null;
+  visitType?: string | null;
+  source: ClinicDispenseSource | string;
+  consultationEncounterId?: string | null;
+  prescriptionItemId?: string | null;
+  patientVitalsId?: string | null;
+  itemName: string;
+  itemCategory: ClinicDispenseItemCategory | string;
+  dosageOrSpec?: string | null;
+  formOrUnit: string;
+  quantityDispensed: number;
+  directionsOrInstructions?: string | null;
+  rosCategory: RosCategoryCode | string;
+  rosCategoryLabel: string;
+  isConsultationValidated: boolean;
+  dispensedByStaffId?: string | null;
+  dispensedByStaffName: string;
+  dispensedByRole: string;
+  dispensedAt: string;
+  chiefComplaint?: string | null;
+  vitalsSummary?: string | null;
+  preAssessmentNotes?: string | null;
+  homeInstructions?: string | null;
+  requiresDoctorReview: boolean;
+  reviewedByDoctorId?: string | null;
+  reviewedByDoctorName?: string | null;
+  reviewedAt?: string | null;
+  doctorReviewNotes?: string | null;
+  interventionFlagged: boolean;
+}
+
 export interface TriageVitals {
   id: string;
   tenantId: string;
@@ -320,6 +408,11 @@ export interface TriageVitals {
   preAssessmentNotes?: string;
   preAssessmentRemarks?: string;
   triageAcuityReason?: string;
+  homeInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
+  rosCategoryLabel?: string;
+  chiefComplaint?: string;
+  dispensedItems?: ClinicDispensingLogRecord[];
 }
 
 export interface EncounterDiagnosis {
@@ -342,6 +435,12 @@ export interface PrescriptionItem {
   isDangerousDrug: boolean;
   philHealthDrugCode?: string;
   remarks?: string;
+  isClinicDispensed?: boolean;
+  clinicDispensedQuantity?: number;
+  clinicDispensedAt?: string;
+  clinicDispensedBy?: string;
+  rosCategory?: RosCategoryCode | string;
+  rosCategoryLabel?: string;
 }
 
 export type VisitWorkflowMode = 'Regular' | 'YakapAvailment';
@@ -380,6 +479,7 @@ export interface PatientGuardianDto {
 
 export interface EncounterReviewOfSystemsItemDto {
   id?: string;
+  system?: string;
   optionCode: string;
   symptomName?: string;
   isPertinentPositive?: boolean;
@@ -467,6 +567,72 @@ export interface PatientBpMonitoringLogDto {
   remarks?: string | null;
 }
 
+export interface DraftDiagnosticOrderDto {
+  serviceItemId?: string;
+  code?: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  philHealthCode?: string;
+  fulfillmentMode: 'in_house' | 'outside';
+  instructions?: string;
+}
+
+export interface DraftProcedureOrderDto {
+  serviceItemId?: string;
+  code?: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  instructions?: string;
+  roomId?: string;
+  roomName?: string;
+  targetRoomId?: string;
+  targetRoomName?: string;
+  status?: 'draft' | 'sent_to_room' | string;
+  isHandedOff?: boolean;
+  handedOffAt?: string;
+  toothNumber?: number;
+  toothSurface?: string;
+  procedureId?: string;
+}
+
+export interface DraftDentalToothDto {
+  toothNumber: number;
+  status: string;
+  surface?: string | null;
+  notes?: string | null;
+}
+
+export interface ConsultationDraftWorkspaceDto {
+  cdsOverrideReason?: string | null;
+  cdsOverrideConfirmed?: boolean | null;
+  planHasMedicationPrescription?: boolean | null;
+  planHasReferral?: boolean | null;
+  planHasCancerScreening?: boolean | null;
+  planHasFollowUp?: boolean | null;
+  planDiagnosticServicesOption?: 'N' | 'Y' | 'R' | null;
+  medCertFitness?: string | null;
+  medCertRestDays?: string | null;
+  medCertPurpose?: string | null;
+  medCertRemarks?: string | null;
+  refFacility?: string | null;
+  refDepartment?: string | null;
+  refUrgency?: string | null;
+  refReason?: string | null;
+  refSummary?: string | null;
+  rxShowAddForm?: boolean | null;
+  rxDraftGeneric?: string | null;
+  rxDraftDosage?: string | null;
+  rxDraftForm?: string | null;
+  rxDraftSig?: string | null;
+  rxDraftQuantity?: string | null;
+  rxDraftClinicDispensedQty?: string | null;
+  rxDraftDangerous?: boolean | null;
+  rxDraftDrugCode?: string | null;
+  rosCategories?: RosCategoryCode[] | string[] | null;
+}
+
 export interface ConsultationRecord {
   id: string;
   visitWorkflowMode?: VisitWorkflowMode;
@@ -539,6 +705,15 @@ export interface ConsultationRecord {
   followUpReason?: string | null;
   followUpVaccineName?: string | null;
   followUpVaccineNextDate?: string | null;
+  rosCategory?: RosCategoryCode | string;
+  rosCategoryLabel?: string;
+  rosCategories?: RosCategoryCode[] | string[] | null;
+  createdAt?: string;
+  updatedAt?: string;
+  draftDiagnosticOrders?: DraftDiagnosticOrderDto[] | null;
+  draftProcedures?: DraftProcedureOrderDto[] | null;
+  draftDentalTeeth?: DraftDentalToothDto[] | null;
+  draftWorkspace?: ConsultationDraftWorkspaceDto | null;
 }
 
 export interface AppointmentItem {
@@ -813,6 +988,8 @@ export interface ClinicLabOrderRecord {
   patientId: string;
   patientName: string;
   consultationId?: string;
+  queueItemId?: string;
+  isSigned?: boolean;
   orderedByDoctorId?: string;
   orderedByDoctorName?: string;
   orderDate: string;
@@ -1217,6 +1394,29 @@ export interface CensusSummary {
   divertedCount?: number;
   noShowCount?: number;
   cancelledCount?: number;
+  visitsWithMedicineDispensing?: number;
+  totalDispensedLineItems?: number;
+  totalDispensedUnits?: number;
+  prescriptionsIssued?: number;
+  medicalCertificatesIssued?: number;
+  referralsIssued?: number;
+  labRequisitionsIssued?: number;
+  vitalsCheckVisits?: number;
+  inClinicProceduresCount?: number;
+}
+
+export interface CensusServiceBreakdown {
+  serviceName: string;
+  visitCount: number;
+  totalVolume: number;
+  percentage: number;
+}
+
+export interface CensusRosBreakdown {
+  rosCategory: string;
+  visitCount: number;
+  dispensingCount: number;
+  percentage: number;
 }
 
 export interface CensusDemographicsBreakdown {
@@ -1302,6 +1502,107 @@ export interface CensusItem {
   netAmount?: number;
   balanceDue?: number;
   isNewPatient?: boolean;
+  servicesAvailed?: string[];
+  servicesAvailedSummary?: string | null;
+  rosCategory?: string | null;
+  dispensedMedicinesSummary?: string | null;
+  prescriptionsCount?: number;
+  medicalCertificatesCount?: number;
+  referralsCount?: number;
+  labRequisitionsCount?: number;
+}
+
+export interface CensusDispensingLedgerEntry {
+  id: string;
+  dispensedAt: string;
+  queueItemId?: string | null;
+  queueNumber?: string | null;
+  patientName: string;
+  visitType?: string | null;
+  source: ClinicDispenseSource | 'Doctor Consultation' | 'Nurse Vitals Check' | string;
+  itemName: string;
+  itemCategory: ClinicDispenseItemCategory | 'Medical Supply' | 'Medicine' | string;
+  dosageOrSpec?: string | null;
+  formOrUnit?: string | null;
+  quantityDispensed: number;
+  directionsOrInstructions?: string | null;
+  rosCategory: RosCategoryCode | string;
+  rosCategoryLabel?: string | null;
+  dispensedByStaffName: string;
+  dispensedByRole: string;
+  requiresDoctorReview?: boolean;
+  isReviewedByDoctor?: boolean;
+  reviewedAt?: string | null;
+  reviewedByDoctorName?: string | null;
+  interventionFlagged?: boolean;
+}
+
+export interface ResolvedCensusLedgerEntryMeta {
+  isDoctorSource: boolean;
+  sourceBadgeLabel: 'Doctor Consultation' | 'Nurse Vitals Check';
+  isMedicalSupply: boolean;
+  categoryBadgeLabel: 'Supply' | 'Medicine';
+  isReviewedByDoctor: boolean;
+  reviewBadgeLabel: string;
+  reviewBadgeVariant: 'success' | 'emergency' | 'warning';
+}
+
+export function resolveCensusLedgerEntryMeta(
+  entry: Pick<
+    CensusDispensingLedgerEntry,
+    | 'source'
+    | 'itemCategory'
+    | 'isReviewedByDoctor'
+    | 'reviewedAt'
+    | 'reviewedByDoctorName'
+    | 'interventionFlagged'
+  >,
+): ResolvedCensusLedgerEntryMeta {
+  const normalizedSource = (entry.source || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const isDoctorSource = normalizedSource === 'doctorconsultation' || normalizedSource.startsWith('doctor');
+
+  const normalizedCategory = (entry.itemCategory || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const isMedicalSupply =
+    normalizedCategory === 'medicalsupply' || normalizedCategory === 'supply' || normalizedCategory.includes('supply');
+
+  const isReviewedByDoctor = isDoctorSource || Boolean(entry.isReviewedByDoctor) || Boolean(entry.reviewedAt);
+
+  if (isDoctorSource) {
+    return {
+      isDoctorSource: true,
+      sourceBadgeLabel: 'Doctor Consultation',
+      isMedicalSupply,
+      categoryBadgeLabel: isMedicalSupply ? 'Supply' : 'Medicine',
+      isReviewedByDoctor: true,
+      reviewBadgeLabel: 'Signed Consultation',
+      reviewBadgeVariant: 'success',
+    };
+  }
+
+  if (isReviewedByDoctor) {
+    const doctorLabel = entry.reviewedByDoctorName || 'MD';
+    return {
+      isDoctorSource: false,
+      sourceBadgeLabel: 'Nurse Vitals Check',
+      isMedicalSupply,
+      categoryBadgeLabel: isMedicalSupply ? 'Supply' : 'Medicine',
+      isReviewedByDoctor: true,
+      reviewBadgeLabel: entry.interventionFlagged
+        ? `Intervention Flagged (${doctorLabel})`
+        : `Reviewed (${doctorLabel})`,
+      reviewBadgeVariant: entry.interventionFlagged ? 'emergency' : 'success',
+    };
+  }
+
+  return {
+    isDoctorSource: false,
+    sourceBadgeLabel: 'Nurse Vitals Check',
+    isMedicalSupply,
+    categoryBadgeLabel: isMedicalSupply ? 'Supply' : 'Medicine',
+    isReviewedByDoctor: false,
+    reviewBadgeLabel: 'Pending Async MD Review',
+    reviewBadgeVariant: 'warning',
+  };
 }
 
 export interface ClinicCensusReport {
@@ -1321,6 +1622,9 @@ export interface ClinicCensusReport {
   visitTypes?: CensusVisitTypeBreakdown[];
   providers?: CensusProviderBreakdown[];
   items: CensusItem[];
+  dispensingLedger?: CensusDispensingLedgerEntry[];
+  serviceBreakdown?: CensusServiceBreakdown[];
+  rosBreakdown?: CensusRosBreakdown[];
 }
 
 export interface CensusFilterOptions {
@@ -2152,6 +2456,7 @@ export interface MedicalCertificateRecord {
   patientId: string;
   patientName: string;
   consultationId?: string;
+  queueItemId?: string;
   doctorId: string;
   doctorName: string;
   prcLicenseNumber: string;
@@ -2179,6 +2484,7 @@ export interface ReferralLetterRecord {
   patientId: string;
   patientName: string;
   consultationId?: string;
+  queueItemId?: string;
   referringDoctorId: string;
   referringDoctorName: string;
   referredToDoctor?: string;
@@ -2450,6 +2756,10 @@ export interface RecordTriageRequest {
   preAssessmentRemarks?: string;
   triageAcuityReason?: string;
   priority?: QueuePriority;
+  homeInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
+  chiefComplaint?: string;
+  dispensedItems?: TriageDispensedItemInput[];
 }
 
 export interface UpdateTriageRequest {
@@ -2488,6 +2798,10 @@ export interface UpdateTriageRequest {
   priority?: QueuePriority;
   clearHeight?: boolean;
   clearWeight?: boolean;
+  homeInstructions?: string | null;
+  rosCategory?: RosCategoryCode | string | null;
+  chiefComplaint?: string | null;
+  dispensedItems?: TriageDispensedItemInput[];
 }
 
 export interface CreateConsultationRequest {
@@ -2502,6 +2816,7 @@ export interface CreateConsultationRequest {
   assessment?: string;
   plan?: string;
   homeInstructions?: string;
+  rosCategory?: RosCategoryCode | string;
   diagnoses?: Array<{ icd10Code: string; description: string; isPrimary?: boolean }>;
   prescriptions?: Array<{
     genericName: string;
@@ -2515,6 +2830,8 @@ export interface CreateConsultationRequest {
     isDangerousDrug?: boolean;
     remarks?: string;
     philHealthDrugCode?: string;
+    clinicDispensedQuantity?: number;
+    rosCategory?: RosCategoryCode | string;
   }>;
   isYakapEligible?: boolean;
   philHealthSignSympCode?: string;
@@ -2553,6 +2870,13 @@ export interface CreateConsultationRequest {
   followUpReason?: string | null;
   followUpVaccineName?: string | null;
   followUpVaccineNextDate?: string | null;
+  doctorPrcLicense?: string;
+  doctorPtr?: string;
+  doctorS2License?: string;
+  draftDiagnosticOrders?: DraftDiagnosticOrderDto[] | null;
+  draftProcedures?: DraftProcedureOrderDto[] | null;
+  draftDentalTeeth?: DraftDentalToothDto[] | null;
+  draftWorkspace?: ConsultationDraftWorkspaceDto | null;
 }
 
 export interface CreateInvoiceRequest {
@@ -2757,6 +3081,56 @@ export const clinicService = {
     return clinicApiClient.put<TriageVitals>(`/queue/${queueItemId}/triage`, payload);
   },
 
+  async escalateToConsultation(
+    queueItemId: string,
+    payload?: {
+      priority?: QueuePriority;
+      escalationReason?: string;
+      doctorId?: string;
+      doctorName?: string;
+      roomId?: string;
+      roomOrStation?: string;
+    }
+  ) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${queueItemId}/escalate-to-consultation`, payload ?? {});
+  },
+
+  // Unified Clinic Dispensing Ledger (Doctor Starter Stock + Nurse OTC / Supply)
+  async getDispensingLogs(params?: {
+    startDate?: string;
+    endDate?: string;
+    source?: ClinicDispenseSource | string;
+    unreviewedOnly?: boolean;
+    patientId?: string;
+    queueItemId?: string;
+    rosCategory?: RosCategoryCode | string;
+    search?: string;
+  }) {
+    const qp = new URLSearchParams();
+    if (params?.startDate) qp.append('startDate', params.startDate);
+    if (params?.endDate) qp.append('endDate', params.endDate);
+    if (params?.source) qp.append('source', params.source);
+    if (typeof params?.unreviewedOnly === 'boolean') qp.append('unreviewedOnly', String(params.unreviewedOnly));
+    if (params?.patientId) qp.append('patientId', params.patientId);
+    if (params?.queueItemId) qp.append('queueItemId', params.queueItemId);
+    if (params?.rosCategory) qp.append('rosCategory', params.rosCategory);
+    if (params?.search) qp.append('search', params.search);
+    const qs = qp.toString();
+    return clinicApiClient.get<ClinicDispensingLogRecord[]>(`/dispensing-logs${qs ? `?${qs}` : ''}`);
+  },
+
+  async reviewDispensingLog(
+    id: string,
+    payload?: {
+      doctorId?: string;
+      doctorName?: string;
+      reviewNotes?: string;
+      interventionFlagged?: boolean;
+    }
+  ) {
+    return clinicApiClient.post<ClinicDispensingLogRecord>(`/dispensing-logs/${id}/review`, payload ?? {});
+  },
+
   // Appointments
   async getAppointments(
     paramsOrDate?: string | GetAppointmentsOptions,
@@ -2800,6 +3174,23 @@ export const clinicService = {
 
   async updateConsultation(id: string, payload: Partial<CreateConsultationRequest>) {
     return clinicApiClient.put<ConsultationRecord>(`/consultations/${id}`, payload);
+  },
+
+  flushConsultationDraftKeepalive(
+    consultationId: string | null | undefined,
+    payload: CreateConsultationRequest,
+  ): boolean {
+    if (consultationId) {
+      return clinicApiClient.sendKeepaliveJson('PUT', `/consultations/${consultationId}`, payload);
+    }
+    return clinicApiClient.sendKeepaliveJson('POST', '/consultations', payload);
+  },
+
+  async abandonConsultation(id: string, options?: { reason?: string; cancelVisit?: boolean }) {
+    return clinicApiClient.post<boolean>(`/consultations/${id}/abandon`, {
+      reason: options?.reason,
+      cancelVisit: options?.cancelVisit ?? false,
+    });
   },
 
   async signConsultation(
@@ -3012,11 +3403,17 @@ export const clinicService = {
   },
 
   // Lab Orders & Diagnostic Requisitions
-  async getLabOrders(patientId?: string, status?: LabOrderStatus, date?: string) {
+  async getLabOrders(
+    patientId?: string,
+    status?: LabOrderStatus,
+    date?: string,
+    options?: { includeUnsigned?: boolean }
+  ) {
     const params = new URLSearchParams();
     if (patientId) params.append('patientId', patientId);
     if (status) params.append('status', status);
     if (date) params.append('date', date);
+    if (options?.includeUnsigned) params.append('includeUnsigned', 'true');
     const qs = params.toString();
     return clinicApiClient.get<ClinicLabOrderRecord[]>(`/lab-orders${qs ? `?${qs}` : ''}`);
   },
@@ -3775,6 +4172,7 @@ export const clinicService = {
     patientId: string;
     patientName: string;
     consultationId?: string;
+    queueItemId?: string;
     doctorId: string;
     doctorName: string;
     prcLicenseNumber: string;
@@ -3791,10 +4189,15 @@ export const clinicService = {
     return clinicApiClient.post<MedicalCertificateRecord>('/documents/medical-certificates', payload);
   },
 
-  async getMedicalCertificates(patientId?: string, doctorId?: string) {
+  async getMedicalCertificates(
+    patientId?: string,
+    doctorId?: string,
+    options?: { includeUnsigned?: boolean }
+  ) {
     const params = new URLSearchParams();
     if (patientId) params.append('patientId', patientId);
     if (doctorId) params.append('doctorId', doctorId);
+    if (options?.includeUnsigned) params.append('includeUnsigned', 'true');
     const qs = params.toString();
     return clinicApiClient.get<MedicalCertificateRecord[]>(`/documents/medical-certificates${qs ? `?${qs}` : ''}`);
   },
@@ -3808,6 +4211,7 @@ export const clinicService = {
     patientId: string;
     patientName: string;
     consultationId?: string;
+    queueItemId?: string;
     referringDoctorId: string;
     referringDoctorName: string;
     referredToDoctor?: string;
@@ -3823,10 +4227,15 @@ export const clinicService = {
     return clinicApiClient.post<ReferralLetterRecord>('/documents/referrals', payload);
   },
 
-  async getReferralLetters(patientId?: string, doctorId?: string) {
+  async getReferralLetters(
+    patientId?: string,
+    doctorId?: string,
+    options?: { includeUnsigned?: boolean }
+  ) {
     const params = new URLSearchParams();
     if (patientId) params.append('patientId', patientId);
     if (doctorId) params.append('doctorId', doctorId);
+    if (options?.includeUnsigned) params.append('includeUnsigned', 'true');
     const qs = params.toString();
     return clinicApiClient.get<ReferralLetterRecord[]>(`/documents/referrals${qs ? `?${qs}` : ''}`);
   },
@@ -4461,6 +4870,8 @@ export interface PrescriptionSlipItem {
   uniquePrescriptionSecurityCode?: string;
   isGamotCovered?: boolean;
   philHealthDrugCode?: string;
+  isClinicDispensed?: boolean;
+  clinicDispensedQuantity?: number | null;
 }
 
 export interface PrescriptionSlipData {

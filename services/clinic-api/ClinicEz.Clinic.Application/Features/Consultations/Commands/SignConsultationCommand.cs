@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Common.DTOs;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
+using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -59,6 +60,13 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IInteropPublisher? _publisher;
     private readonly IConfiguration? _configuration;
     private readonly IRepository<Procedure>? _procedureRepository;
+    private readonly IRepository<ClinicDispensingLog>? _dispensingLogRepository;
+    private readonly IRepository<MedicalCertificate>? _medCertRepository;
+    private readonly IRepository<ReferralLetter>? _referralRepository;
+    private readonly IRepository<LabOrder>? _labOrderRepository;
+    private readonly IUploadGrantService? _uploadGrantService;
+    private readonly ILabRequisitionPublisher? _labRequisitionPublisher;
+    private readonly IDocumentSecurityService? _documentSecurityService;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -75,7 +83,14 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IPatientDocumentPublisher documents,
         IInteropPublisher? publisher = null,
         IConfiguration? configuration = null,
-        IRepository<Procedure>? procedureRepository = null)
+        IRepository<Procedure>? procedureRepository = null,
+        IRepository<ClinicDispensingLog>? dispensingLogRepository = null,
+        IRepository<MedicalCertificate>? medCertRepository = null,
+        IRepository<ReferralLetter>? referralRepository = null,
+        IRepository<LabOrder>? labOrderRepository = null,
+        IUploadGrantService? uploadGrantService = null,
+        ILabRequisitionPublisher? labRequisitionPublisher = null,
+        IDocumentSecurityService? documentSecurityService = null)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
@@ -92,6 +107,13 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _publisher = publisher;
         _configuration = configuration;
         _procedureRepository = procedureRepository;
+        _dispensingLogRepository = dispensingLogRepository;
+        _medCertRepository = medCertRepository;
+        _referralRepository = referralRepository;
+        _labOrderRepository = labOrderRepository;
+        _uploadGrantService = uploadGrantService;
+        _labRequisitionPublisher = labRequisitionPublisher;
+        _documentSecurityService = documentSecurityService;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
@@ -101,6 +123,16 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         var encounter = await _consultationRepository.Query(c => c.Id == request.Id && c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.ReviewOfSystemsItems)
+            .Include(c => c.PhysicalExams)
+                .ThenInclude(p => p.Findings)
+            .Include(c => c.ObGyneExam)
+            .Include(c => c.PediatricMilestones)
+                .ThenInclude(m => m.DangerSigns)
+            .Include(c => c.AdolescentAssessment)
+            .Include(c => c.HeadsssAssessments)
+            .Include(c => c.BpMonitoringLogs)
+                .ThenInclude(b => b.Days)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (encounter == null)
@@ -176,11 +208,14 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             }
         }
 
-        var prcLicense = request.PrcLicenseNumber ?? doctor?.PrcLicenseNumber;
-        var ptr = request.PtrNumber ?? doctor?.PtrNumber;
-        var s2License = request.S2LicenseNumber ?? doctor?.S2LicenseNumber;
-        var pan = request.DoctorPhilHealthPan ?? encounter.DoctorPhilHealthPan ?? doctor?.PhilHealthPan;
-        var atc = request.PhilHealthAtc ?? encounter.PhilHealthAtc;
+        static string? FirstNonEmpty(params string?[] candidates) =>
+            candidates.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))?.Trim();
+
+        var prcLicense = FirstNonEmpty(request.PrcLicenseNumber, encounter.DoctorPrcLicense, doctor?.PrcLicenseNumber);
+        var ptr = FirstNonEmpty(request.PtrNumber, encounter.DoctorPtr, doctor?.PtrNumber);
+        var s2License = FirstNonEmpty(request.S2LicenseNumber, encounter.DoctorS2License, doctor?.S2LicenseNumber);
+        var pan = FirstNonEmpty(request.DoctorPhilHealthPan, encounter.DoctorPhilHealthPan, doctor?.PhilHealthPan);
+        var atc = FirstNonEmpty(request.PhilHealthAtc, encounter.PhilHealthAtc);
 
         // PDEA Dangerous Drugs compliance: S2 license must be present if prescribing dangerous drugs
         var hasDangerousDrugs = encounter.Prescriptions.Any(p => p.IsDangerousDrug);
@@ -191,6 +226,103 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
 
         encounter.Sign(prcLicense, ptr, s2License, pan, atc);
         encounter.BranchId ??= _clinicContext.BranchId;
+        var signedAt = encounter.SignedAt ?? DateTime.UtcNow;
+
+        var defaultRos = encounter.RosCategory
+                         ?? encounter.ReviewOfSystemsItems.FirstOrDefault(r => !r.IsNormal)?.System
+                         ?? RosSystem.EssentiallyNormal;
+
+        if (!encounter.RosCategory.HasValue && encounter.ReviewOfSystemsItems.Count > 0)
+        {
+            encounter.RosCategory = defaultRos;
+        }
+
+        var dispensedPrescriptions = encounter.Prescriptions
+            .Where(p => p.ClinicDispensedQuantity is > 0)
+            .ToList();
+
+        var createdDirectQueue = false;
+        if (queueItem == null && !encounter.QueueItemId.HasValue)
+        {
+            var directQueue = new QueueItem
+            {
+                Id = Guid.NewGuid(),
+                TenantId = encounter.TenantId,
+                ClinicId = encounter.ClinicId,
+                QueueNumber = $"DIR-{signedAt:HHmmss}",
+                SequenceNumber = 1,
+                QueueDate = DateOnly.FromDateTime(encounter.EncounterDate),
+                PatientId = encounter.PatientId,
+                PatientName = encounter.PatientName,
+                DoctorId = encounter.DoctorId,
+                DoctorName = encounter.DoctorName,
+                Priority = QueuePriority.Routine,
+                Status = QueueStatus.Completed,
+                VisitType = VisitType.Consultation,
+                IsDirectVisit = true,
+                CheckInTime = encounter.EncounterDate,
+                CalledTime = encounter.EncounterDate,
+                CompletedTime = signedAt,
+                ChiefComplaint = string.IsNullOrWhiteSpace(encounter.Subjective) ? "Direct Consultation" : encounter.Subjective,
+                CreatedAt = signedAt,
+                CreatedBy = encounter.DoctorName
+            };
+            await _queueRepository.AddAsync(directQueue, cancellationToken);
+            queueItem = directQueue;
+            encounter.QueueItemId = directQueue.Id;
+            createdDirectQueue = true;
+        }
+
+        var dispensingLogRepo = _dispensingLogRepository ?? (_unitOfWork as IRepositoryProvider)?.GetRepository<ClinicDispensingLog>();
+        foreach (var rx in dispensedPrescriptions)
+        {
+            rx.IsClinicDispensed = true;
+            rx.ClinicDispensedAt = signedAt;
+            rx.ClinicDispensedBy = encounter.DoctorName;
+            rx.RosCategory ??= defaultRos;
+
+            if (dispensingLogRepo != null && encounter.QueueItemId.HasValue)
+            {
+                var alreadyLogged = await dispensingLogRepo
+                    .Query(d => d.PrescriptionItemId == rx.Id && d.ClinicId == _clinicContext.ClinicId)
+                    .AnyAsync(cancellationToken);
+
+                if (!alreadyLogged)
+                {
+                    var itemDisplay = !string.IsNullOrWhiteSpace(rx.BrandName)
+                        ? $"{rx.GenericName} ({rx.BrandName})"
+                        : rx.GenericName;
+
+                    await dispensingLogRepo.AddAsync(new ClinicDispensingLog
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = encounter.TenantId,
+                        ClinicId = encounter.ClinicId,
+                        PatientId = encounter.PatientId,
+                        PatientName = encounter.PatientName,
+                        QueueItemId = encounter.QueueItemId.Value,
+                        Source = ClinicDispenseSource.DoctorConsultation,
+                        ConsultationEncounterId = encounter.Id,
+                        PrescriptionItemId = rx.Id,
+                        ItemName = itemDisplay,
+                        ItemCategory = ClinicDispenseItemCategory.Medicine,
+                        DosageOrSpec = rx.Dosage,
+                        FormOrUnit = rx.Form,
+                        QuantityDispensed = rx.ClinicDispensedQuantity!.Value,
+                        DirectionsOrInstructions = rx.Sig,
+                        RosCategory = rx.RosCategory ?? defaultRos,
+                        IsConsultationValidated = true,
+                        DispensedByStaffId = encounter.DoctorId,
+                        DispensedByStaffName = encounter.DoctorName,
+                        DispensedByRole = "Doctor",
+                        DispensedAt = signedAt,
+                        RequiresDoctorReview = false,
+                        CreatedAt = signedAt,
+                        CreatedBy = encounter.DoctorName
+                    }, cancellationToken);
+                }
+            }
+        }
 
         if (encounter.Prescriptions.Any())
         {
@@ -201,12 +333,12 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
 
         _consultationRepository.Update(encounter);
 
-        // Update queue item to Completed
-        if (queueItem != null)
+        // Update existing queue item to Completed (newly added directQueue is already Completed & in Added state)
+        if (queueItem != null && !createdDirectQueue)
         {
             queueItem.Status = QueueStatus.Completed;
-            queueItem.CompletedTime = DateTime.UtcNow;
-            queueItem.UpdatedAt = DateTime.UtcNow;
+            queueItem.CompletedTime = signedAt;
+            queueItem.UpdatedAt = signedAt;
             _queueRepository.Update(queueItem);
         }
 
@@ -227,6 +359,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
 
         // Messages are queued in the interop outbox and commit in the same SaveChanges as the signed consultation.
         var clinic = await _clinicIdentity.GetAsync(cancellationToken);
+
+        await FinalizePendingConsultationArtifactsAsync(encounter, doctor, clinic, signedAt, cancellationToken);
 
         if (encounter.Prescriptions.Any())
         {
@@ -444,6 +578,205 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                 Remarks = p.Remarks
             }).ToList()
         };
+    }
+
+    private async Task FinalizePendingConsultationArtifactsAsync(
+        ConsultationEncounter encounter,
+        StaffMember? doctor,
+        ClinicIdentity? clinic,
+        DateTime signedAt,
+        CancellationToken cancellationToken)
+    {
+        var security = _documentSecurityService ?? new DocumentSecurityService();
+        var queueItemId = encounter.QueueItemId;
+
+        if (_medCertRepository != null)
+        {
+            var pendingCerts = await _medCertRepository
+                .Query(m => m.ClinicId == _clinicContext.ClinicId &&
+                            !m.IsSigned &&
+                            (m.ConsultationId == encounter.Id ||
+                             (queueItemId.HasValue && m.QueueItemId == queueItemId.Value)))
+                .ToListAsync(cancellationToken);
+
+            foreach (var cert in pendingCerts)
+            {
+                cert.ConsultationId ??= encounter.Id;
+                cert.QueueItemId ??= queueItemId;
+                cert.IsSigned = true;
+                cert.SignedAt = signedAt;
+                cert.SecurityDigest = security.ComputeDocumentDigest(
+                    cert.TenantId, "MED-CERT", cert.CertificateNumber, cert.PatientId, cert.PrcLicenseNumber, signedAt);
+                _medCertRepository.Update(cert);
+
+                if (clinic != null)
+                {
+                    var verifyUrl = security.GenerateVerificationUrl(
+                        VerificationUrlResolver.Resolve(_configuration), "med-cert", cert.CertificateNumber, cert.SecurityDigest);
+
+                    await _documents.PublishAsync(new PatientDocumentDraft(
+                        cert.ClinicId,
+                        cert.PatientId,
+                        cert.Id,
+                        Interop.PatientDocumentKind.MedicalCertificate,
+                        $"Medical certificate {cert.CertificateNumber}",
+                        signedAt,
+                        Status: "Issued",
+                        VerificationToken: cert.CertificateNumber,
+                        VerificationUrl: verifyUrl,
+                        Body: new Interop.MedicalCertificateIssuedPayload
+                        {
+                            CertificateId = cert.Id,
+                            CertificateNumber = cert.CertificateNumber,
+                            PatientId = cert.PatientId,
+                            PatientName = cert.PatientName,
+                            IssuerTenantId = clinic.TenantId,
+                            IssuerFacilityId = clinic.ClinicId.ToString(),
+                            IssuerName = clinic.Name,
+                            DoctorName = cert.DoctorName,
+                            DoctorPrcLicense = cert.PrcLicenseNumber,
+                            DoctorPtrNumber = cert.PtrNumber,
+                            Purpose = cert.Purpose,
+                            Diagnosis = cert.Diagnosis,
+                            Remarks = cert.Remarks,
+                            RestDays = cert.RecommendedRestDays,
+                            ValidFrom = cert.RestStartDate?.ToDateTime(TimeOnly.MinValue),
+                            ValidTo = cert.RestEndDate?.ToDateTime(TimeOnly.MinValue),
+                            IssuedAtUtc = signedAt,
+                            VerificationToken = cert.CertificateNumber,
+                            VerificationUrl = verifyUrl
+                        }), cancellationToken);
+                }
+            }
+        }
+
+        if (_referralRepository != null)
+        {
+            var pendingReferrals = await _referralRepository
+                .Query(r => r.ClinicId == _clinicContext.ClinicId &&
+                            !r.IsSigned &&
+                            (r.ConsultationId == encounter.Id ||
+                             (queueItemId.HasValue && r.QueueItemId == queueItemId.Value)))
+                .ToListAsync(cancellationToken);
+
+            foreach (var referral in pendingReferrals)
+            {
+                referral.ConsultationId ??= encounter.Id;
+                referral.QueueItemId ??= queueItemId;
+                referral.IsSigned = true;
+                referral.SignedAt = signedAt;
+                var prc = referral.ReferringDoctorPrcNumber ?? encounter.DoctorPrcLicense ?? doctor?.PrcLicenseNumber ?? "PRC-DOCTOR";
+                referral.ReferringDoctorPrcNumber = prc;
+                referral.SecurityDigest = security.ComputeDocumentDigest(
+                    referral.TenantId, "REFERRAL", referral.ReferralNumber, referral.PatientId, prc, signedAt);
+                _referralRepository.Update(referral);
+            }
+        }
+
+        if (_labOrderRepository != null)
+        {
+            var pendingOrders = await _labOrderRepository
+                .Query(o => o.ClinicId == _clinicContext.ClinicId &&
+                            !o.IsSigned &&
+                            (o.ConsultationId == encounter.Id ||
+                             (queueItemId.HasValue && o.QueueItemId == queueItemId.Value)))
+                .Include(o => o.Items)
+                .ToListAsync(cancellationToken);
+
+            if (pendingOrders.Count > 0)
+            {
+                var patient = await _patientRepository.GetByIdAsync(encounter.PatientId, cancellationToken);
+
+                foreach (var order in pendingOrders)
+                {
+                    order.ConsultationId ??= encounter.Id;
+                    order.QueueItemId ??= queueItemId;
+                    order.IsSigned = true;
+                    order.StageChangedAt = signedAt;
+
+                    if (_uploadGrantService != null)
+                    {
+                        var upload = await _uploadGrantService.MintAsync(order, Interop.UploaderKind.ExternalLab, cancellationToken);
+                        var isRouted = order.TargetFacilityId.HasValue && !string.IsNullOrWhiteSpace(order.TargetTenantId);
+                        var prc = encounter.DoctorPrcLicense ?? doctor?.PrcLicenseNumber;
+
+                        if (clinic != null && patient != null && !string.IsNullOrWhiteSpace(prc))
+                        {
+                            var requisition = new Interop.LabRequisitionIssuedEvent
+                            {
+                                RequisitionId = order.Id,
+                                AccessionNumber = order.OrderNumber,
+                                OrderingFacilityId = clinic.ClinicId.ToString(),
+                                OrderingFacilityName = clinic.Name,
+                                TenantId = clinic.TenantId,
+                                BranchId = _clinicContext.BranchId?.ToString(),
+                                VisitKey = (order.QueueItemId ?? encounter.Id).ToString(),
+                                TargetFacilityId = order.TargetFacilityId?.ToString(),
+                                TargetTenantId = order.TargetTenantId,
+                                OrderingDoctor = new Interop.OrderingDoctorDto
+                                {
+                                    DoctorId = (order.OrderedByDoctorId ?? encounter.DoctorId).ToString(),
+                                    DoctorName = order.OrderedByDoctorName ?? encounter.DoctorName,
+                                    PrcLicenseNumber = prc.Trim(),
+                                    PtrNumber = encounter.DoctorPtr ?? doctor?.PtrNumber,
+                                    Specialization = doctor?.Specialty
+                                },
+                                Patient = new Interop.RequisitionPatientDto
+                                {
+                                    PatientId = patient.CloudPatientId ?? Guid.Empty,
+                                    FullName = order.PatientName,
+                                    PhilHealthPin = patient.PhilHealthNumber,
+                                    NationalId = patient.SeniorCitizenId ?? patient.PwdId,
+                                    DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
+                                    Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
+                                    Gender = patient.Sex.ToString(),
+                                    ContactNumber = patient.ContactNumber
+                                },
+                                Icd10Code = order.ClinicalDiagnosis,
+                                ProvisionalDiagnosis = order.ClinicalDiagnosis,
+                                FastingInstructions = order.Notes,
+                                Urgency = "Routine",
+                                Items = order.Items.Select(i => new Interop.RequisitionItemDto
+                                {
+                                    ItemCode = i.TestName.ToUpperInvariant().Replace(" ", "_")[..Math.Min(i.TestName.Length, 15)],
+                                    ItemName = i.TestName,
+                                    Category = i.Category,
+                                    Urgency = "Routine",
+                                    SpecimenRequirement = i.Instructions
+                                }).ToList(),
+                                PublicUploadToken = upload.Token,
+                                PublicUploadUrl = upload.Url,
+                                IssuedAt = signedAt
+                            };
+
+                            if (isRouted)
+                            {
+                                _labRequisitionPublisher?.PublishRequisitionIssued(requisition);
+                            }
+                            else
+                            {
+                                var claim = await _claims.CreateLabClaimAsync(requisition, cancellationToken);
+                                order.ClaimToken = claim.Token;
+                                order.ClaimExpiresAt = claim.ExpiresAtUtc;
+                            }
+
+                            await _documents.PublishAsync(new PatientDocumentDraft(
+                                order.ClinicId,
+                                order.PatientId,
+                                order.Id,
+                                Interop.PatientDocumentKind.LabRequest,
+                                $"Laboratory request {order.OrderNumber}",
+                                signedAt,
+                                Status: order.Stage.ToString(),
+                                ClaimToken: order.ClaimToken,
+                                Body: requisition), cancellationToken);
+                        }
+                    }
+
+                    _labOrderRepository.Update(order);
+                }
+            }
+        }
     }
 
     private static ConsultationEncounterDto MapToDto(ConsultationEncounter encounter)

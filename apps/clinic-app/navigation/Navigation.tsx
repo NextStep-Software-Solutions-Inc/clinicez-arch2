@@ -24,6 +24,7 @@ import ProfileScreen from './screens/Profile.screen';
 import ResultReviewScreen from './screens/ResultReview.screen';
 import ShareImportScreen from './screens/ShareImport.screen';
 import AuditScreen from './screens/Audit.screen';
+import { parseBooleanRouteParam } from '../components/consultation';
 
 /**
  * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
@@ -70,7 +71,12 @@ const Tab = createBottomTabNavigator({
     },
     Patients: {
       screen: PatientsScreen,
-      linking: 'patients',
+      linking: {
+        path: 'patients',
+        parse: {
+          openRegister: parseBooleanRouteParam,
+        },
+      },
       options: {
         title: 'Patients',
         tabBarIcon: tabIcon('patients'),
@@ -78,7 +84,12 @@ const Tab = createBottomTabNavigator({
     },
     Consultations: {
       screen: ConsultationsScreen,
-      linking: 'consultations',
+      linking: {
+        path: 'consultations',
+        parse: {
+          forceSeparateVisit: parseBooleanRouteParam,
+        },
+      },
       options: {
         title: 'Consultations',
         tabBarLabel: 'Consults',

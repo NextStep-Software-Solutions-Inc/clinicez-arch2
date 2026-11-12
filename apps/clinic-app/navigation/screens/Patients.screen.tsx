@@ -83,7 +83,7 @@ import ServiceCheckInModal, {
 import ConsultationTypeModal from '../../components/patient/ConsultationTypeModal';
 import QueueTicketPickerModal from '../../components/patient/QueueTicketPickerModal';
 import IssueMedicalCertificateModal from '../../components/patient/IssueMedicalCertificateModal';
-import { RecordVitalsModal } from '../../components/consultation';
+import { RecordVitalsModal, parseBooleanRouteParam } from '../../components/consultation';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
@@ -198,7 +198,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const { isWorkstation, isDesktop } = useBreakpoint();
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
   const routeParams = route?.params;
-  const openRegister = Boolean(routeParams?.openRegister);
+  const openRegister = parseBooleanRouteParam(routeParams?.openRegister);
   const rawOpenPatientId = routeParams?.openPatientId || routeParams?.patientId;
   const openPatientId =
     openRegister || rawOpenPatientId === 'quick-action-register'
@@ -1784,13 +1784,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
     const isYakap = forcedProgram === 'yakap';
     resolveActiveVisitForAction(patient, 'Doctor Consultation', (queueItemId, forceSeparateVisit) => {
+      const shouldForceSeparate = parseBooleanRouteParam(forceSeparateVisit);
       navigation.navigate('Consultations', {
         queueId: queueItemId || undefined,
         queueItemId: queueItemId || undefined,
         patientId: patient.id,
         patientName: patient.fullName,
         directVisitMode: isYakap ? 'yakap' : 'regular',
-        forceSeparateVisit: Boolean(forceSeparateVisit),
+        ...(shouldForceSeparate ? { forceSeparateVisit: true } : {}),
       });
       if (queueItemId) {
         notify.info('Resuming encounter in consultation workstation');

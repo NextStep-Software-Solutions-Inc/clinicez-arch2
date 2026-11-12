@@ -47,6 +47,7 @@ import {
   GraduationCap,
   GripVertical,
   HeartPulse,
+  HelpCircle,
   Hourglass,
   Info,
   KeyRound,
@@ -199,6 +200,8 @@ export const ICONS = {
   // Status / feedback
   alert: AlertTriangle,
   alertCircle: AlertCircle,
+  help: HelpCircle,
+  helpCircle: HelpCircle,
   info: Info,
   emergency: Siren,
   bell: Bell,

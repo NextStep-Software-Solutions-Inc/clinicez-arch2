@@ -11,8 +11,11 @@ import {
   type UpdateTriageRequest,
   type TriageVitals,
   type ClinicPatient,
+  type PatientQueueItem,
   type PediatricZScoreResult,
   type QueuePriority,
+  type RosCategoryCode,
+  type TriageDispensedItemInput,
 } from '../../services/clinicService';
 import { notify } from '../../utils/feedback';
 import {
@@ -31,6 +34,8 @@ import {
   AnthropometricsSection,
   VisualAcuitySection,
   PreAssessmentSection,
+  NurseCareAndOtcDispensingSection,
+  isVisitTypeEligibleForOtcDispensing,
 } from './VitalsFormFields';
 
 export type { MeasurementPosture };
@@ -39,11 +44,13 @@ export interface EditVitalsModalProps {
   visible: boolean;
   onClose: () => void;
   queueItemId: string | null;
+  visitType?: string;
   patient?: ClinicPatient | null;
   patientId?: string;
   initialVitals?: TriageVitals | null;
   currentStaffId?: string;
   currentStaffName?: string;
+  onEscalatedToConsultation?: (updatedVisit: PatientQueueItem) => void;
   onSuccess: (
     updatedVitals: TriageVitals,
     summaryData?: { priority?: QueuePriority; vitalsSummary?: string; chiefComplaint?: string }
@@ -55,11 +62,13 @@ export default function EditVitalsModal({
   visible,
   onClose,
   queueItemId,
+  visitType,
   patient,
   patientId,
   initialVitals,
   currentStaffId,
   currentStaffName,
+  onEscalatedToConsultation,
   onSuccess,
   title = 'Edit Vitals',
 }: EditVitalsModalProps) {
@@ -198,7 +207,15 @@ export default function EditVitalsModal({
     setForm((prev) => ({ ...prev, [key]: val }));
   };
 
-  const handleSave = async () => {
+  const updateRosCategory = (val: RosCategoryCode) => {
+    setForm((prev) => ({ ...prev, rosCategory: val }));
+  };
+
+  const updateDispensedItems = (items: TriageDispensedItemInput[]) => {
+    setForm((prev) => ({ ...prev, dispensedItems: items }));
+  };
+
+  const handleSave = async (escalateToDoctor: boolean = false) => {
     if (!queueItemId) {
       Alert.alert('Cannot update vitals', 'Active queue item ID is missing for this consultation.');
       return;
@@ -253,6 +270,14 @@ export default function EditVitalsModal({
       return;
     }
 
+    const allowDispensing = isVisitTypeEligibleForOtcDispensing(visitType);
+    const normalizedDispensed = allowDispensing
+      ? form.dispensedItems.map((it) => ({
+          ...it,
+          rosCategory: it.rosCategory || form.rosCategory,
+        }))
+      : [];
+
     const payload: UpdateTriageRequest = {
       nurseId: currentStaffId,
       recordedByNurseName: currentStaffName,
@@ -289,6 +314,10 @@ export default function EditVitalsModal({
       priority: form.triagePriority,
       clearHeight: heightCm == null,
       clearWeight: weightKg == null,
+      chiefComplaint: form.chiefComplaint.trim(),
+      homeInstructions: form.homeInstructions.trim(),
+      rosCategory: form.rosCategory,
+      dispensedItems: normalizedDispensed,
     };
 
     setSaving(true);
@@ -334,18 +363,41 @@ export default function EditVitalsModal({
         preAssessmentRemarks: form.preAssessmentRemarks.trim() || undefined,
         triageAcuityReason: form.triagePriority,
         priority: form.triagePriority,
+        chiefComplaint: form.chiefComplaint.trim() || undefined,
+        homeInstructions: form.homeInstructions.trim() || undefined,
+        rosCategory: form.rosCategory,
+        dispensedItems: normalizedDispensed.length > 0 ? normalizedDispensed : undefined,
       };
       [savedVitals, err] = await clinicService.recordTriage(queueItemId, createPayload);
     }
 
-    setSaving(false);
-
     if (err || !savedVitals) {
+      setSaving(false);
       notify.error(err?.message || 'Could not update vitals.');
       return;
     }
 
-    notify.success('Vitals updated successfully.');
+    if (escalateToDoctor) {
+      const escalationPriority = form.triagePriority === 'Routine' ? 'Urgent' : form.triagePriority;
+      const [escalatedVisit, escErr] = await clinicService.escalateToConsultation(queueItemId, {
+        priority: escalationPriority,
+        escalationReason:
+          form.preAssessmentNotes.trim() ||
+          form.chiefComplaint.trim() ||
+          'Escalated to physician consultation during nurse vitals check',
+      });
+      setSaving(false);
+      if (escErr || !escalatedVisit) {
+        notify.error(escErr?.message || 'Vitals updated, but could not escalate visit to consultation.');
+      } else {
+        notify.success('Vitals updated and visit escalated to Physician Consultation.');
+        onEscalatedToConsultation?.(escalatedVisit);
+      }
+    } else {
+      setSaving(false);
+      notify.success('Vitals updated successfully.');
+    }
+
     const summary = formatVitalsSummary({
       systolicBp: savedVitals.systolicBp,
       diastolicBp: savedVitals.diastolicBp,
@@ -361,7 +413,7 @@ export default function EditVitalsModal({
     onSuccess(savedVitals, {
       priority: form.triagePriority,
       vitalsSummary: summary,
-      chiefComplaint: form.notes.trim() || undefined,
+      chiefComplaint: form.chiefComplaint.trim() || form.notes.trim() || undefined,
     });
     onClose();
   };
@@ -379,7 +431,7 @@ export default function EditVitalsModal({
           : undefined
       }
       headerExtra={<CohortHeaderMeta cohort={cohort} />}
-      maxWidth={640}
+      maxWidth={680}
       footer={
         <View style={styles.modalFooter}>
           <Button
@@ -388,11 +440,20 @@ export default function EditVitalsModal({
             onPress={onClose}
             disabled={saving}
           />
+          {(visitType === 'VitalsCheckOnly' || form.triagePriority === 'Emergency') && (
+            <Button
+              title="Update & Escalate to MD"
+              variant="dangerOutline"
+              icon="emergency"
+              onPress={() => handleSave(true)}
+              disabled={isSubmitDisabled}
+            />
+          )}
           <Button
             title="Update vitals"
             variant="primary"
             icon="check"
-            onPress={handleSave}
+            onPress={() => handleSave(false)}
             loading={saving}
             disabled={isSubmitDisabled}
           />
@@ -424,6 +485,17 @@ export default function EditVitalsModal({
           />
           <VisualAcuitySection form={form} updateField={updateField} />
           <PreAssessmentSection form={form} updateField={updateField} />
+          <NurseCareAndOtcDispensingSection
+            allowDispensing={isVisitTypeEligibleForOtcDispensing(visitType)}
+            chiefComplaint={form.chiefComplaint}
+            onChangeChiefComplaint={(txt) => updateField('chiefComplaint', txt)}
+            homeInstructions={form.homeInstructions}
+            onChangeHomeInstructions={(txt) => updateField('homeInstructions', txt)}
+            rosCategory={form.rosCategory}
+            onChangeRosCategory={updateRosCategory}
+            dispensedItems={form.dispensedItems}
+            onChangeDispensedItems={updateDispensedItems}
+          />
         </ScrollView>
       )}
     </Modal>
@@ -433,6 +505,7 @@ export default function EditVitalsModal({
 const styles = StyleSheet.create({
   modalFooter: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
   },

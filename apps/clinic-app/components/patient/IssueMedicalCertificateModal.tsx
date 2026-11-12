@@ -140,6 +140,7 @@ export default function IssueMedicalCertificateModal({
         patientId: patient.id,
         patientName: patient.fullName,
         consultationId: undefined,
+        queueItemId: effectiveQueueItemId || undefined,
         doctorId: doctorId || currentStaff?.id || '',
         doctorName: doctorName || currentName || 'Attending Physician',
         prcLicenseNumber: prcLicense.trim(),

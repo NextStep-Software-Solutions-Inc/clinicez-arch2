@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using ClinicEz.Clinic.Application.Features.Dispensing.DTOs;
 
 namespace ClinicEz.Clinic.Application.Features.Triage.DTOs;
 
@@ -39,7 +41,12 @@ public sealed record TriageVitalsDto(
     decimal? LimbsCircumferenceCm = null,
     string? PreAssessmentNotes = null,
     string? PreAssessmentRemarks = null,
-    string? TriageAcuityReason = null)
+    string? TriageAcuityReason = null,
+    string? HomeInstructions = null,
+    string? RosCategory = null,
+    string? RosCategoryLabel = null,
+    string? ChiefComplaint = null,
+    IReadOnlyList<ClinicDispensingLogDto>? DispensedItems = null)
 {
     public string? PhilHealthZScoreCategory => GrowthZScoreCategory;
     public string? PhilHealthZScoreCode => GrowthZScoreCode;

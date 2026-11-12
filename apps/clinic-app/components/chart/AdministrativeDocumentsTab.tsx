@@ -184,23 +184,27 @@ export default function AdministrativeDocumentsTab({
                         {cert.certificateNumber}
                       </ThemedText>
                       {cert.isSigned === false ? (
-                        <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                        <>
+                          <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                          <Badge label="Pending encounter sign-off" variant="neutral" size="sm" />
+                        </>
                       ) : null}
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Issued on {formatClinicDate(cert.issueDate, { dateFormat, timeZoneId, fallback: cert.issueDate })} • Attending: {formatDoctorName(cert.doctorName)}
+                      {cert.isSigned === false ? 'Drafted on ' : 'Issued on '}
+                      {formatClinicDate(cert.issueDate, { dateFormat, timeZoneId, fallback: cert.issueDate })} • Attending: {formatDoctorName(cert.doctorName)}
                       {cert.prcLicenseNumber ? ` (PRC #${cert.prcLicenseNumber})` : ''}
                     </ThemedText>
                   </View>
 
                   <Button
-                    title="Reprint / View PDF"
-                    variant="primary"
+                    title={cert.isSigned === false ? 'Sign encounter to print' : 'Reprint / View PDF'}
+                    variant={cert.isSigned === false ? 'outline' : 'primary'}
                     size="sm"
-                    icon="print"
+                    icon={cert.isSigned === false ? 'clock' : 'print'}
                     testID="reprint-med-cert-btn"
                     loading={isActioning}
-                    disabled={isActioning}
+                    disabled={isActioning || cert.isSigned === false}
                     onPress={() => handleReprintMedCert(cert)}
                   />
                 </View>
@@ -278,7 +282,10 @@ export default function AdministrativeDocumentsTab({
                         {letter.referralNumber}
                       </ThemedText>
                       {letter.isSigned === false ? (
-                        <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                        <>
+                          <Badge label="Draft" variant="warning" size="sm" icon="clock" />
+                          <Badge label="Pending encounter sign-off" variant="neutral" size="sm" />
+                        </>
                       ) : null}
                       <Badge
                         label={letter.urgency || 'Routine'}
@@ -287,18 +294,19 @@ export default function AdministrativeDocumentsTab({
                       />
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      Referred on {formatClinicDate(letter.referralDate, { dateFormat, timeZoneId, fallback: letter.referralDate })} • Referring: {formatDoctorName(letter.referringDoctorName)}
+                      {letter.isSigned === false ? 'Drafted on ' : 'Referred on '}
+                      {formatClinicDate(letter.referralDate, { dateFormat, timeZoneId, fallback: letter.referralDate })} • Referring: {formatDoctorName(letter.referringDoctorName)}
                     </ThemedText>
                   </View>
 
                   <Button
-                    title="Reprint / View PDF"
-                    variant="primary"
+                    title={letter.isSigned === false ? 'Sign encounter to print' : 'Reprint / View PDF'}
+                    variant={letter.isSigned === false ? 'outline' : 'primary'}
                     size="sm"
-                    icon="print"
+                    icon={letter.isSigned === false ? 'clock' : 'print'}
                     testID="reprint-referral-btn"
                     loading={isActioning}
-                    disabled={isActioning}
+                    disabled={isActioning || letter.isSigned === false}
                     onPress={() => handleReprintReferral(letter)}
                   />
                 </View>

@@ -543,8 +543,14 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                     t.Span(item.Sig).FontColor("#1F2937").FontSize(9f);
                                 });
 
-                                var qtyText = $"Quantity: #{item.Quantity}";
-                                medItem.Item().PaddingTop(1).PaddingLeft(12).Text(qtyText).FontSize(8.5f).SemiBold().FontColor("#64748B");
+                                var clinicDispensedQty = (item.IsClinicDispensed || item.ClinicDispensedQuantity.GetValueOrDefault() > 0)
+                                    ? Math.Min(item.Quantity, Math.Max(0, item.ClinicDispensedQuantity.GetValueOrDefault()))
+                                    : 0;
+                                var remainingExternalQty = Math.Max(0, item.Quantity - clinicDispensedQty);
+                                var qtyText = clinicDispensedQty > 0
+                                    ? $"Quantity: #{item.Quantity} (Dispensed in Clinic: {clinicDispensedQty} • Remaining for External Purchase: {remainingExternalQty})"
+                                    : $"Quantity: #{item.Quantity}";
+                                medItem.Item().PaddingTop(1).PaddingLeft(12).Text(qtyText).FontSize(8.5f).SemiBold().FontColor(clinicDispensedQty > 0 ? "#0D6963" : "#64748B");
 
                                 if (!string.IsNullOrWhiteSpace(item.Remarks))
                                 {
@@ -2283,8 +2289,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     {
                         ComposeKpiCell(row, "TOTAL CENSUS", report.Summary.TotalCensus.ToString());
                         ComposeKpiCell(row, "NEW PATIENTS", report.Summary.NewPatients.ToString(), $"Returning: {report.Summary.ReturningPatients}");
-                        ComposeKpiCell(row, "CONSULTATIONS", report.Summary.Consultations.ToString());
-                        ComposeKpiCell(row, "PROCEDURES", report.Summary.StandaloneProcedures.ToString());
+                        ComposeKpiCell(row, "CONSULTATIONS", report.Summary.Consultations.ToString(), report.Summary.VitalsCheckVisits > 0 ? $"Vitals Check: {report.Summary.VitalsCheckVisits}" : null);
+                        ComposeKpiCell(row, "PROCEDURES", Math.Max(report.Summary.StandaloneProcedures, report.Summary.InClinicProceduresCount).ToString());
                         ComposeKpiCell(row, "SENIOR / PWD", (report.Demographics.SeniorCount + report.Demographics.PwdCount).ToString(), $"PhilHealth: {report.Demographics.PhilHealthCount}");
                         ComposeKpiCell(row, "URGENT / EMERG", (report.Acuity.UrgentCount + report.Acuity.EmergencyCount).ToString());
                     });
@@ -2312,6 +2318,39 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             c.Item().Text($"Routine: {report.Acuity.RoutineCount} | Urgent: {report.Acuity.UrgentCount} | Emergency: {report.Acuity.EmergencyCount}")
                                 .FontSize(7f).FontColor("#1E293B");
                         });
+                    });
+
+                    // Multi-Service Availment Breakdown & Review of Systems (ROS) Breakdown Summary Parity
+                    var serviceBreakdown = ClinicCensusBreakdownResolver.ResolveServiceBreakdown(report);
+                    var rosBreakdown = ClinicCensusBreakdownResolver.ResolveRosBreakdown(report);
+
+                    col.Item().PaddingTop(4).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(4).Column(sBox =>
+                    {
+                        sBox.Item().Text("MULTI-SERVICE AVAILMENT BREAKDOWN").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                        var serviceParts = serviceBreakdown.Select(svc =>
+                        {
+                            if (svc.ServiceName == "Medicine Dispensing")
+                            {
+                                return $"{svc.ServiceName}: {svc.VisitCount} ({report.Summary.TotalDispensedLineItems} items / {report.Summary.TotalDispensedUnits} units)";
+                            }
+                            if (svc.ServiceName is "Prescription" or "Medical Certificate" or "Referral" or "Laboratory Requisition")
+                            {
+                                return svc.TotalVolume != svc.VisitCount && svc.VisitCount > 0
+                                    ? $"{svc.ServiceName}: {svc.TotalVolume} ({svc.VisitCount} visits)"
+                                    : $"{svc.ServiceName}: {svc.TotalVolume}";
+                            }
+                            return $"{svc.ServiceName}: {svc.VisitCount}";
+                        });
+                        sBox.Item().PaddingTop(1).Text(string.Join(" | ", serviceParts)).FontSize(7f).FontColor("#1E293B");
+
+                        sBox.Item().PaddingTop(3).Text("REVIEW OF SYSTEMS (ROS) BREAKDOWN").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                        var rosText = rosBreakdown.Count > 0
+                            ? string.Join(" | ", rosBreakdown.Select(r =>
+                                r.DispensingCount > 0
+                                    ? $"{r.RosCategory}: {r.VisitCount} ({r.Percentage:0.0}%, {r.DispensingCount} disp.)"
+                                    : $"{r.RosCategory}: {r.VisitCount} ({r.Percentage:0.0}%)"))
+                            : "No Review of Systems (ROS) categories recorded in this reporting period";
+                        sBox.Item().PaddingTop(1).Text(rosText).FontSize(7f).FontColor("#1E293B");
                     });
 
                     // Patient Encounter Census Register (Landscape Table)
@@ -2391,7 +2430,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                 {
                                     c.Item().Text($"MD: {item.AttendingDoctor ?? "—"}").FontSize(6.5f).SemiBold().FontColor("#1E293B");
                                     c.Item().Text($"RN: {item.AttendingNurse ?? "—"}").FontSize(6.5f).FontColor("#475569");
-                                    c.Item().Text($"Type: {item.VisitType}").FontSize(6f).FontColor("#64748B");
+                                    var serviceLine = item.ServicesAvailed is { Count: > 1 } && !string.IsNullOrWhiteSpace(item.ServicesAvailedSummary)
+                                        ? item.ServicesAvailedSummary
+                                        : item.VisitType;
+                                    c.Item().Text($"Services: {serviceLine}").FontSize(6f).FontColor("#0D6963");
                                 });
 
                                 // 5. Nurse Impression & Vitals
@@ -2424,6 +2466,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                     {
                                         c.Item().Text($"Proc: {item.ProceduresPerformed}").FontSize(6.5f).SemiBold().FontColor("#4338CA");
                                     }
+                                    if (!string.IsNullOrWhiteSpace(item.DispensedMedicinesSummary))
+                                    {
+                                        c.Item().Text($"Dispensed: {item.DispensedMedicinesSummary}").FontSize(6f).SemiBold().FontColor("#0D6963");
+                                    }
                                     c.Item().Text(item.Disposition).FontSize(6.5f).FontColor("#1E293B");
                                 });
 
@@ -2447,6 +2493,53 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             }
                         }
                     });
+
+                    if (report.DispensingLedger is { Count: > 0 })
+                    {
+                        ComposeSectionTitle(col, $"UNIFIED CLINIC MEDICINE & SUPPLY DISPENSING LEDGER ({report.DispensingLedger.Count} ENTRIES)", primaryColor);
+                        col.Item().Table(dTable =>
+                        {
+                            dTable.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(58);   // Time / Ticket
+                                columns.RelativeColumn(1.8f); // Patient
+                                columns.RelativeColumn(1.6f); // Source & Visit
+                                columns.RelativeColumn(2.4f); // Item &Qty
+                                columns.RelativeColumn(1.4f); // ROS
+                                columns.RelativeColumn(2.2f); // Directions
+                                columns.RelativeColumn(1.6f); // Staff / Review
+                            });
+
+                            dTable.Header(h =>
+                            {
+                                TableHeaderCell(h.Cell(), "TIME / TICKET");
+                                TableHeaderCell(h.Cell(), "PATIENT");
+                                TableHeaderCell(h.Cell(), "SOURCE");
+                                TableHeaderCell(h.Cell(), "DISPENSED ITEM & QTY");
+                                TableHeaderCell(h.Cell(), "ROS CATEGORY");
+                                TableHeaderCell(h.Cell(), "INSTRUCTIONS");
+                                TableHeaderCell(h.Cell(), "STAFF / MD REVIEW");
+                            });
+
+                            int dIdx = 0;
+                            foreach (var dEntry in report.DispensingLedger)
+                            {
+                                var dBg = (dIdx++ % 2 == 1) ? "#F8FAFC" : "#FFFFFF";
+                                IContainer DCell(IContainer c) => c.Background(dBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(2.5f).PaddingHorizontal(3f);
+
+                                DCell(dTable.Cell()).Text($"{dEntry.DispensedAt:HH:mm} • {dEntry.QueueNumber}").FontSize(6f).SemiBold().FontColor("#0F172A");
+                                DCell(dTable.Cell()).Text(dEntry.PatientName).FontSize(6.5f).Bold().FontColor("#0F172A");
+                                DCell(dTable.Cell()).Text(dEntry.Source).FontSize(6f).FontColor("#334155");
+                                DCell(dTable.Cell()).Text($"{dEntry.ItemName}{(!string.IsNullOrWhiteSpace(dEntry.DosageOrSpec) ? " " + dEntry.DosageOrSpec : "")} ({dEntry.QuantityDispensed} {dEntry.FormOrUnit})").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                                DCell(dTable.Cell()).Text(dEntry.RosCategory).FontSize(6f).FontColor("#334155");
+                                DCell(dTable.Cell()).Text(dEntry.DirectionsOrInstructions ?? "—").FontSize(6f).FontColor("#475569");
+                                var revLabel = !dEntry.RequiresDoctorReview
+                                    ? dEntry.DispensedByStaffName
+                                    : $"{dEntry.DispensedByStaffName} • {(dEntry.IsReviewedByDoctor ? "Reviewed" : "Pending MD")}";
+                                DCell(dTable.Cell()).Text(revLabel).FontSize(6f).FontColor("#334155");
+                            }
+                        });
+                    }
 
                     // Statutory Attestation Note
                     col.Item().PaddingTop(6).Text("This official outpatient clinic census report is an authentic record of clinical encounters maintained pursuant to DOH Administrative Orders and statutory regulations. All patient entries reflect recorded triage, physician encounters, diagnoses, procedures, and cashier collections.")

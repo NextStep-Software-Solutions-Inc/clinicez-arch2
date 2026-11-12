@@ -155,8 +155,11 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             // 12. Custom Fields
             ws1.Cell(currentRow, 12).SetValue(item.CustomFieldsSummary);
 
-            // 13. Visit Type
-            ws1.Cell(currentRow, 13).SetValue(item.VisitType);
+            // 13. Visit Type (shows composite Services Availed when multiple services were rendered in the visit)
+            var visitTypeDisplay = item.ServicesAvailed is { Count: > 1 } && !string.IsNullOrWhiteSpace(item.ServicesAvailedSummary)
+                ? item.ServicesAvailedSummary
+                : item.VisitType;
+            ws1.Cell(currentRow, 13).SetValue(visitTypeDisplay);
             ws1.Cell(currentRow, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 14. Chief Complaint
@@ -183,8 +186,15 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             // 21. Systems Reviewed & Physical Findings
             ws1.Cell(currentRow, 21).SetValue(item.SystemsReviewed ?? "—");
 
-            // 22. In-Clinic Procedures Performed
-            ws1.Cell(currentRow, 22).SetValue(item.ProceduresPerformed ?? "—");
+            // 22. In-Clinic Procedures Performed (+ Clinic Medicine / Supply Dispensing)
+            var procDisplay = item.ProceduresPerformed ?? "—";
+            if (!string.IsNullOrWhiteSpace(item.DispensedMedicinesSummary))
+            {
+                procDisplay = string.IsNullOrWhiteSpace(item.ProceduresPerformed) || item.ProceduresPerformed == "None"
+                    ? $"Dispensed: {item.DispensedMedicinesSummary}"
+                    : $"{item.ProceduresPerformed} | Dispensed: {item.DispensedMedicinesSummary}";
+            }
+            ws1.Cell(currentRow, 22).SetValue(procDisplay);
 
             // 23. Acuity / Priority
             ws1.Cell(currentRow, 23).SetValue(item.Acuity);
@@ -293,7 +303,7 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
         AddSummaryRow("Consultations", report.Summary.Consultations, totalVisits > 0 ? $"{Math.Round(((double)report.Summary.Consultations / totalVisits) * 100, 1)}%" : "0.0%");
         AddSummaryRow("Standalone In-Clinic Procedures", report.Summary.StandaloneProcedures, totalVisits > 0 ? $"{Math.Round(((double)report.Summary.StandaloneProcedures / totalVisits) * 100, 1)}%" : "0.0%");
         AddSummaryRow("Laboratory Specimen & Diagnostics", report.Summary.DiagnosticsOrLab, totalVisits > 0 ? $"{Math.Round(((double)report.Summary.DiagnosticsOrLab / totalVisits) * 100, 1)}%" : "0.0%");
-        AddSummaryRow("Non-Doctor Outpatient Visits", report.Summary.NonDoctorVisits, "Triage / Administrative / Vitals only");
+        AddSummaryRow("Non-Doctor Outpatient Visits", report.Summary.NonDoctorVisits, "Vitals Check / Procedure / Administrative");
         AddSummaryRow("Completed & Discharged Visits", report.Summary.CompletedVisits, totalVisits > 0 ? $"{Math.Round(((double)report.Summary.CompletedVisits / totalVisits) * 100, 1)}%" : "0.0%");
         AddSummaryRow("Average Turnaround Time (Mins)", $"{report.Summary.AverageTurnaroundMinutes:0.0} mins", "Check-in to discharge");
         AddSummaryRow("Diverted / Emergency Transfers", report.Summary.DivertedVisits, "Hospital / Emergency transfer");
@@ -421,6 +431,83 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
             sRow++;
         }
 
+        sRow += 2;
+
+        // Section 5: Multi-Service Availment & Dispensing Summary
+        ws2.Cell(sRow, 1).SetValue("5. MULTI-SERVICE AVAILMENT & AUXILIARY CLINIC SERVICES SUMMARY");
+        ws2.Cell(sRow, 1).Style.Font.Bold = true;
+        ws2.Cell(sRow, 1).Style.Font.FontSize = 10.5;
+        ws2.Cell(sRow, 1).Style.Font.FontColor = NavyBlue;
+        sRow++;
+
+        ws2.Cell(sRow, 1).SetValue("Clinical Service Availed");
+        ws2.Cell(sRow, 2).SetValue("Visits / Count");
+        ws2.Cell(sRow, 3).SetValue("Share / Volume Details");
+        var sec5Hdr = ws2.Range(sRow, 1, sRow, 3);
+        sec5Hdr.Style.Fill.BackgroundColor = NavyBlue;
+        sec5Hdr.Style.Font.FontColor = XLColor.White;
+        sec5Hdr.Style.Font.Bold = true;
+        sRow++;
+
+        var resolvedServices = ClinicCensusBreakdownResolver.ResolveServiceBreakdown(report);
+        foreach (var svc in resolvedServices)
+        {
+            var svcDetails = svc.ServiceName switch
+            {
+                "Consultation" => $"{svc.Percentage:0.0}% of census (vitals bundled)",
+                "Vitals Check" => $"{svc.Percentage:0.0}% of census (nurse vitals check)",
+                "Medicine Dispensing" => $"{svc.Percentage:0.0}% of visits • {report.Summary.TotalDispensedLineItems} line items ({report.Summary.TotalDispensedUnits} units)",
+                "Prescription" => $"{svc.Percentage:0.0}% of visits • {svc.TotalVolume} signed Rx items",
+                "Medical Certificate" => $"{svc.Percentage:0.0}% of visits • {svc.TotalVolume} signed certificates",
+                "Referral" => $"{svc.Percentage:0.0}% of visits • {svc.TotalVolume} signed referrals",
+                "Laboratory Requisition" => $"{svc.Percentage:0.0}% of visits • {svc.TotalVolume} signed requisitions",
+                "In-Clinic Procedure" => $"{svc.Percentage:0.0}% of visits • {svc.TotalVolume} procedures",
+                _ => $"{svc.Percentage:0.0}% of visits ({svc.TotalVolume} total)"
+            };
+            var displayVal = svc.ServiceName is "Prescription" or "Medical Certificate" or "Referral" or "Laboratory Requisition"
+                ? svc.TotalVolume
+                : svc.VisitCount;
+            AddSummaryRow(svc.ServiceName, displayVal, svcDetails);
+        }
+        AddSummaryRow("Total Dispensed Line Items", report.Summary.TotalDispensedLineItems, $"{report.Summary.TotalDispensedUnits} total pieces/units dispensed");
+
+        sRow += 2;
+
+        // Section 6: Review of Systems (ROS) Breakdown
+        ws2.Cell(sRow, 1).SetValue("6. REVIEW OF SYSTEMS (ROS) BREAKDOWN");
+        ws2.Cell(sRow, 1).Style.Font.Bold = true;
+        ws2.Cell(sRow, 1).Style.Font.FontSize = 10.5;
+        ws2.Cell(sRow, 1).Style.Font.FontColor = NavyBlue;
+        sRow++;
+
+        ws2.Cell(sRow, 1).SetValue("ROS Category");
+        ws2.Cell(sRow, 2).SetValue("Visit Count");
+        ws2.Cell(sRow, 3).SetValue("Share / Dispensing Entries");
+        var sec6Hdr = ws2.Range(sRow, 1, sRow, 3);
+        sec6Hdr.Style.Fill.BackgroundColor = NavyBlue;
+        sec6Hdr.Style.Font.FontColor = XLColor.White;
+        sec6Hdr.Style.Font.Bold = true;
+        sRow++;
+
+        var resolvedRos = ClinicCensusBreakdownResolver.ResolveRosBreakdown(report);
+        if (resolvedRos.Count > 0)
+        {
+            foreach (var ros in resolvedRos)
+            {
+                AddSummaryRow(
+                    ros.RosCategory,
+                    ros.VisitCount,
+                    $"{ros.Percentage:0.0}% of census • {ros.DispensingCount} dispensing entries");
+            }
+        }
+        else
+        {
+            ws2.Cell(sRow, 1).SetValue("No Review of Systems (ROS) categories recorded in this reporting period.");
+            ws2.Range(sRow, 1, sRow, 3).Merge();
+            ws2.Cell(sRow, 1).Style.Font.Italic = true;
+            sRow++;
+        }
+
         try
         {
             ws2.Columns(1, 5).AdjustToContents(15, 45);
@@ -428,6 +515,108 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
         catch
         {
             // Fallback for headless environments
+        }
+
+        // -------------------------------------------------------------
+        // SHEET 3: UNIFIED DISPENSING LEDGER (when dispensing occurred)
+        // -------------------------------------------------------------
+        if (report.DispensingLedger is { Count: > 0 })
+        {
+            var ws3 = workbook.Worksheets.Add("Dispensing Ledger");
+            ws3.ShowGridLines = true;
+
+            ws3.Cell(1, 1).SetValue(clinicTitle);
+            ws3.Cell(1, 1).Style.Font.Bold = true;
+            ws3.Cell(1, 1).Style.Font.FontSize = 14;
+            ws3.Cell(1, 1).Style.Font.FontColor = NavyBlue;
+
+            ws3.Cell(2, 1).SetValue("UNIFIED CLINIC MEDICINE & SUPPLY DISPENSING LEDGER");
+            ws3.Cell(2, 1).Style.Font.Bold = true;
+            ws3.Cell(2, 1).Style.Font.FontSize = 11;
+            ws3.Cell(2, 1).Style.Font.FontColor = NavyBlue;
+
+            ws3.Cell(3, 1).SetValue($"Report Period: {report.StartDate:yyyy-MM-dd} to {report.EndDate:yyyy-MM-dd} • Total Entries: {report.DispensingLedger.Count}");
+            ws3.Cell(3, 1).Style.Font.FontSize = 8.5;
+            ws3.Cell(3, 1).Style.Font.FontColor = XLColor.FromHtml("#64748B");
+
+            string[] ledgerHeaders =
+            {
+                "Dispensed Time",
+                "Ticket No.",
+                "Patient Name",
+                "Visit & Services Availed",
+                "Clinical Source",
+                "Item Name",
+                "Category",
+                "Dosage / Spec",
+                "Quantity",
+                "Unit",
+                "ROS Category",
+                "Directions / Home Instructions",
+                "Dispensed By",
+                "Doctor Review"
+            };
+
+            ws3.Row(5).Height = 26;
+            for (int c = 0; c < ledgerHeaders.Length; c++)
+            {
+                var cell = ws3.Cell(5, c + 1);
+                cell.SetValue(ledgerHeaders[c]);
+                cell.Style.Fill.BackgroundColor = NavyBlue;
+                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Font.Bold = true;
+                cell.Style.Font.FontSize = 9.5;
+                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                cell.Style.Alignment.WrapText = true;
+            }
+
+            int lRow = 6;
+            foreach (var entry in report.DispensingLedger)
+            {
+                var bg = (lRow % 2 == 0) ? AltRowBg : XLColor.White;
+                ws3.Cell(lRow, 1).SetValue(entry.DispensedAt.ToString("yyyy-MM-dd HH:mm"));
+                ws3.Cell(lRow, 2).SetValue(entry.QueueNumber);
+                ws3.Cell(lRow, 3).SetValue(entry.PatientName);
+                ws3.Cell(lRow, 4).SetValue(entry.VisitType);
+                ws3.Cell(lRow, 5).SetValue(entry.Source);
+                ws3.Cell(lRow, 6).SetValue(entry.ItemName);
+                ws3.Cell(lRow, 7).SetValue(entry.ItemCategory);
+                ws3.Cell(lRow, 8).SetValue(entry.DosageOrSpec ?? "—");
+                ws3.Cell(lRow, 9).SetValue(entry.QuantityDispensed);
+                ws3.Cell(lRow, 10).SetValue(entry.FormOrUnit);
+                ws3.Cell(lRow, 11).SetValue(entry.RosCategory);
+                ws3.Cell(lRow, 12).SetValue(entry.DirectionsOrInstructions ?? "—");
+                ws3.Cell(lRow, 13).SetValue($"{entry.DispensedByStaffName} ({entry.DispensedByRole})");
+                var reviewText = !entry.RequiresDoctorReview
+                    ? "Doctor Dispensed"
+                    : (entry.IsReviewedByDoctor
+                        ? $"Reviewed by {entry.ReviewedByDoctorName ?? "MD"}{(entry.InterventionFlagged ? " [Intervention]" : "")}"
+                        : "Pending MD Review");
+                ws3.Cell(lRow, 14).SetValue(reviewText);
+
+                var lr = ws3.Range(lRow, 1, lRow, ledgerHeaders.Length);
+                lr.Style.Fill.BackgroundColor = bg;
+                lr.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+                lr.Style.Border.InsideBorderColor = LightBorder;
+                lr.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                lr.Style.Border.OutsideBorderColor = BorderColor;
+                lRow++;
+            }
+
+            ws3.SheetView.FreezeRows(5);
+            if (lRow > 6)
+            {
+                ws3.Range(5, 1, lRow - 1, ledgerHeaders.Length).SetAutoFilter();
+            }
+
+            try
+            {
+                ws3.Columns(1, ledgerHeaders.Length).AdjustToContents(12, 42);
+            }
+            catch
+            {
+                // Fallback for headless environments
+            }
         }
 
         using var ms = new MemoryStream();

@@ -108,10 +108,49 @@ public sealed class ConsultationsController : ControllerBase
             request.FollowUpScheduleText,
             request.FollowUpReason,
             request.FollowUpVaccineName,
-            request.FollowUpVaccineNextDate);
+            request.FollowUpVaccineNextDate,
+            request.RosCategory,
+            request.ReviewOfSystemsItems,
+            request.VisitWorkflowMode,
+            request.DoctorPrcLicense,
+            request.DoctorPtr,
+            request.DoctorS2License,
+            request.PhysicalExams,
+            request.ObGyneExam,
+            request.PediatricMilestones,
+            request.AdolescentAssessment,
+            request.HeadsssAssessments,
+            request.BpMonitoringLogs,
+            request.DraftDiagnosticOrders,
+            request.DraftProcedures,
+            request.DraftDentalTeeth,
+            request.DraftWorkspace);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ConsultationEncounterDto>.Success(result, "Consultation updated successfully."));
+    }
+
+    [HttpPost("{id:guid}/abandon")]
+    [HasPermission(ClinicPermissions.ConsultationsWrite)]
+    public async Task<ActionResult<ApiResponse<bool>>> AbandonConsultation(
+        Guid id,
+        [FromBody] AbandonConsultationRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new AbandonConsultationCommand(id, request?.Reason, request?.CancelVisit ?? false), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Unsigned consultation draft and all associated clinical items reverted cleanly."));
+    }
+
+    [HttpDelete("{id:guid}")]
+    [HasPermission(ClinicPermissions.ConsultationsWrite)]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteUnsignedConsultation(
+        Guid id,
+        [FromQuery] string? reason,
+        [FromQuery] bool cancelVisit = false,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new AbandonConsultationCommand(id, reason, cancelVisit), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Unsigned consultation draft deleted cleanly."));
     }
 
     [HttpPost("{id:guid}/sign")]
@@ -172,7 +211,27 @@ public sealed record UpdateConsultationRequest(
     string? FollowUpScheduleText = null,
     string? FollowUpReason = null,
     string? FollowUpVaccineName = null,
-    string? FollowUpVaccineNextDate = null);
+    string? FollowUpVaccineNextDate = null,
+    string? RosCategory = null,
+    List<ConsultationRosItemInput>? ReviewOfSystemsItems = null,
+    string? VisitWorkflowMode = null,
+    string? DoctorPrcLicense = null,
+    string? DoctorPtr = null,
+    string? DoctorS2License = null,
+    List<ConsultationPhysicalExamDto>? PhysicalExams = null,
+    ConsultationObGyneExamDto? ObGyneExam = null,
+    List<ConsultationPediatricMilestoneDto>? PediatricMilestones = null,
+    ConsultationAdolescentAssessmentDto? AdolescentAssessment = null,
+    List<ConsultationHeadsssAssessmentDto>? HeadsssAssessments = null,
+    List<ConsultationBpMonitoringLogDto>? BpMonitoringLogs = null,
+    List<DraftDiagnosticOrderDto>? DraftDiagnosticOrders = null,
+    List<DraftProcedureOrderDto>? DraftProcedures = null,
+    List<DraftDentalToothDto>? DraftDentalTeeth = null,
+    ConsultationDraftWorkspaceDto? DraftWorkspace = null);
+
+public sealed record AbandonConsultationRequest(
+    string? Reason = null,
+    bool CancelVisit = false);
 
 public sealed record SignConsultationRequest(
     string? PrcLicenseNumber,

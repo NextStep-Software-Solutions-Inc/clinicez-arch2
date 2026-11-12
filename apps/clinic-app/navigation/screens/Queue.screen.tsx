@@ -131,6 +131,12 @@ export default function QueueScreen() {
   // Emergency diversion modal
   const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
 
+  // Escalate Vitals Check -> Doctor Consultation modal
+  const [escalateModalItem, setEscalateModalItem] = useState<PatientQueueItem | null>(null);
+  const [escalatePriority, setEscalatePriority] = useState<'Emergency' | 'Urgent' | 'Routine'>('Emergency');
+  const [escalateReason, setEscalateReason] = useState<string>('');
+  const [isEscalating, setIsEscalating] = useState<boolean>(false);
+
   const loadData = useCallback(async () => {
     setError(null);
     const todayStr = getManilaTodayStr();
@@ -215,6 +221,24 @@ export default function QueueScreen() {
     notify.success(`${dischargeModalItem.patientName} discharged successfully.`);
     setDischargeModalItem(null);
     setDischargeRemarks('');
+    loadData();
+  };
+
+  const handleEscalateToDoctor = async () => {
+    if (!escalateModalItem) return;
+    setIsEscalating(true);
+    const [, err] = await clinicService.escalateToConsultation(escalateModalItem.id, {
+      priority: escalatePriority,
+      escalationReason: escalateReason.trim() || 'Escalated from routine vitals check to physician consultation',
+    });
+    setIsEscalating(false);
+    if (err) {
+      notify.error(err.message || 'Failed to escalate visit to physician consultation.');
+      return;
+    }
+    notify.success(`${escalateModalItem.patientName} escalated to Physician Consultation (${escalatePriority}).`);
+    setEscalateModalItem(null);
+    setEscalateReason('');
     loadData();
   };
 
@@ -466,6 +490,23 @@ export default function QueueScreen() {
                           />
                         )}
 
+                      {ticket.visitType === 'VitalsCheckOnly' &&
+                        ticket.status !== 'Diverted' &&
+                        ticket.status !== 'Cancelled' &&
+                        ticket.status !== 'NoShow' && (
+                          <Button
+                            title="Escalate to MD"
+                            variant="dangerOutline"
+                            icon="emergency"
+                            size="sm"
+                            onPress={() => {
+                              setEscalateModalItem(ticket);
+                              setEscalatePriority(ticket.priority === 'Routine' ? 'Emergency' : ticket.priority);
+                              setEscalateReason('');
+                            }}
+                          />
+                        )}
+
                       {(ticket.status === 'Triaged' || (ticket.visitType && ticket.visitType !== 'Consultation')) &&
                         ticket.status !== 'Completed' &&
                         ticket.status !== 'DischargedNonDoctor' &&
@@ -713,6 +754,62 @@ export default function QueueScreen() {
             loadData();
           }}
         />
+
+        {/* ESCALATE VITALS CHECK TO DOCTOR CONSULTATION MODAL */}
+        <Modal
+          visible={!!escalateModalItem}
+          title={`Escalate to Doctor Consultation — ${escalateModalItem?.patientName || ''}`}
+          onClose={() => {
+            if (!isEscalating) {
+              setEscalateModalItem(null);
+              setEscalateReason('');
+            }
+          }}
+        >
+          <View style={styles.modalContent}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              Elevate Ticket {escalateModalItem?.queueNumber} from Vitals Check to a full Physician Consultation. All recorded vitals and nursing notes are preserved on the same visit.
+            </ThemedText>
+
+            <SegmentedControl<'Emergency' | 'Urgent' | 'Routine'>
+              value={escalatePriority}
+              onChange={setEscalatePriority}
+              options={[
+                { value: 'Emergency', label: 'STAT / Emergency' },
+                { value: 'Urgent', label: 'Urgent' },
+                { value: 'Routine', label: 'Routine' },
+              ]}
+            />
+
+            <Input
+              label="Escalation Reason / Clinical Red Flags"
+              placeholder="e.g. BP 180/110 with severe headache, acute bronchospasm, high fever..."
+              value={escalateReason}
+              onChangeText={setEscalateReason}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                disabled={isEscalating}
+                onPress={() => {
+                  setEscalateModalItem(null);
+                  setEscalateReason('');
+                }}
+              />
+              <Button
+                title="Escalate to Doctor"
+                variant="danger"
+                icon="emergency"
+                loading={isEscalating}
+                onPress={handleEscalateToDoctor}
+              />
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </ResponsiveLayout>
   );

@@ -58,7 +58,9 @@ public record ClinicLabOrderDto(
     string? LaboratoryName = null,
     string? ClaimToken = null,
     List<ClinicLabResultSummaryDto>? Results = null,
-    List<LabObservationDto>? Observations = null
+    List<LabObservationDto>? Observations = null,
+    Guid? QueueItemId = null,
+    bool IsSigned = true
 );
 
 public record AcknowledgePanicAlertRequest(

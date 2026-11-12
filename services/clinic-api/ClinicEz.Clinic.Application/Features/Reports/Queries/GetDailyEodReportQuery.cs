@@ -148,7 +148,7 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
             .Select(g => new DoctorWorkloadSummary(g.DoctorName, g.EncountersCount))
             .ToList();
 
-        var prescriptionData = await _consultationRepo.Query(c => c.EncounterDate >= targetDate && c.EncounterDate < nextDay)
+        var prescriptionData = await _consultationRepo.Query(c => c.EncounterDate >= targetDate && c.EncounterDate < nextDay && c.IsSigned)
             .Select(c => new
             {
                 TotalPrescriptions = c.Prescriptions.Count,
@@ -163,7 +163,7 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         int totalProceduresPerformed = await _procedureRepo.Query(p => p.ScheduledAt >= targetDate && p.ScheduledAt < nextDay && p.Status == ProcedureStatus.Completed)
             .CountAsync(cancellationToken);
 
-        int totalLabOrdersIssued = await _labOrderRepo.Query(o => o.OrderDate >= targetDate && o.OrderDate < nextDay)
+        int totalLabOrdersIssued = await _labOrderRepo.Query(o => o.OrderDate >= targetDate && o.OrderDate < nextDay && o.IsSigned && o.Status != LabOrderStatus.Cancelled)
             .CountAsync(cancellationToken);
 
         return new DailyEodReportDto(

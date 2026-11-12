@@ -57,6 +57,7 @@ public sealed class ConsultationEncounter : ClinicScopedEntity
 
         IsSigned = true;
         SignedAt = DateTime.UtcNow;
+        DraftOrdersJson = null;
         UpdatedAt = DateTime.UtcNow;
         UpdatedBy = DoctorName;
 
@@ -71,6 +72,14 @@ public sealed class ConsultationEncounter : ClinicScopedEntity
 
     // Dual Clinical Workflow Mode
     public VisitWorkflowMode VisitWorkflowMode { get; set; } = VisitWorkflowMode.Regular;
+    public RosSystem? RosCategory { get; set; }
+
+    /// <summary>
+    /// Structured JSON snapshot of staged draft orders (diagnostic orders, unhanded-off procedures,
+    /// staged dental tooth markings, and draft workspace metadata) associated with an unsigned encounter.
+    /// Cleared automatically when the encounter is signed.
+    /// </summary>
+    public string? DraftOrdersJson { get; set; }
 
     // PhilHealth Konsulta / YAKAP Encounter Tracking
     public bool IsYakapEligible { get; set; } = false;

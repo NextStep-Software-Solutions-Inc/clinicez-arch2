@@ -36,8 +36,16 @@ public sealed class GetConsultationsQueryHandler : IRequestHandler<GetConsultati
         var query = _consultationRepository.Query(c => c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.ReviewOfSystemsItems)
             .Include(c => c.PhysicalExams)
                 .ThenInclude(p => p.Findings)
+            .Include(c => c.ObGyneExam)
+            .Include(c => c.PediatricMilestones)
+                .ThenInclude(m => m.DangerSigns)
+            .Include(c => c.AdolescentAssessment)
+            .Include(c => c.HeadsssAssessments)
+            .Include(c => c.BpMonitoringLogs)
+                .ThenInclude(b => b.Days)
             .AsQueryable();
 
         if (request.PatientId.HasValue)
@@ -83,8 +91,16 @@ public sealed class GetConsultationByIdQueryHandler : IRequestHandler<GetConsult
         var encounter = await _consultationRepository.Query(c => c.Id == request.Id && c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.ReviewOfSystemsItems)
             .Include(c => c.PhysicalExams)
                 .ThenInclude(p => p.Findings)
+            .Include(c => c.ObGyneExam)
+            .Include(c => c.PediatricMilestones)
+                .ThenInclude(m => m.DangerSigns)
+            .Include(c => c.AdolescentAssessment)
+            .Include(c => c.HeadsssAssessments)
+            .Include(c => c.BpMonitoringLogs)
+                .ThenInclude(b => b.Days)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (encounter == null)

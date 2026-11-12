@@ -32,6 +32,7 @@ public sealed class ConsultationEncounterConfiguration : IEntityTypeConfiguratio
             entity.Property(e => e.PhilHealthCaseNo).HasMaxLength(50);
             entity.Property(e => e.PhilHealthSoapTransNo).HasMaxLength(50);
             entity.Property(e => e.VisitWorkflowMode).IsRequired().HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.DraftOrdersJson);
             entity.Property(e => e.PhilHealthVisitType).HasMaxLength(50);
             entity.Property(e => e.ServiceDeliveryMethod).HasMaxLength(30);
             entity.Property(e => e.PatientIdentityVerificationId);

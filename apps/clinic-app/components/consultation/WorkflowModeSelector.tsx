@@ -7,6 +7,8 @@ import Input from '../ui/Input';
 import { theme } from '../../constants/theme';
 import type { VisitWorkflowMode } from '../../services/clinicService';
 
+export type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 export interface WorkflowModeSelectorProps {
   mode: VisitWorkflowMode;
   onChange: (nextMode: VisitWorkflowMode) => void;
@@ -15,6 +17,9 @@ export interface WorkflowModeSelectorProps {
   onChangeAtc?: (value: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  draftSaveStatus?: DraftSaveStatus;
+  draftSavedAtLabel?: string | null;
+  onRetryDraftSave?: () => void;
 }
 
 export default function WorkflowModeSelector({
@@ -25,8 +30,97 @@ export default function WorkflowModeSelector({
   onChangeAtc,
   isExpanded = false,
   onToggleExpand,
+  draftSaveStatus = 'idle',
+  draftSavedAtLabel = null,
+  onRetryDraftSave,
 }: WorkflowModeSelectorProps) {
   const isYakap = mode === 'YakapAvailment';
+  const showDraftIndicator = !disabled && draftSaveStatus !== 'idle';
+
+  const renderDraftIndicator = () => {
+    if (!showDraftIndicator) return null;
+
+    if (draftSaveStatus === 'saving') {
+      return (
+        <View
+          style={[styles.draftPill, styles.draftPillSaving]}
+          testID="workflow-draft-status-indicator"
+          accessibilityLiveRegion="polite"
+        >
+          <Icon
+            name="clock"
+            size={theme.sizes.iconSm}
+            color={theme.colors.textSecondary}
+          />
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Saving draft...
+          </ThemedText>
+        </View>
+      );
+    }
+
+    if (draftSaveStatus === 'error') {
+      const label = onRetryDraftSave
+        ? 'Draft save failed · Tap to retry'
+        : 'Draft save failed';
+      if (onRetryDraftSave) {
+        return (
+          <TouchableOpacity
+            onPress={onRetryDraftSave}
+            style={[styles.draftPill, styles.draftPillError]}
+            testID="workflow-draft-status-indicator"
+            accessibilityRole="button"
+            accessibilityLabel="Retry saving consultation draft"
+          >
+            <Icon
+              name="alertCircle"
+              size={theme.sizes.iconSm}
+              color={theme.colors.emergency}
+            />
+            <ThemedText variant="caption" color={theme.colors.emergencyText}>
+              {label}
+            </ThemedText>
+          </TouchableOpacity>
+        );
+      }
+      return (
+        <View
+          style={[styles.draftPill, styles.draftPillError]}
+          testID="workflow-draft-status-indicator"
+          accessibilityLiveRegion="polite"
+        >
+          <Icon
+            name="alertCircle"
+            size={theme.sizes.iconSm}
+            color={theme.colors.emergency}
+          />
+          <ThemedText variant="caption" color={theme.colors.emergencyText}>
+            {label}
+          </ThemedText>
+        </View>
+      );
+    }
+
+    const savedText = draftSavedAtLabel
+      ? `Saved as draft · ${draftSavedAtLabel}`
+      : 'Saved as draft';
+    return (
+      <View
+        style={[styles.draftPill, styles.draftPillSaved]}
+        testID="workflow-draft-status-indicator"
+        accessibilityLiveRegion="polite"
+      >
+        <Icon
+          name="checkCircle"
+          size={theme.sizes.iconSm}
+          color={theme.colors.success}
+        />
+        <ThemedText variant="caption" color={theme.colors.successText}>
+          {savedText}
+        </ThemedText>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -39,25 +133,28 @@ export default function WorkflowModeSelector({
               : 'Standard EHR clinical consultation (Cash, HMO, Corporate, Walk-in)'}
           </ThemedText>
         </View>
-        {onToggleExpand ? (
+        {showDraftIndicator || onToggleExpand ? (
           <View style={styles.headerActions}>
-            <Button
-              iconOnly
-              icon={isExpanded ? 'layoutSplit' : 'maximize'}
-              variant="secondary"
-              size="sm"
-              onPress={onToggleExpand}
-              accessibilityLabel={
-                isExpanded
-                  ? 'Switch back to 2-column split pane'
-                  : 'Expand consultation workspace'
-              }
-              testID={
-                isExpanded
-                  ? 'toggle-split-pane-btn'
-                  : 'expand-consultation-workspace-btn'
-              }
-            />
+            {renderDraftIndicator()}
+            {onToggleExpand ? (
+              <Button
+                iconOnly
+                icon={isExpanded ? 'layoutSplit' : 'maximize'}
+                variant="secondary"
+                size="sm"
+                onPress={onToggleExpand}
+                accessibilityLabel={
+                  isExpanded
+                    ? 'Switch back to 2-column split pane'
+                    : 'Expand consultation workspace'
+                }
+                testID={
+                  isExpanded
+                    ? 'toggle-split-pane-btn'
+                    : 'expand-consultation-workspace-btn'
+                }
+              />
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -145,8 +242,31 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: theme.spacing.sm,
     flexShrink: 0,
+  },
+  draftPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  draftPillSaved: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+  },
+  draftPillSaving: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+  },
+  draftPillError: {
+    backgroundColor: theme.colors.emergencySubtle,
+    borderColor: theme.colors.emergencyBorder,
   },
   toggleContainer: {
     flexDirection: 'row',

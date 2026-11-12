@@ -29,6 +29,7 @@ public sealed partial class MedicalCertificate : ClinicScopedEntity
     public Patient? Patient { get; set; }
     public required string PatientName { get; set; }
     public Guid? ConsultationId { get; set; }
+    public Guid? QueueItemId { get; set; }
 
     public Guid DoctorId { get; set; }
     public required string DoctorName { get; set; }

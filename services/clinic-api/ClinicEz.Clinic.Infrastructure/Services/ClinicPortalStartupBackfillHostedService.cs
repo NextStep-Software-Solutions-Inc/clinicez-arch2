@@ -305,7 +305,7 @@ public sealed class ClinicPortalStartupBackfillHostedService : BackgroundService
                 // 3d. Clinic Lab Orders
                 var labOrders = await db.LabOrders.IgnoreQueryFilters()
                     .Include(o => o.Items)
-                    .Where(o => o.ClinicId == clinic.ClinicId && !o.IsDeleted && o.OrderDate >= cutoff)
+                    .Where(o => o.ClinicId == clinic.ClinicId && !o.IsDeleted && o.IsSigned && o.OrderDate >= cutoff)
                     .OrderByDescending(o => o.OrderDate)
                     .Take(500)
                     .ToListAsync(stoppingToken);

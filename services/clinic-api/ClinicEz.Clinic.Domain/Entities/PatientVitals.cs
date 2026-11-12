@@ -1,5 +1,6 @@
 using System;
 using ClinicEz.Clinic.Domain.Common;
+using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
@@ -38,6 +39,8 @@ public sealed class PatientVitals : ClinicScopedEntity
     public string? PreAssessmentNotes { get; set; }
     public string? PreAssessmentRemarks { get; set; }
     public string? TriageAcuityReason { get; set; }
+    public string? HomeInstructions { get; set; }
+    public RosSystem? RosCategory { get; set; }
 
     // Visual Acuity (Snellen format: "20/20", "20/40", "CF", etc.)
     public string? VisionChartTypeCode { get; set; }

@@ -5,6 +5,7 @@ export {
   from1NFFindings,
 } from './InlinePhysicalExamCard';
 export { default as WorkflowModeSelector } from './WorkflowModeSelector';
+export type { DraftSaveStatus, WorkflowModeSelectorProps } from './WorkflowModeSelector';
 export { default as NursePreAssessmentCard } from './NursePreAssessmentCard';
 export type { NursePreAssessmentCardProps } from './NursePreAssessmentCard';
 export { default as ReviewOfSystemsChecklist } from './ReviewOfSystemsChecklist';
@@ -60,6 +61,17 @@ export type { EditVitalsModalProps } from './EditVitalsModal';
 export {
   EMPTY_VITALS_FORM,
   PRE_ASSESSMENT_OBSERVATION_CHIPS,
+  NURSE_HOME_CARE_CHIPS,
+  NURSE_ROUTINE_OTC_PRESETS,
+  normalizeRosCategoryCode,
+  normalizeRosCategoryList,
+  toggleRosCategorySelection,
+  getRosShortLabel,
+  formatRosCategoriesSummary,
+  inferRosCategoryFromSymptom,
+  getRequiredRosCategoriesForSymptoms,
+  syncRosCategoriesWithSymptoms,
+  hydrateVitalsFormFromRecord,
   parseOptionalInt,
   parseOptionalFloat,
   resolveCohort,
@@ -72,6 +84,9 @@ export {
   AnthropometricsSection,
   VisualAcuitySection,
   PreAssessmentSection,
+  RosCategorySelectorSection,
+  NurseCareAndOtcDispensingSection,
+  isVisitTypeEligibleForOtcDispensing,
 } from './VitalsFormFields';
 export type {
   VitalsFormState,
@@ -80,6 +95,9 @@ export type {
   BmiEvaluation,
   CentralObesityEvaluation,
   VitalsSummaryData,
+  NurseOtcPreset,
+  RosCategorySelectorSectionProps,
+  NurseCareAndOtcDispensingSectionProps,
 } from './VitalsFormFields';
 
 export {
@@ -115,3 +133,26 @@ export type {
   DentalToothState,
   InlineDentalChartCardProps,
 } from './InlineDentalChartCard';
+
+export {
+  parseBooleanRouteParam,
+  formatDraftSavedTimestamp,
+  extractStagedDentalTeethForDraft,
+  buildConsultationDraftPayload,
+  rehydrateEncounterPlanManagementWithWorkspace,
+  validateRxClinicDispensedQuantity,
+  saveLocalConsultationDraft,
+  readLocalConsultationDraft,
+  clearLocalConsultationDraft,
+  shouldOverlayLocalConsultationDraft,
+  mergeConsultationRecordWithLocalDraft,
+} from './consultationDraftHelpers';
+export type {
+  DraftDiagnosisItem,
+  DraftPrescriptionItem,
+  DraftLabOrderItem,
+  DraftProcedureOrderItem,
+  BuildConsultationDraftPayloadInput,
+  LocalConsultationDraftEntry,
+  LocalConsultationDraftLookup,
+} from './consultationDraftHelpers';

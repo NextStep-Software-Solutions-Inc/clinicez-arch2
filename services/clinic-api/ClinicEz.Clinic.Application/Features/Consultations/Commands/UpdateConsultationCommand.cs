@@ -5,7 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
+using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
@@ -51,7 +53,23 @@ public sealed record UpdateConsultationCommand(
     string? FollowUpScheduleText = null,
     string? FollowUpReason = null,
     string? FollowUpVaccineName = null,
-    string? FollowUpVaccineNextDate = null) : IRequest<ConsultationEncounterDto>;
+    string? FollowUpVaccineNextDate = null,
+    string? RosCategory = null,
+    List<ConsultationRosItemInput>? ReviewOfSystemsItems = null,
+    string? VisitWorkflowMode = null,
+    string? DoctorPrcLicense = null,
+    string? DoctorPtr = null,
+    string? DoctorS2License = null,
+    List<ConsultationPhysicalExamDto>? PhysicalExams = null,
+    ConsultationObGyneExamDto? ObGyneExam = null,
+    List<ConsultationPediatricMilestoneDto>? PediatricMilestones = null,
+    ConsultationAdolescentAssessmentDto? AdolescentAssessment = null,
+    List<ConsultationHeadsssAssessmentDto>? HeadsssAssessments = null,
+    List<ConsultationBpMonitoringLogDto>? BpMonitoringLogs = null,
+    List<DraftDiagnosticOrderDto>? DraftDiagnosticOrders = null,
+    List<DraftProcedureOrderDto>? DraftProcedures = null,
+    List<DraftDentalToothDto>? DraftDentalTeeth = null,
+    ConsultationDraftWorkspaceDto? DraftWorkspace = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class UpdateConsultationCommandValidator : AbstractValidator<UpdateConsultationCommand>
 {
@@ -71,6 +89,8 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
     private readonly IRepository<StaffMember>? _staffRepository;
     private readonly IRepository<FacilitySettings>? _settingsRepository;
     private readonly IPhilHealthSequenceGenerator? _sequenceGenerator;
+    private readonly IRepository<EncounterReviewOfSystemsItem>? _rosRepository;
+    private readonly IRepository<QueueItem>? _queueRepository;
 
     public UpdateConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -80,7 +100,9 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         IClinicContext clinicContext,
         IRepository<StaffMember>? staffRepository = null,
         IRepository<FacilitySettings>? settingsRepository = null,
-        IPhilHealthSequenceGenerator? sequenceGenerator = null)
+        IPhilHealthSequenceGenerator? sequenceGenerator = null,
+        IRepository<EncounterReviewOfSystemsItem>? rosRepository = null,
+        IRepository<QueueItem>? queueRepository = null)
     {
         _consultationRepository = consultationRepository;
         _diagnosisRepository = diagnosisRepository;
@@ -90,6 +112,8 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;
         _sequenceGenerator = sequenceGenerator;
+        _rosRepository = rosRepository;
+        _queueRepository = queueRepository;
     }
 
     public async Task<ConsultationEncounterDto> Handle(UpdateConsultationCommand request, CancellationToken cancellationToken)
@@ -97,6 +121,16 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         var encounter = await _consultationRepository.Query(c => c.Id == request.Id && c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
+            .Include(c => c.ReviewOfSystemsItems)
+            .Include(c => c.PhysicalExams)
+                .ThenInclude(p => p.Findings)
+            .Include(c => c.ObGyneExam)
+            .Include(c => c.PediatricMilestones)
+                .ThenInclude(m => m.DangerSigns)
+            .Include(c => c.AdolescentAssessment)
+            .Include(c => c.HeadsssAssessments)
+            .Include(c => c.BpMonitoringLogs)
+                .ThenInclude(b => b.Days)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (encounter == null)
@@ -109,19 +143,52 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
             throw new BadRequestException("Encounter is already signed and locked. Amendments cannot overwrite a signed record.");
         }
 
+        if (request.Prescriptions is { Count: > 0 } && _staffRepository != null && _clinicContext.StaffId.HasValue)
+        {
+            var callerStaff = await _staffRepository
+                .Query(s => s.Id == _clinicContext.StaffId.Value && s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (callerStaff != null && callerStaff.Role != StaffRole.Doctor && callerStaff.Role != StaffRole.Admin)
+            {
+                throw new ForbiddenException("Prescribing privileges are strictly restricted to physicians. Nurses may only log OTC medicines during a Vitals Check.");
+            }
+        }
+
+        var repoProvider = _unitOfWork as IRepositoryProvider;
+        CreateConsultationCommandHandler.ValidatePrescriptionInputs(request.Prescriptions);
+        var resolvedRosCategory = CreateConsultationCommandHandler.ResolveEncounterRosCategory(request.RosCategory, request.ReviewOfSystemsItems);
+        if (resolvedRosCategory.HasValue)
+        {
+            encounter.RosCategory = resolvedRosCategory.Value;
+        }
+        else if (request.RosCategory != null && string.IsNullOrWhiteSpace(request.RosCategory))
+        {
+            encounter.RosCategory = null;
+        }
+
         if (request.Subjective != null) encounter.Subjective = request.Subjective;
         if (request.Objective != null) encounter.Objective = request.Objective;
         if (request.Assessment != null) encounter.Assessment = request.Assessment;
         if (request.Plan != null) encounter.Plan = request.Plan;
-        if (request.HomeInstructions != null) encounter.HomeInstructions = request.HomeInstructions;
-        if (request.IsYakapEligible.HasValue) encounter.IsYakapEligible = request.IsYakapEligible.Value;
-        if (request.PhilHealthSignSympCode != null) encounter.PhilHealthSignSympCode = request.PhilHealthSignSympCode;
-        if (request.PhilHealthOtherComplaint != null) encounter.PhilHealthOtherComplaint = request.PhilHealthOtherComplaint;
-        if (request.PhilHealthPainSite != null) encounter.PhilHealthPainSite = request.PhilHealthPainSite;
-        if (request.DoctorPhilHealthPan != null) encounter.DoctorPhilHealthPan = request.DoctorPhilHealthPan;
-        if (request.PhilHealthAtc != null) encounter.PhilHealthAtc = request.PhilHealthAtc;
-        if (request.HciCaseNo != null) encounter.PhilHealthCaseNo = request.HciCaseNo;
-        if (request.SoapTransNo != null) encounter.PhilHealthSoapTransNo = request.SoapTransNo;
+        if (request.HomeInstructions != null) encounter.HomeInstructions = CreateConsultationCommandHandler.NullIfWhiteSpace(request.HomeInstructions);
+        ConsultationDraftPersistenceHelper.SyncWorkflowMode(
+            encounter,
+            request.VisitWorkflowMode,
+            request.IsYakapEligible);
+        await ConsultationDraftPersistenceHelper.SyncQueueWorkflowModeAsync(
+            encounter,
+            _queueRepository ?? repoProvider?.GetRepository<QueueItem>(),
+            cancellationToken);
+        if (request.PhilHealthSignSympCode != null) encounter.PhilHealthSignSympCode = CreateConsultationCommandHandler.NullIfWhiteSpace(request.PhilHealthSignSympCode);
+        if (request.PhilHealthOtherComplaint != null) encounter.PhilHealthOtherComplaint = CreateConsultationCommandHandler.NullIfWhiteSpace(request.PhilHealthOtherComplaint);
+        if (request.PhilHealthPainSite != null) encounter.PhilHealthPainSite = CreateConsultationCommandHandler.NullIfWhiteSpace(request.PhilHealthPainSite);
+        if (request.DoctorPhilHealthPan != null) encounter.DoctorPhilHealthPan = ConsultationPlanManagementMapper.Truncate(request.DoctorPhilHealthPan, 50);
+        if (request.PhilHealthAtc != null) encounter.PhilHealthAtc = ConsultationPlanManagementMapper.Truncate(request.PhilHealthAtc, 50);
+        if (request.DoctorPrcLicense != null) encounter.DoctorPrcLicense = ConsultationPlanManagementMapper.Truncate(request.DoctorPrcLicense, 50);
+        if (request.DoctorPtr != null) encounter.DoctorPtr = ConsultationPlanManagementMapper.Truncate(request.DoctorPtr, 50);
+        if (request.DoctorS2License != null) encounter.DoctorS2License = ConsultationPlanManagementMapper.Truncate(request.DoctorS2License, 50);
+        if (request.HciCaseNo != null) encounter.PhilHealthCaseNo = ConsultationPlanManagementMapper.Truncate(request.HciCaseNo, 50);
+        if (request.SoapTransNo != null) encounter.PhilHealthSoapTransNo = ConsultationPlanManagementMapper.Truncate(request.SoapTransNo, 50);
         ConsultationPlanManagementMapper.Apply(
             encounter,
             request.CounselingCodes,
@@ -141,33 +208,27 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
             request.FollowUpReason,
             request.FollowUpVaccineName,
             request.FollowUpVaccineNextDate);
-        if (request.GeneralSurveyId != null || request.GeneralSurveyRemarks != null || !string.IsNullOrWhiteSpace(request.PhysicalExamFindingsJson))
-        {
-            var exam = encounter.PhysicalExams.FirstOrDefault();
-            if (exam == null)
-            {
-                exam = new PatientPhysicalExam
-                {
-                    TenantId = encounter.TenantId,
-                    ClinicId = encounter.ClinicId,
-                    PatientId = encounter.PatientId,
-                    ConsultationEncounterId = encounter.Id,
-                    ExamDate = encounter.EncounterDate != default ? encounter.EncounterDate : DateTime.UtcNow
-                };
-                encounter.PhysicalExams.Add(exam);
-            }
-            if (request.GeneralSurveyId != null) exam.GenSurveyId = request.GeneralSurveyId;
-            if (request.GeneralSurveyRemarks != null) exam.GeneralSurveyRemarks = request.GeneralSurveyRemarks;
-            if (!string.IsNullOrWhiteSpace(request.PhysicalExamFindingsJson))
-            {
-                try
-                {
-                    var pe = System.Text.Json.JsonSerializer.Deserialize<NineSystemPhysicalExamFindings>(request.PhysicalExamFindingsJson);
-                    encounter.SetPhysicalExamFindings(pe);
-                }
-                catch { }
-            }
-        }
+
+        await ConsultationDraftPersistenceHelper.SyncPhysicalExamsAsync(
+            encounter,
+            isExistingEncounter: true,
+            request.PhysicalExams,
+            request.GeneralSurveyId,
+            request.GeneralSurveyRemarks,
+            request.PhysicalExamFindingsJson,
+            repoProvider,
+            cancellationToken);
+
+        await ConsultationDraftPersistenceHelper.SyncCohortAssessmentsAsync(
+            encounter,
+            isExistingEncounter: true,
+            request.ObGyneExam,
+            request.PediatricMilestones,
+            request.AdolescentAssessment,
+            request.HeadsssAssessments,
+            request.BpMonitoringLogs,
+            repoProvider,
+            cancellationToken);
 
         PhilHealthPatientJourneyNumbers? journey = null;
         if (encounter.IsYakapEligible)
@@ -217,12 +278,15 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         encounter.UpdatedAt = DateTime.UtcNow;
         encounter.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 
+        var rosRepo = _rosRepository ?? repoProvider?.GetRepository<EncounterReviewOfSystemsItem>();
+        var dispensingLogRepo = repoProvider?.GetRepository<ClinicDispensingLog>();
+
         if (request.Diagnoses != null)
         {
-            // Remove previous diagnoses and replace with updated set
+            // Hard-remove previous draft diagnoses and replace with updated set
             foreach (var diag in encounter.Diagnoses.ToList())
             {
-                _diagnosisRepository.Remove(diag);
+                _diagnosisRepository.Remove(diag, hardDelete: true);
             }
             encounter.Diagnoses.Clear();
 
@@ -230,50 +294,121 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
             {
                 var newDiag = new EncounterDiagnosis
                 {
+                    Id = Guid.NewGuid(),
+                    TenantId = encounter.TenantId,
+                    ClinicId = encounter.ClinicId,
                     ConsultationEncounterId = encounter.Id,
-                    Icd10Code = diag.Icd10Code.Trim().ToUpperInvariant(),
-                    Description = diag.Description.Trim(),
+                    Icd10Code = ConsultationPlanManagementMapper.Truncate(diag.Icd10Code.Trim().ToUpperInvariant(), 20) ?? "Z00.0",
+                    Description = ConsultationPlanManagementMapper.Truncate(diag.Description, 255) ?? "Clinical diagnosis",
                     IsPrimary = diag.IsPrimary,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = encounter.DoctorName
                 };
-                encounter.Diagnoses.Add(newDiag);
                 await _diagnosisRepository.AddAsync(newDiag, cancellationToken);
+                if (!encounter.Diagnoses.Contains(newDiag))
+                {
+                    encounter.Diagnoses.Add(newDiag);
+                }
+            }
+        }
+
+        if (request.ReviewOfSystemsItems != null)
+        {
+            foreach (var existingRos in encounter.ReviewOfSystemsItems.ToList())
+            {
+                rosRepo?.Remove(existingRos, hardDelete: true);
+            }
+            encounter.ReviewOfSystemsItems.Clear();
+
+            var newRosItems = CreateConsultationCommandHandler.BuildRosEntities(encounter, request.ReviewOfSystemsItems, resolvedRosCategory ?? encounter.RosCategory);
+            foreach (var ros in newRosItems)
+            {
+                if (rosRepo != null)
+                {
+                    await rosRepo.AddAsync(ros, cancellationToken);
+                }
+                if (!encounter.ReviewOfSystemsItems.Contains(ros))
+                {
+                    encounter.ReviewOfSystemsItems.Add(ros);
+                }
             }
         }
 
         if (request.Prescriptions != null)
         {
-            // Remove previous prescriptions and replace with updated set
-            foreach (var rx in encounter.Prescriptions.ToList())
+            var previousRx = encounter.Prescriptions.ToList();
+            if (previousRx.Count > 0 && dispensingLogRepo != null)
             {
-                _prescriptionRepository.Remove(rx);
+                var oldRxIds = previousRx.Select(r => r.Id).ToHashSet();
+                var draftDispenseLogs = await dispensingLogRepo
+                    .Query(d => d.ClinicId == encounter.ClinicId &&
+                                d.PrescriptionItemId.HasValue &&
+                                oldRxIds.Contains(d.PrescriptionItemId.Value))
+                    .IgnoreQueryFilters()
+                    .ToListAsync(cancellationToken);
+                foreach (var dLog in draftDispenseLogs)
+                {
+                    if (dLog.Source == ClinicDispenseSource.DoctorConsultation && !dLog.IsConsultationValidated)
+                    {
+                        dispensingLogRepo.Remove(dLog, hardDelete: true);
+                    }
+                    else
+                    {
+                        dLog.PrescriptionItemId = null;
+                        dLog.PrescriptionItem = null;
+                    }
+                }
+            }
+
+            // Remove previous prescriptions and replace with updated set
+            foreach (var rx in previousRx)
+            {
+                _prescriptionRepository.Remove(rx, hardDelete: true);
             }
             encounter.Prescriptions.Clear();
 
             foreach (var rx in request.Prescriptions)
             {
+                var rxRos = RosCategoryHelper.ParseNullable(rx.RosCategory) ?? encounter.RosCategory;
                 var newRx = new PrescriptionItem
                 {
+                    Id = Guid.NewGuid(),
+                    TenantId = encounter.TenantId,
+                    ClinicId = encounter.ClinicId,
                     ConsultationEncounterId = encounter.Id,
-                    GenericName = rx.GenericName.Trim(),
-                    BrandName = rx.BrandName?.Trim(),
-                    Dosage = rx.Dosage.Trim(),
-                    Form = rx.Form.Trim(),
-                    Sig = rx.Sig.Trim(),
+                    GenericName = ConsultationPlanManagementMapper.Truncate(rx.GenericName, 150) ?? "Medication",
+                    BrandName = ConsultationPlanManagementMapper.Truncate(rx.BrandName, 150),
+                    Dosage = ConsultationPlanManagementMapper.Truncate(rx.Dosage, 50) ?? "As directed",
+                    Form = ConsultationPlanManagementMapper.Truncate(rx.Form, 50) ?? "Tablet",
+                    Sig = ConsultationPlanManagementMapper.Truncate(rx.Sig, 255) ?? "As directed",
                     Quantity = rx.Quantity,
                     DurationDays = rx.DurationDays,
                     Refills = rx.Refills,
                     IsDangerousDrug = rx.IsDangerousDrug,
                     Remarks = rx.Remarks?.Trim(),
                     PhilHealthDrugCode = rx.PhilHealthDrugCode?.Trim(),
+                    IsClinicDispensed = false,
+                    ClinicDispensedQuantity = rx.ClinicDispensedQuantity is > 0 ? rx.ClinicDispensedQuantity : null,
+                    RosCategory = rxRos,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = encounter.DoctorName
                 };
-                encounter.Prescriptions.Add(newRx);
                 await _prescriptionRepository.AddAsync(newRx, cancellationToken);
+                if (!encounter.Prescriptions.Contains(newRx))
+                {
+                    encounter.Prescriptions.Add(newRx);
+                }
             }
         }
+
+        await ConsultationDraftPersistenceHelper.SyncDraftOrdersAndAssociateArtifactsAsync(
+            encounter,
+            request.DraftDiagnosticOrders,
+            request.DraftProcedures,
+            request.DraftDentalTeeth,
+            request.DraftWorkspace,
+            repoProvider,
+            cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

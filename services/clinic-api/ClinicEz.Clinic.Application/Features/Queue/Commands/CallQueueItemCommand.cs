@@ -180,17 +180,29 @@ public sealed class CompleteQueueItemCommandHandler : IRequestHandler<CompleteQu
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
+    private readonly IRepository<ConsultationEncounter>? _consultationRepository;
+    private readonly IRepository<MedicalCertificate>? _medCertRepository;
+    private readonly IRepository<ReferralLetter>? _referralRepository;
+    private readonly IRepository<LabOrder>? _labOrderRepository;
 
     public CompleteQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null)
+        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null,
+        IRepository<ConsultationEncounter>? consultationRepository = null,
+        IRepository<MedicalCertificate>? medCertRepository = null,
+        IRepository<ReferralLetter>? referralRepository = null,
+        IRepository<LabOrder>? labOrderRepository = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _notificationDispatcher = notificationDispatcher;
+        _consultationRepository = consultationRepository;
+        _medCertRepository = medCertRepository;
+        _referralRepository = referralRepository;
+        _labOrderRepository = labOrderRepository;
     }
 
     public async Task<bool> Handle(CompleteQueueItemCommand request, CancellationToken cancellationToken)
@@ -201,6 +213,34 @@ public sealed class CompleteQueueItemCommandHandler : IRequestHandler<CompleteQu
         if (item == null)
         {
             throw new NotFoundException($"Queue item '{request.Id}' was not found in this clinic.");
+        }
+
+        if (item.VisitType == VisitType.Consultation)
+        {
+            var hasUnsignedEncounter = _consultationRepository != null &&
+                await _consultationRepository
+                    .Query(c => c.ClinicId == _clinicContext.ClinicId && c.QueueItemId == item.Id && !c.IsSigned)
+                    .AnyAsync(cancellationToken);
+
+            var hasUnsignedMedCert = _medCertRepository != null &&
+                await _medCertRepository
+                    .Query(m => m.ClinicId == _clinicContext.ClinicId && m.QueueItemId == item.Id && !m.IsSigned)
+                    .AnyAsync(cancellationToken);
+
+            var hasUnsignedReferral = _referralRepository != null &&
+                await _referralRepository
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && r.QueueItemId == item.Id && !r.IsSigned)
+                    .AnyAsync(cancellationToken);
+
+            var hasUnsignedLabOrder = _labOrderRepository != null &&
+                await _labOrderRepository
+                    .Query(o => o.ClinicId == _clinicContext.ClinicId && o.QueueItemId == item.Id && !o.IsSigned && o.Status != LabOrderStatus.Cancelled)
+                    .AnyAsync(cancellationToken);
+
+            if (hasUnsignedEncounter || hasUnsignedMedCert || hasUnsignedReferral || hasUnsignedLabOrder)
+            {
+                throw new BadRequestException("Cannot complete a consultation visit while an unsigned consultation encounter or staged clinical order is pending physician sign-off.");
+            }
         }
 
         item.Status = QueueStatus.Completed;

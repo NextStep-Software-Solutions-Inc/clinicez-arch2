@@ -59,23 +59,23 @@ export default function ReviewOfSystemsChecklist({
 
   const [filterText, setFilterText] = useState('');
 
+  const isPainOption = (code: string, name?: string | null) =>
+    code === '38' ||
+    code.toLowerCase().includes('pain') ||
+    (name?.toLowerCase() ?? '').includes('pain');
+
+  const isOtherOption = (code: string, name?: string | null) =>
+    code.toUpperCase() === 'X' ||
+    code.toLowerCase().includes('other') ||
+    (name?.toLowerCase() ?? '').includes('other');
+
   // Derive active inputs directly from items to preserve existing documented notes
   const activePainItem = useMemo(
-    () =>
-      items.find(
-        (i) =>
-          i.optionCode.toLowerCase().includes('pain') ||
-          (i.symptomName?.toLowerCase() ?? '').includes('pain')
-      ),
+    () => items.find((i) => isPainOption(i.optionCode, i.symptomName)),
     [items]
   );
   const activeOtherItem = useMemo(
-    () =>
-      items.find(
-        (i) =>
-          i.optionCode.toLowerCase().includes('other') ||
-          (i.symptomName?.toLowerCase() ?? '').includes('other')
-      ),
+    () => items.find((i) => isOtherOption(i.optionCode, i.symptomName)),
     [items]
   );
 
@@ -112,19 +112,11 @@ export default function ReviewOfSystemsChecklist({
   }, [items]);
 
   const hasPain = useMemo(() => {
-    return items.some(
-      (i) =>
-        i.optionCode.toLowerCase().includes('pain') ||
-        (i.symptomName?.toLowerCase() ?? '').includes('pain')
-    );
+    return items.some((i) => isPainOption(i.optionCode, i.symptomName));
   }, [items]);
 
   const hasOther = useMemo(() => {
-    return items.some(
-      (i) =>
-        i.optionCode.toLowerCase().includes('other') ||
-        (i.symptomName?.toLowerCase() ?? '').includes('other')
-    );
+    return items.some((i) => isOtherOption(i.optionCode, i.symptomName));
   }, [items]);
 
   const toggleItem = (code: string, label: string) => {
@@ -132,9 +124,8 @@ export default function ReviewOfSystemsChecklist({
     if (activeCodes.has(code)) {
       onChange(items.filter((i) => i.optionCode !== code));
     } else {
-      const isPain = code.toLowerCase().includes('pain') || label.toLowerCase().includes('pain');
-      const isOther =
-        code.toLowerCase().includes('other') || label.toLowerCase().includes('other');
+      const isPain = isPainOption(code, label);
+      const isOther = isOtherOption(code, label);
       const newItem: EncounterReviewOfSystemsItemDto = {
         optionCode: code,
         symptomName: label,
@@ -151,10 +142,7 @@ export default function ReviewOfSystemsChecklist({
     setPainSiteInput(site);
     onChange(
       items.map((i) =>
-        i.optionCode.toLowerCase().includes('pain') ||
-        (i.symptomName?.toLowerCase() ?? '').includes('pain')
-          ? { ...i, painSite: site || null }
-          : i
+        isPainOption(i.optionCode, i.symptomName) ? { ...i, painSite: site || null } : i
       )
     );
   };
@@ -163,10 +151,7 @@ export default function ReviewOfSystemsChecklist({
     setOtherSpecifyInput(text);
     onChange(
       items.map((i) =>
-        i.optionCode.toLowerCase().includes('other') ||
-        (i.symptomName?.toLowerCase() ?? '').includes('other')
-          ? { ...i, othersSpecifyText: text || null }
-          : i
+        isOtherOption(i.optionCode, i.symptomName) ? { ...i, othersSpecifyText: text || null } : i
       )
     );
   };
