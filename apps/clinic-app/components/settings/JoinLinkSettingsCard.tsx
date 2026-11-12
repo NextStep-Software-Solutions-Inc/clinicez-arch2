@@ -46,7 +46,7 @@ export default function JoinLinkSettingsCard({
   showSkeletons = false,
 }: JoinLinkSettingsCardProps) {
   const { isDesktop } = useBreakpoint();
-  const { facilityName, letterhead, loading: clinicLoading, refresh: refreshClinic } = useClinic();
+  const { facilityName, letterhead, loading: clinicLoading, refresh: refreshClinic, license, workspaceProfile } = useClinic();
   const isLoading = Boolean(showSkeletons || (clinicLoading && !settings));
   const resolvedFacilityName = (facilityName || settings?.clinicName || '').trim();
 
@@ -111,9 +111,12 @@ export default function JoinLinkSettingsCard({
       return formatReceptionCodeUrl(portalBase, joinCode.trim());
     }
     const ctx = resolveTenantContext();
-    const { tenantSlug, facilitySlug } = resolvePublicJoinSlugs(ctx, settings);
+    const { tenantSlug, facilitySlug } = resolvePublicJoinSlugs(ctx, settings, {
+      tenantSlug: workspaceProfile?.tenantSlug || license?.tenantSlug,
+      facilitySlug: license?.facilitySlug,
+    });
     return formatReceptionQrUrl(portalBase, tenantSlug, facilitySlug);
-  }, [settings, joinCode]);
+  }, [settings, joinCode, workspaceProfile?.tenantSlug, license?.tenantSlug, license?.facilitySlug]);
 
   // Live QR Specimen Matrix
   const qrSpecimen = useMemo(() => {

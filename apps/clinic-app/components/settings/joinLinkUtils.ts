@@ -55,14 +55,21 @@ export function sanitizePublicJoinSlug(value: unknown): string | null {
  */
 export function resolvePublicJoinSlugs(
   ctx?: PublicJoinTenantContext | null,
-  settings?: PublicJoinSlugSettings | null
+  settings?: PublicJoinSlugSettings | null,
+  fallback?: PublicJoinSlugSettings | null
 ): PublicJoinSlugs {
   const ctxTenant = sanitizePublicJoinSlug(ctx?.tenantSlug);
   const ctxFacility = sanitizePublicJoinSlug(ctx?.facilitySlug);
-  const settingsTenant = sanitizePublicJoinSlug(settings?.tenantSlug);
+
+  const settingsTenant =
+    sanitizePublicJoinSlug(settings?.tenantSlug) ||
+    sanitizePublicJoinSlug(fallback?.tenantSlug);
+
   const settingsFacility =
     sanitizePublicJoinSlug((settings as any)?.facilitySlug) ||
-    sanitizePublicJoinSlug((settings as any)?.clinicSlug);
+    sanitizePublicJoinSlug((settings as any)?.clinicSlug) ||
+    sanitizePublicJoinSlug(fallback?.facilitySlug) ||
+    sanitizePublicJoinSlug(fallback?.clinicSlug);
 
   if (ctxTenant && ctxFacility) {
     return {
@@ -72,15 +79,27 @@ export function resolvePublicJoinSlugs(
   }
 
   if (!ctxTenant && ctxFacility) {
+    const tenantSlug = settingsTenant || ctxFacility;
+    const facilitySlug =
+      settingsFacility ||
+      (settingsTenant && settingsTenant.toLowerCase() !== ctxFacility.toLowerCase() ? ctxFacility : 'main');
+
     return {
-      tenantSlug: settingsTenant || ctxFacility || 'clinic',
+      tenantSlug: tenantSlug || 'clinic',
+      facilitySlug: facilitySlug || 'main',
+    };
+  }
+
+  if (ctxTenant && !ctxFacility) {
+    return {
+      tenantSlug: ctxTenant,
       facilitySlug: settingsFacility || 'main',
     };
   }
 
   return {
-    tenantSlug: ctxTenant || settingsTenant || 'clinic',
-    facilitySlug: ctxFacility || settingsFacility || 'main',
+    tenantSlug: settingsTenant || 'clinic',
+    facilitySlug: settingsFacility || 'main',
   };
 }
 

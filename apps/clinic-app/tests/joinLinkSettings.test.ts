@@ -346,6 +346,24 @@ describe('GitHub #168: resolvePublicJoinSlugs prevents raw GUID leakage on multi
       )
     ).toEqual({ tenantSlug: 'clinic', facilitySlug: 'main' });
   });
+
+  test('resolves fallback tenantSlug and facilitySlug from workspaceProfile and license when settings are empty', () => {
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: null, facilitySlug: 'nextstep' },
+        { tenantId: RAW_TENANT_UUID },
+        { tenantSlug: 'nextstep-group', facilitySlug: 'downtown-opd' }
+      )
+    ).toEqual({ tenantSlug: 'nextstep-group', facilitySlug: 'downtown-opd' });
+
+    expect(
+      resolvePublicJoinSlugs(
+        { tenantSlug: null, facilitySlug: null },
+        { tenantId: RAW_TENANT_UUID },
+        { tenantSlug: 'apex-health' }
+      )
+    ).toEqual({ tenantSlug: 'apex-health', facilitySlug: 'main' });
+  });
 });
 
 describe('GitHub #160 & Split Specimen Card: Blank passcode locks expiration to Never', () => {

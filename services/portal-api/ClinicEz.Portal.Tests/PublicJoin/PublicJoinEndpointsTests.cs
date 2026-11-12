@@ -446,6 +446,19 @@ public class PublicJoinEndpointsTests : IDisposable
         Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
     }
 
+    [Fact]
+    public async Task GetFacilityJoinData_UnknownTenantSlugOrGuid_Returns404NotFound()
+    {
+        _clinic.IsJoinEnabled = true;
+        await _context.SaveChangesAsync();
+
+        var result = await PublicJoinEndpoints.GetFacilityJoinDataAsync(Guid.NewGuid().ToString(), "main-clinic", _context);
+        var notFound = Assert.IsAssignableFrom<IValueHttpResult>(result);
+        var response = Assert.IsAssignableFrom<ApiResponse<PublicFacilityJoinData>>(notFound.Value);
+        Assert.False(response.Succeeded);
+        Assert.Equal("NOT_FOUND", response.ErrorCode);
+    }
+
     [Theory]
     [InlineData("133900000", null, null, null)] // 9 digits
     [InlineData("13390000001", null, null, null)] // 11 digits
