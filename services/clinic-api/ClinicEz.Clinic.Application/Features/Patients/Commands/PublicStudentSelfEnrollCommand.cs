@@ -118,6 +118,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             : new Dictionary<string, object?>();
 
         customFields["classification"] = "Student";
+        customFields["affiliation"] = "Student";
         customFields["student_id"] = request.StudentId.Trim();
         if (!string.IsNullOrWhiteSpace(request.College)) customFields["college"] = request.College.Trim();
         if (!string.IsNullOrWhiteSpace(request.Program)) customFields["program"] = request.Program.Trim();
