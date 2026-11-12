@@ -227,9 +227,27 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] Guid? nurseId,
         [FromQuery] string? visitType,
         [FromQuery] string? status,
-        CancellationToken ct)
+        CancellationToken ct = default,
+        [FromQuery] string? acuity = null,
+        [FromQuery] string? search = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null,
+        [FromQuery] string? tableVisitType = null)
     {
-        var result = await _sender.Send(new GetClinicCensusReportQuery(startDate, endDate, doctorId, nurseId, visitType, status), ct);
+        var result = await _sender.Send(
+            new GetClinicCensusReportQuery(
+                startDate,
+                endDate,
+                doctorId,
+                nurseId,
+                visitType,
+                status,
+                acuity,
+                search,
+                page,
+                pageSize,
+                tableVisitType),
+            ct);
         return Ok(ApiResponse<ClinicCensusReportDto>.Success(result));
     }
 

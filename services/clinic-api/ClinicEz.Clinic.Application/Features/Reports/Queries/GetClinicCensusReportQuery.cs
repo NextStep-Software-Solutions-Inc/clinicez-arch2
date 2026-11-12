@@ -20,7 +20,12 @@ public sealed record GetClinicCensusReportQuery(
     Guid? DoctorId = null,
     Guid? NurseId = null,
     string? VisitType = null,
-    string? Status = null
+    string? Status = null,
+    string? Acuity = null,
+    string? Search = null,
+    int? Page = null,
+    int? PageSize = null,
+    string? TableVisitType = null
 ) : IRequest<ClinicCensusReportDto>
 {
     public GetClinicCensusReportQuery(
@@ -1043,7 +1048,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         ServiceDetails: loFallbackDetail,
                         Acuity: q.Priority.ToString(),
                         Disposition: lo.Stage.ToString(),
-                        ServiceItemName: "Outside Diagnostic Order",
+                        ServiceItemName: null,
                         ServiceFee: 0m
                     ));
                     continue;
@@ -1071,7 +1076,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         it.Status == LabOrderStatus.Completed ||
                         !string.IsNullOrWhiteSpace(it.ResultRemarks) ||
                         it.PerformedDate.HasValue ||
-                        (!lo.ConsultationId.HasValue && LookupCatalogPrice(it.TestCode, it.TestName, "Diagnostic") > 0m));
+                        LookupCatalogPrice(it.TestCode, it.TestName, "Diagnostic") > 0m);
 
                     if (isInClinicItem)
                         inClinicDiagItems.Add(it);
@@ -1118,19 +1123,23 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     ));
                 }
 
-                if (outsideDiagItems.Count > 0)
+                foreach (var outItem in outsideDiagItems)
                 {
-                    var loTests = string.Join(", ", outsideDiagItems.Select(it => it.TestName));
-                    var outsideTarget = loTargetLab ?? outsideDiagItems.Select(it => it.ExternalFacilityName).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
-                    var loDetail = !string.IsNullOrWhiteSpace(outsideTarget) ? $"{loTests} • {outsideTarget}" : loTests;
-                    var outsideItemLabel = outsideDiagItems.Count == 1
-                        ? $"{outsideDiagItems[0].TestName} (Outside)"
-                        : $"{outsideDiagItems.Count} Tests (Outside)";
+                    var outsideTarget = !string.IsNullOrWhiteSpace(outItem.ExternalFacilityName)
+                        ? outItem.ExternalFacilityName
+                        : loTargetLab;
+                    var outParts = new List<string> { outItem.TestName };
+                    if (!string.IsNullOrWhiteSpace(outItem.Category))
+                        outParts.Add($"({outItem.Category})");
+                    if (!string.IsNullOrWhiteSpace(outItem.Instructions))
+                        outParts.Add(outItem.Instructions);
+                    if (!string.IsNullOrWhiteSpace(outsideTarget))
+                        outParts.Add(outsideTarget);
 
                     diagnosticGroupsAndTestsCount++;
                     serviceRows.Add(new CensusServiceRowDto(
                         SubRowIndex: subRowIdx++,
-                        ServiceName: "Laboratory Requisition",
+                        ServiceName: "Diagnostic Order (Outside)",
                         ServiceTime: lo.OrderDate,
                         ReferenceNumber: lo.OrderNumber,
                         AttendingDoctor: loDoctor,
@@ -1142,10 +1151,10 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         ClinicalAssessment: string.Empty,
                         RosCategory: string.Empty,
                         SystemsReviewed: string.Empty,
-                        ServiceDetails: loDetail,
+                        ServiceDetails: string.Join(" • ", outParts),
                         Acuity: q.Priority.ToString(),
                         Disposition: lo.Stage.ToString(),
-                        ServiceItemName: outsideItemLabel,
+                        ServiceItemName: outItem.TestName,
                         ServiceFee: 0m
                     ));
                 }
@@ -1429,7 +1438,57 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             .ThenBy(r => r.RosCategory, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var preliminaryReport = new ClinicCensusReportDto(
+        // 11. Aggregate Full-Period Itemized Procedures & Diagnostics (unaffected by table pagination)
+        var procCountMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var inClinicDiagMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var outsideDiagMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var visitItem in items)
+        {
+            if (visitItem.ServiceRows == null) continue;
+            foreach (var sr in visitItem.ServiceRows)
+            {
+                if (sr.ServiceName.Equals("In-Clinic Procedure", StringComparison.OrdinalIgnoreCase))
+                {
+                    var label = (sr.ServiceItemName ?? sr.ServiceDetails?.Split('•')[0] ?? string.Empty).Trim();
+                    if (!string.IsNullOrWhiteSpace(label))
+                        procCountMap[label] = procCountMap.GetValueOrDefault(label) + 1;
+                }
+                else if (sr.ServiceName.Equals("In-Clinic Diagnostic", StringComparison.OrdinalIgnoreCase))
+                {
+                    var label = (sr.ServiceItemName ?? sr.ServiceDetails?.Split('•')[0] ?? string.Empty).Trim();
+                    if (!string.IsNullOrWhiteSpace(label))
+                        inClinicDiagMap[label] = inClinicDiagMap.GetValueOrDefault(label) + 1;
+                }
+                else if (sr.ServiceName.Equals("Diagnostic Order (Outside)", StringComparison.OrdinalIgnoreCase) ||
+                         sr.ServiceName.Equals("Laboratory Requisition", StringComparison.OrdinalIgnoreCase))
+                {
+                    var label = (sr.ServiceItemName ?? sr.ReferenceNumber ?? "Diagnostic Requisition").Trim();
+                    if (!string.IsNullOrWhiteSpace(label))
+                        outsideDiagMap[label] = outsideDiagMap.GetValueOrDefault(label) + 1;
+                }
+            }
+        }
+
+        var itemizedProcedures = procCountMap
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => new CensusServiceItemBreakdownDto(kv.Key, kv.Value))
+            .ToList();
+
+        var itemizedInClinicDiagnostics = inClinicDiagMap
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => new CensusServiceItemBreakdownDto(kv.Key, kv.Value))
+            .ToList();
+
+        var itemizedOutsideDiagnostics = outsideDiagMap
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => new CensusServiceItemBreakdownDto(kv.Key, kv.Value))
+            .ToList();
+
+        var fullPeriodReport = new ClinicCensusReportDto(
             StartDate: start,
             EndDate: end.AddDays(-1),
             TenantId: _clinicContext.TenantId,
@@ -1443,12 +1502,98 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             Providers: providerList.OrderByDescending(p => p.TotalEncounters).ToList(),
             Items: items,
             DispensingLedger: orderedLedger,
-            RosBreakdown: rosBreakdown
+            RosBreakdown: rosBreakdown,
+            ItemizedProcedures: itemizedProcedures,
+            ItemizedInClinicDiagnostics: itemizedInClinicDiagnostics,
+            ItemizedOutsideDiagnostics: itemizedOutsideDiagnostics
         );
 
-        return preliminaryReport with
+        var serviceBreakdown = ClinicCensusBreakdownResolver.ResolveServiceBreakdown(fullPeriodReport);
+
+        // 12. Server-Side Census Register Filtering & Pagination
+        IEnumerable<CensusItemDto> registerQuery = items;
+
+        if (!string.IsNullOrWhiteSpace(request.Acuity) &&
+            !request.Acuity.Equals("ALL", StringComparison.OrdinalIgnoreCase))
         {
-            ServiceBreakdown = ClinicCensusBreakdownResolver.ResolveServiceBreakdown(preliminaryReport)
+            var acuityFilter = request.Acuity.Trim();
+            registerQuery = registerQuery.Where(i =>
+                i.Acuity.Equals(acuityFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.TableVisitType) &&
+            !request.TableVisitType.Equals("ALL", StringComparison.OrdinalIgnoreCase))
+        {
+            var vtFilter = request.TableVisitType.Trim();
+            registerQuery = registerQuery.Where(i =>
+                i.VisitType.Equals(vtFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim();
+            bool ContainsTerm(string? value) =>
+                !string.IsNullOrWhiteSpace(value) &&
+                value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+            registerQuery = registerQuery.Where(i =>
+                ContainsTerm(i.PatientName) ||
+                ContainsTerm(i.PatientCode) ||
+                ContainsTerm(i.QueueNumber) ||
+                ContainsTerm(i.ServicesAvailedSummary) ||
+                ContainsTerm(i.RosCategory) ||
+                ContainsTerm(i.DispensedMedicinesSummary) ||
+                ContainsTerm(i.DoctorDiagnosis) ||
+                ContainsTerm(i.ClinicalAssessment) ||
+                ContainsTerm(i.NurseAssessment) ||
+                ContainsTerm(i.AttendingDoctor) ||
+                ContainsTerm(i.AttendingNurse) ||
+                ContainsTerm(i.ChiefComplaint) ||
+                ContainsTerm(i.SystemsReviewed) ||
+                ContainsTerm(i.ProceduresPerformed) ||
+                ContainsTerm(i.CustomFieldsSummary) ||
+                ContainsTerm(i.Classification) ||
+                (i.ServiceRows != null && i.ServiceRows.Any(sr =>
+                    ContainsTerm(sr.ServiceName) ||
+                    ContainsTerm(sr.ServiceItemName) ||
+                    ContainsTerm(sr.ReferenceNumber) ||
+                    ContainsTerm(sr.AttendingDoctor) ||
+                    ContainsTerm(sr.AttendingNurse) ||
+                    ContainsTerm(sr.ServiceDetails) ||
+                    ContainsTerm(sr.Disposition))));
+        }
+
+        var filteredRegisterList = registerQuery.ToList();
+        int totalRegisterItems = filteredRegisterList.Count;
+
+        bool isPaginatedRequest = request.Page.HasValue || request.PageSize.HasValue;
+        int effectivePageSize = isPaginatedRequest
+            ? Math.Clamp(request.PageSize ?? 20, 1, 200)
+            : totalRegisterItems;
+        int totalPages = isPaginatedRequest && effectivePageSize > 0
+            ? Math.Max(1, (int)Math.Ceiling(totalRegisterItems / (double)effectivePageSize))
+            : 1;
+        int effectivePage = isPaginatedRequest
+            ? Math.Clamp(request.Page ?? 1, 1, totalPages)
+            : 1;
+
+        var resultItems = isPaginatedRequest
+            ? filteredRegisterList
+                .Skip((effectivePage - 1) * effectivePageSize)
+                .Take(effectivePageSize)
+                .ToList()
+            : filteredRegisterList;
+
+        return fullPeriodReport with
+        {
+            Items = resultItems,
+            ServiceBreakdown = serviceBreakdown,
+            PageNumber = effectivePage,
+            PageSize = effectivePageSize,
+            TotalItems = totalRegisterItems,
+            TotalPages = totalPages,
+            HasPreviousPage = isPaginatedRequest && effectivePage > 1,
+            HasNextPage = isPaginatedRequest && effectivePage < totalPages
         };
     }
 }

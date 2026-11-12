@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
@@ -85,7 +85,13 @@ import {
 } from '../../components/consultation';
 
 type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
-type ReportType = 'DAILY_EOD' | 'CENSUS' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
+type ReportType =
+  | 'DAILY_EOD'
+  | 'CENSUS'
+  | 'DISPENSING_LEDGER'
+  | 'MORBIDITY'
+  | 'TAX_DISCOUNT'
+  | 'DOCTOR_SHARES';
 type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'PendingProcedure' | 'OnHold' | 'NoShow' | 'Completed';
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
@@ -359,6 +365,14 @@ export default function DashboardScreen() {
   const [censusSearchQuery, setCensusSearchQuery] = useState('');
   const [censusAcuityFilter, setCensusAcuityFilter] = useState<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>('ALL');
   const [censusVisitTypeFilter, setCensusVisitTypeFilter] = useState<string>('ALL');
+  const [censusPage, setCensusPage] = useState<number>(1);
+  const [censusPageSize, setCensusPageSize] = useState<10 | 20 | 50>(20);
+  const [censusPageLoading, setCensusPageLoading] = useState<boolean>(false);
+  const censusSearchMountedRef = useRef<boolean>(false);
+  const [dispensingSearchQuery, setDispensingSearchQuery] = useState<string>('');
+  const [dispensingSourceFilter, setDispensingSourceFilter] = useState<
+    'ALL' | 'Doctor Consultation' | 'Nurse Vitals Check'
+  >('ALL');
   const [expandedCustomRows, setExpandedCustomRows] = useState<Record<string, boolean>>({});
   const toggleCustomRow = useCallback((rowKey: string) => {
     setExpandedCustomRows((prev) => ({
@@ -398,7 +412,7 @@ export default function DashboardScreen() {
       clinicService.getQueue({ date: todayStr, view: 'All' }),
       clinicService.getClinicAnalytics(),
       clinicService.getDailyEodReport(todayStr),
-      clinicService.getCensusReport(todayStr, todayStr),
+      clinicService.getCensusReport(todayStr, todayStr, { page: 1, pageSize: 20 }),
       clinicService.getMorbidityReport(),
       clinicService.getTaxDiscountAuditReport(),
       clinicService.getDoctorSharesReport(),
@@ -438,30 +452,116 @@ export default function DashboardScreen() {
     setAnalyticsLoading(false);
   }, []);
 
-  const loadReports = useCallback(async (type: ReportType, start?: string, end?: string, date?: string) => {
-    setReportsError(null);
-    if (type === 'DAILY_EOD') {
-      const [data, err] = await clinicService.getDailyEodReport(date || getManilaTodayStr());
-      setEodReport(data ?? null);
-      if (err) setReportsError(err.message);
-    } else if (type === 'CENSUS') {
-      const [data, err] = await clinicService.getCensusReport(start || undefined, end || undefined);
-      setCensusReport(data ?? null);
-      if (err) setReportsError(err.message);
-    } else if (type === 'MORBIDITY') {
-      const [data, err] = await clinicService.getMorbidityReport(start || undefined, end || undefined);
-      setMorbidityReport(data ?? null);
-      if (err) setReportsError(err.message);
-    } else if (type === 'TAX_DISCOUNT') {
-      const [data, err] = await clinicService.getTaxDiscountAuditReport(start || undefined, end || undefined);
-      setTaxReport(data ?? null);
-      if (err) setReportsError(err.message);
-    } else if (type === 'DOCTOR_SHARES') {
-      const [data, err] = await clinicService.getDoctorSharesReport(start || undefined, end || undefined);
-      setDoctorSharesReport(data ?? null);
-      if (err) setReportsError(err.message);
+  const fetchCensusPage = useCallback(
+    async (params: {
+      start?: string;
+      end?: string;
+      page: number;
+      pageSize: 10 | 20 | 50;
+      acuity?: 'ALL' | 'Routine' | 'Urgent' | 'Emergency';
+      visitType?: string;
+      search?: string;
+    }) => {
+      setCensusPageLoading(true);
+      setReportsError(null);
+      const effectiveStart = params.start || reportsStartDate || getManilaTodayStr();
+      const effectiveEnd = params.end || reportsEndDate || getManilaTodayStr();
+      const [data, err] = await clinicService.getCensusReport(effectiveStart, effectiveEnd, {
+        page: params.page,
+        pageSize: params.pageSize,
+        acuity: params.acuity && params.acuity !== 'ALL' ? params.acuity : undefined,
+        tableVisitType:
+          params.visitType && params.visitType !== 'ALL' ? params.visitType : undefined,
+        search: params.search?.trim() ? params.search.trim() : undefined,
+      });
+      setCensusPageLoading(false);
+      if (data) {
+        setCensusReport(data);
+        setCensusPage(data.pageNumber ?? params.page);
+      }
+      if (err) {
+        setReportsError(err.message);
+      }
+    },
+    [reportsStartDate, reportsEndDate],
+  );
+
+  const loadReports = useCallback(
+    async (type: ReportType, start?: string, end?: string, date?: string) => {
+      setReportsError(null);
+      if (type === 'DAILY_EOD') {
+        const [data, err] = await clinicService.getDailyEodReport(date || getManilaTodayStr());
+        setEodReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'CENSUS' || type === 'DISPENSING_LEDGER') {
+        setCensusPage(1);
+        const [data, err] = await clinicService.getCensusReport(
+          start || undefined,
+          end || undefined,
+          {
+            page: 1,
+            pageSize: censusPageSize,
+            acuity:
+              type === 'CENSUS' && censusAcuityFilter !== 'ALL'
+                ? censusAcuityFilter
+                : undefined,
+            tableVisitType:
+              type === 'CENSUS' && censusVisitTypeFilter !== 'ALL'
+                ? censusVisitTypeFilter
+                : undefined,
+            search:
+              type === 'CENSUS' && censusSearchQuery.trim()
+                ? censusSearchQuery.trim()
+                : undefined,
+          },
+        );
+        setCensusReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'MORBIDITY') {
+        const [data, err] = await clinicService.getMorbidityReport(start || undefined, end || undefined);
+        setMorbidityReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'TAX_DISCOUNT') {
+        const [data, err] = await clinicService.getTaxDiscountAuditReport(start || undefined, end || undefined);
+        setTaxReport(data ?? null);
+        if (err) setReportsError(err.message);
+      } else if (type === 'DOCTOR_SHARES') {
+        const [data, err] = await clinicService.getDoctorSharesReport(start || undefined, end || undefined);
+        setDoctorSharesReport(data ?? null);
+        if (err) setReportsError(err.message);
+      }
+    },
+    [censusPageSize, censusAcuityFilter, censusVisitTypeFilter, censusSearchQuery],
+  );
+
+  useEffect(() => {
+    if (!censusSearchMountedRef.current) {
+      censusSearchMountedRef.current = true;
+      return;
     }
-  }, []);
+    if (activeTab !== 'REPORTS' || reportType !== 'CENSUS') {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCensusPage(1);
+      fetchCensusPage({
+        page: 1,
+        pageSize: censusPageSize,
+        acuity: censusAcuityFilter,
+        visitType: censusVisitTypeFilter,
+        search: censusSearchQuery,
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [
+    censusSearchQuery,
+    activeTab,
+    reportType,
+    censusPageSize,
+    censusAcuityFilter,
+    censusVisitTypeFilter,
+    fetchCensusPage,
+  ]);
 
   useEffect(() => {
     setLoading(true);
@@ -1049,6 +1149,7 @@ export default function DashboardScreen() {
   const reportTitle: Record<ReportType, string> = {
     DAILY_EOD: 'Daily end-of-day report',
     CENSUS: 'Clinic census report',
+    DISPENSING_LEDGER: 'Clinic Medicine & Supply Dispensing Ledger',
     MORBIDITY: 'Morbidity report',
     TAX_DISCOUNT: 'Senior / PWD discount audit',
     DOCTOR_SHARES: 'Doctor shares',
@@ -1059,6 +1160,7 @@ export default function DashboardScreen() {
       case 'DAILY_EOD':
         return clinicService.getDailyEodPdfUrl(eodDate || eodReport?.reportDate);
       case 'CENSUS':
+      case 'DISPENSING_LEDGER':
         return clinicService.getCensusPdfUrl(
           reportsStartDate || censusReport?.startDate,
           reportsEndDate || censusReport?.endDate
@@ -1127,6 +1229,7 @@ export default function DashboardScreen() {
   const currentReportReady =
     (reportType === 'DAILY_EOD' && !!eodReport) ||
     (reportType === 'CENSUS' && !!censusReport) ||
+    (reportType === 'DISPENSING_LEDGER' && !!censusReport) ||
     (reportType === 'MORBIDITY' && !!morbidityReport) ||
     (reportType === 'TAX_DISCOUNT' && !!taxReport) ||
     (reportType === 'DOCTOR_SHARES' && !!doctorSharesReport);
@@ -2090,55 +2193,93 @@ export default function DashboardScreen() {
       };
 
       const dispensingLedger = censusReport.dispensingLedger || [];
+      const isServerPaginated =
+        typeof censusReport.pageNumber === 'number' &&
+        typeof censusReport.totalItems === 'number' &&
+        (censusReport.pageSize ?? 0) > 0;
 
       const q = censusSearchQuery.trim().toLowerCase();
-      const filteredItems = (censusReport.items || []).filter((item) => {
-        if (censusAcuityFilter !== 'ALL' && (item.acuity || '').toLowerCase() !== censusAcuityFilter.toLowerCase()) {
-          return false;
-        }
-        if (censusVisitTypeFilter !== 'ALL' && (item.visitType || '').toLowerCase() !== censusVisitTypeFilter.toLowerCase()) {
-          return false;
-        }
-        if (!q) return true;
+      const rawItems = censusReport.items || [];
+      const filteredItems = isServerPaginated
+        ? rawItems
+        : rawItems.filter((item) => {
+            if (censusAcuityFilter !== 'ALL' && (item.acuity || '').toLowerCase() !== censusAcuityFilter.toLowerCase()) {
+              return false;
+            }
+            if (censusVisitTypeFilter !== 'ALL' && (item.visitType || '').toLowerCase() !== censusVisitTypeFilter.toLowerCase()) {
+              return false;
+            }
+            if (!q) return true;
 
-        const pills = formatCustomFieldPills(item.customFields).join(' ').toLowerCase();
-        const subRowsBlob = resolveCensusVisitServiceRows(item, dispensingLedger)
-          .map((sr) =>
-            [
-              sr.serviceName,
-              sr.referenceNumber ?? '',
-              sr.attendingDoctor ?? '',
-              sr.attendingNurse ?? '',
-              sr.doctorDiagnosis ?? '',
-              sr.serviceDetails ?? '',
-              sr.disposition ?? '',
-            ].join(' '),
-          )
-          .join(' ');
-        const searchableBlob = [
-          item.patientName,
-          item.patientCode,
-          item.queueNumber,
-          item.servicesAvailedSummary ?? '',
-          (item.servicesAvailed || []).join(' '),
-          item.rosCategory ?? '',
-          item.dispensedMedicinesSummary ?? '',
-          item.doctorDiagnosis ?? '',
-          item.clinicalAssessment ?? '',
-          item.nurseImpression ?? item.nurseAssessment ?? '',
-          item.attendingDoctor ?? '',
-          item.attendingNurse ?? '',
-          item.chiefComplaint ?? '',
-          item.systemsReviewed ?? '',
-          item.proceduresPerformed ?? '',
-          subRowsBlob,
-          pills,
-        ]
-          .join(' ')
-          .toLowerCase();
+            const pills = formatCustomFieldPills(item.customFields).join(' ').toLowerCase();
+            const subRowsBlob = resolveCensusVisitServiceRows(item, dispensingLedger)
+              .map((sr) =>
+                [
+                  sr.serviceName,
+                  sr.referenceNumber ?? '',
+                  sr.attendingDoctor ?? '',
+                  sr.attendingNurse ?? '',
+                  sr.doctorDiagnosis ?? '',
+                  sr.serviceDetails ?? '',
+                  sr.disposition ?? '',
+                ].join(' '),
+              )
+              .join(' ');
+            const searchableBlob = [
+              item.patientName,
+              item.patientCode,
+              item.queueNumber,
+              item.servicesAvailedSummary ?? '',
+              (item.servicesAvailed || []).join(' '),
+              item.rosCategory ?? '',
+              item.dispensedMedicinesSummary ?? '',
+              item.doctorDiagnosis ?? '',
+              item.clinicalAssessment ?? '',
+              item.nurseImpression ?? item.nurseAssessment ?? '',
+              item.attendingDoctor ?? '',
+              item.attendingNurse ?? '',
+              item.chiefComplaint ?? '',
+              item.systemsReviewed ?? '',
+              item.proceduresPerformed ?? '',
+              subRowsBlob,
+              pills,
+            ]
+              .join(' ')
+              .toLowerCase();
 
-        return searchableBlob.includes(q);
-      });
+            return searchableBlob.includes(q);
+          });
+
+      const effectivePage = censusReport.pageNumber ?? censusPage;
+      const effectivePageSize =
+        censusReport.pageSize && censusReport.pageSize > 0
+          ? censusReport.pageSize
+          : censusPageSize;
+      const totalMatchingEncounters =
+        typeof censusReport.totalItems === 'number'
+          ? censusReport.totalItems
+          : filteredItems.length;
+      const effectiveTotalPages = Math.max(
+        1,
+        censusReport.totalPages ??
+          Math.ceil(totalMatchingEncounters / Math.max(1, effectivePageSize)),
+      );
+      const hasPrevPage =
+        typeof censusReport.hasPreviousPage === 'boolean'
+          ? censusReport.hasPreviousPage
+          : effectivePage > 1;
+      const hasNextPage =
+        typeof censusReport.hasNextPage === 'boolean'
+          ? censusReport.hasNextPage
+          : effectivePage < effectiveTotalPages;
+      const rangeStart =
+        totalMatchingEncounters === 0
+          ? 0
+          : (effectivePage - 1) * effectivePageSize + 1;
+      const rangeEnd =
+        totalMatchingEncounters === 0
+          ? 0
+          : Math.min(totalMatchingEncounters, rangeStart + filteredItems.length - 1);
 
       return (
         <View style={styles.listGap}>
@@ -2305,32 +2446,70 @@ export default function DashboardScreen() {
 
                   const procItemCounts = new Map<string, number>();
                   const inClinicDiagCounts = new Map<string, number>();
-                  let outsideDiagOrdersCount = 0;
+                  const outsideDiagCounts = new Map<string, number>();
 
-                  for (const visitItem of itemsList) {
-                    const visitSubs = resolveCensusVisitServiceRows(visitItem, dispensingLedger);
-                    for (const sr of visitSubs) {
-                      if (sr.serviceName === 'In-Clinic Procedure') {
-                        const pLabel = (sr.serviceItemName || sr.serviceDetails?.split('•')[0] || '').trim();
-                        if (pLabel) {
-                          procItemCounts.set(pLabel, (procItemCounts.get(pLabel) ?? 0) + 1);
+                  if (
+                    censusReport.itemizedProcedures ||
+                    censusReport.itemizedInClinicDiagnostics ||
+                    censusReport.itemizedOutsideDiagnostics
+                  ) {
+                    for (const p of censusReport.itemizedProcedures ?? []) {
+                      if (p.itemName) procItemCounts.set(p.itemName, p.count);
+                    }
+                    for (const d of censusReport.itemizedInClinicDiagnostics ?? []) {
+                      if (d.itemName) inClinicDiagCounts.set(d.itemName, d.count);
+                    }
+                    for (const d of censusReport.itemizedOutsideDiagnostics ?? []) {
+                      if (d.itemName) outsideDiagCounts.set(d.itemName, d.count);
+                    }
+                  } else {
+                    for (const visitItem of itemsList) {
+                      const visitIsolated = resolveCensusIsolatedServiceRows(
+                        visitItem,
+                        dispensingLedger,
+                      );
+                      for (const sr of visitIsolated) {
+                        if (sr.serviceName === 'In-Clinic Procedure') {
+                          const pLabel = (
+                            sr.serviceItemName ||
+                            sr.serviceDetails?.split('•')[0] ||
+                            ''
+                          ).trim();
+                          if (pLabel) {
+                            procItemCounts.set(pLabel, (procItemCounts.get(pLabel) ?? 0) + 1);
+                          }
+                        } else if (sr.serviceName === 'In-Clinic Diagnostic') {
+                          const dLabel = (
+                            sr.serviceItemName ||
+                            sr.serviceDetails?.split('•')[0] ||
+                            ''
+                          ).trim();
+                          if (dLabel) {
+                            inClinicDiagCounts.set(
+                              dLabel,
+                              (inClinicDiagCounts.get(dLabel) ?? 0) + 1,
+                            );
+                          }
+                        } else if (sr.serviceName === 'Diagnostic Order (Outside)') {
+                          const outLabel = (
+                            sr.serviceItemName ||
+                            sr.referenceNumber ||
+                            'Diagnostic Requisition'
+                          ).trim();
+                          if (outLabel) {
+                            outsideDiagCounts.set(
+                              outLabel,
+                              (outsideDiagCounts.get(outLabel) ?? 0) + 1,
+                            );
+                          }
                         }
-                      } else if (sr.serviceName === 'In-Clinic Diagnostic') {
-                        const dLabel = (sr.serviceItemName || sr.serviceDetails?.split('•')[0] || '').trim();
-                        if (dLabel) {
-                          inClinicDiagCounts.set(dLabel, (inClinicDiagCounts.get(dLabel) ?? 0) + 1);
-                        }
-                      } else if (
-                        sr.serviceName === 'Laboratory Requisition' ||
-                        sr.serviceName === 'Diagnostic Order (Outside)'
-                      ) {
-                        outsideDiagOrdersCount += 1;
                       }
                     }
                   }
 
                   const itemizedProcedures = Array.from(procItemCounts.entries());
                   const itemizedInClinicDiags = Array.from(inClinicDiagCounts.entries());
+                  const itemizedOutsideDiags = Array.from(outsideDiagCounts.entries());
 
                   return (
                     <View style={styles.demographicsCardContent}>
@@ -2359,7 +2538,7 @@ export default function DashboardScreen() {
                           ))}
                         </View>
                       )}
-                      {(itemizedInClinicDiags.length > 0 || outsideDiagOrdersCount > 0) && (
+                      {(itemizedInClinicDiags.length > 0 || itemizedOutsideDiags.length > 0) && (
                         <View style={styles.badgeWrapRow}>
                           <ThemedText variant="captionBold" color={theme.colors.textMuted}>
                             Diagnostics:
@@ -2372,13 +2551,14 @@ export default function DashboardScreen() {
                               size="xs"
                             />
                           ))}
-                          {outsideDiagOrdersCount > 0 && (
+                          {itemizedOutsideDiags.map(([dName, count]) => (
                             <Badge
-                              label={`Outside Orders: ${outsideDiagOrdersCount}`}
+                              key={`diag-out-${dName}`}
+                              label={`Outside • ${dName}: ${count}`}
                               variant="purple"
                               size="xs"
                             />
-                          )}
+                          ))}
                         </View>
                       )}
                     </View>
@@ -2473,7 +2653,17 @@ export default function DashboardScreen() {
                       <Pressable
                         key={acuity}
                         style={[styles.filterChip, active && styles.filterChipActive]}
-                        onPress={() => setCensusAcuityFilter(acuity)}
+                        onPress={() => {
+                          setCensusAcuityFilter(acuity);
+                          setCensusPage(1);
+                          fetchCensusPage({
+                            page: 1,
+                            pageSize: censusPageSize,
+                            acuity,
+                            visitType: censusVisitTypeFilter,
+                            search: censusSearchQuery,
+                          });
+                        }}
                         accessibilityRole="button"
                         accessibilityLabel={`Filter census acuity ${acuity}`}
                       >
@@ -2510,7 +2700,17 @@ export default function DashboardScreen() {
                       <Pressable
                         key={vt}
                         style={[styles.filterChip, active && styles.filterChipActive]}
-                        onPress={() => setCensusVisitTypeFilter(vt)}
+                        onPress={() => {
+                          setCensusVisitTypeFilter(vt);
+                          setCensusPage(1);
+                          fetchCensusPage({
+                            page: 1,
+                            pageSize: censusPageSize,
+                            acuity: censusAcuityFilter,
+                            visitType: vt,
+                            search: censusSearchQuery,
+                          });
+                        }}
                         accessibilityRole="button"
                         accessibilityLabel={`Filter census visit type ${vt}`}
                       >
@@ -2532,7 +2732,11 @@ export default function DashboardScreen() {
           <Card style={styles.censusTableCard}>
             <CardHeader
               title="Census Register"
-              subtitle={`Showing ${filteredItems.length} of ${censusReport.items?.length ?? 0} encounters • ${formatDateRangeLabel(reportsStartDate || censusReport.startDate, reportsEndDate || censusReport.endDate)}`}
+              subtitle={
+                totalMatchingEncounters > 0
+                  ? `Showing ${rangeStart}–${rangeEnd} of ${totalMatchingEncounters} encounters • Page ${effectivePage} of ${effectiveTotalPages} • ${formatDateRangeLabel(reportsStartDate || censusReport.startDate, reportsEndDate || censusReport.endDate)}`
+                  : `Showing 0 of ${censusReport.summary.totalCensus ?? 0} encounters • ${formatDateRangeLabel(reportsStartDate || censusReport.startDate, reportsEndDate || censusReport.endDate)}`
+              }
               rightAction={
                 <View style={styles.censusHeaderActions}>
                   <Button
@@ -2664,8 +2868,12 @@ export default function DashboardScreen() {
                     const totalInClinicDiagRows = isolatedServiceRows.filter(
                       (r) => r.serviceName === 'In-Clinic Diagnostic',
                     ).length;
+                    const totalOutsideDiagRows = isolatedServiceRows.filter(
+                      (r) => r.serviceName === 'Diagnostic Order (Outside)',
+                    ).length;
                     let procOrdinal = 0;
                     let inClinicDiagOrdinal = 0;
+                    let outsideDiagOrdinal = 0;
 
                     const computedFeesSum = isolatedServiceRows.reduce(
                       (acc, r) => acc + (r.serviceFee ?? 0),
@@ -2808,6 +3016,7 @@ export default function DashboardScreen() {
                             const isOutsideDiagRow = sub.serviceName === 'Diagnostic Order (Outside)';
                             if (isProcRow) procOrdinal += 1;
                             if (isInClinicDiagRow) inClinicDiagOrdinal += 1;
+                            if (isOutsideDiagRow) outsideDiagOrdinal += 1;
 
                             const subBadgeVariant: BadgeVariant =
                               sub.serviceName === 'Doctor Consultation'
@@ -2829,7 +3038,7 @@ export default function DashboardScreen() {
                               : isInClinicDiagRow
                                 ? `${inClinicDiagOrdinal} of ${totalInClinicDiagRows}`
                                 : isOutsideDiagRow
-                                  ? '1 Order'
+                                  ? `${outsideDiagOrdinal} of ${totalOutsideDiagRows}`
                                   : '';
 
                             const rowFee = sub.serviceFee ?? 0;
@@ -3053,15 +3262,259 @@ export default function DashboardScreen() {
                 </View>
               </ScrollView>
             )}
+
+            {/* Server-Side Pagination Bar */}
+            <View style={styles.censusPaginationFooter} testID="census-server-pagination">
+              <View style={styles.censusPaginationInfoRow}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {totalMatchingEncounters > 0
+                    ? `Rows ${rangeStart}–${rangeEnd} of ${totalMatchingEncounters}`
+                    : '0 matching encounters'}
+                </ThemedText>
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Per page:
+                  </ThemedText>
+                  {([10, 20, 50] as const).map((sz) => {
+                    const activeSize = censusPageSize === sz;
+                    return (
+                      <Pressable
+                        key={`census-ps-${sz}`}
+                        style={[styles.filterChip, activeSize && styles.filterChipActive]}
+                        onPress={() => {
+                          setCensusPageSize(sz);
+                          setCensusPage(1);
+                          fetchCensusPage({
+                            page: 1,
+                            pageSize: sz,
+                            acuity: censusAcuityFilter,
+                            visitType: censusVisitTypeFilter,
+                            search: censusSearchQuery,
+                          });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Set census rows per page to ${sz}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={activeSize ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {sz}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.censusPaginationControls}>
+                <Button
+                  title="First"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasPrevPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: 1,
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="First census page"
+                />
+                <Button
+                  title="Previous"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasPrevPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: Math.max(1, effectivePage - 1),
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="Previous census page"
+                />
+                <Badge
+                  label={
+                    censusPageLoading
+                      ? 'Loading...'
+                      : `Page ${effectivePage} of ${effectiveTotalPages}`
+                  }
+                  variant="neutral"
+                  size="sm"
+                />
+                <Button
+                  title="Next"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasNextPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: Math.min(effectiveTotalPages, effectivePage + 1),
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="Next census page"
+                />
+                <Button
+                  title="Last"
+                  variant="outline"
+                  size="xs"
+                  disabled={!hasNextPage || censusPageLoading}
+                  onPress={() =>
+                    fetchCensusPage({
+                      page: effectiveTotalPages,
+                      pageSize: censusPageSize,
+                      acuity: censusAcuityFilter,
+                      visitType: censusVisitTypeFilter,
+                      search: censusSearchQuery,
+                    })
+                  }
+                  accessibilityLabel="Last census page"
+                />
+              </View>
+            </View>
+          </Card>
+        </View>
+      );
+    }
+
+    if (reportType === 'DISPENSING_LEDGER' && censusReport) {
+      const dispensingLedger = censusReport.dispensingLedger || [];
+      const pendingReviewCount = dispensingLedger.filter((entry) => {
+        const meta = resolveCensusLedgerEntryMeta(entry);
+        return !meta.isReviewedByDoctor;
+      }).length;
+      const totalUnits =
+        censusReport.summary.totalDispensedUnits ??
+        dispensingLedger.reduce((sum, e) => sum + (e.quantityDispensed ?? 0), 0);
+      const visitsWithDispensing = censusReport.summary.visitsWithMedicineDispensing ?? 0;
+
+      const ledgerQuery = dispensingSearchQuery.trim().toLowerCase();
+      const filteredDispensingLedger = dispensingLedger.filter((entry) => {
+        const meta = resolveCensusLedgerEntryMeta(entry);
+        if (
+          dispensingSourceFilter !== 'ALL' &&
+          meta.sourceBadgeLabel !== dispensingSourceFilter
+        ) {
+          return false;
+        }
+        if (!ledgerQuery) return true;
+        const blob = [
+          entry.queueNumber ?? '',
+          entry.patientName,
+          entry.itemName,
+          entry.dosageOrSpec ?? '',
+          entry.dispensedByStaffName,
+          entry.rosCategoryLabel || getRosShortLabel(entry.rosCategory),
+          entry.directionsOrInstructions ?? '',
+          meta.sourceBadgeLabel,
+          meta.categoryBadgeLabel,
+        ]
+          .join(' ')
+          .toLowerCase();
+        return blob.includes(ledgerQuery);
+      });
+
+      return (
+        <View style={styles.listGap}>
+          <View style={styles.statRow}>
+            <StatCard
+              style={styles.statItem}
+              label="Ledger Entries"
+              value={dispensingLedger.length}
+              subtext={formatDateRangeLabel(
+                reportsStartDate || censusReport.startDate,
+                reportsEndDate || censusReport.endDate,
+              )}
+              icon="pill"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Total Units Dispensed"
+              value={totalUnits}
+              subtext="Medicines & medical supplies"
+              icon="activity"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Visits w/ Dispensing"
+              value={visitsWithDispensing}
+              subtext="Doctor starter stock & nurse OTC"
+              icon="patients"
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Pending MD Review"
+              value={pendingReviewCount}
+              subtext="Async physician oversight"
+              icon="stethoscope"
+            />
+          </View>
+
+          <Card>
+            <CardContent style={styles.censusFilterCardContent}>
+              <View style={styles.censusSearchRow}>
+                <View style={styles.flexFill}>
+                  <Input
+                    label="Search Dispensing Ledger"
+                    placeholder="Search by patient, ticket, medicine or supply, staff, ROS category..."
+                    value={dispensingSearchQuery}
+                    onChangeText={setDispensingSearchQuery}
+                  />
+                </View>
+              </View>
+              <View style={styles.censusFilterPillsRow}>
+                <View style={styles.censusFilterPillsGroup}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    Source Workflow:
+                  </ThemedText>
+                  {(
+                    [
+                      'ALL',
+                      'Doctor Consultation',
+                      'Nurse Vitals Check',
+                    ] as const
+                  ).map((src) => {
+                    const active = dispensingSourceFilter === src;
+                    return (
+                      <Pressable
+                        key={src}
+                        style={[styles.filterChip, active && styles.filterChipActive]}
+                        onPress={() => setDispensingSourceFilter(src)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Filter dispensing source ${src}`}
+                      >
+                        <ThemedText
+                          variant="caption"
+                          color={active ? theme.colors.onPrimary : theme.colors.text}
+                        >
+                          {src}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </CardContent>
           </Card>
 
           {/* Unified Clinic Medicine & Medical Supply Dispensing Ledger */}
           <Card style={styles.censusTableCard}>
             <CardHeader
               title="Clinic Medicine & Supply Dispensing Ledger"
-              subtitle={`Unified non-pharmacy ledger across Doctor Consultations & Nurse Vitals Checks (${dispensingLedger.length} entries)`}
+              subtitle={`Showing ${filteredDispensingLedger.length} of ${dispensingLedger.length} entries • Unified non-pharmacy ledger across Doctor Consultations & Nurse Vitals Checks`}
             />
-            {dispensingLedger.length === 0 ? (
+            {filteredDispensingLedger.length === 0 ? (
               <EmptyState
                 icon="pill"
                 title="No clinic stock medicines or supplies dispensed in this period"
@@ -3107,7 +3560,7 @@ export default function DashboardScreen() {
                     </View>
                   </View>
 
-                  {dispensingLedger.map((entry, idx) => {
+                  {filteredDispensingLedger.map((entry, idx) => {
                     const isEven = idx % 2 === 0;
                     const ledgerMeta = resolveCensusLedgerEntryMeta(entry);
                     return (
@@ -3370,6 +3823,7 @@ export default function DashboardScreen() {
             options={[
               { value: 'DAILY_EOD', label: 'End of day' },
               { value: 'CENSUS', label: 'Clinic census' },
+              { value: 'DISPENSING_LEDGER', label: 'Dispensing ledger' },
               { value: 'MORBIDITY', label: 'Morbidity' },
               { value: 'TAX_DISCOUNT', label: 'Discount audit' },
               { value: 'DOCTOR_SHARES', label: 'Doctor shares' },
@@ -3377,7 +3831,7 @@ export default function DashboardScreen() {
           />
         </View>
         <View style={styles.reportActionsRow}>
-          {reportType === 'CENSUS' && (
+          {(reportType === 'CENSUS' || reportType === 'DISPENSING_LEDGER') && (
             <Button
               title={isExportingExcel ? 'Exporting...' : 'Export Excel (.xlsx)'}
               variant="outline"
@@ -4775,5 +5229,29 @@ const styles = StyleSheet.create({
   dispensingLedgerInner: {
     width: '100%',
     minWidth: 1200,
+  },
+  censusPaginationFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  censusPaginationInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  censusPaginationControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
   },
 });

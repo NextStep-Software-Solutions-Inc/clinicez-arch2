@@ -2019,14 +2019,65 @@ export function resolveCensusIsolatedServiceRows(
   }
 
   for (const sub of additionalSubRows) {
-    const normalizedServiceName =
-      sub.serviceName === 'Laboratory Requisition'
-        ? 'Diagnostic Order (Outside)'
-        : sub.serviceName;
+    if (
+      sub.serviceName === 'Laboratory Requisition' ||
+      sub.serviceName === 'Diagnostic Order (Outside)'
+    ) {
+      const rawItemName = (sub.serviceItemName || '').trim();
+      const isGroupedLabel =
+        !rawItemName ||
+        /^\d+\s+Tests/i.test(rawItemName) ||
+        /^Outside Diagnostic Order$/i.test(rawItemName) ||
+        rawItemName.includes(',');
+
+      if (isGroupedLabel) {
+        const [testsSegment, ...restSegments] = (sub.serviceDetails || '')
+          .split('•')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const parsedTests = (testsSegment || '')
+          .split(',')
+          .map((t) => t.trim())
+          .filter(
+            (t) =>
+              Boolean(t) &&
+              !/^signed diagnostic requisition$/i.test(t) &&
+              !/^diagnostic requisition$/i.test(t),
+          );
+
+        if (parsedTests.length > 0) {
+          for (const testName of parsedTests) {
+            isolated.push({
+              ...sub,
+              subRowIndex: rowIndex++,
+              serviceName: 'Diagnostic Order (Outside)',
+              serviceItemName: testName,
+              serviceDetails: [testName, ...restSegments].filter(Boolean).join(' • '),
+              serviceFee: 0,
+            });
+          }
+          continue;
+        }
+      }
+
+      const cleanedItemName = rawItemName
+        ? rawItemName.replace(/\s*\(Outside\)$/i, '').trim() || null
+        : null;
+
+      isolated.push({
+        ...sub,
+        subRowIndex: rowIndex++,
+        serviceName: 'Diagnostic Order (Outside)',
+        serviceItemName: cleanedItemName,
+        serviceFee: 0,
+      });
+      continue;
+    }
+
     isolated.push({
       ...sub,
       subRowIndex: rowIndex++,
-      serviceName: normalizedServiceName,
+      serviceName: sub.serviceName,
       serviceFee: typeof sub.serviceFee === 'number' ? sub.serviceFee : 0,
     });
   }
@@ -2150,6 +2201,11 @@ export function resolveCensusLedgerEntryMeta(
   };
 }
 
+export interface CensusServiceItemBreakdown {
+  itemName: string;
+  count: number;
+}
+
 export interface ClinicCensusReport {
   startDate: string;
   endDate: string;
@@ -2170,14 +2226,27 @@ export interface ClinicCensusReport {
   dispensingLedger?: CensusDispensingLedgerEntry[];
   serviceBreakdown?: CensusServiceBreakdown[];
   rosBreakdown?: CensusRosBreakdown[];
+  pageNumber?: number;
+  pageSize?: number;
+  totalItems?: number;
+  totalPages?: number;
+  hasPreviousPage?: boolean;
+  hasNextPage?: boolean;
+  itemizedProcedures?: CensusServiceItemBreakdown[];
+  itemizedInClinicDiagnostics?: CensusServiceItemBreakdown[];
+  itemizedOutsideDiagnostics?: CensusServiceItemBreakdown[];
 }
 
 export interface CensusFilterOptions {
   doctorId?: string;
   nurseId?: string;
   visitType?: string;
+  tableVisitType?: string;
   acuity?: string;
   status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface PatientProblemRecord {
@@ -4170,8 +4239,12 @@ export const clinicService = {
     if (options?.doctorId) params.append('doctorId', options.doctorId);
     if (options?.nurseId) params.append('nurseId', options.nurseId);
     if (options?.visitType) params.append('visitType', options.visitType);
+    if (options?.tableVisitType) params.append('tableVisitType', options.tableVisitType);
     if (options?.acuity) params.append('acuity', options.acuity);
     if (options?.status) params.append('status', options.status);
+    if (options?.search) params.append('search', options.search);
+    if (typeof options?.page === 'number') params.append('page', String(options.page));
+    if (typeof options?.pageSize === 'number') params.append('pageSize', String(options.pageSize));
     const qs = params.toString();
     return clinicApiClient.get<ClinicCensusReport>(`/reports/census${qs ? `?${qs}` : ''}`);
   },

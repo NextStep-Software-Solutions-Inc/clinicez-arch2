@@ -19,7 +19,21 @@ public sealed record ClinicCensusReportDto(
     List<CensusItemDto> Items,
     IReadOnlyList<CensusDispensingLedgerItemDto>? DispensingLedger = null,
     IReadOnlyList<CensusServiceBreakdownDto>? ServiceBreakdown = null,
-    IReadOnlyList<CensusRosBreakdownDto>? RosBreakdown = null
+    IReadOnlyList<CensusRosBreakdownDto>? RosBreakdown = null,
+    int PageNumber = 1,
+    int PageSize = 0,
+    int TotalItems = 0,
+    int TotalPages = 1,
+    bool HasPreviousPage = false,
+    bool HasNextPage = false,
+    IReadOnlyList<CensusServiceItemBreakdownDto>? ItemizedProcedures = null,
+    IReadOnlyList<CensusServiceItemBreakdownDto>? ItemizedInClinicDiagnostics = null,
+    IReadOnlyList<CensusServiceItemBreakdownDto>? ItemizedOutsideDiagnostics = null
+);
+
+public sealed record CensusServiceItemBreakdownDto(
+    string ItemName,
+    int Count
 );
 
 public sealed record CensusSummaryDto(

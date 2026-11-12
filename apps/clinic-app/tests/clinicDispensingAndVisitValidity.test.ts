@@ -1161,7 +1161,7 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
       expect(dashboardSource).toContain('resolveCensusVisitServiceRows(item, dispensingLedger)');
     });
 
-    test('6.7 Census Register isolates every rendered service row with per-service fees, Visit Type column, chip overflow guard, 1-of-N procedures & in-clinic diagnostics, and 1 grouped outside diagnostic order', () => {
+    test('6.7 Census Register isolates every rendered service row with per-service fees, Visit Type column, chip overflow guard, 1-of-N procedures & in-clinic/outside diagnostics, dedicated Dispensing Ledger tab, and server-side pagination', async () => {
       const visitWithDiagnosticsAndProcedures = {
         id: 'q-iso-001',
         queueNumber: 'Q-012',
@@ -1277,6 +1277,7 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
         'In-Clinic Diagnostic',
         'In-Clinic Diagnostic',
         'Diagnostic Order (Outside)',
+        'Diagnostic Order (Outside)',
       ]);
 
       // Vitals & Triage isolated from Doctor Diagnosis
@@ -1301,14 +1302,60 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
       // Medical Certificate fee reflected accurately
       expect(isolated[4].serviceFee).toBe(150);
 
-      // 1-of-N In-Clinic Diagnostics vs 1 Grouped Outside Diagnostic Order
+      // 1-of-N In-Clinic Diagnostics AND 1-of-N Outside Diagnostic Orders (individual tests, zero count collapse)
       expect(isolated[5].serviceItemName).toBe('Complete Blood Count (CBC)');
       expect(isolated[5].serviceFee).toBe(300);
       expect(isolated[6].serviceItemName).toBe('Random Blood Sugar (RBS)');
       expect(isolated[6].serviceFee).toBe(200);
       expect(isolated[7].serviceName).toBe('Diagnostic Order (Outside)');
-      expect(isolated[7].serviceItemName).toBe('2 Tests (Outside)');
+      expect(isolated[7].serviceItemName).toBe('Chest X-Ray PA');
+      expect(isolated[7].serviceDetails).toContain('Hi-Precision Diagnostics');
       expect(isolated[7].serviceFee).toBe(0);
+      expect(isolated[8].serviceName).toBe('Diagnostic Order (Outside)');
+      expect(isolated[8].serviceItemName).toBe('Sputum AFB');
+      expect(isolated[8].serviceDetails).toContain('Hi-Precision Diagnostics');
+      expect(isolated[8].serviceFee).toBe(0);
+
+      // Verify getCensusReport passes server-side pagination & filter query params
+      const origGet = clinicApiClient.get;
+      const mockGet = mock(() =>
+        Promise.resolve([
+          {
+            startDate: '2026-11-12',
+            endDate: '2026-11-12',
+            generatedAt: '2026-11-12T09:00:00Z',
+            summary: { totalCensus: 45, newPatients: 10, returningPatients: 35 } as any,
+            demographics: {} as any,
+            items: [],
+            pageNumber: 2,
+            pageSize: 20,
+            totalItems: 45,
+            totalPages: 3,
+            hasPreviousPage: true,
+            hasNextPage: true,
+          },
+          null,
+        ]),
+      );
+      (clinicApiClient as any).get = mockGet;
+      try {
+        await clinicService.getCensusReport('2026-11-12', '2026-11-12', {
+          page: 2,
+          pageSize: 20,
+          acuity: 'Urgent',
+          tableVisitType: 'AcuteIllnessConsultation',
+          search: 'Santos',
+        });
+        const lastUrl = String((mockGet.mock.calls as any[])[0]?.[0] ?? '');
+        expect(lastUrl).toContain('/reports/census?');
+        expect(lastUrl).toContain('page=2');
+        expect(lastUrl).toContain('pageSize=20');
+        expect(lastUrl).toContain('acuity=Urgent');
+        expect(lastUrl).toContain('tableVisitType=AcuteIllnessConsultation');
+        expect(lastUrl).toContain('search=Santos');
+      } finally {
+        (clinicApiClient as any).get = origGet;
+      }
 
       const badgeSource = fs.readFileSync(
         path.join(APP_ROOT, 'components/ui/Badge.tsx'),
@@ -1324,7 +1371,9 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
       expect(dashboardSource).toContain('Visit Type');
       expect(dashboardSource).toContain('Service Fee');
       expect(dashboardSource).toContain('Performed Procedures:');
-      expect(dashboardSource).toContain('Outside Orders:');
+      expect(dashboardSource).toContain('Outside • ');
+      expect(dashboardSource).toContain("{ value: 'DISPENSING_LEDGER', label: 'Dispensing ledger' }");
+      expect(dashboardSource).toContain('census-server-pagination');
       expect(dashboardSource).toContain('resolveCensusIsolatedServiceRows(item, dispensingLedger)');
     });
   });
