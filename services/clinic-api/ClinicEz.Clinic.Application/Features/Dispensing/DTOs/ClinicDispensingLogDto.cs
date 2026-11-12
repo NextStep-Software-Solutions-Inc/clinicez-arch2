@@ -67,7 +67,7 @@ public static class ClinicDispensingLogMapper
             log.PatientName,
             log.QueueItemId,
             queueItem?.QueueNumber,
-            queueItem?.VisitType.ToString(),
+            queueItem != null && Enum.IsDefined(queueItem.VisitType) ? queueItem.VisitType.ToString() : string.Empty,
             log.Source.ToString(),
             log.ConsultationEncounterId,
             log.PrescriptionItemId,

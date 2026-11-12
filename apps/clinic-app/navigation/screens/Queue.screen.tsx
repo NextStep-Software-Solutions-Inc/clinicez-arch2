@@ -429,7 +429,7 @@ export default function QueueScreen() {
                           variant={getPriorityVariant(ticket.priority)}
                           size="sm"
                         />
-                        {ticket.visitType ? (
+                        {ticket.visitType && mapCensusVisitTypeLabel(ticket.visitType) ? (
                           <Badge
                             label={mapCensusVisitTypeLabel(ticket.visitType)}
                             variant="neutral"

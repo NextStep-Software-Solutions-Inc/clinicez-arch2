@@ -855,7 +855,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 Classification: classification,
                 CustomFields: customFields,
                 CustomFieldsSummary: string.IsNullOrWhiteSpace(customSummary) ? "None" : customSummary,
-                VisitType: q.VisitType.ToString(),
+                VisitType: Enum.IsDefined(q.VisitType) ? q.VisitType.ToString() : string.Empty,
                 ChiefComplaint: q.ChiefComplaint,
                 NurseAssessment: nurseAssessment,
                 AttendingNurse: vital?.RecordedByNurseName ?? visitDispensings.FirstOrDefault(d => d.Source == ClinicDispenseSource.NurseVitalsCheck)?.DispensedByStaffName ?? procs.FirstOrDefault()?.PerformedByStaffName ?? "—",

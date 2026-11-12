@@ -330,7 +330,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             null,
             queueItem.RoomOrStation,
             queueItem.RoomId,
-            queueItem.VisitType,
+            Enum.IsDefined(queueItem.VisitType) ? queueItem.VisitType : null,
             queueItem.DischargeNotes,
             queueItem.DischargedAt,
             queueItem.DischargedByStaffId);

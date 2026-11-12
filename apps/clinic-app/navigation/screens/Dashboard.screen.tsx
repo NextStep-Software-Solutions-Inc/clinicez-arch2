@@ -153,7 +153,6 @@ const getServiceBadge = (
 ): { label: string; variant: BadgeVariant; icon?: string } => {
   switch (visitType) {
     case 'PreventiveHealthAssessment':
-    case 'VitalsCheckOnly':
       return { label: 'Preventive Health Assessment', variant: 'info', icon: 'heartPulse' };
     case 'AcuteIllnessConsultation':
       return { label: 'Acute Illness Consultation', variant: 'primary', icon: 'activity' };
@@ -162,8 +161,9 @@ const getServiceBadge = (
     case 'UrgentCareVisit':
       return { label: 'Urgent Care Visit', variant: 'urgent', icon: 'emergency' };
     case 'RoutineCheckup':
-    default:
       return { label: 'Routine Checkup', variant: 'primary', icon: 'stethoscope' };
+    default:
+      return { label: '', variant: 'neutral' };
   }
 };
 
@@ -1307,12 +1307,14 @@ export default function DashboardScreen() {
                       </ThemedText>
                     </View>
                     <View style={styles.badgeRow}>
-                      <Badge
-                        label={serviceBadge.label}
-                        variant={serviceBadge.variant}
-                        icon={serviceBadge.icon}
-                        size="sm"
-                      />
+                      {serviceBadge.label ? (
+                        <Badge
+                          label={serviceBadge.label}
+                          variant={serviceBadge.variant}
+                          icon={serviceBadge.icon}
+                          size="sm"
+                        />
+                      ) : null}
                       {item.roomOrStation ? (
                         <Badge label={item.roomOrStation} variant="outline" size="sm" icon="clinic" />
                       ) : null}

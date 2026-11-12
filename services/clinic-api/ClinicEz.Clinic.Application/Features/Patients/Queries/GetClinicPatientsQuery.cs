@@ -493,7 +493,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                             t.Id,
                             t.QueueNumber,
                             t.Status.ToString(),
-                            t.VisitType.ToString(),
+                            Enum.IsDefined(t.VisitType) ? t.VisitType.ToString() : string.Empty,
                             t.ChiefComplaint,
                             t.DoctorId,
                             t.DoctorName,
