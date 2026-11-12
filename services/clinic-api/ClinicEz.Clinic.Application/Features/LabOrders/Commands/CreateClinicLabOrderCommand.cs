@@ -153,6 +153,9 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
                     TestName = item.TestName.Trim(),
                     Category = string.IsNullOrWhiteSpace(item.Category) ? "Diagnostic" : item.Category.Trim(),
                     Instructions = item.Instructions?.Trim(),
+                    IsDoneOutsideFacility = item.IsDoneOutsideFacility ?? isRouted,
+                    DiagnosticFee = item.DiagnosticFee,
+                    TestCode = string.IsNullOrWhiteSpace(item.TestCode) ? null : item.TestCode.Trim(),
                     Status = LabOrderStatus.Ordered
                 });
             }
@@ -458,7 +461,8 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             i.LoincCode,
             i.IsPhysicianRecommended,
             i.PatientComplianceCode,
-            i.DiagnosticFee
+            i.DiagnosticFee,
+            i.IsDoneOutsideFacility
         )).ToList(),
         publicUploadUrl,
         order.ExternalLabName,

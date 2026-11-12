@@ -2529,7 +2529,12 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                     };
                                     c.Item().Background(acuityBg).PaddingHorizontal(3).PaddingVertical(1).Text(item.Acuity.ToUpperInvariant()).FontSize(5.5f).Bold().FontColor(acuityColor);
                                     c.Item().PaddingTop(1).Text(item.BillingStatus).FontSize(6.5f).SemiBold().FontColor("#0F172A");
-                                    c.Item().Text($"₱{item.AmountPaid:N2}").FontSize(6.5f).FontColor("#475569");
+                                    var totalVisitBilled = item.NetAmount > 0 ? item.NetAmount : (item.GrossAmount > 0 ? item.GrossAmount : item.TotalServiceFees);
+                                    if (totalVisitBilled > 0)
+                                    {
+                                        c.Item().Text($"Total: ₱{totalVisitBilled:N2}").FontSize(6f).SemiBold().FontColor("#0F172A");
+                                    }
+                                    c.Item().Text($"Paid: ₱{item.AmountPaid:N2}").FontSize(6.5f).FontColor("#475569");
                                     if (!string.IsNullOrWhiteSpace(item.OfficialReceiptNumber))
                                     {
                                         c.Item().Text($"OR: {item.OfficialReceiptNumber}").FontSize(5.5f).FontColor("#64748B");
@@ -2565,6 +2570,15 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                     SubServiceCell(table.Cell()).Column(c =>
                                     {
                                         c.Item().Text($"↳ {sub.ServiceName}").FontSize(6.5f).SemiBold().FontColor("#0D6963");
+                                        if (!string.IsNullOrWhiteSpace(sub.ServiceItemName) &&
+                                            !sub.ServiceItemName.Equals(sub.ServiceName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            c.Item().Text(sub.ServiceItemName).FontSize(6f).Bold().FontColor("#0F172A");
+                                        }
+                                        if (sub.ServiceFee > 0m)
+                                        {
+                                            c.Item().Text($"₱{sub.ServiceFee:N2}").FontSize(5.8f).SemiBold().FontColor("#0369A1");
+                                        }
                                         if (!string.IsNullOrWhiteSpace(sub.ReferenceNumber))
                                         {
                                             c.Item().Text(sub.ReferenceNumber).FontSize(5.8f).SemiBold().FontColor("#475569");

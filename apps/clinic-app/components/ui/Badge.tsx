@@ -42,7 +42,7 @@ export default function Badge({
       {resolveIconName(icon) ? (
         <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
-      <ThemedText style={[sizeStyles.text, variantStyles.text, textStyle]}>{label}</ThemedText>
+      <ThemedText style={[styles.badgeText, sizeStyles.text, variantStyles.text, textStyle]}>{label}</ThemedText>
     </View>
   );
 }
@@ -143,7 +143,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     gap: theme.spacing.xs,
     borderWidth: theme.sizes.borderWidth,
+  },
+  badgeText: {
+    flexShrink: 1,
   },
 });

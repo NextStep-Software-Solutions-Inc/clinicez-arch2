@@ -213,6 +213,9 @@ export default function NursingProceduresTab({
               testName: order.name,
               category: order.category || 'Diagnostic',
               instructions: order.instructions,
+              isDoneOutsideFacility: order.fulfillmentMode === 'outside',
+              diagnosticFee: order.fulfillmentMode === 'outside' ? 0 : order.standardPrice,
+              testCode: order.code || undefined,
             },
           ],
         });

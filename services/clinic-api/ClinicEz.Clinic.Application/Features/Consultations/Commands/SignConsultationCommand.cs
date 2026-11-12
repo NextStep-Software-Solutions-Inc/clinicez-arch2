@@ -224,6 +224,13 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             throw new BadRequestException("Encounter includes PDEA controlled/dangerous drug prescriptions, but Doctor S2 License number is missing.");
         }
 
+        // Capture in-house diagnostic orders from DraftOrdersJson before Sign() clears draft envelope
+        var preSignDraftEnvelope = ConsultationPlanManagementMapper.DeserializeDraftEnvelope(encounter.DraftOrdersJson);
+        var stagedInHouseDiagnostics = preSignDraftEnvelope?.DraftDiagnosticOrders?
+            .Where(d => !string.IsNullOrWhiteSpace(d.Name) &&
+                        string.Equals(d.FulfillmentMode, "in_house", StringComparison.OrdinalIgnoreCase))
+            .ToList() ?? new List<DraftDiagnosticOrderDto>();
+
         encounter.Sign(prcLicense, ptr, s2License, pan, atc);
         encounter.BranchId ??= _clinicContext.BranchId;
         var signedAt = encounter.SignedAt ?? DateTime.UtcNow;
@@ -361,6 +368,79 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         var clinic = await _clinicIdentity.GetAsync(cancellationToken);
 
         await FinalizePendingConsultationArtifactsAsync(encounter, doctor, clinic, signedAt, cancellationToken);
+
+        var labOrderRepo = _labOrderRepository ?? (_unitOfWork as IRepositoryProvider)?.GetRepository<LabOrder>();
+        if (labOrderRepo != null && stagedInHouseDiagnostics.Count > 0)
+        {
+            var existingInHouseOrders = await labOrderRepo
+                .Query(o => o.ClinicId == _clinicContext.ClinicId &&
+                            o.Status != LabOrderStatus.Cancelled &&
+                            (o.ConsultationId == encounter.Id ||
+                             (encounter.QueueItemId.HasValue && o.QueueItemId == encounter.QueueItemId.Value)))
+                .Include(o => o.Items)
+                .ToListAsync(cancellationToken);
+
+            var existingInHouseTestNames = existingInHouseOrders
+                .SelectMany(o => o.Items)
+                .Where(i => !i.IsDoneOutsideFacility)
+                .Select(i => i.TestName.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var newInHouseItems = stagedInHouseDiagnostics
+                .Where(d => !existingInHouseTestNames.Contains(d.Name.Trim()))
+                .ToList();
+
+            if (newInHouseItems.Count > 0)
+            {
+                var inHouseOrderId = Guid.NewGuid();
+                var inHouseOrderNumber = $"DIAG-{signedAt:yyyyMMdd}-{encounter.Id.ToString("N")[..10].ToUpperInvariant()}";
+                var inHouseOrder = new LabOrder
+                {
+                    Id = inHouseOrderId,
+                    TenantId = encounter.TenantId,
+                    ClinicId = encounter.ClinicId,
+                    OrderNumber = inHouseOrderNumber,
+                    PatientId = encounter.PatientId,
+                    PatientName = ConsultationPlanManagementMapper.Truncate(encounter.PatientName, 150) ?? "Patient",
+                    ConsultationId = encounter.Id,
+                    QueueItemId = encounter.QueueItemId,
+                    IsSigned = true,
+                    OrderedByDoctorId = encounter.DoctorId,
+                    OrderedByDoctorName = ConsultationPlanManagementMapper.Truncate(encounter.DoctorName, 150) ?? "Doctor",
+                    OrderDate = signedAt,
+                    Status = LabOrderStatus.Ordered,
+                    Stage = Interop.LabOrderStage.Issued,
+                    StageChangedAt = signedAt,
+                    LaboratoryName = clinic?.Name ?? "In-Clinic Diagnostic",
+                    ClinicalDiagnosis = string.IsNullOrWhiteSpace(encounter.Assessment) ? null : encounter.Assessment,
+                    Notes = "In-Clinic Diagnostic Order",
+                    RequestingPhysicianName = ConsultationPlanManagementMapper.Truncate(encounter.DoctorName, 150),
+                    RequestingPhysicianPrcNo = ConsultationPlanManagementMapper.Truncate(encounter.DoctorPrcLicense, 50),
+                    RequestingPhysicianPan = ConsultationPlanManagementMapper.Truncate(encounter.DoctorPhilHealthPan, 50),
+                    CreatedAt = signedAt,
+                    CreatedBy = encounter.DoctorName,
+                    Items = newInHouseItems.Select(d => new LabOrderItem
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = encounter.TenantId,
+                        ClinicId = encounter.ClinicId,
+                        LabOrderId = inHouseOrderId,
+                        TestName = ConsultationPlanManagementMapper.Truncate(d.Name.Trim(), 150) ?? "Diagnostic Test",
+                        Category = ConsultationPlanManagementMapper.Truncate(d.Category, 50) ?? "Diagnostic",
+                        Instructions = ConsultationPlanManagementMapper.Truncate(d.Instructions, 500),
+                        TestCode = ConsultationPlanManagementMapper.Truncate(d.Code, 20),
+                        PhilHealthServiceCode = ConsultationPlanManagementMapper.Truncate(d.PhilHealthCode, 50),
+                        DiagnosticFee = d.StandardPrice,
+                        IsDoneOutsideFacility = false,
+                        Status = LabOrderStatus.Ordered,
+                        CreatedAt = signedAt,
+                        CreatedBy = encounter.DoctorName
+                    }).ToList()
+                };
+
+                await labOrderRepo.AddAsync(inHouseOrder, cancellationToken);
+            }
+        }
 
         if (encounter.Prescriptions.Any())
         {

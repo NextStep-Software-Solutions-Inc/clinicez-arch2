@@ -235,6 +235,11 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
                 var subServiceDisplay = !string.IsNullOrWhiteSpace(sub.ReferenceNumber)
                     ? $"↳ {sub.ServiceName} ({sub.ReferenceNumber})"
                     : $"↳ {sub.ServiceName}";
+                if (!string.IsNullOrWhiteSpace(sub.ServiceItemName) &&
+                    !sub.ServiceItemName.Equals(sub.ServiceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    subServiceDisplay += $" - {sub.ServiceItemName}";
+                }
                 ws1.Cell(r, 13).SetValue(subServiceDisplay);
                 ws1.Cell(r, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
@@ -249,7 +254,14 @@ public sealed class ClinicCensusExcelService : IClinicCensusExcelService
                 ws1.Cell(r, 20).SetValue(string.Empty);
                 ws1.Cell(r, 21).SetValue(string.Empty);
 
-                ws1.Cell(r, 22).SetValue(sub.ServiceDetails ?? string.Empty);
+                var subDetailsWithFee = sub.ServiceDetails ?? string.Empty;
+                if (sub.ServiceFee > 0m)
+                {
+                    subDetailsWithFee = !string.IsNullOrWhiteSpace(subDetailsWithFee)
+                        ? $"{subDetailsWithFee} • Fee: ₱{sub.ServiceFee:N2}"
+                        : $"Fee: ₱{sub.ServiceFee:N2}";
+                }
+                ws1.Cell(r, 22).SetValue(subDetailsWithFee);
                 ws1.Cell(r, 24).SetValue(!string.IsNullOrWhiteSpace(sub.Disposition) ? sub.Disposition : "Completed");
             }
 

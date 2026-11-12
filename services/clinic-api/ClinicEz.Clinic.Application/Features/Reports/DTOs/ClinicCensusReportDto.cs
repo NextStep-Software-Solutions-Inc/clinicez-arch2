@@ -146,7 +146,10 @@ public sealed record CensusItemDto(
     int MedicalCertificatesCount = 0,
     int ReferralsCount = 0,
     int LabRequisitionsCount = 0,
-    IReadOnlyList<CensusServiceRowDto>? ServiceRows = null
+    IReadOnlyList<CensusServiceRowDto>? ServiceRows = null,
+    decimal TotalServiceFees = 0m,
+    decimal ConsultationFee = 0m,
+    decimal VitalsFee = 0m
 );
 
 public sealed record CensusServiceRowDto(
@@ -165,7 +168,9 @@ public sealed record CensusServiceRowDto(
     string? SystemsReviewed,
     string? ServiceDetails,
     string? Acuity,
-    string? Disposition
+    string? Disposition,
+    string? ServiceItemName = null,
+    decimal ServiceFee = 0m
 );
 
 public sealed record CensusDispensingLedgerItemDto(
@@ -318,6 +323,16 @@ public static class ClinicCensusBreakdownResolver
             .ToList();
     }
 
+    public static string FormatVisitTypeLabel(string? visitType) => (visitType ?? string.Empty).Trim() switch
+    {
+        nameof(VisitType.RoutineCheckup) or "Routine Checkup" => "Routine Checkup",
+        nameof(VisitType.AcuteIllnessConsultation) or "Acute Illness Consultation" => "Acute Illness Consultation",
+        nameof(VisitType.ChronicDiseaseFollowUp) or "Chronic Disease Follow-Up" => "Chronic Disease Follow-Up",
+        nameof(VisitType.PreventiveHealthAssessment) or "Preventive Health Assessment" => "Preventive Health Assessment",
+        nameof(VisitType.UrgentCareVisit) or "Urgent Care Visit" => "Urgent Care Visit",
+        _ => string.Empty
+    };
+
     public static string MapVisitTypeToPrimaryServiceLabel(string? visitType) => (visitType ?? string.Empty).Trim() switch
     {
         nameof(VisitType.RoutineCheckup) => "Routine Checkup",
@@ -325,8 +340,8 @@ public static class ClinicCensusBreakdownResolver
         nameof(VisitType.ChronicDiseaseFollowUp) => "Chronic Disease Follow-Up",
         nameof(VisitType.PreventiveHealthAssessment) => "Preventive Health Assessment",
         nameof(VisitType.UrgentCareVisit) => "Urgent Care Visit",
-        "Consultation" => "Routine Checkup",
-        "VitalsCheckOnly" => "Preventive Health Assessment",
+        "Consultation" => "Consultation",
+        "VitalsCheckOnly" => "Vitals Check",
         var other => string.IsNullOrWhiteSpace(other) ? "Clinic Visit" : other
     };
 
@@ -360,6 +375,12 @@ public static class ClinicCensusBreakdownResolver
     /// and emits dedicated sub-rows for auxiliary services (dispensing, prescriptions, certificates, referrals,
     /// lab requisitions, and procedures performed on top of the base visit).
     /// </summary>
+    public static IReadOnlyList<CensusServiceRowDto> ResolveAdditionalServiceRows(CensusItemDto item) =>
+        ResolveServiceRows(item)
+            .Where(r => !r.ServiceName.Equals("Vitals & Triage", StringComparison.OrdinalIgnoreCase) &&
+                        !r.ServiceName.Equals("Doctor Consultation", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
     public static IReadOnlyList<CensusServiceRowDto> ResolveServiceRows(CensusItemDto item)
     {
         if (item.ServiceRows != null)

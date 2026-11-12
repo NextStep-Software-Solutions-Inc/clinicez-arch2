@@ -3947,6 +3947,8 @@ export default function ConsultationsScreen() {
             testName: l.name,
             category: l.category || (diagnosticCatalog.find((d) => d.name === l.name)?.category ?? 'Diagnostic'),
             instructions: l.instructions,
+            isDoneOutsideFacility: true,
+            testCode: l.code || undefined,
           })),
         });
         if (labErr) {

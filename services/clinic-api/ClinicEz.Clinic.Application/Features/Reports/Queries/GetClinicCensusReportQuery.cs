@@ -49,6 +49,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
     private readonly IRepository<MedicalCertificate>? _medCertRepo;
     private readonly IRepository<ReferralLetter>? _referralRepo;
     private readonly IRepository<LabOrder>? _labOrderRepo;
+    private readonly IRepository<ServiceItem>? _serviceItemRepo;
 
     public GetClinicCensusReportQueryHandler(
         IRepository<QueueItem> queueRepo,
@@ -62,7 +63,8 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         IRepository<ClinicDispensingLog>? dispensingLogRepo = null,
         IRepository<MedicalCertificate>? medCertRepo = null,
         IRepository<ReferralLetter>? referralRepo = null,
-        IRepository<LabOrder>? labOrderRepo = null)
+        IRepository<LabOrder>? labOrderRepo = null,
+        IRepository<ServiceItem>? serviceItemRepo = null)
     {
         _queueRepo = queueRepo;
         _patientRepo = patientRepo;
@@ -76,6 +78,7 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         _medCertRepo = medCertRepo;
         _referralRepo = referralRepo;
         _labOrderRepo = labOrderRepo;
+        _serviceItemRepo = serviceItemRepo;
     }
 
     public async Task<ClinicCensusReportDto> Handle(GetClinicCensusReportQuery request, CancellationToken cancellationToken)
@@ -128,7 +131,19 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
         List<MedicalCertificate> medCerts = new();
         List<ReferralLetter> referrals = new();
         List<LabOrder> labOrders = new();
+        List<ServiceItem> serviceItems = new();
         Dictionary<Guid, DateTime> earliestLookup = new();
+
+        FacilitySettings? settings = null;
+        if (_settingsRepo != null)
+        {
+            settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (_serviceItemRepo != null)
+        {
+            serviceItems = await _serviceItemRepo.Query(s => s.IsActive).ToListAsync(cancellationToken);
+        }
 
         if (patientIds.Count > 0)
         {
@@ -154,12 +169,19 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
 
             var signedConsultIds = consultations.Select(c => c.Id).ToList();
 
-            procedures = await _procedureRepo.Query(p => (p.QueueItemId.HasValue && queueItemIds.Contains(p.QueueItemId.Value)) ||
-                                                         (patientIds.Contains(p.PatientId) && p.ScheduledAt >= start && p.ScheduledAt < end))
+            procedures = await _procedureRepo.Query(p =>
+                    p.Status != ProcedureStatus.Cancelled &&
+                    ((p.QueueItemId.HasValue && queueItemIds.Contains(p.QueueItemId.Value)) ||
+                     (patientIds.Contains(p.PatientId) && p.ScheduledAt >= start && p.ScheduledAt < end)))
                 .ToListAsync(cancellationToken);
 
-            invoices = await _invoiceRepo.Query(i => (i.QueueItemId.HasValue && queueItemIds.Contains(i.QueueItemId.Value)) ||
-                                                     (i.PatientId.HasValue && patientIds.Contains(i.PatientId.Value) && i.InvoiceDate >= start && i.InvoiceDate < end))
+            invoices = await _invoiceRepo.Query(i =>
+                    i.Status != InvoiceStatus.Voided &&
+                    i.Status != InvoiceStatus.Refunded &&
+                    ((i.QueueItemId.HasValue && queueItemIds.Contains(i.QueueItemId.Value)) ||
+                     (i.ConsultationId.HasValue && signedConsultIds.Contains(i.ConsultationId.Value)) ||
+                     (i.PatientId.HasValue && patientIds.Contains(i.PatientId.Value) && i.InvoiceDate >= start && i.InvoiceDate < end)))
+                .Include(i => i.LineItems)
                 .Include(i => i.Payments)
                 .ToListAsync(cancellationToken);
 
@@ -253,9 +275,13 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             .ToLookup(x => x.QueueId!.Value, x => x.Proc);
 
         var invByQueueId = invoices
+            .Where(i => i.QueueItemId.HasValue || !i.ConsultationId.HasValue)
             .Select(i => (QueueId: i.QueueItemId ?? (i.PatientId.HasValue ? PickClosestVisitQueueId(i.PatientId.Value, i.InvoiceDate) : null), Inv: i))
             .Where(x => x.QueueId.HasValue)
             .ToLookup(x => x.QueueId!.Value, x => x.Inv);
+        var invByConsultId = invoices
+            .Where(i => !i.QueueItemId.HasValue && i.ConsultationId.HasValue)
+            .ToLookup(i => i.ConsultationId!.Value);
 
         var dispByQueueId = dispensingLogs.ToLookup(d => d.QueueItemId);
         var dispByConsultId = dispensingLogs.Where(d => d.ConsultationEncounterId.HasValue).ToLookup(d => d.ConsultationEncounterId!.Value);
@@ -323,7 +349,16 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             var vital = vitalsByQueueId[q.Id].FirstOrDefault();
             var consult = consultByQueueId[q.Id].FirstOrDefault();
             var procs = procByQueueId[q.Id].ToList();
-            var inv = invByQueueId[q.Id].FirstOrDefault();
+            var visitInvoices = new List<Invoice>();
+            visitInvoices.AddRange(invByQueueId[q.Id]);
+            if (consult != null)
+            {
+                foreach (var ci in invByConsultId[consult.Id])
+                {
+                    if (visitInvoices.All(existing => existing.Id != ci.Id))
+                        visitInvoices.Add(ci);
+                }
+            }
 
             var visitDispensings = new List<ClinicDispensingLog>();
             foreach (var qd in dispByQueueId[q.Id])
@@ -388,7 +423,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 servicesAvailed.Add("Medical Certificate");
             if (visitReferrals.Count > 0)
                 servicesAvailed.Add("Referral");
-            if (visitLabOrders.Count > 0)
+            bool hasDiagnosticInvoiceLines = visitInvoices.Any(i =>
+                i.LineItems != null && i.LineItems.Any(li => li.Category.Equals("Diagnostic", StringComparison.OrdinalIgnoreCase)));
+            if (visitLabOrders.Count > 0 || hasDiagnosticInvoiceLines)
                 servicesAvailed.Add("Laboratory Requisition");
             if (procs.Count > 0 && !servicesAvailed.Contains("In-Clinic Procedure"))
                 servicesAvailed.Add("In-Clinic Procedure");
@@ -584,32 +621,132 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             else
                 disposition = q.Status.ToString();
 
-            // Billing
+            // Billing (aggregate across all non-voided/non-refunded visit invoices)
             string billingStatus = "Unbilled";
             string? orNumber = null;
             decimal amountPaid = 0m, gross = 0m, net = 0m, balance = 0m;
-            if (inv != null)
+            if (visitInvoices.Count > 0)
             {
-                gross = inv.GrossAmount;
-                net = inv.NetAmount;
-                amountPaid = inv.AmountPaid;
-                balance = inv.BalanceDue;
-                if (inv.Payments != null && inv.Payments.Count > 0)
+                gross = visitInvoices.Sum(i => i.GrossAmount);
+                net = visitInvoices.Sum(i => i.NetAmount);
+                amountPaid = visitInvoices.Sum(i => i.AmountPaid);
+                balance = visitInvoices.Sum(i => i.BalanceDue);
+
+                var orNums = visitInvoices
+                    .Where(i => i.Payments != null)
+                    .SelectMany(i => i.Payments)
+                    .Select(p => p.PaymentNumber)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct()
+                    .ToList();
+                if (orNums.Count > 0)
                 {
-                    orNumber = string.Join(", ", inv.Payments.Select(p => p.PaymentNumber));
+                    orNumber = string.Join(", ", orNums);
                 }
 
-                if (inv.Status == InvoiceStatus.Paid || (amountPaid > 0 && balance <= 0))
+                if (visitInvoices.All(i => i.Status == InvoiceStatus.Paid) || (amountPaid > 0 && balance <= 0))
                     billingStatus = "Paid";
-                else if (inv.DiscountType == DiscountType.PhilHealthKonsulta && balance <= 0)
+                else if (visitInvoices.Any(i => i.DiscountType == DiscountType.PhilHealthKonsulta) && balance <= 0)
                     billingStatus = "Zero-Balance / PhilHealth";
                 else if (balance > 0 && amountPaid > 0)
                     billingStatus = "Partially Paid";
                 else if (balance > 0 && amountPaid == 0)
                     billingStatus = "Unsettled / Promissory";
                 else
-                    billingStatus = inv.Status.ToString();
+                    billingStatus = visitInvoices[0].Status.ToString();
             }
+
+            // Per-visit invoice line item claim tracker & catalog price fallback for accurate per-service fees
+            var claimableLines = visitInvoices
+                .Where(i => i.LineItems != null)
+                .SelectMany(i => i.LineItems.Select(li => new
+                {
+                    InvoiceNumber = i.InvoiceNumber,
+                    InvoiceDate = i.InvoiceDate,
+                    Line = li,
+                    UnitPrice = li.Quantity > 0 ? Math.Round(li.TotalPrice / li.Quantity, 2) : li.TotalPrice
+                }))
+                .ToList();
+            var remainingQty = claimableLines.Select(x => Math.Max(1, x.Line.Quantity)).ToArray();
+
+            bool HasUnclaimedInvoiceUnit(Func<InvoiceLineItem, bool> predicate)
+            {
+                for (int idx = 0; idx < claimableLines.Count; idx++)
+                {
+                    if (remainingQty[idx] > 0 && predicate(claimableLines[idx].Line))
+                        return true;
+                }
+                return false;
+            }
+
+            decimal? TryClaimInvoiceUnit(Func<InvoiceLineItem, bool> predicate)
+            {
+                for (int idx = 0; idx < claimableLines.Count; idx++)
+                {
+                    if (remainingQty[idx] > 0 && predicate(claimableLines[idx].Line))
+                    {
+                        remainingQty[idx]--;
+                        return claimableLines[idx].UnitPrice;
+                    }
+                }
+                return null;
+            }
+
+            decimal LookupCatalogPrice(string? code, string? name, params string[] allowedCategories)
+            {
+                if (serviceItems.Count == 0) return 0m;
+                IEnumerable<ServiceItem> pool = serviceItems;
+                if (allowedCategories.Length > 0)
+                {
+                    var catMatches = serviceItems
+                        .Where(s => allowedCategories.Any(cat => s.Category.Equals(cat, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+                    if (catMatches.Count > 0)
+                        pool = catMatches;
+                }
+
+                if (!string.IsNullOrWhiteSpace(code))
+                {
+                    var trimmedCode = code.Trim();
+                    var byCode = pool.FirstOrDefault(s => s.Code.Equals(trimmedCode, StringComparison.OrdinalIgnoreCase))
+                              ?? serviceItems.FirstOrDefault(s => s.Code.Equals(trimmedCode, StringComparison.OrdinalIgnoreCase));
+                    if (byCode != null) return byCode.StandardPrice;
+                }
+
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    var trimmedName = name.Trim();
+                    var exact = pool.FirstOrDefault(s => s.Name.Equals(trimmedName, StringComparison.OrdinalIgnoreCase))
+                             ?? serviceItems.FirstOrDefault(s => s.Name.Equals(trimmedName, StringComparison.OrdinalIgnoreCase));
+                    if (exact != null) return exact.StandardPrice;
+
+                    var partial = pool.FirstOrDefault(s =>
+                        s.Name.Contains(trimmedName, StringComparison.OrdinalIgnoreCase) ||
+                        trimmedName.Contains(s.Name, StringComparison.OrdinalIgnoreCase));
+                    if (partial != null) return partial.StandardPrice;
+                }
+
+                return 0m;
+            }
+
+            decimal vitalsFee = TryClaimInvoiceUnit(li =>
+                li.Category.Equals("NursingService", StringComparison.OrdinalIgnoreCase) &&
+                (li.Description.Contains("Vital", StringComparison.OrdinalIgnoreCase) ||
+                 li.Description.Contains("Triage", StringComparison.OrdinalIgnoreCase)))
+                ?? ((q.VisitType == VisitType.PreventiveHealthAssessment && consult == null)
+                    ? LookupCatalogPrice(null, "Vitals Check", "NursingService")
+                    : 0m);
+
+            decimal consultFee = TryClaimInvoiceUnit(li =>
+                li.Category.Equals("Consultation", StringComparison.OrdinalIgnoreCase) ||
+                li.Description.Contains("Consultation", StringComparison.OrdinalIgnoreCase))
+                ?? (consult != null
+                    ? (LookupCatalogPrice(null, q.VisitType.ToDisplayLabel(), "Consultation") is > 0 and var vtPrice
+                        ? vtPrice
+                        : (serviceItems.FirstOrDefault(s => s.Category.Equals("Consultation", StringComparison.OrdinalIgnoreCase))?.StandardPrice
+                            ?? settings?.DefaultConsultationFee
+                            ?? 0m))
+                    : 0m);
 
             // New vs Returning
             bool isNew = earliestLookup.TryGetValue(q.PatientId, out var firstCheckIn) && q.CheckInTime <= firstCheckIn;
@@ -649,13 +786,15 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             var serviceRows = new List<CensusServiceRowDto>();
             int subRowIdx = 0;
 
-            // 1. In-Clinic Procedure sub-rows (each procedure availed during the visit)
+            // 1. In-Clinic Procedure sub-rows (1 of N per performed/ordered procedure with specific name & fee)
             var additionalProcs = procs;
             foreach (var p in additionalProcs)
             {
                 var procDetailParts = new List<string> { p.ProcedureName };
                 if (!string.IsNullOrWhiteSpace(p.Category))
                     procDetailParts.Add($"({p.Category})");
+                if (p.ToothNumber.HasValue)
+                    procDetailParts.Add($"Tooth #{p.ToothNumber}{(!string.IsNullOrWhiteSpace(p.ToothSurface) ? " (" + p.ToothSurface + ")" : "")}");
                 if (!string.IsNullOrWhiteSpace(p.MedicationAdministered))
                     procDetailParts.Add($"Med: {p.MedicationAdministered}");
                 if (!string.IsNullOrWhiteSpace(p.SiteRoute))
@@ -664,6 +803,12 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     procDetailParts.Add($"Room: {p.TargetRoomName}");
                 if (!string.IsNullOrWhiteSpace(p.ClinicalNotes))
                     procDetailParts.Add(p.ClinicalNotes);
+
+                decimal procFee = TryClaimInvoiceUnit(li =>
+                    (!string.IsNullOrWhiteSpace(p.ProcedureCode) && string.Equals(li.ItemCode, p.ProcedureCode, StringComparison.OrdinalIgnoreCase)) ||
+                    li.Description.Contains(p.ProcedureName, StringComparison.OrdinalIgnoreCase) ||
+                    p.ProcedureName.Contains(li.Description, StringComparison.OrdinalIgnoreCase))
+                    ?? LookupCatalogPrice(p.ProcedureCode, p.ProcedureName, "Procedure", "NursingService", "Dental");
 
                 serviceRows.Add(new CensusServiceRowDto(
                     SubRowIndex: subRowIdx++,
@@ -681,7 +826,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     SystemsReviewed: string.Empty,
                     ServiceDetails: string.Join(" • ", procDetailParts),
                     Acuity: q.Priority.ToString(),
-                    Disposition: p.Status.ToString()
+                    Disposition: p.Status.ToString(),
+                    ServiceItemName: p.ProcedureName,
+                    ServiceFee: procFee
                 ));
             }
 
@@ -689,9 +836,29 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             foreach (var d in visitDispensings)
             {
                 bool dispensedByDoctor = d.DispensedByRole.Contains("Doctor", StringComparison.OrdinalIgnoreCase);
+                var dispItemLabel = $"{d.ItemName}{(!string.IsNullOrWhiteSpace(d.DosageOrSpec) ? " " + d.DosageOrSpec : "")} (x{d.QuantityDispensed})";
                 var dispDetail = $"{d.ItemName}{(!string.IsNullOrWhiteSpace(d.DosageOrSpec) ? " " + d.DosageOrSpec : "")} x{d.QuantityDispensed} {d.FormOrUnit}" +
                                  $"{(!string.IsNullOrWhiteSpace(d.DirectionsOrInstructions) ? " • " + d.DirectionsOrInstructions : "")}" +
                                  $" • ROS: {RosCategoryHelper.ToDisplayLabel(d.RosCategory)}";
+
+                decimal dispFee = 0m;
+                for (int idx = 0; idx < claimableLines.Count; idx++)
+                {
+                    if (remainingQty[idx] > 0 &&
+                        (claimableLines[idx].Line.Category.Equals("Supply", StringComparison.OrdinalIgnoreCase) ||
+                         claimableLines[idx].Line.Category.Equals("Pharmacy", StringComparison.OrdinalIgnoreCase) ||
+                         claimableLines[idx].Line.Category.Equals("Medicine", StringComparison.OrdinalIgnoreCase) ||
+                         claimableLines[idx].Line.Description.Contains(d.ItemName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (claimableLines[idx].Line.Description.Contains(d.ItemName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            int take = Math.Min(remainingQty[idx], Math.Max(1, d.QuantityDispensed));
+                            remainingQty[idx] -= take;
+                            dispFee = Math.Round(claimableLines[idx].UnitPrice * take, 2);
+                            break;
+                        }
+                    }
+                }
 
                 serviceRows.Add(new CensusServiceRowDto(
                     SubRowIndex: subRowIdx++,
@@ -709,7 +876,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     SystemsReviewed: string.Empty,
                     ServiceDetails: dispDetail,
                     Acuity: q.Priority.ToString(),
-                    Disposition: "Dispensed"
+                    Disposition: "Dispensed",
+                    ServiceItemName: dispItemLabel,
+                    ServiceFee: dispFee
                 ));
             }
 
@@ -736,11 +905,13 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     SystemsReviewed: string.Empty,
                     ServiceDetails: rxSummary,
                     Acuity: q.Priority.ToString(),
-                    Disposition: "Issued"
+                    Disposition: "Issued",
+                    ServiceItemName: $"{consult.Prescriptions.Count} Rx item(s)",
+                    ServiceFee: 0m
                 ));
             }
 
-            // 4. Medical Certificate sub-rows (1 sub-row per signed certificate; blank diagnosis)
+            // 4. Medical Certificate sub-rows (1 sub-row per signed certificate with certificate fee; blank diagnosis)
             foreach (var mc in visitMedCerts)
             {
                 var mcDoctor = !string.IsNullOrWhiteSpace(mc.PrcLicenseNumber)
@@ -756,6 +927,20 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     mcParts.Add($"Purpose: {mc.Purpose}");
                 if (!string.IsNullOrWhiteSpace(mc.Remarks))
                     mcParts.Add(mc.Remarks);
+
+                decimal medCertFee = TryClaimInvoiceUnit(li =>
+                    (!string.IsNullOrWhiteSpace(mc.CertificateNumber) && li.Description.Contains(mc.CertificateNumber, StringComparison.OrdinalIgnoreCase)) ||
+                    string.Equals(li.ItemCode, "MEDCERT", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(li.ItemCode, "MED-CERT", StringComparison.OrdinalIgnoreCase) ||
+                    li.Description.Contains("Medical Certificate", StringComparison.OrdinalIgnoreCase) ||
+                    li.Description.Contains("Med Cert", StringComparison.OrdinalIgnoreCase))
+                    ?? (LookupCatalogPrice("MEDCERT", "Medical Certificate") is > 0 and var mcPrice
+                        ? mcPrice
+                        : LookupCatalogPrice("MED-CERT", "Med Cert"));
+
+                var mcItemLabel = !string.IsNullOrWhiteSpace(mc.Purpose)
+                    ? mc.Purpose
+                    : (!string.IsNullOrWhiteSpace(formattedFitness) ? formattedFitness : "Medical Certificate");
 
                 serviceRows.Add(new CensusServiceRowDto(
                     SubRowIndex: subRowIdx++,
@@ -773,7 +958,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     SystemsReviewed: string.Empty,
                     ServiceDetails: string.Join(" • ", mcParts),
                     Acuity: q.Priority.ToString(),
-                    Disposition: "Issued"
+                    Disposition: "Issued",
+                    ServiceItemName: mcItemLabel,
+                    ServiceFee: medCertFee
                 ));
             }
 
@@ -784,6 +971,11 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     ? $"{rf.ReferringDoctorName} (PRC: {rf.ReferringDoctorPrcNumber})"
                     : rf.ReferringDoctorName;
                 var rfDetail = $"{rf.ReferredToFacility} ({rf.ReferredDepartment}) • [{rf.Urgency}] {rf.ReasonForReferral}";
+
+                decimal referralFee = TryClaimInvoiceUnit(li =>
+                    (!string.IsNullOrWhiteSpace(rf.ReferralNumber) && li.Description.Contains(rf.ReferralNumber, StringComparison.OrdinalIgnoreCase)) ||
+                    li.Description.Contains("Referral", StringComparison.OrdinalIgnoreCase))
+                    ?? LookupCatalogPrice("REFERRAL", "Referral");
 
                 serviceRows.Add(new CensusServiceRowDto(
                     SubRowIndex: subRowIdx++,
@@ -801,43 +993,236 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     SystemsReviewed: string.Empty,
                     ServiceDetails: rfDetail,
                     Acuity: q.Priority.ToString(),
-                    Disposition: "Referred"
+                    Disposition: "Referred",
+                    ServiceItemName: rf.ReferredToFacility,
+                    ServiceFee: referralFee
                 ));
             }
 
-            // 6. Laboratory Requisition sub-rows (1 sub-row per signed diagnostic order; blank diagnosis)
+            // 6. Diagnostic Orders:
+            //    - In-Clinic Diagnostics: 1 of N isolated sub-rows per performed/ordered in-clinic test with its per-test fee
+            //    - Outside Diagnostic Orders: 1 grouped sub-row per outside requisition (₱0.00 clinic fee)
+            int diagnosticGroupsAndTestsCount = 0;
             foreach (var lo in visitLabOrders)
             {
                 var loDoctor = !string.IsNullOrWhiteSpace(lo.OrderedByDoctorName)
                     ? lo.OrderedByDoctorName
                     : (!string.IsNullOrWhiteSpace(lo.RequestingPhysicianName) ? lo.RequestingPhysicianName : (attendingDoc ?? string.Empty));
-                var loTests = lo.Items is { Count: > 0 }
-                    ? string.Join(", ", lo.Items.Select(it => it.TestName))
-                    : (!string.IsNullOrWhiteSpace(lo.Notes) ? lo.Notes : "Diagnostic Requisition");
                 var loTargetLab = !string.IsNullOrWhiteSpace(lo.LaboratoryName)
                     ? lo.LaboratoryName
                     : lo.ExternalLabName;
-                var loDetail = !string.IsNullOrWhiteSpace(loTargetLab) ? $"{loTests} • {loTargetLab}" : loTests;
 
-                serviceRows.Add(new CensusServiceRowDto(
-                    SubRowIndex: subRowIdx++,
-                    ServiceName: "Laboratory Requisition",
-                    ServiceTime: lo.OrderDate,
-                    ReferenceNumber: lo.OrderNumber,
-                    AttendingDoctor: loDoctor,
-                    AttendingNurse: string.Empty,
-                    ChiefComplaint: string.Empty,
-                    NurseAssessment: string.Empty,
-                    VitalsSnapshot: string.Empty,
-                    DoctorDiagnosis: string.Empty,
-                    ClinicalAssessment: string.Empty,
-                    RosCategory: string.Empty,
-                    SystemsReviewed: string.Empty,
-                    ServiceDetails: loDetail,
-                    Acuity: q.Priority.ToString(),
-                    Disposition: lo.Stage.ToString()
-                ));
+                bool orderLevelOutside = lo.TargetFacilityId.HasValue ||
+                                         !string.IsNullOrWhiteSpace(lo.TargetTenantId) ||
+                                         !string.IsNullOrWhiteSpace(lo.ExternalLabName) ||
+                                         !string.IsNullOrWhiteSpace(lo.LaboratoryTenantId);
+                bool orderMarkedInClinic = lo.Notes != null && lo.Notes.Contains("In-Clinic", StringComparison.OrdinalIgnoreCase);
+                bool orderMarkedOutside = lo.Notes != null && lo.Notes.Contains("Outside", StringComparison.OrdinalIgnoreCase);
+
+                if (lo.Items == null || lo.Items.Count == 0)
+                {
+                    var loFallbackDetail = !string.IsNullOrWhiteSpace(lo.Notes) ? lo.Notes : "Diagnostic Requisition";
+                    if (!string.IsNullOrWhiteSpace(loTargetLab))
+                        loFallbackDetail = $"{loFallbackDetail} • {loTargetLab}";
+
+                    diagnosticGroupsAndTestsCount++;
+                    serviceRows.Add(new CensusServiceRowDto(
+                        SubRowIndex: subRowIdx++,
+                        ServiceName: "Laboratory Requisition",
+                        ServiceTime: lo.OrderDate,
+                        ReferenceNumber: lo.OrderNumber,
+                        AttendingDoctor: loDoctor,
+                        AttendingNurse: string.Empty,
+                        ChiefComplaint: string.Empty,
+                        NurseAssessment: string.Empty,
+                        VitalsSnapshot: string.Empty,
+                        DoctorDiagnosis: string.Empty,
+                        ClinicalAssessment: string.Empty,
+                        RosCategory: string.Empty,
+                        SystemsReviewed: string.Empty,
+                        ServiceDetails: loFallbackDetail,
+                        Acuity: q.Priority.ToString(),
+                        Disposition: lo.Stage.ToString(),
+                        ServiceItemName: "Outside Diagnostic Order",
+                        ServiceFee: 0m
+                    ));
+                    continue;
+                }
+
+                var inClinicDiagItems = new List<LabOrderItem>();
+                var outsideDiagItems = new List<LabOrderItem>();
+
+                foreach (var it in lo.Items)
+                {
+                    bool hasMatchingInvoiceLine = HasUnclaimedInvoiceUnit(li =>
+                        (!string.IsNullOrWhiteSpace(it.TestCode) && string.Equals(li.ItemCode, it.TestCode, StringComparison.OrdinalIgnoreCase)) ||
+                        li.Description.Contains(it.TestName, StringComparison.OrdinalIgnoreCase) ||
+                        it.TestName.Contains(li.Description, StringComparison.OrdinalIgnoreCase));
+
+                    bool explicitlyOutside = it.IsDoneOutsideFacility ||
+                                             !string.IsNullOrWhiteSpace(it.ExternalFacilityName) ||
+                                             orderLevelOutside ||
+                                             orderMarkedOutside;
+
+                    bool isInClinicItem = !explicitlyOutside && (
+                        orderMarkedInClinic ||
+                        it.DiagnosticFee.HasValue ||
+                        hasMatchingInvoiceLine ||
+                        it.Status == LabOrderStatus.Completed ||
+                        !string.IsNullOrWhiteSpace(it.ResultRemarks) ||
+                        it.PerformedDate.HasValue ||
+                        (!lo.ConsultationId.HasValue && LookupCatalogPrice(it.TestCode, it.TestName, "Diagnostic") > 0m));
+
+                    if (isInClinicItem)
+                        inClinicDiagItems.Add(it);
+                    else
+                        outsideDiagItems.Add(it);
+                }
+
+                foreach (var diagItem in inClinicDiagItems)
+                {
+                    decimal diagFee = TryClaimInvoiceUnit(li =>
+                        (!string.IsNullOrWhiteSpace(diagItem.TestCode) && string.Equals(li.ItemCode, diagItem.TestCode, StringComparison.OrdinalIgnoreCase)) ||
+                        li.Description.Contains(diagItem.TestName, StringComparison.OrdinalIgnoreCase) ||
+                        diagItem.TestName.Contains(li.Description, StringComparison.OrdinalIgnoreCase))
+                        ?? (diagItem.DiagnosticFee is > 0 ? diagItem.DiagnosticFee.Value : LookupCatalogPrice(diagItem.TestCode, diagItem.TestName, "Diagnostic"));
+
+                    var diagParts = new List<string> { diagItem.TestName };
+                    if (!string.IsNullOrWhiteSpace(diagItem.Category))
+                        diagParts.Add($"({diagItem.Category})");
+                    if (!string.IsNullOrWhiteSpace(diagItem.Instructions))
+                        diagParts.Add(diagItem.Instructions);
+                    if (!string.IsNullOrWhiteSpace(diagItem.ResultRemarks))
+                        diagParts.Add($"Result: {diagItem.ResultRemarks}");
+
+                    diagnosticGroupsAndTestsCount++;
+                    serviceRows.Add(new CensusServiceRowDto(
+                        SubRowIndex: subRowIdx++,
+                        ServiceName: "In-Clinic Diagnostic",
+                        ServiceTime: lo.OrderDate,
+                        ReferenceNumber: lo.OrderNumber,
+                        AttendingDoctor: loDoctor,
+                        AttendingNurse: string.Empty,
+                        ChiefComplaint: string.Empty,
+                        NurseAssessment: string.Empty,
+                        VitalsSnapshot: string.Empty,
+                        DoctorDiagnosis: string.Empty,
+                        ClinicalAssessment: string.Empty,
+                        RosCategory: string.Empty,
+                        SystemsReviewed: string.Empty,
+                        ServiceDetails: string.Join(" • ", diagParts),
+                        Acuity: q.Priority.ToString(),
+                        Disposition: diagItem.Status.ToString(),
+                        ServiceItemName: diagItem.TestName,
+                        ServiceFee: diagFee
+                    ));
+                }
+
+                if (outsideDiagItems.Count > 0)
+                {
+                    var loTests = string.Join(", ", outsideDiagItems.Select(it => it.TestName));
+                    var outsideTarget = loTargetLab ?? outsideDiagItems.Select(it => it.ExternalFacilityName).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+                    var loDetail = !string.IsNullOrWhiteSpace(outsideTarget) ? $"{loTests} • {outsideTarget}" : loTests;
+                    var outsideItemLabel = outsideDiagItems.Count == 1
+                        ? $"{outsideDiagItems[0].TestName} (Outside)"
+                        : $"{outsideDiagItems.Count} Tests (Outside)";
+
+                    diagnosticGroupsAndTestsCount++;
+                    serviceRows.Add(new CensusServiceRowDto(
+                        SubRowIndex: subRowIdx++,
+                        ServiceName: "Laboratory Requisition",
+                        ServiceTime: lo.OrderDate,
+                        ReferenceNumber: lo.OrderNumber,
+                        AttendingDoctor: loDoctor,
+                        AttendingNurse: string.Empty,
+                        ChiefComplaint: string.Empty,
+                        NurseAssessment: string.Empty,
+                        VitalsSnapshot: string.Empty,
+                        DoctorDiagnosis: string.Empty,
+                        ClinicalAssessment: string.Empty,
+                        RosCategory: string.Empty,
+                        SystemsReviewed: string.Empty,
+                        ServiceDetails: loDetail,
+                        Acuity: q.Priority.ToString(),
+                        Disposition: lo.Stage.ToString(),
+                        ServiceItemName: outsideItemLabel,
+                        ServiceFee: 0m
+                    ));
+                }
             }
+
+            // 7. Emit any remaining unclaimed InvoiceLineItems (e.g. historical billed In-Clinic Diagnostics or standalone billed services)
+            for (int idx = 0; idx < claimableLines.Count; idx++)
+            {
+                if (remainingQty[idx] <= 0) continue;
+                var entry = claimableLines[idx];
+                var li = entry.Line;
+
+                if (li.Category.Equals("Diagnostic", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cleanDiagName = li.Description.StartsWith("Diagnostic:", StringComparison.OrdinalIgnoreCase)
+                        ? li.Description["Diagnostic:".Length..].Trim()
+                        : li.Description.Trim();
+
+                    for (int u = 0; u < remainingQty[idx]; u++)
+                    {
+                        diagnosticGroupsAndTestsCount++;
+                        serviceRows.Add(new CensusServiceRowDto(
+                            SubRowIndex: subRowIdx++,
+                            ServiceName: "In-Clinic Diagnostic",
+                            ServiceTime: entry.InvoiceDate,
+                            ReferenceNumber: entry.InvoiceNumber,
+                            AttendingDoctor: li.DoctorName ?? (attendingDoc ?? string.Empty),
+                            AttendingNurse: string.Empty,
+                            ChiefComplaint: string.Empty,
+                            NurseAssessment: string.Empty,
+                            VitalsSnapshot: string.Empty,
+                            DoctorDiagnosis: string.Empty,
+                            ClinicalAssessment: string.Empty,
+                            RosCategory: string.Empty,
+                            SystemsReviewed: string.Empty,
+                            ServiceDetails: cleanDiagName,
+                            Acuity: q.Priority.ToString(),
+                            Disposition: "Completed",
+                            ServiceItemName: cleanDiagName,
+                            ServiceFee: entry.UnitPrice
+                        ));
+                    }
+                    remainingQty[idx] = 0;
+                }
+                else
+                {
+                    var mappedSvcName = li.Category.Equals("Procedure", StringComparison.OrdinalIgnoreCase) || li.Category.Equals("Dental", StringComparison.OrdinalIgnoreCase)
+                        ? "In-Clinic Procedure"
+                        : (li.Description.Contains("Medical Certificate", StringComparison.OrdinalIgnoreCase) ? "Medical Certificate" : li.Category);
+                    decimal lineRemainingFee = Math.Round(entry.UnitPrice * remainingQty[idx], 2);
+                    remainingQty[idx] = 0;
+
+                    serviceRows.Add(new CensusServiceRowDto(
+                        SubRowIndex: subRowIdx++,
+                        ServiceName: mappedSvcName,
+                        ServiceTime: entry.InvoiceDate,
+                        ReferenceNumber: entry.InvoiceNumber,
+                        AttendingDoctor: li.DoctorName ?? string.Empty,
+                        AttendingNurse: string.Empty,
+                        ChiefComplaint: string.Empty,
+                        NurseAssessment: string.Empty,
+                        VitalsSnapshot: string.Empty,
+                        DoctorDiagnosis: string.Empty,
+                        ClinicalAssessment: string.Empty,
+                        RosCategory: string.Empty,
+                        SystemsReviewed: string.Empty,
+                        ServiceDetails: li.Description,
+                        Acuity: q.Priority.ToString(),
+                        Disposition: "Billed",
+                        ServiceItemName: li.Description,
+                        ServiceFee: lineRemainingFee
+                    ));
+                }
+            }
+
+            decimal totalServiceFees = vitalsFee + consultFee + serviceRows.Sum(r => r.ServiceFee);
+            int effectiveLabCount = Math.Max(visitLabOrders.Count, diagnosticGroupsAndTestsCount);
 
             items.Add(new CensusItemDto(
                 SequenceNumber: seq++,
@@ -881,8 +1266,11 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 PrescriptionsCount: prescriptionsCount,
                 MedicalCertificatesCount: visitMedCerts.Count,
                 ReferralsCount: visitReferrals.Count,
-                LabRequisitionsCount: visitLabOrders.Count,
-                ServiceRows: serviceRows
+                LabRequisitionsCount: effectiveLabCount,
+                ServiceRows: serviceRows,
+                TotalServiceFees: totalServiceFees,
+                ConsultationFee: consultFee,
+                VitalsFee: vitalsFee
             ));
         }
 
@@ -1014,13 +1402,6 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 CompletedEncounters: g.Count(x => x.CompletedTime.HasValue)
             ));
         providerList.AddRange(nurseEncounters);
-
-        // Facility metadata
-        FacilitySettings? settings = null;
-        if (_settingsRepo != null)
-        {
-            settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
-        }
 
         var orderedLedger = visitLedgerRows
             .OrderBy(r => r.DispensedAt)

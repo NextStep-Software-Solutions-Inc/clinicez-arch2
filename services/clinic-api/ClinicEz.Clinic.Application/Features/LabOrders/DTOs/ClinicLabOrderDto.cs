@@ -14,7 +14,8 @@ public record ClinicLabOrderItemDto(
     string? LoincCode = null,
     bool IsPhysicianRecommended = false,
     string? PatientComplianceCode = null,
-    decimal? DiagnosticFee = null
+    decimal? DiagnosticFee = null,
+    bool IsDoneOutsideFacility = false
 );
 
 public record ClinicLabResultSummaryDto(
@@ -71,7 +72,10 @@ public record AcknowledgePanicAlertRequest(
 public record CreateLabOrderItemRequest(
     string TestName,
     string Category,
-    string? Instructions
+    string? Instructions,
+    bool? IsDoneOutsideFacility = null,
+    decimal? DiagnosticFee = null,
+    string? TestCode = null
 );
 
 public record CreateClinicLabOrderRequest(

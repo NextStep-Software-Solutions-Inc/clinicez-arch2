@@ -131,6 +131,7 @@ const {
   ROS_CATEGORY_OPTIONS,
   resolveCensusLedgerEntryMeta,
   resolveCensusVisitServiceRows,
+  resolveCensusIsolatedServiceRows,
   mapCensusVisitTypeLabel,
   normalizeCensusDisplayField,
 } = await import('../services/clinicService');
@@ -1158,6 +1159,173 @@ describe('Clinic Stock & OTC Dispensing, ROS Association & Visit Validity Suite'
       expect(dashboardSource).toContain('Ticket, Date &amp; Time');
       expect(dashboardSource).not.toContain('Ticket, Visit &amp; Services Availed');
       expect(dashboardSource).toContain('resolveCensusVisitServiceRows(item, dispensingLedger)');
+    });
+
+    test('6.7 Census Register isolates every rendered service row with per-service fees, Visit Type column, chip overflow guard, 1-of-N procedures & in-clinic diagnostics, and 1 grouped outside diagnostic order', () => {
+      const visitWithDiagnosticsAndProcedures = {
+        id: 'q-iso-001',
+        queueNumber: 'Q-012',
+        visitType: 'AcuteIllnessConsultation' as const,
+        acuity: 'Urgent',
+        checkInTime: '2026-11-12T08:00:00Z',
+        triageTime: '2026-11-12T08:05:00Z',
+        calledTime: '2026-11-12T08:12:00Z',
+        completedTime: '2026-11-12T08:45:00Z',
+        patientCode: 'PAT-012',
+        patientName: 'Santos, Elena',
+        age: 34,
+        sex: 'Female',
+        chiefComplaint: 'Productive cough and fever',
+        attendingNurse: 'Nurse Clara, RN',
+        nurseAssessment: 'Febrile, mild wheezing',
+        vitalsSnapshot: 'BP 120/80, HR 92bpm, T 38.4°C',
+        attendingDoctor: 'Dr. Ana Cruz (PRC: 0123456)',
+        doctorDiagnosis: '[J20.9] Acute Bronchitis (Primary)',
+        clinicalAssessment: 'Acute lower respiratory infection',
+        rosCategory: 'Respiratory',
+        systemsReviewed: 'Respiratory: Wheezing',
+        disposition: 'Treated & Discharged',
+        consultationFee: 500,
+        vitalsFee: 0,
+        totalServiceFees: 1750,
+        netAmount: 1750,
+        amountPaid: 1750,
+        billingStatus: 'Paid',
+        serviceRows: [
+          {
+            subRowIndex: 0,
+            serviceName: 'In-Clinic Procedure',
+            serviceItemName: 'Salbutamol Nebulization',
+            serviceFee: 350,
+            serviceTime: '2026-11-12T08:20:00Z',
+            referenceNumber: 'PROC-NEB',
+            attendingDoctor: 'Dr. Ana Cruz',
+            attendingNurse: 'Nurse Clara, RN',
+            serviceDetails: 'Salbutamol Nebulization • (Nebulization)',
+            disposition: 'Completed',
+          },
+          {
+            subRowIndex: 1,
+            serviceName: 'In-Clinic Procedure',
+            serviceItemName: 'Wound Dressing',
+            serviceFee: 250,
+            serviceTime: '2026-11-12T08:28:00Z',
+            referenceNumber: 'PROC-WND',
+            attendingDoctor: 'Dr. Ana Cruz',
+            attendingNurse: 'Nurse Clara, RN',
+            serviceDetails: 'Wound Dressing • (WoundCare)',
+            disposition: 'Completed',
+          },
+          {
+            subRowIndex: 2,
+            serviceName: 'Medical Certificate',
+            serviceItemName: 'Fit to Return to Work after Rest',
+            serviceFee: 150,
+            serviceTime: '2026-11-12T08:40:00Z',
+            referenceNumber: 'MC-20261112-001',
+            attendingDoctor: 'Dr. Ana Cruz (PRC: 0123456)',
+            attendingNurse: '',
+            serviceDetails: 'Unfit to work • 2 rest day(s)',
+            disposition: 'Issued',
+          },
+          {
+            subRowIndex: 3,
+            serviceName: 'In-Clinic Diagnostic',
+            serviceItemName: 'Complete Blood Count (CBC)',
+            serviceFee: 300,
+            serviceTime: '2026-11-12T08:22:00Z',
+            referenceNumber: 'LAB-20261112-001',
+            attendingDoctor: 'Dr. Ana Cruz',
+            attendingNurse: '',
+            serviceDetails: 'Complete Blood Count (CBC) • (Hematology)',
+            disposition: 'Completed',
+          },
+          {
+            subRowIndex: 4,
+            serviceName: 'In-Clinic Diagnostic',
+            serviceItemName: 'Random Blood Sugar (RBS)',
+            serviceFee: 200,
+            serviceTime: '2026-11-12T08:24:00Z',
+            referenceNumber: 'LAB-20261112-001',
+            attendingDoctor: 'Dr. Ana Cruz',
+            attendingNurse: '',
+            serviceDetails: 'Random Blood Sugar (RBS) • (Chemistry)',
+            disposition: 'Completed',
+          },
+          {
+            subRowIndex: 5,
+            serviceName: 'Laboratory Requisition',
+            serviceItemName: '2 Tests (Outside)',
+            serviceFee: 0,
+            serviceTime: '2026-11-12T08:42:00Z',
+            referenceNumber: 'LAB-20261112-002',
+            attendingDoctor: 'Dr. Ana Cruz',
+            attendingNurse: '',
+            serviceDetails: 'Chest X-Ray PA, Sputum AFB • Hi-Precision Diagnostics',
+            disposition: 'Issued',
+          },
+        ],
+      };
+
+      const isolated = resolveCensusIsolatedServiceRows(visitWithDiagnosticsAndProcedures);
+      expect(isolated.map((r) => r.serviceName)).toEqual([
+        'Vitals & Triage',
+        'Doctor Consultation',
+        'In-Clinic Procedure',
+        'In-Clinic Procedure',
+        'Medical Certificate',
+        'In-Clinic Diagnostic',
+        'In-Clinic Diagnostic',
+        'Diagnostic Order (Outside)',
+      ]);
+
+      // Vitals & Triage isolated from Doctor Diagnosis
+      expect(isolated[0].attendingNurse).toBe('Nurse Clara, RN');
+      expect(isolated[0].attendingDoctor).toBe('');
+      expect(isolated[0].vitalsSnapshot).toContain('BP 120/80');
+      expect(isolated[0].doctorDiagnosis).toBe('');
+
+      // Doctor Consultation isolated from Nurse Vitals, with Consultation Fee
+      expect(isolated[1].attendingDoctor).toContain('Dr. Ana Cruz');
+      expect(isolated[1].attendingNurse).toBe('');
+      expect(isolated[1].vitalsSnapshot).toBe('');
+      expect(isolated[1].doctorDiagnosis).toContain('[J20.9] Acute Bronchitis');
+      expect(isolated[1].serviceFee).toBe(500);
+
+      // 1-of-N In-Clinic Procedures with specific names & fees
+      expect(isolated[2].serviceItemName).toBe('Salbutamol Nebulization');
+      expect(isolated[2].serviceFee).toBe(350);
+      expect(isolated[3].serviceItemName).toBe('Wound Dressing');
+      expect(isolated[3].serviceFee).toBe(250);
+
+      // Medical Certificate fee reflected accurately
+      expect(isolated[4].serviceFee).toBe(150);
+
+      // 1-of-N In-Clinic Diagnostics vs 1 Grouped Outside Diagnostic Order
+      expect(isolated[5].serviceItemName).toBe('Complete Blood Count (CBC)');
+      expect(isolated[5].serviceFee).toBe(300);
+      expect(isolated[6].serviceItemName).toBe('Random Blood Sugar (RBS)');
+      expect(isolated[6].serviceFee).toBe(200);
+      expect(isolated[7].serviceName).toBe('Diagnostic Order (Outside)');
+      expect(isolated[7].serviceItemName).toBe('2 Tests (Outside)');
+      expect(isolated[7].serviceFee).toBe(0);
+
+      const badgeSource = fs.readFileSync(
+        path.join(APP_ROOT, 'components/ui/Badge.tsx'),
+        'utf-8',
+      );
+      expect(badgeSource).toContain("maxWidth: '100%'");
+      expect(badgeSource).toContain('flexShrink: 1');
+
+      const dashboardSource = fs.readFileSync(
+        path.join(APP_ROOT, 'navigation/screens/Dashboard.screen.tsx'),
+        'utf-8',
+      );
+      expect(dashboardSource).toContain('Visit Type');
+      expect(dashboardSource).toContain('Service Fee');
+      expect(dashboardSource).toContain('Performed Procedures:');
+      expect(dashboardSource).toContain('Outside Orders:');
+      expect(dashboardSource).toContain('resolveCensusIsolatedServiceRows(item, dispensingLedger)');
     });
   });
 });

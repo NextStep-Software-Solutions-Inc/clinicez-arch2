@@ -1481,6 +1481,8 @@ export interface CensusProviderBreakdown {
 export interface CensusServiceRow {
   subRowIndex: number;
   serviceName: string;
+  serviceItemName?: string | null;
+  serviceFee?: number;
   serviceTime?: string | null;
   referenceNumber?: string | null;
   attendingDoctor?: string | null;
@@ -1546,6 +1548,9 @@ export interface CensusItem {
   referralsCount?: number;
   labRequisitionsCount?: number;
   serviceRows?: CensusServiceRow[];
+  totalServiceFees?: number;
+  consultationFee?: number;
+  vitalsFee?: number;
 }
 
 const CENSUS_EMPTY_SENTINELS = new Set([
@@ -1626,17 +1631,19 @@ export function resolveCensusVisitServiceRows(
       .map((row, idx) => ({
         subRowIndex: row.subRowIndex ?? idx,
         serviceName: row.serviceName,
+        serviceItemName: normalizeCensusField(row.serviceItemName) || null,
+        serviceFee: typeof row.serviceFee === 'number' ? row.serviceFee : 0,
         serviceTime: row.serviceTime ?? null,
         referenceNumber: normalizeCensusField(row.referenceNumber) || null,
         attendingDoctor: normalizeCensusField(row.attendingDoctor),
         attendingNurse: normalizeCensusField(row.attendingNurse),
-        chiefComplaint: '',
-        nurseAssessment: '',
-        vitalsSnapshot: '',
-        doctorDiagnosis: '',
-        clinicalAssessment: '',
-        rosCategory: '',
-        systemsReviewed: '',
+        chiefComplaint: normalizeCensusField(row.chiefComplaint),
+        nurseAssessment: normalizeCensusField(row.nurseAssessment),
+        vitalsSnapshot: normalizeCensusField(row.vitalsSnapshot),
+        doctorDiagnosis: normalizeCensusField(row.doctorDiagnosis),
+        clinicalAssessment: normalizeCensusField(row.clinicalAssessment),
+        rosCategory: normalizeCensusField(row.rosCategory),
+        systemsReviewed: normalizeCensusField(row.systemsReviewed),
         serviceDetails: normalizeCensusField(row.serviceDetails),
         acuity: row.acuity || item.acuity || 'Routine',
         disposition: normalizeCensusField(row.disposition) || 'Completed',
@@ -1701,6 +1708,8 @@ export function resolveCensusVisitServiceRows(
         resolved.push({
           subRowIndex: nextIdx++,
           serviceName: 'In-Clinic Procedure',
+          serviceItemName: procName || null,
+          serviceFee: 0,
           serviceTime: item.calledTime || item.completedTime || item.checkInTime,
           referenceNumber: null,
           attendingDoctor: isPhysicianConsultationVisitType(item.visitType) ? doc : '',
@@ -1734,6 +1743,8 @@ export function resolveCensusVisitServiceRows(
           resolved.push({
             subRowIndex: nextIdx++,
             serviceName: 'Medicine Dispensing',
+            serviceItemName: `${entry.itemName}${entry.dosageOrSpec ? ` ${entry.dosageOrSpec}` : ''} (x${entry.quantityDispensed})`,
+            serviceFee: 0,
             serviceTime: entry.dispensedAt,
             referenceNumber: null,
             attendingDoctor: isDoctorDisp
@@ -1756,6 +1767,8 @@ export function resolveCensusVisitServiceRows(
         resolved.push({
           subRowIndex: nextIdx++,
           serviceName: 'Medicine Dispensing',
+          serviceItemName: dispensedSummary || null,
+          serviceFee: 0,
           serviceTime: item.completedTime || item.checkInTime,
           referenceNumber: null,
           attendingDoctor: isPhysicianConsultationVisitType(item.visitType) ? doc : '',
@@ -1780,6 +1793,8 @@ export function resolveCensusVisitServiceRows(
       resolved.push({
         subRowIndex: nextIdx++,
         serviceName: 'Prescription',
+        serviceItemName: `${rxCount} Rx item(s)`,
+        serviceFee: 0,
         serviceTime: item.completedTime || item.checkInTime,
         referenceNumber: null,
         attendingDoctor: doc,
@@ -1804,6 +1819,8 @@ export function resolveCensusVisitServiceRows(
         resolved.push({
           subRowIndex: nextIdx++,
           serviceName: 'Medical Certificate',
+          serviceItemName: 'Medical Certificate',
+          serviceFee: 0,
           serviceTime: item.completedTime || item.checkInTime,
           referenceNumber: null,
           attendingDoctor: doc,
@@ -1829,6 +1846,8 @@ export function resolveCensusVisitServiceRows(
         resolved.push({
           subRowIndex: nextIdx++,
           serviceName: 'Referral',
+          serviceItemName: 'Clinical Referral',
+          serviceFee: 0,
           serviceTime: item.completedTime || item.checkInTime,
           referenceNumber: null,
           attendingDoctor: doc,
@@ -1854,6 +1873,8 @@ export function resolveCensusVisitServiceRows(
         resolved.push({
           subRowIndex: nextIdx++,
           serviceName: 'Laboratory Requisition',
+          serviceItemName: 'Outside Diagnostic Order',
+          serviceFee: 0,
           serviceTime: item.completedTime || item.checkInTime,
           referenceNumber: null,
           attendingDoctor: doc,
@@ -1876,6 +1897,8 @@ export function resolveCensusVisitServiceRows(
     resolved.push({
       subRowIndex: nextIdx++,
       serviceName: svc,
+      serviceItemName: null,
+      serviceFee: 0,
       serviceTime: item.calledTime || item.completedTime || item.checkInTime,
       referenceNumber: null,
       attendingDoctor: doc,
@@ -1894,6 +1917,144 @@ export function resolveCensusVisitServiceRows(
   }
 
   return resolved;
+}
+
+/**
+ * Resolves the complete list of strictly isolated service sub-rows rendered during a visit:
+ * - Isolated "Vitals & Triage" sub-row (RN + CC + Vitals only)
+ * - Isolated "Doctor Consultation" sub-row (MD + Dx + ROS + Consultation Fee only)
+ * - Isolated 1..N "In-Clinic Procedure" sub-rows (each with specific procedure name & fee)
+ * - Isolated 1..N "In-Clinic Diagnostic" sub-rows (each with specific test name & fee)
+ * - Isolated 1 grouped "Diagnostic Order (Outside)" sub-row per outside requisition (₱0.00 clinic fee)
+ * - Isolated "Medicine Dispensing", "Prescription", "Medical Certificate" (with fee), and "Referral" sub-rows
+ */
+export function resolveCensusIsolatedServiceRows(
+  item: CensusItem,
+  dispensingLedger?: CensusDispensingLedgerEntry[],
+): CensusServiceRow[] {
+  const visitTypeLabel = mapCensusVisitTypeLabel(item.visitType);
+  const isConsultationVisit =
+    isPhysicianConsultationVisitType(item.visitType) ||
+    Boolean(normalizeCensusField(item.doctorDiagnosis)) ||
+    (item.consultationFee ?? 0) > 0;
+
+  const mainDoc = normalizeCensusField(item.attendingDoctor);
+  const mainNurse = normalizeCensusField(item.attendingNurse);
+  const mainCc = normalizeCensusField(item.chiefComplaint);
+  const mainImpression = normalizeCensusField(item.nurseImpression || item.nurseAssessment);
+  const mainVitals = normalizeCensusField(item.vitalsSnapshot);
+  const mainDx = isConsultationVisit ? normalizeCensusField(item.doctorDiagnosis) : '';
+  const mainRos = isConsultationVisit ? normalizeCensusField(item.rosCategory) : '';
+  const mainAssessment = isConsultationVisit ? normalizeCensusField(item.clinicalAssessment) : '';
+  const mainSystems = isConsultationVisit ? normalizeCensusField(item.systemsReviewed) : '';
+  const nonConsultRos = !isConsultationVisit ? normalizeCensusField(item.rosCategory) : '';
+  const nonConsultSystems = !isConsultationVisit ? normalizeCensusField(item.systemsReviewed) : '';
+
+  const additionalSubRows = resolveCensusVisitServiceRows(item, dispensingLedger);
+  const isolated: CensusServiceRow[] = [];
+  let rowIndex = 0;
+
+  const hasVitalsOrTriage =
+    Boolean(mainVitals) ||
+    Boolean(item.triageTime) ||
+    Boolean(mainImpression && mainImpression !== mainCc) ||
+    isNurseAssessmentVisitType(item.visitType) ||
+    (Boolean(mainNurse) && !additionalSubRows.some((r) => r.attendingNurse === mainNurse));
+
+  if (hasVitalsOrTriage) {
+    isolated.push({
+      subRowIndex: rowIndex++,
+      serviceName: 'Vitals & Triage',
+      serviceItemName: isNurseAssessmentVisitType(item.visitType)
+        ? 'Preventive Health Triage'
+        : null,
+      serviceFee: item.vitalsFee ?? 0,
+      serviceTime: item.triageTime || item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: '',
+      attendingNurse: mainNurse,
+      chiefComplaint: mainCc,
+      nurseAssessment: mainImpression,
+      vitalsSnapshot: mainVitals,
+      doctorDiagnosis: '',
+      clinicalAssessment: '',
+      rosCategory: nonConsultRos,
+      systemsReviewed: nonConsultSystems,
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: mainVitals ? 'Recorded' : normalizeCensusField(item.disposition) || 'Recorded',
+    });
+  }
+
+  const hasDoctorConsultation =
+    isConsultationVisit &&
+    (Boolean(mainDoc) ||
+      Boolean(mainDx) ||
+      Boolean(mainAssessment) ||
+      Boolean(mainSystems) ||
+      (item.consultationFee ?? 0) > 0 ||
+      additionalSubRows.length === 0);
+
+  if (hasDoctorConsultation) {
+    isolated.push({
+      subRowIndex: rowIndex++,
+      serviceName: 'Doctor Consultation',
+      serviceItemName: visitTypeLabel || null,
+      serviceFee: item.consultationFee ?? 0,
+      serviceTime: item.calledTime || item.completedTime || item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: mainDoc,
+      attendingNurse: '',
+      chiefComplaint: !hasVitalsOrTriage ? mainCc : '',
+      nurseAssessment: '',
+      vitalsSnapshot: '',
+      doctorDiagnosis: mainDx,
+      clinicalAssessment: mainAssessment,
+      rosCategory: mainRos,
+      systemsReviewed: mainSystems,
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: normalizeCensusField(item.disposition) || 'Completed',
+    });
+  }
+
+  for (const sub of additionalSubRows) {
+    const normalizedServiceName =
+      sub.serviceName === 'Laboratory Requisition'
+        ? 'Diagnostic Order (Outside)'
+        : sub.serviceName;
+    isolated.push({
+      ...sub,
+      subRowIndex: rowIndex++,
+      serviceName: normalizedServiceName,
+      serviceFee: typeof sub.serviceFee === 'number' ? sub.serviceFee : 0,
+    });
+  }
+
+  if (isolated.length === 0) {
+    isolated.push({
+      subRowIndex: 0,
+      serviceName: 'Pending Visit',
+      serviceItemName: visitTypeLabel || null,
+      serviceFee: 0,
+      serviceTime: item.checkInTime,
+      referenceNumber: null,
+      attendingDoctor: mainDoc,
+      attendingNurse: mainNurse,
+      chiefComplaint: mainCc,
+      nurseAssessment: '',
+      vitalsSnapshot: '',
+      doctorDiagnosis: '',
+      clinicalAssessment: '',
+      rosCategory: '',
+      systemsReviewed: '',
+      serviceDetails: '',
+      acuity: item.acuity || 'Routine',
+      disposition: normalizeCensusField(item.disposition) || 'Waiting',
+    });
+  }
+
+  return isolated;
 }
 
 export interface CensusDispensingLedgerEntry {
@@ -3810,7 +3971,14 @@ export const clinicService = {
     orderedByDoctorName?: string;
     clinicalDiagnosis?: string;
     notes?: string;
-    items?: Array<{ testName: string; category: string; instructions?: string }>;
+    items?: Array<{
+      testName: string;
+      category: string;
+      instructions?: string;
+      isDoneOutsideFacility?: boolean;
+      diagnosticFee?: number;
+      testCode?: string;
+    }>;
     targetFacilityId?: string;
     targetTenantId?: string;
     queueItemId?: string;
