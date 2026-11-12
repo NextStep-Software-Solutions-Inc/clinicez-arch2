@@ -295,7 +295,13 @@ export default function ClinicChatDrawerHost() {
     setIsManualReconnecting(true);
     try {
       if (typeof reconnect === 'function') {
-        await reconnect();
+        // Enforce 8s timeout so manual reconnect never hangs indefinitely
+        await Promise.race([
+          reconnect(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Connection timed out. Please verify network connectivity.')), 8000)
+          ),
+        ]);
       }
       await Promise.allSettled([
         refreshConversations?.(),
@@ -376,7 +382,9 @@ export default function ClinicChatDrawerHost() {
               size="sm"
               icon="refresh"
               iconOnly
-              loading={isSpinning}
+              spinIcon={isSpinning}
+              loading={isManualReconnecting}
+              disabled={isManualReconnecting}
               onPress={handleManualReconnect}
               accessibilityLabel="Manual reconnect to clinic communications"
             >

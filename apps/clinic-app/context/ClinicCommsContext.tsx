@@ -57,6 +57,18 @@ export function getCommsApiBaseUrl(): string {
         url.port = '5247';
         return url.origin;
       }
+      if (url.host.includes('clinicez-clinic')) {
+        return `${url.protocol}//${url.host.replace('clinicez-clinic', 'clinicez-comms')}`;
+      }
+      if (url.host.startsWith('clinic-api.')) {
+        return `${url.protocol}//${url.host.replace('clinic-api.', 'comms-api.')}`;
+      }
+      if (url.host.startsWith('clinic.')) {
+        return `${url.protocol}//${url.host.replace('clinic.', 'comms.')}`;
+      }
+      if (url.host.includes('clinic')) {
+        return `${url.protocol}//${url.host.replace('clinic', 'comms')}`;
+      }
       return `${url.protocol}//comms.${url.host}`;
     } catch {
       // Ignore invalid URL parse

@@ -163,8 +163,8 @@ export const CommsProvider: React.FC<CommsProviderProps> = ({
         if (state === 'Disconnected') {
           triggerAutoReconnect();
         } else if (state === 'Reconnecting') {
-          // If SignalR's internal reconnection doesn't resolve in 4s, trigger unified reconnect
-          triggerAutoReconnect(4000);
+          // If SignalR's internal reconnection doesn't resolve in 15s, trigger unified reconnect
+          triggerAutoReconnect(15000);
         } else if (state === 'Connected') {
           clearAutoReconnectTimer();
           reconnectAttemptRef.current = 0;
