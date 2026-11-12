@@ -1,9 +1,8 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
-import { resolveServiceApiUrl } from '@shared/safe';
 import { clinicApiClient } from '../services/apiClient';
-import { getApiBaseUrl } from '../services/runtimeConfig';
+import { getApiBaseUrl, getSetting } from '../services/runtimeConfig';
 import { useAuth } from './AuthContext';
 import { useClinic } from './ClinicContext';
 import { useStaff, formatStaffName } from './StaffContext';
@@ -46,36 +45,11 @@ const ClinicCommsContext = createContext<ClinicCommsContextValue>({
 export const useClinicComms = () => useContext(ClinicCommsContext);
 
 export function getCommsApiBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_COMMS_API_URL) {
-    return process.env.EXPO_PUBLIC_COMMS_API_URL.replace(/\/+$/, '');
+  const commsUrl = getSetting('EXPO_PUBLIC_COMMS_API_URL') || process.env.EXPO_PUBLIC_COMMS_API_URL;
+  if (commsUrl && commsUrl.trim()) {
+    return commsUrl.trim().replace(/\/+$/, '');
   }
-  const apiBase = getApiBaseUrl();
-  if (apiBase) {
-    try {
-      const url = new URL(apiBase);
-      if (url.port === '5245' || url.port === '5240' || url.port === '5242' || url.port === '5243' || url.port === '5310') {
-        url.port = '5247';
-        return url.origin;
-      }
-      if (url.host.includes('clinicez-clinic')) {
-        return `${url.protocol}//${url.host.replace('clinicez-clinic', 'clinicez-comms')}`;
-      }
-      if (url.host.startsWith('clinic-api.')) {
-        return `${url.protocol}//${url.host.replace('clinic-api.', 'comms-api.')}`;
-      }
-      if (url.host.startsWith('clinic.')) {
-        return `${url.protocol}//${url.host.replace('clinic.', 'comms.')}`;
-      }
-      if (url.host.includes('clinic')) {
-        return `${url.protocol}//${url.host.replace('clinic', 'comms')}`;
-      }
-      return `${url.protocol}//comms.${url.host}`;
-    } catch {
-      // Ignore invalid URL parse
-    }
-    return apiBase;
-  }
-  return resolveServiceApiUrl({ fallbackPort: 5247 });
+  throw new Error('EXPO_PUBLIC_COMMS_API_URL is required and must be configured in environment variables or runtime settings.');
 }
 
 export function ClinicCommsProvider({ children }: { children: React.ReactNode }) {
