@@ -15,6 +15,8 @@ export interface UsePersistedTabOptions<T extends string> {
   queryParam?: string;
   /** Optional fallback query parameter names accepted during initial URL hydration (e.g. `['subTab']`). */
   queryParamAliases?: readonly string[];
+  /** Optional map of raw string aliases to target canonical tab value (e.g. `{'procedure-bay': 'PendingProcedure'}`). */
+  valueAliases?: Record<string, T>;
   /** Guard ensuring URL query parameters are only read/written when the browser is on the owning route path. */
   pathnameMatcher?: (pathname: string) => boolean;
   /** Whether changes should write `queryParam` into `window.location` via `history.replaceState` (default `true`). */
@@ -26,6 +28,7 @@ export interface UsePersistedTabOptions<T extends string> {
 export function normalizePersistedTabValue<T extends string>(
   raw: string | null | undefined,
   allowedValues: readonly T[],
+  valueAliases?: Record<string, T>,
 ): T | null {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
@@ -34,7 +37,25 @@ export function normalizePersistedTabValue<T extends string>(
   if (exact) return exact;
   const upper = trimmed.toUpperCase();
   const caseInsensitive = allowedValues.find((candidate) => candidate.toUpperCase() === upper);
-  return caseInsensitive ?? null;
+  if (caseInsensitive) return caseInsensitive;
+
+  const stripped = upper.replace(/[-_\s]/g, '');
+  const strippedMatch = allowedValues.find(
+    (candidate) => candidate.toUpperCase().replace(/[-_\s]/g, '') === stripped,
+  );
+  if (strippedMatch) return strippedMatch;
+
+  if (valueAliases) {
+    if (valueAliases[trimmed]) return valueAliases[trimmed];
+    for (const [aliasKey, targetVal] of Object.entries(valueAliases)) {
+      const aliasUpper = aliasKey.toUpperCase();
+      if (aliasUpper === upper || aliasUpper.replace(/[-_\s]/g, '') === stripped) {
+        return targetVal;
+      }
+    }
+  }
+
+  return null;
 }
 
 export function readPersistedTabFromSearch<T extends string>(
@@ -42,13 +63,14 @@ export function readPersistedTabFromSearch<T extends string>(
   allowedValues: readonly T[],
   queryParam?: string,
   queryParamAliases?: readonly string[],
+  valueAliases?: Record<string, T>,
 ): T | null {
   if (!search || !queryParam) return null;
   try {
     const params = new URLSearchParams(search);
     const keys = [queryParam, ...(queryParamAliases ?? [])];
     for (const key of keys) {
-      const candidate = normalizePersistedTabValue(params.get(key), allowedValues);
+      const candidate = normalizePersistedTabValue(params.get(key), allowedValues, valueAliases);
       if (candidate) return candidate;
     }
   } catch {
@@ -64,6 +86,7 @@ export function resolveInitialPersistedTab<T extends string>({
   routeParam,
   queryParam,
   queryParamAliases,
+  valueAliases,
   pathnameMatcher,
 }: Pick<
   UsePersistedTabOptions<T>,
@@ -73,9 +96,10 @@ export function resolveInitialPersistedTab<T extends string>({
   | 'routeParam'
   | 'queryParam'
   | 'queryParamAliases'
+  | 'valueAliases'
   | 'pathnameMatcher'
 >): T {
-  const fromRoute = normalizePersistedTabValue(routeParam, allowedValues);
+  const fromRoute = normalizePersistedTabValue(routeParam, allowedValues, valueAliases);
   if (fromRoute) return fromRoute;
 
   if (Platform.OS === 'web' && typeof window !== 'undefined' && queryParam) {
@@ -87,12 +111,13 @@ export function resolveInitialPersistedTab<T extends string>({
         allowedValues,
         queryParam,
         queryParamAliases,
+        valueAliases,
       );
       if (fromUrl) return fromUrl;
     }
   }
 
-  const fromStorage = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues);
+  const fromStorage = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues, valueAliases);
   if (fromStorage) return fromStorage;
 
   return defaultValue;
@@ -146,6 +171,7 @@ export function usePersistedTab<T extends string>(
     routeParam,
     queryParam,
     queryParamAliases,
+    valueAliases,
     pathnameMatcher,
     syncUrl = true,
     onPersist,
@@ -159,6 +185,7 @@ export function usePersistedTab<T extends string>(
       routeParam,
       queryParam,
       queryParamAliases,
+      valueAliases,
       pathnameMatcher,
     }),
   );
@@ -180,14 +207,14 @@ export function usePersistedTab<T extends string>(
   useEffect(() => {
     if (didHydrateSyncRef.current) return;
     didHydrateSyncRef.current = true;
-    const stored = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues);
+    const stored = normalizePersistedTabValue(getSessionItem(storageKey), allowedValues, valueAliases);
     if (stored !== valueRef.current && (valueRef.current !== defaultValue || stored !== null)) {
       setSessionItem(storageKey, valueRef.current);
     }
     if (syncUrl && queryParam && valueRef.current !== defaultValue) {
       writeQueryParamToWebHistory(queryParam, valueRef.current, pathnameMatcherRef.current);
     }
-  }, [allowedValues, defaultValue, queryParam, storageKey, syncUrl]);
+  }, [allowedValues, defaultValue, queryParam, storageKey, syncUrl, valueAliases]);
 
   // React to genuine external route param transitions without ping-ponging on local clicks
   useEffect(() => {
@@ -195,7 +222,7 @@ export function usePersistedTab<T extends string>(
       return;
     }
     prevRouteParamRef.current = routeParam;
-    const incoming = normalizePersistedTabValue(routeParam, allowedValues);
+    const incoming = normalizePersistedTabValue(routeParam, allowedValues, valueAliases);
     if (!incoming) return;
 
     const pendingIdx = pendingSyncedValuesRef.current.indexOf(incoming);
@@ -214,13 +241,13 @@ export function usePersistedTab<T extends string>(
       }
       onPersistRef.current?.(incoming, prev);
     }
-  }, [allowedValues, queryParam, routeParam, storageKey, syncUrl]);
+  }, [allowedValues, queryParam, routeParam, storageKey, syncUrl, valueAliases]);
 
   const setPersistedValue = useCallback(
     (updater: T | ((prev: T) => T)) => {
       const prev = valueRef.current;
       const rawNext = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
-      const validated = normalizePersistedTabValue(rawNext, allowedValues) ?? prev;
+      const validated = normalizePersistedTabValue(rawNext, allowedValues, valueAliases) ?? prev;
       valueRef.current = validated;
       pendingSyncedValuesRef.current = [...pendingSyncedValuesRef.current.slice(-4), validated];
       setValueState(validated);
@@ -232,7 +259,7 @@ export function usePersistedTab<T extends string>(
         onPersistRef.current?.(validated, prev);
       }
     },
-    [allowedValues, queryParam, storageKey, syncUrl],
+    [allowedValues, queryParam, storageKey, syncUrl, valueAliases],
   );
 
   return [value, setPersistedValue];

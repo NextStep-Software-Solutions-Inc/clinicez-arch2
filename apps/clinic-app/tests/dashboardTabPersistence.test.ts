@@ -34,8 +34,47 @@ const REPORT_TYPES = [
 ] as const;
 type ReportType = (typeof REPORT_TYPES)[number];
 
+const QUEUE_FILTERS = [
+  'ALL',
+  'Waiting',
+  'Triaged',
+  'InConsultation',
+  'PendingProcedure',
+  'OnHold',
+  'NoShow',
+  'Completed',
+] as const;
+type QueueFilter = (typeof QUEUE_FILTERS)[number];
+
 const DASHBOARD_ACTIVE_TAB_STORAGE_KEY = 'clinicez_dashboard_active_tab';
 const DASHBOARD_REPORT_TYPE_STORAGE_KEY = 'clinicez_dashboard_report_type';
+const DASHBOARD_QUEUE_FILTER_STORAGE_KEY = 'clinicez_dashboard_queue_filter';
+
+const QUEUE_FILTER_VALUE_ALIASES: Record<string, QueueFilter> = {
+  all: 'ALL',
+  waiting: 'Waiting',
+  triage: 'Triaged',
+  triaged: 'Triaged',
+  in_consultation: 'InConsultation',
+  'in-consultation': 'InConsultation',
+  inconsultation: 'InConsultation',
+  consultation: 'InConsultation',
+  procedure: 'PendingProcedure',
+  procedure_bay: 'PendingProcedure',
+  'procedure-bay': 'PendingProcedure',
+  procedurebay: 'PendingProcedure',
+  pending_procedure: 'PendingProcedure',
+  'pending-procedure': 'PendingProcedure',
+  pendingprocedure: 'PendingProcedure',
+  on_hold: 'OnHold',
+  'on-hold': 'OnHold',
+  onhold: 'OnHold',
+  no_show: 'NoShow',
+  'no-show': 'NoShow',
+  noshow: 'NoShow',
+  completed: 'Completed',
+  done: 'Completed',
+};
 
 function isDashboardPathname(pathname?: string | null): boolean {
   const clean = (pathname || '').trim().toLowerCase().replace(/\/+$/, '');
@@ -227,8 +266,8 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
     (globalThis as any).sessionStorage = origSessionStorage;
   });
 
-  test('1. Preserves REPORTS + CENSUS across full page refresh without flashing QUEUE', () => {
-    // Mount 1: User starts on default Live Queue
+  test('1. Preserves REPORTS + CENSUS and QUEUE + QueueFilter across full page refresh without flashing defaults', () => {
+    // Mount 1: User starts on default Live Queue with ALL filter
     const session1 = createHookHarness(
       () => {
         const [activeTab, setActiveTab] = usePersistedTab<DashboardTab>({
@@ -247,13 +286,32 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
           pathnameMatcher: isDashboardPathname,
           syncUrl: activeTab === 'REPORTS',
         });
-        return { activeTab, setActiveTab, reportType, setReportType };
+        const [queueFilter, setQueueFilter] = usePersistedTab<QueueFilter>({
+          storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+          allowedValues: QUEUE_FILTERS,
+          defaultValue: 'ALL',
+          queryParam: 'status',
+          queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+          valueAliases: QUEUE_FILTER_VALUE_ALIASES,
+          pathnameMatcher: isDashboardPathname,
+          syncUrl: activeTab === 'QUEUE',
+        });
+        return { activeTab, setActiveTab, reportType, setReportType, queueFilter, setQueueFilter };
       },
       {},
     );
 
     expect(session1.result.activeTab).toBe('QUEUE');
     expect(session1.result.reportType).toBe('DAILY_EOD');
+    expect(session1.result.queueFilter).toBe('ALL');
+
+    // User switches Queue filter to Waiting
+    session1.result.setQueueFilter('Waiting');
+    session1.rerender();
+
+    expect(session1.result.queueFilter).toBe('Waiting');
+    expect(getSessionItem(DASHBOARD_QUEUE_FILTER_STORAGE_KEY)).toBe('Waiting');
+    expect(currentHref).toContain('status=Waiting');
 
     // User switches to Reports -> Clinic Census
     session1.result.setActiveTab('REPORTS');
@@ -270,7 +328,7 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
 
     session1.unmount();
 
-    // Simulate browser refresh (Cmd+R) — even if URL is bare `/` OR `?tab=REPORTS&report=CENSUS`
+    // Simulate browser refresh (Cmd+R) — even if URL is bare `/`
     currentHref = 'http://localhost:8081/';
     const session2 = createHookHarness(
       () => {
@@ -290,7 +348,17 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
           pathnameMatcher: isDashboardPathname,
           syncUrl: activeTab === 'REPORTS',
         });
-        return { activeTab, reportType };
+        const [queueFilter] = usePersistedTab<QueueFilter>({
+          storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+          allowedValues: QUEUE_FILTERS,
+          defaultValue: 'ALL',
+          queryParam: 'status',
+          queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+          valueAliases: QUEUE_FILTER_VALUE_ALIASES,
+          pathnameMatcher: isDashboardPathname,
+          syncUrl: activeTab === 'QUEUE',
+        });
+        return { activeTab, reportType, queueFilter };
       },
       {},
     );
@@ -298,10 +366,45 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
     // Synchronous initial hydration must immediately yield REPORTS + CENSUS on first render
     expect(session2.result.activeTab).toBe('REPORTS');
     expect(session2.result.reportType).toBe('CENSUS');
+    // And queueFilter in background storage also preserves Waiting!
+    expect(session2.result.queueFilter).toBe('Waiting');
     session2.unmount();
+
+    // Now test a bare refresh when user was on Live Queue with PendingProcedure (Procedure bay)
+    setSessionItem(DASHBOARD_ACTIVE_TAB_STORAGE_KEY, 'QUEUE');
+    setSessionItem(DASHBOARD_QUEUE_FILTER_STORAGE_KEY, 'PendingProcedure');
+    currentHref = 'http://localhost:8081/';
+
+    const session3 = createHookHarness(
+      () => {
+        const [activeTab] = usePersistedTab<DashboardTab>({
+          storageKey: DASHBOARD_ACTIVE_TAB_STORAGE_KEY,
+          allowedValues: DASHBOARD_TABS,
+          defaultValue: 'QUEUE',
+          queryParam: 'tab',
+          pathnameMatcher: isDashboardPathname,
+        });
+        const [queueFilter] = usePersistedTab<QueueFilter>({
+          storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+          allowedValues: QUEUE_FILTERS,
+          defaultValue: 'ALL',
+          queryParam: 'status',
+          queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+          valueAliases: QUEUE_FILTER_VALUE_ALIASES,
+          pathnameMatcher: isDashboardPathname,
+          syncUrl: activeTab === 'QUEUE',
+        });
+        return { activeTab, queueFilter };
+      },
+      {},
+    );
+
+    expect(session3.result.activeTab).toBe('QUEUE');
+    expect(session3.result.queueFilter).toBe('PendingProcedure');
+    session3.unmount();
   });
 
-  test('2. Preserves ANALYTICS tab and all 6 ReportType sub-tabs across refresh', () => {
+  test('2. Preserves ANALYTICS tab, all 6 ReportType sub-tabs, and all 8 QueueFilter status tabs across refresh', () => {
     setSessionItem(DASHBOARD_ACTIVE_TAB_STORAGE_KEY, 'ANALYTICS');
     expect(
       resolveInitialPersistedTab({
@@ -325,11 +428,27 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
         }),
       ).toBe(subTab);
     }
+
+    for (const qf of QUEUE_FILTERS) {
+      setSessionItem(DASHBOARD_QUEUE_FILTER_STORAGE_KEY, qf);
+      expect(
+        resolveInitialPersistedTab({
+          storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+          allowedValues: QUEUE_FILTERS,
+          defaultValue: 'ALL',
+          queryParam: 'status',
+          queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+          valueAliases: QUEUE_FILTER_VALUE_ALIASES,
+          pathnameMatcher: isDashboardPathname,
+        }),
+      ).toBe(qf);
+    }
   });
 
-  test('3. URL query params take priority on deep-link load, normalize case, and ignore non-dashboard paths', () => {
+  test('3. URL query params take priority on deep-link load, normalize case, and map queue status aliases', () => {
     setSessionItem(DASHBOARD_ACTIVE_TAB_STORAGE_KEY, 'QUEUE');
     setSessionItem(DASHBOARD_REPORT_TYPE_STORAGE_KEY, 'DAILY_EOD');
+    setSessionItem(DASHBOARD_QUEUE_FILTER_STORAGE_KEY, 'ALL');
     currentHref = 'http://localhost:8081/dashboard?tab=reports&report=dispensing_ledger';
 
     expect(
@@ -368,6 +487,53 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
     expect(readPersistedTabFromSearch('?subTab=morbidity', REPORT_TYPES, 'report', ['subTab'])).toBe(
       'MORBIDITY',
     );
+
+    // Queue status aliases
+    expect(
+      readPersistedTabFromSearch(
+        '?status=waiting',
+        QUEUE_FILTERS,
+        'status',
+        ['queueStatus', 'queueFilter', 'filter'],
+        QUEUE_FILTER_VALUE_ALIASES,
+      ),
+    ).toBe('Waiting');
+    expect(
+      readPersistedTabFromSearch(
+        '?queueStatus=triage',
+        QUEUE_FILTERS,
+        'status',
+        ['queueStatus', 'queueFilter', 'filter'],
+        QUEUE_FILTER_VALUE_ALIASES,
+      ),
+    ).toBe('Triaged');
+    expect(
+      readPersistedTabFromSearch(
+        '?status=in-consultation',
+        QUEUE_FILTERS,
+        'status',
+        ['queueStatus', 'queueFilter', 'filter'],
+        QUEUE_FILTER_VALUE_ALIASES,
+      ),
+    ).toBe('InConsultation');
+    expect(
+      readPersistedTabFromSearch(
+        '?status=procedure-bay',
+        QUEUE_FILTERS,
+        'status',
+        ['queueStatus', 'queueFilter', 'filter'],
+        QUEUE_FILTER_VALUE_ALIASES,
+      ),
+    ).toBe('PendingProcedure');
+    expect(
+      readPersistedTabFromSearch(
+        '?filter=no-show',
+        QUEUE_FILTERS,
+        'status',
+        ['queueStatus', 'queueFilter', 'filter'],
+        QUEUE_FILTER_VALUE_ALIASES,
+      ),
+    ).toBe('NoShow');
   });
 
   test('4. Dashboard.screen.tsx and Navigation.tsx wire usePersistedTab and linking parse', () => {
@@ -382,10 +548,14 @@ describe('Dashboard activeTab & Reports reportType persistence across page refre
 
     expect(dashboardSrc).toContain('usePersistedTab<DashboardTab>');
     expect(dashboardSrc).toContain('usePersistedTab<ReportType>');
+    expect(dashboardSrc).toContain('usePersistedTab<QueueFilter>');
     expect(dashboardSrc).toContain('DASHBOARD_ACTIVE_TAB_STORAGE_KEY');
     expect(dashboardSrc).toContain('DASHBOARD_REPORT_TYPE_STORAGE_KEY');
+    expect(dashboardSrc).toContain('DASHBOARD_QUEUE_FILTER_STORAGE_KEY');
     expect(dashboardSrc).toContain('usePersistedScrollPosition');
     expect(navSrc).toContain("path: 'dashboard'");
     expect(navSrc).toContain('report: String');
+    expect(navSrc).toContain('status: String');
+    expect(navSrc).toContain('queueStatus: String');
   });
 });

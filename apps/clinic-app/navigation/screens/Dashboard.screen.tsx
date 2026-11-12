@@ -99,12 +99,28 @@ export const REPORT_TYPES = [
 ] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
 
+export const QUEUE_FILTERS = [
+  'ALL',
+  'Waiting',
+  'Triaged',
+  'InConsultation',
+  'PendingProcedure',
+  'OnHold',
+  'NoShow',
+  'Completed',
+] as const;
+export type QueueFilter = (typeof QUEUE_FILTERS)[number];
+
 export const DASHBOARD_ACTIVE_TAB_STORAGE_KEY = 'clinicez_dashboard_active_tab';
 export const DASHBOARD_REPORT_TYPE_STORAGE_KEY = 'clinicez_dashboard_report_type';
+export const DASHBOARD_QUEUE_FILTER_STORAGE_KEY = 'clinicez_dashboard_queue_filter';
 
 export interface DashboardRouteParams {
   tab?: string;
   report?: string;
+  status?: string;
+  queueStatus?: string;
+  queueFilter?: string;
 }
 
 export function isDashboardPathname(pathname?: string | null): boolean {
@@ -120,8 +136,6 @@ function useOptionalDashboardRoute(): { params?: DashboardRouteParams } | null {
     return null;
   }
 }
-
-type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'PendingProcedure' | 'OnHold' | 'NoShow' | 'Completed';
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
@@ -353,14 +367,17 @@ export default function DashboardScreen({
   const [savingDischarge, setSavingDischarge] = useState<boolean>(false);
   const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
 
+  const activeTabRef = useRef<DashboardTab>('QUEUE');
   const reportTypeRef = useRef<ReportType>('DAILY_EOD');
+  const queueFilterRef = useRef<QueueFilter>('ALL');
   const resetScrollRef = useRef<((targetKey?: string) => void) | null>(null);
 
   const syncDashboardRouteAndUrl = useCallback(
-    (nextTab: DashboardTab, nextReport: ReportType) => {
+    (nextTab: DashboardTab, nextReport: ReportType, nextQueueFilter: QueueFilter) => {
       navigation?.setParams?.({
         tab: nextTab,
         report: nextTab === 'REPORTS' ? nextReport : undefined,
+        status: nextTab === 'QUEUE' && nextQueueFilter !== 'ALL' ? nextQueueFilter : undefined,
       });
       if (
         Platform.OS === 'web' &&
@@ -374,8 +391,23 @@ export default function DashboardScreen({
           url.searchParams.set('tab', nextTab);
           if (nextTab === 'REPORTS') {
             url.searchParams.set('report', nextReport);
+            url.searchParams.delete('status');
+            url.searchParams.delete('queueStatus');
+            url.searchParams.delete('queueFilter');
+          } else if (nextTab === 'QUEUE') {
+            url.searchParams.delete('report');
+            if (nextQueueFilter !== 'ALL') {
+              url.searchParams.set('status', nextQueueFilter);
+            } else {
+              url.searchParams.delete('status');
+              url.searchParams.delete('queueStatus');
+              url.searchParams.delete('queueFilter');
+            }
           } else {
             url.searchParams.delete('report');
+            url.searchParams.delete('status');
+            url.searchParams.delete('queueStatus');
+            url.searchParams.delete('queueFilter');
           }
           if (url.toString() !== window.location.href) {
             window.history.replaceState(window.history.state ?? null, '', url.toString());
@@ -396,14 +428,19 @@ export default function DashboardScreen({
     queryParam: 'tab',
     pathnameMatcher: isDashboardPathname,
     onPersist: (nextTab) => {
+      activeTabRef.current = nextTab;
       const scrollKey =
         nextTab === 'REPORTS'
           ? `clinicez.scroll.dashboard.REPORTS.${reportTypeRef.current}`
-          : `clinicez.scroll.dashboard.${nextTab}`;
+          : nextTab === 'QUEUE'
+            ? `clinicez.scroll.dashboard.QUEUE.${queueFilterRef.current}`
+            : `clinicez.scroll.dashboard.${nextTab}`;
       resetScrollRef.current?.(scrollKey);
-      syncDashboardRouteAndUrl(nextTab, reportTypeRef.current);
+      syncDashboardRouteAndUrl(nextTab, reportTypeRef.current, queueFilterRef.current);
     },
   });
+  activeTabRef.current = activeTab;
+
   const [metrics, setMetrics] = useState<QueueMetrics | null>(null);
   const [queue, setQueue] = useState<PatientQueueItem[] | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
@@ -412,7 +449,49 @@ export default function DashboardScreen({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actioningId, setActioningId] = useState<string | null>(null);
-  const [queueFilter, setQueueFilter] = useState<QueueFilter>('ALL');
+
+  const [queueFilter, setQueueFilter] = usePersistedTab<QueueFilter>({
+    storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+    allowedValues: QUEUE_FILTERS,
+    defaultValue: 'ALL',
+    routeParam: routeParams?.status || routeParams?.queueStatus || routeParams?.queueFilter,
+    queryParam: 'status',
+    queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+    valueAliases: {
+      all: 'ALL',
+      waiting: 'Waiting',
+      triage: 'Triaged',
+      triaged: 'Triaged',
+      in_consultation: 'InConsultation',
+      'in-consultation': 'InConsultation',
+      inconsultation: 'InConsultation',
+      consultation: 'InConsultation',
+      procedure: 'PendingProcedure',
+      procedure_bay: 'PendingProcedure',
+      'procedure-bay': 'PendingProcedure',
+      procedurebay: 'PendingProcedure',
+      pending_procedure: 'PendingProcedure',
+      'pending-procedure': 'PendingProcedure',
+      pendingprocedure: 'PendingProcedure',
+      on_hold: 'OnHold',
+      'on-hold': 'OnHold',
+      onhold: 'OnHold',
+      no_show: 'NoShow',
+      'no-show': 'NoShow',
+      noshow: 'NoShow',
+      completed: 'Completed',
+      done: 'Completed',
+    },
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'QUEUE',
+    onPersist: (nextFilter) => {
+      queueFilterRef.current = nextFilter;
+      resetScrollRef.current?.(`clinicez.scroll.dashboard.QUEUE.${nextFilter}`);
+      syncDashboardRouteAndUrl(activeTabRef.current, reportTypeRef.current, nextFilter);
+    },
+  });
+  queueFilterRef.current = queueFilter;
+
   const [showForceEodModal, setShowForceEodModal] = useState(false);
 
   // Nurse triage modal state
@@ -448,7 +527,7 @@ export default function DashboardScreen({
     onPersist: (nextReport) => {
       reportTypeRef.current = nextReport;
       resetScrollRef.current?.(`clinicez.scroll.dashboard.REPORTS.${nextReport}`);
-      syncDashboardRouteAndUrl(activeTab, nextReport);
+      syncDashboardRouteAndUrl(activeTabRef.current, nextReport, queueFilterRef.current);
     },
   });
   reportTypeRef.current = reportType;
@@ -456,7 +535,9 @@ export default function DashboardScreen({
   const dashboardScrollKey =
     activeTab === 'REPORTS'
       ? `clinicez.scroll.dashboard.REPORTS.${reportType}`
-      : `clinicez.scroll.dashboard.${activeTab}`;
+      : activeTab === 'QUEUE'
+        ? `clinicez.scroll.dashboard.QUEUE.${queueFilter}`
+        : `clinicez.scroll.dashboard.${activeTab}`;
   const {
     scrollViewRef: dashboardScrollRef,
     onScroll: handleDashboardScroll,

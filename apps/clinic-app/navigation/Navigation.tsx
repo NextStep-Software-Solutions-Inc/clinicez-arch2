@@ -66,6 +66,8 @@ const Tab = createBottomTabNavigator({
         parse: {
           tab: String,
           report: String,
+          status: String,
+          queueStatus: String,
         },
       },
       options: {
