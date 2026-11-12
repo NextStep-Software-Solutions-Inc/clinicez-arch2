@@ -157,7 +157,7 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             Sex = RegisterClinicPatientCommandHandler.ParseBiologicalSex(request.Sex),
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
-            BloodType = Enum.TryParse<BloodType>(request.BloodType, true, out var bt) ? bt : null,
+            BloodType = BloodTypeParser.TryParse(request.BloodType, out var bt) ? bt : null,
             CustomFields = customFields,
             VerificationStatus = PatientVerificationStatus.PendingVerification,
             CreatedAt = DateTime.UtcNow,

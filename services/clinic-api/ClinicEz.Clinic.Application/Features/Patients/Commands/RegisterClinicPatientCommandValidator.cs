@@ -82,6 +82,13 @@ public sealed class RegisterClinicPatientCommandValidator : AbstractValidator<Re
                 .MaximumLength(10)
                 .WithMessage("Series prefix must not exceed 10 characters.");
         });
+
+        When(x => !string.IsNullOrWhiteSpace(x.BloodType), () =>
+        {
+            RuleFor(x => x.BloodType!)
+                .Must(s => BloodTypeParser.TryParse(s, out _))
+                .WithMessage("Blood type must be a valid ABO/Rh blood group (e.g., A+, A-, B+, B-, AB+, AB-, O+, O-, Unknown).");
+        });
     }
 
     public static bool BeValidPhilHealthMod11(string pin)

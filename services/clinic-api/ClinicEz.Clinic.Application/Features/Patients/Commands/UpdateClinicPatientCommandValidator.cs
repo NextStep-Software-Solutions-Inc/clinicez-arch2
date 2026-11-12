@@ -66,6 +66,13 @@ public sealed class UpdateClinicPatientCommandValidator : AbstractValidator<Upda
                 .MaximumLength(255).WithMessage("Email must not exceed 255 characters.");
         });
 
+        When(x => !string.IsNullOrWhiteSpace(x.BloodType), () =>
+        {
+            RuleFor(x => x.BloodType!)
+                .Must(s => BloodTypeParser.TryParse(s, out _))
+                .WithMessage("Blood type must be a valid ABO/Rh blood group (e.g., A+, A-, B+, B-, AB+, AB-, O+, O-, Unknown).");
+        });
+
         When(x => x.StructuredAllergies != null && x.StructuredAllergies.Count > 0, () =>
         {
             RuleForEach(x => x.StructuredAllergies!).ChildRules(allergy =>

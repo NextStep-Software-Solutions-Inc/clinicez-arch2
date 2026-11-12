@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 import { ThemedText, Badge, Button, Card, Icon, ActionMenu, type ActionMenuItem } from '@ui';
 import { theme } from '@constants/theme';
+import { formatBloodTypeLabel } from '../../constants/bloodTypes';
 import { formatLongAge } from '../../utils/age';
 import type { ClinicPatient, StaffMember } from '../../services/clinicService';
 import { computePatientLocation } from './patientLocation';
@@ -143,11 +144,13 @@ export function formatPatientDemographicsLine(
     ? `${patient.age} yrs`
     : null;
 
+  const bloodTypeDisplay = formatBloodTypeLabel(patient.bloodType);
+
   return [
     ageDisplay,
     patient.sex,
     patient.civilStatus,
-    patient.bloodType ? `Blood type ${patient.bloodType}` : null,
+    bloodTypeDisplay ? `Blood type ${bloodTypeDisplay}` : null,
   ]
     .filter(Boolean)
     .join(' • ');
