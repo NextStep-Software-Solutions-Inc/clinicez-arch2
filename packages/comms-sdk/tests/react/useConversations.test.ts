@@ -164,6 +164,145 @@ describe('useConversations Hook Backend Wireup', () => {
     }
   });
 
+  it('creates Facility conversation with department room name without sending category enum and binds contextType/contextId', async () => {
+    const originalFetch = globalThis.fetch;
+    const postCalls: Array<{ url: string; options: any }> = [];
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      if (options?.method === 'POST') {
+        postCalls.push({ url, options });
+        const body = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          id: 'conv-server-facility-888',
+          tenantId: body.tenantId,
+          facilityId: body.facilityId,
+          scope: body.scope,
+          kind: body.kind,
+          title: body.title,
+          contextType: body.contextType,
+          contextId: body.contextId,
+          category: body.category,
+          status: 'Submitted',
+          isEmergencyConfirmed: false,
+          isLocalOnly: false,
+          reopenCount: 0,
+          messageCount: 0,
+          lastSeq: 0,
+          createdAtUtc: new Date().toISOString(),
+          createdBy: 'staff-nurse-1',
+          participants: []
+        }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as any;
+
+    try {
+      const client = new MockCommsClient();
+      const store = new OptimisticStore();
+      const mockContext = createMockContext(client, store, 'https://comms.local');
+
+      const contextMap = new Map();
+      contextMap.set(CommsContext, mockContext);
+
+      const harness = createHookHarness(() => useConversations(), {
+        contextValues: contextMap
+      });
+
+      const created = await harness.result.current.createConversation({
+        scope: 'Facility',
+        title: 'Room 1 Channel',
+        department: 'Room 1'
+      });
+
+      expect(postCalls.length).toBe(1);
+      const call = postCalls[0];
+      const parsed = JSON.parse(call.options.body);
+
+      // Invariants: Category must be null (not "Room 1"), contextType mapped to Department, contextId mapped to Room 1
+      expect(parsed.title).toBe('Room 1 Channel');
+      expect(parsed.scope).toBe('Facility');
+      expect(parsed.contextType).toBe('Department');
+      expect(parsed.contextId).toBe('Room 1');
+      expect(parsed.category).toBeNull();
+
+      expect(created.id).toBe('conv-server-facility-888');
+      expect(created.contextType).toBe('Department');
+      expect(created.contextId).toBe('Room 1');
+      expect(created.category).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('sanitizes invalid or free-text category into null before sending to backend to prevent 400 Bad Request', async () => {
+    const originalFetch = globalThis.fetch;
+    const postCalls: Array<{ url: string; options: any }> = [];
+
+    globalThis.fetch = (async (url: string, options: any) => {
+      if (options?.method === 'POST') {
+        postCalls.push({ url, options });
+        const body = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+          id: 'conv-sanitized-999',
+          tenantId: body.tenantId,
+          facilityId: body.facilityId,
+          scope: body.scope,
+          title: body.title,
+          category: body.category,
+          status: 'Submitted',
+          createdAtUtc: new Date().toISOString(),
+          createdBy: 'staff-nurse-1',
+          participants: []
+        }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as any;
+
+    try {
+      const client = new MockCommsClient();
+      const store = new OptimisticStore();
+      const mockContext = createMockContext(client, store, 'https://comms.local');
+
+      const contextMap = new Map();
+      contextMap.set(CommsContext, mockContext);
+
+      const harness = createHookHarness(() => useConversations(), {
+        contextValues: contextMap
+      });
+
+      // Pass an invalid free-text category that is not a valid MessageCategory enum
+      const created = await harness.result.current.createConversation({
+        scope: 'Facility',
+        title: 'Triage Station Channel',
+        contextType: 'Department',
+        contextId: 'Triage Station',
+        category: 'Triage Station' as any
+      });
+
+      expect(postCalls.length).toBe(1);
+      const call = postCalls[0];
+      const parsed = JSON.parse(call.options.body);
+
+      // Free-text category must be sanitized to null
+      expect(parsed.category).toBeNull();
+      expect(created.id).toBe('conv-sanitized-999');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('rejects createConversation() and rolls back optimistic state on non-2xx', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string, options: any) => {

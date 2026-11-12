@@ -8,6 +8,19 @@ import {
   UseConversationsResult
 } from '../types';
 
+const VALID_MESSAGE_CATEGORIES = new Set<string>([
+  'Scheduling',
+  'PrescriptionRefill',
+  'LabResultQuestion',
+  'PostVisitFollowUp',
+  'Billing',
+  'OrderStatus',
+  'MedicineQuestion',
+  'CollectionAndAppointment',
+  'ReportCopy',
+  'Other'
+]);
+
 export function useConversations(
   scope?: ConversationScopeFilter | ConversationScope[],
   initialFilter?: ConversationsFilterOptions
@@ -99,6 +112,15 @@ export function useConversations(
       const effectiveCreatedBy = staffId || 'staff';
       const participantsList = request.participantIds || request.participantStaffIds || [];
 
+      const effectiveContextType =
+        request.contextType || (request.department ? 'Department' : undefined);
+      const effectiveContextId =
+        request.contextId || request.department || undefined;
+      const effectiveCategory =
+        request.category && VALID_MESSAGE_CATEGORIES.has(request.category)
+          ? request.category
+          : undefined;
+
       const newConv: ConversationDto = {
         id: optimisticId,
         tenantId: tenantId || '',
@@ -106,9 +128,9 @@ export function useConversations(
         scope: request.scope,
         kind: 'General',
         title: request.title,
-        contextType: request.contextType,
-        contextId: request.contextId,
-        category: request.category,
+        contextType: effectiveContextType,
+        contextId: effectiveContextId,
+        category: effectiveCategory,
         status: 'Submitted',
         isEmergencyConfirmed: false,
         isLocalOnly: request.isLocalOnly ?? false,
@@ -150,9 +172,9 @@ export function useConversations(
           scope: request.scope,
           kind: 'General',
           title: request.title,
-          contextType: request.contextType || null,
-          contextId: request.contextId || null,
-          category: request.category || null,
+          contextType: effectiveContextType || null,
+          contextId: effectiveContextId || null,
+          category: effectiveCategory || null,
           isEmergencyConfirmed: false,
           isLocalOnly: request.isLocalOnly ?? false,
           participants: participantsList.length > 0 ? participantsList.map((id) => ({

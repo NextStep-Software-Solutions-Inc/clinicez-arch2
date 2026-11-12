@@ -442,5 +442,31 @@ describe('ClinicActiveThread & NewConversationModal Dedicated Suite', () => {
       expect(html).toContain('Start Conversation');
       expect(html).toContain('Cancel');
     });
+
+    test('AST audit verifies ClinicChatDrawerHost maps Facility department to contextId/contextType, not MessageCategory', () => {
+      const fs = require('fs');
+      const path = require('path');
+      const hostPath = path.resolve(__dirname, '../components/comms/ClinicChatDrawerHost.tsx');
+      const hostSource = fs.readFileSync(hostPath, 'utf-8');
+
+      // Must not assign department to category enum
+      expect(hostSource).not.toContain('category: params.department');
+      // Must map contextType to Department for facility scope
+      expect(hostSource).toContain("isFacility && params.department ? 'Department'");
+      // Must map contextId to params.department for facility scope
+      expect(hostSource).toContain("isFacility ? params.department");
+      // Must map contextType to Patient for staffContext scope
+      expect(hostSource).toContain("isStaffContext && params.patientId ? 'Patient'");
+    });
+
+    test('Facility scope conversation in ClinicActiveThread protects handleViewPatientChart from treating room name as patient ID', () => {
+      const fs = require('fs');
+      const path = require('path');
+      const threadPath = path.resolve(__dirname, '../components/comms/ClinicActiveThread.tsx');
+      const threadSource = fs.readFileSync(threadPath, 'utf-8');
+
+      // Must guard patientId resolution with scope check
+      expect(threadSource).toContain("conversation?.scope === 'StaffContext' || conversation?.scope === 'PatientFacility'");
+    });
   });
 });

@@ -233,7 +233,10 @@ export default function ClinicActiveThread({
   // Action Menu: View Patient Chart
   const handleViewPatientChart = () => {
     setIsActionMenuOpen(false);
-    const patientId = conversation?.contextId || (conversation?.scope === 'PatientFacility' ? conversation.id : undefined);
+    const isPatientScoped = conversation?.scope === 'StaffContext' || conversation?.scope === 'PatientFacility';
+    const patientId = isPatientScoped
+      ? (conversation?.contextId || (conversation?.scope === 'PatientFacility' ? conversation.id : undefined))
+      : undefined;
     if (patientId) {
       if (onOpenPatientChart) {
         onOpenPatientChart(patientId);
