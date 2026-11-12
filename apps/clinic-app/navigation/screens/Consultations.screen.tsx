@@ -70,6 +70,7 @@ import type {
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { formatLongAge } from '../../utils/age';
 import { getSessionItem, setSessionItem, getDeviceItem, setDeviceItem } from '../../utils/deviceStorage';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   InlinePhysicalExamCard,
   DEFAULT_PHYSICAL_EXAM_NORMAL,
@@ -450,12 +451,17 @@ export default function ConsultationsScreen() {
     documents: 'Issued medical certificates and referral letters',
     dental: 'Odontogram findings, tooth condition, surfaces, and dental procedures',
   };
-  const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>(() => {
-    const saved = getSessionItem('clinicez_consultations_active_chart_tab') as ChartReviewTab | null;
-    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'documents', 'dental'].includes(saved)) {
-      return saved;
-    }
-    return 'summary';
+  const [activeChartTab, setActiveChartTab] = usePersistedTab<ChartReviewTab>({
+    storageKey: 'clinicez_consultations_active_chart_tab',
+    allowedValues: ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'documents', 'dental'],
+    defaultValue: 'summary',
+    routeParam: (route?.params as any)?.chartTab,
+    queryParam: 'chartTab',
+    queryParamAliases: ['tab', 'section'],
+    syncUrl: Boolean(selectedPatient),
+    clearUrlOnInactive: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
   });
 
   const [chartTabHistory, setChartTabHistory] = useState<ChartReviewTab[]>([]);
@@ -464,7 +470,6 @@ export default function ConsultationsScreen() {
     if (tab === activeChartTab) return;
     setChartTabHistory((prev) => pushChartTabHistory(prev, activeChartTab, tab));
     setActiveChartTab(tab);
-    setSessionItem('clinicez_consultations_active_chart_tab', tab);
   };
   const [isWorkspaceExpanded, setIsWorkspaceExpanded] = useState<boolean>(() => {
     return getSessionItem('clinicez_consultations_workspace_expanded') === 'true';

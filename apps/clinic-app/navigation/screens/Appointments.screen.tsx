@@ -47,6 +47,7 @@ import {
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   CalendarHeader,
   CalendarSkeleton,
@@ -74,6 +75,7 @@ export type AppointmentsRouteParams = {
   date?: string;
   view?: CalendarViewMode;
   tab?: string;
+  status?: string;
   appointmentId?: string;
 };
 
@@ -277,12 +279,28 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [checkInAppointment, setCheckInAppointment] = useState<AppointmentItem | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_status_filter',
+    allowedValues: ['ALL', 'Scheduled', 'CheckedIn', 'Completed', 'Cancelled', 'NoShow'],
+    defaultValue: 'ALL',
+    routeParam: route?.params?.status,
+    queryParam: 'status',
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
 
   // Calendar View & Navigation State
-  const [viewMode, setViewMode] = useState<CalendarViewMode>(() =>
-    (route?.params?.view as CalendarViewMode) || 'month'
-  );
+  const [viewMode, setViewMode] = usePersistedTab<CalendarViewMode>({
+    storageKey: 'clinicez_appointments_view_mode',
+    allowedValues: ['month', 'week', 'day', 'agenda'],
+    defaultValue: 'month',
+    routeParam: (route?.params?.view as CalendarViewMode) || null,
+    queryParam: 'view',
+    queryParamAliases: ['viewMode'],
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
   const [currentDate, setCurrentDate] = useState<string>(() =>
     route?.params?.date || getManilaTodayStr()
   );
@@ -533,13 +551,6 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       setCurrentDate(route.params.date);
     }
   }, [route?.params?.date]);
-
-  // Deep-link / route param: view
-  useEffect(() => {
-    if (route?.params?.view && route.params.view !== viewMode) {
-      setViewMode(route.params.view as CalendarViewMode);
-    }
-  }, [route?.params?.view]);
 
   const handlePrev = useCallback(() => {
     const { year, month, day } = parseDateOnly(currentDate);

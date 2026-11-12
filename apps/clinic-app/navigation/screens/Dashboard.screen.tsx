@@ -147,6 +147,9 @@ export interface DashboardRouteParams {
   status?: string;
   queueStatus?: string;
   queueFilter?: string;
+  preset?: string;
+  acuity?: string;
+  visitType?: string;
 }
 
 export function isDashboardPathname(pathname?: string | null): boolean {
@@ -519,8 +522,45 @@ export default function DashboardScreen({
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [censusSearchQuery, setCensusSearchQuery] = useState('');
-  const [censusAcuityFilter, setCensusAcuityFilter] = useState<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>('ALL');
-  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = useState<string>('ALL');
+  const [censusAcuityFilter, setCensusAcuityFilter] = usePersistedTab<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>({
+    storageKey: 'clinicez_dashboard_census_acuity',
+    allowedValues: ['ALL', 'Routine', 'Urgent', 'Emergency'],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.acuity,
+    queryParam: 'acuity',
+    queryParamAliases: ['censusAcuity'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_census_visit_type',
+    allowedValues: [
+      'ALL',
+      'RoutineCheckup',
+      'AcuteIllnessConsultation',
+      'FollowUpConsultation',
+      'ChronicDiseaseManagement',
+      'PrescriptionRefill',
+      'DiagnosticLabFollowUp',
+      'VaccinationImmunization',
+      'WoundCareDressing',
+      'PediatricWellBabyVisit',
+      'PreEmploymentSchoolCheck',
+      'Other',
+    ],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.visitType,
+    queryParam: 'visitType',
+    queryParamAliases: ['censusVisitType'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
   const [censusPage, setCensusPage] = useState<number>(1);
   const [censusPageSize, setCensusPageSize] = useState<10 | 20 | 50>(20);
   const [censusPageLoading, setCensusPageLoading] = useState<boolean>(false);
@@ -537,8 +577,22 @@ export default function DashboardScreen({
     }));
   }, []);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsStartDate, setAnalyticsStartDate] = useState('');
-  const [analyticsEndDate, setAnalyticsEndDate] = useState('');
+  const [analyticsPreset, setAnalyticsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'ytd'>({
+    storageKey: 'clinicez_dashboard_analytics_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'ytd'],
+    defaultValue: '7d',
+    routeParam: routeParams?.preset as any,
+    queryParam: 'preset',
+    queryParamAliases: ['period', 'analyticsPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'ANALYTICS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const initialAnalyticsRange = useMemo(() => computeDatePresetRange(analyticsPreset), [analyticsPreset]);
+  const [analyticsStartDate, setAnalyticsStartDate] = useState(initialAnalyticsRange.start);
+  const [analyticsEndDate, setAnalyticsEndDate] = useState(initialAnalyticsRange.end);
   const [reportsStartDate, setReportsStartDate] = useState('');
   const [reportsEndDate, setReportsEndDate] = useState('');
   const [eodDate, setEodDate] = useState('');
@@ -1898,10 +1952,11 @@ export default function DashboardScreen({
                 return (
                   <Button
                     key={preset}
-                    variant="subtle"
+                    variant={analyticsPreset === preset ? 'primary' : 'subtle'}
                     size="xs"
                     title={labelMap[preset]}
                     onPress={() => {
+                      setAnalyticsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setAnalyticsStartDate(range.start);
                       setAnalyticsEndDate(range.end);

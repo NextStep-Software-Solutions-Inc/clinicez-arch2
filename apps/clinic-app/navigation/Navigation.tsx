@@ -68,6 +68,9 @@ const Tab = createBottomTabNavigator({
           report: String,
           status: String,
           queueStatus: String,
+          preset: String,
+          acuity: String,
+          visitType: String,
         },
       },
       options: {
@@ -80,6 +83,9 @@ const Tab = createBottomTabNavigator({
       linking: {
         path: 'patients',
         parse: {
+          filter: String,
+          view: String,
+          chartTab: String,
           openRegister: parseBooleanRouteParam,
         },
       },
@@ -93,6 +99,8 @@ const Tab = createBottomTabNavigator({
       linking: {
         path: 'consultations',
         parse: {
+          chartTab: String,
+          queueView: String,
           forceSeparateVisit: parseBooleanRouteParam,
         },
       },
@@ -104,7 +112,13 @@ const Tab = createBottomTabNavigator({
     },
     Appointments: {
       screen: AppointmentsScreen,
-      linking: 'appointments',
+      linking: {
+        path: 'appointments',
+        parse: {
+          view: String,
+          status: String,
+        },
+      },
       options: {
         title: 'Appointments',
         tabBarLabel: 'Appts',
@@ -113,7 +127,12 @@ const Tab = createBottomTabNavigator({
     },
     Billing: {
       screen: BillingScreen,
-      linking: 'billing',
+      linking: {
+        path: 'billing',
+        parse: {
+          mode: String,
+        },
+      },
       options: {
         title: 'Billing',
         tabBarLabel: 'Billing',
@@ -122,7 +141,13 @@ const Tab = createBottomTabNavigator({
     },
     ResultReview: {
       screen: ResultReviewScreen,
-      linking: 'result-review',
+      linking: {
+        path: 'result-review',
+        parse: {
+          state: String,
+          scope: String,
+        },
+      },
       options: {
         title: 'Result review',
         tabBarLabel: 'Results',
@@ -140,7 +165,12 @@ const Tab = createBottomTabNavigator({
     },
     Yakap: {
       screen: YakapScreen,
-      linking: 'yakap',
+      linking: {
+        path: 'yakap',
+        parse: {
+          tab: String,
+        },
+      },
       options: {
         title: 'PhilHealth Yakap',
         tabBarLabel: 'PhilHealth',
