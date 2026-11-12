@@ -39,6 +39,7 @@ public sealed record UpdateClinicSettingsCommand(
     string? JoinCode = null,
     DateTime? JoinCodeExpiresAt = null,
     bool ClearJoinCode = false,
+    bool ClearJoinCodeExpiresAt = false,
     string? PatientSearchDisplayFieldsJson = null,
     string? EodReconciliationTime = null,
     bool? AutoEodEnabled = null,
@@ -175,7 +176,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.IsJoinEnabled.HasValue)
             settings.IsJoinEnabled = request.IsJoinEnabled.Value;
 
-        if (request.ClearJoinCode)
+        if (request.ClearJoinCode || (request.JoinCode != null && string.IsNullOrWhiteSpace(request.JoinCode)))
         {
             settings.JoinCode = null;
             settings.JoinCodeExpiresAt = null;
@@ -183,10 +184,16 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         else
         {
             if (request.JoinCode != null)
-                settings.JoinCode = string.IsNullOrWhiteSpace(request.JoinCode) ? null : request.JoinCode.Trim().ToUpperInvariant();
+                settings.JoinCode = request.JoinCode.Trim().ToUpperInvariant();
 
-            if (request.JoinCodeExpiresAt.HasValue)
+            if (request.ClearJoinCodeExpiresAt)
+            {
+                settings.JoinCodeExpiresAt = null;
+            }
+            else if (request.JoinCodeExpiresAt.HasValue)
+            {
                 settings.JoinCodeExpiresAt = request.JoinCodeExpiresAt.Value;
+            }
         }
 
         if (request.PatientSearchDisplayFieldsJson != null)

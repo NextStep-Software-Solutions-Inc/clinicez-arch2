@@ -22,6 +22,7 @@ export interface SegmentedControlProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   style?: ViewStyle;
+  disabled?: boolean;
 }
 
 /**
@@ -33,6 +34,7 @@ export default function SegmentedControl<T extends string>({
   value,
   onChange,
   style,
+  disabled = false,
 }: SegmentedControlProps<T>) {
   return (
     <ScrollView
@@ -55,9 +57,10 @@ export default function SegmentedControl<T extends string>({
           return (
             <Pressable
               key={option.value}
-              onPress={() => onChange(option.value)}
+              onPress={() => !disabled && onChange(option.value)}
+              disabled={disabled}
               accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
+              accessibilityState={{ selected: active, disabled }}
               accessibilityLabel={a11yLabel}
               {...(Platform.OS === 'web' && isIconOnly
                 ? ({ title: option.label } as Record<string, unknown>)
@@ -66,8 +69,9 @@ export default function SegmentedControl<T extends string>({
                 styles.segment,
                 isIconOnly && styles.segmentIconOnly,
                 active && styles.segmentActive,
-                hovered && !active && styles.segmentHover,
-                pressed && !active && styles.segmentPressed,
+                hovered && !active && !disabled && styles.segmentHover,
+                pressed && !active && !disabled && styles.segmentPressed,
+                disabled && styles.segmentDisabled,
               ]}
             >
               {option.icon ? (
@@ -172,6 +176,10 @@ const styles = StyleSheet.create({
   },
   segmentPressed: {
     backgroundColor: theme.colors.primaryLight,
+  },
+  segmentDisabled: {
+    opacity: 0.5,
+    ...(Platform.OS === 'web' ? ({ cursor: 'not-allowed' } as any) : {}),
   },
   countBadge: {
     paddingHorizontal: 7,

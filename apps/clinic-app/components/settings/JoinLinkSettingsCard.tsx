@@ -230,6 +230,7 @@ export default function JoinLinkSettingsCard({
       joinCode: trimmedCode ? trimmedCode : null,
       joinCodeExpiresAt: trimmedCode && computedExpiresAt ? computedExpiresAt.toISOString() : null,
       clearJoinCode: !trimmedCode,
+      clearJoinCodeExpiresAt: Boolean(trimmedCode && !computedExpiresAt),
     });
     setSaving(false);
 
@@ -464,6 +465,7 @@ export default function JoinLinkSettingsCard({
                   style={!hasPasscode ? styles.dimmed : undefined}
                 >
                   <SegmentedControl
+                    disabled={!isEnabled || !hasPasscode}
                     options={[
                       { value: '24h', label: '24 Hours' },
                       { value: '7d', label: '7 Days' },
