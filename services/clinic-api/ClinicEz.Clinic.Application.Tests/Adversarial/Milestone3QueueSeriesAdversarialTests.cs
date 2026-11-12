@@ -47,23 +47,23 @@ public class Milestone3QueueSeriesAdversarialTests
         // Q, SQ, Q, V, SV, P, SP, A, SA, SQ, Q, V
         var checkIns = new (string? prefix, VisitType vType, string expected)[]
         {
-            ("Q", VisitType.Consultation, "Q-001"),
-            ("SQ", VisitType.Consultation, "SQ-001"),
-            ("Q", VisitType.Consultation, "Q-002"),
-            ("V", VisitType.VitalsCheckOnly, "V-001"),
-            ("SV", VisitType.VitalsCheckOnly, "SV-001"),
-            ("P", VisitType.StandaloneProcedure, "P-001"),
-            ("SP", VisitType.StandaloneProcedure, "SP-001"),
-            ("A", VisitType.AdministrativeDocument, "A-001"),
-            ("SA", VisitType.AdministrativeDocument, "SA-001"),
-            ("SQ", VisitType.Consultation, "SQ-002"),
-            ("Q", VisitType.Consultation, "Q-003"),
-            ("V", VisitType.VitalsCheckOnly, "V-002"),
-            ("P", VisitType.StandaloneProcedure, "P-002"),
-            ("A", VisitType.AdministrativeDocument, "A-002"),
-            ("SA", VisitType.AdministrativeDocument, "SA-002"),
-            ("SV", VisitType.VitalsCheckOnly, "SV-002"),
-            ("SP", VisitType.StandaloneProcedure, "SP-002"),
+            ("Q", VisitType.RoutineCheckup, "Q-001"),
+            ("SQ", VisitType.RoutineCheckup, "SQ-001"),
+            ("Q", VisitType.RoutineCheckup, "Q-002"),
+            ("V", VisitType.PreventiveHealthAssessment, "V-001"),
+            ("SV", VisitType.PreventiveHealthAssessment, "SV-001"),
+            ("P", VisitType.PreventiveHealthAssessment, "P-001"),
+            ("SP", VisitType.PreventiveHealthAssessment, "SP-001"),
+            ("A", VisitType.PreventiveHealthAssessment, "A-001"),
+            ("SA", VisitType.PreventiveHealthAssessment, "SA-001"),
+            ("SQ", VisitType.RoutineCheckup, "SQ-002"),
+            ("Q", VisitType.RoutineCheckup, "Q-003"),
+            ("V", VisitType.PreventiveHealthAssessment, "V-002"),
+            ("P", VisitType.PreventiveHealthAssessment, "P-002"),
+            ("A", VisitType.PreventiveHealthAssessment, "A-002"),
+            ("SA", VisitType.PreventiveHealthAssessment, "SA-002"),
+            ("SV", VisitType.PreventiveHealthAssessment, "SV-002"),
+            ("SP", VisitType.PreventiveHealthAssessment, "SP-002"),
         };
 
         foreach (var (prefix, vType, expected) in checkIns)
@@ -101,27 +101,27 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // Check in QA-001
         var r1 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "QA Pat", SeriesPrefix: "QA", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "QA Pat", SeriesPrefix: "QA", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r1.QueueNumber.Should().Be("QA-001");
 
         // Check in Q -> must be Q-001 (not Q-002)
         var r2 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Q Pat", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Q Pat", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r2.QueueNumber.Should().Be("Q-001");
 
         // Check in S -> S-001
         var r3 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "S Pat", SeriesPrefix: "S", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "S Pat", SeriesPrefix: "S", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r3.QueueNumber.Should().Be("S-001");
 
         // Check in SQ -> SQ-001
         var r4 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "SQ Pat", SeriesPrefix: "SQ", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "SQ Pat", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r4.QueueNumber.Should().Be("SQ-001");
 
         // Another Q -> Q-002
         var r5 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Q Pat 2", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Q Pat 2", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r5.QueueNumber.Should().Be("Q-002");
     }
 
@@ -150,7 +150,7 @@ public class Milestone3QueueSeriesAdversarialTests
             PatientId = Guid.NewGuid(),
             PatientName = "Pre-seeded 999",
             Status = QueueStatus.Completed,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             CheckInTime = DateTime.UtcNow
         });
         await context.SaveChangesAsync();
@@ -163,7 +163,7 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // Act 1: Check in when max is 999
         var res1 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Rollover Pat 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Rollover Pat 1", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
 
         // Assert 1: next should be 1000 ("Q-1000")
         res1.QueueNumber.Should().Be("Q-1000");
@@ -171,7 +171,7 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // Act 2: Check in subsequent patient
         var res2 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Rollover Pat 2", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Rollover Pat 2", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
 
         // Assert 2: next should be 1001 ("Q-1001")
         res2.QueueNumber.Should().Be("Q-1001");
@@ -205,7 +205,7 @@ public class Milestone3QueueSeriesAdversarialTests
                 PatientId = Guid.NewGuid(),
                 PatientName = $"Existing {seq}",
                 Status = QueueStatus.Completed,
-                VisitType = VisitType.Consultation,
+                VisitType = VisitType.RoutineCheckup,
                 CheckInTime = DateTime.UtcNow
             });
         }
@@ -219,7 +219,7 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // Act: next check-in
         var res = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Gap Patient", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Gap Patient", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
 
         // Assert: should take max (100) + 1 = 101 -> "Q-101"
         res.QueueNumber.Should().Be("Q-101");
@@ -253,7 +253,7 @@ public class Milestone3QueueSeriesAdversarialTests
                 PatientId = Guid.NewGuid(),
                 PatientName = "Malformed Pat",
                 Status = QueueStatus.Completed,
-                VisitType = VisitType.Consultation,
+                VisitType = VisitType.RoutineCheckup,
                 CheckInTime = DateTime.UtcNow
             });
         }
@@ -267,7 +267,7 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // Act: next check-in with prefix "Q"
         var res = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Clean Pat", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Clean Pat", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
 
         // Assert: Since Q-000 parsedSeq is 0, and others fail TryParse, maxSeq is 0 -> next is 1 -> "Q-001"
         res.QueueNumber.Should().Be("Q-001");
@@ -295,42 +295,42 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // 1. null prefix -> defaults to "Q", should get "Q-001"
         var r1 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 1", SeriesPrefix: null, VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 1", SeriesPrefix: null, VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r1.QueueNumber.Should().Be("Q-001");
 
         // 2. empty prefix "" -> defaults to "Q", should get "Q-002"
         var r2 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 2", SeriesPrefix: "", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 2", SeriesPrefix: "", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r2.QueueNumber.Should().Be("Q-002");
 
         // 3. whitespace prefix "   " -> defaults to "Q", should get "Q-003"
         var r3 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 3", SeriesPrefix: "   ", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 3", SeriesPrefix: "   ", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r3.QueueNumber.Should().Be("Q-003");
 
         // 4. lowercase "sq" -> normalized to "SQ", should get "SQ-001"
         var r4 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 4", SeriesPrefix: "sq", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 4", SeriesPrefix: "sq", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r4.QueueNumber.Should().Be("SQ-001");
 
         // 5. whitespace with lowercase "  sq  " -> normalized to "SQ", should get "SQ-002"
         var r5 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 5", SeriesPrefix: "  sq  ", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 5", SeriesPrefix: "  sq  ", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r5.QueueNumber.Should().Be("SQ-002");
 
         // 6. trailing hyphen "sq-" -> normalized to "SQ", should get "SQ-003"
         var r6 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 6", SeriesPrefix: "sq-", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 6", SeriesPrefix: "sq-", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r6.QueueNumber.Should().Be("SQ-003");
 
         // 7. hyphen only " - " -> trimmed becomes "", defaults to "Q", should get "Q-004"
         var r7 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 7", SeriesPrefix: " - ", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 7", SeriesPrefix: " - ", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r7.QueueNumber.Should().Be("Q-004");
 
         // 8. uppercase with trailing hyphen "Q-" -> normalized to "Q", should get "Q-005"
         var r8 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Pat 8", SeriesPrefix: "Q-", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "Pat 8", SeriesPrefix: "Q-", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         r8.QueueNumber.Should().Be("Q-005");
     }
 
@@ -368,7 +368,7 @@ public class Milestone3QueueSeriesAdversarialTests
                 PatientId = Guid.NewGuid(),
                 PatientName = "Yesterday Pat 1",
                 Status = QueueStatus.Completed,
-                VisitType = VisitType.Consultation,
+                VisitType = VisitType.RoutineCheckup,
                 CheckInTime = DateTime.UtcNow.AddDays(-1)
             },
             new QueueItem
@@ -382,7 +382,7 @@ public class Milestone3QueueSeriesAdversarialTests
                 PatientId = Guid.NewGuid(),
                 PatientName = "Yesterday Pat 2",
                 Status = QueueStatus.Completed,
-                VisitType = VisitType.Consultation,
+                VisitType = VisitType.RoutineCheckup,
                 CheckInTime = DateTime.UtcNow.AddDays(-1)
             },
             new QueueItem
@@ -396,7 +396,7 @@ public class Milestone3QueueSeriesAdversarialTests
                 PatientId = Guid.NewGuid(),
                 PatientName = "Yesterday SQ Pat",
                 Status = QueueStatus.Completed,
-                VisitType = VisitType.Consultation,
+                VisitType = VisitType.RoutineCheckup,
                 CheckInTime = DateTime.UtcNow.AddDays(-1)
             }
         );
@@ -404,22 +404,22 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // Act 1: Today's check-in for Q -> should start back at Q-001
         var todayQ1 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Today Q 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: today), CancellationToken.None);
+            Guid.NewGuid(), "Today Q 1", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: today), CancellationToken.None);
         todayQ1.QueueNumber.Should().Be("Q-001");
 
         // Act 2: Today's check-in for SQ -> should start back at SQ-001
         var todaySQ1 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Today SQ 1", SeriesPrefix: "SQ", VisitType: VisitType.Consultation, QueueDate: today), CancellationToken.None);
+            Guid.NewGuid(), "Today SQ 1", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup, QueueDate: today), CancellationToken.None);
         todaySQ1.QueueNumber.Should().Be("SQ-001");
 
         // Act 3: Tomorrow's check-in for Q -> should also start at Q-001
         var tomorrowQ1 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Tomorrow Q 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: tomorrow), CancellationToken.None);
+            Guid.NewGuid(), "Tomorrow Q 1", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: tomorrow), CancellationToken.None);
         tomorrowQ1.QueueNumber.Should().Be("Q-001");
 
         // Act 4: Today's second Q ticket -> should be Q-002 (not affected by tomorrow or yesterday)
         var todayQ2 = await handler.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "Today Q 2", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: today), CancellationToken.None);
+            Guid.NewGuid(), "Today Q 2", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: today), CancellationToken.None);
         todayQ2.QueueNumber.Should().Be("Q-002");
     }
 
@@ -460,30 +460,30 @@ public class Milestone3QueueSeriesAdversarialTests
 
         // Act 1: Clinic 1 checks in two Q patients and one SQ patient
         var c1_q1 = await handler1.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "C1 Pat 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "C1 Pat 1", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         c1_q1.QueueNumber.Should().Be("Q-001");
 
         var c1_q2 = await handler1.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "C1 Pat 2", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "C1 Pat 2", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         c1_q2.QueueNumber.Should().Be("Q-002");
 
         var c1_sq1 = await handler1.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "C1 Pat 3", SeriesPrefix: "SQ", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "C1 Pat 3", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         c1_sq1.QueueNumber.Should().Be("SQ-001");
 
         // Act 2: Clinic 2 checks in Q patient -> must receive Q-001 (isolated from Clinic 1)
         var c2_q1 = await handler2.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "C2 Pat 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "C2 Pat 1", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         c2_q1.QueueNumber.Should().Be("Q-001");
 
         // Act 3: Clinic 2 checks in SQ patient -> must receive SQ-001 (isolated from Clinic 1)
         var c2_sq1 = await handler2.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "C2 Pat 2", SeriesPrefix: "SQ", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "C2 Pat 2", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         c2_sq1.QueueNumber.Should().Be("SQ-001");
 
         // Act 4: Clinic 1 checks in third Q patient -> must receive Q-003
         var c1_q3 = await handler1.Handle(new CheckInPatientCommand(
-            Guid.NewGuid(), "C1 Pat 4", SeriesPrefix: "Q", VisitType: VisitType.Consultation, QueueDate: fixedDate), CancellationToken.None);
+            Guid.NewGuid(), "C1 Pat 4", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup, QueueDate: fixedDate), CancellationToken.None);
         c1_q3.QueueNumber.Should().Be("Q-003");
     }
 

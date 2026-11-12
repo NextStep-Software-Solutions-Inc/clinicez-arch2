@@ -311,37 +311,37 @@ public class CheckInPatientCommandHandlerTests
         // Act & Assert: Senior Consultation (SQ)
         var pat1 = Guid.NewGuid();
         var res1 = await handler.Handle(new CheckInPatientCommand(
-            pat1, "Senior Patient 1", SeriesPrefix: "SQ", VisitType: VisitType.Consultation), CancellationToken.None);
+            pat1, "Senior Patient 1", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup), CancellationToken.None);
         res1.QueueNumber.Should().Be("SQ-001");
 
         // Act & Assert: Regular Consultation (Q)
         var pat2 = Guid.NewGuid();
         var res2 = await handler.Handle(new CheckInPatientCommand(
-            pat2, "Regular Patient 1", SeriesPrefix: "Q", VisitType: VisitType.Consultation), CancellationToken.None);
+            pat2, "Regular Patient 1", SeriesPrefix: "Q", VisitType: VisitType.RoutineCheckup), CancellationToken.None);
         res2.QueueNumber.Should().Be("Q-001");
 
         // Act & Assert: Second Senior Consultation (SQ) -> SQ-002
         var pat3 = Guid.NewGuid();
         var res3 = await handler.Handle(new CheckInPatientCommand(
-            pat3, "Senior Patient 2", SeriesPrefix: "SQ", VisitType: VisitType.Consultation), CancellationToken.None);
+            pat3, "Senior Patient 2", SeriesPrefix: "SQ", VisitType: VisitType.RoutineCheckup), CancellationToken.None);
         res3.QueueNumber.Should().Be("SQ-002");
 
         // Act & Assert: Vitals Check (V) -> V-001
         var pat4 = Guid.NewGuid();
         var res4 = await handler.Handle(new CheckInPatientCommand(
-            pat4, "Triage Patient", SeriesPrefix: "V", VisitType: VisitType.VitalsCheckOnly), CancellationToken.None);
+            pat4, "Triage Patient", SeriesPrefix: "V", VisitType: VisitType.PreventiveHealthAssessment), CancellationToken.None);
         res4.QueueNumber.Should().Be("V-001");
 
         // Act & Assert: Clinical Procedure (P) -> P-001
         var pat5 = Guid.NewGuid();
         var res5 = await handler.Handle(new CheckInPatientCommand(
-            pat5, "Procedure Patient", SeriesPrefix: "P", VisitType: VisitType.StandaloneProcedure), CancellationToken.None);
+            pat5, "Procedure Patient", SeriesPrefix: "P", VisitType: VisitType.PreventiveHealthAssessment), CancellationToken.None);
         res5.QueueNumber.Should().Be("P-001");
 
         // Act & Assert: Administrative (A) -> A-001
         var pat6 = Guid.NewGuid();
         var res6 = await handler.Handle(new CheckInPatientCommand(
-            pat6, "Admin Patient", SeriesPrefix: "A", VisitType: VisitType.AdministrativeDocument), CancellationToken.None);
+            pat6, "Admin Patient", SeriesPrefix: "A", VisitType: VisitType.PreventiveHealthAssessment), CancellationToken.None);
         res6.QueueNumber.Should().Be("A-001");
     }
 
@@ -414,7 +414,7 @@ public class CheckInPatientCommandHandlerTests
             senior.Id,
             "Eduardo Dela Cruz",
             SeriesPrefix: null,
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             QueueDate: today), CancellationToken.None);
 
         // Assert
@@ -466,7 +466,7 @@ public class CheckInPatientCommandHandlerTests
             youngPatient.Id,
             "Juan Tamad",
             SeriesPrefix: null,
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             QueueDate: today), CancellationToken.None);
 
         // Assert
@@ -518,7 +518,7 @@ public class CheckInPatientCommandHandlerTests
             senior.Id,
             "Corazon Aquino",
             SeriesPrefix: null,
-            VisitType: VisitType.VitalsCheckOnly,
+            VisitType: VisitType.PreventiveHealthAssessment,
             QueueDate: today), CancellationToken.None);
 
         // Assert

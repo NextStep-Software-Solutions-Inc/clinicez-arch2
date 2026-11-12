@@ -53,7 +53,7 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Consultation Waiting Patient",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.Consultation
+            VisitType = VisitType.RoutineCheckup
         };
 
         // 2. Waiting (VitalsCheckOnly) -> should become Cancelled with notes, NOT NoShow
@@ -68,7 +68,7 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Vitals Check Patient",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.VitalsCheckOnly
+            VisitType = VisitType.PreventiveHealthAssessment
         };
 
         // 3. Waiting (RetailPurchase) -> should become Cancelled with notes, NOT NoShow
@@ -83,7 +83,7 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Retail Guest",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.RetailPurchase
+            VisitType = (VisitType)6
         };
 
         // 4. DischargedNonDoctor -> MUST REMAIN UNTOUCHED
@@ -98,7 +98,7 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Nurse Discharged Patient",
             Status = QueueStatus.DischargedNonDoctor,
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             DischargedAt = pastDischargedAt,
             DischargeNotes = "Vitals within normal limits; discharged by nurse."
         };
@@ -115,7 +115,7 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Emergency Diverted Patient",
             Status = QueueStatus.Diverted,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             DischargedAt = pastDischargedAt,
             DischargeNotes = "Ambulance transfer to tertiary ER."
         };
@@ -132,7 +132,7 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Finished Doctor Consultation",
             Status = QueueStatus.Completed,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             CompletedTime = pastCompletedTime
         };
 
@@ -193,10 +193,10 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
     }
 
     [Theory]
-    [InlineData(VisitType.StandaloneProcedure)]
-    [InlineData(VisitType.LaboratorySpecimen)]
-    [InlineData(VisitType.AdministrativeDocument)]
-    [InlineData(VisitType.CashierSettlement)]
+    [InlineData(VisitType.PreventiveHealthAssessment)]
+    [InlineData((VisitType)6)]
+    [InlineData((VisitType)7)]
+    [InlineData((VisitType)99)]
     public async Task ReconcileEod_AllNonConsultationVisitTypes_AreCancelledWithoutNoShow(VisitType nonConsultType)
     {
         // Arrange
@@ -255,7 +255,7 @@ public class NonDoctorWorkflowsMilestone1Challenger2Tests
             PatientId = Guid.NewGuid(),
             PatientName = "Custom Note Patient",
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             DischargeNotes = customNote
         };
         await queueRepo.AddAsync(ticket, CancellationToken.None);

@@ -63,6 +63,10 @@ const Tab = createBottomTabNavigator({
       linking: {
         path: 'dashboard',
         alias: [''],
+        parse: {
+          tab: String,
+          report: String,
+        },
       },
       options: {
         title: 'Dashboard',

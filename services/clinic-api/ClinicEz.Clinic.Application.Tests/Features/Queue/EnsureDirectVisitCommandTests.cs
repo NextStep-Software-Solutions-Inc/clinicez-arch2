@@ -41,7 +41,7 @@ public class EnsureDirectVisitCommandTests
         var command = new EnsureDirectVisitCommand(
             PatientId: patientId,
             PatientName: "Dela Cruz, Juan",
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             InitialStatus: QueueStatus.InConsultation);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -78,7 +78,7 @@ public class EnsureDirectVisitCommandTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -93,7 +93,7 @@ public class EnsureDirectVisitCommandTests
         var command = new EnsureDirectVisitCommand(
             PatientId: patientId,
             PatientName: "Dela Cruz, Juan",
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             InitialStatus: QueueStatus.InConsultation);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -127,7 +127,7 @@ public class EnsureDirectVisitCommandTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -139,7 +139,7 @@ public class EnsureDirectVisitCommandTests
         var command = new EnsureDirectVisitCommand(
             PatientId: patientId,
             PatientName: "Dela Cruz, Juan",
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             InitialStatus: QueueStatus.InConsultation,
             AllowDuplicateActive: true);
 
@@ -175,7 +175,7 @@ public class EnsureDirectVisitCommandTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -202,7 +202,7 @@ public class EnsureDirectVisitCommandTests
         var command = new EnsureDirectVisitCommand(
             PatientId: patientId,
             PatientName: "Dela Cruz, Juan",
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             InitialStatus: QueueStatus.InConsultation);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -233,7 +233,7 @@ public class EnsureDirectVisitCommandTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -259,7 +259,7 @@ public class EnsureDirectVisitCommandTests
         var command = new EnsureDirectVisitCommand(
             PatientId: patientId,
             PatientName: "Dela Cruz, Juan",
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             InitialStatus: QueueStatus.InConsultation);
 
         var result = await handler.Handle(command, CancellationToken.None);
