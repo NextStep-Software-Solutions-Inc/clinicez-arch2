@@ -32,25 +32,30 @@ export default function EncountersTimelineTab({
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>('ALL');
   const [encounterTypeFilter, setEncounterTypeFilter] = useState<'ALL' | 'YAKAP' | 'STANDARD'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const signedConsultations = useMemo(
+    () => consultations.filter((c) => c.isSigned !== false),
+    [consultations],
+  );
+
   const [expandedEncounterIds, setExpandedEncounterIds] = useState<Record<string, boolean>>({
-    // Auto-expand the latest encounter by default
-    ...(consultations.length > 0 ? { [consultations[0].id]: true } : {}),
+    // Auto-expand the latest signed encounter by default
+    ...(signedConsultations.length > 0 ? { [signedConsultations[0].id]: true } : {}),
   });
 
   // Extract unique doctors
   const doctorsList = useMemo(() => {
     const map = new Map<string, string>();
-    consultations.forEach((c) => {
+    signedConsultations.forEach((c) => {
       if (c.doctorId && c.doctorName) {
         map.set(c.doctorId, c.doctorName);
       }
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [consultations]);
+  }, [signedConsultations]);
 
   // Filter consultations
   const filteredConsultations = useMemo(() => {
-    return consultations.filter((c) => {
+    return signedConsultations.filter((c) => {
       // Doctor filter
       if (selectedDoctorFilter !== 'ALL' && c.doctorId !== selectedDoctorFilter) {
         return false;
@@ -83,7 +88,7 @@ export default function EncountersTimelineTab({
       }
       return true;
     });
-  }, [consultations, selectedDoctorFilter, encounterTypeFilter, searchQuery]);
+  }, [signedConsultations, selectedDoctorFilter, encounterTypeFilter, searchQuery]);
 
   const toggleExpand = (id: string) => {
     setExpandedEncounterIds((prev) => ({
@@ -125,7 +130,7 @@ export default function EncountersTimelineTab({
               variant="captionBold"
               color={selectedDoctorFilter === 'ALL' ? theme.colors.onPrimary : theme.colors.textSecondary}
             >
-              All Doctors ({consultations.length})
+              All Doctors ({signedConsultations.length})
             </ThemedText>
           </Pressable>
           {doctorsList.map((doc) => (

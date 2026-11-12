@@ -117,8 +117,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             throw new BadRequestException("PatientId is required to query patient chart.");
         }
 
-        // Consultations
-        var consultations = await _consultationRepo.Query(c => c.PatientId == request.PatientId)
+        // Consultations (exclude unsigned draft encounters from the official patient chart; only signed encounters are returned)
+        var consultations = await _consultationRepo.Query(c => c.PatientId == request.PatientId && c.IsSigned)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
             .Include(c => c.ReviewOfSystemsItems)

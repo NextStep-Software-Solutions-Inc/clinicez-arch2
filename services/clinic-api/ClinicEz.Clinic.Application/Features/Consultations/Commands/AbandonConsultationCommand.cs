@@ -139,7 +139,7 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
 
             if (queueItem != null && queueItem.Status != QueueStatus.Completed)
             {
-                if (request.CancelVisit || queueItem.IsDirectVisit)
+                if (request.CancelVisit)
                 {
                     var repoProvider = _unitOfWork as IRepositoryProvider;
                     var dispRepo = _dispensingLogRepository ?? repoProvider?.GetRepository<ClinicDispensingLog>();
@@ -207,7 +207,10 @@ public sealed class AbandonConsultationCommandHandler : IRequestHandler<AbandonC
                 }
                 else if (queueItem.Status == QueueStatus.InConsultation || queueItem.Status == QueueStatus.ReEvaluation)
                 {
-                    queueItem.Status = queueItem.PatientVitals != null ? QueueStatus.Triaged : QueueStatus.Waiting;
+                    var vitalsRepo = (_unitOfWork as IRepositoryProvider)?.GetRepository<PatientVitals>();
+                    bool hasVitals = queueItem.PatientVitals != null ||
+                        (vitalsRepo != null && await vitalsRepo.Query(v => v.QueueItemId == queueItem.Id && !v.IsDeleted).AnyAsync(cancellationToken));
+                    queueItem.Status = hasVitals ? QueueStatus.Triaged : QueueStatus.Waiting;
                     queueItem.UpdatedAt = DateTime.UtcNow;
                     _queueRepository.Update(queueItem);
                 }

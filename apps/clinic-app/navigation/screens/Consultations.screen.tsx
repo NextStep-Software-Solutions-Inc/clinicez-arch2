@@ -1977,23 +1977,29 @@ export default function ConsultationsScreen() {
     activePatientId.current = p.id;
     needsBaselineCaptureRef.current = true;
     setContextLoading(true);
-    const [triageRes, recordRes, labRes, chartRes, dentalRes] = await Promise.all([
+    const [triageRes, recordRes, labRes, chartRes, dentalRes, consultationsRes] = await Promise.all([
       p.id.startsWith('ephemeral-') ? Promise.resolve([null, { status: 404, message: '' }] as const) : clinicService.getTriage(p.id),
       clinicService.getPatientById(p.patientId),
       clinicService.getLabOrders(p.patientId),
       clinicService.getPatientChart(p.patientId),
       clinicService.getPatientDentalChart(p.patientId),
+      clinicService.getConsultations(p.patientId),
     ]);
     if (activePatientId.current !== p.id) return;
 
     const [dentalData] = dentalRes;
     const [chartData] = chartRes;
+    const [patientConsultations] = consultationsRes;
+    const candidateEncounters =
+      Array.isArray(patientConsultations) && patientConsultations.length > 0
+        ? patientConsultations
+        : chartData?.consultations ?? [];
     const todayStr = getManilaTodayStr();
     const isStandardEphemeral = p.id === `ephemeral-${p.patientId}`;
     const serverMatchedEncounter =
-      chartData?.consultations?.find((c) => c.queueItemId === p.id) ??
+      candidateEncounters.find((c) => c.queueItemId === p.id) ??
       (isStandardEphemeral
-        ? chartData?.consultations?.find(
+        ? candidateEncounters.find(
             (c) =>
               !c.isSigned &&
               Boolean(c.queueItemId) &&
@@ -4087,6 +4093,7 @@ export default function ConsultationsScreen() {
             if (targetConsultationId) {
               const [, abandonErr] = await clinicService.abandonConsultation(targetConsultationId, {
                 reason: 'Unsigned consultation draft discarded by physician',
+                cancelVisit: false,
               });
               if (abandonErr) {
                 setIsAbandoningDraft(false);
