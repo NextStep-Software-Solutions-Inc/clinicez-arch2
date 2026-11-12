@@ -81,6 +81,8 @@ export default function AttachExternalDocumentModal({
   const [docRecordType, setDocRecordType] = useState('OutsideChestXRay');
   const [docFileType, setDocFileType] = useState<'PDF' | 'Photo'>('PDF');
   const [docNotes, setDocNotes] = useState('');
+  const [customFileName, setCustomFileName] = useState('');
+  const [fileExtension, setFileExtension] = useState('');
   const [pickedDocFile, setPickedDocFile] = useState<{
     uri: string;
     name: string;
@@ -96,6 +98,8 @@ export default function AttachExternalDocumentModal({
       setDocRecordType('OutsideChestXRay');
       setDocFileType('PDF');
       setDocNotes('');
+      setCustomFileName('');
+      setFileExtension('');
       setPickedDocFile(null);
       setUploadingDoc(false);
     }
@@ -111,16 +115,23 @@ export default function AttachExternalDocumentModal({
       });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
+      const originalName = asset.name;
+      const lastDotIndex = originalName.lastIndexOf('.');
+      const baseName = lastDotIndex !== -1 ? originalName.substring(0, lastDotIndex) : originalName;
+      const ext = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+
       setPickedDocFile({
-        name: asset.name,
+        name: originalName,
         size: asset.size,
         uri: asset.uri,
-        mimeType: asset.mimeType || (asset.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+        mimeType: asset.mimeType || (originalName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
         file: (asset as any).file,
       });
+      setCustomFileName(baseName);
+      setFileExtension(ext);
+
       if (!docTitle.trim()) {
-        const cleanName = asset.name.replace(/\.[^/.]+$/, '');
-        setDocTitle(cleanName);
+        setDocTitle(baseName);
       }
       if (asset.name.toLowerCase().endsWith('.pdf')) {
         setDocFileType('PDF');
@@ -153,23 +164,31 @@ export default function AttachExternalDocumentModal({
 
     setUploadingDoc(true);
 
+    const trimmedCustom = customFileName.trim();
+    let finalFileName = pickedDocFile?.name || `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`;
+    if (pickedDocFile && trimmedCustom) {
+      const hasExt = fileExtension && trimmedCustom.toLowerCase().endsWith(fileExtension.toLowerCase());
+      finalFileName = hasExt ? trimmedCustom : `${trimmedCustom}${fileExtension}`;
+    }
+
     if (pickedDocFile) {
       try {
         const formData = new FormData();
         formData.append('PatientId', targetPatientId);
         formData.append('RecordType', docRecordType);
         formData.append('Title', docTitle.trim());
+        formData.append('FileName', finalFileName);
         if (docNotes.trim()) formData.append('Notes', docNotes.trim());
         formData.append('DocumentDate', strictlyFormattedDocDate);
         if (actorStaffId) formData.append('UploadedByStaffId', actorStaffId);
         if (actorStaffName) formData.append('UploadedByStaffName', actorStaffName);
 
         if (pickedDocFile.file) {
-          formData.append('File', pickedDocFile.file);
+          formData.append('File', pickedDocFile.file, finalFileName);
         } else {
           formData.append('File', {
             uri: pickedDocFile.uri,
-            name: pickedDocFile.name,
+            name: finalFileName,
             type: pickedDocFile.mimeType || 'application/octet-stream',
           } as any);
         }
@@ -201,7 +220,7 @@ export default function AttachExternalDocumentModal({
       patientId: targetPatientId,
       recordType: docRecordType,
       title: docTitle.trim(),
-      fileName: `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
+      fileName: finalFileName,
       contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
       fileSizeBytes: 1024 * 450,
       storageUri: `tenants/${tenantId}/clinics/${clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
@@ -250,7 +269,7 @@ export default function AttachExternalDocumentModal({
             />
           </View>
           <ThemedText style={styles.modalSub}>
-            Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {patientDisplayName}&apos;s profile.
+            Ingest scanned physical documents (outside Chest X-Ray films, lab sheets, or med certs) directly into {patientDisplayName}&apos;s profile.
           </ThemedText>
 
           <ScrollView
@@ -284,7 +303,6 @@ export default function AttachExternalDocumentModal({
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                 {[
                   { key: 'OutsideChestXRay', label: 'Chest X-Ray' },
-                  { key: 'CertificateOfRegistration', label: 'Paper COR' },
                   { key: 'MedicalCertificate', label: 'Outside MedCert' },
                   { key: 'LabResult', label: 'Lab Sheet' },
                   { key: 'Other', label: 'Other' },
@@ -322,35 +340,65 @@ export default function AttachExternalDocumentModal({
             <View>
               <ThemedText style={styles.inputLabel}>File Attachment (PDF, JPEG, PNG)</ThemedText>
               {pickedDocFile ? (
-                <View style={styles.pickedFileBox}>
-                  <View style={styles.pickedFileInfo}>
-                    <Icon
-                      name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
-                      size={theme.sizes.iconMd}
-                      color={theme.colors.primary}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
-                        {pickedDocFile.name}
-                      </ThemedText>
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
-                      </ThemedText>
+                <View style={styles.pickedFileContainer}>
+                  <View style={styles.pickedFileBox}>
+                    <View style={styles.pickedFileInfo}>
+                      <Icon
+                        name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
+                        size={theme.sizes.iconMd}
+                        color={theme.colors.primary}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
+                          {pickedDocFile.name}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        title="Change"
+                        onPress={handlePickDocument}
+                      />
+                      <Button
+                        variant="dangerOutline"
+                        size="xs"
+                        title="Clear"
+                        onPress={() => {
+                          setPickedDocFile(null);
+                          setCustomFileName('');
+                          setFileExtension('');
+                        }}
+                      />
                     </View>
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      title="Change"
-                      onPress={handlePickDocument}
-                    />
-                    <Button
-                      variant="dangerOutline"
-                      size="xs"
-                      title="Clear"
-                      onPress={() => setPickedDocFile(null)}
-                    />
+
+                  <View style={styles.renameFieldWrap}>
+                    <ThemedText style={styles.inputLabel}>Attachment Display Name (Renaming)</ThemedText>
+                    <View style={styles.renameInputRow}>
+                      <TextInput
+                        style={[styles.textInput, styles.renameInput]}
+                        placeholder="e.g. Chest_XRay_Nov2026"
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={customFileName}
+                        onChangeText={setCustomFileName}
+                        accessibilityLabel="Attachment Display Name"
+                      />
+                      {fileExtension ? (
+                        <View style={styles.extensionBadge}>
+                          <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                            {fileExtension}
+                          </ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Preserves file extension and underlying content. The customized name will be saved in Doc Vault.
+                    </ThemedText>
                   </View>
                 </View>
               ) : (
@@ -491,5 +539,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     flex: 1,
+  },
+  pickedFileContainer: {
+    gap: theme.spacing.sm,
+  },
+  renameFieldWrap: {
+    gap: 4,
+  },
+  renameInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  renameInput: {
+    flex: 1,
+  },
+  extensionBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
