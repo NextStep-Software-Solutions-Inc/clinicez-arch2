@@ -1,30 +1,30 @@
 export {
   default as DebouncedDuplicateChecker,
-  DebouncedDuplicateCheckerProps,
+  type DebouncedDuplicateCheckerProps,
 } from './DebouncedDuplicateChecker';
 
 export {
   default as DuplicatePatientWarningModal,
-  DuplicatePatientWarningModalProps,
+  type DuplicatePatientWarningModalProps,
 } from './DuplicatePatientWarningModal';
 
 export {
   default as StructuredAllergyIntakeModal,
   AllergyPillList,
-  CreateAllergyRequest,
-  CreateAllergyPayload,
-  AllergyCategory,
-  AllergySeverity,
-  StructuredAllergyIntakeModalProps,
-  AllergyPillListProps,
+  type CreateAllergyRequest,
+  type CreateAllergyPayload,
+  type AllergyCategory,
+  type AllergySeverity,
+  type StructuredAllergyIntakeModalProps,
+  type AllergyPillListProps,
 } from './StructuredAllergyIntakeModal';
 
 export {
   default as StructuredMedicalHistoryModal,
   MedicalHistoryPillList,
-  MedicalHistoryItem,
-  MedicalHistoryPillListProps,
-  StructuredMedicalHistoryModalProps,
+  type MedicalHistoryItem,
+  type MedicalHistoryPillListProps,
+  type StructuredMedicalHistoryModalProps,
   PHILHEALTH_MDISEASES_CONDITIONS,
   PHILHEALTH_QUICK_CONDITIONS,
   formatMedicalHistoriesSummary,
@@ -33,9 +33,9 @@ export {
 
 export {
   default as ClinicalAlertsSection,
-  ClinicalAlertsSectionProps,
+  type ClinicalAlertsSectionProps,
   CLINICAL_ALERT_PRESETS,
-  AlertPreset,
+  type AlertPreset,
   isPresetActive,
   toggleAlertPreset,
 } from './ClinicalAlertsSection';
@@ -93,3 +93,9 @@ export {
   type IssueMedicalCertificateModalProps,
   type FitnessStatus,
 } from './IssueMedicalCertificateModal';
+
+export {
+  default as IssueReferralLetterModal,
+  type IssueReferralLetterModalProps,
+  type ReferralUrgency,
+} from './IssueReferralLetterModal';
