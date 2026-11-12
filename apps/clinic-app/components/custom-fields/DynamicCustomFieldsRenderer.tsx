@@ -530,9 +530,14 @@ export default function DynamicCustomFieldsRenderer({
                   onChangeText={(text) => handleFieldChange(field.fieldKey, text)}
                   error={error}
                   editable={!disabled}
+                  accessibilityHint={field.placeholder || undefined}
+                  title={field.placeholder || undefined}
                 />
                 {placeholderPresentation.isExpandedHint && placeholderPresentation.helperHint ? (
-                  <View style={styles.expandedHintContainer}>
+                  <View
+                    style={styles.expandedHintContainer}
+                    accessibilityLabel={`Guidance: ${placeholderPresentation.helperHint}`}
+                  >
                     <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
                     <ThemedText
                       variant="caption"
@@ -599,9 +604,14 @@ export default function DynamicCustomFieldsRenderer({
                   onBlur={handleNumberBlur}
                   error={error}
                   editable={!disabled}
+                  accessibilityHint={field.placeholder || undefined}
+                  title={field.placeholder || undefined}
                 />
                 {placeholderPresentation.isExpandedHint && placeholderPresentation.helperHint ? (
-                  <View style={styles.expandedHintContainer}>
+                  <View
+                    style={styles.expandedHintContainer}
+                    accessibilityLabel={`Guidance: ${placeholderPresentation.helperHint}`}
+                  >
                     <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
                     <ThemedText
                       variant="caption"
@@ -633,9 +643,14 @@ export default function DynamicCustomFieldsRenderer({
                   error={error}
                   boundaryMode={effectiveBoundaryMode}
                   disabled={disabled}
+                  accessibilityHint={field.placeholder || undefined}
+                  title={field.placeholder || undefined}
                 />
                 {placeholderPresentation.isExpandedHint && placeholderPresentation.helperHint ? (
-                  <View style={styles.expandedHintContainer}>
+                  <View
+                    style={styles.expandedHintContainer}
+                    accessibilityLabel={`Guidance: ${placeholderPresentation.helperHint}`}
+                  >
                     <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
                     <ThemedText
                       variant="caption"

@@ -809,6 +809,7 @@ export default function AddEditFieldModal({
           value={placeholder}
           onChangeText={setPlaceholder}
           placeholder="Optional guidance shown to patients or staff"
+          helperText="Recommended: under 50 characters. Hints longer than 75 characters automatically wrap beneath the field during intake so staff can read them."
         />
         {isSingleLineFieldType &&
         placeholderPresentation.isExpandedHint &&
