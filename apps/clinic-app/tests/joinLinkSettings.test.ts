@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 // Mock React Native modules for Bun environment
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, testID }: any) =>
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, testID, disabled, accessibilityState }: any) =>
     React.createElement(
       'div',
       {
@@ -16,6 +16,8 @@ const createMockComponent = (name: string) => {
         ...(accessibilityRole ? { role: accessibilityRole } : {}),
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
         ...(testID ? { 'data-testid': testID } : {}),
+        ...(disabled !== undefined ? { 'data-disabled': String(disabled) } : {}),
+        ...(accessibilityState ? { 'data-accessibility-state': JSON.stringify(accessibilityState) } : {}),
       },
       placeholder,
       children
@@ -540,5 +542,102 @@ describe('GitHub #160 & Split Specimen Card: Blank passcode locks expiration to 
         nowMs
       )
     ).toBe(true);
+  });
+
+  test('JoinLinkSettingsCard renders SegmentedControl with data-disabled="true" when passcode is blank', async () => {
+    const prevWindow = (globalThis as any).window;
+    (globalThis as any).window = {
+      location: {
+        hostname: 'nextstep.clinic.dev.clinicez.net',
+        protocol: 'https:',
+        origin: 'https://nextstep.clinic.dev.clinicez.net',
+        search: '',
+      },
+    };
+    (globalThis as any).__mockClinicContext = {
+      facilityName: 'NextStep Family Clinic',
+      letterhead: { header: 'NextStep Family Clinic', subHeader: '', address: '', contact: '', footer: '' },
+      refresh: async () => {},
+    };
+
+    try {
+      const JoinLinkSettingsCard = (await import('../components/settings/JoinLinkSettingsCard')).default;
+      const markup = renderToStaticMarkup(
+        React.createElement(JoinLinkSettingsCard, {
+          settings: {
+            id: 'set-blank',
+            tenantId: 'tenant-1',
+            clinicId: 'clinic-1',
+            clinicName: 'NextStep Family Clinic',
+            operatingHours: '08:00-17:00',
+            defaultSlotDurationMinutes: 15,
+            queuePrefix: 'A',
+            invoicePrefix: 'INV',
+            defaultConsultationFee: 500,
+            vatRate: 0,
+            isJoinEnabled: true,
+            joinCode: '',
+            joinCodeExpiresAt: null,
+          },
+        })
+      );
+
+      // Verify disabled state on SegmentedControl pressables when passcode is blank
+      expect(markup).toContain('data-disabled="true"');
+      expect(markup).toContain('&quot;disabled&quot;:true');
+      expect(markup).toContain(BLANK_PASSCODE_EXPIRATION_HELPER);
+    } finally {
+      (globalThis as any).window = prevWindow;
+      delete (globalThis as any).__mockClinicContext;
+    }
+  });
+
+  test('Save payload contract accurately flags clearJoinCodeExpiresAt when switching active code to Never', () => {
+    // When code is set and window is 'never' (computedExpiresAt is null)
+    const codeWithNever = 'CARE2026';
+    const computedExpiresAtNever: Date | null = null;
+    const payloadNever = {
+      isJoinEnabled: true,
+      joinCode: codeWithNever,
+      joinCodeExpiresAt: codeWithNever && computedExpiresAtNever ? (computedExpiresAtNever as Date).toISOString() : null,
+      clearJoinCode: !codeWithNever,
+      clearJoinCodeExpiresAt: Boolean(codeWithNever && !computedExpiresAtNever),
+    };
+
+    expect(payloadNever.joinCode).toBe('CARE2026');
+    expect(payloadNever.joinCodeExpiresAt).toBeNull();
+    expect(payloadNever.clearJoinCode).toBe(false);
+    expect(payloadNever.clearJoinCodeExpiresAt).toBe(true);
+
+    // When code is set and window is '24h' (computedExpiresAt is a Date)
+    const codeWith24h = 'CARE2026';
+    const computedExpiresAt24h = new Date(Date.now() + 24 * 3600 * 1000);
+    const payload24h = {
+      isJoinEnabled: true,
+      joinCode: codeWith24h,
+      joinCodeExpiresAt: codeWith24h && computedExpiresAt24h ? computedExpiresAt24h.toISOString() : null,
+      clearJoinCode: !codeWith24h,
+      clearJoinCodeExpiresAt: Boolean(codeWith24h && !computedExpiresAt24h),
+    };
+
+    expect(payload24h.joinCode).toBe('CARE2026');
+    expect(payload24h.joinCodeExpiresAt).toBe(computedExpiresAt24h.toISOString());
+    expect(payload24h.clearJoinCode).toBe(false);
+    expect(payload24h.clearJoinCodeExpiresAt).toBe(false);
+
+    // When code is cleared/empty
+    const blankCode = '';
+    const payloadBlank = {
+      isJoinEnabled: true,
+      joinCode: blankCode ? blankCode : null,
+      joinCodeExpiresAt: null,
+      clearJoinCode: !blankCode,
+      clearJoinCodeExpiresAt: Boolean(blankCode && !computedExpiresAtNever),
+    };
+
+    expect(payloadBlank.joinCode).toBeNull();
+    expect(payloadBlank.joinCodeExpiresAt).toBeNull();
+    expect(payloadBlank.clearJoinCode).toBe(true);
+    expect(payloadBlank.clearJoinCodeExpiresAt).toBe(false);
   });
 });

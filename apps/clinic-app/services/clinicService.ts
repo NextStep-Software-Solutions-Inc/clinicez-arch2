@@ -2281,6 +2281,7 @@ export interface ClinicSettingsRecord {
   joinCode?: string | null;
   joinCodeExpiresAt?: string | null;
   clearJoinCode?: boolean;
+  clearJoinCodeExpiresAt?: boolean;
 
   cashierMode?: 'ClinicDesk' | 'CashierCounter';
 
