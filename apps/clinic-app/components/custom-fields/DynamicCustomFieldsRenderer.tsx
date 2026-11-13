@@ -366,7 +366,11 @@ export function validateCustomFields(
   definitions: ClinicCustomFieldDefinition[],
   values: Record<string, any>,
   staticValues: StaticPatientValues = {},
-  options?: { now?: Date }
+  options?: {
+    now?: Date;
+    isUpdate?: boolean;
+    initialValues?: Record<string, any>;
+  }
 ): { isValid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   let isValid = true;
@@ -384,6 +388,19 @@ export function validateCustomFields(
       (typeof val === 'boolean' && val === false && def.dataType !== 'Boolean');
 
     if (def.isRequired && isEmpty) {
+      // In update mode, grandfather required fields that were never populated on pre-existing records
+      if (options?.isUpdate) {
+        const initialVal = options.initialValues?.[def.fieldKey];
+        const hadInitial =
+          initialVal !== null &&
+          initialVal !== undefined &&
+          (typeof initialVal === 'string' ? initialVal.trim() !== '' : true);
+
+        if (!hadInitial) {
+          continue;
+        }
+      }
+
       errors[def.fieldKey] = `${def.label} is required.`;
       isValid = false;
       continue;

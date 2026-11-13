@@ -600,7 +600,7 @@ export function EditPatientModal({
     setGuardian(extractInitialGuardianFromPatient(source));
     setGuardianErrors({});
     setIsGuardianPinValid(null);
-    const rawAffiliation = cf['affiliation'] || (cf['classification'] === 'Student' ? 'Student' : cf['classification'] === 'Employee' ? 'Employee/Faculty' : undefined);
+    const rawAffiliation = cf['affiliation'] || (cf['classification'] === 'Student' ? 'Student' : cf['classification'] === 'Employee' ? 'Employee/Faculty' : cf['classification'] === 'General' ? 'Guest' : undefined);
     setCustomFieldValues({
       ...cf,
       ...(rawAffiliation ? { affiliation: rawAffiliation } : {}),
@@ -723,7 +723,17 @@ export function EditPatientModal({
 
     // Defensive validation for rendered demographic custom fields
     if (renderedCustomFields.length > 0) {
-      const { isValid, errors } = validateCustomFields(renderedCustomFields, customFieldValues, staticValues);
+      const effectivePatient = hydratedPatient || patient;
+      const initialCustomFields = effectivePatient?.customFields || {};
+      const { isValid, errors } = validateCustomFields(
+        renderedCustomFields,
+        customFieldValues,
+        staticValues,
+        {
+          isUpdate: true,
+          initialValues: initialCustomFields,
+        }
+      );
       if (!isValid) {
         setCustomFieldErrors(errors);
         const errorMessages = Object.values(errors);
@@ -850,6 +860,8 @@ export function EditPatientModal({
       onClose();
     } else {
       const fieldErrorsMap: Record<string, string> = {};
+      const newCustomFieldErrors: Record<string, string> = {};
+
       if (err) {
         if (typeof err.getFieldErrorsMap === 'function') {
           Object.assign(fieldErrorsMap, err.getFieldErrorsMap());
@@ -878,8 +890,43 @@ export function EditPatientModal({
 
         const emailErr = err.getFieldError?.('email');
         if (emailErr) fieldErrorsMap.email = emailErr;
+
+        // Map custom field errors from err.errors (supporting exact field keys and label fallbacks)
+        if (Array.isArray(err.errors)) {
+          for (const item of err.errors) {
+            if (item.field) {
+              const matchedCustom = renderedCustomFields.find(
+                (f) => f.fieldKey.toLowerCase() === item.field.toLowerCase()
+              );
+              if (matchedCustom) {
+                newCustomFieldErrors[matchedCustom.fieldKey] = item.message;
+              }
+            } else if (item.message) {
+              const matchedCustom = renderedCustomFields.find(
+                (f) =>
+                  item.message.toLowerCase().includes(f.label.toLowerCase()) ||
+                  item.message.toLowerCase().includes(f.fieldKey.toLowerCase())
+              );
+              if (matchedCustom) {
+                newCustomFieldErrors[matchedCustom.fieldKey] = item.message;
+              }
+            }
+          }
+        }
+
+        for (const [k, v] of Object.entries(fieldErrorsMap)) {
+          const matched = renderedCustomFields.find(
+            (f) => f.fieldKey.toLowerCase() === k.toLowerCase()
+          );
+          if (matched) {
+            newCustomFieldErrors[matched.fieldKey] = v;
+          }
+        }
       }
       setFieldErrors(fieldErrorsMap);
+      if (Object.keys(newCustomFieldErrors).length > 0) {
+        setCustomFieldErrors((prev) => ({ ...prev, ...newCustomFieldErrors }));
+      }
 
       notify.error(err?.message || 'Failed to update patient demographics.', {
         traceId: err?.traceId,

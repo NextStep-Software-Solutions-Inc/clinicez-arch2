@@ -778,11 +778,33 @@ public static class DevPatientSeeder
                 };
                 if (classification == "Student")
                 {
+                    var studentColleges = new[]
+                    {
+                        ("College of Information Technology and Computing", "BS Information Technology"),
+                        ("College of Engineering and Architecture", "BS Civil Engineering"),
+                        ("College of Science and Mathematics", "BS Applied Mathematics"),
+                        ("College of Technology", "Bachelor of Engineering Technology"),
+                        ("College of Science and Technology Education", "BSEd Major in Sciences")
+                    };
+                    var studentYearLevels = new[] { "1st Year", "2nd Year", "3rd Year", "4th Year" };
+                    var (col, prog) = studentColleges[rng.Next(studentColleges.Length)];
+
+                    customFields["affiliation"] = "Student";
                     customFields["student_id"] = $"STU-{now.Year}-{rng.Next(1000, 9999)}";
+                    customFields["college"] = col;
+                    customFields["program"] = prog;
+                    customFields["year_level"] = studentYearLevels[rng.Next(studentYearLevels.Length)];
                 }
                 else if (classification == "Employee")
                 {
+                    var employeeDepartments = new[] { "Office of Student Affairs", "HRMO", "College of Engineering", "Health Services Center" };
+                    customFields["affiliation"] = "Employee/Faculty";
                     customFields["employee_id"] = $"EMP-{rng.Next(1000, 9999)}";
+                    customFields["department"] = employeeDepartments[rng.Next(employeeDepartments.Length)];
+                }
+                else
+                {
+                    customFields["affiliation"] = "Guest";
                 }
 
                 var patientCreatedAt = now.AddDays(-rng.Next(30, 720));
