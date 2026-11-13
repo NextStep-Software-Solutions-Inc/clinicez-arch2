@@ -8,6 +8,7 @@ import Input from '../ui/Input';
 import { theme } from '../../constants/theme';
 import { useEhrOptions } from '../../hooks/useEhrOptions';
 import type { ConsultationRecord } from '../../services/clinicService';
+import { resolveAgeYears } from './SpecificEncounterFormsCard';
 
 export interface PlanManagementOption {
   code: string;
@@ -177,6 +178,7 @@ export interface ScreeningCohortTabDescriptor {
 
 export function getScreeningCohortTabsForPatient(params: {
   patientAgeYears?: number | null;
+  patientDateOfBirth?: string | null;
   patientSex?: string | null;
   adultSelectedCount?: number;
   pediatricSelectedCount?: number;
@@ -184,16 +186,14 @@ export function getScreeningCohortTabsForPatient(params: {
 }): ScreeningCohortTabDescriptor[] {
   const {
     patientAgeYears,
+    patientDateOfBirth,
     patientSex,
     adultSelectedCount = 0,
     pediatricSelectedCount = 0,
     prenatalSelectedCount = 0,
   } = params;
 
-  const ageYears =
-    typeof patientAgeYears === 'number' && !Number.isNaN(patientAgeYears)
-      ? Math.max(0, patientAgeYears)
-      : null;
+  const ageYears = resolveAgeYears(patientAgeYears, patientDateOfBirth);
   const rawSex = patientSex?.trim().toLowerCase() ?? '';
   const sex: 'female' | 'male' | null = rawSex.startsWith('f')
     ? 'female'
@@ -244,6 +244,7 @@ export interface PlanManagementCardProps {
   disabled?: boolean;
   embedded?: boolean;
   patientAgeYears?: number | null;
+  patientDateOfBirth?: string | null;
   patientSex?: string | null;
   orderedLabsCount?: number;
   completedLabResultsCount?: number;
@@ -265,6 +266,7 @@ export default function PlanManagementCard({
   disabled = false,
   embedded = false,
   patientAgeYears,
+  patientDateOfBirth,
   patientSex,
   orderedLabsCount = 0,
   completedLabResultsCount = 0,
@@ -279,12 +281,14 @@ export default function PlanManagementCard({
   prenatalScreeningOptionsOverride,
   cancerScreeningOptionsOverride,
 }: PlanManagementCardProps) {
+  const effectiveAgeYears = resolveAgeYears(patientAgeYears, patientDateOfBirth);
+
   const defaultCohort: ScreeningCohortTab = useMemo(() => {
-    if (typeof patientAgeYears === 'number' && patientAgeYears < 20) {
+    if (typeof effectiveAgeYears === 'number' && effectiveAgeYears < 20) {
       return 'pediatric';
     }
     return 'adult';
-  }, [patientAgeYears]);
+  }, [effectiveAgeYears]);
 
   const [activeCohort, setActiveCohort] = useState<ScreeningCohortTab>(defaultCohort);
   useEffect(() => {
@@ -337,6 +341,18 @@ export default function PlanManagementCard({
     if (cancerScreeningOptionsOverride?.length) return cancerScreeningOptionsOverride;
     return cancerEhr.map((o) => ({ code: o.philHealthCode || o.code, label: o.label }));
   }, [cancerScreeningOptionsOverride, cancerEhr]);
+
+  const isMale = typeof patientSex === 'string' && patientSex.trim().toLowerCase().startsWith('m');
+
+  const visibleCancerOptions = useMemo(() => {
+    return cancerOptions.filter((opt) => {
+      const isPapSmear = opt.code === '13' || opt.label.toLowerCase().includes('pap smear');
+      if (isPapSmear && isMale) {
+        return value.cancerScreeningCodes.includes(opt.code);
+      }
+      return true;
+    });
+  }, [cancerOptions, isMale, value.cancerScreeningCodes]);
 
   const diagnosticServiceChoices: Array<{ code: DiagnosticPlanFlag; label: string }> = useMemo(() => {
     return diagnosticPlanEhr
@@ -448,12 +464,20 @@ export default function PlanManagementCard({
     () =>
       getScreeningCohortTabsForPatient({
         patientAgeYears,
+        patientDateOfBirth,
         patientSex,
         adultSelectedCount,
         pediatricSelectedCount,
         prenatalSelectedCount,
       }),
-    [patientAgeYears, patientSex, adultSelectedCount, pediatricSelectedCount, prenatalSelectedCount]
+    [
+      patientAgeYears,
+      patientDateOfBirth,
+      patientSex,
+      adultSelectedCount,
+      pediatricSelectedCount,
+      prenatalSelectedCount,
+    ]
   );
 
   const effectiveActiveCohort: ScreeningCohortTab = cohortTabs.some((t) => t.id === activeCohort)
@@ -536,7 +560,11 @@ export default function PlanManagementCard({
       <View style={[styles.sectionBlock, styles.sectionDivider]}>
         <View style={styles.sectionHeaderRow}>
           <View style={styles.sectionTitleWrap}>
-            <ThemedText variant="bodyBold">Routine & Prenatal Screening Plan</ThemedText>
+            <ThemedText variant="bodyBold">
+              {cohortTabs.some((tab) => tab.id === 'prenatal')
+                ? 'Routine & Prenatal Screening Plan'
+                : 'Routine Screening Plan'}
+            </ThemedText>
             <ThemedText variant="caption" color={theme.colors.textSecondary}>
               Age- and cohort-appropriate preventive screening tests recommended for this patient
             </ThemedText>
@@ -567,6 +595,13 @@ export default function PlanManagementCard({
                 >
                   {tab.label}
                 </ThemedText>
+                {tab.isRecommended ? (
+                  <Badge
+                    variant={active ? 'primary' : 'routine'}
+                    size="xs"
+                    label="Recommended"
+                  />
+                ) : null}
                 <View
                   style={[
                     styles.cohortCountPill,
@@ -607,7 +642,9 @@ export default function PlanManagementCard({
           <View style={styles.sectionTitleWrap}>
             <ThemedText variant="bodyBold">Cancer Screening</ThemedText>
             <ThemedText variant="caption" color={theme.colors.textSecondary}>
-              Early detection screening tests (FOBT/FIT, Pap Smear, AFP, Colonoscopy, Imaging)
+              {isMale
+                ? 'Early detection screening tests (FOBT/FIT, AFP, Colonoscopy, Imaging)'
+                : 'Early detection screening tests (FOBT/FIT, Pap Smear, AFP, Colonoscopy, Imaging)'}
             </ThemedText>
           </View>
           <View style={styles.segmentedGroup}>
@@ -652,7 +689,7 @@ export default function PlanManagementCard({
 
         {value.hasCancerScreening ? (
           <View style={styles.chipGrid}>
-            {cancerOptions.map((opt) =>
+            {visibleCancerOptions.map((opt) =>
               renderChip(
                 `cancer-${opt.code}`,
                 opt.label,

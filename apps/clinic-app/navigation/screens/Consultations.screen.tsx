@@ -6242,6 +6242,12 @@ export default function ConsultationsScreen() {
                     onChange={setPlanManagement}
                     disabled={isSigned}
                     patientAgeYears={patientRecord?.age ?? patientChart?.demographics?.age ?? null}
+                    patientDateOfBirth={
+                      patientRecord?.dateOfBirth ??
+                      patientChart?.demographics?.dateOfBirth ??
+                      patientChart?.demographics?.dob ??
+                      null
+                    }
                     patientSex={patientRecord?.sex ?? patientChart?.demographics?.sex ?? null}
                     orderedLabsCount={orderedLabs.length}
                     completedLabResultsCount={
