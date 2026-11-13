@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, Platform } from 'react-native';
 import { theme } from '@constants/theme';
 import {
   ThemedText,
@@ -14,7 +14,7 @@ import {
   Icd10AutocompleteInput,
   validateDateString,
 } from '@ui';
-import { Alert } from '@utils/feedback';
+import { Alert, notify } from '@utils/feedback';
 import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
 import { useClinic } from '../../context/ClinicContext';
 import { useAuth, usePermission } from '../../context/AuthContext';
@@ -224,14 +224,54 @@ export function mergeOtherConditionDescriptions(existingDesc: string, additions:
 }
 
 /**
+ * Resolves condition codes in Personal Medical History that are linked to active
+ * Structured Problems or active documented allergies.
+ * Returns a Map of condition code -> lock explanation message.
+ */
+export function getLockedPersonalConditionCodes(params: {
+  problems: (Pick<PatientProblemRecord, 'icd10Code' | 'problemTitle' | 'philHealthMdiseaseCode'> & { status?: string })[];
+  allergies: (Pick<PatientAllergyRecord, 'allergen'> & { status?: string })[];
+  catalogConditions?: { code: string; description: string }[];
+}): Map<string, string> {
+  const catalog = params.catalogConditions || PHILHEALTH_MDISEASES_CONDITIONS;
+  const locked = new Map<string, string>();
+
+  const activeProblems = params.problems.filter(
+    (p) => !p.status || p.status.toLowerCase() === 'active'
+  );
+  for (const prob of activeProblems) {
+    if (!prob.problemTitle?.trim()) continue;
+    const match = matchProblemToPersonalHistoryCondition(prob, catalog);
+    if (!locked.has(match.matchedCode)) {
+      locked.set(
+        match.matchedCode,
+        'Managed in Structured Problem List — resolve or delete problem to remove.'
+      );
+    }
+  }
+
+  const activeAllergies = params.allergies.filter(
+    (a) => !a.status || a.status.toLowerCase() === 'active'
+  );
+  if (activeAllergies.length > 0 && !locked.has('001')) {
+    locked.set(
+      '001',
+      'Managed in Documented Allergies — remove allergy to remove.'
+    );
+  }
+
+  return locked;
+}
+
+/**
  * Reconciles Personal Medical History codes and Others description against
- * documented Structured Problems and Documented Allergies.
+ * active documented Structured Problems and active Documented Allergies.
  */
 export function reconcilePersonalHistoryWithClinicalRecords(params: {
   selectedCodes: Iterable<string>;
   otherDesc: string;
-  problems: Pick<PatientProblemRecord, 'icd10Code' | 'problemTitle' | 'philHealthMdiseaseCode'>[];
-  allergies: Pick<PatientAllergyRecord, 'allergen'>[];
+  problems: (Pick<PatientProblemRecord, 'icd10Code' | 'problemTitle' | 'philHealthMdiseaseCode'> & { status?: string })[];
+  allergies: (Pick<PatientAllergyRecord, 'allergen'> & { status?: string })[];
   catalogConditions?: { code: string; description: string }[];
 }): { codes: Set<string>; otherDesc: string; changed: boolean } {
   const catalog = params.catalogConditions || PHILHEALTH_MDISEASES_CONDITIONS;
@@ -246,11 +286,17 @@ export function reconcilePersonalHistoryWithClinicalRecords(params: {
   const nextCodes = new Set(prevCleanCodes);
   const otherAdditions: string[] = [];
 
-  if (params.allergies.length > 0) {
+  const activeAllergies = params.allergies.filter(
+    (a) => !a.status || a.status.toLowerCase() === 'active'
+  );
+  if (activeAllergies.length > 0) {
     nextCodes.add('001');
   }
 
-  for (const prob of params.problems) {
+  const activeProblems = params.problems.filter(
+    (p) => !p.status || p.status.toLowerCase() === 'active'
+  );
+  for (const prob of activeProblems) {
     if (!prob.problemTitle?.trim()) continue;
     const match = matchProblemToPersonalHistoryCondition(prob, catalog);
     nextCodes.add(match.matchedCode);
@@ -336,6 +382,8 @@ export interface ClinicalHistoryTabProps {
   patient: ClinicPatient;
   initialSurgicalHistories?: PatientSurgicalHistory[];
   initialProfile?: PhilHealthPatientProfile;
+  initialProblems?: PatientProblemRecord[];
+  initialAllergies?: PatientAllergyRecord[];
   onRefreshChart?: () => void;
   readOnly?: boolean;
 }
@@ -344,6 +392,8 @@ export default function ClinicalHistoryTab({
   patient,
   initialSurgicalHistories,
   initialProfile,
+  initialProblems,
+  initialAllergies,
   onRefreshChart,
   readOnly,
 }: ClinicalHistoryTabProps) {
@@ -376,7 +426,7 @@ export default function ClinicalHistoryTab({
   const [formError, setFormError] = useState<string | null>(null);
 
   // Problems State
-  const [problems, setProblems] = useState<PatientProblemRecord[]>([]);
+  const [problems, setProblems] = useState<PatientProblemRecord[]>(initialProblems || []);
   const [loadingProblems, setLoadingProblems] = useState(false);
   const [problemModalVisible, setProblemModalVisible] = useState(false);
   const [savingProblem, setSavingProblem] = useState(false);
@@ -390,7 +440,7 @@ export default function ClinicalHistoryTab({
   const [problemFormError, setProblemFormError] = useState<string | null>(null);
 
   // Allergies State (managed via StructuredAllergyIntakeModal)
-  const [allergies, setAllergies] = useState<PatientAllergyRecord[]>([]);
+  const [allergies, setAllergies] = useState<PatientAllergyRecord[]>(initialAllergies || []);
   const [loadingAllergies, setLoadingAllergies] = useState(false);
   const [allergyModalVisible, setAllergyModalVisible] = useState(false);
   const [savingAllergy, setSavingAllergy] = useState(false);
@@ -533,6 +583,15 @@ export default function ClinicalHistoryTab({
       : PHILHEALTH_MDISEASES_CONDITIONS;
   }, [diseaseCatalog]);
   const availableConditions = activeCatalogConditions;
+
+  // Conditions linked to active Structured Problems or active documented allergies are locked
+  const lockedConditionReasons = useMemo(() => {
+    return getLockedPersonalConditionCodes({
+      problems,
+      allergies,
+      catalogConditions: activeCatalogConditions,
+    });
+  }, [problems, allergies, activeCatalogConditions]);
 
   const formatClinicalCalendarDate = useCallback(
     (raw?: string | null): string => {
@@ -1129,6 +1188,16 @@ export default function ClinicalHistoryTab({
   const toggleMedicalCondition = (code: string) => {
     if (!canWritePatients) return;
     const prev = personalSnapshotRef.current;
+
+    // Prevent untoggling conditions linked to active Structured Problems or active documented allergies
+    if (prev.codes.has(code)) {
+      const lockReason = lockedConditionReasons.get(code);
+      if (lockReason) {
+        notify.info(lockReason);
+        return;
+      }
+    }
+
     const nextCodes = new Set(prev.codes);
     let nextOtherDesc = prev.otherDesc;
 
@@ -1793,17 +1862,29 @@ export default function ClinicalHistoryTab({
         <View style={styles.chipsWrap}>
           {availableConditions.map((cond) => {
             const isSelected = selectedMedicalCodes.has(cond.code);
+            const lockReason = lockedConditionReasons.get(cond.code);
+            const isLocked = Boolean(lockReason && isSelected);
+
             return (
               <Pressable
                 key={`personal-${cond.code}`}
                 disabled={!canWritePatients}
                 onPress={() => toggleMedicalCondition(cond.code)}
                 accessibilityRole="button"
-                accessibilityLabel={`Toggle personal ${cond.description}`}
+                accessibilityLabel={
+                  isLocked
+                    ? `Toggle personal ${cond.description} (locked)`
+                    : `Toggle personal ${cond.description}`
+                }
+                accessibilityHint={isLocked ? lockReason : undefined}
                 accessibilityState={{ selected: isSelected, disabled: !canWritePatients }}
+                {...(Platform.OS === 'web' && isLocked && lockReason
+                  ? ({ title: lockReason } as Record<string, unknown>)
+                  : {})}
                 style={[
                   styles.toggleChip,
                   isSelected && styles.toggleChip_active,
+                  isLocked && styles.toggleChip_locked,
                 ]}
               >
                 <Icon
@@ -1817,6 +1898,13 @@ export default function ClinicalHistoryTab({
                 >
                   {cond.description}
                 </ThemedText>
+                {isLocked ? (
+                  <Icon
+                    name="lock"
+                    size={theme.fontSizes.xs}
+                    color={theme.colors.primaryDark}
+                  />
+                ) : null}
               </Pressable>
             );
           })}
@@ -2350,6 +2438,9 @@ const styles = StyleSheet.create({
   toggleChip_active: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+  },
+  toggleChip_locked: {
+    borderColor: theme.colors.primaryDark,
   },
   otherInputRow: {
     marginTop: theme.spacing.xs,
