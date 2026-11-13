@@ -224,8 +224,8 @@ export function mergeOtherConditionDescriptions(existingDesc: string, additions:
 }
 
 /**
- * Resolves condition codes in Personal Medical History that are linked to active
- * Structured Problems or active documented allergies.
+ * Resolves condition codes in Personal Medical History that are linked to
+ * documented Structured Problems (active or resolved) or active documented allergies.
  * Returns a Map of condition code -> lock explanation message.
  */
 export function getLockedPersonalConditionCodes(params: {
@@ -236,16 +236,16 @@ export function getLockedPersonalConditionCodes(params: {
   const catalog = params.catalogConditions || PHILHEALTH_MDISEASES_CONDITIONS;
   const locked = new Map<string, string>();
 
-  const activeProblems = params.problems.filter(
-    (p) => !p.status || p.status.toLowerCase() === 'active'
+  const nonVoidProblems = params.problems.filter(
+    (p) => !p.status || (p.status.toLowerCase() !== 'voided' && p.status.toLowerCase() !== 'enteredinerror')
   );
-  for (const prob of activeProblems) {
+  for (const prob of nonVoidProblems) {
     if (!prob.problemTitle?.trim()) continue;
     const match = matchProblemToPersonalHistoryCondition(prob, catalog);
     if (!locked.has(match.matchedCode)) {
       locked.set(
         match.matchedCode,
-        'Managed in Structured Problem List — resolve or delete problem to remove.'
+        'Managed in Structured Problem List — cannot be untoggled unless problem is voided.'
       );
     }
   }
@@ -265,7 +265,7 @@ export function getLockedPersonalConditionCodes(params: {
 
 /**
  * Reconciles Personal Medical History codes and Others description against
- * active documented Structured Problems and active Documented Allergies.
+ * documented Structured Problems (active or resolved) and active Documented Allergies.
  */
 export function reconcilePersonalHistoryWithClinicalRecords(params: {
   selectedCodes: Iterable<string>;
@@ -293,10 +293,10 @@ export function reconcilePersonalHistoryWithClinicalRecords(params: {
     nextCodes.add('001');
   }
 
-  const activeProblems = params.problems.filter(
-    (p) => !p.status || p.status.toLowerCase() === 'active'
+  const nonVoidProblems = params.problems.filter(
+    (p) => !p.status || (p.status.toLowerCase() !== 'voided' && p.status.toLowerCase() !== 'enteredinerror')
   );
-  for (const prob of activeProblems) {
+  for (const prob of nonVoidProblems) {
     if (!prob.problemTitle?.trim()) continue;
     const match = matchProblemToPersonalHistoryCondition(prob, catalog);
     nextCodes.add(match.matchedCode);
@@ -584,7 +584,7 @@ export default function ClinicalHistoryTab({
   }, [diseaseCatalog]);
   const availableConditions = activeCatalogConditions;
 
-  // Conditions linked to active Structured Problems or active documented allergies are locked
+  // Conditions linked to documented Structured Problems (active or resolved) or active documented allergies are locked
   const lockedConditionReasons = useMemo(() => {
     return getLockedPersonalConditionCodes({
       problems,
@@ -1189,11 +1189,12 @@ export default function ClinicalHistoryTab({
     if (!canWritePatients) return;
     const prev = personalSnapshotRef.current;
 
-    // Prevent untoggling conditions linked to active Structured Problems or active documented allergies
+    // Prevent untoggling conditions linked to documented Structured Problems or active documented allergies
     if (prev.codes.has(code)) {
       const lockReason = lockedConditionReasons.get(code);
       if (lockReason) {
-        notify.info(lockReason);
+        Alert.alert('Condition Locked', lockReason);
+        notify.warning(lockReason);
         return;
       }
     }

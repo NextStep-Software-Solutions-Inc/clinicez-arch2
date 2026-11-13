@@ -621,7 +621,7 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
     });
   });
 
-  describe('6. Issue #136: Prevent Untoggling Conditions Linked to Active Structured Problems', () => {
+  describe('6. Issue #136 & #206: Prevent Untoggling Conditions Linked to Documented Structured Problems', () => {
     test('6.1 getLockedPersonalConditionCodes locks conditions linked to active Structured Problems', () => {
       const locked = getLockedPersonalConditionCodes({
         problems: [
@@ -633,15 +633,15 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       });
 
       expect(locked.has('006')).toBe(true); // Diabetes Mellitus
-      expect(locked.get('006')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(locked.get('006')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
       expect(locked.has('011')).toBe(true); // Hypertension
-      expect(locked.get('011')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(locked.get('011')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
       expect(locked.has('998')).toBe(true); // Others (Gout)
-      expect(locked.get('998')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(locked.get('998')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
       expect(locked.has('002')).toBe(false); // Asthma not documented
     });
 
-    test('6.2 getLockedPersonalConditionCodes does NOT lock conditions for Resolved or Inactive problems', () => {
+    test('6.2 getLockedPersonalConditionCodes locks conditions for Resolved or Inactive problems (past medical history), but not Voided problems', () => {
       const lockedResolved = getLockedPersonalConditionCodes({
         problems: [
           { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus without complications', status: 'Resolved' },
@@ -650,19 +650,21 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
         allergies: [],
       });
 
-      expect(lockedResolved.has('006')).toBe(false);
-      expect(lockedResolved.has('011')).toBe(false);
-      expect(lockedResolved.size).toBe(0);
+      expect(lockedResolved.has('006')).toBe(true);
+      expect(lockedResolved.get('006')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+      expect(lockedResolved.has('011')).toBe(true);
+      expect(lockedResolved.get('011')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
+      expect(lockedResolved.size).toBe(2);
 
-      // Multiple problems: one active, one resolved for same condition -> stays locked until all resolved
-      const mixed = getLockedPersonalConditionCodes({
+      // Voided or EnteredInError problems do NOT lock conditions
+      const lockedVoided = getLockedPersonalConditionCodes({
         problems: [
-          { icd10Code: 'E10.9', problemTitle: 'Type 1 diabetes mellitus', status: 'Resolved' },
-          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus', status: 'Active' },
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus', status: 'Voided' },
+          { icd10Code: 'I10', problemTitle: 'Essential hypertension', status: 'EnteredInError' },
         ],
         allergies: [],
       });
-      expect(mixed.has('006')).toBe(true);
+      expect(lockedVoided.size).toBe(0);
     });
 
     test('6.3 Active documented allergies lock condition 001', () => {
@@ -680,16 +682,16 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       });
       expect(inactiveAllergy.has('001')).toBe(false);
 
-      // Precedence: If active problem also maps to 001, Structured Problem List message takes precedence
+      // Precedence: If problem also maps to 001, Structured Problem List message takes precedence
       const both = getLockedPersonalConditionCodes({
         problems: [{ icd10Code: 'J30.9', problemTitle: 'Allergic rhinitis, unspecified', status: 'Active' }],
         allergies: [{ allergen: 'Pollen', status: 'Active' }],
       });
       expect(both.has('001')).toBe(true);
-      expect(both.get('001')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(both.get('001')).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
     });
 
-    test('6.4 reconcilePersonalHistoryWithClinicalRecords ignores Resolved problems and Inactive allergies', () => {
+    test('6.4 reconcilePersonalHistoryWithClinicalRecords preserves Resolved problems and ignores Voided problems / Inactive allergies', () => {
       // Patient had '006' untoggled in baseline
       const reconciled = reconcilePersonalHistoryWithClinicalRecords({
         selectedCodes: ['011'],
@@ -697,19 +699,21 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
         problems: [
           { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus', status: 'Resolved' },
           { icd10Code: 'J45.9', problemTitle: 'Asthma, unspecified', status: 'Active' },
+          { icd10Code: 'B18.2', problemTitle: 'Chronic viral hepatitis C', status: 'Voided' },
         ],
         allergies: [{ allergen: 'Shellfish', status: 'Inactive' }],
       });
 
-      expect(reconciled.codes.has('006')).toBe(false); // Resolved problem does NOT auto-reselect
+      expect(reconciled.codes.has('006')).toBe(true); // Resolved problem IS past medical history and auto-reconciled
       expect(reconciled.codes.has('001')).toBe(false); // Inactive allergy does NOT auto-reselect
       expect(reconciled.codes.has('002')).toBe(true); // Active Asthma IS auto-reconciled
       expect(reconciled.codes.has('011')).toBe(true); // Baseline Hypertension preserved
+      expect(reconciled.codes.has('007')).toBe(false); // Voided Hepatitis C is NOT reconciled
     });
 
-    test('6.5 Chip toggle protection prevents untoggling locked conditions and allows unlocked ones', () => {
+    test('6.5 Chip toggle protection prevents untoggling locked conditions (active or resolved) and allows unlocked ones', () => {
       const lockedCodes = new Map<string, string>([
-        ['006', 'Managed in Structured Problem List — resolve or delete problem to remove.'],
+        ['006', 'Managed in Structured Problem List — cannot be untoggled unless problem is voided.'],
       ]);
 
       let selected = new Set(['006', '002']); // 006 is locked, 002 is self-reported
@@ -731,7 +735,7 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       // Attempt to untoggle locked '006'
       simulateToggle('006');
       expect(selected.has('006')).toBe(true);
-      expect(notifiedReason).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(notifiedReason).toBe('Managed in Structured Problem List — cannot be untoggled unless problem is voided.');
 
       // Untoggle unlocked self-reported '002'
       simulateToggle('002');
@@ -741,7 +745,7 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       simulateToggle('002');
       expect(selected.has('002')).toBe(true);
 
-      // When problem is resolved, code unlocks and can be untoggled
+      // When problem is voided/removed, code unlocks and can be untoggled
       lockedCodes.delete('006');
       simulateToggle('006');
       expect(selected.has('006')).toBe(false);
@@ -791,7 +795,7 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       // Locked chip attributes:
       expect(markupWithActiveProblem).toContain('Toggle personal Diabetes Mellitus (locked)');
       expect(markupWithActiveProblem).toContain(
-        'title="Managed in Structured Problem List — resolve or delete problem to remove."'
+        'title="Managed in Structured Problem List — cannot be untoggled unless problem is voided."'
       );
     });
   });
