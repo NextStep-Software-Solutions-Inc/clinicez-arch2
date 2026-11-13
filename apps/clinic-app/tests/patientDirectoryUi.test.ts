@@ -729,7 +729,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('11/110');
   });
 
-  test('15. Patients.screen.tsx tab filters display loaded over total and removes redundant toolbar label', async () => {
+  test('15. Patients.screen.tsx tab filters display independent server totals and footer displays pagination clarity (Option 1)', async () => {
     const { readFileSync } = await import('fs');
     const { join } = await import('path');
     const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
@@ -738,20 +738,23 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(screenCode).not.toContain('{filteredPatients.length} loaded{hasMore ? \' • Scroll for more\' : \'\'}');
     expect(screenCode).not.toContain('Scroll for more');
 
-    // formatTabCount helper is present and formats loaded/total
-    expect(screenCode).toContain('const formatTabCount = useCallback(');
-    expect(screenCode).toContain('`${loaded}/${total}`');
+    // Tab options consume totalCounts directly without cross-tab loaded pollution
+    expect(screenCode).toContain("count: totalCounts?.all");
+    expect(screenCode).toContain("count: totalCounts?.myPatients");
+    expect(screenCode).toContain("count: totalCounts?.students");
+    expect(screenCode).toContain("count: totalCounts?.employees");
+    expect(screenCode).toContain("count: totalCounts?.alerts");
+    expect(screenCode).toContain("count: totalCounts?.seniorPwd");
 
-    // Tab options consume formatTabCount
-    expect(screenCode).toContain("formatTabCount(filterCounts?.all, totalCounts?.all)");
-    expect(screenCode).toContain("formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients)");
-    expect(screenCode).toContain("formatTabCount(filterCounts?.students, totalCounts?.students)");
-    expect(screenCode).toContain("formatTabCount(filterCounts?.employees, totalCounts?.employees)");
-    expect(screenCode).toContain("formatTabCount(filterCounts?.alerts, totalCounts?.alerts)");
-    expect(screenCode).toContain("formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd)");
+    // Emergency badge variant uses totalCounts.alerts
+    expect(screenCode).toContain("badgeVariant: (totalCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined");
 
     // getPatientCounts is called to fetch database totals
     expect(screenCode).toContain('clinicService.getPatientCounts');
+
+    // Footer shows loaded vs total and empty state
+    expect(screenCode).toContain('Showing {patients.length} of {activeTotal ?? patients.length}');
+    expect(screenCode).toContain('All 0 patients loaded');
   });
 
   test('16. Patients.screen.tsx includes "My patients" tab toolbar option placed directly after "All patients"', async () => {
@@ -771,8 +774,8 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(myPatientsIndex).toBeGreaterThan(allPatientsIndex);
     expect(studentsIndex).toBeGreaterThan(myPatientsIndex);
 
-    // formatTabCount is used for myPatients
-    expect(screenCode).toContain("formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients)");
+    // totalCounts is used for myPatients
+    expect(screenCode).toContain("count: totalCounts?.myPatients");
 
     // Server-side filtering parameters passed in fetchPatients
     expect(screenCode).toContain("serverFilterMode = activeFilter !== 'ALL' ? activeFilter : undefined;");
@@ -1644,13 +1647,13 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     // Server-side filter mode & stale-cache error clearing
     expect(patientsSrc).toContain("const serverFilterMode = activeFilter !== 'ALL' ? activeFilter : undefined;");
-    expect(patientsSrc).toMatch(/const handleFilterModeChange = \(mode: PatientFilter\) => \{[\s\S]*?setPatientsError\(null\);[\s\S]*?setPatients\(null\);/);
+    expect(patientsSrc).toContain("setPatientsError(null);");
+    expect(patientsSrc).toContain("setPatients(null);");
     expect(patientsSrc).toMatch(/if \(err\) \{[\s\S]*?setPatients\(null\);[\s\S]*?setPatientsError\(err\.message \|\| 'Unable to load patients\.'\);/);
 
     // Trusts server-filtered patients list directly without discarding historical MY_PATIENTS rows
     expect(patientsSrc).toContain('const filteredPatients = useMemo(() => patients ?? [], [patients]);');
     expect(patientsSrc).not.toMatch(/const filteredPatients = \(patients \?\? \[\]\)\.filter/);
-    expect(patientsSrc).toContain("myPatients: filterMode === 'MY_PATIENTS' ? patients.length : myPatients,");
 
     // Audit & ResultReview omit headerSubtitle
     expect(auditSrc).not.toContain('headerSubtitle');

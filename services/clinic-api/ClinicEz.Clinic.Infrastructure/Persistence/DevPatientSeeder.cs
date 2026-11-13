@@ -766,8 +766,6 @@ public static class DevPatientSeeder
                 {
                     { "classification", classification },
                     { "category", classification },
-                    { "student_id", classification == "Student" ? $"STU-{now.Year}-{rng.Next(1000, 9999)}" : null },
-                    { "employee_id", classification == "Employee" ? $"EMP-{rng.Next(1000, 9999)}" : null },
                     { "workplace", loc.City },
                     { "seeded_batch", "scale_test_1000" },
                     { "primary_address_line", loc.Street },
@@ -778,6 +776,14 @@ public static class DevPatientSeeder
                     { "emergency_contact_phone", emergencyPhone },
                     { "emergency_contact_relationship", emergencyRel }
                 };
+                if (classification == "Student")
+                {
+                    customFields["student_id"] = $"STU-{now.Year}-{rng.Next(1000, 9999)}";
+                }
+                else if (classification == "Employee")
+                {
+                    customFields["employee_id"] = $"EMP-{rng.Next(1000, 9999)}";
+                }
 
                 var patientCreatedAt = now.AddDays(-rng.Next(30, 720));
 

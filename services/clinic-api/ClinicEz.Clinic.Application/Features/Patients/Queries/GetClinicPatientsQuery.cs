@@ -175,7 +175,9 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
 
         if (string.Equals(request.FilterMode, "SENIOR_PWD", StringComparison.OrdinalIgnoreCase))
         {
-            var seniorCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-60));
+            var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
+            var localToday = request.QueueDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+            var seniorCutoff = localToday.AddYears(-60);
             query = query.Where(p =>
                 (!string.IsNullOrWhiteSpace(p.SeniorCitizenId) && p.SeniorCitizenId.Trim().Length > 0) ||
                 (!string.IsNullOrWhiteSpace(p.PwdId) && p.PwdId.Trim().Length > 0) ||
@@ -391,6 +393,14 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 p.DeceasedAt,
                 p.HasActiveSafetyAlert,
                 p.CloudPatientId,
+                AlertTitles = p.Alerts
+                    .Where(a => !a.IsDeleted && a.Status == PatientAlertStatus.Active)
+                    .Select(a => a.Title)
+                    .ToList(),
+                Allergens = p.Allergies!
+                    .Where(a => !a.IsDeleted && a.Status == AllergyStatus.Active)
+                    .Select(a => a.Allergen)
+                    .ToList(),
                 Addresses = p.Addresses
                     .Where(a => !a.IsDeleted)
                     .Select(a => new PatientAddressDto(
@@ -456,7 +466,8 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                     q.VisitType,
                     q.ChiefComplaint,
                     q.CheckInTime,
-                    q.IsDirectVisit
+                    q.IsDirectVisit,
+                    q.RoomId
                 })
                 .ToListAsync(ct);
 
@@ -498,7 +509,8 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                             t.DoctorId,
                             t.DoctorName,
                             t.CheckInTime,
-                            t.IsDirectVisit
+                            t.IsDirectVisit,
+                            t.RoomId
                         )).ToList());
             }
         }
@@ -520,10 +532,18 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 ? new Dictionary<string, object?>(p.CustomFields)
                 : new Dictionary<string, object?>();
 
-            if (hasActiveTicket && primaryTicket != null && primaryTicket.DoctorId.HasValue)
+            if (hasActiveTicket && primaryTicket != null)
             {
-                customFields["activeQueueDoctorId"] = primaryTicket.DoctorId.Value.ToString();
-                customFields["doctorId"] = primaryTicket.DoctorId.Value.ToString();
+                if (primaryTicket.DoctorId.HasValue)
+                {
+                    customFields["activeQueueDoctorId"] = primaryTicket.DoctorId.Value.ToString();
+                    customFields["doctorId"] = primaryTicket.DoctorId.Value.ToString();
+                }
+                if (primaryTicket.RoomId.HasValue)
+                {
+                    customFields["activeQueueRoomId"] = primaryTicket.RoomId.Value.ToString();
+                    customFields["roomId"] = primaryTicket.RoomId.Value.ToString();
+                }
             }
 
             return new ClinicPatientDto(
@@ -564,9 +584,9 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 YakapEnlistments: null,
                 AlertsList: null,
                 MedicalHistories: null,
-                Allergies: null,
+                Allergies: p.Allergens.Count > 0 ? string.Join(", ", p.Allergens) : null,
                 ChronicConditions: null,
-                Alerts: p.HasActiveSafetyAlert ? "Active Safety Alert" : null,
+                Alerts: p.HasActiveSafetyAlert ? "Active Safety Alert" : (p.AlertTitles.Count > 0 ? string.Join(", ", p.AlertTitles) : null),
                 SyncPatientId: p.CloudPatientId,
                 GenderIdentity: p.GenderIdentity,
                 Addresses: p.Addresses.Count > 0 ? p.Addresses : null,

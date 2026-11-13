@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.Search;
 using ClinicEz.Clinic.Domain.Entities;
@@ -17,7 +18,8 @@ public sealed record GetClinicPatientCountsQuery(
     string? SearchTerm = null,
     Guid? StaffId = null,
     Guid? DoctorId = null,
-    IReadOnlyList<Guid>? RoomIds = null) : IRequest<PatientDirectoryCountsDto>;
+    IReadOnlyList<Guid>? RoomIds = null,
+    DateOnly? QueueDate = null) : IRequest<PatientDirectoryCountsDto>;
 
 public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClinicPatientCountsQuery, PatientDirectoryCountsDto>
 {
@@ -41,7 +43,9 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
 
         baseQuery = baseQuery.WhereMatchesSearchTerm(request.SearchTerm);
 
-        var seniorCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-60));
+        var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
+        var localToday = request.QueueDate ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+        var seniorCutoff = localToday.AddYears(-60);
         var effectiveStaffId = request.StaffId ?? request.DoctorId;
 
         var relatedPatientIds = new List<Guid>();
@@ -52,6 +56,7 @@ public sealed class GetClinicPatientCountsQueryHandler : IRequestHandler<GetClin
                 ? await _queueRepo.Query()
                     .AsNoTracking()
                     .Where(q => (q.DoctorId == staffId || (request.RoomIds != null && q.RoomId.HasValue && request.RoomIds.Contains(q.RoomId.Value))) &&
+                                (q.QueueDate == localToday || (request.QueueDate == null && q.QueueDate == DateOnly.FromDateTime(DateTime.UtcNow))) &&
                                 q.Status != QueueStatus.Completed &&
                                 q.Status != QueueStatus.Cancelled &&
                                 q.Status != QueueStatus.NoShow &&

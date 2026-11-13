@@ -25,8 +25,10 @@ export function isMyPatient(
     return (
       patient.customFields?.assigned_doctor_id === staffId ||
       patient.customFields?.doctor_id === staffId ||
+      patient.customFields?.activeQueueDoctorId === staffId ||
       (patient as any).activeQueueDoctorId === staffId ||
-      (patient as any).doctorId === staffId
+      (patient as any).doctorId === staffId ||
+      Boolean(patient.activeQueueTickets?.some((t) => t.doctorId === staffId))
     );
   }
 
@@ -34,13 +36,15 @@ export function isMyPatient(
     const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
     const patientRoomId = (patient as any).roomId || (patient as any).activeQueueRoomId || patient.customFields?.room_id || patient.customFields?.assigned_room_id;
     const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+    const ticketRoomMatch = Boolean(patient.activeQueueTickets?.some((t) => !!t.roomId && nurseRooms.includes(t.roomId)));
 
     return (
       patient.customFields?.nurse_id === staffId ||
       patient.customFields?.assigned_nurse_id === staffId ||
       patient.customFields?.vitals_recorded_by_nurse_id === staffId ||
       patient.customFields?.recorded_by_nurse_id === staffId ||
-      roomMatch
+      roomMatch ||
+      ticketRoomMatch
     );
   }
 
@@ -50,8 +54,10 @@ export function isMyPatient(
     patient.customFields?.nurse_id === staffId ||
     patient.customFields?.assigned_nurse_id === staffId ||
     patient.customFields?.staff_id === staffId ||
+    patient.customFields?.activeQueueDoctorId === staffId ||
     (patient as any).activeQueueDoctorId === staffId ||
-    (patient as any).doctorId === staffId
+    (patient as any).doctorId === staffId ||
+    Boolean(patient.activeQueueTickets?.some((t) => t.doctorId === staffId))
   );
 }
 
