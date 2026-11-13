@@ -42,7 +42,7 @@ function normalizePatientSex(sex?: string | null): 'female' | 'male' | null {
   return null;
 }
 
-function resolveAgeYears(patientAgeYears?: number | null, patientDateOfBirth?: string | null): number | null {
+export function resolveAgeYears(patientAgeYears?: number | null, patientDateOfBirth?: string | null): number | null {
   if (patientDateOfBirth) {
     const dob = new Date(patientDateOfBirth);
     if (!Number.isNaN(dob.getTime())) {
@@ -370,16 +370,6 @@ export default function SpecificEncounterFormsCard({
                       size={theme.sizes.iconSm}
                       color={selected ? theme.colors.primaryDark : theme.colors.success}
                     />
-                  ) : tab.isRecommended ? (
-                    <View
-                      style={[
-                        styles.recommendedDot,
-                        {
-                          backgroundColor: selected ? theme.colors.primaryDark : theme.colors.primary,
-                          borderRadius: theme.radii.full,
-                        },
-                      ]}
-                    />
                   ) : null}
                   <ThemedText
                     variant="caption"
@@ -390,6 +380,13 @@ export default function SpecificEncounterFormsCard({
                   >
                     {tab.label}
                   </ThemedText>
+                  {tab.isRecommended && !tab.hasData ? (
+                    <Badge
+                      variant={selected ? 'primary' : 'routine'}
+                      size="xs"
+                      label="Recommended"
+                    />
+                  ) : null}
                 </TouchableOpacity>
               );
             })}

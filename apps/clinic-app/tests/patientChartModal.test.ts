@@ -438,19 +438,46 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).not.toContain('>Edit Demographics<');
   });
 
-  test('12. HealthProfilesTab renders horizontally scrollable sub-tabs with all sections', () => {
-    const markup = renderToStaticMarkup(
+  test('12. HealthProfilesTab renders horizontally scrollable sub-tabs with all sections for female patients and filters for male patients', () => {
+    // 12a. Female patient renders all 4 statutory sub-tabs
+    const femaleMarkup = renderToStaticMarkup(
       React.createElement(HealthProfilesTab, {
-        patient: mockPatient,
+        patient: { ...mockPatient, sex: 'Female' },
       })
     );
 
-    // Rendered inside ScrollView
-    expect(markup).toContain('data-component="ScrollView"');
-    expect(markup).toContain('Surgical &amp; Clinical');
-    expect(markup).toContain('Lifestyle &amp; Social');
-    expect(markup).toContain('Reproductive / OB-GYN');
-    expect(markup).toContain('Cardiometabolic &amp; NCD');
+    expect(femaleMarkup).toContain('data-component="ScrollView"');
+    expect(femaleMarkup).toContain('Surgical &amp; Clinical');
+    expect(femaleMarkup).toContain('Lifestyle &amp; Social');
+    expect(femaleMarkup).toContain('Reproductive / OB-GYN');
+    expect(femaleMarkup).toContain('Cardiometabolic &amp; NCD');
+
+    // 12b. Issue #187: Male patient with no reproductive history hides Reproductive / OB-GYN
+    const maleMarkup = renderToStaticMarkup(
+      React.createElement(HealthProfilesTab, {
+        patient: mockPatient, // sex: 'Male'
+      })
+    );
+    expect(maleMarkup).toContain('Surgical &amp; Clinical');
+    expect(maleMarkup).toContain('Lifestyle &amp; Social');
+    expect(maleMarkup).not.toContain('Reproductive / OB-GYN');
+    expect(maleMarkup).toContain('Cardiometabolic &amp; NCD');
+
+    // 12c. Issue #187: Male patient with historical reproductive data preserves Reproductive / OB-GYN
+    const maleWithDataMarkup = renderToStaticMarkup(
+      React.createElement(HealthProfilesTab, {
+        patient: mockPatient,
+        reproductiveHistory: {
+          id: 'rep-001',
+          clinicId: 'cln-1',
+          patientId: mockPatient.id,
+          isApplicable: true,
+          isMenopausal: false,
+          hadPreEclampsiaHypertension: false,
+        },
+      })
+    );
+    expect(maleWithDataMarkup).toContain('Reproductive / OB-GYN');
   });
 
   test('13. Storage helpers persist and retrieve active chart tab and sub-tab', () => {

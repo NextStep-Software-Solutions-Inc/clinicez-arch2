@@ -752,6 +752,7 @@ describe('Milestone 4-A Empirical Adversarial Challenger: Workstation EHR Workfl
         })
       );
       expect(adultMaleHtml).toContain('BP Monitoring Log');
+      expect(adultMaleHtml).toContain('Recommended');
       expect(adultMaleHtml).toContain('Systolic (mmHg)');
       expect(adultMaleHtml).not.toContain('Ob-Gyne Exam');
       expect(adultMaleHtml).not.toContain('Pediatric Milestones');
