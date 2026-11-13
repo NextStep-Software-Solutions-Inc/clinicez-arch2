@@ -2878,6 +2878,7 @@ export interface PatientActiveQueueTicket {
   doctorName?: string | null;
   checkInTime?: string;
   isDirectVisit?: boolean;
+  roomId?: string | null;
 }
 
 export interface ClinicPatient {
@@ -4665,7 +4666,8 @@ export const clinicService = {
     filterMode?: string,
     staffId?: string,
     doctorId?: string,
-    queueDate?: string
+    queueDate?: string,
+    roomIds?: string[]
   ) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
@@ -4676,15 +4678,28 @@ export const clinicService = {
     params.append('page', String(page));
     params.append('pageSize', String(pageSize));
     if (queueDate) params.append('queueDate', queueDate);
+    if (roomIds && roomIds.length > 0) {
+      roomIds.forEach((r) => params.append('roomIds', r));
+    }
     const qs = params.toString();
     return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
   },
 
-  async getPatientCounts(search?: string, staffId?: string, doctorId?: string) {
+  async getPatientCounts(
+    search?: string,
+    staffId?: string,
+    doctorId?: string,
+    roomIds?: string[],
+    queueDate?: string
+  ) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (staffId) params.append('staffId', staffId);
     if (doctorId) params.append('doctorId', doctorId);
+    if (queueDate) params.append('queueDate', queueDate);
+    if (roomIds && roomIds.length > 0) {
+      roomIds.forEach((r) => params.append('roomIds', r));
+    }
     const qs = params.toString();
     return clinicApiClient.get<PatientDirectoryCounts>(`/patients/counts${qs ? `?${qs}` : ''}`);
   },

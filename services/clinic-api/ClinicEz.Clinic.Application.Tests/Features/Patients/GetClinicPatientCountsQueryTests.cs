@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
 using ClinicEz.Clinic.Application.Features.Patients.Search;
@@ -468,6 +469,239 @@ public sealed class GetClinicPatientCountsQueryTests
             Array.Empty<Guid>()).ToQueryString();
 
         noStaffSql.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Handle_Issue170_NullOrEmptyCustomFields_DoNotInflateStudentsOrEmployees()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var countsHandler = new GetClinicPatientCountsQueryHandler(repo);
+        var listHandler = new GetClinicPatientsQueryHandler(repo);
+
+        var pNullFields = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-NULL-01",
+            FirstName = "Null",
+            LastName = "Customs",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            ContactNumber = "09170000301",
+            CustomFields = new Dictionary<string, object?>
+            {
+                { "classification", "General" },
+                { "student_id", null },
+                { "employee_id", null }
+            }
+        };
+
+        var pEmptyFields = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-EMPTY-02",
+            FirstName = "Empty",
+            LastName = "Strings",
+            DateOfBirth = new DateOnly(1991, 2, 2),
+            ContactNumber = "09170000302",
+            CustomFields = new Dictionary<string, object?>
+            {
+                { "classification", "General" },
+                { "student_id", "   " },
+                { "employee_id", "" }
+            }
+        };
+
+        var pRealStudent = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-STU-03",
+            FirstName = "Real",
+            LastName = "Student",
+            DateOfBirth = new DateOnly(2004, 3, 3),
+            ContactNumber = "09170000303",
+            CustomFields = new Dictionary<string, object?>
+            {
+                { "classification", "Student" },
+                { "student_id", "STU-2026-99" }
+            }
+        };
+
+        context.Patients.AddRange(pNullFields, pEmptyFields, pRealStudent);
+        await context.SaveChangesAsync();
+
+        var counts = await countsHandler.Handle(new GetClinicPatientCountsQuery(), CancellationToken.None);
+        var studentList = await listHandler.Handle(new GetClinicPatientsQuery(FilterMode: "STUDENTS"), CancellationToken.None);
+        var employeeList = await listHandler.Handle(new GetClinicPatientsQuery(FilterMode: "EMPLOYEES"), CancellationToken.None);
+
+        counts.All.Should().Be(3);
+        counts.Students.Should().Be(1);
+        counts.Employees.Should().Be(0);
+        studentList.Should().HaveCount(1);
+        studentList[0].Id.Should().Be(pRealStudent.Id);
+        employeeList.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_Issue170_NurseRoomIds_MatchesAssignedRoomsForCountsAndList()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var countsHandler = new GetClinicPatientCountsQueryHandler(patientRepo, queueRepo);
+        var listHandler = new GetClinicPatientsQueryHandler(patientRepo, queueRepo);
+
+        var nurseId = Guid.NewGuid();
+        var nurseRoomId = Guid.NewGuid();
+        var otherRoomId = Guid.NewGuid();
+
+        var patInNurseRoom = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-ROOM-01",
+            FirstName = "Room",
+            LastName = "PatientOne",
+            DateOfBirth = new DateOnly(1995, 1, 1),
+            ContactNumber = "09170000401"
+        };
+        var patInOtherRoom = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-ROOM-02",
+            FirstName = "Room",
+            LastName = "PatientTwo",
+            DateOfBirth = new DateOnly(1996, 2, 2),
+            ContactNumber = "09170000402"
+        };
+
+        var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+
+        var qItemNurse = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = patInNurseRoom.Id,
+            PatientName = $"{patInNurseRoom.LastName}, {patInNurseRoom.FirstName}",
+            QueueNumber = "Q-NURSE",
+            QueueDate = today,
+            RoomId = nurseRoomId,
+            Status = QueueStatus.Waiting
+        };
+
+        var qItemOther = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = patInOtherRoom.Id,
+            PatientName = $"{patInOtherRoom.LastName}, {patInOtherRoom.FirstName}",
+            QueueNumber = "Q-OTHER",
+            QueueDate = today,
+            RoomId = otherRoomId,
+            Status = QueueStatus.Waiting
+        };
+
+        context.Patients.AddRange(patInNurseRoom, patInOtherRoom);
+        context.QueueItems.AddRange(qItemNurse, qItemOther);
+        await context.SaveChangesAsync();
+
+        var counts = await countsHandler.Handle(new GetClinicPatientCountsQuery(
+            StaffId: nurseId,
+            RoomIds: new[] { nurseRoomId }), CancellationToken.None);
+
+        var myPatientsList = await listHandler.Handle(new GetClinicPatientsQuery(
+            FilterMode: "MY_PATIENTS",
+            StaffId: nurseId,
+            RoomIds: new[] { nurseRoomId }), CancellationToken.None);
+
+        counts.MyPatients.Should().Be(1);
+        myPatientsList.Should().HaveCount(1);
+        myPatientsList[0].Id.Should().Be(patInNurseRoom.Id);
+    }
+
+    [Fact]
+    public async Task Handle_Issue170_HistoricalOrTerminalQueueTickets_DoNotInflateCounts()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var countsHandler = new GetClinicPatientCountsQueryHandler(patientRepo, queueRepo);
+        var listHandler = new GetClinicPatientsQueryHandler(patientRepo, queueRepo);
+
+        var doctorId = Guid.NewGuid();
+        var patPastTicket = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-PAST-01",
+            FirstName = "Past",
+            LastName = "Ticket",
+            DateOfBirth = new DateOnly(1995, 1, 1),
+            ContactNumber = "09170000501"
+        };
+        var patDivertedTicket = new Patient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-DIV-02",
+            FirstName = "Diverted",
+            LastName = "Ticket",
+            DateOfBirth = new DateOnly(1996, 2, 2),
+            ContactNumber = "09170000502"
+        };
+
+        var tz = ClinicTimeZoneResolver.ResolveTimeZone("Asia/Manila");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+        var yesterday = today.AddDays(-1);
+
+        var qYesterday = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = patPastTicket.Id,
+            PatientName = $"{patPastTicket.LastName}, {patPastTicket.FirstName}",
+            QueueNumber = "Q-YESTERDAY",
+            QueueDate = yesterday,
+            DoctorId = doctorId,
+            Status = QueueStatus.Waiting
+        };
+
+        var qDivertedToday = new QueueItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = patDivertedTicket.Id,
+            PatientName = $"{patDivertedTicket.LastName}, {patDivertedTicket.FirstName}",
+            QueueNumber = "Q-DIVERTED",
+            QueueDate = today,
+            DoctorId = doctorId,
+            Status = QueueStatus.Diverted
+        };
+
+        context.Patients.AddRange(patPastTicket, patDivertedTicket);
+        context.QueueItems.AddRange(qYesterday, qDivertedToday);
+        await context.SaveChangesAsync();
+
+        var counts = await countsHandler.Handle(new GetClinicPatientCountsQuery(DoctorId: doctorId), CancellationToken.None);
+        var list = await listHandler.Handle(new GetClinicPatientsQuery(FilterMode: "MY_PATIENTS", DoctorId: doctorId), CancellationToken.None);
+
+        counts.MyPatients.Should().Be(0);
+        list.Should().BeEmpty();
     }
 }
 

@@ -151,8 +151,10 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     return (
       p.customFields?.assigned_doctor_id === staffId ||
       p.customFields?.doctor_id === staffId ||
+      p.customFields?.activeQueueDoctorId === staffId ||
       (p as any).activeQueueDoctorId === staffId ||
-      (p as any).doctorId === staffId
+      (p as any).doctorId === staffId ||
+      Boolean(p.activeQueueTickets?.some((t) => t.doctorId === staffId))
     );
   }
 
@@ -160,13 +162,15 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
     const patientRoomId = (p as any).roomId || (p as any).activeQueueRoomId || p.customFields?.room_id || p.customFields?.assigned_room_id;
     const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+    const ticketRoomMatch = Boolean(p.activeQueueTickets?.some((t) => !!t.roomId && nurseRooms.includes(t.roomId)));
 
     return (
       p.customFields?.nurse_id === staffId ||
       p.customFields?.assigned_nurse_id === staffId ||
       p.customFields?.vitals_recorded_by_nurse_id === staffId ||
       p.customFields?.recorded_by_nurse_id === staffId ||
-      roomMatch
+      roomMatch ||
+      ticketRoomMatch
     );
   }
 
@@ -176,8 +180,10 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     p.customFields?.nurse_id === staffId ||
     p.customFields?.assigned_nurse_id === staffId ||
     p.customFields?.staff_id === staffId ||
+    p.customFields?.activeQueueDoctorId === staffId ||
     (p as any).activeQueueDoctorId === staffId ||
-    (p as any).doctorId === staffId
+    (p as any).doctorId === staffId ||
+    Boolean(p.activeQueueTickets?.some((t) => t.doctorId === staffId))
   );
 };
 
@@ -631,12 +637,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         : authUser?.role === 'Doctor'
           ? actorStaffId
           : undefined;
+    const roomIds = currentStaff?.assignedRoomIds ?? (currentStaff?.assignedRoomId ? [currentStaff.assignedRoomId] : undefined);
 
     setPatientsError(null);
     setPage(1);
     setScrollY(0);
     lastScrollYRef.current = 0;
-    clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId).then(([countsData]) => {
+    clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId, roomIds).then(([countsData]) => {
       if (requestId === fetchRequestIdRef.current && countsData) {
         setTotalCounts(countsData);
       }
@@ -649,7 +656,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       PAGE_SIZE,
       serverFilterMode,
       staffId,
-      doctorId
+      doctorId,
+      undefined,
+      roomIds
     );
     if (requestId !== fetchRequestIdRef.current) {
       return;
@@ -682,6 +691,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         : authUser?.role === 'Doctor'
           ? actorStaffId
           : undefined;
+    const roomIds = currentStaff?.assignedRoomIds ?? (currentStaff?.assignedRoomId ? [currentStaff.assignedRoomId] : undefined);
 
     const [data, err] = await clinicService.getPatients(
       activeSearch || undefined,
@@ -690,7 +700,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       PAGE_SIZE,
       serverFilterMode,
       staffId,
-      doctorId
+      doctorId,
+      undefined,
+      roomIds
     );
 
 
@@ -1699,68 +1711,30 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     fetchPatients();
   };
 
-  const filterCounts = useMemo(() => {
-    if (!patients) return null;
-    let myPatients = 0;
-    let students = 0;
-    let employees = 0;
-    let alerts = 0;
-    let seniorPwd = 0;
-    for (const p of patients) {
-      if (isMyPatient(p, currentStaff)) {
-        myPatients++;
-      }
-      if (
-        p.customFields?.classification === 'Student' ||
-        p.customFields?.category === 'Student' ||
-        (typeof p.customFields?.student_id === 'string'
-          ? p.customFields.student_id.trim().length > 0
-          : !!p.customFields?.student_id)
-      ) {
-        students++;
-      }
-      if (
-        p.customFields?.classification === 'Employee' ||
-        p.customFields?.category === 'Employee' ||
-        (typeof p.customFields?.employee_id === 'string'
-          ? p.customFields.employee_id.trim().length > 0
-          : !!p.customFields?.employee_id)
-      ) {
-        employees++;
-      }
-      if (hasKnownAllergies(p.allergies) || (p.alerts && p.alerts.trim().length > 0)) {
-        alerts++;
-      }
-      if (!!p.seniorCitizenId || !!p.pwdId || p.age >= 60) {
-        seniorPwd++;
-      }
+  const activeTotal = useMemo(() => {
+    if (!totalCounts) return undefined;
+    switch (filterMode) {
+      case 'MY_PATIENTS':
+        return totalCounts.myPatients;
+      case 'STUDENTS':
+        return totalCounts.students;
+      case 'EMPLOYEES':
+        return totalCounts.employees;
+      case 'ALERTS':
+        return totalCounts.alerts;
+      case 'SENIOR_PWD':
+        return totalCounts.seniorPwd;
+      case 'ALL':
+      default:
+        return totalCounts.all;
     }
-    return {
-      all: patients.length,
-      myPatients: filterMode === 'MY_PATIENTS' ? patients.length : myPatients,
-      students: filterMode === 'STUDENTS' ? patients.length : students,
-      employees: filterMode === 'EMPLOYEES' ? patients.length : employees,
-      alerts: filterMode === 'ALERTS' ? patients.length : alerts,
-      seniorPwd: filterMode === 'SENIOR_PWD' ? patients.length : seniorPwd,
-    };
-  }, [patients, currentStaff, filterMode]);
+  }, [totalCounts, filterMode]);
 
   const filteredPatients = useMemo(() => patients ?? [], [patients]);
 
-
-  const formatTabCount = useCallback(
-    (loaded: number | undefined, total: number | undefined): string | number | undefined => {
-      if (loaded === undefined) return undefined;
-      if (total !== undefined && total !== null) {
-        return `${loaded}/${total}`;
-      }
-      if (!hasMore && patients !== null) {
-        return `${loaded}/${loaded}`;
-      }
-      return loaded;
-    },
-    [hasMore, patients]
-  );
+  const formatTabCount = useCallback((total: number | undefined): number | undefined => {
+    return total;
+  }, []);
 
   const isTable = effectiveViewMode === 'table';
   const itemHeight = isTable ? 64 : 270;
@@ -1914,17 +1888,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             value={filterMode}
             onChange={handleFilterModeChange}
             options={[
-              { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
-              { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
-              { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
-              { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
+              { value: 'ALL', label: 'All patients', count: totalCounts?.all },
+              { value: 'MY_PATIENTS', label: 'My patients', count: totalCounts?.myPatients },
+              { value: 'STUDENTS', label: 'Students', count: totalCounts?.students },
+              { value: 'EMPLOYEES', label: 'Employees', count: totalCounts?.employees },
               {
                 value: 'ALERTS',
                 label: 'Alerts & allergies',
-                count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
-                badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
+                count: totalCounts?.alerts,
+                badgeVariant: (totalCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
               },
-              { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
+              { value: 'SENIOR_PWD', label: 'Senior & PWD', count: totalCounts?.seniorPwd },
             ]}
           />
         </View>
@@ -2078,13 +2052,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               </ThemedText>
             </View>
           ) : hasMore ? (
-            <Button
-              title="Load more patients"
-              variant="ghost"
-              size="sm"
-              icon="chevronDown"
-              onPress={loadMorePatients}
-            />
+            <View style={{ alignItems: 'center', gap: 8 }}>
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
+                Showing {patients.length} of {activeTotal ?? patients.length} {activeTotal === 1 ? 'patient' : 'patients'}
+              </ThemedText>
+              <Button
+                title="Load more patients"
+                variant="ghost"
+                size="sm"
+                icon="chevronDown"
+                onPress={loadMorePatients}
+              />
+            </View>
           ) : (
             <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
               All {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'} loaded
