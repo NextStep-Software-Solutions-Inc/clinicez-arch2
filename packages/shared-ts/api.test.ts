@@ -66,6 +66,85 @@ describe('extractApiError', () => {
     expect(result.errors[0].message).toBe('PRC License Number is mandatory for Doctors.');
   });
 
+  it('unmasks specific field error when rawData.message is generic "One or more validation errors occurred."', () => {
+    const error = {
+      response: {
+        status: 400,
+        data: {
+          succeeded: false,
+          message: 'One or more validation errors occurred.',
+          errors: [
+            {
+              field: 'HeartRateBpm',
+              code: 'InclusiveBetweenValidator',
+              message: "'Heart Rate Bpm' must be between 30 and 250. You entered 18.",
+            },
+          ],
+          errorCode: 'VALIDATION_ERROR',
+          traceId: '00-trace-vitals-141',
+        },
+      },
+    };
+
+    const result = extractApiError(error);
+
+    expect(result.status).toBe(400);
+    expect(result.message).toBe("'Heart Rate Bpm' must be between 30 and 250. You entered 18.");
+    expect(result.getFieldError('HeartRateBpm')).toBe("'Heart Rate Bpm' must be between 30 and 250. You entered 18.");
+    expect(result.getFieldError('heartRateBpm')).toBe("'Heart Rate Bpm' must be between 30 and 250. You entered 18.");
+  });
+
+  it('combines multiple specific field error messages when rawData.message is generic', () => {
+    const error = {
+      response: {
+        status: 400,
+        data: {
+          succeeded: false,
+          message: 'One or more validation errors occurred.',
+          errors: [
+            {
+              field: 'HeartRateBpm',
+              code: 'InclusiveBetweenValidator',
+              message: "'Heart Rate Bpm' must be between 30 and 250. You entered 18.",
+            },
+            {
+              field: 'SystolicBp',
+              code: 'InclusiveBetweenValidator',
+              message: "'Systolic Bp' must be between 50 and 300. You entered 400.",
+            },
+          ],
+          errorCode: 'VALIDATION_ERROR',
+        },
+      },
+    };
+
+    const result = extractApiError(error);
+
+    expect(result.status).toBe(400);
+    expect(result.message).toBe(
+      "'Heart Rate Bpm' must be between 30 and 250. You entered 18.; 'Systolic Bp' must be between 50 and 300. You entered 400."
+    );
+  });
+
+  it('falls back to generic validation message when fieldErrors array is empty', () => {
+    const error = {
+      response: {
+        status: 400,
+        data: {
+          succeeded: false,
+          message: 'One or more validation errors occurred.',
+          errors: [],
+          errorCode: 'VALIDATION_ERROR',
+        },
+      },
+    };
+
+    const result = extractApiError(error);
+
+    expect(result.status).toBe(400);
+    expect(result.message).toBe('One or more validation errors occurred.');
+  });
+
   it('extracts detail or title from RFC ProblemDetails when message is absent', () => {
     const problemDetails = {
       response: {

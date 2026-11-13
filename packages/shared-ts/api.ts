@@ -133,6 +133,16 @@ function isDatabaseOrOrmLeak(message: string): boolean {
 }
 
 /**
+ * Detects whether an error message is a generic ASP.NET Core validation failure summary
+ * ("One or more validation errors occurred.") that masks specific field-level validation errors.
+ */
+function isGenericValidationMessage(message: string): boolean {
+  if (!message || typeof message !== 'string') return false;
+  const normalized = message.trim().toLowerCase().replace(/[.:!]+$/, '');
+  return normalized === 'one or more validation errors occurred';
+}
+
+/**
  * Safely extracts a meaningful, user-friendly ApiError from any error object,
  * including Axios errors, ASP.NET Core ValidationProblemDetails (RFC 7807/9110),
  * standard ApiResponse envelopes, and network errors.
@@ -241,9 +251,12 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
     }
 
     // 2. Determine best primary message
-    if (typeof rawData.message === 'string' && rawData.message.trim().length > 0) {
+    const hasFieldErrors = fieldErrors.length > 0;
+    const isGenericMsg = typeof rawData.message === 'string' && isGenericValidationMessage(rawData.message);
+
+    if (typeof rawData.message === 'string' && rawData.message.trim().length > 0 && (!hasFieldErrors || !isGenericMsg)) {
       extractedMessage = rawData.message.trim();
-    } else if (fieldErrors.length > 0) {
+    } else if (hasFieldErrors) {
       // If there are specific field errors, filter out generic wrapper "The command field is required."
       const specificFieldErrors = fieldErrors.filter(
         (e) => e.field !== 'command' && !e.message.includes('The command field is required')
@@ -251,6 +264,8 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
       const errorsToUse = specificFieldErrors.length > 0 ? specificFieldErrors : fieldErrors;
       const uniqueMsgs = Array.from(new Set(errorsToUse.map((e) => e.message)));
       extractedMessage = uniqueMsgs.join('; ');
+    } else if (typeof rawData.message === 'string' && rawData.message.trim().length > 0) {
+      extractedMessage = rawData.message.trim();
     } else if (typeof rawData.detail === 'string' && rawData.detail.trim().length > 0) {
       extractedMessage = rawData.detail.trim();
     } else if (typeof rawData.title === 'string' && rawData.title.trim().length > 0) {
