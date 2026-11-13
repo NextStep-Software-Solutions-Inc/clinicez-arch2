@@ -23,6 +23,7 @@ import {
   type VitalsFormState,
   EMPTY_VITALS_FORM,
   hydrateVitalsFormFromRecord,
+  mapApiErrorsToVitalsFormErrors,
   parseOptionalInt,
   parseOptionalFloat,
   resolveCohort,
@@ -73,6 +74,7 @@ export default function EditVitalsModal({
   title = 'Edit Vitals',
 }: EditVitalsModalProps) {
   const [form, setForm] = useState<VitalsFormState>(EMPTY_VITALS_FORM);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof VitalsFormState, string>>>({});
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -86,6 +88,7 @@ export default function EditVitalsModal({
   const applyVitalsToState = useCallback(
     (vitalsData: TriageVitals, patientCohort: ReturnType<typeof resolveCohort>) => {
       setForm(hydrateVitalsFormFromRecord(vitalsData, patientCohort));
+      setFieldErrors({});
       if (vitalsData.growthZScoreCategory || vitalsData.philHealthZScoreCategory) {
         setZScorePreview({
           ageInMonths: 0,
@@ -152,6 +155,7 @@ export default function EditVitalsModal({
       loadVitals();
     } else {
       setForm(EMPTY_VITALS_FORM);
+      setFieldErrors({});
       setLoading(false);
       setFetchError(null);
       setZScorePreview(null);
@@ -205,6 +209,13 @@ export default function EditVitalsModal({
 
   const updateField = (key: keyof VitalsFormState, val: string) => {
     setForm((prev) => ({ ...prev, [key]: val }));
+    if (fieldErrors[key]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   const updateRosCategory = (val: RosCategoryCode) => {
@@ -373,9 +384,14 @@ export default function EditVitalsModal({
 
     if (err || !savedVitals) {
       setSaving(false);
-      notify.error(err?.message || 'Could not update vitals.');
+      if (err) {
+        setFieldErrors(mapApiErrorsToVitalsFormErrors(err));
+      }
+      notify.error(err?.message || 'Could not update vitals.', { traceId: err?.traceId });
       return;
     }
+
+    setFieldErrors({});
 
     if (escalateToDoctor) {
       const escalationPriority = form.triagePriority === 'Routine' ? 'Urgent' : form.triagePriority;
@@ -473,7 +489,7 @@ export default function EditVitalsModal({
         />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false}>
-          <StandardVitalsSection form={form} updateField={updateField} cohort={cohort} />
+          <StandardVitalsSection form={form} updateField={updateField} cohort={cohort} errors={fieldErrors} />
           <AnthropometricsSection
             form={form}
             updateField={updateField}
@@ -482,9 +498,10 @@ export default function EditVitalsModal({
             bmiCategory={bmiEval?.category}
             centralObesity={centralObesity}
             zScorePreview={zScorePreview}
+            errors={fieldErrors}
           />
-          <VisualAcuitySection form={form} updateField={updateField} />
-          <PreAssessmentSection form={form} updateField={updateField} />
+          <VisualAcuitySection form={form} updateField={updateField} errors={fieldErrors} />
+          <PreAssessmentSection form={form} updateField={updateField} errors={fieldErrors} />
           <NurseCareAndOtcDispensingSection
             allowDispensing={isVisitTypeEligibleForOtcDispensing(visitType)}
             chiefComplaint={form.chiefComplaint}
@@ -495,6 +512,8 @@ export default function EditVitalsModal({
             onChangeRosCategory={updateRosCategory}
             dispensedItems={form.dispensedItems}
             onChangeDispensedItems={updateDispensedItems}
+            chiefComplaintError={fieldErrors.chiefComplaint}
+            homeInstructionsError={fieldErrors.homeInstructions}
           />
         </ScrollView>
       )}
