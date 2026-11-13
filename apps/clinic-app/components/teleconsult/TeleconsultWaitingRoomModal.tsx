@@ -317,10 +317,13 @@ const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
       autoPlay: true,
       playsInline: true,
       muted,
+      draggable: false,
       style: {
         width: '100%',
         height: '100%',
         objectFit: 'cover',
+        userSelect: 'none',
+        pointerEvents: 'none',
         transform: mirror ? 'scaleX(-1)' : undefined,
       },
     });
@@ -397,12 +400,20 @@ function ActiveTeleconsultModal({
   const recordingSessionIdRef = useRef<string | null>(
     teleconsultSession.activeRecordingSessionId ?? null,
   );
-  const persistentVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const dockWrapperRef = useRef<any>(null);
+  const activeDragCleanupRef = useRef<(() => void) | null>(null);
 
   const [hydratedStatus, setHydratedStatus] = useState<TeleconsultStatusDto | null>(null);
   const [patientInviteUrl, setPatientInviteUrl] = useState<string | undefined>(undefined);
   const [isPipActive, setIsPipActive] = useState<boolean>(false);
+  const [videoOrientation, setVideoOrientation] = useState<'portrait' | 'landscape'>('landscape');
+  const [isDraggingDock, setIsDraggingDock] = useState<boolean>(false);
   const [isConfirmEndCallOpen, setIsConfirmEndCallOpen] = useState<boolean>(false);
+  const isPipActiveRef = useRef<boolean>(isPipActive);
+  const videoOrientationRef = useRef<'portrait' | 'landscape'>(videoOrientation);
+  isPipActiveRef.current = isPipActive;
+  videoOrientationRef.current = videoOrientation;
 
   useEffect(() => {
     let isMounted = true;
@@ -785,8 +796,15 @@ function ActiveTeleconsultModal({
     }
   }, [isActuallyInCall, session.mediaTracks.isMicEnabled]);
 
-  const handleDockAndOpenChart = useCallback(() => {
-    dockCallStage();
+  const participantInitials = useMemo(() => {
+    const trimmed = resolvedPatientName.trim();
+    if (!trimmed) return '??';
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }, [resolvedPatientName]);
+
+  const revealPatientChart = useCallback(() => {
     if (onOpenConsultationChart) {
       onOpenConsultationChart(appointmentId, teleconsultSession.patientId);
     } else if (onNavigateToChart) {
@@ -794,12 +812,17 @@ function ActiveTeleconsultModal({
     }
   }, [
     appointmentId,
-    dockCallStage,
     onNavigateToChart,
     onOpenConsultationChart,
     teleconsultSession.patientId,
     teleconsultSession.patientName,
   ]);
+
+  const handleDockAndOpenChart = useCallback(() => {
+    setIsPipActive(false);
+    dockCallStage();
+    revealPatientChart();
+  }, [dockCallStage, revealPatientChart]);
 
   const mappedPaymentStatus = mapToCommsPaymentStatus(
     session.paymentState.status || teleconsultSession.paymentStatus,
@@ -815,65 +838,54 @@ function ActiveTeleconsultModal({
           ? 'Disabled'
           : 'Pending';
 
-  // Native Web Picture-in-Picture Support
-  const isPipSupported = useMemo(() => {
-    if (Platform.OS !== 'web') return false;
-    return (
-      typeof document !== 'undefined' &&
-      'pictureInPictureEnabled' in document &&
-      Boolean(document.pictureInPictureEnabled)
-    );
-  }, []);
+  // Unified In-App Coupled Picture-in-Picture + Dock support
+  const isPipSupported = true;
 
   const handleTogglePip = useCallback(async () => {
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    try {
-      if (document.pictureInPictureElement) {
+    if (Platform.OS === 'web' && typeof document !== 'undefined' && document.pictureInPictureElement) {
+      try {
         await document.exitPictureInPicture();
-        setIsPipActive(false);
-      } else if (persistentVideoRef.current) {
-        await persistentVideoRef.current.requestPictureInPicture();
-        setIsPipActive(true);
+      } catch {
+        // Ignore browser PiP exit error
       }
-    } catch {
-      notify.info('Picture-in-picture is currently unavailable in this browser.');
     }
+    if (!isCallStageDocked) {
+      setIsPipActive(true);
+      dockCallStage();
+      revealPatientChart();
+      return;
+    }
+    setIsPipActive((prev) => !prev);
+  }, [dockCallStage, isCallStageDocked, revealPatientChart]);
+
+  const handleMaximizeStage = useCallback(() => {
+    setIsPipActive(false);
+    maximizeCallStage();
+  }, [maximizeCallStage]);
+
+  const handleToggleOrientation = useCallback(() => {
+    setVideoOrientation((prev) => (prev === 'landscape' ? 'portrait' : 'landscape'));
   }, []);
 
+  const stopDragPropagation = useCallback((e: any) => {
+    e?.stopPropagation?.();
+  }, []);
+
+  // Continuously attach remote patient audio track across both full-screen and docked layouts
   useEffect(() => {
     if (Platform.OS !== 'web' || !isActuallyInCall) return;
-    const el = persistentVideoRef.current;
+    const el = remoteAudioRef.current;
     if (!el) return;
 
-    const onEnterPip = () => setIsPipActive(true);
-    const onLeavePip = () => setIsPipActive(false);
-
-    el.addEventListener('enterpictureinpicture', onEnterPip);
-    el.addEventListener('leavepictureinpicture', onLeavePip);
-
-    return () => {
-      el.removeEventListener('enterpictureinpicture', onEnterPip);
-      el.removeEventListener('leavepictureinpicture', onLeavePip);
-    };
-  }, [isActuallyInCall]);
-
-  // Continuously attach remote video track (or local preview track) to persistent hidden video element
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !isActuallyInCall) return;
-    const el = persistentVideoRef.current;
-    if (!el) return;
-
-    const remoteTrack = mediaAdapter.getRemoteVideoTrack();
-    const track = remoteTrack || mediaAdapter.getLocalVideoTrack();
-
-    if (!track) {
+    const remoteAudioTrack = mediaAdapter.getRemoteAudioTrack();
+    if (!remoteAudioTrack) {
       if (el.srcObject) {
         el.srcObject = null;
       }
       return;
     }
 
-    const attachable = track as {
+    const attachable = remoteAudioTrack as {
       attach?: (element: HTMLMediaElement) => void;
       detach?: (element?: HTMLMediaElement) => void;
     };
@@ -885,8 +897,8 @@ function ActiveTeleconsultModal({
       };
     }
 
-    if (typeof MediaStream !== 'undefined' && track instanceof MediaStreamTrack) {
-      el.srcObject = new MediaStream([track]);
+    if (typeof MediaStream !== 'undefined' && remoteAudioTrack instanceof MediaStreamTrack) {
+      el.srcObject = new MediaStream([remoteAudioTrack]);
       return () => {
         if (el.srcObject) {
           el.srcObject = null;
@@ -895,7 +907,7 @@ function ActiveTeleconsultModal({
     }
 
     return undefined;
-  }, [isActuallyInCall, mediaAdapter, mediaRevision]);
+  }, [isActuallyInCall, isCallStageDocked, mediaAdapter, mediaRevision]);
 
   // MediaSession API Integration on Web
   useEffect(() => {
@@ -944,15 +956,153 @@ function ActiveTeleconsultModal({
     };
   }, [isActuallyInCall, resolvedPatientName, resolvedClinicianName, session.mediaTracks]);
 
-  // Draggable PanResponder with boundary clamping math
+  // Unified Draggable State with Pointer Capture (Web) + PanResponder (Native) + Viewport Clamping
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const panOffsetRef = useRef({ x: 0, y: 0 });
+
+  const clampDockCoordinates = useCallback((rawX: number, rawY: number) => {
+    const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 768;
+
+    const measuredRect =
+      typeof (dockWrapperRef.current as HTMLElement | null)?.getBoundingClientRect === 'function'
+        ? (dockWrapperRef.current as HTMLElement).getBoundingClientRect()
+        : null;
+
+    const width =
+      measuredRect && measuredRect.width > 0
+        ? measuredRect.width
+        : isPipActiveRef.current
+          ? 348
+          : 340;
+    const height =
+      measuredRect && measuredRect.height > 0
+        ? measuredRect.height
+        : isPipActiveRef.current
+          ? videoOrientationRef.current === 'portrait'
+            ? 286
+            : 234
+          : 38;
+
+    const maxX = 16;
+    const maxY = 16;
+    const minX = Math.min(maxX, -(windowWidth - width - 32));
+    const minY = Math.min(maxY, -(windowHeight - height - 32));
+
+    return {
+      clampedX: Math.min(maxX, Math.max(minX, rawX)),
+      clampedY: Math.min(maxY, Math.max(minY, rawY)),
+      minX,
+      maxX,
+      minY,
+      maxY,
+    };
+  }, []);
+
+  // Re-clamp dock wrapper whenever PiP opens/rotates so the top edge stays inside the viewport
+  useEffect(() => {
+    if (!isActuallyInCall || !isCallStageDocked) return;
+    const rafId =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame(() => {
+            const { clampedX, clampedY } = clampDockCoordinates(
+              panOffsetRef.current.x,
+              panOffsetRef.current.y,
+            );
+            panOffsetRef.current = { x: clampedX, y: clampedY };
+            pan.setValue({ x: clampedX, y: clampedY });
+          })
+        : null;
+
+    return () => {
+      if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [clampDockCoordinates, isActuallyInCall, isCallStageDocked, isPipActive, pan, videoOrientation]);
+
+  const handleWebDragPointerDown = useCallback(
+    (e: any) => {
+      if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+      if (typeof e?.button === 'number' && e.button !== 0) return;
+
+      activeDragCleanupRef.current?.();
+      e?.preventDefault?.();
+
+      const captureTarget = e?.currentTarget as HTMLElement | null;
+      const pointerId = e?.pointerId;
+      if (typeof pointerId === 'number') {
+        try {
+          captureTarget?.setPointerCapture?.(pointerId);
+        } catch {
+          // Ignore pointer capture rejection if synthetic event
+        }
+      }
+
+      const startClientX = Number(e?.clientX ?? 0);
+      const startClientY = Number(e?.clientY ?? 0);
+      const originX = panOffsetRef.current.x;
+      const originY = panOffsetRef.current.y;
+
+      const prevUserSelect = typeof document !== 'undefined' ? document.body?.style?.userSelect : '';
+      const prevCursor = typeof document !== 'undefined' ? document.body?.style?.cursor : '';
+      if (typeof document !== 'undefined' && document.body?.style) {
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'grabbing';
+      }
+      setIsDraggingDock(true);
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        const dx = moveEvent.clientX - startClientX;
+        const dy = moveEvent.clientY - startClientY;
+        const { clampedX, clampedY } = clampDockCoordinates(originX + dx, originY + dy);
+        panOffsetRef.current = { x: clampedX, y: clampedY };
+        pan.setValue({ x: clampedX, y: clampedY });
+      };
+
+      const finishDrag = () => {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', finishDrag);
+        window.removeEventListener('pointercancel', finishDrag);
+        window.removeEventListener('blur', finishDrag);
+        if (typeof pointerId === 'number') {
+          try {
+            if (captureTarget?.hasPointerCapture?.(pointerId)) {
+              captureTarget.releasePointerCapture?.(pointerId);
+            }
+          } catch {
+            // Ignore release error
+          }
+        }
+        if (typeof document !== 'undefined' && document.body?.style) {
+          document.body.style.userSelect = prevUserSelect || '';
+          document.body.style.cursor = prevCursor || '';
+        }
+        setIsDraggingDock(false);
+        activeDragCleanupRef.current = null;
+      };
+
+      activeDragCleanupRef.current = finishDrag;
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', finishDrag);
+      window.addEventListener('pointercancel', finishDrag);
+      window.addEventListener('blur', finishDrag);
+    },
+    [clampDockCoordinates, pan],
+  );
+
+  useEffect(() => {
+    return () => {
+      activeDragCleanupRef.current?.();
+    };
+  }, []);
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => Platform.OS !== 'web',
         onMoveShouldSetPanResponder: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+          if (Platform.OS === 'web') return false;
           return Math.abs(gestureState.dx) > 1 || Math.abs(gestureState.dy) > 1;
         },
         onPanResponderGrant: () => {
@@ -963,22 +1113,10 @@ function ActiveTeleconsultModal({
           pan.setValue({ x: 0, y: 0 });
         },
         onPanResponderMove: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-          const currentX = panOffsetRef.current.x + gestureState.dx;
-          const currentY = panOffsetRef.current.y + gestureState.dy;
-
-          const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
-          const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 768;
-          const barWidth = 480;
-          const barHeight = 38;
-
-          const minX = -(windowWidth - barWidth - 32);
-          const maxX = 16;
-          const minY = -(windowHeight - barHeight - 32);
-          const maxY = 16;
-
-          const clampedX = Math.min(maxX, Math.max(minX, currentX));
-          const clampedY = Math.min(maxY, Math.max(minY, currentY));
-
+          const { clampedX, clampedY } = clampDockCoordinates(
+            panOffsetRef.current.x + gestureState.dx,
+            panOffsetRef.current.y + gestureState.dy,
+          );
           pan.setValue({
             x: clampedX - panOffsetRef.current.x,
             y: clampedY - panOffsetRef.current.y,
@@ -986,50 +1124,39 @@ function ActiveTeleconsultModal({
         },
         onPanResponderRelease: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
           pan.flattenOffset();
-          const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
-          const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 768;
-          const barWidth = 480;
-          const barHeight = 38;
-
-          const rawX = panOffsetRef.current.x + gestureState.dx;
-          const rawY = panOffsetRef.current.y + gestureState.dy;
-
-          const minX = -(windowWidth - barWidth - 32);
-          const maxX = 16;
-          const minY = -(windowHeight - barHeight - 32);
-          const maxY = 16;
-
-          const finalX = Math.min(maxX, Math.max(minX, rawX));
-          const finalY = Math.min(maxY, Math.max(minY, rawY));
-
-          panOffsetRef.current = { x: finalX, y: finalY };
-          pan.setValue({ x: finalX, y: finalY });
+          const { clampedX, clampedY } = clampDockCoordinates(
+            panOffsetRef.current.x + gestureState.dx,
+            panOffsetRef.current.y + gestureState.dy,
+          );
+          panOffsetRef.current = { x: clampedX, y: clampedY };
+          pan.setValue({ x: clampedX, y: clampedY });
+        },
+        onPanResponderTerminate: (_: GestureResponderEvent, gestureState: PanResponderGestureState) => {
+          pan.flattenOffset();
+          const { clampedX, clampedY } = clampDockCoordinates(
+            panOffsetRef.current.x + gestureState.dx,
+            panOffsetRef.current.y + gestureState.dy,
+          );
+          panOffsetRef.current = { x: clampedX, y: clampedY };
+          pan.setValue({ x: clampedX, y: clampedY });
         },
       }),
-    [pan],
+    [clampDockCoordinates, pan],
   );
 
-  const persistentVideoElement =
+  const remoteAudioElement =
     Platform.OS === 'web' && isActuallyInCall ? (
       <View
-        testID="persistent-pip-video-container"
-        data-testid="persistent-pip-video-container"
+        testID="persistent-remote-audio-container"
+        data-testid="persistent-remote-audio-container"
         style={styles.persistentVideoHidden}
         pointerEvents="none"
         aria-hidden={true}
       >
-        {React.createElement('video', {
-          ref: persistentVideoRef,
+        {React.createElement('audio', {
+          ref: remoteAudioRef,
           autoPlay: true,
           playsInline: true,
-          muted: false,
-          style: {
-            width: 1,
-            height: 1,
-            opacity: 0,
-            position: 'absolute',
-            pointerEvents: 'none',
-          },
         })}
       </View>
     ) : null;
@@ -1079,18 +1206,117 @@ function ActiveTeleconsultModal({
     </View>
   ) : null;
 
-  // Ultra-Thin Draggable Dock Bar (~36-38px) when call is docked
+  // Unified Floating Draggable Frame: Coupled PiP Video (Top) + Ultra-Thin ~38px Dock Bar (Bottom)
   if (isActuallyInCall && isCallStageDocked) {
+    void mediaRevision;
+    const remoteVideoTrack = Platform.OS === 'web' ? mediaAdapter.getRemoteVideoTrack() : null;
+    const localVideoTrack =
+      Platform.OS === 'web' && session.mediaTracks.isCameraEnabled
+        ? mediaAdapter.getLocalVideoTrack()
+        : null;
+    const primaryPipTrack = remoteVideoTrack || localVideoTrack;
+    const isPrimaryLocal = !remoteVideoTrack && Boolean(localVideoTrack);
+
     return (
       <>
-        {persistentVideoElement}
+        {remoteAudioElement}
         <Animated.View
+          ref={dockWrapperRef}
           style={[styles.dockedBarContainer, { transform: pan.getTranslateTransform() }]}
           pointerEvents="box-none"
           testID="docked-call-mini-bar-wrapper"
         >
+          {isPipActive && (
+            <View
+              testID="docked-pip-frame"
+              data-testid="docked-pip-frame"
+              style={[
+                styles.dockedPipFrame,
+                videoOrientation === 'portrait'
+                  ? styles.dockedPipFramePortrait
+                  : styles.dockedPipFrameLandscape,
+                isDraggingDock && styles.dockedGrabbing,
+                Platform.OS === 'web' && ({ touchAction: 'none', WebkitUserSelect: 'none' } as any),
+              ]}
+              {...panResponder.panHandlers}
+              {...(Platform.OS === 'web' ? { onPointerDown: handleWebDragPointerDown } : {})}
+              accessibilityLabel="Picture-in-picture consultation preview"
+            >
+              {primaryPipTrack ? (
+                <View style={styles.dockedPipVideoLayer} pointerEvents="none">
+                  <WebVideoTrackView
+                    track={primaryPipTrack}
+                    muted={true}
+                    mirror={isPrimaryLocal}
+                  />
+                </View>
+              ) : (
+                <View
+                  style={styles.dockedPipFallback}
+                  testID="docked-pip-fallback"
+                  data-testid="docked-pip-fallback"
+                  pointerEvents="none"
+                >
+                  <View style={styles.dockedPipAvatarCircle}>
+                    <ThemedText variant="bodyBold" color={theme.colors.onPrimary}>
+                      {participantInitials}
+                    </ThemedText>
+                  </View>
+                  <ThemedText variant="captionBold" color={theme.colors.textInverted} numberOfLines={1}>
+                    {resolvedPatientName}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textLight}>
+                    {session.mediaTracks.isCameraEnabled ? 'Waiting for Patient Video' : 'Camera Off'}
+                  </ThemedText>
+                </View>
+              )}
+
+              {remoteVideoTrack && localVideoTrack && (
+                <View style={styles.dockedPipSelfInset} pointerEvents="none">
+                  <WebVideoTrackView track={localVideoTrack} muted={true} mirror={true} />
+                </View>
+              )}
+
+              {isPrimaryLocal && (
+                <View style={styles.dockedPipBadgeBottomLeft} pointerEvents="none">
+                  <ThemedText variant="caption" color={theme.colors.textInverted}>
+                    Self Preview
+                  </ThemedText>
+                </View>
+              )}
+
+              <View
+                style={styles.dockedPipOverlayBar}
+                {...(Platform.OS === 'web' ? { onPointerDown: stopDragPropagation } : {})}
+              >
+                <TouchableOpacity
+                  testID="btn-rotate-docked-pip"
+                  data-testid="btn-rotate-docked-pip"
+                  style={styles.dockedCompactButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  onPress={handleToggleOrientation}
+                  accessibilityLabel="Toggle picture-in-picture orientation"
+                  accessibilityRole="button"
+                >
+                  <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  testID="btn-close-docked-pip"
+                  data-testid="btn-close-docked-pip"
+                  style={styles.dockedCompactButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  onPress={() => setIsPipActive(false)}
+                  accessibilityLabel="Close picture-in-picture"
+                  accessibilityRole="button"
+                >
+                  <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           <View
-            style={styles.dockedBar}
+            style={[styles.dockedBar, isPipActive && styles.dockedBarWithPip]}
             testID="docked-call-mini-bar"
             role="toolbar"
             accessibilityLabel="Docked Consultation Call Bar"
@@ -1098,8 +1324,13 @@ function ActiveTeleconsultModal({
             <View
               testID="docked-drag-handle"
               data-testid="docked-drag-handle"
-              style={styles.dockedDragHandle}
+              style={[
+                styles.dockedDragHandle,
+                isDraggingDock && styles.dockedGrabbing,
+                Platform.OS === 'web' && ({ touchAction: 'none', WebkitUserSelect: 'none' } as any),
+              ]}
               {...panResponder.panHandlers}
+              {...(Platform.OS === 'web' ? { onPointerDown: handleWebDragPointerDown } : {})}
               accessibilityLabel="Drag docked consultation bar"
               accessibilityRole="adjustable"
             >
@@ -1179,7 +1410,7 @@ function ActiveTeleconsultModal({
                 data-testid="btn-maximize-call"
                 style={styles.dockedCompactButton}
                 hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                onPress={maximizeCallStage}
+                onPress={handleMaximizeStage}
                 accessibilityLabel="Maximize call stage"
                 accessibilityRole="button"
               >
@@ -1209,7 +1440,7 @@ function ActiveTeleconsultModal({
   if (isActuallyInCall && !isCallStageDocked) {
     return (
       <View style={styles.fullScreenStage} testID="teleconsult-active-stage-container">
-        {persistentVideoElement}
+        {remoteAudioElement}
         <CallStage
           callId={callId}
           roomName={session.roomName || callId}
@@ -1217,6 +1448,8 @@ function ActiveTeleconsultModal({
           participantName={resolvedPatientName}
           selfName={user?.name || 'You'}
           hideHeader
+          videoOrientation={videoOrientation}
+          onToggleOrientation={handleToggleOrientation}
           remoteStatusLabel={
             isLocalPreviewMode
               ? 'Waiting for Patient to Connect'
@@ -1260,7 +1493,7 @@ function ActiveTeleconsultModal({
             return (
               <WebVideoTrackView
                 track={track}
-                muted={trackType === 'local'}
+                muted={true}
                 mirror={trackType === 'local'}
               />
             );
@@ -1441,10 +1674,94 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
   },
   dockedBarContainer: {
-    position: 'absolute',
+    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
     bottom: theme.spacing.xl,
     right: theme.spacing.xl,
     zIndex: 9999,
+    alignItems: 'stretch',
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dockedPipFrame: {
+    backgroundColor: theme.colors.surfaceInverse,
+    borderColor: theme.colors.primaryBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: theme.radii.md,
+    borderTopRightRadius: theme.radii.md,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    overflow: 'hidden',
+    position: 'relative',
+    cursor: 'grab' as any,
+    userSelect: 'none' as any,
+  },
+  dockedPipFrameLandscape: {
+    minWidth: 348,
+    height: 196,
+  },
+  dockedPipFramePortrait: {
+    minWidth: 320,
+    height: 248,
+  },
+  dockedPipVideoLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dockedPipFallback: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceInverse,
+  },
+  dockedPipAvatarCircle: {
+    width: theme.sizes.touchTarget,
+    height: theme.sizes.touchTarget,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dockedPipSelfInset: {
+    position: 'absolute',
+    right: theme.spacing.sm,
+    bottom: theme.spacing.sm,
+    width: 84,
+    height: 54,
+    borderRadius: theme.radii.sm,
+    overflow: 'hidden',
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    backgroundColor: theme.colors.surfaceInverse,
+  },
+  dockedPipBadgeBottomLeft: {
+    position: 'absolute',
+    left: theme.spacing.sm,
+    bottom: theme.spacing.sm,
+    backgroundColor: theme.colors.overlay,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.radii.full,
+  },
+  dockedPipOverlayBar: {
+    position: 'absolute',
+    top: theme.spacing.xs,
+    right: theme.spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   dockedBar: {
     flexDirection: 'row',
@@ -1465,12 +1782,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
+  dockedBarWithPip: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    minWidth: 320,
+  },
   dockedDragHandle: {
     cursor: 'grab' as any,
+    userSelect: 'none' as any,
     paddingHorizontal: 2,
     paddingVertical: 4,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  dockedGrabbing: {
+    cursor: 'grabbing' as any,
   },
   dockedInfoSection: {
     flexDirection: 'row',

@@ -184,50 +184,49 @@ describe('Challenger M11.2: Empirical Stress, Concurrency & Resilience Suite', (
       expect(isActuallyInCall).toBe(true);
     });
 
-    it('1.2: Persistent hidden video element definition is anchored across both docked and fullscreen modes', () => {
-      // Hidden persistent container has testID and pointerEvents="none"
-      expect(modalSource).toContain('testID="persistent-pip-video-container"');
+    it('1.2: Persistent remote audio container and coupled PiP + dock wrapper are anchored across docked and fullscreen modes', () => {
+      expect(modalSource).toContain('testID="persistent-remote-audio-container"');
       expect(modalSource).toContain('pointerEvents="none"');
       expect(modalSource).toContain('aria-hidden={true}');
+      expect(modalSource).toContain('testID="docked-pip-frame"');
 
-      // The hidden video element has autoPlay, playsInline, position: absolute, opacity: 0
-      expect(modalSource).toContain('autoPlay: true');
-      expect(modalSource).toContain('playsInline: true');
+      // Hidden container has zero-footprint off-screen style
       expect(modalSource).toContain("position: 'absolute'");
       expect(modalSource).toContain('opacity: 0');
       expect(modalSource).toContain('width: 1');
       expect(modalSource).toContain('height: 1');
 
-      // Check both docked and fullscreen branches include {persistentVideoElement}
+      // Check both docked and fullscreen branches include {remoteAudioElement}
       const dockedBranch = modalSource.match(/if\s*\(isActuallyInCall\s*&&\s*isCallStageDocked\)\s*\{([\s\S]*?)\n\s*\}/);
       expect(dockedBranch).not.toBeNull();
-      expect(dockedBranch![1]).toContain('{persistentVideoElement}');
+      expect(dockedBranch![1]).toContain('{remoteAudioElement}');
 
       const fullscreenBranch = modalSource.match(/if\s*\(isActuallyInCall\s*&&\s*!isCallStageDocked\)\s*\{([\s\S]*?)\n\s*\}/);
       expect(fullscreenBranch).not.toBeNull();
-      expect(fullscreenBranch![1]).toContain('{persistentVideoElement}');
+      expect(fullscreenBranch![1]).toContain('{remoteAudioElement}');
     });
 
-    it('1.3: Video track attachment effect attaches remote track or local fallback and detaches cleanly', () => {
-      // Track attachment effect dependencies must include [isActuallyInCall, mediaAdapter, mediaRevision]
-      const attachEffect = modalSource.match(/Continuously attach remote video track[\s\S]*?useEffect\s*\(\s*\(\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*\[([^\]]+)\]\s*\);/);
+    it('1.3: Remote audio track attachment effect attaches remote audio and coupled PiP frame reads remote or local video track', () => {
+      const attachEffect = modalSource.match(/Continuously attach remote patient audio track[\s\S]*?useEffect\s*\(\s*\(\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*\[([^\]]+)\]\s*\);/);
       expect(attachEffect).not.toBeNull();
 
       const effectBody = attachEffect![1];
       const deps = attachEffect![2].split(',').map((s) => s.trim());
 
       expect(deps).toContain('isActuallyInCall');
+      expect(deps).toContain('isCallStageDocked');
       expect(deps).toContain('mediaAdapter');
       expect(deps).toContain('mediaRevision');
-      // isCallStageDocked must NOT be in dependencies so mode toggle does not tear down track
-      expect(deps).not.toContain('isCallStageDocked');
 
       // Logic handles both attachable tracks (LiveKit Track) and standard MediaStreamTrack
-      expect(effectBody).toContain('mediaAdapter.getRemoteVideoTrack()');
-      expect(effectBody).toContain('mediaAdapter.getLocalVideoTrack()');
+      expect(effectBody).toContain('mediaAdapter.getRemoteAudioTrack()');
       expect(effectBody).toContain('attachable.attach(el)');
       expect(effectBody).toContain('attachable.detach?.(el)');
-      expect(effectBody).toContain('new MediaStream([track])');
+      expect(effectBody).toContain('new MediaStream([remoteAudioTrack])');
+
+      // Coupled PiP frame reads both remote & local video tracks inside docked wrapper
+      expect(modalSource).toContain('mediaAdapter.getRemoteVideoTrack()');
+      expect(modalSource).toContain('mediaAdapter.getLocalVideoTrack()');
     });
 
     it('1.4: Draggable dock bar math clamps to bounded viewport coordinates across 8 viewports', () => {

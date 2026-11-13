@@ -235,15 +235,18 @@ describe('Challenger M9: Clinic Workstation UI/UX, Draggable Dock, Native PiP & 
       expect(styleBody).toContain("alignItems: 'center'");
     });
 
-    it('2.4: Zero inline video box: Docked bar contains NO video element, WebVideoTrackView, or preview surface', () => {
+    it('2.4: Slim dock bar (docked-call-mini-bar) contains NO inline video element while optional docked-pip-frame mounts directly above it inside the shared wrapper', () => {
       const dockedBranchMatch = modalSource.match(
         /if \(isActuallyInCall && isCallStageDocked\) \{([\s\S]*?)return \(\s*<>([\s\S]*?)<\/>\s*\);/m,
       );
       expect(dockedBranchMatch).not.toBeNull();
       const dockedJsx = dockedBranchMatch![2];
 
-      // Exclude persistentVideoElement which is outside the bar and hidden
-      const barOnlyJsx = dockedJsx.replace(/\{persistentVideoElement\}/g, '');
+      expect(dockedJsx).toContain('testID="docked-pip-frame"');
+
+      const barOnlyStart = dockedJsx.indexOf('testID="docked-call-mini-bar"');
+      expect(barOnlyStart).toBeGreaterThan(-1);
+      const barOnlyJsx = dockedJsx.slice(barOnlyStart);
       expect(barOnlyJsx).not.toContain('<video');
       expect(barOnlyJsx).not.toContain('WebVideoTrackView');
       expect(barOnlyJsx).not.toContain('renderVideoPreview');
@@ -352,70 +355,84 @@ describe('Challenger M9: Clinic Workstation UI/UX, Draggable Dock, Native PiP & 
   });
 
   // =========================================================================
-  // Focus 3: Native Web Picture-in-Picture & Persistent Video Element
+  // Focus 3: Coupled In-App PiP + Slim Dock & Zero-Detachment Pointer Capture
   // =========================================================================
-  describe('Focus 3: Native Web Picture-in-Picture & Persistent Video Element', () => {
-    it('3.1: Persistent hidden video container is mounted whenever isActuallyInCall === true', () => {
-      expect(modalSource).toContain('testID="persistent-pip-video-container"');
+  describe('Focus 3: Coupled In-App PiP + Slim Dock & Zero-Detachment Pointer Capture', () => {
+    it('3.1: Persistent remote audio container is mounted whenever isActuallyInCall === true', () => {
+      expect(modalSource).toContain('testID="persistent-remote-audio-container"');
       expect(modalSource).toContain('styles.persistentVideoHidden');
-      expect(modalSource).toContain('Platform.OS === \'web\' && isActuallyInCall');
+      expect(modalSource).toContain("Platform.OS === 'web' && isActuallyInCall");
     });
 
-    it('3.2: Persistent video container is placed in both docked and full-screen return branches', () => {
-      // Full screen return branch includes persistentVideoElement
+    it('3.2: Persistent remote audio container is placed in both docked and full-screen return branches', () => {
+      // Full screen return branch includes remoteAudioElement
       const fullScreenReturn = modalSource.match(
         /if \(isActuallyInCall && !isCallStageDocked\) \{[\s\S]*?return \(\s*<View[^>]*testID="teleconsult-active-stage-container"[^>]*>([\s\S]*?)<\/View>/,
       );
       expect(fullScreenReturn).not.toBeNull();
-      expect(fullScreenReturn![1]).toContain('{persistentVideoElement}');
+      expect(fullScreenReturn![1]).toContain('{remoteAudioElement}');
 
-      // Docked return branch includes persistentVideoElement
+      // Docked return branch includes remoteAudioElement
       const dockedReturn = modalSource.match(
         /if \(isActuallyInCall && isCallStageDocked\) \{[\s\S]*?return \(\s*<>([\s\S]*?)<\/>/,
       );
       expect(dockedReturn).not.toBeNull();
-      expect(dockedReturn![1]).toContain('{persistentVideoElement}');
+      expect(dockedReturn![1]).toContain('{remoteAudioElement}');
     });
 
-    it('3.3: Persistent video container has hidden zero-footprint off-screen styling', () => {
-      const hiddenStyleMatch = modalSource.match(/persistentVideoHidden:\s*\{([\s\S]*?)\},/);
-      expect(hiddenStyleMatch).not.toBeNull();
-      const styleBody = hiddenStyleMatch![1];
-      expect(styleBody).toContain("position: 'absolute'");
-      expect(styleBody).toContain('width: 1');
-      expect(styleBody).toContain('height: 1');
-      expect(styleBody).toContain('opacity: 0');
-      expect(styleBody).toContain("overflow: 'hidden'");
-      expect(styleBody).toContain('zIndex: -1');
+    it('3.3: Coupled PiP frame and camera-off fallback render inside the unified draggable wrapper', () => {
+      expect(modalSource).toContain('const isPipSupported = true;');
+      expect(modalSource).toContain('testID="docked-pip-frame"');
+      expect(modalSource).toContain('testID="docked-pip-fallback"');
+      expect(modalSource).toContain('testID="btn-close-docked-pip"');
+      expect(modalSource).toContain("session.mediaTracks.isCameraEnabled ? 'Waiting for Patient Video' : 'Camera Off'");
     });
 
-    it('3.4: Prioritizes remote video track over local preview track on persistent hidden video', () => {
-      expect(modalSource).toContain('const remoteTrack = mediaAdapter.getRemoteVideoTrack();');
-      expect(modalSource).toContain('const track = remoteTrack || mediaAdapter.getLocalVideoTrack();');
+    it('3.4: Dock action minimizes full-screen without PiP, while PiP button docks with PiP open and toggles in-dock PiP', () => {
+      const dockHandler = modalSource.match(/const handleDockAndOpenChart = useCallback\(\(\) => \{([\s\S]*?)\}, \[/);
+      expect(dockHandler).not.toBeNull();
+      expect(dockHandler![1]).toContain('setIsPipActive(false);');
+      expect(dockHandler![1]).toContain('dockCallStage();');
+
+      const pipHandler = modalSource.match(/const handleTogglePip = useCallback\(async \(\) => \{([\s\S]*?)\}, \[/);
+      expect(pipHandler).not.toBeNull();
+      expect(pipHandler![1]).toContain('if (!isCallStageDocked) {');
+      expect(pipHandler![1]).toContain('setIsPipActive(true);');
+      expect(pipHandler![1]).toContain('dockCallStage();');
+      expect(pipHandler![1]).toContain('setIsPipActive((prev) => !prev);');
     });
 
-    it('3.5: Persistent video track attachment supports both LiveKit attach/detach and MediaStreamTrack', () => {
+    it('3.5: Web pointer capture and window-level listeners prevent cursor detachment during fast drags', () => {
+      expect(modalSource).toContain('captureTarget?.setPointerCapture?.(pointerId)');
+      expect(modalSource).toContain("window.addEventListener('pointermove', onPointerMove)");
+      expect(modalSource).toContain("window.addEventListener('pointerup', finishDrag)");
+      expect(modalSource).toContain("window.addEventListener('pointercancel', finishDrag)");
+      expect(modalSource).toContain("window.removeEventListener('pointermove', onPointerMove)");
+
+      // Both the coupled PiP frame and dock drag handle share the zero-detachment drag handler
+      const pipBlock = modalSource.match(/testID="docked-pip-frame"([\s\S]*?)accessibilityLabel=/);
+      expect(pipBlock).not.toBeNull();
+      expect(pipBlock![1]).toContain('handleWebDragPointerDown');
+
+      const handleBlock = modalSource.match(/testID="docked-drag-handle"([\s\S]*?)>/);
+      expect(handleBlock).not.toBeNull();
+      expect(handleBlock![1]).toContain('handleWebDragPointerDown');
+    });
+
+    it('3.6: Remote audio track attachment supports both LiveKit attach/detach and MediaStreamTrack', () => {
+      expect(modalSource).toContain('const remoteAudioTrack = mediaAdapter.getRemoteAudioTrack();');
       expect(modalSource).toContain("typeof attachable.attach === 'function'");
       expect(modalSource).toContain('attachable.attach(el)');
       expect(modalSource).toContain('attachable.detach?.(el)');
-      expect(modalSource).toContain("track instanceof MediaStreamTrack");
-      expect(modalSource).toContain('el.srcObject = new MediaStream([track])');
+      expect(modalSource).toContain('remoteAudioTrack instanceof MediaStreamTrack');
+      expect(modalSource).toContain('el.srcObject = new MediaStream([remoteAudioTrack])');
       expect(modalSource).toContain('el.srcObject = null');
     });
 
-    it('3.6: handleTogglePip toggles native PiP via exitPictureInPicture or requestPictureInPicture', () => {
-      expect(modalSource).toContain('if (document.pictureInPictureElement) {');
-      expect(modalSource).toContain('await document.exitPictureInPicture();');
-      expect(modalSource).toContain('setIsPipActive(false);');
-      expect(modalSource).toContain('await persistentVideoRef.current.requestPictureInPicture();');
-      expect(modalSource).toContain('setIsPipActive(true);');
-    });
-
-    it('3.7: Event listeners for enterpictureinpicture and leavepictureinpicture synchronize state', () => {
-      expect(modalSource).toContain("el.addEventListener('enterpictureinpicture', onEnterPip);");
-      expect(modalSource).toContain("el.addEventListener('leavepictureinpicture', onLeavePip);");
-      expect(modalSource).toContain("el.removeEventListener('enterpictureinpicture', onEnterPip);");
-      expect(modalSource).toContain("el.removeEventListener('leavepictureinpicture', onLeavePip);");
+    it('3.7: dockedBarContainer uses fixed positioning on Web so viewport coordinates stay aligned during scroll/drag', () => {
+      const containerStyle = modalSource.match(/dockedBarContainer:\s*\{([\s\S]*?)\},/);
+      expect(containerStyle).not.toBeNull();
+      expect(containerStyle![1]).toContain("Platform.OS === 'web' ? ('fixed' as any) : 'absolute'");
     });
 
     it('3.8: MediaSession API connects hangup action handler directly to confirmation dialog', () => {

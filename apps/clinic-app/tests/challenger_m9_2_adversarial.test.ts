@@ -158,33 +158,32 @@ describe('Challenger M9.2: Clinic Workstation UI/UX Adversarial Stress Suite', (
   // =========================================================================
   // Focus 1: State Transition Fuzzing & Persistent Video Element Invariant
   // =========================================================================
-  describe('Focus 1: State Transition Fuzzing & Persistent Video Element Invariant', () => {
-    it('1.1: Persistent video element container uses aria-hidden, pointerEvents="none", and 1x1 hidden video style', () => {
-      // Must contain persistent video container definition
-      expect(modalContent).toContain('testID="persistent-pip-video-container"');
-      expect(modalContent).toContain('data-testid="persistent-pip-video-container"');
+  describe('Focus 1: State Transition Fuzzing & Coupled Dock/PiP Invariant', () => {
+    it('1.1: Persistent remote audio container uses aria-hidden, pointerEvents="none", and coupled PiP frame sits above docked bar', () => {
+      expect(modalContent).toContain('testID="persistent-remote-audio-container"');
+      expect(modalContent).toContain('data-testid="persistent-remote-audio-container"');
       expect(modalContent).toContain('pointerEvents="none"');
       expect(modalContent).toContain('aria-hidden={true}');
 
-      // Must create hidden HTMLVideoElement with persistentVideoRef
-      expect(modalContent).toContain('ref: persistentVideoRef');
-      expect(modalContent).toContain('autoPlay: true');
-      expect(modalContent).toContain('playsInline: true');
+      // Must create hidden HTMLAudioElement with remoteAudioRef and coupled in-app PiP frame
+      expect(modalContent).toContain('ref: remoteAudioRef');
+      expect(modalContent).toContain('testID="docked-pip-frame"');
       expect(modalContent).toContain("position: 'absolute'");
       expect(modalContent).toContain('opacity: 0');
     });
 
-    it('1.2: Persistent video element is present in both docked and fullscreen layout returns', () => {
+    it('1.2: Persistent remote audio element is present in both docked and fullscreen layout returns', () => {
       // Docked layout return
       const dockedSection = modalContent.match(/if\s*\(isActuallyInCall\s*&&\s*isCallStageDocked\)\s*\{([\s\S]*?)\n\s*\}/);
       expect(dockedSection).not.toBeNull();
-      expect(dockedSection![1]).toContain('{persistentVideoElement}');
+      expect(dockedSection![1]).toContain('{remoteAudioElement}');
       expect(dockedSection![1]).toContain('docked-call-mini-bar-wrapper');
+      expect(dockedSection![1]).toContain('docked-pip-frame');
 
       // Fullscreen layout return
       const fullscreenSection = modalContent.match(/if\s*\(isActuallyInCall\s*&&\s*!isCallStageDocked\)\s*\{([\s\S]*?)\n\s*\}/);
       expect(fullscreenSection).not.toBeNull();
-      expect(fullscreenSection![1]).toContain('{persistentVideoElement}');
+      expect(fullscreenSection![1]).toContain('{remoteAudioElement}');
       expect(fullscreenSection![1]).toContain('teleconsult-active-stage-container');
     });
 
@@ -214,21 +213,23 @@ describe('Challenger M9.2: Clinic Workstation UI/UX Adversarial Stress Suite', (
       expect(isActuallyInCall).toBe(true);
     });
 
-    it('1.4: Video track attachment effect continuously re-evaluates across track changes and media revisions', () => {
-      // Check useEffect for continuously attaching video tracks to persistentVideoRef
-      const trackEffectMatch = modalContent.match(/Continuously attach remote video track[\s\S]*?useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*?getRemoteVideoTrack[\s\S]*?\}\s*,\s*\[([^\]]+)\]\s*\);/);
+    it('1.4: Remote audio attachment effect continuously re-evaluates across track changes, dock state, and media revisions', () => {
+      const trackEffectMatch = modalContent.match(/Continuously attach remote patient audio track[\s\S]*?useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*?getRemoteAudioTrack[\s\S]*?\}\s*,\s*\[([^\]]+)\]\s*\);/);
       expect(trackEffectMatch).not.toBeNull();
       const deps = trackEffectMatch![1].split(',').map((d) => d.trim());
       expect(deps).toContain('isActuallyInCall');
+      expect(deps).toContain('isCallStageDocked');
       expect(deps).toContain('mediaAdapter');
       expect(deps).toContain('mediaRevision');
     });
 
-    it('1.5: PiP event listeners (enterpictureinpicture, leavepictureinpicture) are cleanly attached and cleaned up', () => {
-      expect(modalContent).toContain("el.addEventListener('enterpictureinpicture', onEnterPip)");
-      expect(modalContent).toContain("el.addEventListener('leavepictureinpicture', onLeavePip)");
-      expect(modalContent).toContain("el.removeEventListener('enterpictureinpicture', onEnterPip)");
-      expect(modalContent).toContain("el.removeEventListener('leavepictureinpicture', onLeavePip)");
+    it('1.5: Window-level pointer drag listeners (pointermove, pointerup, pointercancel, blur) are cleanly attached and cleaned up', () => {
+      expect(modalContent).toContain("window.addEventListener('pointermove', onPointerMove)");
+      expect(modalContent).toContain("window.addEventListener('pointerup', finishDrag)");
+      expect(modalContent).toContain("window.removeEventListener('pointermove', onPointerMove)");
+      expect(modalContent).toContain("window.removeEventListener('pointerup', finishDrag)");
+      expect(modalContent).toContain("window.removeEventListener('pointercancel', finishDrag)");
+      expect(modalContent).toContain("window.removeEventListener('blur', finishDrag)");
     });
   });
 
