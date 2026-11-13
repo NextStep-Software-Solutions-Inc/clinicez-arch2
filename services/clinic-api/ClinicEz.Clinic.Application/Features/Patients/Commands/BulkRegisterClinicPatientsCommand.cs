@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.CustomFields.Validation;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -58,17 +59,20 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IPatientCodeGenerator _codeGenerator;
+    private readonly IRepository<CustomFieldDefinition>? _customFieldRepo;
 
     public BulkRegisterClinicPatientsCommandHandler(
         IRepository<Patient> patientRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IPatientCodeGenerator? codeGenerator = null)
+        IPatientCodeGenerator? codeGenerator = null,
+        IRepository<CustomFieldDefinition>? customFieldRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
+        _customFieldRepo = customFieldRepo;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
@@ -116,6 +120,14 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
         var createdEntities = new List<Patient>();
         var resultDtos = new List<ClinicPatientDto>();
 
+        List<CustomFieldDefinition>? activeDefs = null;
+        if (_customFieldRepo != null)
+        {
+            activeDefs = await _customFieldRepo.Query()
+                .Where(f => f.IsActive && (f.EntityType == "Patient" || f.EntityType == "ClinicPatient"))
+                .ToListAsync(ct);
+        }
+
         for (int i = 0; i < request.Patients.Count; i++)
         {
             var item = request.Patients[i];
@@ -124,6 +136,16 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
             var customFields = item.CustomFields != null
                 ? new Dictionary<string, object?>(item.CustomFields)
                 : new Dictionary<string, object?>();
+
+            if (activeDefs != null && activeDefs.Count > 0)
+            {
+                var staticContext = new PatientStaticContext(
+                    Sex: item.Sex,
+                    CivilStatus: item.CivilStatus,
+                    DateOfBirth: item.DateOfBirth);
+
+                CustomFieldValueValidator.ValidateAndNormalize(customFields, activeDefs, "Patient", staticContext);
+            }
 
             if (!string.IsNullOrWhiteSpace(item.AddressLine) && !customFields.ContainsKey("primary_address_line"))
                 customFields["primary_address_line"] = item.AddressLine.Trim();

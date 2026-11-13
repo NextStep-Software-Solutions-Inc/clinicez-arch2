@@ -101,11 +101,17 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         {
             if (_customFieldRepo != null)
             {
+                var staticContext = new PatientStaticContext(
+                    Sex: string.IsNullOrWhiteSpace(request.Sex) ? patient.Sex.ToString() : request.Sex,
+                    CivilStatus: request.CivilStatus ?? patient.CivilStatus?.ToString(),
+                    DateOfBirth: request.DateOfBirth);
+
                 await CustomFieldValueValidator.MergeAndValidateForUpdateAsync(
                     nextCustomFields,
                     request.CustomFields,
                     _customFieldRepo,
                     "Patient",
+                    staticContext,
                     ct);
             }
             else
