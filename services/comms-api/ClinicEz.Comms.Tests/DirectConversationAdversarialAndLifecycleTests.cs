@@ -264,4 +264,76 @@ public class DirectConversationAdversarialAndLifecycleTests
         var outsiderResult = await queryHandler.Handle(outsiderQuery, CancellationToken.None);
         Assert.DoesNotContain(outsiderResult, c => c.Id == conversation.Id);
     }
+
+    [Fact]
+    public async Task DirectConversation_PerspectiveTitleResolution_NullDefault_ReflectsOppositeParticipant()
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var createHandler = new CreateConversationCommandHandler(db);
+        var queryHandler = new GetConversationsQueryHandler(db);
+
+        // 1. Direct conversation created with null/empty title (default)
+        var createCmd = new CreateConversationCommand(
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            BranchId: null,
+            Scope: ConversationScope.Direct,
+            Kind: ConversationKind.Direct,
+            Title: null, // User did not enter custom title
+            ContextType: null,
+            ContextId: null,
+            Category: null,
+            IsEmergencyConfirmed: false,
+            IsLocalOnly: false,
+            CreatedBy: "staff-alice",
+            Participants: new List<ParticipantInput>
+            {
+                new("Staff", "staff-wave", "Wave Ambray", "Member")
+            },
+            CreatedByDisplayName: "Dr. Alice");
+
+        var conversation = await createHandler.Handle(createCmd, CancellationToken.None);
+
+        // Underlying stored title is null (no hardcoded fallback)
+        var storedConv = await db.Conversations.FindAsync(conversation.Id);
+        Assert.NotNull(storedConv);
+        Assert.Null(storedConv.Title);
+
+        // From Alice's perspective -> displays "Wave Ambray"
+        var aliceResult = await queryHandler.Handle(new GetConversationsQuery(TenantId, FacilityId, StaffId: "staff-alice"), CancellationToken.None);
+        var convForAlice = aliceResult.First(c => c.Id == conversation.Id);
+        Assert.Equal("Wave Ambray", convForAlice.Title);
+
+        // From Wave's perspective -> displays "Dr. Alice" (NOT "Wave Ambray", NOT "Chat with...")
+        var waveResult = await queryHandler.Handle(new GetConversationsQuery(TenantId, FacilityId, StaffId: "staff-wave"), CancellationToken.None);
+        var convForWave = waveResult.First(c => c.Id == conversation.Id);
+        Assert.Equal("Dr. Alice", convForWave.Title);
+
+        // 2. Direct conversation with explicit custom title shared by all
+        var customCmd = new CreateConversationCommand(
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            BranchId: null,
+            Scope: ConversationScope.Direct,
+            Kind: ConversationKind.Direct,
+            Title: "Weekend Clinical Rotation",
+            ContextType: null,
+            ContextId: null,
+            Category: null,
+            IsEmergencyConfirmed: false,
+            IsLocalOnly: false,
+            CreatedBy: "staff-alice",
+            Participants: new List<ParticipantInput>
+            {
+                new("Staff", "staff-wave", "Wave Ambray", "Member")
+            },
+            CreatedByDisplayName: "Dr. Alice");
+
+        var customConv = await createHandler.Handle(customCmd, CancellationToken.None);
+        var aliceCustom = (await queryHandler.Handle(new GetConversationsQuery(TenantId, FacilityId, StaffId: "staff-alice"), CancellationToken.None)).First(c => c.Id == customConv.Id);
+        var waveCustom = (await queryHandler.Handle(new GetConversationsQuery(TenantId, FacilityId, StaffId: "staff-wave"), CancellationToken.None)).First(c => c.Id == customConv.Id);
+
+        Assert.Equal("Weekend Clinical Rotation", aliceCustom.Title);
+        Assert.Equal("Weekend Clinical Rotation", waveCustom.Title);
+    }
 }

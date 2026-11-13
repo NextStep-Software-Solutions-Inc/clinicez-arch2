@@ -8,3 +8,4 @@ export * from './queue/DeliveryStateTracker';
 export * from './queue/ClientMessageQueue';
 export * from './attachments/AttachmentHelper';
 export * from './reactions';
+export * from './conversationTitle';

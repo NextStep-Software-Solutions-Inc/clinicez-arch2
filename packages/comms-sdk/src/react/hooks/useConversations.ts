@@ -140,7 +140,7 @@ export function useConversations(
         facilityId,
         scope: request.scope,
         kind: 'General',
-        title: request.title,
+        title: request.title ?? null,
         contextType: request.contextType,
         contextId: request.contextId,
         category: request.category,
@@ -184,7 +184,7 @@ export function useConversations(
           facilityId,
           scope: request.scope,
           kind: 'General',
-          title: request.title,
+          title: request.title ? request.title.trim() : null,
           contextType: request.contextType || null,
           contextId: request.contextId || null,
           category: request.category || null,
@@ -289,7 +289,7 @@ export function useConversations(
       if (filter.priority && c.priority !== filter.priority) return false;
       if (filter.searchTerm) {
         const term = filter.searchTerm.toLowerCase();
-        const matchesTitle = c.title.toLowerCase().includes(term);
+        const matchesTitle = Boolean(c.title?.toLowerCase().includes(term));
         const matchesSnippet = c.lastMessageSnippet?.toLowerCase().includes(term);
         if (!matchesTitle && !matchesSnippet) return false;
       }

@@ -194,7 +194,7 @@ public sealed record CreateConversationRequest(
     string? BranchId,
     ConversationScope Scope,
     ConversationKind Kind,
-    string Title,
+    string? Title,
     string? ContextType,
     string? ContextId,
     MessageCategory? Category,

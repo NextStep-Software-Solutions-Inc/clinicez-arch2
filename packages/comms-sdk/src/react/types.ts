@@ -127,10 +127,11 @@ export interface ParticipantInputDto {
 
 export interface CreateConversationRequest {
   scope: ConversationScope;
-  title: string;
+  title?: string | null;
   contextType?: string;
   contextId?: string;
   category?: MessageCategory;
+  department?: string;
   isLocalOnly?: boolean;
   participantIds?: string[];
   participantStaffIds?: string[];

@@ -158,12 +158,7 @@ export default function NewConversationModal({
       const dept = selectedDepartment || availableDepartments[0] || 'General Clinic';
       setTitle(`${dept} Channel`);
     } else if (tab === 'Direct') {
-      if (selectedStaffId) {
-        const found = staff.find((s) => s.id === selectedStaffId);
-        if (found) setTitle(`Chat with ${formatStaffName(found)}`);
-      } else {
-        setTitle('');
-      }
+      setTitle('');
     } else if (tab === 'StaffContext') {
       if (selectedPatient) {
         setTitle(`Care Team: ${selectedPatient.fullName}`);
@@ -176,10 +171,6 @@ export default function NewConversationModal({
   const handleSelectStaff = (staffMemberId: string) => {
     setSelectedStaffId(staffMemberId);
     setValidationError(null);
-    const found = staff.find((s) => s.id === staffMemberId);
-    if (found) {
-      setTitle(`Chat with ${formatStaffName(found)}`);
-    }
   };
 
   const handleSelectDepartment = (dept: string) => {
@@ -397,7 +388,7 @@ export default function NewConversationModal({
               }}
               placeholder={
                 activeTab === 'Direct'
-                  ? 'Select staff colleague or enter custom title'
+                  ? 'Colleague name or optional custom title'
                   : activeTab === 'StaffContext'
                   ? 'Select patient below to auto-populate'
                   : 'Enter channel title or select department below'

@@ -6,6 +6,7 @@ import {
   useConversations,
   useTriageQueue,
 } from '@clinicez/comms-sdk/react';
+import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
   TriageQueueView,
@@ -20,6 +21,7 @@ import ClinicActiveThread from './ClinicActiveThread';
 import NewConversationModal from './NewConversationModal';
 import { useClinicComms } from '../../context/ClinicCommsContext';
 import { useAuth } from '../../context/AuthContext';
+import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
@@ -46,6 +48,7 @@ export default function ClinicChatDrawerHost() {
 
   const { isChatDrawerOpen, closeChatDrawer, activeConversationId, setActiveConversationId } = useClinicComms();
   const { user, can } = useAuth();
+  const { staff } = useStaff();
   const { facilityName, license } = useClinic();
   const { isWorkstation } = useBreakpoint();
   const comms = useComms();
@@ -185,13 +188,24 @@ export default function ClinicChatDrawerHost() {
     return conversations
       .filter((c) => {
         if (removedConversationIds.has(c.id)) return false;
-        if (c.status === 'Closed' || (c as any).status === 'Archived') return false;
+        if (c.status === 'Closed') return false;
         if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
+          const displayTitle = resolveConversationDisplayTitle(
+            c,
+            user?.id,
+            user?.name,
+            (p) => {
+              const pid = p.participantId || p.userId || p.id;
+              const match = staff.find((s) => s.id === pid);
+              return match ? formatStaffName(match) : null;
+            },
+          ).toLowerCase();
           return (
-            c.title.toLowerCase().includes(q) ||
-            (c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
+            displayTitle.includes(q) ||
+            Boolean(c.title && c.title.toLowerCase().includes(q)) ||
+            Boolean(c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
           );
         }
         return true;
@@ -199,15 +213,24 @@ export default function ClinicChatDrawerHost() {
       .map((c) => ({
         id: c.id,
         scope: c.scope as ChatDrawerItem['scope'],
-        title: c.title,
+        title: resolveConversationDisplayTitle(
+          c,
+          user?.id,
+          user?.name,
+          (p) => {
+            const pid = p.participantId || p.userId || p.id;
+            const match = staff.find((s) => s.id === pid);
+            return match ? formatStaffName(match) : null;
+          },
+        ),
         lastMessageSnippet: c.lastMessageSnippet ?? undefined,
         lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
-        unreadCount: (c as any).unreadCount ?? 0,
+        unreadCount: c.unreadCount ?? 0,
         urgentCount: c.priority === 'Urgent' ? 1 : 0,
         isEmergency: c.priority === 'Critical',
         isActive: c.id === activeConversationId,
       }));
-  }, [conversations, selectedScope, searchQuery, activeConversationId]);
+  }, [conversations, removedConversationIds, selectedScope, searchQuery, activeConversationId, user, staff]);
 
   const mappedTriageItems: TriageQueueItem[] = useMemo(() => {
     return triageItems.map((i) => ({
@@ -638,7 +661,7 @@ export default function ClinicChatDrawerHost() {
             scope: params.scope,
             title: params.title,
             contextId: params.patientId,
-            category: params.department as any,
+            department: params.department,
             participantStaffIds: params.participantStaffIds,
             participants: params.participants,
           });

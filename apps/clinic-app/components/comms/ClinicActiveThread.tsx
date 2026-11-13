@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
 import { useConversation, useSendMessage } from '@clinicez/comms-sdk/react';
+import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
 import type { ThreadMessage } from '@clinicez/comms-sdk/native-ui';
 import ThemedText from '../ui/ThemedText';
@@ -56,22 +57,6 @@ function getCategoryLabel(scope?: string): string {
   }
 }
 
-function getDefaultChannelTitle(scope?: string): string {
-  switch (scope) {
-    case 'PatientFacility':
-      return 'Patient Request';
-    case 'StaffContext':
-    case 'PatientContext':
-      return 'Care Team';
-    case 'Direct':
-      return 'Direct Message';
-    case 'Facility':
-      return 'Facility Channel';
-    default:
-      return scope ? `${scope} Channel` : 'Facility Channel';
-  }
-}
-
 function getActiveThemeSnapshot(): string {
   const s = getActiveThemeState();
   return `${s.brandColorHex}|${s.clinicBrandColorHex}|${s.userBrandColorHex ?? ''}|${s.scheme}`;
@@ -105,11 +90,21 @@ export default function ClinicActiveThread({
 
   // Header and View State
   const [customTitle, setCustomTitle] = useState<string | null>(null);
-  const rawTitle = customTitle ?? conversation?.title ?? initialConversation?.title ?? '';
-  const isGenericPlaceholder = !rawTitle.trim() || rawTitle.trim().toLowerCase() === 'conversation';
-  const activeTitle = isGenericPlaceholder
-    ? getDefaultChannelTitle(conversation?.scope || initialConversation?.scope)
-    : rawTitle.trim();
+  const resolvedTitle = useMemo(() => {
+    const raw = conversation || initialConversation;
+    if (!raw) return '';
+    return resolveConversationDisplayTitle(
+      raw,
+      effectiveUserId,
+      auth?.user?.name,
+      (p) => {
+        const participantId = p.participantId || p.userId || p.id;
+        const staffMatch = staff.find((s) => s.id === participantId);
+        return staffMatch ? formatStaffName(staffMatch) : null;
+      },
+    );
+  }, [conversation, initialConversation, effectiveUserId, auth?.user?.name, staff]);
+  const activeTitle = customTitle ?? resolvedTitle;
   const [privacyBlur, setPrivacyBlur] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 

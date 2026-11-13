@@ -10,3 +10,4 @@ export * from './hooks/useConversation';
 export * from './hooks/useSendMessage';
 export * from './hooks/useTriageQueue';
 export * from './hooks/useCallSession';
+export { resolveConversationDisplayTitle } from '../core/conversationTitle';

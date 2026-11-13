@@ -102,7 +102,7 @@ export interface ConversationDto {
   branchId?: string | null;
   scope: ConversationScope;
   kind: ConversationKind;
-  title: string;
+  title?: string | null;
   contextType?: string | null;
   contextId?: string | null;
   category?: MessageCategory | null;
@@ -119,6 +119,7 @@ export interface ConversationDto {
   lastMessageAtUtc?: string | null;
   lastMessageSnippet?: string | null;
   messageCount: number;
+  unreadCount?: number;
   lastSeq: number;
   createdAtUtc: string;
   createdBy: string;

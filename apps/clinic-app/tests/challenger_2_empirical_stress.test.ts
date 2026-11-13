@@ -318,6 +318,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
     declineRequest: mock(async () => {}),
     routeToStaff: mock(async () => {}),
   }),
+  resolveConversationDisplayTitle: (c: any) => c?.title || '',
 }));
 
 let capturedSelectCard: ((id: string) => void) | null = null;
