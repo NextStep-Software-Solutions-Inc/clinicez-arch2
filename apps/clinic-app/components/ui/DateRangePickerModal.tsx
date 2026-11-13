@@ -34,7 +34,7 @@ function getManilaTodayStr(): string {
   }
 }
 
-function computePresetRange(preset: 'today' | '7d' | '30d' | 'all'): { start: string; end: string } {
+function computePresetRange(preset: 'today' | '7d' | '30d' | 'this_month' | 'all'): { start: string; end: string } {
   const todayStr = getManilaTodayStr();
   const [ty, tm, td] = todayStr.split('-').map(Number);
   const todayDate = new Date(ty, tm - 1, td);
@@ -47,7 +47,7 @@ function computePresetRange(preset: 'today' | '7d' | '30d' | 'all'): { start: st
     const startStr = `${sevenDaysAgo.getFullYear()}-${String(sevenDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sevenDaysAgo.getDate()).padStart(2, '0')}`;
     return { start: startStr, end: todayStr };
   }
-  if (preset === '30d') {
+  if (preset === '30d' || preset === 'this_month') {
     const startStr = `${ty}-${String(tm).padStart(2, '0')}-01`;
     return { start: startStr, end: todayStr };
   }
@@ -198,7 +198,7 @@ export default function DateRangePickerModal({
   };
 
   // Quick preset click
-  const handleApplyPreset = (preset: 'today' | '7d' | '30d' | 'all') => {
+  const handleApplyPreset = (preset: 'today' | '7d' | '30d' | 'this_month' | 'all') => {
     const { start, end } = computePresetRange(preset);
     setDraftStart(start);
     setDraftEnd(end);
