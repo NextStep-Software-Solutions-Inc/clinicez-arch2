@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 using ClinicEz.Clinic.Application.Features.CustomFields.DTOs;
 using ClinicEz.Clinic.Application.Features.CustomFields.Queries;
+using ClinicEz.Clinic.Application.Features.CustomFields.Validation;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using FluentAssertions;
 using FluentValidation.TestHelper;
 using Microsoft.EntityFrameworkCore;
@@ -343,5 +347,320 @@ public class BoundaryModeCustomFieldsTests
         // Assert: omitted key retains its previous value in the DB!
         reloaded.CustomFields["last_physical_exam_date"]?.ToString().Should().Be("2025-10-10");
         reloaded.CustomFields["unrelated_field"]?.ToString().Should().Be("Value 1");
+    }
+
+    [Fact]
+    public void MergeAndValidateForUpdate_GrandfathersUnmodifiedHistoricalFutureDate_WhenBoundaryRuleTightenedToPastOrToday()
+    {
+        var targetFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = "2028-11-15",
+            ["contact_notes"] = "Initial intake"
+        };
+
+        var defs = new[]
+        {
+            new CustomFieldDefinition
+            {
+                Id = Guid.NewGuid(),
+                FieldKey = "last_physical_exam_date",
+                Label = "Date of Last Physical Examination",
+                DataType = CustomFieldDataType.Date,
+                BoundaryMode = "pastOrToday",
+                IsActive = true,
+                EntityType = "Patient"
+            }
+        };
+
+        var submittedFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = "2028-11-15",
+            ["contact_notes"] = "Updated phone number"
+        };
+
+        // Act & Assert: Must not throw ValidationException despite 2028-11-15 being in the future
+        var act = () => CustomFieldValueValidator.MergeAndValidateForUpdate(targetFields, submittedFields, defs);
+        act.Should().NotThrow();
+
+        targetFields["last_physical_exam_date"].Should().Be("2028-11-15");
+        targetFields["contact_notes"].Should().Be("Updated phone number");
+    }
+
+    [Fact]
+    public void MergeAndValidateForUpdate_GrandfathersUnmodifiedHistoricalPastDate_WhenBoundaryRuleTightenedToFutureOrToday()
+    {
+        var targetFields = new Dictionary<string, object?>
+        {
+            ["next_appointment_date"] = "2020-05-20"
+        };
+
+        var defs = new[]
+        {
+            new CustomFieldDefinition
+            {
+                Id = Guid.NewGuid(),
+                FieldKey = "next_appointment_date",
+                Label = "Next Appointment Date",
+                DataType = CustomFieldDataType.Date,
+                BoundaryMode = "futureOrToday",
+                IsActive = true,
+                EntityType = "Patient"
+            }
+        };
+
+        var submittedFields = new Dictionary<string, object?>
+        {
+            ["next_appointment_date"] = "2020-05-20"
+        };
+
+        var act = () => CustomFieldValueValidator.MergeAndValidateForUpdate(targetFields, submittedFields, defs);
+        act.Should().NotThrow();
+
+        targetFields["next_appointment_date"].Should().Be("2020-05-20");
+    }
+
+    [Fact]
+    public void MergeAndValidateForUpdate_ModifiedDate_EnforcesActiveBoundaryRule()
+    {
+        var targetFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = "2028-11-15"
+        };
+
+        var defs = new[]
+        {
+            new CustomFieldDefinition
+            {
+                Id = Guid.NewGuid(),
+                FieldKey = "last_physical_exam_date",
+                Label = "Date of Last Physical Examination",
+                DataType = CustomFieldDataType.Date,
+                BoundaryMode = "pastOrToday",
+                IsActive = true,
+                EntityType = "Patient"
+            }
+        };
+
+        // User actively changes the date to another future date
+        var submittedFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = "2029-01-01"
+        };
+
+        var act = () => CustomFieldValueValidator.MergeAndValidateForUpdate(targetFields, submittedFields, defs);
+        act.Should().Throw<ValidationException>()
+            .WithMessage("*cannot be a future date*");
+    }
+
+    [Fact]
+    public void MergeAndValidateForUpdate_NewDateOnExistingPatient_EnforcesActiveBoundaryRule()
+    {
+        var targetFields = new Dictionary<string, object?>
+        {
+            ["unrelated_data"] = "Hello"
+        };
+
+        var defs = new[]
+        {
+            new CustomFieldDefinition
+            {
+                Id = Guid.NewGuid(),
+                FieldKey = "last_physical_exam_date",
+                Label = "Date of Last Physical Examination",
+                DataType = CustomFieldDataType.Date,
+                BoundaryMode = "pastOrToday",
+                IsActive = true,
+                EntityType = "Patient"
+            }
+        };
+
+        var submittedFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = "2029-01-01"
+        };
+
+        var act = () => CustomFieldValueValidator.MergeAndValidateForUpdate(targetFields, submittedFields, defs);
+        act.Should().Throw<ValidationException>()
+            .WithMessage("*cannot be a future date*");
+    }
+
+    [Fact]
+    public void MergeAndValidateForUpdate_CaseMismatchedKey_RecognizesGrandfatheredValue()
+    {
+        var targetFields = new Dictionary<string, object?>
+        {
+            ["LAST_PHYSICAL_EXAM_DATE"] = "2028-11-15"
+        };
+
+        var defs = new[]
+        {
+            new CustomFieldDefinition
+            {
+                Id = Guid.NewGuid(),
+                FieldKey = "last_physical_exam_date",
+                Label = "Date of Last Physical Examination",
+                DataType = CustomFieldDataType.Date,
+                BoundaryMode = "pastOrToday",
+                IsActive = true,
+                EntityType = "Patient"
+            }
+        };
+
+        var submittedFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = "2028-11-15"
+        };
+
+        var act = () => CustomFieldValueValidator.MergeAndValidateForUpdate(targetFields, submittedFields, defs);
+        act.Should().NotThrow();
+
+        targetFields.Should().NotContainKey("LAST_PHYSICAL_EXAM_DATE");
+        targetFields["last_physical_exam_date"].Should().Be("2028-11-15");
+    }
+
+    [Fact]
+    public void MergeAndValidateForUpdate_JsonElementHistoricalDate_RecognizesGrandfatheredValue()
+    {
+        using var jsonDoc = JsonDocument.Parse("\"2028-11-15\"");
+        var targetFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = jsonDoc.RootElement.Clone()
+        };
+
+        var defs = new[]
+        {
+            new CustomFieldDefinition
+            {
+                Id = Guid.NewGuid(),
+                FieldKey = "last_physical_exam_date",
+                Label = "Date of Last Physical Examination",
+                DataType = CustomFieldDataType.Date,
+                BoundaryMode = "pastOrToday",
+                IsActive = true,
+                EntityType = "Patient"
+            }
+        };
+
+        var submittedFields = new Dictionary<string, object?>
+        {
+            ["last_physical_exam_date"] = "2028-11-15"
+        };
+
+        var act = () => CustomFieldValueValidator.MergeAndValidateForUpdate(targetFields, submittedFields, defs);
+        act.Should().NotThrow();
+
+        targetFields["last_physical_exam_date"].Should().Be("2028-11-15");
+    }
+
+    [Fact]
+    public async Task UpdateClinicPatient_WithGrandfatheredHistoricalCustomDate_SucceedsEndToEndWithRepository()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var customFieldRepo = TestDbHelper.CreateRepository<CustomFieldDefinition>(context, sieve);
+
+        // 1. Create CustomFieldDefinition with futureOrToday
+        var def = new CustomFieldDefinition
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            EntityType = "Patient",
+            FieldKey = "last_physical_exam_date",
+            Label = "Date of Last Physical Examination",
+            DataType = CustomFieldDataType.Date,
+            BoundaryMode = "futureOrToday",
+            IsActive = true,
+            DisplayOrder = 1,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "Admin"
+        };
+        await customFieldRepo.AddAsync(def, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        // 2. Register patient with future date 2028-11-15 (valid under futureOrToday)
+        var regHandler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext);
+        var regCommand = new RegisterClinicPatientCommand(
+            FirstName: "Emilita",
+            LastName: "Santos",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1985, 8, 20),
+            Sex: "Female",
+            CivilStatus: "Married",
+            ContactNumber: "09170001111",
+            Email: "emilita@example.ph",
+            AddressLine: "123 Main St",
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null,
+            CustomFields: new Dictionary<string, object?>
+            {
+                ["last_physical_exam_date"] = "2028-11-15"
+            });
+
+        var created = await regHandler.Handle(regCommand, CancellationToken.None);
+
+        // 3. Admin tightens the rule to pastOrToday in Settings
+        def.BoundaryMode = "pastOrToday";
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        // 4. User edits patient demographics (e.g. contact number), roundtripping existing custom fields
+        var updHandler = new UpdateClinicPatientCommandHandler(patientRepo, uow, null, _clinicContext, customFieldRepo);
+        var updCommand = new UpdateClinicPatientCommand(
+            Id: created.Id,
+            FirstName: "Emilita",
+            LastName: "Santos",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1985, 8, 20),
+            Sex: "Female",
+            CivilStatus: "Married",
+            ContactNumber: "09179998888", // Updated phone number
+            Email: "emilita@example.ph",
+            CustomFields: new Dictionary<string, object?>
+            {
+                ["last_physical_exam_date"] = "2028-11-15" // Unmodified historical date
+            });
+
+        // Act: Must succeed without throwing 400 ValidationException!
+        var updateResult = await updHandler.Handle(updCommand, CancellationToken.None);
+        updateResult.Should().NotBeNull();
+
+        context.ChangeTracker.Clear();
+        var reloaded = await patientRepo.Query().FirstAsync(p => p.Id == created.Id);
+        reloaded.ContactNumber.Should().Be("09179998888");
+        reloaded.CustomFields["last_physical_exam_date"]?.ToString().Should().Be("2028-11-15");
+
+        // 5. Actively modifying the date to another future date must fail with ValidationException under pastOrToday
+        var modifyDateCommand = new UpdateClinicPatientCommand(
+            Id: created.Id,
+            FirstName: "Emilita",
+            LastName: "Santos",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1985, 8, 20),
+            Sex: "Female",
+            CivilStatus: "Married",
+            ContactNumber: "09179998888",
+            Email: "emilita@example.ph",
+            CustomFields: new Dictionary<string, object?>
+            {
+                ["last_physical_exam_date"] = "2029-01-01" // Modified future date!
+            });
+
+        var actModify = () => updHandler.Handle(modifyDateCommand, CancellationToken.None);
+        await actModify.Should().ThrowAsync<ValidationException>()
+            .WithMessage("*cannot be a future date*");
     }
 }

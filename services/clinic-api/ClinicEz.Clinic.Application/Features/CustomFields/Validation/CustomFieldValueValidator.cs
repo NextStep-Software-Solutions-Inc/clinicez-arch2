@@ -615,22 +615,41 @@ public static class CustomFieldValueValidator
                         throw new ValidationException($"{def.Label} must be a valid date in YYYY-MM-DD format.");
                     }
 
-                    switch (def.BoundaryMode?.Trim().ToLowerInvariant())
+                    bool hasExisting = TryGetCustomFieldValue(targetCustomFields, def.FieldKey, out var existingRaw);
+                    var existingStr = existingRaw switch
                     {
-                        case "pastortoday":
-                            if (dateVal > todayInClinic)
-                                throw new ValidationException($"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
-                            break;
+                        null => null,
+                        string s => s.Trim(),
+                        JsonElement elem when elem.ValueKind == JsonValueKind.String => elem.GetString()?.Trim(),
+                        JsonElement elem when elem.ValueKind == JsonValueKind.Null || elem.ValueKind == JsonValueKind.Undefined => null,
+                        JsonElement elem => elem.ToString()?.Trim(),
+                        _ => existingRaw.ToString()?.Trim()
+                    };
 
-                        case "futureortoday":
-                            if (dateVal < todayInClinic)
-                                throw new ValidationException($"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
-                            break;
+                    bool isUnmodified = hasExisting && (
+                        string.Equals(existingStr, rawString, StringComparison.OrdinalIgnoreCase) ||
+                        (DateOnly.TryParseExact(existingStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var existingDate) && existingDate == dateVal)
+                    );
 
-                        case "futureonly":
-                            if (dateVal <= todayInClinic)
-                                throw new ValidationException($"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
-                            break;
+                    if (!isUnmodified)
+                    {
+                        switch (def.BoundaryMode?.Trim().ToLowerInvariant())
+                        {
+                            case "pastortoday":
+                                if (dateVal > todayInClinic)
+                                    throw new ValidationException($"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
+                                break;
+
+                            case "futureortoday":
+                                if (dateVal < todayInClinic)
+                                    throw new ValidationException($"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
+                                break;
+
+                            case "futureonly":
+                                if (dateVal <= todayInClinic)
+                                    throw new ValidationException($"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
+                                break;
+                        }
                     }
 
                     var caseMatch = targetCustomFields.Keys

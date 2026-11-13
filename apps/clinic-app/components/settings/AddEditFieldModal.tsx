@@ -176,6 +176,18 @@ export function formatLiveRulePreview(
   return `Visible when [${ruleField}] ${ruleOperator} '${ruleValue || '...'}'`;
 }
 
+export function isDateBoundaryModeChanged(
+  fieldToEdit: Pick<ClinicCustomFieldDefinition, 'boundaryMode' | 'category' | 'dataType'> | null | undefined,
+  currentBoundaryMode: BoundaryMode,
+  currentDataType: string
+): boolean {
+  if (!fieldToEdit || currentDataType !== 'Date') return false;
+  const historicalBoundaryMode =
+    fieldToEdit.boundaryMode ||
+    ((fieldToEdit.category || '').trim().toLowerCase() === 'clinical' ? 'pastOrToday' : 'any');
+  return Boolean(historicalBoundaryMode && currentBoundaryMode !== historicalBoundaryMode);
+}
+
 export default function AddEditFieldModal({
   visible,
   onClose,
@@ -202,8 +214,17 @@ export default function AddEditFieldModal({
   );
   const [isRequired, setIsRequired] = useState(() => Boolean(visible && fieldToEdit?.isRequired));
   const [options, setOptions] = useState('');
-  const [boundaryMode, setBoundaryMode] = useState<BoundaryMode>('any');
-  const [isBoundaryModeManuallySet, setIsBoundaryModeManuallySet] = useState(false);
+  const [boundaryMode, setBoundaryMode] = useState<BoundaryMode>(() => {
+    if (visible && fieldToEdit) {
+      if (fieldToEdit.boundaryMode) return fieldToEdit.boundaryMode;
+      const isClinical = (fieldToEdit.category || '').trim().toLowerCase() === 'clinical';
+      return isClinical ? 'pastOrToday' : 'any';
+    }
+    return 'any';
+  });
+  const [isBoundaryModeManuallySet, setIsBoundaryModeManuallySet] = useState(() =>
+    Boolean(visible && fieldToEdit?.boundaryMode)
+  );
 
   // Live Rule Builder state
   const [hasVisibilityRule, setHasVisibilityRule] = useState(false);
@@ -234,6 +255,8 @@ export default function AddEditFieldModal({
     ? candidateParentFields.find((f) => f.fieldKey === ruleField)
     : undefined;
   const isParentBoolean = selectedParentField?.dataType === 'Boolean';
+
+  const isBoundaryModeChanged = isDateBoundaryModeChanged(fieldToEdit, boundaryMode, dataType);
 
   // Initialize form when fieldToEdit changes or modal opens
   useEffect(() => {
@@ -778,6 +801,15 @@ export default function AddEditFieldModal({
                 ? 'Allows future dates only.'
                 : 'Allows any calendar date.'}
             </ThemedText>
+
+            {isBoundaryModeChanged && (
+              <View style={styles.boundaryChangeWarningBox}>
+                <Icon name="AlertTriangle" size={16} color={theme.colors.warningText} />
+                <ThemedText variant="caption" color={theme.colors.warningText} style={styles.boundaryWarningText}>
+                  Note: Updating date rules will only apply to new entries or edits. Existing historical patient records remain preserved and will not be locked out.
+                </ThemedText>
+              </View>
+            )}
           </FieldGroup>
         )}
 
@@ -1252,5 +1284,19 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surfaceSubtle,
+  },
+  boundaryChangeWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  boundaryWarningText: {
+    flex: 1,
   },
 });
