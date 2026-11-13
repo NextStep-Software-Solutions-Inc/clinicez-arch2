@@ -45,7 +45,7 @@ public sealed class CustomFieldsController : ControllerBase
     }
 
     [HttpGet]
-    [HasPermission(ClinicPermissions.SettingsRead)]
+    [HasAnyPermission(ClinicPermissions.SettingsRead, ClinicPermissions.PatientsRead)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ClinicCustomFieldDefinitionDto>>>> GetCustomFields(
         [FromQuery] string? entityType = "ClinicPatient",
         [FromQuery] string? category = null,
