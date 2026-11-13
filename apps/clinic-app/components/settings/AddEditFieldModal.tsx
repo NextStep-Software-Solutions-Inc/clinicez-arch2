@@ -804,7 +804,7 @@ export default function AddEditFieldModal({
 
             {isBoundaryModeChanged && (
               <View style={styles.boundaryChangeWarningBox}>
-                <Icon name="AlertTriangle" size={16} color={theme.colors.warningText} />
+                <Icon name="alert" size={16} color={theme.colors.warningText} />
                 <ThemedText variant="caption" color={theme.colors.warningText} style={styles.boundaryWarningText}>
                   Note: Updating date rules will only apply to new entries or edits. Existing historical patient records remain preserved and will not be locked out.
                 </ThemedText>
