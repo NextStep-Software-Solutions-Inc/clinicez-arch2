@@ -19,8 +19,23 @@ export const MIN_ACCENT_CONTRAST = 3;
 /** Default Clinic EZ Brand Color (Teal 600) */
 export const DEFAULT_CLINIC_BRAND_COLOR = '#0D6963';
 
-/** Sentinel token indicating no clinic-level override (inherits workspace or default brand color). */
-export const LEGACY_UNSET_ACCENT = 'inherit';
+/** Legacy Sentinel Unset Value (used in older DB schemas and InitialCreate to indicate uncustomized clinic). */
+export const LEGACY_UNSET_ACCENT = '#0284C7';
+
+/** Sentinel token indicating an explicit user or workstation request to reset to workspace inheritance. */
+export const RESET_SENTINEL_ACCENT = 'inherit';
+
+/**
+ * Checks whether a color value represents an unset / workspace-inherited state:
+ * - null, undefined, or empty/whitespace string
+ * - 'inherit' (explicit reset sentinel)
+ * - '#0284C7' (legacy database default sentinel from InitialCreate schema)
+ */
+export function isUnsetAccent(hex: string | null | undefined): boolean {
+  if (!hex) return true;
+  const clean = hex.trim().toLowerCase();
+  return clean === '' || clean === RESET_SENTINEL_ACCENT || clean === LEGACY_UNSET_ACCENT.toLowerCase();
+}
 
 export interface BrandColorPreset {
   color: string;
@@ -33,7 +48,7 @@ export interface BrandColorPreset {
  */
 export const BRAND_COLOR_PRESETS: BrandColorPreset[] = [
   { color: '#0D6963', label: 'Teal (Default)', description: 'Official Clinic EZ medical teal' },
-  { color: '#0284C7', label: 'Sky Blue', description: 'Clean clinical sky tone' },
+  { color: '#0284C8', label: 'Sky Blue', description: 'Clean clinical sky tone' },
   { color: '#059669', label: 'Emerald', description: 'Vitality and pharmacy green' },
   { color: '#4F46E5', label: 'Indigo', description: 'Modern professional deep indigo' },
   { color: '#E11D48', label: 'Rose', description: 'Pediatric and wellness rose' },
@@ -271,10 +286,10 @@ export function resolveClinicBrandColor({
   const cleanOverride = clinicOverrideHex?.trim();
   const cleanWorkspace = workspaceAccentHex?.trim();
 
-  // If user has an explicit personal override that is valid hex and not an unset sentinel ('inherit' / empty)
+  // If user has an explicit personal override that is valid hex and not an unset sentinel
   if (
     cleanUserOverride &&
-    cleanUserOverride.toLowerCase() !== LEGACY_UNSET_ACCENT.toLowerCase() &&
+    !isUnsetAccent(cleanUserOverride) &&
     HEX_COLOR.test(cleanUserOverride)
   ) {
     return {
@@ -284,10 +299,10 @@ export function resolveClinicBrandColor({
     };
   }
 
-  // If clinic has an explicit override that is valid hex and not an unset sentinel ('inherit' / empty)
+  // If clinic has an explicit override that is valid hex and not an unset sentinel
   if (
     cleanOverride &&
-    cleanOverride.toLowerCase() !== LEGACY_UNSET_ACCENT.toLowerCase() &&
+    !isUnsetAccent(cleanOverride) &&
     HEX_COLOR.test(cleanOverride)
   ) {
     return {

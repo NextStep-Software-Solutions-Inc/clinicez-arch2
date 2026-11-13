@@ -104,6 +104,8 @@ const {
   BRAND_COLOR_PRESETS,
   DEFAULT_CLINIC_BRAND_COLOR,
   LEGACY_UNSET_ACCENT,
+  RESET_SENTINEL_ACCENT,
+  isUnsetAccent,
 } = await import('../constants/color');
 
 const {
@@ -184,8 +186,8 @@ describe('resolveClinicBrandColor Resolution Rules', () => {
     expect(res.source).toBe('workspace_inherited');
   });
 
-  test('auto-inherits workspace accent when clinic has unset sentinel ("inherit" / empty / null)', () => {
-    for (const unsetVal of [LEGACY_UNSET_ACCENT, 'inherit', '', '   ', null, undefined]) {
+  test('auto-inherits workspace accent when clinic has unset sentinel ("#0284C7" / "inherit" / empty / null)', () => {
+    for (const unsetVal of [LEGACY_UNSET_ACCENT, '#0284C7', '#0284c7', RESET_SENTINEL_ACCENT, 'inherit', '', '   ', null, undefined]) {
       const res = resolveClinicBrandColor({
         clinicOverrideHex: unsetVal,
         workspaceAccentHex: '#E11D48',
@@ -196,28 +198,29 @@ describe('resolveClinicBrandColor Resolution Rules', () => {
     }
   });
 
-  test('GitHub #151: Sky Blue (#0284C7) preset resolves as an active clinic_override and never resets to unset', () => {
+  test('GitHub #151: Sky Blue (#0284C8) preset resolves as an active clinic_override and never resets to unset', () => {
     const skyBluePreset = BRAND_COLOR_PRESETS.find((p) => p.label === 'Sky Blue');
     expect(skyBluePreset).toBeDefined();
-    expect(skyBluePreset?.color).toBe('#0284C7');
-    expect(LEGACY_UNSET_ACCENT.toUpperCase()).not.toBe('#0284C7');
+    expect(skyBluePreset?.color).toBe('#0284C8');
+    expect(LEGACY_UNSET_ACCENT.toUpperCase()).toBe('#0284C7');
+    expect(skyBluePreset?.color).not.toBe(LEGACY_UNSET_ACCENT);
 
     const withWorkspace = resolveClinicBrandColor({
-      clinicOverrideHex: '#0284C7',
+      clinicOverrideHex: '#0284C8',
       workspaceAccentHex: '#0D6963',
     });
     expect(withWorkspace).toEqual({
-      color: '#0284C7',
+      color: '#0284C8',
       isOverridden: true,
       source: 'clinic_override',
     });
 
     const lowercaseReloaded = resolveClinicBrandColor({
-      clinicOverrideHex: ' #0284c7 ',
+      clinicOverrideHex: ' #0284c8 ',
       workspaceAccentHex: null,
     });
     expect(lowercaseReloaded).toEqual({
-      color: '#0284C7',
+      color: '#0284C8',
       isOverridden: true,
       source: 'clinic_override',
     });
@@ -257,7 +260,7 @@ describe('resolveClinicBrandColor Resolution Rules', () => {
   test('prioritizes userOverrideHex > clinicOverrideHex > workspaceAccentHex > defaultHex', () => {
     const userWins = resolveClinicBrandColor({
       userOverrideHex: ' #e11d48 ',
-      clinicOverrideHex: '#0284C7',
+      clinicOverrideHex: '#0284C8',
       workspaceAccentHex: '#4F46E5',
     });
     expect(userWins).toEqual({
@@ -268,11 +271,11 @@ describe('resolveClinicBrandColor Resolution Rules', () => {
 
     const clearedUserFallsBackToClinic = resolveClinicBrandColor({
       userOverrideHex: null,
-      clinicOverrideHex: '#0284C7',
+      clinicOverrideHex: '#0284C8',
       workspaceAccentHex: '#4F46E5',
     });
     expect(clearedUserFallsBackToClinic).toEqual({
-      color: '#0284C7',
+      color: '#0284C8',
       isOverridden: true,
       source: 'clinic_override',
     });
