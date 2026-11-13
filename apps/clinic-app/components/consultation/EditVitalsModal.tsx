@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import ErrorState from '../ui/ErrorState';
@@ -488,8 +488,9 @@ export default function EditVitalsModal({
           retryLabel="Retry"
         />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.formContent}>
           <StandardVitalsSection form={form} updateField={updateField} cohort={cohort} errors={fieldErrors} />
+          <PreAssessmentSection form={form} updateField={updateField} cohort={cohort} errors={fieldErrors} />
           <AnthropometricsSection
             form={form}
             updateField={updateField}
@@ -501,7 +502,6 @@ export default function EditVitalsModal({
             errors={fieldErrors}
           />
           <VisualAcuitySection form={form} updateField={updateField} errors={fieldErrors} />
-          <PreAssessmentSection form={form} updateField={updateField} errors={fieldErrors} />
           <NurseCareAndOtcDispensingSection
             allowDispensing={isVisitTypeEligibleForOtcDispensing(visitType)}
             chiefComplaint={form.chiefComplaint}
@@ -515,13 +515,16 @@ export default function EditVitalsModal({
             chiefComplaintError={fieldErrors.chiefComplaint}
             homeInstructionsError={fieldErrors.homeInstructions}
           />
-        </ScrollView>
+        </View>
       )}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  formContent: {
+    gap: theme.spacing.md,
+  },
   modalFooter: {
     flexDirection: 'row',
     flexWrap: 'wrap',
