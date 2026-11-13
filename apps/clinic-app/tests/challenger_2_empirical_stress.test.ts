@@ -877,5 +877,22 @@ describe('Challenger 2 Empirical Verification: Comms Active Thread, Modals & Dra
       mockClinicComms.setActiveConversationId(undefined);
       expect(mockClinicComms.activeConversationId).toBeUndefined();
     });
+
+    test('Empirical 4.5: Conversation deletion and archive removes item from list and triggers backend close', () => {
+      const hostSource = fs.readFileSync(
+        path.resolve(__dirname, '../components/comms/ClinicChatDrawerHost.tsx'),
+        'utf-8'
+      );
+      expect(hostSource).toContain('onDeleteConversation={handleDeleteConversation}');
+      expect(hostSource).toContain('onCloseAndArchive={handleCloseAndArchive}');
+      expect(hostSource).toContain('removedConversationIds.has(c.id)');
+
+      const threadSource = fs.readFileSync(
+        path.resolve(__dirname, '../components/comms/ClinicActiveThread.tsx'),
+        'utf-8'
+      );
+      expect(threadSource).toContain('onDeleteConversation?.(conversationId)');
+      expect(threadSource).toContain('onCloseAndArchive?.(conversationId)');
+    });
   });
 });

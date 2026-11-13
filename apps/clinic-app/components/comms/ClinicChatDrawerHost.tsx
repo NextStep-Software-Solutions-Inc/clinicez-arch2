@@ -62,6 +62,7 @@ export default function ClinicChatDrawerHost() {
   const [isManualReconnecting, setIsManualReconnecting] = useState(false);
   const [isNewConvModalOpen, setIsNewConvModalOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [removedConversationIds, setRemovedConversationIds] = useState<Set<string>>(new Set());
 
   // Play audio chime when any incoming message is received
   useEffect(() => {
@@ -114,9 +115,77 @@ export default function ClinicChatDrawerHost() {
   const [selectedScope, setSelectedScope] = useState<ConversationScopeFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      setRemovedConversationIds((prev) => new Set(prev).add(id));
+      setActiveConversationId(undefined);
+      try {
+        const cleanBase = (process.env.EXPO_PUBLIC_COMMS_API_URL || '').trim().replace(/\/+$/, '');
+        if (cleanBase) {
+          let ticket = comms?.activeTicket?.ticket;
+          if (!ticket && comms?.refreshTicket) {
+            try {
+              const refreshed = await comms.refreshTicket();
+              ticket = refreshed?.ticket;
+            } catch {
+              // ignore
+            }
+          }
+          await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+            },
+            body: JSON.stringify({ notes: 'Deleted by clinician' }),
+          });
+        }
+        await refreshConversations();
+      } catch (err) {
+        console.warn('Failed to delete/close conversation on server:', err);
+      }
+    },
+    [comms, refreshConversations, setActiveConversationId],
+  );
+
+  const handleCloseAndArchive = useCallback(
+    async (id: string) => {
+      setRemovedConversationIds((prev) => new Set(prev).add(id));
+      setActiveConversationId(undefined);
+      try {
+        const cleanBase = (process.env.EXPO_PUBLIC_COMMS_API_URL || '').trim().replace(/\/+$/, '');
+        if (cleanBase) {
+          let ticket = comms?.activeTicket?.ticket;
+          if (!ticket && comms?.refreshTicket) {
+            try {
+              const refreshed = await comms.refreshTicket();
+              ticket = refreshed?.ticket;
+            } catch {
+              // ignore
+            }
+          }
+          await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+            },
+            body: JSON.stringify({ notes: 'Closed and archived' }),
+          });
+        }
+        await refreshConversations();
+      } catch (err) {
+        console.warn('Failed to archive conversation on server:', err);
+      }
+    },
+    [comms, refreshConversations, setActiveConversationId],
+  );
+
   const chatItems: ChatDrawerItem[] = useMemo(() => {
     return conversations
       .filter((c) => {
+        if (removedConversationIds.has(c.id)) return false;
+        if (c.status === 'Closed' || (c as any).status === 'Archived') return false;
         if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
@@ -490,6 +559,8 @@ export default function ClinicChatDrawerHost() {
             onBack={() => setActiveConversationId(undefined)}
             onOpenPatientChart={handleOpenPatientChart}
             currentUserId={user?.id || ''}
+            onDeleteConversation={handleDeleteConversation}
+            onCloseAndArchive={handleCloseAndArchive}
           />
         ) : drawerTab === 'triage' && canViewTriage ? (
           <TriageQueueView

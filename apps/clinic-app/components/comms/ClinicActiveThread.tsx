@@ -29,6 +29,8 @@ export interface ClinicActiveThreadProps {
   onOpenPatientChart?: (patientId: string) => void;
   initialActionMenuOpen?: boolean;
   pinnedAlerts?: PinnedAlertItem[] | null;
+  onDeleteConversation?: (conversationId: string) => void;
+  onCloseAndArchive?: (conversationId: string) => void;
 }
 
 const SPEED_RESPONSE_PILLS = [
@@ -67,6 +69,8 @@ export default function ClinicActiveThread({
   onOpenPatientChart,
   initialActionMenuOpen,
   pinnedAlerts,
+  onDeleteConversation,
+  onCloseAndArchive,
 }: ClinicActiveThreadProps) {
   const themeSnapshot = useSyncExternalStore(
     subscribeActiveTheme,
@@ -268,6 +272,7 @@ export default function ClinicActiveThread({
   // Action Menu: Close & Archive
   const handleCloseAndArchive = () => {
     setIsActionMenuOpen(false);
+    onCloseAndArchive?.(conversationId);
     notify.success('Conversation closed and archived.');
     onBack();
   };
@@ -279,6 +284,7 @@ export default function ClinicActiveThread({
       notify.error('Cannot delete active clinical conversation with recorded notes. Use Close & Archive instead.');
       return;
     }
+    onDeleteConversation?.(conversationId);
     notify.success('Conversation deleted.');
     onBack();
   };
