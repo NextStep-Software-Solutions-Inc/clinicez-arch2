@@ -780,7 +780,7 @@ export function formatVitalsSummary(vitals?: VitalsSummaryData | null): string {
   return parts.join(' • ');
 }
 
-export const PRE_ASSESSMENT_OBSERVATION_CHIPS = [
+export const ADULT_PRE_ASSESSMENT_OBSERVATION_CHIPS = [
   'Alert & Oriented',
   'Mild Distress',
   'Acute Dyspnea',
@@ -789,6 +789,24 @@ export const PRE_ASSESSMENT_OBSERVATION_CHIPS = [
   'Fall Risk',
   'Ambulatory with Assist',
 ];
+
+export const PEDIATRIC_PRE_ASSESSMENT_OBSERVATION_CHIPS = [
+  'Well-Appearing',
+  'Active & Playful',
+  'Mild Distress',
+  'Lethargic',
+  'Tolerating Orals',
+  'Hydrated / Moist Mucous Membranes',
+];
+
+export const PRE_ASSESSMENT_OBSERVATION_CHIPS = ADULT_PRE_ASSESSMENT_OBSERVATION_CHIPS;
+
+export function getPreAssessmentObservationChips(cohort?: DemographicCohort): string[] {
+  if (cohort?.isPediatric) {
+    return PEDIATRIC_PRE_ASSESSMENT_OBSERVATION_CHIPS;
+  }
+  return ADULT_PRE_ASSESSMENT_OBSERVATION_CHIPS;
+}
 
 export function togglePreAssessmentChip(currentRemarks: string, chip: string): string {
   if (currentRemarks.includes(chip)) {
@@ -1122,6 +1140,9 @@ export function AnthropometricsSection({
   centralObesity,
   zScorePreview,
 }: AnthropometricsSectionProps) {
+  const [showAdvancedAnthropometrics, setShowAdvancedAnthropometrics] = React.useState<boolean>(
+    () => !cohort.isPediatric || !!(form.waistCircumference || form.hipCircumference)
+  );
   return (
     <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
@@ -1242,6 +1263,27 @@ export function AnthropometricsSection({
               />
             </View>
           </>
+        ) : cohort.isPediatric ? (
+          <>
+            <View style={styles.gridItem}>
+              <Input
+                label="Height (cm)"
+                placeholder="e.g. 140"
+                value={form.height}
+                onChangeText={(txt) => updateField('height', txt)}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <View style={styles.gridItem}>
+              <Input
+                label="Weight (kg)"
+                placeholder="e.g. 35.0"
+                value={form.weight}
+                onChangeText={(txt) => updateField('weight', txt)}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          </>
         ) : (
           <>
             <View style={styles.gridItem}>
@@ -1283,6 +1325,57 @@ export function AnthropometricsSection({
           </>
         )}
       </View>
+
+      {/* Optional Advanced Anthropometrics Disclosure for Pediatric Patients */}
+      {cohort.isPediatric ? (
+        <View style={styles.advancedAnthropometricsContainer}>
+          <Pressable
+            testID="toggle-advanced-anthropometrics"
+            accessibilityRole="button"
+            accessibilityLabel={
+              showAdvancedAnthropometrics
+                ? 'Hide advanced anthropometrics'
+                : 'Show advanced anthropometrics'
+            }
+            onPress={() => setShowAdvancedAnthropometrics((prev) => !prev)}
+            style={styles.advancedDisclosureButton}
+          >
+            <Icon
+              name={showAdvancedAnthropometrics ? 'chevronUp' : 'chevronDown'}
+              size={theme.sizes.iconSm}
+              color={theme.colors.primary}
+            />
+            <ThemedText variant="captionBold" color={theme.colors.primary}>
+              {showAdvancedAnthropometrics
+                ? 'Hide Advanced Anthropometrics (Waist & Hip)'
+                : 'Advanced Anthropometrics (Waist & Hip)'}
+            </ThemedText>
+          </Pressable>
+
+          {showAdvancedAnthropometrics ? (
+            <View style={styles.advancedFormGrid}>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Waist Circumference (cm)"
+                  placeholder="Optional, e.g. 60"
+                  value={form.waistCircumference}
+                  onChangeText={(txt) => updateField('waistCircumference', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Hip Circumference (cm)"
+                  placeholder="Optional, e.g. 70"
+                  value={form.hipCircumference}
+                  onChangeText={(txt) => updateField('hipCircumference', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* Central Obesity & WHR Risk Badges (for adults) */}
       {cohort.isAdult && centralObesity ? (
@@ -1435,12 +1528,16 @@ export function VisualAcuitySection({
 export interface PreAssessmentSectionProps {
   form: VitalsFormState;
   updateField: (key: keyof VitalsFormState, val: string) => void;
+  cohort?: DemographicCohort;
 }
 
 export function PreAssessmentSection({
   form,
   updateField,
+  cohort,
 }: PreAssessmentSectionProps) {
+  const chips = getPreAssessmentObservationChips(cohort);
+
   return (
     <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
@@ -1470,11 +1567,12 @@ export function PreAssessmentSection({
           Pre-assessment Observations (tap to add to remarks)
         </ThemedText>
         <View style={styles.chipsRow}>
-          {PRE_ASSESSMENT_OBSERVATION_CHIPS.map((chip) => {
+          {chips.map((chip) => {
             const isActive = form.preAssessmentRemarks.includes(chip);
             return (
               <Pressable
                 key={chip}
+                testID={`observation-chip-${chip.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
                 onPress={() => {
                   const updated = togglePreAssessmentChip(form.preAssessmentRemarks, chip);
                   updateField('preAssessmentRemarks', updated);
@@ -2221,5 +2319,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  advancedAnthropometricsContainer: {
+    marginTop: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  advancedDisclosureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
+    alignSelf: 'flex-start',
+    borderRadius: theme.radii.sm,
+  },
+  advancedFormGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
   },
 });
