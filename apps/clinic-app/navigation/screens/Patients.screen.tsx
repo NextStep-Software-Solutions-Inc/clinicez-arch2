@@ -2042,7 +2042,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       )}
 
       {/* Infinite Scroll Load More Footer */}
-      {patients && (
+      {patients && patients.length > 0 && (
         <View style={styles.infiniteScrollFooter}>
           {loadingMore ? (
             <View style={styles.loadingMoreRow}>
@@ -2051,10 +2051,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 Loading more patients (50 at a time)...
               </ThemedText>
             </View>
-          ) : patients.length === 0 ? (
-            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
-              All 0 patients loaded
-            </ThemedText>
           ) : hasMore ? (
             <View style={{ alignItems: 'center', gap: 8 }}>
               <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
@@ -2070,7 +2066,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             </View>
           ) : (
             <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
-              Showing {patients.length} of {activeTotal ?? patients.length} {activeTotal === 1 ? 'patient' : 'patients'}
+              All {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'} loaded
             </ThemedText>
           )}
         </View>

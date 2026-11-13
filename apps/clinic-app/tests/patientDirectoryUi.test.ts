@@ -752,9 +752,9 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     // getPatientCounts is called to fetch database totals
     expect(screenCode).toContain('clinicService.getPatientCounts');
 
-    // Footer shows loaded vs total and empty state
+    // Footer shows loaded vs total when more pages exist and all loaded when complete
     expect(screenCode).toContain('Showing {patients.length} of {activeTotal ?? patients.length}');
-    expect(screenCode).toContain('All 0 patients loaded');
+    expect(screenCode).toContain("All {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'} loaded");
   });
 
   test('16. Patients.screen.tsx includes "My patients" tab toolbar option placed directly after "All patients"', async () => {
