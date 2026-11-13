@@ -2,16 +2,28 @@ import { describe, test, expect, mock, beforeEach, afterEach, spyOn } from 'bun:
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import React from 'react';
+import * as ReactJsxRuntime from 'react/jsx-runtime';
+import * as ReactJsxDevRuntime from 'react/jsx-dev-runtime';
 import { renderToString } from 'react-dom/server';
 
-// ── Unify React instance between patient-app and workspace root ───────────────
-try {
-  const rootReact = require.resolve('../../../node_modules/react');
-  mock.module(rootReact, () => React);
-} catch {
-  // Ignore if workspace has single React
+// ── Unify React instance across patient-app, comms-sdk, and workspace root ────
+for (const reactPkg of [
+  '../../../node_modules/react',
+  '../../../packages/comms-sdk/node_modules/react',
+]) {
+  try {
+    mock.module(require.resolve(reactPkg), () => ({ ...React, default: React }));
+  } catch { /* not present */ }
+  try {
+    mock.module(require.resolve(`${reactPkg}/jsx-runtime`), () => ReactJsxRuntime);
+  } catch { /* not present */ }
+  try {
+    mock.module(require.resolve(`${reactPkg}/jsx-dev-runtime`), () => ReactJsxDevRuntime);
+  } catch { /* not present */ }
 }
-mock.module('react', () => React);
+mock.module('react', () => ({ ...React, default: React }));
+mock.module('react/jsx-runtime', () => ReactJsxRuntime);
+mock.module('react/jsx-dev-runtime', () => ReactJsxDevRuntime);
 
 // ── Native Module Mocks for React Native in Bun Test ─────────────────────────
 mock.module('react-native', () => ({

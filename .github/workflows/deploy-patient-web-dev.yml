@@ -58,7 +58,9 @@ jobs:
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --frozen-lockfile
+          rm -rf packages/comms-sdk/node_modules/react packages/comms-sdk/node_modules/react-dom packages/comms-sdk/node_modules/@types/react packages/comms-sdk/node_modules/@types/react-dom
 
       - name: Type check patient app
         run: bun run --cwd apps/patient-app typecheck
@@ -122,7 +124,9 @@ jobs:
 
       - name: Install dependencies
         if: steps.check-env.outputs.configured == 'true'
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --frozen-lockfile
+          rm -rf packages/comms-sdk/node_modules/react packages/comms-sdk/node_modules/react-dom packages/comms-sdk/node_modules/@types/react packages/comms-sdk/node_modules/@types/react-dom
 
       - name: Install Vercel CLI
         if: steps.check-env.outputs.configured == 'true'
