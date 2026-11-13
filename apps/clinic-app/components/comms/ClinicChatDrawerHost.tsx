@@ -19,7 +19,8 @@ import type {
 } from '@clinicez/comms-sdk/native-ui';
 import ClinicActiveThread from './ClinicActiveThread';
 import NewConversationModal from './NewConversationModal';
-import { useClinicComms, getCommsApiBaseUrl } from '../../context/ClinicCommsContext';
+import { useClinicComms } from '../../context/ClinicCommsContext';
+import { getCommsApiBaseUrl } from '../../services/commsUrl';
 import { useAuth } from '../../context/AuthContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';

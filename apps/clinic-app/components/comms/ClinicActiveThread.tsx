@@ -13,7 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { playMessageChime } from '../../utils/alertSounds';
-import { getCommsApiBaseUrl } from '../../context/ClinicCommsContext';
+import { getCommsApiBaseUrl } from '../../services/commsUrl';
 import type { ConversationDto } from '@clinicez/comms-sdk/core';
 
 interface ThreadParticipantLike {
@@ -66,6 +66,22 @@ function getCategoryLabel(scope?: string): string {
       return 'Facility Channel';
     default:
       return scope || 'Facility Channel';
+  }
+}
+
+function getDefaultChannelTitle(scope?: string): string {
+  switch (scope) {
+    case 'PatientFacility':
+      return 'Patient Request';
+    case 'StaffContext':
+    case 'PatientContext':
+      return 'Care Team';
+    case 'Direct':
+      return 'Direct Message';
+    case 'Facility':
+      return 'Facility Channel';
+    default:
+      return scope ? `${scope} Channel` : 'Facility Channel';
   }
 }
 
@@ -130,6 +146,8 @@ export default function ClinicActiveThread({
 
   // Header and View State
   const [customTitle, setCustomTitle] = useState<string | null>(null);
+  const rawTitle = customTitle ?? conversation?.title ?? initialConversation?.title ?? '';
+  const isGenericPlaceholder = !rawTitle.trim() || rawTitle.trim().toLowerCase() === 'conversation';
   const resolvedTitle = useMemo(() => {
     const raw = conversation || initialConversation;
     if (!raw) return '';
@@ -162,7 +180,11 @@ export default function ClinicActiveThread({
       },
     );
   }, [conversation, initialConversation, members, effectiveUserId, auth?.user?.name, staff]);
-  const activeTitle = customTitle ?? resolvedTitle;
+  const activeTitle = customTitle ?? (
+    isGenericPlaceholder
+      ? (resolvedTitle || getDefaultChannelTitle(conversation?.scope || initialConversation?.scope))
+      : rawTitle.trim()
+  );
   const [privacyBlur, setPrivacyBlur] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
