@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Patient.Application.Common.Interfaces;
@@ -8,32 +9,46 @@ using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Handling;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Patient.Infrastructure.Interop;
 
 /// <summary>
 /// Handles <c>comms.call.state.changed</c>: updates video call session state, LiveKit tokens,
-/// and room details for the patient client.
+/// relay URL, and room details for the patient client.
 /// </summary>
 public sealed class CommsCallStateChangedInteropHandler : IInteropHandler<CommsCallStateChangedPayload>
 {
+    private static readonly ConcurrentDictionary<Guid, string> CallRelayUrls = new();
+
     private readonly ApplicationDbContext _dbContext;
     private readonly ISyncNotificationService _syncNotificationService;
+    private readonly IConfiguration? _configuration;
     private readonly ILogger<CommsCallStateChangedInteropHandler> _logger;
 
     public CommsCallStateChangedInteropHandler(
         ApplicationDbContext dbContext,
         ISyncNotificationService syncNotificationService,
-        ILogger<CommsCallStateChangedInteropHandler> logger)
+        ILogger<CommsCallStateChangedInteropHandler> logger,
+        IConfiguration? configuration = null)
     {
         _dbContext = dbContext;
         _syncNotificationService = syncNotificationService;
         _logger = logger;
+        _configuration = configuration;
     }
+
+    public static string? GetRelayUrl(Guid callId) =>
+        CallRelayUrls.TryGetValue(callId, out var url) ? url : null;
 
     public async Task HandleAsync(CommsCallStateChangedPayload message, InteropMessageContext context, CancellationToken ct)
     {
+        if (!string.IsNullOrWhiteSpace(message.RelayUrl))
+        {
+            CallRelayUrls[message.CallId] = message.RelayUrl;
+        }
+
         var session = await _dbContext.PatientCallSessions
             .FirstOrDefaultAsync(s => s.CallId == message.CallId, ct);
 
@@ -106,6 +121,11 @@ public sealed class CommsCallStateChangedInteropHandler : IInteropHandler<CommsC
             "Call session {CallId} state updated to {Status} for Patient {PatientId}.",
             session.CallId, session.Status, session.PatientId);
 
+        var relayUrl = message.RelayUrl
+            ?? (CallRelayUrls.TryGetValue(session.CallId, out var cached) ? cached : null)
+            ?? _configuration?["LIVEKIT_URL"]
+            ?? "wss://media.clinicez.internal";
+
         try
         {
             await _syncNotificationService.NotifyCommsEventAsync(
@@ -117,7 +137,8 @@ public sealed class CommsCallStateChangedInteropHandler : IInteropHandler<CommsC
                     conversationId = session.ConversationId,
                     status = session.Status,
                     roomName = session.RoomName,
-                    joinToken = session.LiveKitToken
+                    joinToken = session.LiveKitToken,
+                    relayUrl = relayUrl
                 },
                 ct);
         }

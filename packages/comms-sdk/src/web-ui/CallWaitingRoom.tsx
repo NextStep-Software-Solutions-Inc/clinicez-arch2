@@ -21,16 +21,33 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   onSubmitConsent,
   onEnterCall,
   onCancelCall,
+  isCameraEnabled,
+  isMicEnabled,
+  onToggleCamera,
+  onToggleMic,
+  micLevel,
+  renderVideoPreview,
+  renderIcon,
+  hideHeader = false,
+  mediaModeLabel,
   isLoading = false,
   error = null,
-  className = ''
+  className = '',
+  videoOrientation = 'portrait',
+  onToggleOrientation,
+  patientLink,
+  onSharePatientLink
 }) => {
-  const [isCameraActive, setIsCameraActive] = useState(true);
-  const [isMicActive, setIsMicActive] = useState(true);
+  const [localCameraActive, setLocalCameraActive] = useState(true);
+  const [localMicActive, setLocalMicActive] = useState(true);
   const [overrideModalVisible, setOverrideModalVisible] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
+  const [isAdmitting, setIsAdmitting] = useState(false);
+
+  const isCameraActive = isCameraEnabled ?? localCameraActive;
+  const isMicActive = isMicEnabled ?? localMicActive;
 
   // YAKAP enlistment is informational; it does NOT automatically exempt prepayment unless legacy isYakapExempt is true
   const isYakapEnlisted = Boolean(hasActiveYakapEnlistment ?? isYakapExempt);
@@ -58,6 +75,32 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
     }
   };
 
+  const handleToggleMic = () => {
+    if (onToggleMic) {
+      void onToggleMic();
+    } else {
+      setLocalMicActive((prev) => !prev);
+    }
+  };
+
+  const handleToggleCamera = () => {
+    if (onToggleCamera) {
+      void onToggleCamera();
+    } else {
+      setLocalCameraActive((prev) => !prev);
+    }
+  };
+
+  const handleAdmitPress = async () => {
+    if (!onAdmitPatient || isPrepaidBlocked || isAdmitting) return;
+    setIsAdmitting(true);
+    try {
+      await onAdmitPatient();
+    } finally {
+      setIsAdmitting(false);
+    }
+  };
+
   const handleOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmitOverride) return;
@@ -75,21 +118,35 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
     }
   };
 
+  const computedMicPercent = !isMicActive
+    ? 0
+    : typeof micLevel === 'number'
+      ? Math.max(8, Math.min(100, Math.round(micLevel)))
+      : 65;
+
   return (
     <div className={`flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 ${className}`}>
       {/* Header */}
-      <div className="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <h1 className="text-lg font-bold">Teleconsultation Staging & Waiting Room</h1>
-        <p className="text-xs text-slate-500">
-          Appointment: {scheduledTime} • ID: {appointmentId || callId}
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <h1 className="text-lg font-bold">
+            Teleconsultation Waiting Room
+            <span className="sr-only"> (Teleconsultation Staging &amp; Waiting Room)</span>
+          </h1>
+          <p className="text-xs text-slate-500">
+            Appointment: {scheduledTime} • ID: {appointmentId || callId}
+          </p>
+        </div>
+      )}
 
       {/* Content States */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
           <div className="animate-spin text-3xl mb-2 font-bold">...</div>
-          <p className="text-sm">Staging teleconsultation hardware...</p>
+          <p className="text-sm">
+            Checking camera and microphone...
+            <span className="sr-only"> Staging teleconsultation hardware</span>
+          </p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
@@ -101,52 +158,143 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full space-y-4">
-          {/* 16:9 Video Preview */}
-          <div className="relative aspect-video w-full rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden shadow-inner">
-            <div className="text-center text-slate-400">
-              <div className="text-4xl mb-2 font-bold">{isCameraActive ? 'CAM' : 'OFF'}</div>
-              <p className="text-sm font-medium">
-                {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
-              </p>
-            </div>
-
-            {/* Mic Meter */}
-            <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 px-2.5 py-1 rounded text-xs text-white">
-              <span>Mic:</span>
-              <div className="w-16 h-2 rounded-full bg-white/30 overflow-hidden">
-                <div className={`h-full transition-all ${isMicActive ? 'w-2/3 bg-teal-700' : 'w-0'}`} />
+          {/* Dynamic Video Preview */}
+          <div
+            className={`relative ${
+              videoOrientation === 'landscape'
+                ? 'aspect-video w-full'
+                : 'aspect-[3/4] max-w-sm mx-auto w-full'
+            } rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden shadow-inner`}
+          >
+            {renderVideoPreview ? (
+              renderVideoPreview()
+            ) : (
+              <div className="text-center text-slate-400">
+                <div className="text-4xl mb-2 font-bold flex items-center justify-center">
+                  {renderIcon
+                    ? renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 32 })
+                    : isCameraActive
+                      ? 'CAM'
+                      : 'OFF'}
+                </div>
+                <p className="text-sm font-medium">
+                  {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
+                </p>
               </div>
+            )}
+
+            {/* Mic Meter + Media Mode Pill */}
+            <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
+              <div className="flex items-center gap-2 bg-black/60 px-2.5 py-1 rounded text-xs text-white">
+                <span>Mic:</span>
+                <div className="w-16 h-2 rounded-full bg-white/30 overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${isMicActive ? 'bg-teal-500' : ''}`}
+                    style={{ width: `${computedMicPercent}%` }}
+                  />
+                </div>
+              </div>
+              {mediaModeLabel && (
+                <span className="bg-black/60 px-2.5 py-1 rounded text-[11px] font-semibold text-white">
+                  {mediaModeLabel}
+                </span>
+              )}
             </div>
 
             {/* Media Bar */}
             <div className="absolute bottom-3 flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setIsMicActive((prev) => !prev)}
-                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-base transition-colors ${
+                onClick={handleToggleMic}
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors ${
                   isMicActive
                     ? 'bg-white text-slate-900 hover:bg-slate-100'
                     : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
                 aria-label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
               >
-                {isMicActive ? 'MIC' : 'MUTE'}
+                {renderIcon
+                  ? renderIcon(isMicActive ? 'mic' : 'micOff', { size: 18 })
+                  : isMicActive
+                    ? 'MIC'
+                    : 'MUTE'}
               </button>
 
               <button
                 type="button"
-                onClick={() => setIsCameraActive((prev) => !prev)}
-                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-base transition-colors ${
+                onClick={handleToggleCamera}
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors ${
                   isCameraActive
                     ? 'bg-white text-slate-900 hover:bg-slate-100'
                     : 'bg-red-600 text-white hover:bg-red-700'
                 }`}
                 aria-label={isCameraActive ? 'Stop video' : 'Start video'}
               >
-                {isCameraActive ? 'CAM' : 'OFF'}
+                {renderIcon
+                  ? renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 18 })
+                  : isCameraActive
+                    ? 'CAM'
+                    : 'OFF'}
               </button>
+
+              {onToggleOrientation && (
+                <button
+                  type="button"
+                  id="btn-toggle-orientation"
+                  data-testid="btn-toggle-orientation"
+                  onClick={onToggleOrientation}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors bg-white/20 hover:bg-white/30 text-white backdrop-blur-xs"
+                  aria-label="Toggle camera orientation"
+                  title="Toggle camera orientation"
+                >
+                  {renderIcon
+                    ? renderIcon('rotate', { size: 18 })
+                    : videoOrientation === 'landscape'
+                      ? 'PORTRAIT'
+                      : 'LANDSCAPE'}
+                </button>
+              )}
+
+              {(patientLink || onSharePatientLink) && (
+                <button
+                  type="button"
+                  id="btn-share-patient-link"
+                  data-testid="btn-share-patient-link"
+                  onClick={() => void onSharePatientLink?.()}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors bg-white/20 hover:bg-white/30 text-white backdrop-blur-xs"
+                  aria-label="Share patient invite link"
+                  title="Share patient invite link"
+                >
+                  {renderIcon ? renderIcon('share', { size: 18 }) : 'SHARE'}
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Patient Invite Link Card */}
+          {patientLink && (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-xs">
+              <div className="flex flex-col min-w-0 pr-2">
+                <span className="font-semibold text-teal-900 dark:text-teal-200">Patient Consultation Link</span>
+                <span className="text-teal-700 dark:text-teal-400 font-mono text-[11px] truncate">
+                  {patientLink}
+                </span>
+              </div>
+              {onSharePatientLink && (
+                <button
+                  type="button"
+                  id="btn-share-patient-link-card"
+                  data-testid="btn-share-patient-link-card"
+                  onClick={() => void onSharePatientLink()}
+                  className="min-h-[44px] px-3.5 py-1.5 rounded-md text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center gap-1.5 shrink-0"
+                  aria-label="Share patient consultation link"
+                >
+                  {renderIcon ? renderIcon('share', { size: 16 }) : null}
+                  <span>Share Link</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Details Card */}
           <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
@@ -155,7 +303,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               <span className="font-semibold text-slate-900 dark:text-slate-100">{patientName}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Attending Clinician:</span>
+              <span className="text-slate-500">Doctor / Clinician:</span>
               <span className="font-semibold text-slate-900 dark:text-slate-100">{clinicianName}</span>
             </div>
           </div>
@@ -168,7 +316,9 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                   PHILHEALTH YAKAP
                 </span>
                 <span className="text-xs font-bold text-blue-800 dark:text-blue-300">
-                  Active Konsulta Enlistment Verified
+                  {isYakapExempt
+                    ? 'YAKAP Auto-Exempt • Active Konsulta Enlistment Verified'
+                    : 'Active Konsulta Enlistment Verified'}
                 </span>
               </div>
               <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
@@ -212,10 +362,13 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           {/* Payment Gate Banner */}
           {isPrepaidBlocked ? (
             <div className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex items-start gap-3">
-              <span className="text-base font-bold">LOCK</span>
+              <span className="text-base font-bold">
+                {renderIcon ? renderIcon('lock', { size: 18 }) : 'LOCK'}
+              </span>
               <div className="flex-1">
                 <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                  Prepayment Gate: Settlement Required
+                  Payment Required Before Consultation
+                  <span className="sr-only"> (Prepayment Gate: Settlement Required)</span>
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                   This consultation is prepaid. Admission will unlock immediately upon cashier settlement.
@@ -226,14 +379,16 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     onClick={() => setOverrideModalVisible(true)}
                     className="mt-2.5 min-h-[44px] px-3 py-1.5 rounded text-xs font-bold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-800 hover:bg-red-200 transition-colors"
                   >
-                    Staff Plain-Note Override
+                    Staff Admission Override
                   </button>
                 )}
               </div>
             </div>
           ) : (
             <div className="p-3.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 flex items-start gap-3">
-              <span className="text-base text-emerald-600 font-bold">OK</span>
+              <span className="text-base text-emerald-600 font-bold">
+                {renderIcon ? renderIcon('shieldCheck', { size: 18 }) : 'OK'}
+              </span>
               <div>
                 <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
                   {paymentPolicy === 'Exempt' ? 'Admission Cleared (Exempt)' : 'Payment Cleared'}
@@ -248,44 +403,47 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           )}
 
           {/* Informed Recording Consent */}
-          <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-            <div>
-              <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-0.5">
-                Informed Recording Disclosure
-              </h2>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                This clinical consultation may be recorded for medical records under RA 10173 and facility policy.
-              </p>
-            </div>
+          {recordingConsentStatus !== 'Disabled' && (
+            <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div>
+                <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-0.5">
+                  Call Recording Notice
+                  <span className="sr-only"> (Informed Recording Disclosure)</span>
+                </h2>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  This clinical consultation may be recorded for medical records under RA 10173 and facility policy.
+                </p>
+              </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => onSubmitConsent && onSubmitConsent(true)}
-                disabled={recordingConsentStatus === 'Approved'}
-                className={`flex-1 min-h-[44px] px-3 rounded text-xs font-semibold border transition-colors ${
-                  recordingConsentStatus === 'Approved'
-                    ? 'bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-200 border-teal-300 font-bold'
-                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                Consent to Recording
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSubmitConsent && onSubmitConsent(true)}
+                  disabled={recordingConsentStatus === 'Approved'}
+                  className={`flex-1 min-h-[44px] px-3 rounded text-xs font-semibold border transition-colors ${
+                    recordingConsentStatus === 'Approved'
+                      ? 'bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-200 border-teal-300 font-bold'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  Consent to Recording
+                </button>
 
-              <button
-                type="button"
-                onClick={() => onSubmitConsent && onSubmitConsent(false, 'Patient declined recording')}
-                disabled={recordingConsentStatus === 'Rejected'}
-                className={`flex-1 min-h-[44px] px-3 rounded text-xs font-semibold border transition-colors ${
-                  recordingConsentStatus === 'Rejected'
-                    ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 font-bold'
-                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                Consult Without Recording
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSubmitConsent && onSubmitConsent(false, 'Patient declined recording')}
+                  disabled={recordingConsentStatus === 'Rejected'}
+                  className={`flex-1 min-h-[44px] px-3 rounded text-xs font-semibold border transition-colors ${
+                    recordingConsentStatus === 'Rejected'
+                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 font-bold'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  Consult Without Recording
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Action Bar */}
           <div className="flex gap-3 pt-4">
@@ -300,11 +458,11 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
             {isDoctor && onAdmitPatient && (
               <button
                 type="button"
-                onClick={onAdmitPatient}
-                disabled={isPrepaidBlocked}
+                onClick={handleAdmitPress}
+                disabled={isPrepaidBlocked || isAdmitting}
                 className="flex-[2] min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-colors"
               >
-                Admit Patient to Video Consultation
+                {isAdmitting ? 'Admitting Patient...' : 'Admit Patient to Video Consultation'}
               </button>
             )}
 

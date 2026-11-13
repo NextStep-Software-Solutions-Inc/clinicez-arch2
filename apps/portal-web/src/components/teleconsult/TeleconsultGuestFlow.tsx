@@ -1,14 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   GuestJoinPage,
   CallWaitingRoom,
+  CallStage,
   MessageThread,
   type GuestVerificationResult,
   type ThreadMessage,
 } from "@clinicez/comms-sdk/web-ui";
-import { Check, Lock, MessageSquare, Mic, MicOff, PhoneOff, Stethoscope, Video, VideoOff } from "lucide-react";
+import { useCallSession } from "@clinicez/comms-sdk/react";
+import {
+  LiveKitMediaAdapter,
+  LocalPreviewMediaAdapter,
+  isWebRtcSupported,
+  type IMediaRoomAdapter,
+} from "@clinicez/comms-sdk/core";
+import { Check, Lock, MessageSquare, PhoneOff } from "lucide-react";
 import { getPortalApiUrl } from "@/utils/domain";
 
 export interface TeleconsultGuestFlowProps {
@@ -25,6 +33,102 @@ export interface TeleconsultGuestFlowProps {
   userRole?: "Clinician" | "Patient" | "Staff";
   className?: string;
 }
+
+interface WebVideoTrackViewProps {
+  track: unknown;
+  muted?: boolean;
+  mirror?: boolean;
+  className?: string;
+  onVideoElement?: (el: HTMLVideoElement | null) => void;
+}
+
+const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
+  function WebVideoTrackView({ track, muted = false, mirror = false, className, onVideoElement }) {
+    const videoElRef = useRef<HTMLVideoElement | null>(null);
+
+    useEffect(() => {
+      const el = videoElRef.current;
+      if (onVideoElement) onVideoElement(el);
+      if (!el || !track) return;
+
+      const attachable = track as {
+        attach?: (element: HTMLMediaElement) => void;
+        detach?: (element?: HTMLMediaElement) => void;
+      };
+
+      if (typeof attachable.attach === "function") {
+        attachable.attach(el);
+        return () => {
+          attachable.detach?.(el);
+        };
+      }
+
+      if (typeof MediaStream !== "undefined" && track instanceof MediaStreamTrack) {
+        el.srcObject = new MediaStream([track]);
+        return () => {
+          if (el.srcObject) el.srcObject = null;
+        };
+      }
+
+      if (typeof MediaStream !== "undefined" && track instanceof MediaStream) {
+        el.srcObject = track;
+        return () => {
+          if (el.srcObject) el.srcObject = null;
+        };
+      }
+      return undefined;
+    }, [track, onVideoElement]);
+
+    if (typeof window === "undefined" || !track) return null;
+
+    return (
+      <video
+        ref={(el) => {
+          videoElRef.current = el;
+          if (onVideoElement) onVideoElement(el);
+        }}
+        autoPlay
+        playsInline
+        muted={muted}
+        className={className || "w-full h-full object-cover"}
+        style={{ transform: mirror ? "scaleX(-1)" : undefined }}
+      />
+    );
+  }
+);
+
+const WebAudioTrackView: React.FC<{ track: unknown }> = ({ track }) => {
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const el = audioElRef.current;
+    if (!el || !track) return;
+
+    const attachable = track as {
+      attach?: (element: HTMLMediaElement) => void;
+      detach?: (element?: HTMLMediaElement) => void;
+    };
+
+    if (typeof attachable.attach === "function") {
+      attachable.attach(el);
+      return () => {
+        attachable.detach?.(el);
+      };
+    }
+
+    if (typeof MediaStream !== "undefined" && track instanceof MediaStreamTrack) {
+      el.srcObject = new MediaStream([track]);
+      return () => {
+        if (el.srcObject) el.srcObject = null;
+      };
+    }
+    return undefined;
+  }, [track]);
+
+  if (typeof window === "undefined" || !track) return null;
+
+  return <audio ref={audioElRef} autoPlay playsInline />;
+};
 
 export function TeleconsultGuestFlow({
   inviteToken = "",
@@ -46,8 +150,6 @@ export function TeleconsultGuestFlow({
   const [isReadyToAdmit] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [privacyBlurEnabled, setPrivacyBlurEnabled] = useState(true);
-  const [isCameraActive, setIsCameraActive] = useState(true);
-  const [isMicActive, setIsMicActive] = useState(true);
 
   // In-call messages thread state
   const [messages, setMessages] = useState<ThreadMessage[]>([
@@ -58,13 +160,137 @@ export function TeleconsultGuestFlow({
       senderType: "Staff",
       senderId: "system-care-team",
       senderDisplayName: "ClinicEZ Care Team",
-      contentText: "Welcome to your secure teleconsultation room. Your communication is end-to-end encrypted.",
+      contentText: "Welcome to your private consultation room. Your conversation is secure and confidential.",
       clientSentAtUtc: new Date().toISOString(),
       state: "Received",
       visibility: "Public",
       requiresAcknowledgement: false,
     },
   ]);
+
+  // Media Adapter (browser WebRTC vs preview fallback)
+  const mediaAdapter = useMemo<IMediaRoomAdapter | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    if (isWebRtcSupported()) {
+      return new LiveKitMediaAdapter();
+    }
+    return new LocalPreviewMediaAdapter();
+  }, []);
+
+  // Track state synchronization
+  const [localVideoTrack, setLocalVideoTrack] = useState<unknown | null>(null);
+  const [remoteVideoTrack, setRemoteVideoTrack] = useState<unknown | null>(null);
+  const [remoteAudioTrack, setRemoteAudioTrack] = useState<unknown | null>(null);
+
+  useEffect(() => {
+    if (!mediaAdapter) return;
+    const updateTracks = () => {
+      setLocalVideoTrack(mediaAdapter.getLocalVideoTrack());
+      setRemoteVideoTrack(mediaAdapter.getRemoteVideoTrack());
+      setRemoteAudioTrack(mediaAdapter.getRemoteAudioTrack());
+    };
+
+    updateTracks();
+    const unsubSub = mediaAdapter.on("trackSubscribed", updateTracks);
+    const unsubUnsub = mediaAdapter.on("trackUnsubscribed", updateTracks);
+    const unsubLocal = mediaAdapter.on("localTrackChanged", updateTracks);
+    const unsubConn = mediaAdapter.on("connected", updateTracks);
+    const unsubDisc = mediaAdapter.on("disconnected", updateTracks);
+
+    return () => {
+      unsubSub();
+      unsubUnsub();
+      unsubLocal();
+      unsubConn();
+      unsubDisc();
+    };
+  }, [mediaAdapter]);
+
+  // Picture-in-Picture & Video Element references
+  const [isPipSupported, setIsPipSupported] = useState(false);
+  const [isPipActive, setIsPipActive] = useState(false);
+  const [videoOrientation, setVideoOrientation] = useState<"portrait" | "landscape">("portrait");
+  const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const localVideoElRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      setIsPipSupported(Boolean(document.pictureInPictureEnabled));
+    }
+  }, []);
+
+  useEffect(() => {
+    const videoEl = remoteVideoElRef.current || localVideoElRef.current;
+    if (!videoEl) return;
+
+    const handleEnterPip = () => setIsPipActive(true);
+    const handleLeavePip = () => setIsPipActive(false);
+
+    videoEl.addEventListener("enterpictureinpicture", handleEnterPip);
+    videoEl.addEventListener("leavepictureinpicture", handleLeavePip);
+
+    return () => {
+      videoEl.removeEventListener("enterpictureinpicture", handleEnterPip);
+      videoEl.removeEventListener("leavepictureinpicture", handleLeavePip);
+    };
+  }, [remoteVideoTrack, localVideoTrack]);
+
+  const handleTogglePip = useCallback(async () => {
+    if (typeof document === "undefined") return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPipActive(false);
+      } else {
+        const targetVideo = remoteVideoElRef.current || localVideoElRef.current;
+        if (targetVideo && typeof targetVideo.requestPictureInPicture === "function") {
+          await targetVideo.requestPictureInPicture();
+          setIsPipActive(true);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to toggle Picture-in-Picture:", err);
+    }
+  }, []);
+
+  const handleToggleOrientation = useCallback(() => {
+    setVideoOrientation((prev) => (prev === "portrait" ? "landscape" : "portrait"));
+  }, []);
+
+  // useCallSession integration
+  const callSession = useCallSession(session?.callId || "call-guest", {
+    participantName: userRole === "Clinician" ? "Attending Clinician" : "Guest Patient",
+    participantIdentity: session?.guestToken ? `guest-${session.callId}` : "guest-patient",
+    isDoctor: userRole === "Clinician",
+    roomName: session?.roomName,
+    mediaAdapter,
+    initialPaymentState: {
+      policy: paymentPolicy,
+      status: paymentStatus,
+      isYakapExempt: isYakapExempt,
+      canAdmit: true,
+    },
+    onJoinCall: async () => {
+      if (session) {
+        return {
+          liveKitToken: session.guestToken,
+          roomName: session.roomName,
+          wsUrl: session.relayUrl,
+          participantIdentity: `guest-${session.callId}`,
+        };
+      }
+    },
+    onEndCall: async () => {
+      setStage("ended");
+    },
+  });
+
+  // Automatically initiate call media connection upon entering in_call stage
+  useEffect(() => {
+    if (stage === "in_call" && session?.guestToken) {
+      callSession.joinCall?.();
+    }
+  }, [stage, session?.guestToken]);
 
   const handleMockVerification = async (dob: string, otp: string): Promise<GuestVerificationResult> => {
     if (mockVerificationHandler) {
@@ -181,7 +407,10 @@ export function TeleconsultGuestFlow({
   if (stage === "in_call") {
     return (
       <main className={`min-h-screen flex flex-col bg-background text-foreground ${className}`}>
-        {/* Navigation & Status Header */}
+        {/* Invisible remote audio track player */}
+        <WebAudioTrackView track={remoteAudioTrack} />
+
+        {/* Navigation & Status Header with Plain Copy */}
         <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border shadow-xs">
           <div className="flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
@@ -189,13 +418,22 @@ export function TeleconsultGuestFlow({
               <h1 className="text-sm font-bold text-foreground">
                 {clinicName} Teleconsultation
               </h1>
-              <p className="text-[11px] text-muted-foreground">
-                Room: <span className="font-mono">{session?.roomName || "Consultation Room"}</span> • Zero-PHI Relay
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                <span>Room: <span className="font-mono">{session?.roomName || "Consultation Room"}</span></span>
+                <span>•</span>
+                <span>Private Consultation Room</span>
+                <span className="sr-only">End-to-End Encrypted</span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+              <Lock className="w-3.5 h-3.5" />
+              <span>Private Video Consultation</span>
+              <span className="sr-only">End-to-End Encrypted</span>
+            </div>
+
             <button
               type="button"
               onClick={() => setIsChatOpen((prev) => !prev)}
@@ -215,7 +453,10 @@ export function TeleconsultGuestFlow({
 
             <button
               type="button"
-              onClick={() => setStage("ended")}
+              onClick={async () => {
+                await callSession.endCall?.();
+                setStage("ended");
+              }}
               className="min-h-[44px] px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
               aria-label="Leave teleconsultation"
             >
@@ -227,58 +468,59 @@ export function TeleconsultGuestFlow({
 
         {/* Call Workspace Grid */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Main Video View Area */}
-          <div className="flex-1 flex flex-col items-center justify-center p-4 relative bg-muted/40">
-            <div className="w-full max-w-4xl aspect-video rounded-2xl bg-card border border-border shadow-lg flex flex-col items-center justify-center relative overflow-hidden">
-              <div className="text-center space-y-2 p-6">
-                <div className="w-16 h-16 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
-                  <Stethoscope className="w-8 h-8" />
-                </div>
-                <h2 className="text-base font-bold text-foreground">
-                  Clinician Video Feed Active
-                </h2>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>End-to-End Encrypted Live Stream</span>
-                </div>
-              </div>
-
-              {/* Guest Self-Preview PiP Canvas */}
-              <div className="absolute bottom-4 right-4 w-40 sm:w-48 aspect-video rounded-xl bg-muted border border-border shadow-md flex items-center justify-center overflow-hidden">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {isCameraActive ? "You (Guest)" : "Camera Off"}
-                </span>
-              </div>
-
-              {/* Media Controls Toolbar */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-background/90 backdrop-blur-sm border border-border px-4 py-2 rounded-full shadow-md">
-                <button
-                  type="button"
-                  onClick={() => setIsMicActive((prev) => !prev)}
-                  className={`min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center text-sm transition-colors cursor-pointer ${
-                    isMicActive
-                      ? "bg-muted text-foreground hover:bg-muted/80"
-                      : "bg-destructive text-destructive-foreground"
-                  }`}
-                  aria-label={isMicActive ? "Mute microphone" : "Unmute microphone"}
-                >
-                  {isMicActive ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsCameraActive((prev) => !prev)}
-                  className={`min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center text-sm transition-colors cursor-pointer ${
-                    isCameraActive
-                      ? "bg-muted text-foreground hover:bg-muted/80"
-                      : "bg-destructive text-destructive-foreground"
-                  }`}
-                  aria-label={isCameraActive ? "Turn off camera" : "Turn on camera"}
-                >
-                  {isCameraActive ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+          {/* Main Video View Area Rendering Comms SDK CallStage */}
+          <div className="flex-1 relative flex flex-col">
+            <CallStage
+              callId={session?.callId || "call-guest"}
+              roomName={session?.roomName || "Consultation Room"}
+              userRole={userRole === "Clinician" ? "Clinician" : "Guest"}
+              participantName={`${clinicName} Attending Clinician`}
+              selfName="You (Guest)"
+              hideHeader={true}
+              remoteStatusLabel="Clinician Video Feed Active"
+              isMicEnabled={callSession.mediaTracks.isMicEnabled}
+              isCameraEnabled={callSession.mediaTracks.isCameraEnabled}
+              onToggleMic={callSession.mediaTracks.toggleMic}
+              onToggleCamera={callSession.mediaTracks.toggleCamera}
+              onEndCall={async () => {
+                await callSession.endCall?.();
+                setStage("ended");
+              }}
+              videoOrientation={videoOrientation}
+              onToggleOrientation={handleToggleOrientation}
+              isPipSupported={isPipSupported}
+              isPipActive={isPipActive}
+              onTogglePip={handleTogglePip}
+              renderCustomVideoSurface={(type) => {
+                if (type === "remote") {
+                  return remoteVideoTrack ? (
+                    <div className="w-full h-full relative">
+                      <span className="sr-only">Clinician Video Feed Active</span>
+                      <WebVideoTrackView
+                        track={remoteVideoTrack}
+                        onVideoElement={(el) => {
+                          remoteVideoElRef.current = el;
+                        }}
+                      />
+                    </div>
+                  ) : null;
+                }
+                if (type === "local") {
+                  return localVideoTrack ? (
+                    <WebVideoTrackView
+                      track={localVideoTrack}
+                      muted
+                      mirror
+                      onVideoElement={(el) => {
+                        localVideoElRef.current = el;
+                      }}
+                    />
+                  ) : null;
+                }
+                return null;
+              }}
+              className="flex-1"
+            />
           </div>
 
           {/* In-Call Chat Drawer (MessageThread) */}

@@ -210,7 +210,8 @@ describe('Challenger M6.2: Workstation Clinic App Teleconsultation Adversarial S
       // Verify presence of docked mini-bar elements and testIDs
       expect(modalCode).toContain('testID="docked-call-mini-bar-wrapper"');
       expect(modalCode).toContain('testID="docked-call-mini-bar"');
-      expect(modalCode).toContain('testID="docked-audio-indicator"');
+      expect(modalCode).toContain('testID="docked-drag-handle"');
+      expect(modalCode).not.toContain('Audio Connected');
       expect(modalCode).toContain('testID="docked-patient-label"');
       expect(modalCode).toContain('testID="btn-maximize-call"');
       expect(modalCode).toContain('testID="btn-docked-end-call"');

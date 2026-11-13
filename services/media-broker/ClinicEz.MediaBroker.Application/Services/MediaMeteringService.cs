@@ -2,11 +2,13 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.MediaBroker.Application.Common.Interfaces;
+using ClinicEz.MediaBroker.Application.Common.Options;
 using ClinicEz.MediaBroker.Domain.Entities;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ClinicEz.MediaBroker.Application.Services;
 
@@ -15,15 +17,18 @@ public sealed class MediaMeteringService : IMediaMeteringService
     private readonly IMediaBrokerDbContext _db;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<MediaMeteringService> _logger;
+    private readonly MediaMeteringOptions _options;
 
     public MediaMeteringService(
         IMediaBrokerDbContext db,
         IInteropPublisher publisher,
-        ILogger<MediaMeteringService> logger)
+        ILogger<MediaMeteringService> logger,
+        IOptions<MediaMeteringOptions>? options = null)
     {
         _db = db;
         _publisher = publisher;
         _logger = logger;
+        _options = options?.Value ?? new MediaMeteringOptions();
     }
 
     public async Task<CallAdmissionDecision> EvaluateCallAdmissionAsync(string tenantId, CancellationToken ct = default)
@@ -32,6 +37,34 @@ public sealed class MediaMeteringService : IMediaMeteringService
 
         var entitlement = await _db.Entitlements
             .FirstOrDefaultAsync(e => e.TenantId == tenantId, ct);
+
+        if (entitlement == null && _options.AutoProvisionDefaultEntitlement && _options.DefaultCallMinutesMonthly > 0)
+        {
+            entitlement = new TenantMediaEntitlement
+            {
+                TenantId = tenantId,
+                CallMinutesMonthly = _options.DefaultCallMinutesMonthly,
+                IsActive = true,
+                AllowOverdraft = _options.DefaultAllowOverdraft,
+                AllowTransportOnlyFallback = _options.DefaultAllowTransportOnlyFallback,
+                Version = 0,
+                UpdatedAtUtc = DateTime.UtcNow
+            };
+            _db.Entitlements.Add(entitlement);
+            _db.AuditLogs.Add(new MediaAuditLog
+            {
+                TenantId = tenantId,
+                CallId = Guid.Empty,
+                EventType = "EntitlementAutoProvisioned",
+                Details = $"Auto-provisioned default teleconsultation entitlement ({_options.DefaultCallMinutesMonthly} mins/mo, Version 0).",
+                TimestampUtc = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "[MediaMeteringService] Auto-provisioned default entitlement (Version 0, {Minutes} mins/mo) for Tenant {TenantId}.",
+                _options.DefaultCallMinutesMonthly, tenantId);
+        }
 
         if (entitlement == null || !entitlement.IsActive)
         {

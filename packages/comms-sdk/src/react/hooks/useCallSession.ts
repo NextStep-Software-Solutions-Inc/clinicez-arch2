@@ -55,11 +55,43 @@ export function useCallSession(
 
   const segmentRecorderRef = useRef<SegmentRecorder | null>(null);
   const recordingSessionIdRef = useRef<string | null>(null);
+  const isCameraEnabledRef = useRef<boolean>(isCameraEnabled);
+  const isMicEnabledRef = useRef<boolean>(isMicEnabled);
+  const isScreenSharingRef = useRef<boolean>(isScreenSharing);
+  const prevSessionIdRef = useRef<string>(sessionId);
+
+  useEffect(() => {
+    isCameraEnabledRef.current = isCameraEnabled;
+  }, [isCameraEnabled]);
+
+  useEffect(() => {
+    isMicEnabledRef.current = isMicEnabled;
+  }, [isMicEnabled]);
+
+  useEffect(() => {
+    isScreenSharingRef.current = isScreenSharing;
+  }, [isScreenSharing]);
+
+  useEffect(() => {
+    if (prevSessionIdRef.current === sessionId) return;
+    prevSessionIdRef.current = sessionId;
+    setStatus('in_waiting_room');
+    setIsAdmitted(false);
+    setError(null);
+    setIsRecording(false);
+    setRecordingDurationSeconds(0);
+    isCameraEnabledRef.current = true;
+    isMicEnabledRef.current = true;
+    isScreenSharingRef.current = false;
+    setIsCameraEnabled(true);
+    setIsMicEnabled(true);
+    setIsScreenSharing(false);
+  }, [sessionId]);
 
   const [participants, setParticipants] = useState<CallParticipant[]>([
     {
       identity: options?.participantIdentity ?? 'staff-current',
-      name: options?.participantName ?? 'Dr. Clinician',
+      name: options?.participantName ?? (options?.isDoctor === false ? 'Participant' : 'Dr. Clinician'),
       isDoctor: options?.isDoctor ?? true,
       isCameraEnabled: true,
       isMicEnabled: true,
@@ -157,10 +189,19 @@ export function useCallSession(
 
     const unsubTrack = adapter.on('localTrackChanged', (...args: unknown[]) => {
       const kind = args[0] as string;
-      const enabled = args[1] as boolean;
-      if (kind === 'audio') setIsMicEnabled(enabled);
-      if (kind === 'video') setIsCameraEnabled(enabled);
-      if (kind === 'screen') setIsScreenSharing(enabled);
+      const enabled = Boolean(args[1]);
+      if (kind === 'audio') {
+        isMicEnabledRef.current = enabled;
+        setIsMicEnabled((prev) => (prev === enabled ? prev : enabled));
+      }
+      if (kind === 'video') {
+        isCameraEnabledRef.current = enabled;
+        setIsCameraEnabled((prev) => (prev === enabled ? prev : enabled));
+      }
+      if (kind === 'screen') {
+        isScreenSharingRef.current = enabled;
+        setIsScreenSharing((prev) => (prev === enabled ? prev : enabled));
+      }
     });
 
     const syncParticipants = () => {
@@ -176,7 +217,7 @@ export function useCallSession(
       setParticipants((prev) => {
         const localSelf = prev[0] ?? {
           identity: options?.participantIdentity ?? 'staff-current',
-          name: options?.participantName ?? 'Dr. Clinician',
+          name: options?.participantName ?? (options?.isDoctor === false ? 'Participant' : 'Dr. Clinician'),
           isDoctor: options?.isDoctor ?? true,
           isCameraEnabled: true,
           isMicEnabled: true,
@@ -278,27 +319,30 @@ export function useCallSession(
   }, [commsContext, sessionId]);
 
   const toggleCamera = useCallback(async (): Promise<void> => {
-    setIsCameraEnabled((prev) => {
-      const next = !prev;
-      options?.mediaAdapter?.setCameraEnabled(next).catch(() => {});
-      return next;
-    });
+    const next = !isCameraEnabledRef.current;
+    isCameraEnabledRef.current = next;
+    setIsCameraEnabled(next);
+    if (options?.mediaAdapter) {
+      await options.mediaAdapter.setCameraEnabled(next).catch(() => {});
+    }
   }, [options?.mediaAdapter]);
 
   const toggleMic = useCallback(async (): Promise<void> => {
-    setIsMicEnabled((prev) => {
-      const next = !prev;
-      options?.mediaAdapter?.setMicrophoneEnabled(next).catch(() => {});
-      return next;
-    });
+    const next = !isMicEnabledRef.current;
+    isMicEnabledRef.current = next;
+    setIsMicEnabled(next);
+    if (options?.mediaAdapter) {
+      await options.mediaAdapter.setMicrophoneEnabled(next).catch(() => {});
+    }
   }, [options?.mediaAdapter]);
 
   const toggleScreenShare = useCallback(async (): Promise<void> => {
-    setIsScreenSharing((prev) => {
-      const next = !prev;
-      options?.mediaAdapter?.setScreenShareEnabled(next).catch(() => {});
-      return next;
-    });
+    const next = !isScreenSharingRef.current;
+    isScreenSharingRef.current = next;
+    setIsScreenSharing(next);
+    if (options?.mediaAdapter) {
+      await options.mediaAdapter.setScreenShareEnabled(next).catch(() => {});
+    }
   }, [options?.mediaAdapter]);
 
   const switchCamera = useCallback(async (): Promise<void> => {
@@ -376,12 +420,23 @@ export function useCallSession(
 
   const admitPatient = useCallback(
     async (emergencyOverride?: EmergencyOverrideInput): Promise<void> => {
-      if (!paymentState.canAdmit && !emergencyOverride && !paymentState.isYakapExempt) {
+      // Guard against DOM/React Native SyntheticEvent mistakenly forwarded by click handlers
+      const validOverride: EmergencyOverrideInput | undefined =
+        emergencyOverride &&
+        typeof emergencyOverride === 'object' &&
+        !('nativeEvent' in emergencyOverride) &&
+        !('currentTarget' in emergencyOverride) &&
+        !('target' in emergencyOverride) &&
+        'reasonNote' in emergencyOverride
+          ? emergencyOverride
+          : undefined;
+
+      if (!paymentState.canAdmit && !validOverride && !paymentState.isYakapExempt) {
         throw new Error('Cannot admit patient: Prepaid consultation is unpaid.');
       }
 
-      if (emergencyOverride) {
-        if (!emergencyOverride.reasonNote || emergencyOverride.reasonNote.trim().length < 5) {
+      if (validOverride) {
+        if (!validOverride.reasonNote || validOverride.reasonNote.trim().length < 5) {
           throw new Error('Override reason note must be at least 5 characters.');
         }
         setPaymentState((prev) => ({
@@ -389,12 +444,12 @@ export function useCallSession(
           status: 'Overridden',
           canAdmit: true,
           isEmergencyOverride: true,
-          overrideReason: emergencyOverride.reasonNote
+          overrideReason: validOverride.reasonNote
         }));
       }
 
       if (options?.onAdmitPatient) {
-        await options.onAdmitPatient(emergencyOverride);
+        await options.onAdmitPatient(validOverride);
       }
 
       const joinRes = options?.onJoinCall ? await options.onJoinCall() : undefined;

@@ -459,5 +459,161 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       nativeHarness.unmount();
       webHarness.unmount();
     });
+
+    it('invokes onAdmitPatient with zero arguments even when click handlers receive a SyntheticEvent', async () => {
+      const nativeAdmit = mock(async () => {});
+      const webAdmit = mock(async () => {});
+
+      const nativeHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          onAdmitPatient: nativeAdmit
+        })
+      );
+      const admitBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Admit Patient')
+      );
+      expect(admitBtn).not.toBeNull();
+      await act(async () => {
+        await admitBtn.props.onPress({ nativeEvent: {}, currentTarget: {}, target: {} });
+      });
+      expect(nativeAdmit).toHaveBeenCalledTimes(1);
+      expect(nativeAdmit.mock.calls[0].length).toBe(0);
+
+      const webHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          onAdmitPatient: webAdmit
+        })
+      );
+      const webAdmitBtn = findElement(
+        webHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Admit Patient')
+      );
+      expect(webAdmitBtn).not.toBeNull();
+      await act(async () => {
+        await webAdmitBtn.props.onClick({ nativeEvent: {}, currentTarget: {}, target: {} });
+      });
+      expect(webAdmit).toHaveBeenCalledTimes(1);
+      expect(webAdmit.mock.calls[0].length).toBe(0);
+
+      nativeHarness.unmount();
+      webHarness.unmount();
+    });
+
+    it('does not mount dormant override Modal when closed and hides consent card when Disabled', () => {
+      const harness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          recordingConsentStatus: 'Disabled',
+          renderIcon: (name: string) => React.createElement('span', { 'data-icon': name }, name)
+        })
+      );
+      const tree = harness.result.current;
+      const modalNode = findElement(tree, (el) => el.type === RNMock.Modal);
+      expect(modalNode).toBeNull();
+      expect(getTextContent(tree)).not.toContain('Informed Recording Disclosure');
+      const videoIcon = findElement(tree, (el) => el.props?.['data-icon'] === 'video');
+      expect(videoIcon).not.toBeNull();
+      harness.unmount();
+    });
+  });
+
+  describe('Tier 4: Milestone 8 Adaptations: Orientation & Link Sharing', () => {
+    it('Native & Web: renders orientation toggle button and fires onToggleOrientation', async () => {
+      let nativeToggled = false;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          videoOrientation: 'portrait',
+          onToggleOrientation: () => {
+            nativeToggled = true;
+          }
+        })
+      );
+
+      const nativeBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-toggle-orientation'
+      );
+      expect(nativeBtn).not.toBeNull();
+      await nativeBtn.props.onPress?.();
+      expect(nativeToggled).toBe(true);
+      nativeHarness.unmount();
+
+      let webToggled = false;
+      const webHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          videoOrientation: 'landscape',
+          onToggleOrientation: () => {
+            webToggled = true;
+          }
+        })
+      );
+
+      const webBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-toggle-orientation' || el.props?.id === 'btn-toggle-orientation'
+      );
+      expect(webBtn).not.toBeNull();
+      await webBtn.props.onClick?.();
+      expect(webToggled).toBe(true);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: renders patient link card and share button', async () => {
+      let nativeShareTriggered = false;
+      const inviteUrl = 'https://portal.clinicez.com/teleconsult/join?token=test-123';
+      const nativeHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          patientLink: inviteUrl,
+          onSharePatientLink: () => {
+            nativeShareTriggered = true;
+          }
+        })
+      );
+
+      const nativeShareBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-share-patient-link'
+      );
+      expect(nativeShareBtn).not.toBeNull();
+      await nativeShareBtn.props.onPress?.();
+      expect(nativeShareTriggered).toBe(true);
+
+      const nativeText = getTextContent(nativeHarness.result.current);
+      expect(nativeText).toContain(inviteUrl);
+      nativeHarness.unmount();
+
+      let webShareTriggered = false;
+      const webHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          patientLink: inviteUrl,
+          onSharePatientLink: () => {
+            webShareTriggered = true;
+          }
+        })
+      );
+
+      const webShareBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-share-patient-link' || el.props?.id === 'btn-share-patient-link'
+      );
+      expect(webShareBtn).not.toBeNull();
+      await webShareBtn.props.onClick?.();
+      expect(webShareTriggered).toBe(true);
+
+      const webText = getTextContent(webHarness.result.current);
+      expect(webText).toContain(inviteUrl);
+      webHarness.unmount();
+    });
   });
 });

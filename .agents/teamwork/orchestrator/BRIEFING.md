@@ -1,7 +1,7 @@
-# BRIEFING — 2026-11-13T02:55:00Z
+# BRIEFING — 2026-11-13T11:56:00Z
 
 ## Mission
-Finalize the teleconsultation feature across services/clinic-api, packages/comms-sdk, and apps/clinic-app according to the approved architecture, implementation plan, and strict repository guardrails.
+Bring the entire ClinicEZ teleconsultation workflow to production readiness end-to-end across the Clinic Workstation (apps/clinic-app), Patient App (apps/patient-app), Browser Guest Portal (apps/portal-web), Comms SDK (packages/comms-sdk), and backend services (clinic-api, media-broker, interop-hub, patient-api, portal-api) connected to LiveKit Cloud.
 
 ## 🔒 My Identity
 - Archetype: orchestrator
@@ -9,7 +9,7 @@ Finalize the teleconsultation feature across services/clinic-api, packages/comms
 - Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api
 - State folder: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/orchestrator
 - Original parent: parent
-- Original parent conversation ID: b5462d22-b4db-451f-a4e7-64a36a093902
+- Original parent conversation ID: 7eb99490-674f-4fdc-beb5-320cdcd7c3fb
 
 ## 🔒 My Workflow
 - **Pattern**: Project
@@ -27,15 +27,14 @@ Finalize the teleconsultation feature across services/clinic-api, packages/comms
 4. **Succession**: At 16 spawns, write handoff.md, spawn successor
 - **Work items**:
   1. Survey phase (3 parallel Explorers) [completed]
-  2. Create PROJECT.md, TEST_INFRA.md, and decomposition [completed]
-  3. Milestone 1: Shared Interop & Facility Teleconsult Settings [DONE: gate PASS, 723 shared + 5,576 clinic tests pass]
-  4. Milestone 2: Appointment & Payment Policy Management [DONE: gate PASS, 5,676 clinic tests pass]
-  5. Milestone 3: Media Signaling & Vault Recording Encryption [DONE: gate PASS, 5,799 clinic tests pass]
-  6. Milestone 4: Workspace Communications & Media SDK [DONE: gate PASS, 403 tests pass, 0 typecheck/lint errors]
-  7. Milestone 5: Clinic Workstation App Integration [DONE: gate PASS, 130 tests pass, 0 typecheck/lint errors]
-  8. Milestone 6: Final Verification & E2E Testing [DONE: gate PASS, 7,115 tests pass, 101 Tier 5 tests added, 0 integrity violations]
-- **Current phase**: Completed / Reporting
-- **Current focus**: Final Synthesis and Reporting to Caller Parent
+  2. Update PROJECT.md, feature inventory, and milestone decomposition [completed]
+  3. Milestone 7: Backend Services & Deployment Infrastructure [DONE: gate PASS, 3,227 tests pass]
+  4. Milestone 8: Communications SDK Adaptations & Plain Copy [DONE: gate PASS, 473 tests pass]
+  5. Milestone 9: Clinic Workstation UI/UX & Native PiP [DONE: gate PASS, 226 tests pass]
+  6. Milestone 10: Patient App & Browser Guest Portal Video [DONE: gate PASS, all tests pass]
+  7. Milestone 11: Final End-to-End Verification & Audit [DONE: gate PASS, 10/10 suites pass, auditor CLEAN]
+- **Current phase**: 4 (Completed / Reporting)
+- **Current focus**: Final Synthesis, Handoff & Reporting to Caller Parent
 
 ## 🔒 Key Constraints
 - NEVER write, modify, or create source code files directly.
@@ -48,34 +47,34 @@ Finalize the teleconsultation feature across services/clinic-api, packages/comms
 - Strict design token enforcement (zero hex/rgb color literals, zero numeric font sizes or border radii, zero emojis, minimum 44px touch targets).
 - Strict host guard enforcement (zero hardcoded URLs, localhost, or IP addresses).
 - Never reuse a subagent after it has delivered its handoff — always spawn fresh
+- Build directly on existing uncommitted changes in the worktree without reverting them.
+- Do not terminate port 8081 (active Expo web preview).
+- Execute dotnet CLI commands via /Users/macuser/.dotnet/dotnet.
 
 ## Current Parent
-- Conversation ID: b5462d22-b4db-451f-a4e7-64a36a093902
-- Updated: 2026-11-12T23:12:21Z
+- Conversation ID: 7eb99490-674f-4fdc-beb5-320cdcd7c3fb
+- Updated: 2026-11-13T09:23:39Z
 
 ## Key Decisions Made
-- Milestones 1, 2, 3, 4, 5, and 6, along with E2E Testing Track, all 100% complete, reviewed, and approved with zero integrity violations.
-- Milestone 6 Phase 1: 100% E2E tests pass across all tiers.
-- Milestone 6 Phase 2: 101 new Tier 5 adversarial tests created and passing (69 backend security tests, 32 client tests).
-- All 7 repository guardrails confirmed CLEAN by Forensic Auditor.
+- All milestones (M7, M8, M9, M10, M11) completed with gate PASS, full review approvals, and clean forensic audits.
+- 100% of all 10 acceptance verification suites passed cleanly (3,092 tests in acceptance suite, 3,227 .NET tests, 676 TS tests, all linters clean).
+- Zero schema migrations, zero external brokers, zero direct HTTP calls, zero PHI, zero design token violations, and port 8081 untouched throughout.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| explorer_survey_backend | teamwork_explorer | Backend Survey (clinic-api & shared-dotnet) | completed | 51cbdf30-8b7f-4056-91a8-66cd6efc12eb |
-| explorer_survey_comms | teamwork_explorer | Comms SDK Survey (comms-sdk) | completed | d2316baa-9dc4-4d51-8797-8947a88a090f |
-| explorer_survey_frontend | teamwork_explorer | Frontend Workstation Survey (clinic-app) | completed | eccf8d04-fed3-498c-98be-95ef7b454c19 |
-| sub_orch_m1 | self | Milestone 1: Shared Interop & Facility Settings | completed | 7da4453a-f25f-417a-b01d-6761db16c9b3 |
-| sub_orch_m4 | self | Milestone 4: Workspace Comms & Media SDK | completed | 92ca51e0-dd08-4965-bc85-d00bc4aa83f6 |
-| e2e_testing_orch | self | E2E Testing Track Orchestrator | completed | 052a68be-b274-4bc3-ae30-373dea9db4b2 |
-| sub_orch_m2 | self | Milestone 2: Appointment & Payment Policy Management | completed | 7c57abf8-b0e9-4a25-a3d7-c50f21540336 |
-| sub_orch_m3 | self | Milestone 3: Media Signaling & Vault Recording Encryption | completed | e7d18c5f-18dc-4733-b546-64d726c24457 |
-| sub_orch_m5 | self | Milestone 5: Clinic Workstation App Integration | completed | cffb0720-8a7b-4ce6-b6a5-ee9b08ba2d04 |
-| sub_orch_m6 | self | Milestone 6: Final Verification & Adversarial Hardening | completed | ed405502-bb92-43fe-a714-77adccb8ed93 |
+| explorer_survey_backend_r2 | teamwork_explorer | Backend Services & Deployment Survey | completed | 1a90ad1a-4a27-4dd8-a11c-177a13e02758 |
+| explorer_survey_comms_r2 | teamwork_explorer | Comms SDK Adaptations & Plain Copy Survey | completed | fad7ec19-13ee-438d-9550-5dad1a301446 |
+| explorer_survey_apps_r2 | teamwork_explorer | Frontend Applications Survey | completed | d8b993df-805e-46c2-bdb5-532007a0791b |
+| sub_orch_m7 | self | Milestone 7: Backend Services & Deployment | completed | a9c32e48-ce01-4570-85e2-bed48d89b945 |
+| sub_orch_m8 | self | Milestone 8: Comms SDK Adaptations & Plain Copy | completed | fe4c8bb2-4a8a-439d-8532-e83b31497020 |
+| sub_orch_m9 | self | Milestone 9: Clinic Workstation UI/UX & Native PiP | completed | e5ea12eb-09d6-42f4-ae19-73988d6b2a4d |
+| sub_orch_m10 | self | Milestone 10: Patient App & Browser Guest Portal Video | completed | cade03de-6e71-4434-a7b6-9f66f2f6a067 |
+| sub_orch_m11 | self | Milestone 11: Final End-to-End Verification & Audit | completed | caf09ff8-d5ac-43ab-9456-35a4a7384ba9 |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 10 / 16
+- Spawn count: 8 / 16
 - Pending subagents: none
 - Predecessor: none
 - Successor spawned: not yet spawned
@@ -83,20 +82,16 @@ Finalize the teleconsultation feature across services/clinic-api, packages/comms
 - Successor state folder: none
 
 ## Active Timers
-- Heartbeat cron: none (all tasks completed, task-19 cancelled)
-- Safety timer: none
+- Heartbeat cron: none (all tasks complete, task-31 killed)
+- Safety timer: none (all tasks complete, task-356 killed)
 - On succession: kill all timers before spawning successor
 - On context truncation: handle timers as step 4 of the State Recovery section of your prompt says
 
 ## Artifact Index
 - /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/ORIGINAL_REQUEST.md — Original User Request
 - /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/PROJECT.md — Master Project Index & Feature Inventory
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/TEST_INFRA.md — E2E Testing Infrastructure Document
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/TEST_READY.md — E2E Test Suite Ready Manifest
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/orchestrator/DISPATCH.md — Orchestrator Dispatch Log
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m1/handoff.md — Milestone 1 Handoff Report
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m4/handoff.md — Milestone 4 Handoff Report
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m2/handoff.md — Milestone 2 Handoff Report
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m3/handoff.md — Milestone 3 Handoff Report
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/e2e_testing_orch/handoff.md — E2E Testing Track Handoff Report
-- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m5/SCOPE.md — Milestone 5 Scope Document
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m7/handoff.md — Milestone 7 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m8/handoff.md — Milestone 8 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m9/handoff.md — Milestone 9 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m10/handoff.md — Milestone 10 Handoff Report
+- /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/sub_orch_m11/handoff.md — Milestone 11 Handoff Report

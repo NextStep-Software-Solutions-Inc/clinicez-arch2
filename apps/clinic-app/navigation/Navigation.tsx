@@ -1,10 +1,11 @@
 import React from 'react';
-import { ColorValue } from 'react-native';
+import { ColorValue, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import {
   createStaticNavigation,
   DarkTheme,
   DefaultTheme,
+  useNavigation,
   type StaticParamList,
   type Theme as ReactNavigationTheme,
 } from '@react-navigation/native';
@@ -25,6 +26,8 @@ import ResultReviewScreen from './screens/ResultReview.screen';
 import ShareImportScreen from './screens/ShareImport.screen';
 import AuditScreen from './screens/Audit.screen';
 import { parseBooleanRouteParam } from '../components/consultation';
+import ClinicChatDrawerHost from '../components/comms/ClinicChatDrawerHost';
+import TeleconsultWaitingRoomModal from '../components/teleconsult/TeleconsultWaitingRoomModal';
 
 /**
  * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
@@ -41,9 +44,39 @@ const tabIcon = (name: IconName) => ({ color }: { focused: boolean; color: Color
   <Icon name={name} size={theme.sizes.iconMd} color={typeof color === 'string' ? color : theme.colors.textMuted} />
 );
 
+const navStyles = StyleSheet.create({
+  navigatorRoot: {
+    flex: 1,
+  },
+});
+
+function NavigatorOverlays({ children }: { children: React.ReactNode }) {
+  const navigation = useNavigation<any>();
+  const handleNavigateToChart = React.useCallback(
+    (patientId?: string, patientName?: string) => {
+      navigation?.navigate?.('Consultations', {
+        patientId,
+        patientName,
+      });
+    },
+    [navigation],
+  );
+
+  return (
+    <View style={navStyles.navigatorRoot}>
+      {children}
+      <ClinicChatDrawerHost />
+      <TeleconsultWaitingRoomModal onNavigateToChart={handleNavigateToChart} />
+    </View>
+  );
+}
+
 const Tab = createBottomTabNavigator({
   implementation: 'custom',
   tabBar: (props: BottomTabBarProps) => <ResponsiveTabBar {...props} />,
+  layout: ({ children }: { children: React.ReactNode }) => (
+    <NavigatorOverlays>{children}</NavigatorOverlays>
+  ),
   screenOptions: {
     headerShown: false,
     tabBarActiveTintColor: theme.colors.primary,

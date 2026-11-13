@@ -81,6 +81,11 @@ services:
       - Licensing__TtlDays=${LICENSING_TTL_DAYS:-30}
       - Licensing__GraceDays=${LICENSING_GRACE_DAYS:-14}
       - Licensing__RenewBeforeDays=${LICENSING_RENEW_BEFORE_DAYS:-10}
+
+      # LiveKit Teleconsultation Credentials
+      - LIVEKIT_URL=${LIVEKIT_URL:-wss://media.clinicez.internal}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-}
       # Facility license keys (ECDSA P-256, PEM or base64 of PEM; scripts/generate-license-keys.sh). The portal signs licenses with
       # the PRIVATE key (it lives only here) and validates them with the public key. No built-in default keys. The previous public
       # key is only set during a rotation, until every issued license was renewed.

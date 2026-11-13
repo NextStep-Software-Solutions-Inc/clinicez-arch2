@@ -260,7 +260,8 @@ public sealed record CommsCallStateChangedPayload(
     string? RoomName,
     string? JoinToken,
     int StateVersion,
-    DateTime ChangedAtUtc);
+    DateTime ChangedAtUtc,
+    string? RelayUrl = null);
 
 /// <summary>Payload for <c>comms.call.event</c>.</summary>
 public sealed record CommsCallEventPayload(

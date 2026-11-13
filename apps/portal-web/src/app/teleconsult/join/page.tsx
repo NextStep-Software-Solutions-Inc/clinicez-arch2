@@ -29,7 +29,7 @@ export default function TeleconsultJoinPage() {
               Preparing secure teleconsultation session...
             </p>
             <p className="text-xs text-muted-foreground">
-              Verifying cryptographic environment and establishing zero-PHI channel.
+              Connecting securely to your private consultation room.
             </p>
           </div>
         </div>

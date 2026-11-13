@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -37,16 +38,33 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   onSubmitConsent,
   onEnterCall,
   onCancelCall,
+  isCameraEnabled,
+  isMicEnabled,
+  onToggleCamera,
+  onToggleMic,
+  micLevel,
+  renderVideoPreview,
+  renderIcon,
+  hideHeader = false,
+  mediaModeLabel,
   isLoading = false,
   error = null,
-  style
+  style,
+  videoOrientation = 'portrait',
+  onToggleOrientation,
+  patientLink,
+  onSharePatientLink
 }) => {
-  const [isCameraActive, setIsCameraActive] = useState(true);
-  const [isMicActive, setIsMicActive] = useState(true);
+  const [localCameraActive, setLocalCameraActive] = useState(true);
+  const [localMicActive, setLocalMicActive] = useState(true);
   const [overrideModalVisible, setOverrideModalVisible] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
+  const [isAdmitting, setIsAdmitting] = useState(false);
+
+  const isCameraActive = isCameraEnabled ?? localCameraActive;
+  const isMicActive = isMicEnabled ?? localMicActive;
 
   // YAKAP enlistment is informational; it does NOT automatically exempt prepayment unless legacy isYakapExempt is true
   const isYakapEnlisted = Boolean(hasActiveYakapEnlistment ?? isYakapExempt);
@@ -75,6 +93,32 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
     }
   };
 
+  const handleToggleMic = () => {
+    if (onToggleMic) {
+      void onToggleMic();
+    } else {
+      setLocalMicActive((prev) => !prev);
+    }
+  };
+
+  const handleToggleCamera = () => {
+    if (onToggleCamera) {
+      void onToggleCamera();
+    } else {
+      setLocalCameraActive((prev) => !prev);
+    }
+  };
+
+  const handleAdmitPress = async () => {
+    if (!onAdmitPatient || isPrepaidBlocked || isAdmitting) return;
+    setIsAdmitting(true);
+    try {
+      await onAdmitPatient();
+    } finally {
+      setIsAdmitting(false);
+    }
+  };
+
   const handleOverrideSubmit = async () => {
     if (!canSubmitOverride) return;
     setIsSubmittingOverride(true);
@@ -91,21 +135,29 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
     }
   };
 
+  const computedMicPercent = !isMicActive
+    ? 0
+    : typeof micLevel === 'number'
+      ? Math.max(8, Math.min(100, Math.round(micLevel)))
+      : 65;
+
   return (
     <View style={[styles.container, style]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Teleconsultation Waiting Room</Text>
-        <Text style={styles.headerSubtitle}>
-          Appointment: {scheduledTime} • ID: {appointmentId || callId}
-        </Text>
-      </View>
+      {/* Header (can be suppressed when hosted inside a workstation modal header) */}
+      {!hideHeader && (
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Teleconsultation Waiting Room</Text>
+          <Text style={styles.headerSubtitle}>
+            Appointment: {scheduledTime} • ID: {appointmentId || callId}
+          </Text>
+        </View>
+      )}
 
       {/* Content States */}
       {isLoading ? (
         <View style={styles.stateContainer}>
           <ActivityIndicator size="small" color={lightColors.primary} />
-          <Text style={styles.stateText}>Staging teleconsultation session...</Text>
+          <Text style={styles.stateText}>Preparing consultation...</Text>
         </View>
       ) : error ? (
         <View style={styles.stateContainer}>
@@ -114,187 +166,319 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
           <Text style={styles.errorSubtitle}>{error}</Text>
         </View>
       ) : (
-        <View style={styles.body}>
-          {/* Video Preview Box */}
-          <View style={styles.previewBox}>
-            <View style={styles.videoPlaceholder}>
-              <Text style={styles.videoPlaceholderIcon}>{isCameraActive ? 'CAM' : 'OFF'}</Text>
-              <Text style={styles.videoPlaceholderText}>
-                {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
-              </Text>
-            </View>
-
-            {/* Audio meter */}
-            <View style={styles.audioMeterContainer}>
-              <Text style={styles.audioMeterLabel}>Mic Level: </Text>
-              <View style={styles.audioMeterBar}>
-                <View style={[styles.audioMeterFill, !isMicActive && styles.audioMeterMuted]} />
-              </View>
-            </View>
-
-            {/* Floating Controls Bar */}
-            <View style={styles.mediaBar}>
-              <TouchableOpacity
-                style={[styles.mediaButton, !isMicActive && styles.mediaButtonOff]}
-                onPress={() => setIsMicActive((prev) => !prev)}
-                accessibilityRole="button"
-                accessibilityLabel={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
+        <View style={styles.bodyWrapper}>
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.bodyContent}
+          >
+            {/* Left / Top Column: Live Video Staging Box */}
+            <View style={styles.previewColumn}>
+              <View
+                style={[
+                  styles.previewBox,
+                  videoOrientation === 'landscape' ? styles.previewBoxLandscape : styles.previewBoxPortrait
+                ]}
               >
-                <Text style={styles.mediaButtonText}>{isMicActive ? 'MIC' : 'MUTE'}</Text>
-              </TouchableOpacity>
+                {renderVideoPreview ? (
+                  renderVideoPreview()
+                ) : (
+                  <View style={styles.videoPlaceholder}>
+                    {renderIcon ? (
+                      renderIcon(isCameraActive ? 'video' : 'videoOff', {
+                        size: 32,
+                        color: isCameraActive ? lightColors.onPrimary : lightColors.textLight
+                      })
+                    ) : (
+                      <Text style={styles.videoPlaceholderIcon}>
+                        {isCameraActive ? 'CAM' : 'OFF'}
+                      </Text>
+                    )}
+                    <Text style={styles.videoPlaceholderText}>
+                      {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
+                    </Text>
+                  </View>
+                )}
 
-              <TouchableOpacity
-                style={[styles.mediaButton, !isCameraActive && styles.mediaButtonOff]}
-                onPress={() => setIsCameraActive((prev) => !prev)}
-                accessibilityRole="button"
-                accessibilityLabel={isCameraActive ? 'Stop video' : 'Start video'}
-              >
-                <Text style={styles.mediaButtonText}>{isCameraActive ? 'CAM' : 'OFF'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Appointment Details Card */}
-          <View style={styles.detailsCard}>
-            <View style={styles.detailsRow}>
-              <Text style={styles.detailsLabel}>Patient:</Text>
-              <Text style={styles.detailsValue}>{patientName}</Text>
-            </View>
-            <View style={styles.detailsRow}>
-              <Text style={styles.detailsLabel}>Attending Clinician:</Text>
-              <Text style={styles.detailsValue}>{clinicianName}</Text>
-            </View>
-          </View>
-
-          {/* Informational YAKAP Badge (Non-Mutating) */}
-          {isYakapEnlisted && (
-            <View style={styles.yakapCard}>
-              <View style={styles.yakapBadgeHeader}>
-                <View style={styles.yakapPill}>
-                  <Text style={styles.yakapPillText}>PHILHEALTH YAKAP</Text>
+                {/* Audio meter + Media mode pill */}
+                <View style={styles.topOverlayRow}>
+                  <View style={styles.audioMeterContainer}>
+                    <Text style={styles.audioMeterLabel}>Mic Level: </Text>
+                    <View style={styles.audioMeterBar}>
+                      <View
+                        style={[
+                          styles.audioMeterFill,
+                          { width: `${computedMicPercent}%` },
+                          !isMicActive && styles.audioMeterMuted
+                        ]}
+                      />
+                    </View>
+                  </View>
+                  {mediaModeLabel ? (
+                    <View style={styles.mediaModeBadge}>
+                      <Text style={styles.mediaModeBadgeText}>{mediaModeLabel}</Text>
+                    </View>
+                  ) : null}
                 </View>
-                <Text style={styles.yakapBadgeTitle}>Active Konsulta Enlistment</Text>
-              </View>
-              <Text style={styles.yakapBadgeDescription}>
-                Patient has an active PhilHealth YAKAP enlistment. Staff may adjust the payment policy to Exempt or Postpaid if covered under primary care capitation.
-              </Text>
-            </View>
-          )}
 
-          {/* Staff Payment Policy Selector */}
-          {isStaffOrDoctor && onChangePaymentPolicy && (
-            <View style={styles.policyCard}>
-              <Text style={styles.policyCardTitle}>Facility Payment Policy</Text>
-              <View style={styles.policySelectorRow}>
-                {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((policy) => {
-                  const isSelected = paymentPolicy === policy;
-                  return (
+                {/* Floating Controls Bar */}
+                <View style={styles.mediaBar}>
+                  <TouchableOpacity
+                    style={[styles.mediaButton, !isMicActive && styles.mediaButtonOff]}
+                    onPress={handleToggleMic}
+                    accessibilityRole="button"
+                    accessibilityLabel={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
+                  >
+                    {renderIcon ? (
+                      renderIcon(isMicActive ? 'mic' : 'micOff', {
+                        size: 18,
+                        color: isMicActive ? lightColors.text : lightColors.onPrimary
+                      })
+                    ) : (
+                      <Text style={[styles.mediaButtonText, !isMicActive && styles.mediaButtonTextOff]}>
+                        {isMicActive ? 'MIC' : 'MUTE'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.mediaButton, !isCameraActive && styles.mediaButtonOff]}
+                    onPress={handleToggleCamera}
+                    accessibilityRole="button"
+                    accessibilityLabel={isCameraActive ? 'Stop video' : 'Start video'}
+                  >
+                    {renderIcon ? (
+                      renderIcon(isCameraActive ? 'video' : 'videoOff', {
+                        size: 18,
+                        color: isCameraActive ? lightColors.text : lightColors.onPrimary
+                      })
+                    ) : (
+                      <Text style={[styles.mediaButtonText, !isCameraActive && styles.mediaButtonTextOff]}>
+                        {isCameraActive ? 'CAM' : 'OFF'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+
+                  {onToggleOrientation && (
                     <TouchableOpacity
-                      key={policy}
-                      style={[styles.policyOptionButton, isSelected && styles.policyOptionButtonSelected]}
-                      onPress={() => handlePolicyChange(policy)}
-                      disabled={isUpdatingPolicy || isSelected}
+                      testID="btn-toggle-orientation"
+                      style={styles.mediaButton}
+                      onPress={onToggleOrientation}
                       accessibilityRole="button"
-                      accessibilityLabel={`Set payment policy to ${policy}`}
+                      accessibilityLabel="Toggle video orientation"
                     >
-                      <Text style={[styles.policyOptionText, isSelected && styles.policyOptionTextSelected]}>
-                        {policy}
+                      {renderIcon ? (
+                        renderIcon('rotate', { size: 18, color: lightColors.text })
+                      ) : (
+                        <Text style={styles.mediaButtonText}>ROTATE</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {(onSharePatientLink || patientLink) && (
+                    <TouchableOpacity
+                      testID="btn-share-patient-link"
+                      style={styles.mediaButton}
+                      onPress={() => onSharePatientLink?.()}
+                      accessibilityRole="button"
+                      accessibilityLabel="Share patient invite link"
+                    >
+                      {renderIcon ? (
+                        renderIcon('share', { size: 18, color: lightColors.text })
+                      ) : (
+                        <Text style={styles.mediaButtonText}>SHARE</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* Right / Bottom Column: Details, Policy & Consent Cards */}
+            <View style={styles.cardsColumn}>
+              {/* Patient Invite Link Card */}
+              {patientLink && (
+                <View style={styles.patientLinkCard}>
+                  <View style={styles.patientLinkHeader}>
+                    <Text style={styles.patientLinkLabel}>Patient Invite Link:</Text>
+                    {onSharePatientLink && (
+                      <TouchableOpacity
+                        testID="btn-share-patient-link-card"
+                        style={styles.shareLinkBadge}
+                        onPress={() => onSharePatientLink()}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share patient invite link"
+                      >
+                        <Text style={styles.shareLinkBadgeText}>Share / Copy</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <Text style={styles.patientLinkValue} numberOfLines={1} ellipsizeMode="middle">
+                    {patientLink}
+                  </Text>
+                </View>
+              )}
+
+              {/* Appointment Details Card */}
+              <View style={styles.detailsCard}>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Patient:</Text>
+                  <Text style={styles.detailsValue}>{patientName}</Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Doctor / Clinician:</Text>
+                  <Text style={styles.detailsValue}>{clinicianName}</Text>
+                </View>
+                <View style={styles.detailsRowLast}>
+                  <Text style={styles.detailsLabel}>Scheduled:</Text>
+                  <Text style={styles.detailsValue}>{scheduledTime}</Text>
+                </View>
+              </View>
+
+              {/* Informational YAKAP Badge (Non-Mutating) */}
+              {isYakapEnlisted && (
+                <View style={styles.yakapCard}>
+                  <View style={styles.yakapBadgeHeader}>
+                    <View style={styles.yakapPill}>
+                      <Text style={styles.yakapPillText}>PHILHEALTH YAKAP</Text>
+                    </View>
+                    <Text style={styles.yakapBadgeTitle}>
+                      {isYakapExempt
+                        ? 'YAKAP Auto-Exempt • Active Konsulta Enlistment Verified'
+                        : 'Active Konsulta Enlistment Verified'}
+                    </Text>
+                  </View>
+                  <Text style={styles.yakapBadgeDescription}>
+                    Patient has an active PhilHealth YAKAP enlistment. Staff may adjust the payment policy to Exempt or Postpaid if covered under primary care capitation.
+                  </Text>
+                </View>
+              )}
+
+              {/* Staff Payment Policy Selector */}
+              {isStaffOrDoctor && onChangePaymentPolicy && (
+                <View style={styles.policyCard}>
+                  <Text style={styles.policyCardTitle}>Facility Payment Policy</Text>
+                  <View style={styles.policySelectorRow}>
+                    {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((policy) => {
+                      const isSelected = paymentPolicy === policy;
+                      return (
+                        <TouchableOpacity
+                          key={policy}
+                          style={[styles.policyOptionButton, isSelected && styles.policyOptionButtonSelected]}
+                          onPress={() => handlePolicyChange(policy)}
+                          disabled={isUpdatingPolicy || isSelected}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Set payment policy to ${policy}`}
+                        >
+                          <Text style={[styles.policyOptionText, isSelected && styles.policyOptionTextSelected]}>
+                            {policy}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Payment Gate Banner */}
+              {isPrepaidBlocked ? (
+                <View style={styles.blockedCard}>
+                  {renderIcon ? (
+                    renderIcon('lock', { size: 18, color: lightColors.warningText })
+                  ) : (
+                    <Text style={styles.blockedIcon}>LOCK</Text>
+                  )}
+                  <View style={styles.gateTextContainer}>
+                    <Text style={styles.blockedTitle}>Payment Required Before Consultation</Text>
+                    <Text style={styles.blockedSubtitle}>
+                      Prepayment Gate: Settlement Required. Admission will unlock immediately upon cashier or online payment.
+                    </Text>
+                    {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
+                      <TouchableOpacity
+                        style={styles.overrideButton}
+                        onPress={() => setOverrideModalVisible(true)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Staff Plain-Note Override"
+                      >
+                        <Text style={styles.overrideButtonText}>Staff Admission Override</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.clearedCard}>
+                  {renderIcon ? (
+                    renderIcon('shieldCheck', { size: 18, color: lightColors.routineText })
+                  ) : (
+                    <Text style={styles.clearedIcon}>OK</Text>
+                  )}
+                  <View style={styles.gateTextContainer}>
+                    <Text style={styles.clearedTitle}>
+                      {paymentPolicy === 'Exempt' ? 'Admission Cleared (Exempt)' : 'Payment Cleared'}
+                    </Text>
+                    <Text style={styles.clearedSubtitle}>
+                      {paymentPolicy === 'Exempt'
+                        ? 'Consultation is exempt from prepayment. Ready for admission.'
+                        : 'Payment confirmed. Ready for consultation.'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Informed Recording Consent (hidden cleanly when disabled at facility/workflow level) */}
+              {recordingConsentStatus !== 'Disabled' && (
+                <View style={styles.consentCard}>
+                  <Text style={styles.consentTitle}>Call Recording Notice</Text>
+                  <Text style={styles.consentSubtitle}>
+                    Informed Recording Disclosure. This teleconsultation may be recorded for medical records under RA 10173 and facility policy.
+                  </Text>
+
+                  <View style={styles.consentActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.consentButton,
+                        recordingConsentStatus === 'Approved' && styles.consentButtonApproved
+                      ]}
+                      onPress={() => onSubmitConsent && onSubmitConsent(true)}
+                      disabled={recordingConsentStatus === 'Approved'}
+                      accessibilityRole="button"
+                      accessibilityLabel="Consent to session recording"
+                    >
+                      <Text
+                        style={[
+                          styles.consentButtonText,
+                          recordingConsentStatus === 'Approved' && styles.consentButtonTextApproved
+                        ]}
+                      >
+                        Consent to Recording
                       </Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.consentButton,
+                        recordingConsentStatus === 'Rejected' && styles.consentButtonRejected
+                      ]}
+                      onPress={() => onSubmitConsent && onSubmitConsent(false, 'Patient declined recording')}
+                      disabled={recordingConsentStatus === 'Rejected'}
+                      accessibilityRole="button"
+                      accessibilityLabel="Consult without recording"
+                    >
+                      <Text
+                        style={[
+                          styles.consentButtonText,
+                          recordingConsentStatus === 'Rejected' && styles.consentButtonTextRejected
+                        ]}
+                      >
+                        Consult Without Recording
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
-          )}
+          </ScrollView>
 
-          {/* Payment Gate Banner */}
-          {isPrepaidBlocked ? (
-            <View style={styles.blockedCard}>
-              <Text style={styles.blockedIcon}>LOCK</Text>
-              <View style={styles.gateTextContainer}>
-                <Text style={styles.blockedTitle}>Prepayment Gate: Settlement Required</Text>
-                <Text style={styles.blockedSubtitle}>
-                  This consultation is prepaid. Admission will unlock immediately upon cashier or online payment.
-                </Text>
-                {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
-                  <TouchableOpacity
-                    style={styles.overrideButton}
-                    onPress={() => setOverrideModalVisible(true)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open plain-note override modal"
-                  >
-                    <Text style={styles.overrideButtonText}>Staff Plain-Note Override</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.clearedCard}>
-              <Text style={styles.clearedIcon}>OK</Text>
-              <View style={styles.gateTextContainer}>
-                <Text style={styles.clearedTitle}>
-                  {paymentPolicy === 'Exempt' ? 'Admission Cleared (Exempt)' : 'Payment Cleared'}
-                </Text>
-                <Text style={styles.clearedSubtitle}>
-                  {paymentPolicy === 'Exempt'
-                    ? 'Consultation is exempt from prepayment. Ready for admission.'
-                    : 'Payment confirmed. Ready for consultation.'}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Informed Recording Consent */}
-          <View style={styles.consentCard}>
-            <Text style={styles.consentTitle}>Informed Recording Disclosure</Text>
-            <Text style={styles.consentSubtitle}>
-              This teleconsultation may be recorded for medical records under RA 10173 and facility policy.
-            </Text>
-
-            <View style={styles.consentActions}>
-              <TouchableOpacity
-                style={[
-                  styles.consentButton,
-                  recordingConsentStatus === 'Approved' && styles.consentButtonApproved
-                ]}
-                onPress={() => onSubmitConsent && onSubmitConsent(true)}
-                disabled={recordingConsentStatus === 'Approved'}
-                accessibilityRole="button"
-                accessibilityLabel="Consent to session recording"
-              >
-                <Text
-                  style={[
-                    styles.consentButtonText,
-                    recordingConsentStatus === 'Approved' && styles.consentButtonTextApproved
-                  ]}
-                >
-                  Consent to Recording
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.consentButton,
-                  recordingConsentStatus === 'Rejected' && styles.consentButtonRejected
-                ]}
-                onPress={() => onSubmitConsent && onSubmitConsent(false, 'Patient declined recording')}
-                disabled={recordingConsentStatus === 'Rejected'}
-                accessibilityRole="button"
-                accessibilityLabel="Consult without recording"
-              >
-                <Text
-                  style={[
-                    styles.consentButtonText,
-                    recordingConsentStatus === 'Rejected' && styles.consentButtonTextRejected
-                  ]}
-                >
-                  Consult Without Recording
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Main Action Buttons */}
+          {/* Pinned Main Action Buttons */}
           <View style={styles.bottomBar}>
             <TouchableOpacity style={styles.cancelButton} onPress={onCancelCall} accessibilityRole="button">
               <Text style={styles.cancelButtonText}>Cancel / Leave</Text>
@@ -302,12 +486,14 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
 
             {isDoctor && onAdmitPatient && (
               <TouchableOpacity
-                style={[styles.admitButton, isPrepaidBlocked && styles.admitButtonDisabled]}
-                onPress={onAdmitPatient}
-                disabled={isPrepaidBlocked}
+                style={[styles.admitButton, (isPrepaidBlocked || isAdmitting) && styles.admitButtonDisabled]}
+                onPress={handleAdmitPress}
+                disabled={isPrepaidBlocked || isAdmitting}
                 accessibilityRole="button"
               >
-                <Text style={styles.admitButtonText}>Admit Patient to Call</Text>
+                <Text style={styles.admitButtonText}>
+                  {isAdmitting ? 'Admitting Patient...' : 'Admit Patient to Call'}
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -327,13 +513,14 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
         </View>
       )}
 
-      {/* Staff Plain-Note Override Modal */}
-      <Modal
-        visible={overrideModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOverrideModalVisible(false)}
-      >
+      {/* Staff Plain-Note Override Modal (only mounted when open to avoid dormant FocusTrap interference) */}
+      {overrideModalVisible ? (
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOverrideModalVisible(false)}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Staff Admission Override</Text>
@@ -380,7 +567,8 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
             </View>
           </View>
         </View>
-      </Modal>
+        </Modal>
+      ) : null}
     </View>
   );
 };
@@ -434,14 +622,33 @@ const styles = StyleSheet.create({
     color: lightColors.textMuted,
     textAlign: 'center'
   },
-  body: {
-    flex: 1,
-    padding: spaceScale.md
+  bodyWrapper: {
+    flex: 1
+  },
+  scrollArea: {
+    flex: 1
+  },
+  bodyContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    padding: spaceScale.md,
+    paddingBottom: spaceScale.lg,
+    gap: spaceScale.lg
+  },
+  previewColumn: {
+    flexGrow: 1,
+    flexBasis: 340,
+    minWidth: 280
+  },
+  cardsColumn: {
+    flexGrow: 1,
+    flexBasis: 300,
+    minWidth: 280
   },
   previewBox: {
-    aspectRatio: 16 / 9,
     width: '100%',
-    backgroundColor: lightColors.surfaceHighlight,
+    backgroundColor: lightColors.surfaceInverse,
     borderRadius: radiusScale.md,
     overflow: 'hidden',
     position: 'relative',
@@ -449,29 +656,54 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
+  previewBoxPortrait: {
+    aspectRatio: 3 / 4
+  },
+  previewBoxLandscape: {
+    aspectRatio: 16 / 9
+  },
   videoPlaceholder: {
-    alignItems: 'center'
+    alignItems: 'center',
+    gap: spaceScale.xs
   },
   videoPlaceholderIcon: {
-    fontSize: fontSizeScale['3xl'],
+    fontSize: fontSizeScale['2xl'],
     fontWeight: '700',
-    color: lightColors.textMuted,
-    marginBottom: spaceScale.xs
+    color: lightColors.textLight,
+    marginBottom: spaceScale.xxs
   },
   videoPlaceholderText: {
     fontSize: fontSizeScale.sm,
-    color: lightColors.textSecondary
+    color: lightColors.textLight
   },
-  audioMeterContainer: {
+  topOverlayRow: {
     position: 'absolute',
     top: spaceScale.sm,
     left: spaceScale.sm,
+    right: spaceScale.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spaceScale.xs
+  },
+  audioMeterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: lightColors.overlay,
     paddingHorizontal: spaceScale.sm,
     paddingVertical: spaceScale.xxs,
     borderRadius: radiusScale.xs
+  },
+  mediaModeBadge: {
+    backgroundColor: lightColors.overlay,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.xxs,
+    borderRadius: radiusScale.xs
+  },
+  mediaModeBadgeText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: lightColors.onPrimary
   },
   audioMeterLabel: {
     fontSize: fontSizeScale.xs,
@@ -508,12 +740,53 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   mediaButtonOff: {
-    backgroundColor: lightColors.emergencyBg
+    backgroundColor: lightColors.emergency
   },
   mediaButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.text
+  },
+  mediaButtonTextOff: {
+    color: lightColors.onPrimary
+  },
+  patientLinkCard: {
+    backgroundColor: lightColors.surfaceHighlight,
+    borderColor: lightColors.border,
+    borderWidth: sizes.borderWidth,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    marginBottom: spaceScale.md,
+    gap: spaceScale.xs
+  },
+  patientLinkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  patientLinkLabel: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.text
+  },
+  shareLinkBadge: {
+    minHeight: sizes.touchTarget,
+    minWidth: sizes.touchTarget,
+    paddingHorizontal: spaceScale.sm,
+    paddingVertical: spaceScale.xxs,
+    backgroundColor: lightColors.primary,
+    borderRadius: radiusScale.xs,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  shareLinkBadgeText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.onPrimary
+  },
+  patientLinkValue: {
+    fontSize: fontSizeScale.xs,
+    color: lightColors.primary
   },
   detailsCard: {
     backgroundColor: lightColors.surface,
@@ -527,6 +800,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: spaceScale.xs
+  },
+  detailsRowLast: {
+    flexDirection: 'row',
+    justifyContent: 'space-between'
   },
   detailsLabel: {
     fontSize: fontSizeScale.xs,
@@ -742,8 +1019,11 @@ const styles = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
     gap: spaceScale.sm,
-    marginTop: 'auto',
-    paddingTop: spaceScale.md
+    paddingHorizontal: spaceScale.md,
+    paddingVertical: spaceScale.sm,
+    borderTopWidth: 1,
+    borderTopColor: lightColors.border,
+    backgroundColor: lightColors.surface
   },
   cancelButton: {
     flex: 1,

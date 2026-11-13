@@ -120,7 +120,7 @@ public sealed class EndTeleconsultCallCommandHandler : IRequestHandler<EndTeleco
         _publisher.Enqueue(
             InteropTypes.CommsCallStateChanged,
             Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic),
-            Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic, InteropServices.Comms),
+            Party.ForPatient(appointment.PatientId.ToString()),
             callId,
             new CommsCallStateChangedPayload(
                 CallId: callId,
@@ -132,7 +132,8 @@ public sealed class EndTeleconsultCallCommandHandler : IRequestHandler<EndTeleco
                 RoomName: roomName,
                 JoinToken: null,
                 StateVersion: 2,
-                ChangedAtUtc: now
+                ChangedAtUtc: now,
+                RelayUrl: null
             ));
 
         // 6. Immutable WORM Audit Entry

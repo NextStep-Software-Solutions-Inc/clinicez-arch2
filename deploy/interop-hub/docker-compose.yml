@@ -113,6 +113,14 @@ services:
       - Hub__Bootstrap__Clients__7__Kind=CloudService
       - Hub__Bootstrap__Clients__7__PublicKey=${COMMS_HUB_SIGNING_PUBLIC_KEY:?COMMS_HUB_SIGNING_PUBLIC_KEY must be set}
 
+      # 8: Media Broker (PlatformService)
+      - Hub__Bootstrap__Clients__8__ClientId=${MEDIA_HUB_CLIENT_ID:-media-broker}
+      - Hub__Bootstrap__Clients__8__Secret=${MEDIA_HUB_CLIENT_SECRET:?MEDIA_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__8__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__8__Service=media
+      - Hub__Bootstrap__Clients__8__Kind=PlatformService
+      - Hub__Bootstrap__Clients__8__PublicKey=${MEDIA_HUB_SIGNING_PUBLIC_KEY:?MEDIA_HUB_SIGNING_PUBLIC_KEY must be set}
+
       # Verify envelope signatures on POST /v1/messages (default true outside Development). Only set false for a temporary
       # migration of clients that cannot sign yet.
       - Hub__Signing__Required=${HUB_SIGNING_REQUIRED:-true}

@@ -52,6 +52,7 @@ jobs:
           - { name: portal-api, dockerfile: services/portal-api/Dockerfile, title: "Clinic EZ Portal API" }
           - { name: billing-api, dockerfile: services/billing-api/Dockerfile, title: "Clinic EZ Billing API" }
           - { name: comms-api, dockerfile: services/comms-api/Dockerfile, title: "Clinic EZ Comms API" }
+          - { name: media-broker, dockerfile: services/media-broker/Dockerfile, title: "Clinic EZ Media Broker" }
           - { name: philhealth-proxy, dockerfile: services/philhealth-proxy/Dockerfile, title: "Clinic EZ PhilHealth proxy" }
           - { name: interop-hub, dockerfile: services/interop-hub/Dockerfile, title: "Clinic EZ Interop Hub" }
           - { name: clinic-web, dockerfile: apps/clinic-app/deploy/Dockerfile.web, title: "Clinic EZ Clinic web app" }

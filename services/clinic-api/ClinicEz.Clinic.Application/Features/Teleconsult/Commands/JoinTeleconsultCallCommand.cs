@@ -205,7 +205,7 @@ public sealed class JoinTeleconsultCallCommandHandler : IRequestHandler<JoinTele
         _publisher.Enqueue(
             InteropTypes.CommsCallStateChanged,
             Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic),
-            Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic, InteropServices.Comms),
+            Party.ForPatient(appointment.PatientId.ToString()),
             callId,
             new CommsCallStateChangedPayload(
                 CallId: callId,
@@ -217,7 +217,8 @@ public sealed class JoinTeleconsultCallCommandHandler : IRequestHandler<JoinTele
                 RoomName: roomName,
                 JoinToken: patientToken,
                 StateVersion: 1,
-                ChangedAtUtc: DateTime.UtcNow
+                ChangedAtUtc: DateTime.UtcNow,
+                RelayUrl: relayUrl
             ));
 
         // 8. Immutable WORM Audit Entry

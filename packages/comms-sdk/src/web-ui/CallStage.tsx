@@ -33,12 +33,23 @@ export const CallStage: React.FC<WebCallStageProps> = ({
   renderChatDrawer,
   renderWorkstationAction,
   renderCustomVideoSurface,
+  renderIcon,
+  hideHeader = false,
+  remoteStatusLabel,
   onEndCall,
   isE2eeActive = true,
   networkQuality = 'good',
   isLoading = false,
   error = null,
-  className = ''
+  className = '',
+  videoOrientation = 'portrait',
+  onToggleOrientation,
+  patientLink,
+  onSharePatientLink,
+  onDockCall,
+  onTogglePip,
+  isPipSupported = true,
+  isPipActive = false
 }) => {
   const participantInitials = useMemo(() => {
     if (!participantName) return '??';
@@ -53,38 +64,40 @@ export const CallStage: React.FC<WebCallStageProps> = ({
   return (
     <div className={`flex flex-col h-full bg-slate-950 text-slate-100 ${className}`}>
       {/* Top Header Bar */}
-      <header className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-sm font-bold text-slate-100">{participantName}</h1>
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
-              {isE2eeActive && (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-800 text-teal-100">
-                  E2EE Encrypted
-                </span>
-              )}
-              <span className="font-mono text-[11px]">Room: {roomName || callId}</span>
+      {!hideHeader && (
+        <header className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-sm font-bold text-slate-100">{participantName}</h1>
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                {isE2eeActive && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-800 text-teal-100">
+                    E2EE Encrypted
+                  </span>
+                )}
+                <span className="font-mono text-[11px]">Room: {roomName || callId}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          {renderWorkstationAction && (
-            <div className="mr-1">
-              {renderWorkstationAction()}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {renderWorkstationAction && (
+              <div className="mr-1">
+                {renderWorkstationAction()}
+              </div>
+            )}
 
-          <button
-            type="button"
-            onClick={onEndCall}
-            className="min-h-[44px] px-4 py-2 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition-colors"
-            aria-label="End consultation call"
-          >
-            End Call
-          </button>
-        </div>
-      </header>
+            <button
+              type="button"
+              onClick={onEndCall}
+              className="min-h-[44px] px-4 py-2 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition-colors"
+              aria-label="End consultation call"
+            >
+              End Call
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Persistent Red REC Banner with Single-Party Stop */}
       {isRecording && (
@@ -94,7 +107,7 @@ export const CallStage: React.FC<WebCallStageProps> = ({
             <span>REC</span>
           </div>
           <span className="font-mono font-bold">{formatDuration(recordingDurationSeconds)}</span>
-          <span className="hidden sm:inline text-red-300">Encrypted Vault Recording Active</span>
+          <span className="hidden sm:inline text-red-300">Recording in progress</span>
           {onStopRecording && canStopRecording && (
             <button
               type="button"
@@ -135,13 +148,22 @@ export const CallStage: React.FC<WebCallStageProps> = ({
               </div>
               <h2 className="text-lg font-bold text-slate-100">{participantName}</h2>
               <p className="text-xs text-slate-400">
-                {isCameraEnabled ? 'Active Clinical Stream' : 'Camera Feed Muted'}
+                {remoteStatusLabel ??
+                  (isCameraEnabled
+                    ? 'Connected • Waiting for Patient Video Stream'
+                    : 'Connected • Local Camera Paused')}
               </p>
             </div>
           )}
 
           {/* Picture-in-Picture Local Self-Preview Canvas */}
-          <div className="absolute bottom-4 right-4 w-44 sm:w-56 aspect-video rounded-xl bg-slate-800 border border-slate-700 shadow-xl overflow-hidden flex items-center justify-center">
+          <div
+            className={`absolute bottom-4 right-4 ${
+              videoOrientation === 'landscape'
+                ? 'w-44 sm:w-56 aspect-video'
+                : 'w-28 sm:w-36 aspect-[3/4]'
+            } rounded-xl bg-slate-800 border border-slate-700 shadow-xl overflow-hidden flex items-center justify-center`}
+          >
             {localVideoSurface ?? (
               <span className="text-xs font-semibold text-slate-300">
                 {isCameraEnabled ? selfName : `${selfName} (Cam Off)`}
@@ -161,7 +183,11 @@ export const CallStage: React.FC<WebCallStageProps> = ({
               }`}
               aria-label={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
             >
-              {isMicEnabled ? 'MIC' : 'MUTE'}
+              {renderIcon
+                ? renderIcon(isMicEnabled ? 'mic' : 'micOff', { size: 18 })
+                : isMicEnabled
+                  ? 'MIC'
+                  : 'MUTE'}
             </button>
 
             <button
@@ -174,21 +200,73 @@ export const CallStage: React.FC<WebCallStageProps> = ({
               }`}
               aria-label={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
             >
-              {isCameraEnabled ? 'CAM' : 'OFF'}
+              {renderIcon
+                ? renderIcon(isCameraEnabled ? 'video' : 'videoOff', { size: 18 })
+                : isCameraEnabled
+                  ? 'CAM'
+                  : 'OFF'}
             </button>
 
             {onToggleScreenShare && (
               <button
                 type="button"
                 onClick={onToggleScreenShare}
-                className={`min-h-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                className={`min-h-[44px] min-w-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
                   isScreenSharing
                     ? 'bg-teal-700 text-white'
                     : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
                 }`}
                 aria-label={isScreenSharing ? 'Stop screen sharing' : 'Start screen sharing'}
               >
-                {isScreenSharing ? 'SHARING' : 'SHARE'}
+                {renderIcon
+                  ? renderIcon(isScreenSharing ? 'screenShareOff' : 'screenShare', { size: 18 })
+                  : isScreenSharing
+                    ? 'SHARING'
+                    : 'SHARE'}
+              </button>
+            )}
+
+            {onDockCall && (
+              <button
+                type="button"
+                id="btn-dock-call"
+                data-testid="btn-dock-call"
+                onClick={() => void onDockCall()}
+                className="min-h-[44px] min-w-[44px] px-3.5 rounded-full bg-slate-800 text-slate-100 hover:bg-slate-700 flex items-center justify-center text-xs font-bold transition-colors"
+                aria-label="Dock call and open chart"
+                title="Dock call and open chart"
+              >
+                {renderIcon ? renderIcon('dock', { size: 18 }) : 'DOCK'}
+              </button>
+            )}
+
+            {onTogglePip && isPipSupported !== false && (
+              <button
+                type="button"
+                id="btn-toggle-pip"
+                data-testid="btn-toggle-pip"
+                onClick={() => void onTogglePip()}
+                className={`min-h-[44px] min-w-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                  isPipActive ? 'bg-teal-700 text-white' : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+                }`}
+                aria-label={isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
+                title={isPipActive ? 'Exit Picture-in-Picture' : 'Picture-in-Picture'}
+              >
+                {renderIcon ? renderIcon('pip', { size: 18 }) : 'PIP'}
+              </button>
+            )}
+
+            {onToggleOrientation && (
+              <button
+                type="button"
+                id="btn-toggle-orientation"
+                data-testid="btn-toggle-orientation"
+                onClick={() => void onToggleOrientation()}
+                className="min-h-[44px] min-w-[44px] px-3.5 rounded-full bg-slate-800 text-slate-100 hover:bg-slate-700 flex items-center justify-center text-xs font-bold transition-colors"
+                aria-label="Toggle camera orientation"
+                title="Toggle camera orientation"
+              >
+                {renderIcon ? renderIcon('rotate', { size: 18 }) : 'ROTATE'}
               </button>
             )}
 
@@ -196,14 +274,18 @@ export const CallStage: React.FC<WebCallStageProps> = ({
               <button
                 type="button"
                 onClick={onToggleChat}
-                className={`min-h-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                className={`min-h-[44px] min-w-[44px] px-3.5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
                   isChatOpen
                     ? 'bg-teal-700 text-white'
                     : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
                 }`}
                 aria-label="Toggle in-call chat"
               >
-                {unreadChatCount > 0 ? `CHAT (${unreadChatCount})` : 'CHAT'}
+                {renderIcon
+                  ? renderIcon('chat', { size: 18 })
+                  : unreadChatCount > 0
+                    ? `CHAT (${unreadChatCount})`
+                    : 'CHAT'}
               </button>
             )}
 
@@ -214,20 +296,20 @@ export const CallStage: React.FC<WebCallStageProps> = ({
                 <button
                   type="button"
                   onClick={onStartRecording}
-                  className="min-h-[44px] min-w-[44px] px-3.5 rounded-full bg-red-700 hover:bg-red-800 text-white text-xs font-bold transition-colors"
+                  className="min-h-[44px] min-w-[44px] px-3.5 rounded-full bg-red-700 hover:bg-red-800 text-white text-xs font-bold flex items-center justify-center transition-colors"
                   aria-label="Start Recording"
                 >
-                  REC
+                  {renderIcon ? renderIcon('recordDot', { size: 18 }) : 'REC'}
                 </button>
               )}
 
             <button
               type="button"
               onClick={onEndCall}
-              className="min-h-[44px] px-4 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors"
+              className="min-h-[44px] min-w-[44px] px-4 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center justify-center transition-colors"
               aria-label="Leave or terminate call"
             >
-              END
+              {renderIcon ? renderIcon('phoneOff', { size: 18 }) : 'END'}
             </button>
           </div>
         </main>

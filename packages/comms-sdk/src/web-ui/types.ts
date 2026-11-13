@@ -1,5 +1,6 @@
 import {
   ChatDrawerItem,
+  CommsCallIconName,
   ConversationScopeFilter,
   ThreadAttachment,
   ThreadMessage,
@@ -9,6 +10,7 @@ import {
 
 export type {
   ChatDrawerItem,
+  CommsCallIconName,
   ConversationScopeFilter,
   ThreadAttachment,
   ThreadMessage,
@@ -85,9 +87,22 @@ export interface WebCallWaitingRoomProps {
   onSubmitConsent?: (approved: boolean, reason?: string) => Promise<void>;
   onEnterCall: () => void;
   onCancelCall: () => void;
+  isCameraEnabled?: boolean;
+  isMicEnabled?: boolean;
+  onToggleCamera?: () => void | Promise<void>;
+  onToggleMic?: () => void | Promise<void>;
+  micLevel?: number;
+  renderVideoPreview?: () => React.ReactNode;
+  renderIcon?: (name: CommsCallIconName, props?: { color?: string; size?: number }) => React.ReactNode;
+  hideHeader?: boolean;
+  mediaModeLabel?: string;
   isLoading?: boolean;
   error?: string | null;
   className?: string;
+  videoOrientation?: 'portrait' | 'landscape';
+  onToggleOrientation?: () => void;
+  patientLink?: string;
+  onSharePatientLink?: () => void | Promise<void>;
 }
 
 export interface WebCallStageProps {
@@ -102,6 +117,7 @@ export interface WebCallStageProps {
   onToggleMic: () => void | Promise<void>;
   onToggleCamera: () => void | Promise<void>;
   onToggleScreenShare?: () => void | Promise<void>;
+  onSwitchCamera?: () => void | Promise<void>;
   isRecording?: boolean;
   recordingDurationSeconds?: number;
   onStartRecording?: () => void | Promise<void>;
@@ -116,12 +132,23 @@ export interface WebCallStageProps {
   renderChatDrawer?: () => React.ReactNode;
   renderWorkstationAction?: () => React.ReactNode;
   renderCustomVideoSurface?: (trackType: 'remote' | 'local') => React.ReactNode;
+  renderIcon?: (name: CommsCallIconName, props?: { color?: string; size?: number }) => React.ReactNode;
+  hideHeader?: boolean;
+  remoteStatusLabel?: string;
   onEndCall: () => void | Promise<void>;
   isE2eeActive?: boolean;
   networkQuality?: 'excellent' | 'good' | 'poor' | 'reconnecting';
   isLoading?: boolean;
   error?: string | null;
   className?: string;
+  videoOrientation?: 'portrait' | 'landscape';
+  onToggleOrientation?: () => void;
+  patientLink?: string;
+  onSharePatientLink?: () => void | Promise<void>;
+  onDockCall?: () => void | Promise<void>;
+  onTogglePip?: () => void | Promise<void>;
+  isPipSupported?: boolean;
+  isPipActive?: boolean;
 }
 
 export interface GuestVerificationResult {

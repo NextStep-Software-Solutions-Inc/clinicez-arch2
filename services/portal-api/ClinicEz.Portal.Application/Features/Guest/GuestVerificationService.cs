@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -78,6 +79,47 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
         InvitesById[inviteId] = stored;
         return stored;
     }
+
+    /// <summary>
+    /// Provisions or registers a pre-hashed guest invite in the verification store
+    /// received from clinic-api via the GuestTeleconsultInviteIssued interop message.
+    /// </summary>
+    public static StoredGuestInvite RegisterPreHashedInvite(
+        Guid inviteId,
+        string tenantId,
+        string facilityId,
+        Guid callId,
+        string inviteTokenHash,
+        string expectedDobHash,
+        string otpHash,
+        DateTime expiresAtUtc)
+    {
+        var stored = new StoredGuestInvite(
+            inviteId,
+            tenantId,
+            facilityId,
+            callId,
+            inviteTokenHash.Trim().ToLowerInvariant(),
+            expectedDobHash.Trim().ToLowerInvariant(),
+            otpHash.Trim().ToLowerInvariant(),
+            expiresAtUtc);
+
+        InvitesByTokenHash[stored.InviteTokenHash] = stored;
+        InvitesById[inviteId] = stored;
+        return stored;
+    }
+
+    /// <inheritdoc />
+    StoredGuestInvite IGuestVerificationService.RegisterPreHashedInvite(
+        Guid inviteId,
+        string tenantId,
+        string facilityId,
+        Guid callId,
+        string inviteTokenHash,
+        string expectedDobHash,
+        string otpHash,
+        DateTime expiresAtUtc) =>
+        RegisterPreHashedInvite(inviteId, tenantId, facilityId, callId, inviteTokenHash, expectedDobHash, otpHash, expiresAtUtc);
 
     public static void ClearStore()
     {
@@ -201,7 +243,11 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
 
         var roomName = $"call-{invite.CallId:N}";
         var guestIdentity = $"guest:otp-{invite.InviteId:N}";
-        var relayUrl = _configuration["Media:RelayUrl"] ?? "wss://media.clinicez.internal";
+        var relayUrl = FirstNonEmpty(
+            _configuration["Media:RelayUrl"],
+            _configuration["LiveKit:RelayUrl"],
+            _configuration["LiveKit:Url"],
+            _configuration["LIVEKIT_URL"]) ?? "wss://media.clinicez.internal";
         var guestToken = MintLiveKitGuestToken(roomName, guestIdentity);
 
         // Enqueue comms.guest.call.join.requested on Interop Hub for comms-api audit and media session tracking
@@ -243,8 +289,14 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
 
     private string MintLiveKitGuestToken(string roomName, string guestIdentity)
     {
-        var apiKey = _configuration["Media:ApiKey"] ?? "clinicez-guest-key";
-        var apiSecret = _configuration["Media:ApiSecret"] ?? "clinicez-production-secret-key-32bytes-minimum!!";
+        var apiKey = FirstNonEmpty(
+            _configuration["Media:ApiKey"],
+            _configuration["LiveKit:ApiKey"],
+            _configuration["LIVEKIT_API_KEY"]) ?? "clinicez-guest-key";
+        var apiSecret = FirstNonEmpty(
+            _configuration["Media:ApiSecret"],
+            _configuration["LiveKit:ApiSecret"],
+            _configuration["LIVEKIT_API_SECRET"]) ?? "clinicez-production-secret-key-32bytes-minimum!!";
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(apiSecret));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -274,6 +326,9 @@ public sealed partial class GuestVerificationService : IGuestVerificationService
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static string ComputeHash(string input)
     {

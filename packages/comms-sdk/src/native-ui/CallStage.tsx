@@ -47,12 +47,23 @@ export const CallStage: React.FC<CallStageProps> = ({
   renderChatDrawer,
   renderWorkstationAction,
   renderCustomVideoSurface,
+  renderIcon,
+  hideHeader = false,
+  remoteStatusLabel,
   onEndCall,
   isE2eeActive = true,
   networkQuality = 'good',
   isLoading = false,
   error = null,
-  style
+  style,
+  videoOrientation = 'portrait',
+  onToggleOrientation,
+  patientLink,
+  onSharePatientLink,
+  onDockCall,
+  onTogglePip,
+  isPipSupported,
+  isPipActive = false
 }) => {
   const participantInitials = useMemo(() => {
     if (!participantName) return '??';
@@ -67,39 +78,41 @@ export const CallStage: React.FC<CallStageProps> = ({
   return (
     <View style={[styles.container, style]}>
       {/* Top Header Bar */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.roomTitle} numberOfLines={1}>
-            {participantName}
-          </Text>
-          <View style={styles.metaRow}>
-            {isE2eeActive && (
-              <View style={styles.e2eeBadge}>
-                <Text style={styles.e2eeBadgeText}>E2EE Encrypted</Text>
+      {!hideHeader && (
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.roomTitle} numberOfLines={1}>
+              {participantName}
+            </Text>
+            <View style={styles.metaRow}>
+              {isE2eeActive && (
+                <View style={styles.e2eeBadge}>
+                  <Text style={styles.e2eeBadgeText}>E2EE Encrypted</Text>
+                </View>
+              )}
+              <Text style={styles.roomSubtitle}>Room: {roomName || callId}</Text>
+            </View>
+          </View>
+
+          {/* Workstation Action Slot */}
+          <View style={styles.headerRight}>
+            {renderWorkstationAction && (
+              <View style={styles.workstationSlot}>
+                {renderWorkstationAction()}
               </View>
             )}
-            <Text style={styles.roomSubtitle}>Room: {roomName || callId}</Text>
+
+            <TouchableOpacity
+              style={styles.endCallHeaderButton}
+              onPress={onEndCall}
+              accessibilityRole="button"
+              accessibilityLabel="End consultation call"
+            >
+              <Text style={styles.endCallHeaderText}>End Call</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        {/* Workstation Action Slot */}
-        <View style={styles.headerRight}>
-          {renderWorkstationAction && (
-            <View style={styles.workstationSlot}>
-              {renderWorkstationAction()}
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.endCallHeaderButton}
-            onPress={onEndCall}
-            accessibilityRole="button"
-            accessibilityLabel="End consultation call"
-          >
-            <Text style={styles.endCallHeaderText}>End Call</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      )}
 
       {/* Persistent Red REC Banner with Single-Party Stop */}
       {isRecording && (
@@ -109,7 +122,7 @@ export const CallStage: React.FC<CallStageProps> = ({
             <Text style={styles.recText}>REC</Text>
           </View>
           <Text style={styles.recTimer}>{formatDuration(recordingDurationSeconds)}</Text>
-          <Text style={styles.recLabel}>Vault Recording Active</Text>
+          <Text style={styles.recLabel}>Recording in progress</Text>
           {onStopRecording && canStopRecording && (
             <TouchableOpacity
               style={styles.stopRecButton}
@@ -149,13 +162,21 @@ export const CallStage: React.FC<CallStageProps> = ({
               </View>
               <Text style={styles.remotePlaceholderText}>{participantName}</Text>
               <Text style={styles.remoteStatusText}>
-                {isCameraEnabled ? 'Active Clinical Stream' : 'Camera Feed Muted'}
+                {remoteStatusLabel ??
+                  (isCameraEnabled
+                    ? 'Connected • Waiting for Patient Video Stream'
+                    : 'Connected • Local Camera Paused')}
               </Text>
             </View>
           )}
 
           {/* Picture-in-Picture Local Self-Preview Canvas */}
-          <View style={styles.pipCanvas}>
+          <View
+            style={[
+              styles.pipCanvas,
+              videoOrientation === 'landscape' ? styles.pipCanvasLandscape : styles.pipCanvasPortrait
+            ]}
+          >
             {localVideoSurface ?? (
               <View style={styles.pipPlaceholder}>
                 <Text style={styles.pipLabel}>
@@ -166,82 +187,208 @@ export const CallStage: React.FC<CallStageProps> = ({
           </View>
 
           {/* Bottom Floating Media Controls Toolbar */}
-          <View style={styles.mediaToolbar}>
-            <TouchableOpacity
-              style={[styles.controlButton, !isMicEnabled && styles.controlButtonEmergency]}
-              onPress={onToggleMic}
-              accessibilityRole="button"
-              accessibilityLabel={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
-            >
-              <Text style={styles.controlButtonText}>{isMicEnabled ? 'MIC' : 'MUTE'}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.controlButton, !isCameraEnabled && styles.controlButtonEmergency]}
-              onPress={onToggleCamera}
-              accessibilityRole="button"
-              accessibilityLabel={isCameraEnabled ? 'Stop video' : 'Start video'}
-            >
-              <Text style={styles.controlButtonText}>{isCameraEnabled ? 'CAM' : 'OFF'}</Text>
-            </TouchableOpacity>
-
-            {onSwitchCamera && (
+          <View style={styles.mediaToolbarWrapper} pointerEvents="box-none">
+            <View style={styles.mediaToolbar}>
               <TouchableOpacity
-                style={styles.controlButton}
-                onPress={onSwitchCamera}
+                style={[styles.controlButton, !isMicEnabled && styles.controlButtonEmergency]}
+                onPress={onToggleMic}
                 accessibilityRole="button"
-                accessibilityLabel="Switch camera"
+                accessibilityLabel={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
               >
-                <Text style={styles.controlButtonText}>FLIP</Text>
+                {renderIcon ? (
+                  renderIcon(isMicEnabled ? 'mic' : 'micOff', {
+                    size: 18,
+                    color: isMicEnabled ? lightColors.text : lightColors.onPrimary
+                  })
+                ) : (
+                  <Text
+                    style={[
+                      styles.controlButtonText,
+                      !isMicEnabled && styles.controlButtonTextInverted
+                    ]}
+                  >
+                    {isMicEnabled ? 'MIC' : 'MUTE'}
+                  </Text>
+                )}
               </TouchableOpacity>
-            )}
 
-            {onToggleScreenShare && (
               <TouchableOpacity
-                style={[styles.controlButton, isScreenSharing && styles.controlButtonActive]}
-                onPress={onToggleScreenShare}
+                style={[styles.controlButton, !isCameraEnabled && styles.controlButtonEmergency]}
+                onPress={onToggleCamera}
                 accessibilityRole="button"
-                accessibilityLabel={isScreenSharing ? 'Stop screen sharing' : 'Start screen sharing'}
+                accessibilityLabel={isCameraEnabled ? 'Stop video' : 'Start video'}
               >
-                <Text style={styles.controlButtonText}>{isScreenSharing ? 'SHARING' : 'SHARE'}</Text>
+                {renderIcon ? (
+                  renderIcon(isCameraEnabled ? 'video' : 'videoOff', {
+                    size: 18,
+                    color: isCameraEnabled ? lightColors.text : lightColors.onPrimary
+                  })
+                ) : (
+                  <Text
+                    style={[
+                      styles.controlButtonText,
+                      !isCameraEnabled && styles.controlButtonTextInverted
+                    ]}
+                  >
+                    {isCameraEnabled ? 'CAM' : 'OFF'}
+                  </Text>
+                )}
               </TouchableOpacity>
-            )}
 
-            {onToggleChat && (
-              <TouchableOpacity
-                style={[styles.controlButton, isChatOpen && styles.controlButtonActive]}
-                onPress={onToggleChat}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle in-call chat"
-              >
-                <Text style={styles.controlButtonText}>
-                  {unreadChatCount > 0 ? `CHAT (${unreadChatCount})` : 'CHAT'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {!isRecording &&
-              onStartRecording &&
-              canStartRecording &&
-              recordingConsentStatus !== 'requested' && (
+              {onSwitchCamera && (
                 <TouchableOpacity
-                  style={styles.recStartButton}
-                  onPress={onStartRecording}
+                  style={styles.controlButton}
+                  onPress={onSwitchCamera}
                   accessibilityRole="button"
-                  accessibilityLabel="Start Recording"
+                  accessibilityLabel="Switch camera"
                 >
-                  <Text style={styles.recStartButtonText}>REC</Text>
+                  {renderIcon ? (
+                    renderIcon('switchCamera', { size: 18, color: lightColors.text })
+                  ) : (
+                    <Text style={styles.controlButtonText}>FLIP</Text>
+                  )}
                 </TouchableOpacity>
               )}
 
-            <TouchableOpacity
-              style={styles.endCallButton}
-              onPress={onEndCall}
-              accessibilityRole="button"
-              accessibilityLabel="Leave or terminate call"
-            >
-              <Text style={styles.endCallButtonText}>END</Text>
-            </TouchableOpacity>
+              {onToggleOrientation && (
+                <TouchableOpacity
+                  testID="btn-toggle-orientation"
+                  style={styles.controlButton}
+                  onPress={onToggleOrientation}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle video orientation"
+                >
+                  {renderIcon ? (
+                    renderIcon('rotate', { size: 18, color: lightColors.text })
+                  ) : (
+                    <Text style={styles.controlButtonText}>ROTATE</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {onToggleScreenShare && (
+                <TouchableOpacity
+                  style={[styles.controlButton, isScreenSharing && styles.controlButtonActive]}
+                  onPress={onToggleScreenShare}
+                  accessibilityRole="button"
+                  accessibilityLabel={isScreenSharing ? 'Stop screen sharing' : 'Start screen sharing'}
+                >
+                  {renderIcon ? (
+                    renderIcon(isScreenSharing ? 'screenShareOff' : 'screenShare', {
+                      size: 18,
+                      color: isScreenSharing ? lightColors.onPrimary : lightColors.text
+                    })
+                  ) : (
+                    <Text
+                      style={[
+                        styles.controlButtonText,
+                        isScreenSharing && styles.controlButtonTextInverted
+                      ]}
+                    >
+                      {isScreenSharing ? 'SHARING' : 'SHARE'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {onDockCall && (
+                <TouchableOpacity
+                  testID="btn-dock-call"
+                  style={styles.controlButton}
+                  onPress={onDockCall}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dock call and open chart"
+                >
+                  {renderIcon ? (
+                    renderIcon('dock', { size: 18, color: lightColors.text })
+                  ) : (
+                    <Text style={styles.controlButtonText}>DOCK</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {onTogglePip && isPipSupported !== false && (
+                <TouchableOpacity
+                  testID="btn-toggle-pip"
+                  style={[styles.controlButton, isPipActive && styles.controlButtonActive]}
+                  onPress={onTogglePip}
+                  accessibilityRole="button"
+                  accessibilityLabel={isPipActive ? 'Exit picture in picture' : 'Toggle picture in picture'}
+                >
+                  {renderIcon ? (
+                    renderIcon('pip', {
+                      size: 18,
+                      color: isPipActive ? lightColors.onPrimary : lightColors.text
+                    })
+                  ) : (
+                    <Text
+                      style={[
+                        styles.controlButtonText,
+                        isPipActive && styles.controlButtonTextInverted
+                      ]}
+                    >
+                      PIP
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {onToggleChat && (
+                <TouchableOpacity
+                  style={[styles.controlButton, isChatOpen && styles.controlButtonActive]}
+                  onPress={onToggleChat}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle in-call chat"
+                >
+                  {renderIcon ? (
+                    renderIcon('chat', {
+                      size: 18,
+                      color: isChatOpen ? lightColors.onPrimary : lightColors.text
+                    })
+                  ) : (
+                    <Text
+                      style={[
+                        styles.controlButtonText,
+                        isChatOpen && styles.controlButtonTextInverted
+                      ]}
+                    >
+                      {unreadChatCount > 0 ? `CHAT (${unreadChatCount})` : 'CHAT'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {!isRecording &&
+                onStartRecording &&
+                canStartRecording &&
+                recordingConsentStatus !== 'requested' && (
+                  <TouchableOpacity
+                    style={styles.recStartButton}
+                    onPress={onStartRecording}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start Recording"
+                  >
+                    {renderIcon ? (
+                      renderIcon('recordDot', { size: 18, color: lightColors.onPrimary })
+                    ) : (
+                      <Text style={styles.recStartButtonText}>REC</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+              <TouchableOpacity
+                style={styles.endCallButton}
+                onPress={onEndCall}
+                accessibilityRole="button"
+                accessibilityLabel="Leave or terminate call"
+              >
+                {renderIcon ? (
+                  renderIcon('phoneOff', { size: 18, color: lightColors.onPrimary })
+                ) : (
+                  <Text style={styles.endCallButtonText}>END</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -445,15 +592,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: spaceScale.lg,
     right: spaceScale.lg,
-    width: 140,
-    aspectRatio: 16 / 9,
     borderRadius: radiusScale.md,
     backgroundColor: lightColors.surfaceHighlight,
-    borderWidth: 1,
+    borderWidth: sizes.borderWidth,
     borderColor: lightColors.borderDark,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center'
+  },
+  pipCanvasPortrait: {
+    width: 105,
+    aspectRatio: 3 / 4
+  },
+  pipCanvasLandscape: {
+    width: 140,
+    aspectRatio: 16 / 9
   },
   pipPlaceholder: {
     padding: spaceScale.xs,
@@ -464,10 +617,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: lightColors.text
   },
-  mediaToolbar: {
+  mediaToolbarWrapper: {
     position: 'absolute',
     bottom: spaceScale.lg,
-    left: spaceScale.lg,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  mediaToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spaceScale.sm,
@@ -489,12 +647,15 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.primary
   },
   controlButtonEmergency: {
-    backgroundColor: lightColors.emergencyBg
+    backgroundColor: lightColors.emergency
   },
   controlButtonText: {
     fontSize: fontSizeScale.xs,
     fontWeight: '700',
     color: lightColors.text
+  },
+  controlButtonTextInverted: {
+    color: lightColors.onPrimary
   },
   endCallButton: {
     minWidth: sizes.touchTarget,

@@ -99,4 +99,18 @@ public sealed class TeleconsultAdmissionController : ControllerBase
         var result = await _sender.Send(new EndTeleconsultCallCommand(appointmentId, request?.EndReason), ct);
         return Ok(ApiResponse<TeleconsultCallEndResultDto>.Success(result, "Teleconsultation call ended successfully."));
     }
+
+    /// <summary>
+    /// Generates a secure cryptographic guest invitation link, 6-digit OTP, and DOB hint for
+    /// third-party or browser guest access, publishing GuestTeleconsultInviteIssued to Party.Portal.
+    /// </summary>
+    [HttpPost("appointments/{appointmentId:guid}/guest-invite")]
+    [HasAnyPermission(ClinicPermissions.ConsultationsWrite, ClinicPermissions.ConsultationsSign, ClinicPermissions.AppointmentsManage)]
+    public async Task<ActionResult<ApiResponse<TeleconsultGuestInviteDto>>> CreateGuestInvite(
+        Guid appointmentId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new CreateTeleconsultGuestInviteCommand(appointmentId), ct);
+        return Ok(ApiResponse<TeleconsultGuestInviteDto>.Success(result, "Teleconsultation guest invite created successfully."));
+    }
 }

@@ -337,7 +337,7 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
       const nativeText = getTextContent(nativeHarness.result.current);
       expect(nativeText).toContain('REC');
       expect(nativeText).toContain('02:05');
-      expect(nativeText).toContain('Vault Recording Active');
+      expect(nativeText).toContain('Recording in progress');
 
       const nativeStopBtn = findElement(
         nativeHarness.result.current,
@@ -383,7 +383,7 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
         })
       );
       const nativeText = getTextContent(nativeHarness.result.current);
-      expect(nativeText).not.toContain('Vault Recording Active');
+      expect(nativeText).not.toContain('Recording in progress');
       expect(nativeText).not.toContain('Stop Recording');
       nativeHarness.unmount();
 
@@ -394,7 +394,7 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
         })
       );
       const webText = getTextContent(webHarness.result.current);
-      expect(webText).not.toContain('Vault Recording Active');
+      expect(webText).not.toContain('Recording in progress');
       expect(webText).not.toContain('Stop Recording');
       webHarness.unmount();
     });
@@ -424,6 +424,134 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
       );
       const webText = getTextContent(webHarness.result.current);
       expect(webText).toContain('Active Chat Drawer Content');
+      webHarness.unmount();
+    });
+  });
+
+  describe('Tier 5: Milestone 8 Adaptations: Dock, PiP, and Orientation', () => {
+    it('Native & Web: renders btn-dock-call and triggers onDockCall', async () => {
+      let nativeDockTriggered = false;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          onDockCall: () => {
+            nativeDockTriggered = true;
+          }
+        })
+      );
+
+      const nativeDockBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-dock-call'
+      );
+      expect(nativeDockBtn).not.toBeNull();
+      await nativeDockBtn.props.onPress?.();
+      expect(nativeDockTriggered).toBe(true);
+      nativeHarness.unmount();
+
+      let webDockTriggered = false;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          onDockCall: () => {
+            webDockTriggered = true;
+          }
+        })
+      );
+
+      const webDockBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-dock-call' || el.props?.id === 'btn-dock-call'
+      );
+      expect(webDockBtn).not.toBeNull();
+      await webDockBtn.props.onClick?.();
+      expect(webDockTriggered).toBe(true);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: renders btn-toggle-pip and triggers onTogglePip', async () => {
+      let nativePipTriggered = false;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          onTogglePip: () => {
+            nativePipTriggered = true;
+          },
+          isPipSupported: true,
+          isPipActive: false
+        })
+      );
+
+      const nativePipBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-toggle-pip'
+      );
+      expect(nativePipBtn).not.toBeNull();
+      await nativePipBtn.props.onPress?.();
+      expect(nativePipTriggered).toBe(true);
+      nativeHarness.unmount();
+
+      let webPipTriggered = false;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          onTogglePip: () => {
+            webPipTriggered = true;
+          },
+          isPipSupported: true,
+          isPipActive: true
+        })
+      );
+
+      const webPipBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-toggle-pip' || el.props?.id === 'btn-toggle-pip'
+      );
+      expect(webPipBtn).not.toBeNull();
+      await webPipBtn.props.onClick?.();
+      expect(webPipTriggered).toBe(true);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: renders btn-toggle-orientation and triggers onToggleOrientation', async () => {
+      let nativeRotateTriggered = false;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          videoOrientation: 'portrait',
+          onToggleOrientation: () => {
+            nativeRotateTriggered = true;
+          }
+        })
+      );
+
+      const nativeRotateBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-toggle-orientation'
+      );
+      expect(nativeRotateBtn).not.toBeNull();
+      await nativeRotateBtn.props.onPress?.();
+      expect(nativeRotateTriggered).toBe(true);
+      nativeHarness.unmount();
+
+      let webRotateTriggered = false;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          videoOrientation: 'landscape',
+          onToggleOrientation: () => {
+            webRotateTriggered = true;
+          }
+        })
+      );
+
+      const webRotateBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-toggle-orientation' || el.props?.id === 'btn-toggle-orientation'
+      );
+      expect(webRotateBtn).not.toBeNull();
+      await webRotateBtn.props.onClick?.();
+      expect(webRotateTriggered).toBe(true);
       webHarness.unmount();
     });
   });

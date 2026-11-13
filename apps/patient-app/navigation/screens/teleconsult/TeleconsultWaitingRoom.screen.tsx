@@ -10,6 +10,7 @@ import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useUser } from '@clerk/expo';
 import { dialog } from '../../../utils/dialog';
+import { teleconsultApi, type PatientTeleconsultCallDto } from '../../../services/api';
 
 type Props = StaticScreenProps<{
   appointmentId?: string;
@@ -26,6 +27,7 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
   const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const { user } = useUser();
+  const { getToken } = useAuth();
 
   const appointmentId = route.params?.appointmentId ?? '';
   const callId = route.params?.callId ?? `call-${appointmentId}`;
@@ -38,12 +40,13 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
 
   const [recordingConsent, setRecordingConsent] = useState<'Pending' | 'Approved' | 'Rejected' | 'Disabled'>('Pending');
   const [isReadyToAdmit, setIsReadyToAdmit] = useState(false);
+  const [callSessionData, setCallSessionData] = useState<PatientTeleconsultCallDto | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const isDemo =
     process.env.EXPO_PUBLIC_ENABLE_DEMO_TELECONSULT === 'true' ||
     process.env.EXPO_PUBLIC_DEMO_TELECONSULT === 'true';
 
-  // Doctor admission gating
+  // Doctor admission gating and call polling
   useEffect(() => {
     // If prepaid blocked and not yakap exempt, cannot admit
     const isBlocked = paymentPolicy === 'Prepaid' && paymentStatus === 'Unpaid' && !isYakapExempt;
@@ -58,15 +61,52 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
       return () => clearTimeout(timer);
     } else {
       setIsReadyToAdmit(false);
-    }
-  }, [isDemo, isYakapExempt, paymentPolicy, paymentStatus]);
 
-  const handleSubmitConsent = useCallback(async (approved: boolean, reason?: string) => {
+      const targetGuid = callId.replace(/^call-/, '') || appointmentId;
+      const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetGuid);
+
+      let isMounted = true;
+
+      const pollCallStatus = async () => {
+        if (!isGuid) return;
+        try {
+          const callData = await teleconsultApi.getCall(getToken, targetGuid);
+          if (!isMounted || !callData) return;
+
+          setCallSessionData(callData);
+
+          const status = callData.status?.toLowerCase();
+          const isAdmittedStatus =
+            status === 'admitted' ||
+            status === 'active' ||
+            status === 'incall' ||
+            status === 'connected' ||
+            Boolean(callData.joinToken);
+
+          if (isAdmittedStatus) {
+            setIsReadyToAdmit(true);
+          }
+        } catch {
+          // Silent polling retry on transient network error
+        }
+      };
+
+      pollCallStatus();
+      const interval = setInterval(pollCallStatus, 3000);
+
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    }
+  }, [appointmentId, callId, getToken, isDemo, isYakapExempt, paymentPolicy, paymentStatus]);
+
+  const handleSubmitConsent = useCallback(async (approved: boolean, _reason?: string) => {
     setRecordingConsent(approved ? 'Approved' : 'Rejected');
     if (approved) {
-      dialog.alert('Consent Recorded', 'Informed consent for teleconsultation audio/video recording has been saved.');
+      dialog.alert('Consent Saved', 'Your consent for recording this consultation has been saved. Your clinician will be notified.');
     } else {
-      dialog.alert('Consultation Without Recording', 'You have opted out of session recording. Your consultation will proceed without recording.');
+      dialog.alert('Consultation Without Recording', "You've chosen not to record this visit. Your consultation will proceed normally without recording.");
     }
   }, []);
 
@@ -77,10 +117,14 @@ export default function TeleconsultWaitingRoomScreen({ route }: Props) {
         callId,
         appointmentId,
         clinicianName,
+        patientName,
         isRecorded: recordingConsent === 'Approved',
+        roomName: callSessionData?.roomName ?? `room-${callId}`,
+        relayUrl: callSessionData?.relayUrl ?? undefined,
+        joinToken: callSessionData?.joinToken ?? undefined,
       },
     });
-  }, [appointmentId, callId, clinicianName, navigation, recordingConsent]);
+  }, [appointmentId, callId, clinicianName, navigation, patientName, recordingConsent, callSessionData]);
 
   const handleCancelCall = useCallback(async () => {
     const ok = await dialog.confirm({

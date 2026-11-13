@@ -146,6 +146,8 @@ public static class InteropTypes
     public const string CommsAttachmentFiled = "comms.attachment.filed";
     /// <summary>Portal -> comms. Payload: <c>GuestCallJoinRequestedPayload</c>.</summary>
     public const string GuestCallJoinRequested = "comms.guest.call.join.requested";
+    /// <summary>Clinic -> portal. Payload: <c>GuestTeleconsultInviteIssuedPayload</c>.</summary>
+    public const string GuestTeleconsultInviteIssued = "portal.teleconsult.guest_invite_issued";
 
     // Media broker (cloud platform service: room tokens & metering)
     /// <summary>Comms -> Media. Payload: <c>MediaRoomRequestedPayload</c>. Reply type: <see cref="MediaRoomResponded"/>.</summary>

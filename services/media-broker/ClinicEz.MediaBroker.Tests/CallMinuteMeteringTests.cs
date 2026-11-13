@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.MediaBroker.Application.Common.Options;
 using ClinicEz.MediaBroker.Application.Services;
 using ClinicEz.MediaBroker.Domain.Entities;
 using ClinicEz.MediaBroker.Infrastructure.Persistence;
@@ -9,6 +10,7 @@ using ClinicEz.Shared.Interop.Contracts;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -180,5 +182,103 @@ public class CallMinuteMeteringTests
             1,
             null
         ), Times.Once);
+    }
+
+    [Fact]
+    public void MediaMeteringOptions_Defaults_AutoProvisionDefaultEntitlement_To_False()
+    {
+        var options = new MediaMeteringOptions();
+        options.AutoProvisionDefaultEntitlement.Should().BeFalse(
+            "unconfigured environments must not automatically grant entitlements without explicit opt-in");
+        options.DefaultCallMinutesMonthly.Should().Be(1000);
+        options.DefaultAllowOverdraft.Should().BeTrue();
+        options.DefaultAllowTransportOnlyFallback.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task EvaluateCallAdmission_RejectsCall_WhenNoEntitlementExists_AndAutoProvisionDefaultEntitlementIsFalse()
+    {
+        var db = CreateInMemoryDb();
+        var publisher = new Mock<IInteropPublisher>();
+        // Instantiate without options to verify default options behavior (AutoProvisionDefaultEntitlement = false)
+        var service = new MediaMeteringService(db, publisher.Object, NullLogger<MediaMeteringService>.Instance);
+
+        var decision = await service.EvaluateCallAdmissionAsync("tenant-unprovisioned");
+
+        decision.Allowed.Should().BeFalse();
+        decision.Reason.Should().Be("Tenant teleconsultation entitlement is inactive.");
+        decision.IsOverdraft.Should().BeFalse();
+
+        // Verify zero database mutations
+        var exists = await db.Entitlements.AnyAsync(e => e.TenantId == "tenant-unprovisioned");
+        exists.Should().BeFalse();
+
+        var auditCount = await db.AuditLogs.CountAsync(a => a.TenantId == "tenant-unprovisioned");
+        auditCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task EvaluateCallAdmission_AdmitsCallAndAutoProvisionsEntitlement_WhenAutoProvisionDefaultEntitlementIsTrue()
+    {
+        var db = CreateInMemoryDb();
+        var publisher = new Mock<IInteropPublisher>();
+        var options = Options.Create(new MediaMeteringOptions
+        {
+            AutoProvisionDefaultEntitlement = true,
+            DefaultCallMinutesMonthly = 1000,
+            DefaultAllowOverdraft = true,
+            DefaultAllowTransportOnlyFallback = true
+        });
+        var service = new MediaMeteringService(db, publisher.Object, NullLogger<MediaMeteringService>.Instance, options);
+
+        var decision = await service.EvaluateCallAdmissionAsync("tenant-autoprovisioned");
+
+        decision.Allowed.Should().BeTrue();
+        decision.Reason.Should().BeNull();
+        decision.IsOverdraft.Should().BeFalse();
+
+        // Verify entitlement record created in database
+        var entitlement = await db.Entitlements.FirstOrDefaultAsync(e => e.TenantId == "tenant-autoprovisioned");
+        entitlement.Should().NotBeNull();
+        entitlement!.CallMinutesMonthly.Should().Be(1000);
+        entitlement.IsActive.Should().BeTrue();
+        entitlement.AllowOverdraft.Should().BeTrue();
+        entitlement.AllowTransportOnlyFallback.Should().BeTrue();
+        entitlement.Version.Should().Be(0);
+
+        // Verify immutable audit log entry
+        var audit = await db.AuditLogs.FirstOrDefaultAsync(
+            a => a.TenantId == "tenant-autoprovisioned" && a.EventType == "EntitlementAutoProvisioned");
+        audit.Should().NotBeNull();
+        audit!.Details.Should().Contain("1000 mins/mo");
+    }
+
+    [Fact]
+    public async Task EvaluateCallAdmission_SubsequentCalls_ReuseExistingAutoProvisionedEntitlement_WithoutDuplicateAuditLogs()
+    {
+        var db = CreateInMemoryDb();
+        var publisher = new Mock<IInteropPublisher>();
+        var options = Options.Create(new MediaMeteringOptions
+        {
+            AutoProvisionDefaultEntitlement = true,
+            DefaultCallMinutesMonthly = 1000
+        });
+        var service = new MediaMeteringService(db, publisher.Object, NullLogger<MediaMeteringService>.Instance, options);
+
+        // First call triggers auto-provisioning
+        var decision1 = await service.EvaluateCallAdmissionAsync("tenant-repeat");
+        decision1.Allowed.Should().BeTrue();
+
+        // Second call reuses existing entitlement
+        var decision2 = await service.EvaluateCallAdmissionAsync("tenant-repeat");
+        decision2.Allowed.Should().BeTrue();
+
+        // Verify strictly 1 entitlement and 1 audit log created
+        var entitlementCount = await db.Entitlements.CountAsync(e => e.TenantId == "tenant-repeat");
+        entitlementCount.Should().Be(1);
+
+        var auditCount = await db.AuditLogs.CountAsync(
+            a => a.TenantId == "tenant-repeat" && a.EventType == "EntitlementAutoProvisioned");
+        auditCount.Should().Be(1);
     }
 }

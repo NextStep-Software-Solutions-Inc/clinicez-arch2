@@ -816,6 +816,14 @@ export interface TeleconsultCallEndResultDto {
   commsCallStateChangedEnqueued?: boolean;
 }
 
+export interface TeleconsultGuestInviteDto {
+  inviteToken: string;
+  inviteUrl: string;
+  otp: string;
+  expiresAtUtc: string;
+  dobHint?: string | null;
+}
+
 export interface RecordingSessionDto {
   id: string;
   tenantId?: string;
@@ -5774,6 +5782,14 @@ export const clinicService = {
   async getRecordingSession(sessionId: string) {
     return clinicApiClient.get<RecordingSessionDto>(
       `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}`,
+    );
+  },
+
+  /** 18. Creates a teleconsult guest invite for browser portal access. */
+  async createTeleconsultGuestInvite(appointmentId: string) {
+    return clinicApiClient.post<TeleconsultGuestInviteDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/guest-invite`,
+      {},
     );
   },
 };

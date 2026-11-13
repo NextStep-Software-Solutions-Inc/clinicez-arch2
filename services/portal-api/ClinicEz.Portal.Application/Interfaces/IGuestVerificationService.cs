@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Portal.Application.Features.Guest;
 
 namespace ClinicEz.Portal.Application.Interfaces;
 
@@ -23,4 +24,14 @@ public interface IGuestVerificationService
         string dateOfBirth,
         string otp,
         CancellationToken ct = default);
+
+    StoredGuestInvite RegisterPreHashedInvite(
+        Guid inviteId,
+        string tenantId,
+        string facilityId,
+        Guid callId,
+        string inviteTokenHash,
+        string expectedDobHash,
+        string otpHash,
+        DateTime expiresAtUtc);
 }

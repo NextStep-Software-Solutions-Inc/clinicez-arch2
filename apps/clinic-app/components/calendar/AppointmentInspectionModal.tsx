@@ -674,41 +674,81 @@ export function AppointmentInspectionModal({
 
             <View style={styles.rightActionsRow}>
               {isTeleconsult && currentAppointment.status !== 'Cancelled' ? (
-                <Pressable
-                  data-testid="btn-drawer-teleconsult"
-                  testID="btn-drawer-teleconsult"
-                  accessibilityRole="button"
-                  accessibilityLabel="Enter teleconsultation waiting room"
-                  onPress={() => {
-                    onClose();
-                    openTeleconsultWaitingRoom({
-                      callId: currentAppointment.callId || currentAppointment.id,
-                      appointmentId: currentAppointment.id,
-                      patientId: currentAppointment.patientId,
-                      patientName: currentAppointment.patientName || 'Patient',
-                      clinicianName: currentAppointment.doctorName || 'Attending Physician',
-                      scheduledTime: currentAppointment.scheduledAt,
-                      paymentPolicy: currentAppointment.paymentPolicy || 'Prepaid',
-                      paymentStatus: currentAppointment.paymentStatus || 'Pending',
-                      isYakapExempt: currentAppointment.paymentPolicy === 'Exempt',
-                      hasActiveYakapEnlistment: currentAppointment.hasActiveYakapEnlistment ?? isYakap ?? false,
-                    });
-                  }}
-                  style={({ pressed }) => [
-                    styles.btn,
-                    styles.btnTeleconsult,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Icon
-                    name="consultations"
-                    size={theme.sizes.iconSm}
-                    color={theme.colors.primary}
-                  />
-                  <ThemedText variant="smallBold" color={theme.colors.primary}>
-                    Teleconsult
-                  </ThemedText>
-                </Pressable>
+                <>
+                  <Pressable
+                    data-testid="btn-copy-patient-link"
+                    testID="btn-copy-patient-link"
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy patient consultation link"
+                    onPress={async () => {
+                      try {
+                        const [invite, err] = await clinicService.createTeleconsultGuestInvite(
+                          currentAppointment.id,
+                        );
+                        if (err || !invite?.inviteUrl) {
+                          notify.error(err?.message || 'Could not generate patient consultation link.');
+                          return;
+                        }
+                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                          await navigator.clipboard.writeText(invite.inviteUrl);
+                        }
+                        notify.success('Patient consultation link copied to clipboard.');
+                      } catch {
+                        notify.error('Could not generate patient consultation link.');
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      styles.btn,
+                      styles.btnSecondary,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Icon
+                      name="copy"
+                      size={theme.sizes.iconSm}
+                      color={theme.colors.text}
+                    />
+                    <ThemedText variant="smallBold" color={theme.colors.text}>
+                      Copy Patient Link
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    data-testid="btn-drawer-teleconsult"
+                    testID="btn-drawer-teleconsult"
+                    accessibilityRole="button"
+                    accessibilityLabel="Enter teleconsultation waiting room"
+                    onPress={() => {
+                      onClose();
+                      openTeleconsultWaitingRoom({
+                        callId: currentAppointment.callId || currentAppointment.id,
+                        appointmentId: currentAppointment.id,
+                        patientId: currentAppointment.patientId,
+                        patientName: currentAppointment.patientName || 'Patient',
+                        clinicianName: currentAppointment.doctorName || 'Attending Physician',
+                        scheduledTime: formattedScheduledAt || currentAppointment.scheduledAt,
+                        paymentPolicy: currentAppointment.paymentPolicy || 'Prepaid',
+                        paymentStatus: currentAppointment.paymentStatus || 'Pending',
+                        isYakapExempt: currentAppointment.paymentPolicy === 'Exempt',
+                        hasActiveYakapEnlistment: currentAppointment.hasActiveYakapEnlistment ?? isYakap ?? false,
+                      });
+                    }}
+                    style={({ pressed }) => [
+                      styles.btn,
+                      styles.btnTeleconsult,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Icon
+                      name="consultations"
+                      size={theme.sizes.iconSm}
+                      color={theme.colors.primary}
+                    />
+                    <ThemedText variant="smallBold" color={theme.colors.primary}>
+                      Teleconsult
+                    </ThemedText>
+                  </Pressable>
+                </>
               ) : null}
 
               {onReschedule && currentAppointment.status !== 'Cancelled' ? (
