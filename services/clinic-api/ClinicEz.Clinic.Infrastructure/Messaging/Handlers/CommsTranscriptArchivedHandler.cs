@@ -91,7 +91,9 @@ public sealed class CommsTranscriptArchivedHandler : IInteropHandler<CommsTransc
             ClinicId = clinic.ClinicId,
             PatientId = resolvedPatientId,
             RecordType = "CommunicationTranscript",
-            Title = message.Title,
+            Title = string.IsNullOrWhiteSpace(message.Title)
+                ? $"Communication Transcript ({message.ConversationId})"
+                : message.Title.Trim(),
             FileName = $"transcript-{message.ConversationId}.json",
             ContentType = "application/json",
             FileSizeBytes = contentBytes.Length,
