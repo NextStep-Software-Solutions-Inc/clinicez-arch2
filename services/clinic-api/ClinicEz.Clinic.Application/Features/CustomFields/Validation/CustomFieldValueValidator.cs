@@ -44,6 +44,14 @@ public static class CustomFieldValueValidator
 {
     private static readonly Regex NumericRegex = new(@"^-?\d+(\.\d+)?$", RegexOptions.Compiled);
 
+    public static ValidationException CreateFieldValidationException(string fieldKey, string message)
+    {
+        return new ValidationException(message, new Dictionary<string, string[]>
+        {
+            [fieldKey] = new[] { message }
+        });
+    }
+
     public static bool IsBlankOrCleared(object? value)
     {
         if (value is null)
@@ -446,7 +454,7 @@ public static class CustomFieldValueValidator
                     !TryGetCustomFieldValue(customFields, def.FieldKey, out var fieldVal) ||
                     IsBlankOrCleared(fieldVal))
                 {
-                    throw new ValidationException($"{def.Label} is required.");
+                    throw CreateFieldValidationException(def.FieldKey, $"{def.Label} is required.");
                 }
             }
         }
@@ -488,31 +496,31 @@ public static class CustomFieldValueValidator
                 }
                 else if (def.DataType == CustomFieldDataType.Number && !IsValidNumber(kvp.Value))
                 {
-                    throw new ValidationException($"{def.Label} must be a valid number.");
+                    throw CreateFieldValidationException(def.FieldKey, $"{def.Label} must be a valid number.");
                 }
                 else if (def.DataType == CustomFieldDataType.Date)
                 {
                     var rawString = kvp.Value?.ToString()?.Trim();
                     if (!DateOnly.TryParseExact(rawString, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateVal))
                     {
-                        throw new ValidationException($"{def.Label} must be a valid date in YYYY-MM-DD format.");
+                        throw CreateFieldValidationException(def.FieldKey, $"{def.Label} must be a valid date in YYYY-MM-DD format.");
                     }
 
                     switch (def.BoundaryMode?.Trim().ToLowerInvariant())
                     {
                         case "pastortoday":
                             if (dateVal > todayInClinic)
-                                throw new ValidationException($"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
+                                throw CreateFieldValidationException(def.FieldKey, $"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
                             break;
 
                         case "futureortoday":
                             if (dateVal < todayInClinic)
-                                throw new ValidationException($"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
+                                throw CreateFieldValidationException(def.FieldKey, $"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
                             break;
 
                         case "futureonly":
                             if (dateVal <= todayInClinic)
-                                throw new ValidationException($"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
+                                throw CreateFieldValidationException(def.FieldKey, $"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
                             break;
                     }
 
@@ -570,19 +578,19 @@ public static class CustomFieldValueValidator
             defMap[def.FieldKey] = def;
         }
 
+        // Capture initial populated and visibility state of targetCustomFields before any mutations
+        var initialPopulated = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var initialVisible = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var def in activeDefs)
+        {
+            bool hasVal = TryGetCustomFieldValue(targetCustomFields, def.FieldKey, out var initVal) && !IsBlankOrCleared(initVal);
+            initialPopulated[def.FieldKey] = hasVal;
+            initialVisible[def.FieldKey] = IsFieldVisible(def, targetCustomFields, staticContext);
+        }
+
         if (submittedCustomFields == null || submittedCustomFields.Count == 0)
         {
-            // Verify mandatory fields are present in target for visible fields
-            foreach (var def in activeDefs)
-            {
-                if (def.IsRequired && IsFieldVisible(def, targetCustomFields, staticContext))
-                {
-                    if (!TryGetCustomFieldValue(targetCustomFields, def.FieldKey, out var fieldVal) || IsBlankOrCleared(fieldVal))
-                    {
-                        throw new ValidationException($"{def.Label} is required.");
-                    }
-                }
-            }
             return;
         }
 
@@ -605,14 +613,14 @@ public static class CustomFieldValueValidator
                 }
                 else if (def.DataType == CustomFieldDataType.Number && !IsValidNumber(kvp.Value))
                 {
-                    throw new ValidationException($"{def.Label} must be a valid number.");
+                    throw CreateFieldValidationException(def.FieldKey, $"{def.Label} must be a valid number.");
                 }
                 else if (def.DataType == CustomFieldDataType.Date)
                 {
                     var rawString = kvp.Value?.ToString()?.Trim();
                     if (!DateOnly.TryParseExact(rawString, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateVal))
                     {
-                        throw new ValidationException($"{def.Label} must be a valid date in YYYY-MM-DD format.");
+                        throw CreateFieldValidationException(def.FieldKey, $"{def.Label} must be a valid date in YYYY-MM-DD format.");
                     }
 
                     bool hasExisting = TryGetCustomFieldValue(targetCustomFields, def.FieldKey, out var existingRaw);
@@ -637,17 +645,17 @@ public static class CustomFieldValueValidator
                         {
                             case "pastortoday":
                                 if (dateVal > todayInClinic)
-                                    throw new ValidationException($"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
+                                    throw CreateFieldValidationException(def.FieldKey, $"{def.Label} cannot be a future date (maximum allowed: {todayInClinic:yyyy-MM-dd}).");
                                 break;
 
                             case "futureortoday":
                                 if (dateVal < todayInClinic)
-                                    throw new ValidationException($"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
+                                    throw CreateFieldValidationException(def.FieldKey, $"{def.Label} cannot be a past date (minimum allowed: {todayInClinic:yyyy-MM-dd}).");
                                 break;
 
                             case "futureonly":
                                 if (dateVal <= todayInClinic)
-                                    throw new ValidationException($"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
+                                    throw CreateFieldValidationException(def.FieldKey, $"{def.Label} must be a future date after {todayInClinic:yyyy-MM-dd}.");
                                 break;
                         }
                     }
@@ -693,16 +701,38 @@ public static class CustomFieldValueValidator
             }
         }
 
-        // Verify all required fields remain present in targetCustomFields ONLY if visible
+        // Required field validation with grandfathering:
+        // Enforce required fields IF:
+        // 1. The field was previously populated and has now been explicitly cleared/blanked.
+        // OR
+        // 2. The field became newly visible as a result of an explicit change during this update (e.g. affiliation switch).
+        // Historical unpopulated required fields on pre-existing records that were not modified/switched into are grandfathered.
         foreach (var def in activeDefs)
         {
-            if (def.IsRequired && IsFieldVisible(def, targetCustomFields, staticContext))
+            if (!def.IsRequired) continue;
+
+            bool nowVisible = IsFieldVisible(def, targetCustomFields, staticContext);
+            if (!nowVisible) continue;
+
+            bool hasValueAfterMerge = TryGetCustomFieldValue(targetCustomFields, def.FieldKey, out var val) && !IsBlankOrCleared(val);
+            if (hasValueAfterMerge) continue;
+
+            bool hadInitial = initialPopulated.TryGetValue(def.FieldKey, out var initPop) && initPop;
+            bool wasInitVisible = initialVisible.TryGetValue(def.FieldKey, out var initVis) && initVis;
+
+            // Scenario 1: A previously populated required field was explicitly cleared
+            if (hadInitial)
             {
-                if (!TryGetCustomFieldValue(targetCustomFields, def.FieldKey, out var val) || IsBlankOrCleared(val))
-                {
-                    throw new ValidationException($"{def.Label} is required.");
-                }
+                throw CreateFieldValidationException(def.FieldKey, $"{def.Label} is required.");
             }
+
+            // Scenario 2: The field became newly visible due to a user change (e.g. affiliation change) and wasn't provided
+            if (!wasInitVisible && nowVisible)
+            {
+                throw CreateFieldValidationException(def.FieldKey, $"{def.Label} is required.");
+            }
+
+            // Otherwise, unpopulated legacy field remains grandfathered
         }
     }
 
