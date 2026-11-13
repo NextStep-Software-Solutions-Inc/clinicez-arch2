@@ -78,7 +78,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Urgent,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(23).AddMinutes(45), // 23:45 UTC
             CompletedTime = queryDate.AddDays(1).AddMinutes(30)   // 00:30 UTC next day (45 mins)
@@ -109,7 +109,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(10).AddMinutes(0),
             CompletedTime = queryDate.AddHours(9).AddMinutes(55) // 5 minutes BEFORE check-in
@@ -140,7 +140,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 3,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(14).AddMinutes(0),
             CompletedTime = queryDate.AddHours(14).AddMinutes(20)
@@ -187,7 +187,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 4,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(8).AddMinutes(0),
             CompletedTime = queryDate.AddHours(8).AddMinutes(30)
@@ -202,7 +202,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 5,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(16).AddMinutes(0),
             CompletedTime = queryDate.AddHours(16).AddMinutes(25)
@@ -234,7 +234,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 6,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Waiting,
             CheckInTime = queryDate.AddHours(17).AddMinutes(0)
             // CompletedTime is null
@@ -578,7 +578,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             DoctorId = docId,
             DoctorName = "Dr. Jose Rizal",
@@ -658,7 +658,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(14),
             CompletedTime = queryDate.AddHours(14).AddMinutes(15)
@@ -702,7 +702,7 @@ public class ClinicCensusAdversarialStressTests
         item1.AmountPaid.Should().Be(500m);
 
         // Item 2 assertions - should NOT inherit Item 1's doctor diagnosis, vitals, or invoice!
-        item2.VisitType.Should().Be("StandaloneProcedure");
+        item2.VisitType.Should().Be("PreventiveHealthAssessment");
         item2.ProceduresPerformed.Should().Be("Tetanus Toxoid Injection");
         item2.AttendingDoctor.Should().Be("—", "Visit 2 was a standalone nursing procedure and should not inherit Visit 1's doctor");
         item2.DoctorDiagnosis.Should().BeEmpty("Visit 2 was not a doctor consultation and non-diagnosis cells must remain blank");
@@ -749,7 +749,7 @@ public class ClinicCensusAdversarialStressTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             DoctorId = docId,
             DoctorName = "Dr. Rizal",

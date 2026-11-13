@@ -1,9 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
-import { resolveServiceApiUrl } from '@shared/safe';
 import { pharmacyApiClient } from '../services/apiClient';
-import { getPharmacyApiBaseUrl } from '../services/runtimeConfig';
 import { useAuth } from '../components/AuthGate';
 
 export interface PharmacyCommsContextValue {
@@ -27,36 +25,11 @@ const PharmacyCommsContext = createContext<PharmacyCommsContextValue>({
 export const usePharmacyComms = () => useContext(PharmacyCommsContext);
 
 export function getCommsApiBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_COMMS_API_URL) {
-    return process.env.EXPO_PUBLIC_COMMS_API_URL.replace(/\/+$/, '');
+  const commsUrl = process.env.EXPO_PUBLIC_COMMS_API_URL;
+  if (commsUrl && commsUrl.trim()) {
+    return commsUrl.trim().replace(/\/+$/, '');
   }
-  const apiBase = getPharmacyApiBaseUrl();
-  try {
-    const url = new URL(apiBase);
-    url.pathname = '';
-    if (url.port === '5245' || url.port === '5240' || url.port === '5242' || url.port === '5243' || url.port === '5310') {
-      url.port = '5247';
-      return url.origin;
-    }
-    if (url.hostname.includes('clinicez-pharmacy')) {
-      url.hostname = url.hostname.replace('clinicez-pharmacy', 'clinicez-comms');
-      return url.origin;
-    }
-    if (url.hostname.includes('pharmacy-api')) {
-      url.hostname = url.hostname.replace('pharmacy-api', 'comms-api');
-      return url.origin;
-    }
-    if (url.hostname.startsWith('pharmacy.')) {
-      url.hostname = url.hostname.replace(/^pharmacy\./, 'comms.');
-      return url.origin;
-    }
-    if (url.hostname.includes('comms')) {
-      return url.origin;
-    }
-  } catch {
-    // fallback
-  }
-  return resolveServiceApiUrl({ serviceSubdomain: 'comms', fallbackPort: 5247 }).replace(/\/+$/, '');
+  throw new Error('EXPO_PUBLIC_COMMS_API_URL is required and must be configured in environment variables.');
 }
 
 export function PharmacyCommsProvider({ children }: { children: React.ReactNode }) {

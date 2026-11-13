@@ -37,7 +37,7 @@ public class BillingControllerRetailValidationTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: walkInName,
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var actionResult = await controller.CreateInvoice(request, CancellationToken.None);
 
@@ -99,7 +99,7 @@ public class BillingControllerRetailValidationTests
             },
             IsWalkInRetail: true,
             WalkInCustomerName: "Pedro Penduko",
-            VisitType: VisitType.RetailPurchase);
+            VisitType: null);
 
         var actionResult = await controller.CreateInvoice(request, CancellationToken.None);
 

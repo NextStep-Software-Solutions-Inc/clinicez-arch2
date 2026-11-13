@@ -17,8 +17,10 @@ import { theme } from '@constants/theme';
 import { PERMISSIONS } from '@constants/permissions';
 import { notify } from '@utils/feedback';
 import { formatDateTime } from '@utils/formatDateTime';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { usePermission } from '../../context/AuthContext';
 import { openDocument } from '../../services/documentOpener';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   clinicService,
   type LabResultReviewItem,
@@ -39,12 +41,41 @@ import { ResultProvenanceBadges } from '../../components/interop/InteropBadges';
 const STATE_OPTIONS = [...REVIEW_STATE_OPTIONS];
 const SCOPE_OPTIONS = [...REVIEW_SCOPE_OPTIONS];
 
-export default function ResultReviewScreen() {
+export default function ResultReviewScreen({
+  route: routeProp,
+}: { route?: { params?: { state?: string; scope?: string } } } = {}) {
+  const navigation = useNavigation<any>();
+  let hookRoute: any = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    hookRoute = useRoute<any>();
+  } catch {
+    // ignore
+  }
+  const routeParams = routeProp?.params ?? hookRoute?.params;
   const canRead = usePermission(PERMISSIONS.labOrdersRead);
   const canReview = usePermission(PERMISSIONS.labResultsReview);
 
-  const [stateFilter, setStateFilter] = useState<LabResultVerificationState>('Unverified');
-  const [scope, setScope] = useState<LabResultReviewScope>('mine');
+  const [stateFilter, setStateFilter] = usePersistedTab<LabResultVerificationState>({
+    storageKey: 'clinicez_result_review_state',
+    allowedValues: ['Unverified', 'Verified', 'Rejected'],
+    defaultValue: 'Unverified',
+    routeParam: routeParams?.state,
+    queryParam: 'state',
+    queryParamAliases: ['filter'],
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('result-review'),
+  });
+  const [scope, setScope] = usePersistedTab<LabResultReviewScope>({
+    storageKey: 'clinicez_result_review_scope',
+    allowedValues: ['mine', 'all'],
+    defaultValue: 'mine',
+    routeParam: routeParams?.scope,
+    queryParam: 'scope',
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('result-review'),
+  });
   const [items, setItems] = useState<LabResultReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

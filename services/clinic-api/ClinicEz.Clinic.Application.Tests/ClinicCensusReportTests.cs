@@ -109,7 +109,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             DoctorId = doc1Id,
             DoctorName = "Dr. Andres Reyes",
@@ -241,7 +241,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 91,
             QueueDate = new DateOnly(2026, 9, 1),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = new DateTime(2026, 9, 1, 9, 0, 0, DateTimeKind.Utc),
             CompletedTime = new DateTime(2026, 9, 1, 9, 30, 0, DateTimeKind.Utc)
@@ -258,7 +258,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Urgent,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             DoctorId = doc1Id,
             DoctorName = "Dr. Andres Reyes",
@@ -395,7 +395,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 3,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Completed,
             ChiefComplaint = "Wound dressing change on left forearm",
             CheckInTime = queryDate.AddHours(10).AddMinutes(0),
@@ -467,7 +467,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 4,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Emergency,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Diverted,
             ChiefComplaint = "Severe acute crushing chest pain radiating to left arm",
             CheckInTime = queryDate.AddHours(11).AddMinutes(0),
@@ -504,7 +504,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 5,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Cancelled,
             CheckInTime = queryDate.AddHours(13).AddMinutes(0)
         };
@@ -569,8 +569,8 @@ public class ClinicCensusReportTests
         acuity.EmergencyPercentage.Should().Be(20.0);
 
         // Visit Types Breakdown
-        result.VisitTypes.Should().Contain(vt => vt.VisitType == "Consultation" && vt.Count == 4 && vt.Percentage == 80.0);
-        result.VisitTypes.Should().Contain(vt => vt.VisitType == "StandaloneProcedure" && vt.Count == 1 && vt.Percentage == 20.0);
+        result.VisitTypes.Should().Contain(vt => vt.VisitType == "RoutineCheckup" && vt.Count == 4 && vt.Percentage == 80.0);
+        result.VisitTypes.Should().Contain(vt => vt.VisitType == "PreventiveHealthAssessment" && vt.Count == 1 && vt.Percentage == 20.0);
 
         // Provider Workload Breakdown
         result.Providers.Should().Contain(p => p.StaffName == "Dr. Andres Reyes" && p.Role == "Doctor" && p.TotalEncounters == 2 && p.CompletedEncounters == 2);
@@ -626,7 +626,7 @@ public class ClinicCensusReportTests
         var item3 = result.Items.First(i => i.QueueNumber == "Q-003");
         item3.Age.Should().Be(67);
         item3.Classification.Should().Contain("Senior");
-        item3.VisitType.Should().Be("StandaloneProcedure");
+        item3.VisitType.Should().Be("PreventiveHealthAssessment");
         item3.ProceduresPerformed.Should().Be("Wound Debridement and Sterile Dressing");
         item3.AttendingNurse.Should().Be("Nurse Clara Bautista");
         item3.DoctorDiagnosis.Should().BeEmpty();
@@ -702,7 +702,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             DoctorId = doc1,
             DoctorName = "Dr. One",
@@ -719,7 +719,7 @@ public class ClinicCensusReportTests
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Urgent,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Completed,
             DoctorId = doc2,
             DoctorName = "Dr. Two",
@@ -777,10 +777,10 @@ public class ClinicCensusReportTests
 
         // 3. Filter by VisitType
         var procResult = await handler.Handle(
-            new GetClinicCensusReportQuery(StartDate: queryDate, EndDate: queryDate, VisitType: "StandaloneProcedure"),
+            new GetClinicCensusReportQuery(StartDate: queryDate, EndDate: queryDate, VisitType: "PreventiveHealthAssessment"),
             CancellationToken.None);
         procResult.Items.Should().HaveCount(1);
-        procResult.Items[0].VisitType.Should().Be("StandaloneProcedure");
+        procResult.Items[0].VisitType.Should().Be("PreventiveHealthAssessment");
 
         // 4. Filter by Status
         var completedResult = await handler.Handle(

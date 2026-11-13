@@ -110,6 +110,8 @@ public sealed class EnsureDirectVisitCommandHandler : IRequestHandler<EnsureDire
 
             foreach (var candidate in candidates)
             {
+                if (!Enum.IsDefined(candidate.VisitType)) continue;
+
                 var isSigned = false;
                 if (_encounterRepository != null)
                 {

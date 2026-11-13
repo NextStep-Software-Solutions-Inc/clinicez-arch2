@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { View, StyleSheet, ScrollView, RefreshControl, Pressable, Platform } from 'react-native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
+import { usePersistedScrollPosition } from '../../hooks/usePersistedScrollPosition';
 import {
   ThemedText,
   Badge,
@@ -84,15 +86,89 @@ import {
   isVisitTypeEligibleForOtcDispensing,
 } from '../../components/consultation';
 
-type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
-type ReportType =
-  | 'DAILY_EOD'
-  | 'CENSUS'
-  | 'DISPENSING_LEDGER'
-  | 'MORBIDITY'
-  | 'TAX_DISCOUNT'
-  | 'DOCTOR_SHARES';
-type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'PendingProcedure' | 'OnHold' | 'NoShow' | 'Completed';
+export const DASHBOARD_TABS = ['QUEUE', 'ANALYTICS', 'REPORTS'] as const;
+export type DashboardTab = (typeof DASHBOARD_TABS)[number];
+
+export const REPORT_TYPES = [
+  'DAILY_EOD',
+  'CENSUS',
+  'DISPENSING_LEDGER',
+  'MORBIDITY',
+  'TAX_DISCOUNT',
+  'DOCTOR_SHARES',
+] as const;
+export type ReportType = (typeof REPORT_TYPES)[number];
+
+export const QUEUE_FILTERS = [
+  'ALL',
+  'Waiting',
+  'Triaged',
+  'InConsultation',
+  'PendingProcedure',
+  'OnHold',
+  'NoShow',
+  'Completed',
+] as const;
+export type QueueFilter = (typeof QUEUE_FILTERS)[number];
+
+export const DASHBOARD_ACTIVE_TAB_STORAGE_KEY = 'clinicez_dashboard_active_tab';
+export const DASHBOARD_REPORT_TYPE_STORAGE_KEY = 'clinicez_dashboard_report_type';
+export const DASHBOARD_QUEUE_FILTER_STORAGE_KEY = 'clinicez_dashboard_queue_filter';
+
+export const QUEUE_FILTER_VALUE_ALIASES: Record<string, QueueFilter> = {
+  all: 'ALL',
+  waiting: 'Waiting',
+  triage: 'Triaged',
+  triaged: 'Triaged',
+  in_consultation: 'InConsultation',
+  'in-consultation': 'InConsultation',
+  inconsultation: 'InConsultation',
+  consultation: 'InConsultation',
+  procedure: 'PendingProcedure',
+  procedure_bay: 'PendingProcedure',
+  'procedure-bay': 'PendingProcedure',
+  procedurebay: 'PendingProcedure',
+  pending_procedure: 'PendingProcedure',
+  'pending-procedure': 'PendingProcedure',
+  pendingprocedure: 'PendingProcedure',
+  on_hold: 'OnHold',
+  'on-hold': 'OnHold',
+  onhold: 'OnHold',
+  no_show: 'NoShow',
+  'no-show': 'NoShow',
+  noshow: 'NoShow',
+  completed: 'Completed',
+  done: 'Completed',
+};
+
+export interface DashboardRouteParams {
+  tab?: string;
+  report?: string;
+  status?: string;
+  queueStatus?: string;
+  queueFilter?: string;
+  preset?: string;
+  acuity?: string;
+  visitType?: string;
+  repPreset?: string;
+  repStart?: string;
+  repEnd?: string;
+  eodDate?: string;
+}
+
+export function isDashboardPathname(pathname?: string | null): boolean {
+  const clean = (pathname || '').trim().toLowerCase().replace(/\/+$/, '');
+  return clean === '' || clean === '/dashboard' || clean.endsWith('/dashboard');
+}
+
+function useOptionalDashboardRoute(): { params?: DashboardRouteParams } | null {
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useRoute<any>();
+  } catch {
+    return null;
+  }
+}
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
@@ -299,8 +375,12 @@ function computeDatePresetRange(preset: 'today' | 'yesterday' | '7d' | '30d' | '
   return { start: `${now.getFullYear()}-01-01`, end: todayStr };
 }
 
-export default function DashboardScreen() {
+export default function DashboardScreen({
+  route: routeProp,
+}: { route?: { params?: DashboardRouteParams } } = {}) {
   const navigation = useNavigation<any>();
+  const hookRoute = useOptionalDashboardRoute();
+  const routeParams = routeProp?.params ?? hookRoute?.params;
   const { facilityName, letterhead, settings, rooms } = useClinic();
   const { current: currentStaff, currentName, staff: staffList } = useStaff();
   const activeDoctors = useMemo(
@@ -320,7 +400,37 @@ export default function DashboardScreen() {
   const [savingDischarge, setSavingDischarge] = useState<boolean>(false);
   const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('QUEUE');
+  const activeTabRef = useRef<DashboardTab>('QUEUE');
+  const reportTypeRef = useRef<ReportType>('DAILY_EOD');
+  const queueFilterRef = useRef<QueueFilter>('ALL');
+  const resetScrollRef = useRef<((targetKey?: string) => void) | null>(null);
+
+  const [activeTab, setActiveTab] = usePersistedTab<DashboardTab>({
+    storageKey: DASHBOARD_ACTIVE_TAB_STORAGE_KEY,
+    allowedValues: DASHBOARD_TABS,
+    defaultValue: 'QUEUE',
+    routeParam: routeParams?.tab,
+    queryParam: 'tab',
+    pathnameMatcher: isDashboardPathname,
+    navigation,
+    cleanupParamsByValue: {
+      QUEUE: ['report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter', 'preset', 'period', 'analyticsPreset'],
+      ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+    },
+    onPersist: (nextTab) => {
+      activeTabRef.current = nextTab;
+      const scrollKey =
+        nextTab === 'REPORTS'
+          ? `clinicez.scroll.dashboard.REPORTS.${reportTypeRef.current}`
+          : nextTab === 'QUEUE'
+            ? `clinicez.scroll.dashboard.QUEUE.${queueFilterRef.current}`
+            : `clinicez.scroll.dashboard.${nextTab}`;
+      resetScrollRef.current?.(scrollKey);
+    },
+  });
+  activeTabRef.current = activeTab;
+
   const [metrics, setMetrics] = useState<QueueMetrics | null>(null);
   const [queue, setQueue] = useState<PatientQueueItem[] | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
@@ -329,7 +439,27 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actioningId, setActioningId] = useState<string | null>(null);
-  const [queueFilter, setQueueFilter] = useState<QueueFilter>('ALL');
+
+  const [queueFilter, setQueueFilter] = usePersistedTab<QueueFilter>({
+    storageKey: DASHBOARD_QUEUE_FILTER_STORAGE_KEY,
+    allowedValues: QUEUE_FILTERS,
+    defaultValue: 'ALL',
+    omitDefaultFromUrl: true,
+    routeParam: routeParams?.status || routeParams?.queueStatus || routeParams?.queueFilter,
+    queryParam: 'status',
+    queryParamAliases: ['queueStatus', 'queueFilter', 'filter'],
+    valueAliases: QUEUE_FILTER_VALUE_ALIASES,
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'QUEUE',
+    clearUrlOnInactive: true,
+    navigation,
+    onPersist: (nextFilter) => {
+      queueFilterRef.current = nextFilter;
+      resetScrollRef.current?.(`clinicez.scroll.dashboard.QUEUE.${nextFilter}`);
+    },
+  });
+  queueFilterRef.current = queueFilter;
+
   const [showForceEodModal, setShowForceEodModal] = useState(false);
 
   // Nurse triage modal state
@@ -353,7 +483,48 @@ export default function DashboardScreen() {
   const [reviewingLogId, setReviewingLogId] = useState<string | null>(null);
 
   // Clinic reports and analytics state
-  const [reportType, setReportType] = useState<ReportType>('DAILY_EOD');
+  const [reportType, setReportType] = usePersistedTab<ReportType>({
+    storageKey: DASHBOARD_REPORT_TYPE_STORAGE_KEY,
+    allowedValues: REPORT_TYPES,
+    defaultValue: 'DAILY_EOD',
+    routeParam: routeParams?.report,
+    queryParam: 'report',
+    queryParamAliases: ['subTab', 'reportType'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS',
+    clearUrlOnInactive: true,
+    navigation,
+    cleanupParamsByValue: {
+      DAILY_EOD: ['repPreset', 'repStart', 'repEnd', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      CENSUS: ['eodDate'],
+      DISPENSING_LEDGER: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      MORBIDITY: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      TAX_DISCOUNT: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      DOCTOR_SHARES: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+    },
+    onPersist: (nextReport) => {
+      reportTypeRef.current = nextReport;
+      resetScrollRef.current?.(`clinicez.scroll.dashboard.REPORTS.${nextReport}`);
+    },
+  });
+  reportTypeRef.current = reportType;
+
+  const dashboardScrollKey =
+    activeTab === 'REPORTS'
+      ? `clinicez.scroll.dashboard.REPORTS.${reportType}`
+      : activeTab === 'QUEUE'
+        ? `clinicez.scroll.dashboard.QUEUE.${queueFilter}`
+        : `clinicez.scroll.dashboard.${activeTab}`;
+  const {
+    scrollViewRef: dashboardScrollRef,
+    onScroll: handleDashboardScroll,
+    onContentSizeChange: handleDashboardContentSizeChange,
+    resetScrollPosition: resetDashboardScrollPosition,
+  } = usePersistedScrollPosition({
+    storageKey: dashboardScrollKey,
+    ready: !loading,
+  });
+  resetScrollRef.current = resetDashboardScrollPosition;
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
   const [censusReport, setCensusReport] = useState<ClinicCensusReport | null>(null);
   const [morbidityReport, setMorbidityReport] = useState<MorbidityReport | null>(null);
@@ -363,8 +534,45 @@ export default function DashboardScreen() {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [censusSearchQuery, setCensusSearchQuery] = useState('');
-  const [censusAcuityFilter, setCensusAcuityFilter] = useState<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>('ALL');
-  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = useState<string>('ALL');
+  const [censusAcuityFilter, setCensusAcuityFilter] = usePersistedTab<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>({
+    storageKey: 'clinicez_dashboard_census_acuity',
+    allowedValues: ['ALL', 'Routine', 'Urgent', 'Emergency'],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.acuity,
+    queryParam: 'acuity',
+    queryParamAliases: ['censusAcuity'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_census_visit_type',
+    allowedValues: [
+      'ALL',
+      'RoutineCheckup',
+      'AcuteIllnessConsultation',
+      'FollowUpConsultation',
+      'ChronicDiseaseManagement',
+      'PrescriptionRefill',
+      'DiagnosticLabFollowUp',
+      'VaccinationImmunization',
+      'WoundCareDressing',
+      'PediatricWellBabyVisit',
+      'PreEmploymentSchoolCheck',
+      'Other',
+    ],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.visitType,
+    queryParam: 'visitType',
+    queryParamAliases: ['censusVisitType'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
   const [censusPage, setCensusPage] = useState<number>(1);
   const [censusPageSize, setCensusPageSize] = useState<10 | 20 | 50>(20);
   const [censusPageLoading, setCensusPageLoading] = useState<boolean>(false);
@@ -381,11 +589,72 @@ export default function DashboardScreen() {
     }));
   }, []);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsStartDate, setAnalyticsStartDate] = useState('');
-  const [analyticsEndDate, setAnalyticsEndDate] = useState('');
-  const [reportsStartDate, setReportsStartDate] = useState('');
-  const [reportsEndDate, setReportsEndDate] = useState('');
-  const [eodDate, setEodDate] = useState('');
+  const [analyticsPreset, setAnalyticsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'ytd'>({
+    storageKey: 'clinicez_dashboard_analytics_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'ytd'],
+    defaultValue: '7d',
+    routeParam: routeParams?.preset as any,
+    queryParam: 'preset',
+    queryParamAliases: ['period', 'analyticsPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'ANALYTICS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const initialAnalyticsRange = useMemo(() => computeDatePresetRange(analyticsPreset), [analyticsPreset]);
+  const [analyticsStartDate, setAnalyticsStartDate] = useState(initialAnalyticsRange.start);
+  const [analyticsEndDate, setAnalyticsEndDate] = useState(initialAnalyticsRange.end);
+  const [reportsPreset, setReportsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'custom'>({
+    storageKey: 'clinicez_dashboard_reports_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'custom'],
+    defaultValue: 'today',
+    routeParam: routeParams?.repPreset as any,
+    queryParam: 'repPreset',
+    queryParamAliases: ['reportPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const defaultReportsRange = useMemo(() => {
+    return reportsPreset === 'custom'
+      ? { start: getManilaTodayStr(), end: getManilaTodayStr() }
+      : computeDatePresetRange(reportsPreset);
+  }, [reportsPreset]);
+  const [reportsStartDate, setReportsStartDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_start',
+    defaultValue: defaultReportsRange.start,
+    routeParam: routeParams?.repStart,
+    queryParam: 'repStart',
+    queryParamAliases: ['reportStart', 'startDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [reportsEndDate, setReportsEndDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_end',
+    defaultValue: defaultReportsRange.end,
+    routeParam: routeParams?.repEnd,
+    queryParam: 'repEnd',
+    queryParamAliases: ['reportEnd', 'endDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [eodDate, setEodDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_eod_date',
+    defaultValue: getManilaTodayStr(),
+    routeParam: routeParams?.eodDate,
+    queryParam: 'eodDate',
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
   const [isAnalyticsDateRangeModalOpen, setIsAnalyticsDateRangeModalOpen] = useState(false);
   const [isReportsDateRangeModalOpen, setIsReportsDateRangeModalOpen] = useState(false);
   const [isEodDatePickerModalOpen, setIsEodDatePickerModalOpen] = useState(false);
@@ -1742,10 +2011,11 @@ export default function DashboardScreen() {
                 return (
                   <Button
                     key={preset}
-                    variant="subtle"
+                    variant={analyticsPreset === preset ? 'primary' : 'subtle'}
                     size="xs"
                     title={labelMap[preset]}
                     onPress={() => {
+                      setAnalyticsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setAnalyticsStartDate(range.start);
                       setAnalyticsEndDate(range.end);
@@ -3937,13 +4207,15 @@ export default function DashboardScreen() {
                   '7d': 'Last 7 Days',
                   '30d': 'This Month',
                 };
+                const isActive = reportsPreset === preset;
                 return (
                   <Button
                     key={preset}
-                    variant="subtle"
+                    variant={isActive ? 'primary' : 'subtle'}
                     size="xs"
                     title={labelMap[preset]}
                     onPress={() => {
+                      setReportsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setReportsStartDate(range.start);
                       setReportsEndDate(range.end);
@@ -3993,6 +4265,7 @@ export default function DashboardScreen() {
         endDate={reportsEndDate}
         boundaryMode="pastOrToday"
         onApply={(start, end) => {
+          setReportsPreset('custom');
           setReportsStartDate(start);
           setReportsEndDate(end);
           setIsReportsDateRangeModalOpen(false);
@@ -4036,8 +4309,12 @@ export default function DashboardScreen() {
       ]}
     >
       <ScrollView
+        ref={dashboardScrollRef}
         style={styles.container}
         contentContainerStyle={styles.content}
+        onScroll={handleDashboardScroll}
+        onContentSizeChange={handleDashboardContentSizeChange}
+        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
         <SegmentedControl<DashboardTab>

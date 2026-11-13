@@ -67,7 +67,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientId = patientId,
             PatientName = "Adversarial Active Patient",
             Status = activeStatus,
-            VisitType = VisitType.Consultation
+            VisitType = VisitType.RoutineCheckup
         };
         await context.Set<QueueItem>().AddAsync(existingTicket);
         await uow.SaveChangesAsync(CancellationToken.None);
@@ -76,7 +76,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         var command = new CheckInPatientCommand(
             PatientId: patientId,
             PatientName: "Adversarial Active Patient",
-            VisitType: VisitType.Consultation);
+            VisitType: VisitType.RoutineCheckup);
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ActiveQueueTicketConflictException>(() =>
@@ -116,7 +116,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientId = patientId,
             PatientName = "Returning Patient",
             Status = terminalStatus,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             DischargedAt = DateTime.UtcNow.AddHours(-1)
         };
         await context.Set<QueueItem>().AddAsync(priorTicket);
@@ -126,7 +126,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         var command = new CheckInPatientCommand(
             PatientId: patientId,
             PatientName: "Returning Patient",
-            VisitType: VisitType.Consultation);
+            VisitType: VisitType.RoutineCheckup);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -135,7 +135,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         result.Should().NotBeNull();
         result.QueueNumber.Should().Be("Q-002");
         result.Status.Should().Be(QueueStatus.Waiting);
-        result.VisitType.Should().Be(VisitType.Consultation);
+        result.VisitType.Should().Be(VisitType.RoutineCheckup);
     }
 
     [Fact]
@@ -151,10 +151,10 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         var patientId = Guid.NewGuid();
         var handler = new CheckInPatientCommandHandler(queueRepo, apptRepo, uow, _clinicContext, identity, publisher);
 
-        // Act: Patient checks in for Vitals, then Retail, then Laboratory Specimen concurrently
-        var vitalsResult = await handler.Handle(new CheckInPatientCommand(patientId, "Multi-intent Patient", VisitType: VisitType.VitalsCheckOnly), CancellationToken.None);
-        var retailResult = await handler.Handle(new CheckInPatientCommand(patientId, "Multi-intent Patient", VisitType: VisitType.RetailPurchase), CancellationToken.None);
-        var labResult = await handler.Handle(new CheckInPatientCommand(patientId, "Multi-intent Patient", VisitType: VisitType.LaboratorySpecimen), CancellationToken.None);
+        // Act: Patient checks in for concurrent clinical visits when staff explicitly allows duplicate active tickets
+        var vitalsResult = await handler.Handle(new CheckInPatientCommand(patientId, "Multi-intent Patient", VisitType: VisitType.PreventiveHealthAssessment), CancellationToken.None);
+        var retailResult = await handler.Handle(new CheckInPatientCommand(patientId, "Multi-intent Patient", VisitType: VisitType.ChronicDiseaseFollowUp, AllowDuplicateActive: true), CancellationToken.None);
+        var labResult = await handler.Handle(new CheckInPatientCommand(patientId, "Multi-intent Patient", VisitType: VisitType.UrgentCareVisit, AllowDuplicateActive: true), CancellationToken.None);
 
         // Assert
         vitalsResult.QueueNumber.Should().Be("Q-001");
@@ -165,20 +165,18 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
         allItems.Should().HaveCount(3);
         allItems.Select(q => q.VisitType).Should().BeEquivalentTo(new[]
         {
-            VisitType.VitalsCheckOnly,
-            VisitType.RetailPurchase,
-            VisitType.LaboratorySpecimen
+            VisitType.PreventiveHealthAssessment,
+            VisitType.ChronicDiseaseFollowUp,
+            VisitType.UrgentCareVisit
         });
     }
 
     [Theory]
-    [InlineData(VisitType.Consultation)]
-    [InlineData(VisitType.VitalsCheckOnly)]
-    [InlineData(VisitType.RetailPurchase)]
-    [InlineData(VisitType.StandaloneProcedure)]
-    [InlineData(VisitType.LaboratorySpecimen)]
-    [InlineData(VisitType.AdministrativeDocument)]
-    [InlineData(VisitType.CashierSettlement)]
+    [InlineData(VisitType.RoutineCheckup)]
+    [InlineData(VisitType.AcuteIllnessConsultation)]
+    [InlineData(VisitType.ChronicDiseaseFollowUp)]
+    [InlineData(VisitType.PreventiveHealthAssessment)]
+    [InlineData(VisitType.UrgentCareVisit)]
     public async Task CheckIn_All7VisitTypeEnumValues_PersistCorrectlyToDatabase(VisitType visitType)
     {
         // Arrange
@@ -431,7 +429,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientName = "Routine Patient",
             Status = QueueStatus.Waiting,
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation
+            VisitType = VisitType.RoutineCheckup
         };
 
         // Urgent patient checked in second (Sequence 2)
@@ -447,7 +445,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientName = "Urgent Patient",
             Status = QueueStatus.Waiting,
             Priority = QueuePriority.Urgent,
-            VisitType = VisitType.Consultation
+            VisitType = VisitType.RoutineCheckup
         };
 
         // Emergency patient checked in third (Sequence 3)
@@ -463,7 +461,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientName = "Emergency Patient",
             Status = QueueStatus.Waiting,
             Priority = QueuePriority.Emergency,
-            VisitType = VisitType.Consultation
+            VisitType = VisitType.RoutineCheckup
         };
 
         await queueRepo.AddAsync(routineTicket, CancellationToken.None);
@@ -482,12 +480,10 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
     }
 
     [Theory]
-    [InlineData(VisitType.VitalsCheckOnly)]
-    [InlineData(VisitType.RetailPurchase)]
-    [InlineData(VisitType.StandaloneProcedure)]
-    [InlineData(VisitType.LaboratorySpecimen)]
-    [InlineData(VisitType.AdministrativeDocument)]
-    [InlineData(VisitType.CashierSettlement)]
+    [InlineData(VisitType.PreventiveHealthAssessment)]
+    [InlineData((VisitType)6)]
+    [InlineData((VisitType)7)]
+    [InlineData((VisitType)99)]
     public async Task TvDisplay_StrictlyExcludesAllNonConsultationVisitTypes_WhenInWaitingOrTriaged(VisitType nonConsultVisitType)
     {
         // Arrange
@@ -534,7 +530,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientName = "Consult Patient",
             Status = QueueStatus.Waiting,
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation
+            VisitType = VisitType.RoutineCheckup
         };
 
         await queueRepo.AddAsync(nonConsultTicket, CancellationToken.None);
@@ -588,7 +584,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientId = Guid.NewGuid(),
             PatientName = "Terminal Status Patient",
             Status = terminalStatus,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             CalledTime = DateTime.UtcNow.AddMinutes(-10),
             CompletedTime = DateTime.UtcNow.AddMinutes(-5)
         };
@@ -634,7 +630,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientId = Guid.NewGuid(),
             PatientName = "Discharged By Nurse",
             Status = QueueStatus.DischargedNonDoctor,
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             DischargedAt = dischargedAt,
             DischargeNotes = "Vitals taken, cleared."
         };
@@ -650,7 +646,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientId = Guid.NewGuid(),
             PatientName = "Transferred ER Patient",
             Status = QueueStatus.Diverted,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             DischargedAt = dischargedAt,
             DischargeNotes = "Diverted to St. Luke's ER."
         };
@@ -666,7 +662,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientId = Guid.NewGuid(),
             PatientName = "Leftover Standalone Procedure",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.StandaloneProcedure
+            VisitType = VisitType.PreventiveHealthAssessment
         };
 
         var ticketActiveConsult = new QueueItem
@@ -680,7 +676,7 @@ public class NonDoctorWorkflowsMilestone1AdversarialTests
             PatientId = Guid.NewGuid(),
             PatientName = "Leftover Consultation",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.Consultation
+            VisitType = VisitType.RoutineCheckup
         };
 
         await queueRepo.AddAsync(ticketDischargedNonDoc, CancellationToken.None);

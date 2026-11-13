@@ -16,6 +16,7 @@ import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, Err
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   PatientSummarySpine,
   reconcileChartWithPatient,
@@ -224,20 +225,36 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<PatientFilter>(() => {
-    const saved = getSessionItem('clinicez_patients_filter_mode') as PatientFilter | null;
-    if (saved && ['ALL', 'MY_PATIENTS', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'].includes(saved)) {
-      return saved;
-    }
-    return 'ALL';
+  const [filterMode, setFilterMode] = usePersistedTab<PatientFilter>({
+    storageKey: 'clinicez_patients_filter_mode',
+    allowedValues: ['ALL', 'MY_PATIENTS', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'],
+    defaultValue: 'ALL',
+    routeParam: (route?.params as any)?.filter,
+    queryParam: 'filter',
+    queryParamAliases: ['filterMode', 'category'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
+    onPersist: (mode, prev) => {
+      setPatientsError(null);
+      if (mode !== prev) {
+        setPatients(null);
+        setLoading(true);
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+      }
+    },
   });
 
-  const [viewMode, setViewMode] = useState<PatientDirectoryViewMode>(() => {
-    const saved = getSessionItem('clinicez_patients_view_mode') as PatientDirectoryViewMode | null;
-    if (saved === 'cards' || saved === 'table') {
-      return saved;
-    }
-    return 'cards';
+  const [viewMode, setViewMode] = usePersistedTab<PatientDirectoryViewMode>({
+    storageKey: 'clinicez_patients_view_mode',
+    allowedValues: ['cards', 'table'],
+    defaultValue: 'cards',
+    routeParam: (route?.params as any)?.view,
+    queryParam: 'view',
+    queryParamAliases: ['viewMode'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
   });
 
   useEffect(() => {
@@ -248,19 +265,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   }, [searchTerm]);
 
   const handleFilterModeChange = (mode: PatientFilter) => {
-    setPatientsError(null);
-    if (mode !== filterMode) {
-      setPatients(null);
-      setLoading(true);
-      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    }
     setFilterMode(mode);
-    setSessionItem('clinicez_patients_filter_mode', mode);
   };
 
   const handleViewModeChange = (mode: PatientDirectoryViewMode) => {
     setViewMode(mode);
-    setSessionItem('clinicez_patients_view_mode', mode);
   };
 
   const effectiveViewMode: PatientDirectoryViewMode = isWorkstation ? viewMode : 'cards';
@@ -465,28 +474,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
 
-  const getInitialChartTab = (): ChartTab => {
-    if (routeTab && (CHART_TABS.some((t) => t.value === routeTab) || routeTab === 'dental')) {
-      return routeTab;
-    }
-    if (routeToothNumber) {
-      return 'dental';
-    }
-    if (typeof window !== 'undefined' && window.location?.search) {
-      try {
-        const sp = new URLSearchParams(window.location.search);
-        const tabParam = sp.get('tab') as ChartTab;
-        if (tabParam && (CHART_TABS.some((t) => t.value === tabParam) || tabParam === 'dental')) {
-          return tabParam;
-        }
-      } catch {}
-    }
-    const saved = getSessionItem('clinicez_active_chart_tab') as ChartTab | null;
-    if (saved && (CHART_TABS.some((t) => t.value === saved) || saved === 'dental')) {
-      return saved;
-    }
-    return 'summary';
-  };
+  const [activeChartTab, setActiveChartTab] = usePersistedTab<ChartTab>({
+    storageKey: 'clinicez_active_chart_tab',
+    allowedValues: [...CHART_TABS.map((t) => t.value), 'dental'],
+    defaultValue: routeToothNumber ? 'dental' : 'summary',
+    routeParam: routeTab,
+    queryParam: 'chartTab',
+    queryParamAliases: ['tab'],
+    syncUrl: chartVisible,
+    clearUrlOnInactive: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
+  });
 
   const getInitialFocusTooth = (): number | undefined => {
     if (routeToothNumber !== undefined) {
@@ -505,19 +504,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     return undefined;
   };
 
-  const [activeChartTab, setActiveChartTab] = useState<ChartTab>(getInitialChartTab);
   const [focusToothNumber, setFocusToothNumber] = useState<number | undefined>(getInitialFocusTooth);
 
   const handleChartTabChange = (tab: ChartTab) => {
     setActiveChartTab(tab);
-    setSessionItem('clinicez_active_chart_tab', tab);
-    if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', tab);
-        window.history.replaceState(null, '', url.toString());
-      } catch {}
-    }
   };
 
   // Queue Check-In Anti-Spam & Concurrency Guard states
@@ -1191,7 +1181,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setChartQueueItemId(queueItemId ?? null);
     setChartForceSeparateVisit(forceSeparateVisit);
     setSelectedPatient(patient);
-    const targetTab = tabToOpen ?? activeChartTab ?? getInitialChartTab();
+    const targetTab = tabToOpen ?? activeChartTab ?? 'summary';
     setActiveChartTab(targetTab);
     if (toothToFocus !== undefined) {
       setFocusToothNumber(toothToFocus);
@@ -1300,7 +1290,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     (async () => {
       const [patient] = await clinicService.getPatientById(targetPatientId!);
       if (cancelled || !patient) return;
-      const initialTab = getInitialChartTab();
+      const initialTab = activeChartTab;
       const initialTooth = getInitialFocusTooth();
       handleOpenChart(patient, initialTab, initialTooth);
     })();

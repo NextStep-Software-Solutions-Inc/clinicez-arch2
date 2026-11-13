@@ -29,16 +29,16 @@ const isNative = Platform.OS !== 'web';
  * Build-time values. Each must stay a literal `process.env.EXPO_PUBLIC_*` read so Metro can inline it.
  */
 const BUILD_SETTINGS: SettingValues = {
-  EXPO_PUBLIC_CLINIC_API_URL: process.env.EXPO_PUBLIC_CLINIC_API_URL,
-  EXPO_PUBLIC_BASE_DOMAIN: process.env.EXPO_PUBLIC_BASE_DOMAIN,
-  EXPO_PUBLIC_SERVICE_SUBDOMAIN: process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN,
-  EXPO_PUBLIC_SERVICE_SUBDOMAINS: process.env.EXPO_PUBLIC_SERVICE_SUBDOMAINS,
-  EXPO_PUBLIC_API_URL_TEMPLATE: process.env.EXPO_PUBLIC_API_URL_TEMPLATE,
-  EXPO_PUBLIC_PORTAL_URL: process.env.EXPO_PUBLIC_PORTAL_URL,
-  EXPO_PUBLIC_STORAGE_PUBLIC_URL: process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL,
-  EXPO_PUBLIC_OFFLINE_GRACE_HOURS: process.env.EXPO_PUBLIC_OFFLINE_GRACE_HOURS,
-  EXPO_PUBLIC_COMMS_API_URL: process.env.EXPO_PUBLIC_COMMS_API_URL,
-  EXPO_PUBLIC_ENABLE_COMMS: process.env.EXPO_PUBLIC_ENABLE_COMMS,
+  get EXPO_PUBLIC_CLINIC_API_URL() { return process.env.EXPO_PUBLIC_CLINIC_API_URL; },
+  get EXPO_PUBLIC_COMMS_API_URL() { return process.env.EXPO_PUBLIC_COMMS_API_URL; },
+  get EXPO_PUBLIC_BASE_DOMAIN() { return process.env.EXPO_PUBLIC_BASE_DOMAIN; },
+  get EXPO_PUBLIC_SERVICE_SUBDOMAIN() { return process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN; },
+  get EXPO_PUBLIC_SERVICE_SUBDOMAINS() { return process.env.EXPO_PUBLIC_SERVICE_SUBDOMAINS; },
+  get EXPO_PUBLIC_API_URL_TEMPLATE() { return process.env.EXPO_PUBLIC_API_URL_TEMPLATE; },
+  get EXPO_PUBLIC_PORTAL_URL() { return process.env.EXPO_PUBLIC_PORTAL_URL; },
+  get EXPO_PUBLIC_STORAGE_PUBLIC_URL() { return process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL; },
+  get EXPO_PUBLIC_OFFLINE_GRACE_HOURS() { return process.env.EXPO_PUBLIC_OFFLINE_GRACE_HOURS; },
+  get EXPO_PUBLIC_ENABLE_COMMS() { return process.env.EXPO_PUBLIC_ENABLE_COMMS; },
 };
 
 /** One setting, resolved the same way on every deployment: runtime (on-prem `config.json`) first, then build-time. */

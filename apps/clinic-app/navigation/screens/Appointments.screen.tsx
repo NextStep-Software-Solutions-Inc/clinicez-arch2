@@ -47,6 +47,7 @@ import {
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   CalendarHeader,
   CalendarSkeleton,
@@ -74,7 +75,9 @@ export type AppointmentsRouteParams = {
   date?: string;
   view?: CalendarViewMode;
   tab?: string;
+  status?: string;
   appointmentId?: string;
+  doctorId?: string;
 };
 
 export type AppointmentsScreenProps = StaticScreenProps<AppointmentsRouteParams | undefined>;
@@ -277,16 +280,46 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [checkInAppointment, setCheckInAppointment] = useState<AppointmentItem | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_status_filter',
+    allowedValues: ['ALL', 'Scheduled', 'CheckedIn', 'Completed', 'Cancelled', 'NoShow'],
+    defaultValue: 'ALL',
+    routeParam: route?.params?.status,
+    queryParam: 'status',
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
 
   // Calendar View & Navigation State
-  const [viewMode, setViewMode] = useState<CalendarViewMode>(() =>
-    (route?.params?.view as CalendarViewMode) || 'month'
-  );
-  const [currentDate, setCurrentDate] = useState<string>(() =>
-    route?.params?.date || getManilaTodayStr()
-  );
-  const [calendarDoctorId, setCalendarDoctorId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = usePersistedTab<CalendarViewMode>({
+    storageKey: 'clinicez_appointments_view_mode',
+    allowedValues: ['month', 'week', 'day', 'agenda'],
+    defaultValue: 'month',
+    routeParam: (route?.params?.view as CalendarViewMode) || null,
+    queryParam: 'view',
+    queryParamAliases: ['viewMode'],
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
+  const [currentDate, setCurrentDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_selected_date',
+    defaultValue: getManilaTodayStr(),
+    routeParam: route?.params?.date,
+    queryParam: 'date',
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
+  const [calendarDoctorId, setCalendarDoctorId] = usePersistedTab<string>({
+    storageKey: 'clinicez_appointments_doctor_id',
+    defaultValue: 'ALL',
+    routeParam: route?.params?.doctorId,
+    queryParam: 'doctorId',
+    queryParamAliases: ['doctor'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('appointments'),
+  });
   const [inspectedAppointment, setInspectedAppointment] = useState<ExtendedAppointmentItem | null>(
     () => {
       const apt = (route?.params as any)?.appointment;
@@ -346,7 +379,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const fetchAppointments = useCallback(async () => {
     const options: GetAppointmentsOptions = {};
 
-    if (calendarDoctorId) {
+    if (calendarDoctorId && calendarDoctorId !== 'ALL') {
       options.doctorId = calendarDoctorId;
     }
 
@@ -527,19 +560,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     }
   }, [route?.params?.appointmentId, appointments, loading, navigation]);
 
-  // Deep-link / route param: date
-  useEffect(() => {
-    if (route?.params?.date && route.params.date !== currentDate) {
-      setCurrentDate(route.params.date);
-    }
-  }, [route?.params?.date]);
 
-  // Deep-link / route param: view
-  useEffect(() => {
-    if (route?.params?.view && route.params.view !== viewMode) {
-      setViewMode(route.params.view as CalendarViewMode);
-    }
-  }, [route?.params?.view]);
 
   const handlePrev = useCallback(() => {
     const { year, month, day } = parseDateOnly(currentDate);
@@ -806,7 +827,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
             onSelectDate={handleSelectDate}
             onSelectSlot={handleSelectSlot}
             onSelectAppointment={(appt) => setInspectedAppointment(appt)}
-            activeDoctorId={calendarDoctorId || undefined}
+            activeDoctorId={calendarDoctorId === 'ALL' ? undefined : calendarDoctorId}
             doctorOverlays={doctorOverlays}
           />
         );
@@ -866,8 +887,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           onNext={handleNext}
           onToday={handleToday}
           onSelectDate={handleSelectDate}
-          activeDoctorId={calendarDoctorId || undefined}
-          onDoctorChange={(docId) => setCalendarDoctorId(docId || null)}
+          activeDoctorId={calendarDoctorId === 'ALL' ? undefined : calendarDoctorId}
+          onDoctorChange={(docId) => setCalendarDoctorId(docId || 'ALL')}
           doctors={activeDoctors.map((d) => ({ id: d.id, name: formatStaffName(d) }))}
         />
 

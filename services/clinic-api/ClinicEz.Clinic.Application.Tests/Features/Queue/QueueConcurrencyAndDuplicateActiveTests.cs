@@ -56,7 +56,7 @@ public class QueueConcurrencyAndDuplicateActiveTests
             PatientId = patientId,
             PatientName = "Abellana, Bea M.",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             CheckInTime = DateTime.UtcNow
         };
         await context.Set<QueueItem>().AddAsync(activeTicket);
@@ -68,7 +68,7 @@ public class QueueConcurrencyAndDuplicateActiveTests
         var procedureCommand = new CheckInPatientCommand(
             PatientId: patientId,
             PatientName: "Abellana, Bea M.",
-            VisitType: VisitType.StandaloneProcedure,
+            VisitType: VisitType.PreventiveHealthAssessment,
             AllowDuplicateActive: false);
 
         var act = () => handler.Handle(procedureCommand, CancellationToken.None);
@@ -103,7 +103,7 @@ public class QueueConcurrencyAndDuplicateActiveTests
             PatientId = patientId,
             PatientName = "Abellana, Bea M.",
             Status = QueueStatus.Waiting,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             CheckInTime = DateTime.UtcNow
         };
         await context.Set<QueueItem>().AddAsync(activeTicket);
@@ -115,7 +115,7 @@ public class QueueConcurrencyAndDuplicateActiveTests
         var procedureCommand = new CheckInPatientCommand(
             PatientId: patientId,
             PatientName: "Abellana, Bea M.",
-            VisitType: VisitType.StandaloneProcedure,
+            VisitType: VisitType.PreventiveHealthAssessment,
             SeriesPrefix: "P",
             AllowDuplicateActive: true);
 
@@ -124,7 +124,7 @@ public class QueueConcurrencyAndDuplicateActiveTests
         // Assert
         result.Should().NotBeNull();
         result.QueueNumber.Should().Be("P-001");
-        result.VisitType.Should().Be(VisitType.StandaloneProcedure);
+        result.VisitType.Should().Be(VisitType.PreventiveHealthAssessment);
     }
 
     [Fact]

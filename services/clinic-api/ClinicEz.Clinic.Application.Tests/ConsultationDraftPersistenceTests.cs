@@ -75,7 +75,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-001",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Triaged,
             CheckInTime = DateTime.UtcNow
         };
@@ -268,9 +268,9 @@ public class ConsultationDraftPersistenceTests
             queueRepo: TestDbHelper.CreateRepository<QueueItem>(db2, sieve2));
 
         var chart = await chartHandler.Handle(new GetPatientChartQuery(patient.Id), CancellationToken.None);
-        var chartConsult = chart.Consultations.Should().ContainSingle(c => c.Id == initialDraft.Id).Subject;
+        chart.Consultations.Should().BeEmpty("unsigned consultation drafts are excluded from the official patient chart");
 
-        foreach (var dto in new[] { reloadedById, chartConsult })
+        foreach (var dto in new[] { reloadedById })
         {
             dto.IsSigned.Should().BeFalse();
             dto.VisitWorkflowMode.Should().Be("YakapAvailment");
@@ -370,7 +370,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-REG-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow
         };
@@ -468,7 +468,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-REL-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Triaged,
             CheckInTime = DateTime.UtcNow
         };
@@ -655,7 +655,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-PROC-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = protectedStatus,
             CheckInTime = DateTime.UtcNow
         };
@@ -715,7 +715,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-SIGN-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow
         };
@@ -839,7 +839,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-ABANDON-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow
         };
@@ -961,7 +961,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-MODE-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             VisitWorkflowMode = VisitWorkflowMode.Regular,
             Status = QueueStatus.PendingProcedure,
             CheckInTime = DateTime.UtcNow
@@ -1038,7 +1038,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-MAX-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow
         };
@@ -1203,7 +1203,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "Q-EMPTY-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow
         };
@@ -1315,7 +1315,7 @@ public class ConsultationDraftPersistenceTests
             QueueNumber = "DV-001",
             SequenceNumber = 0,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             Status = QueueStatus.ReEvaluation,
             CheckInTime = DateTime.UtcNow
@@ -1368,12 +1368,12 @@ public class ConsultationDraftPersistenceTests
         abandoned.Should().BeTrue();
         db.Consultations.Count(c => c.Id == draft.Id).Should().Be(0);
 
-        // Executed procedure survives with ConsultationId unlinked, and direct-visit QueueItem is Cancelled (NOT hard-deleted)
+        // Executed procedure survives with ConsultationId unlinked, and direct-visit QueueItem reverts to Waiting (NOT hard-deleted or prematurely cancelled)
         var survivingProc = await db.Procedures.SingleAsync(p => p.Id == executedProc.Id);
         survivingProc.ConsultationId.Should().BeNull();
         survivingProc.QueueItemId.Should().Be(directQueueItem.Id);
 
         var survivingQueue = await db.QueueItems.SingleAsync(q => q.Id == directQueueItem.Id);
-        survivingQueue.Status.Should().Be(QueueStatus.Cancelled);
+        survivingQueue.Status.Should().Be(QueueStatus.Waiting);
     }
 }

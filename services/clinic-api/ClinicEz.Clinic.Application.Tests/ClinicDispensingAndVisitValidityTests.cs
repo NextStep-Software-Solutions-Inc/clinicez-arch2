@@ -92,9 +92,9 @@ public class ClinicDispensingAndVisitValidityTests
     }
 
     [Theory]
-    [InlineData(VisitType.AdministrativeDocument)]
-    [InlineData(VisitType.RetailPurchase)]
-    [InlineData(VisitType.CashierSettlement)]
+    [InlineData((VisitType)6)]
+    [InlineData((VisitType)7)]
+    [InlineData((VisitType)99)]
     public async Task TwoScenarioRule_RejectsMedicineDispensing_WhenVisitIsNeitherConsultationNorVitalsCheck(VisitType disallowedVisitType)
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -145,7 +145,7 @@ public class ClinicDispensingAndVisitValidityTests
             }), CancellationToken.None);
 
         await act.Should().ThrowAsync<BadRequestException>()
-            .WithMessage("*Consultation*Vitals Check*");
+            .WithMessage("*valid clinical VisitType*");
     }
 
     [Theory]
@@ -202,7 +202,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "Q-101",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Triaged,
             DoctorId = doctor.Id,
@@ -433,7 +433,7 @@ public class ClinicDispensingAndVisitValidityTests
                 QueueNumber = ticketNo,
                 SequenceNumber = 1,
                 QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                VisitType = VisitType.Consultation,
+                VisitType = VisitType.RoutineCheckup,
                 Status = QueueStatus.Triaged,
                 CheckInTime = DateTime.UtcNow
             };
@@ -556,7 +556,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "V-001",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Waiting,
             ChiefComplaint = "Tension headache after exam week",
@@ -633,7 +633,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "V-002",
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Triaged,
             CheckInTime = DateTime.UtcNow
@@ -649,7 +649,7 @@ public class ClinicDispensingAndVisitValidityTests
             DoctorId: doctor.Id,
             DoctorName: "Dr. Ana Cruz"), CancellationToken.None);
 
-        escalated.VisitType.Should().Be(VisitType.Consultation);
+        escalated.VisitType.Should().Be(VisitType.UrgentCareVisit);
         escalated.Priority.Should().Be(QueuePriority.Emergency);
         escalated.Status.Should().Be(QueueStatus.Triaged);
         escalated.DoctorId.Should().Be(doctor.Id);
@@ -696,7 +696,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "C-001",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(visitDay),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Completed,
             DoctorName = "Dr. Ana Cruz",
@@ -714,7 +714,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "V-002",
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(visitDay),
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Completed,
             ChiefComplaint = "Mild dysmenorrhea",
@@ -731,7 +731,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "C-003",
             SequenceNumber = 3,
             QueueDate = DateOnly.FromDateTime(visitDay),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Completed,
             DoctorName = "Dr. Ana Cruz",
@@ -930,17 +930,17 @@ public class ClinicDispensingAndVisitValidityTests
 
         var row1 = report.Items.Single(i => i.QueueNumber == "C-001");
         row1.ServicesAvailed.Should().NotContain("Vitals Check", "vitals are already part of the Consultation package");
-        row1.ServicesAvailedSummary.Should().Be("Consultation + Medicine Dispensing + Prescription + Medical Certificate + Referral + Laboratory Requisition");
+        row1.ServicesAvailedSummary.Should().Be("Routine Checkup + Medicine Dispensing + Prescription + Medical Certificate + Referral + Laboratory Requisition");
         row1.RosCategory.Should().Be("Respiratory");
         row1.DispensedMedicinesSummary.Should().Contain("Salbutamol + Guaifenesin");
 
         var row2 = report.Items.Single(i => i.QueueNumber == "V-002");
-        row2.ServicesAvailedSummary.Should().Be("Vitals Check + Medicine Dispensing");
+        row2.ServicesAvailedSummary.Should().Be("Preventive Health Assessment + Medicine Dispensing");
         row2.RosCategory.Should().Be("Genitourinary");
         row2.NurseAssessment.Should().Contain("Home Care: Warm compress and hydration");
 
         var row3 = report.Items.Single(i => i.QueueNumber == "C-003");
-        row3.ServicesAvailedSummary.Should().Be("Consultation");
+        row3.ServicesAvailedSummary.Should().Be("Routine Checkup");
         row3.RosCategory.Should().Be("Essentially Normal");
         row3.SystemsReviewed.Should().Contain("Essentially Normal");
 
@@ -968,14 +968,14 @@ public class ClinicDispensingAndVisitValidityTests
         wb.Worksheets.Count.Should().Be(3);
         wb.Worksheets.Should().Contain(w => w.Name == "Dispensing Ledger");
         var wsReg = wb.Worksheet("Census Register");
-        wsReg.Cell(7, 13).GetString().Should().Be("Consultation");
+        wsReg.Cell(7, 13).GetString().Should().Be("Routine Checkup");
         wsReg.Cell(8, 13).GetString().Should().Contain("↳ Medicine Dispensing");
         wsReg.Cell(8, 19).GetString().Should().BeEmpty();
         wsReg.Cell(9, 13).GetString().Should().Contain("↳ Prescription");
         wsReg.Cell(10, 13).GetString().Should().Contain("↳ Medical Certificate (MC-20261110-0001)");
         wsReg.Cell(11, 13).GetString().Should().Contain("↳ Referral (REF-20261110-0001)");
         wsReg.Cell(12, 13).GetString().Should().Contain("↳ Laboratory Requisition (LAB-20261110-0001)");
-        wsReg.Cell(13, 13).GetString().Should().Be("Vitals Check");
+        wsReg.Cell(13, 13).GetString().Should().Be("Preventive Health Assessment");
         wsReg.Cell(13, 19).GetString().Should().BeEmpty();
         wsReg.Cell(14, 13).GetString().Should().Contain("↳ Medicine Dispensing");
 
@@ -1158,9 +1158,9 @@ public class ClinicDispensingAndVisitValidityTests
 
         census.Items.Should().HaveCount(2, "both signed direct consultations must materialize a visit row in Clinic Census");
         census.Items.Single(i => i.PatientCode == "PAT-DIR-01").ServicesAvailedSummary
-            .Should().Be("Consultation + Medicine Dispensing + Prescription");
+            .Should().Be("Routine Checkup + Medicine Dispensing + Prescription");
         census.Items.Single(i => i.PatientCode == "PAT-DIR-02").ServicesAvailedSummary
-            .Should().Be("Consultation + Prescription");
+            .Should().Be("Routine Checkup + Prescription");
     }
 
     [Fact]
@@ -1203,7 +1203,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
             PatientId = patient.Id,
             PatientName = "Vega, Katrina",
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Waiting,
             CheckInTime = DateTime.UtcNow
         };
@@ -1318,14 +1318,16 @@ public class ClinicDispensingAndVisitValidityTests
             dispensingLogRepo: dispensingRepo, queueRepo: queueRepo);
 
         var unsignedChart = await chartHandler.Handle(new GetPatientChartQuery(patient.Id), CancellationToken.None);
+        var draftById = await new ClinicEz.Clinic.Application.Features.Consultations.Queries.GetConsultationByIdQueryHandler(consultRepo, _clinicContext)
+            .Handle(new ClinicEz.Clinic.Application.Features.Consultations.Queries.GetConsultationByIdQuery(draft.Id), CancellationToken.None);
 
-        // Draft encounter rehydrates RosCategory + staged ClinicDispensedQuantity, while IsClinicDispensed stays false
-        unsignedChart.Consultations.Should().ContainSingle();
-        unsignedChart.Consultations[0].IsSigned.Should().BeFalse();
-        unsignedChart.Consultations[0].RosCategory.Should().Be("Respiratory");
-        unsignedChart.Consultations[0].RosCategoryLabel.Should().Be("Respiratory");
-        unsignedChart.Consultations[0].Prescriptions[0].ClinicDispensedQuantity.Should().Be(3);
-        unsignedChart.Consultations[0].Prescriptions[0].IsClinicDispensed.Should().BeFalse();
+        // Draft encounter rehydrates RosCategory + staged ClinicDispensedQuantity via GetConsultationByIdQuery, while official Patient Chart hides unsigned drafts
+        draftById.IsSigned.Should().BeFalse();
+        draftById.RosCategory.Should().Be("Respiratory");
+        draftById.RosCategoryLabel.Should().Be("Respiratory");
+        draftById.Prescriptions[0].ClinicDispensedQuantity.Should().Be(3);
+        draftById.Prescriptions[0].IsClinicDispensed.Should().BeFalse();
+        unsignedChart.Consultations.Should().BeEmpty();
 
         // Nurse vitals retain HomeInstructions, RosCategory, ChiefComplaint, and DispensedItems
         unsignedChart.VitalsHistory.Should().ContainSingle();
@@ -1391,7 +1393,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
             PatientId = patient.Id,
             PatientName = "Ramos, Noel",
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow
         };
@@ -1467,7 +1469,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
             PatientId = patient.Id,
             PatientName = "Ramos, Noel",
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Waiting,
             CheckInTime = DateTime.UtcNow
         };
@@ -1545,7 +1547,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueDate = DateOnly.FromDateTime(visitDay),
             PatientId = patient.Id,
             PatientName = "Mendoza, Carlo",
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = visitDay.AddHours(9),
             CompletedTime = visitDay.AddHours(9).AddMinutes(20)
@@ -1560,7 +1562,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueDate = DateOnly.FromDateTime(visitDay),
             PatientId = patient.Id,
             PatientName = "Mendoza, Carlo",
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = visitDay.AddHours(15),
             CompletedTime = visitDay.AddHours(15).AddMinutes(25)
@@ -1732,7 +1734,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
             PatientId = patient.Id,
             PatientName = "Santos, Maria",
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             Status = QueueStatus.Completed,
             CheckInTime = DateTime.UtcNow
@@ -1909,7 +1911,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = $"Q-FK-{Guid.NewGuid().ToString("N")[..4]}",
             SequenceNumber = 1,
             QueueDate = queueDate,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Triaged,
             CheckInTime = DateTime.UtcNow.AddMinutes(-30),
@@ -2690,7 +2692,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "C-101",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(today),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Priority = QueuePriority.Urgent,
             Status = QueueStatus.Completed,
             CheckInTime = today.AddHours(8),
@@ -2708,7 +2710,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "V-102",
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(today),
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.DischargedNonDoctor,
             CheckInTime = today.AddHours(9),
@@ -3019,7 +3021,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "Q-DRF-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow.AddMinutes(-20),
@@ -3228,7 +3230,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "Q-DNT-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.InConsultation,
             CheckInTime = DateTime.UtcNow.AddMinutes(-30),
@@ -3457,7 +3459,7 @@ public class ClinicDispensingAndVisitValidityTests
             QueueNumber = "V-REV-01",
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            VisitType = VisitType.VitalsCheckOnly,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Waiting,
             CheckInTime = DateTime.UtcNow.AddMinutes(-15)

@@ -87,7 +87,7 @@ public class ClinicCensusChallengerEmpiricalTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             DoctorId = doc1Id,
             DoctorName = "Dr. Jose Rizal",
@@ -172,7 +172,7 @@ public class ClinicCensusChallengerEmpiricalTests
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Urgent,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(13),
             CompletedTime = queryDate.AddHours(13).AddMinutes(20)
@@ -206,7 +206,7 @@ public class ClinicCensusChallengerEmpiricalTests
             SequenceNumber = 3,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.LaboratorySpecimen,
+            VisitType = (VisitType)7,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(15),
             CompletedTime = queryDate.AddHours(15).AddMinutes(10)
@@ -225,7 +225,20 @@ public class ClinicCensusChallengerEmpiricalTests
             NetAmount = 350m,
             AmountPaid = 0m,
             BalanceDue = 350m,
-            Status = InvoiceStatus.Draft
+            Status = InvoiceStatus.Draft,
+            LineItems = new List<InvoiceLineItem>
+            {
+                new()
+                {
+                    TenantId = _testTenantId,
+                    ClinicId = _testClinicId,
+                    Category = "Diagnostic",
+                    Description = "Complete Blood Count",
+                    Quantity = 1,
+                    UnitPrice = 350m,
+                    TotalPrice = 350m
+                }
+            }
         };
         await invoiceRepo.AddAsync(inv3);
 
@@ -240,7 +253,7 @@ public class ClinicCensusChallengerEmpiricalTests
             SequenceNumber = 4,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Urgent,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             DoctorId = doc2Id,
             DoctorName = "Dr. Apolinario Mabini",
@@ -380,9 +393,9 @@ public class ClinicCensusChallengerEmpiricalTests
 
         var ws1 = wb.Worksheet("Census Register");
         ws1.Cell(7, 1).GetString().Should().Be("1"); // Q-01
-        ws1.Cell(8, 18).GetString().Should().Be("—"); // Q-02 doctor
-        ws1.Cell(9, 18).GetString().Should().Be("—"); // Q-03 doctor
-        ws1.Cell(10, 18).GetString().Should().Contain("Dr. Apolinario Mabini"); // Q-04 doctor
+        ws1.Cell(8, 18).GetString().Should().Be("—"); // Q-02 doctor (row 9 is Complex Wound Dressing sub-row)
+        ws1.Cell(10, 18).GetString().Should().Be("—"); // Q-03 doctor (row 11 is Complete Blood Count diagnostic sub-row)
+        ws1.Cell(12, 18).GetString().Should().Contain("Dr. Apolinario Mabini"); // Q-04 doctor
 
         var pdfBytes = _pdfService.GenerateClinicCensusReportPdf(report, facility, "Dr. Challenger");
         pdfBytes.Should().NotBeNullOrEmpty();
@@ -427,7 +440,7 @@ public class ClinicCensusChallengerEmpiricalTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Emergency,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             CheckInTime = queryDate.AddHours(23).AddMinutes(50),
             CompletedTime = queryDate.AddDays(1).AddHours(1).AddMinutes(10)
@@ -445,7 +458,7 @@ public class ClinicCensusChallengerEmpiricalTests
             SequenceNumber = 2,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Urgent,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.InConsultation,
             CheckInTime = queryDate.AddHours(23).AddMinutes(55),
             CompletedTime = null,
@@ -536,7 +549,7 @@ public class ClinicCensusChallengerEmpiricalTests
             SequenceNumber = 1,
             QueueDate = DateOnly.FromDateTime(queryDate),
             Priority = QueuePriority.Routine,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             Status = QueueStatus.Completed,
             ChiefComplaint = "Earache following swimming",
             CheckInTime = queryDate.AddHours(10),

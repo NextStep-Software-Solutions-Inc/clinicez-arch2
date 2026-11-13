@@ -49,7 +49,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -91,7 +91,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -135,7 +135,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = otherDate,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow.AddDays(dayOffset)
         };
@@ -182,7 +182,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = terminalStatus,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -229,7 +229,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = nonTerminalStatus,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -253,9 +253,9 @@ public class EnsureDirectVisitAdversarialTests
     }
 
     [Theory]
-    [InlineData(VisitType.RetailPurchase)]
-    [InlineData(VisitType.CashierSettlement)]
-    [InlineData(VisitType.LaboratorySpecimen)]
+    [InlineData((VisitType)6)]
+    [InlineData((VisitType)7)]
+    [InlineData((VisitType)99)]
     public async Task Handle_NonClinicalVisitTypes_DoNotReuse_CreatesNewDV(VisitType nonClinicalVisitType)
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -288,7 +288,7 @@ public class EnsureDirectVisitAdversarialTests
         var command = new EnsureDirectVisitCommand(
             PatientId: patientId,
             PatientName: "Dela Cruz, Juan",
-            VisitType: VisitType.Consultation,
+            VisitType: VisitType.RoutineCheckup,
             QueueDate: today);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -298,10 +298,11 @@ public class EnsureDirectVisitAdversarialTests
     }
 
     [Theory]
-    [InlineData(VisitType.Consultation)]
-    [InlineData(VisitType.VitalsCheckOnly)]
-    [InlineData(VisitType.StandaloneProcedure)]
-    [InlineData(VisitType.AdministrativeDocument)]
+    [InlineData(VisitType.RoutineCheckup)]
+    [InlineData(VisitType.AcuteIllnessConsultation)]
+    [InlineData(VisitType.ChronicDiseaseFollowUp)]
+    [InlineData(VisitType.PreventiveHealthAssessment)]
+    [InlineData(VisitType.UrgentCareVisit)]
     public async Task Handle_ClinicalVisitTypes_ReusesExistingVisit(VisitType clinicalVisitType)
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -360,7 +361,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -415,7 +416,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow.AddHours(-3)
         };
@@ -448,7 +449,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow.AddMinutes(-30)
         };
@@ -493,7 +494,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -548,7 +549,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -595,9 +596,9 @@ public class EnsureDirectVisitAdversarialTests
         // Regular lobby tickets Q-001, Q-002, Q-100
         var lobbyTickets = new[]
         {
-            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "Lobby 1", QueueNumber = "Q-001", SequenceNumber = 1, QueueDate = today, Status = QueueStatus.Waiting, VisitType = VisitType.Consultation, IsDirectVisit = false, CheckInTime = DateTime.UtcNow },
-            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "Lobby 2", QueueNumber = "Q-002", SequenceNumber = 2, QueueDate = today, Status = QueueStatus.Waiting, VisitType = VisitType.Consultation, IsDirectVisit = false, CheckInTime = DateTime.UtcNow },
-            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "Lobby 100", QueueNumber = "Q-100", SequenceNumber = 100, QueueDate = today, Status = QueueStatus.Waiting, VisitType = VisitType.Consultation, IsDirectVisit = false, CheckInTime = DateTime.UtcNow }
+            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "Lobby 1", QueueNumber = "Q-001", SequenceNumber = 1, QueueDate = today, Status = QueueStatus.Waiting, VisitType = VisitType.RoutineCheckup, IsDirectVisit = false, CheckInTime = DateTime.UtcNow },
+            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "Lobby 2", QueueNumber = "Q-002", SequenceNumber = 2, QueueDate = today, Status = QueueStatus.Waiting, VisitType = VisitType.RoutineCheckup, IsDirectVisit = false, CheckInTime = DateTime.UtcNow },
+            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "Lobby 100", QueueNumber = "Q-100", SequenceNumber = 100, QueueDate = today, Status = QueueStatus.Waiting, VisitType = VisitType.RoutineCheckup, IsDirectVisit = false, CheckInTime = DateTime.UtcNow }
         };
         await context.Set<QueueItem>().AddRangeAsync(lobbyTickets);
         await uow.SaveChangesAsync(CancellationToken.None);
@@ -628,8 +629,8 @@ public class EnsureDirectVisitAdversarialTests
 
         var dvTickets = new[]
         {
-            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "P1", QueueNumber = "DV-001", SequenceNumber = 0, QueueDate = today, Status = QueueStatus.Completed, VisitType = VisitType.Consultation, IsDirectVisit = true, CheckInTime = DateTime.UtcNow },
-            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "P5", QueueNumber = "DV-005", SequenceNumber = 0, QueueDate = today, Status = QueueStatus.Completed, VisitType = VisitType.Consultation, IsDirectVisit = true, CheckInTime = DateTime.UtcNow }
+            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "P1", QueueNumber = "DV-001", SequenceNumber = 0, QueueDate = today, Status = QueueStatus.Completed, VisitType = VisitType.RoutineCheckup, IsDirectVisit = true, CheckInTime = DateTime.UtcNow },
+            new QueueItem { Id = Guid.NewGuid(), TenantId = _tenantId, ClinicId = _clinicId, PatientId = Guid.NewGuid(), PatientName = "P5", QueueNumber = "DV-005", SequenceNumber = 0, QueueDate = today, Status = QueueStatus.Completed, VisitType = VisitType.RoutineCheckup, IsDirectVisit = true, CheckInTime = DateTime.UtcNow }
         };
         await context.Set<QueueItem>().AddRangeAsync(dvTickets);
         await uow.SaveChangesAsync(CancellationToken.None);
@@ -680,7 +681,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 1,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = false,
             CalledTime = DateTime.UtcNow.AddMinutes(-5),
             CheckInTime = DateTime.UtcNow.AddMinutes(-20)
@@ -698,7 +699,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CalledTime = DateTime.UtcNow.AddMinutes(-3),
             CheckInTime = DateTime.UtcNow.AddMinutes(-10)
@@ -716,7 +717,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 2,
             QueueDate = today,
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = false,
             CheckInTime = DateTime.UtcNow.AddMinutes(-15)
         };
@@ -733,7 +734,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow.AddMinutes(-5)
         };
@@ -784,7 +785,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };
@@ -799,7 +800,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 1,
             QueueDate = today,
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = false,
             CheckInTime = DateTime.UtcNow
         };
@@ -851,7 +852,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.InConsultation,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow.AddHours(-2)
         };
@@ -866,7 +867,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.PendingProcedure,
-            VisitType = VisitType.StandaloneProcedure,
+            VisitType = VisitType.PreventiveHealthAssessment,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow.AddHours(-1)
         };
@@ -881,7 +882,7 @@ public class EnsureDirectVisitAdversarialTests
             SequenceNumber = 0,
             QueueDate = today,
             Status = QueueStatus.Triaged,
-            VisitType = VisitType.Consultation,
+            VisitType = VisitType.RoutineCheckup,
             IsDirectVisit = true,
             CheckInTime = DateTime.UtcNow
         };

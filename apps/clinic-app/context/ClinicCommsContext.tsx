@@ -1,9 +1,8 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
-import { parseServiceHost, resolveServiceApiUrl } from '@shared/safe';
 import { clinicApiClient } from '../services/apiClient';
-import { getApiBaseUrl, getSetting, isCommsEnabled as isCommsConfigEnabled } from '../services/runtimeConfig';
+import { getSetting, isCommsEnabled as isCommsConfigEnabled } from '../services/runtimeConfig';
 import { useAuth } from './AuthContext';
 import { useClinic } from './ClinicContext';
 import { useStaff, formatStaffName } from './StaffContext';
@@ -48,62 +47,11 @@ const ClinicCommsContext = createContext<ClinicCommsContextValue>({
 export const useClinicComms = () => useContext(ClinicCommsContext);
 
 export function getCommsApiBaseUrl(): string {
-  const explicit = getSetting('EXPO_PUBLIC_COMMS_API_URL') || process.env.EXPO_PUBLIC_COMMS_API_URL;
-  if (explicit && explicit.trim()) {
-    return explicit.trim().replace(/\/+$/, '');
+  const commsUrl = getSetting('EXPO_PUBLIC_COMMS_API_URL') || process.env.EXPO_PUBLIC_COMMS_API_URL;
+  if (commsUrl && commsUrl.trim()) {
+    return commsUrl.trim().replace(/\/+$/, '');
   }
-  const apiBase = getApiBaseUrl();
-  if (apiBase) {
-    try {
-      const url = new URL(apiBase);
-      // Local development port mapping (5245 clinic-api -> 5247 comms-api)
-      if (url.port === '5245' || url.port === '5240' || url.port === '5242' || url.port === '5243' || url.port === '5310') {
-        url.port = '5247';
-        return url.origin;
-      }
-      // Dev and Prod cloud host mappings:
-      // 1. clinicez-clinic.api.dev.nextstep-software.com -> clinicez-comms.api.dev.nextstep-software.com
-      if (url.hostname.includes('clinicez-clinic')) {
-        url.hostname = url.hostname.replace('clinicez-clinic', 'clinicez-comms');
-        return url.origin;
-      }
-      // 2. clinic-api.dev.clinicez.net -> comms-api.dev.clinicez.net
-      if (url.hostname.includes('clinic-api')) {
-        url.hostname = url.hostname.replace('clinic-api', 'comms-api');
-        return url.origin;
-      }
-      // 3. clinic.dev.clinicez.net -> comms.dev.clinicez.net
-      if (url.hostname.startsWith('clinic.')) {
-        url.hostname = url.hostname.replace(/^clinic\./, 'comms.');
-        return url.origin;
-      }
-      // 4. [tenant].clinic.[baseDomain] -> [tenant].comms.[baseDomain]
-      if (url.hostname.includes('.clinic.')) {
-        url.hostname = url.hostname.replace(/\.clinic\./, '.comms.');
-        return url.origin;
-      }
-      // If hostname already points to comms
-      if (url.hostname.includes('comms')) {
-        return url.origin;
-      }
-    } catch {
-      // Ignore invalid URL parse
-    }
-  }
-
-  const hostParts = typeof window !== 'undefined' && window.location?.hostname
-    ? parseServiceHost(window.location.hostname, getSetting('EXPO_PUBLIC_SERVICE_SUBDOMAIN') || 'clinic')
-    : null;
-  const baseDomain = getSetting('EXPO_PUBLIC_BASE_DOMAIN') || hostParts?.baseDomain;
-
-  return resolveServiceApiUrl({
-    hostname: typeof window !== 'undefined' ? window.location?.hostname : null,
-    protocol: typeof window !== 'undefined' ? window.location?.protocol : null,
-    serviceSubdomain: 'comms',
-    baseDomain,
-    template: getSetting('EXPO_PUBLIC_API_URL_TEMPLATE'),
-    fallbackPort: 5247,
-  }).replace(/\/+$/, '');
+  throw new Error('EXPO_PUBLIC_COMMS_API_URL is required and must be configured in environment variables or runtime settings.');
 }
 
 export function ClinicCommsProvider({ children }: { children: React.ReactNode }) {
@@ -183,7 +131,14 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
     };
   }, [user?.id, user?.permissions, staffDisplayName, tenantId, facilityId]);
 
-  const commsEnabled = isCommsConfigEnabled();
+  let commsBaseUrl = '';
+  try {
+    commsBaseUrl = getCommsApiBaseUrl();
+  } catch {
+    commsBaseUrl = '';
+  }
+
+  const commsEnabled = isCommsConfigEnabled() && Boolean(commsBaseUrl);
 
   const contextValue = useMemo<ClinicCommsContextValue>(
     () => ({
@@ -213,7 +168,7 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
 
   return (
     <CommsProvider
-      baseUrl={getCommsApiBaseUrl()}
+      baseUrl={commsBaseUrl}
       getCommsTicket={getCommsTicket}
       tenantId={tenantId}
       facilityId={facilityId}

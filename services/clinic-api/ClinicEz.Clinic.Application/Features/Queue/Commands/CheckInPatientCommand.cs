@@ -112,13 +112,15 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
                 QueueStatus.OnHold
             ];
 
-            var activeTicket = await _queueRepository.Query(q =>
+            var activeCandidates = await _queueRepository.Query(q =>
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today &&
                 q.PatientId == request.PatientId &&
                 activeStatuses.Contains(q.Status))
                 .OrderByDescending(q => q.CheckInTime)
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
+
+            var activeTicket = activeCandidates.FirstOrDefault(q => Enum.IsDefined(q.VisitType));
 
             if (activeTicket != null)
             {
