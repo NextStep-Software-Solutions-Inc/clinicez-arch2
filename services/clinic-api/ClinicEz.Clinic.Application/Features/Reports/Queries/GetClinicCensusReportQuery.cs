@@ -89,26 +89,29 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
     public async Task<ClinicCensusReportDto> Handle(GetClinicCensusReportQuery request, CancellationToken cancellationToken)
     {
         // 1. Resolve date boundaries
-        DateTime start, end;
+        DateTime? startUtc = null;
+        DateTime? endUtc = null;
+
         if (request.StartDate.HasValue && request.EndDate.HasValue)
         {
-            start = request.StartDate.Value.ToStartOfDayUtc();
-            end = request.EndDate.Value.ToEndOfDayExclusiveUtc();
+            startUtc = request.StartDate.Value.ToStartOfDayUtc();
+            endUtc = request.EndDate.Value.ToEndOfDayExclusiveUtc();
         }
         else if (request.StartDate.HasValue)
         {
-            start = request.StartDate.Value.ToStartOfDayUtc();
-            end = start.AddDays(1);
+            startUtc = request.StartDate.Value.ToStartOfDayUtc();
         }
-        else
+        else if (request.EndDate.HasValue)
         {
-            var today = DateTime.UtcNow.ToStartOfDayUtc();
-            start = today;
-            end = today.AddDays(1);
+            endUtc = request.EndDate.Value.ToEndOfDayExclusiveUtc();
         }
 
-        // 2. Query Queue Items
-        var queueQuery = _queueRepo.Query(q => q.CheckInTime >= start && q.CheckInTime < end);
+        // 2. Query Queue Items (open-ended when StartDate and EndDate are null for "All Time")
+        var queueQuery = _queueRepo.Query();
+        if (startUtc.HasValue)
+            queueQuery = queueQuery.Where(q => q.CheckInTime >= startUtc.Value);
+        if (endUtc.HasValue)
+            queueQuery = queueQuery.Where(q => q.CheckInTime < endUtc.Value);
 
         if (request.DoctorId.HasValue)
             queueQuery = queueQuery.Where(q => q.DoctorId == request.DoctorId.Value);
@@ -156,15 +159,24 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                 .Include(p => p.PhilHealthMembership)
                 .ToListAsync(cancellationToken);
 
+            var hasStart = startUtc.HasValue;
+            var hasEnd = endUtc.HasValue;
+            var startVal = startUtc ?? DateTime.MinValue;
+            var endVal = endUtc ?? DateTime.MaxValue;
+
             vitals = await _vitalsRepo.Query(v => (v.QueueItemId.HasValue && queueItemIds.Contains(v.QueueItemId.Value)) ||
-                                                  (patientIds.Contains(v.PatientId) && v.RecordedAt >= start && v.RecordedAt < end))
+                                                  (patientIds.Contains(v.PatientId) &&
+                                                   (!hasStart || v.RecordedAt >= startVal) &&
+                                                   (!hasEnd || v.RecordedAt < endVal)))
                 .ToListAsync(cancellationToken);
 
             // Only signed consultation encounters are clinically valid for census reporting
             consultations = await _consultationRepo.Query(c =>
                     c.IsSigned &&
                     ((c.QueueItemId.HasValue && queueItemIds.Contains(c.QueueItemId.Value)) ||
-                     (patientIds.Contains(c.PatientId) && c.EncounterDate >= start && c.EncounterDate < end)))
+                     (patientIds.Contains(c.PatientId) &&
+                      (!hasStart || c.EncounterDate >= startVal) &&
+                      (!hasEnd || c.EncounterDate < endVal))))
                 .Include(c => c.Diagnoses)
                 .Include(c => c.Prescriptions)
                 .Include(c => c.ReviewOfSystemsItems)
@@ -177,7 +189,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             procedures = await _procedureRepo.Query(p =>
                     p.Status != ProcedureStatus.Cancelled &&
                     ((p.QueueItemId.HasValue && queueItemIds.Contains(p.QueueItemId.Value)) ||
-                     (patientIds.Contains(p.PatientId) && p.ScheduledAt >= start && p.ScheduledAt < end)))
+                     (patientIds.Contains(p.PatientId) &&
+                      (!hasStart || p.ScheduledAt >= startVal) &&
+                      (!hasEnd || p.ScheduledAt < endVal))))
                 .ToListAsync(cancellationToken);
 
             invoices = await _invoiceRepo.Query(i =>
@@ -185,13 +199,15 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                     i.Status != InvoiceStatus.Refunded &&
                     ((i.QueueItemId.HasValue && queueItemIds.Contains(i.QueueItemId.Value)) ||
                      (i.ConsultationId.HasValue && signedConsultIds.Contains(i.ConsultationId.Value)) ||
-                     (i.PatientId.HasValue && patientIds.Contains(i.PatientId.Value) && i.InvoiceDate >= start && i.InvoiceDate < end)))
+                     (i.PatientId.HasValue && patientIds.Contains(i.PatientId.Value) &&
+                      (!hasStart || i.InvoiceDate >= startVal) &&
+                      (!hasEnd || i.InvoiceDate < endVal))))
                 .Include(i => i.LineItems)
                 .Include(i => i.Payments)
                 .ToListAsync(cancellationToken);
 
-            var startDateOnly = DateOnly.FromDateTime(start);
-            var endDateOnly = DateOnly.FromDateTime(end.AddTicks(-1));
+            var startDateOnly = startUtc.HasValue ? DateOnly.FromDateTime(startUtc.Value) : DateOnly.MinValue;
+            var endDateOnly = endUtc.HasValue ? DateOnly.FromDateTime(endUtc.Value.AddTicks(-1)) : DateOnly.MaxValue;
 
             if (_dispensingLogRepo != null)
             {
@@ -200,7 +216,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         (!d.ConsultationEncounterId.HasValue || signedConsultIds.Contains(d.ConsultationEncounterId.Value)) &&
                         (queueItemIds.Contains(d.QueueItemId) ||
                          (d.ConsultationEncounterId.HasValue && signedConsultIds.Contains(d.ConsultationEncounterId.Value)) ||
-                         (patientIds.Contains(d.PatientId) && d.DispensedAt >= start && d.DispensedAt < end)))
+                         (patientIds.Contains(d.PatientId) &&
+                          (!hasStart || d.DispensedAt >= startVal) &&
+                          (!hasEnd || d.DispensedAt < endVal))))
                     .OrderBy(d => d.DispensedAt)
                     .ToListAsync(cancellationToken);
             }
@@ -211,7 +229,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         m.IsSigned &&
                         ((m.QueueItemId.HasValue && queueItemIds.Contains(m.QueueItemId.Value)) ||
                          (m.ConsultationId.HasValue && signedConsultIds.Contains(m.ConsultationId.Value)) ||
-                         (!m.QueueItemId.HasValue && !m.ConsultationId.HasValue && patientIds.Contains(m.PatientId) && m.IssueDate >= startDateOnly && m.IssueDate <= endDateOnly)))
+                         (!m.QueueItemId.HasValue && !m.ConsultationId.HasValue && patientIds.Contains(m.PatientId) &&
+                          (!hasStart || m.IssueDate >= startDateOnly) &&
+                          (!hasEnd || m.IssueDate <= endDateOnly))))
                     .ToListAsync(cancellationToken);
             }
 
@@ -221,7 +241,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         r.IsSigned &&
                         ((r.QueueItemId.HasValue && queueItemIds.Contains(r.QueueItemId.Value)) ||
                          (r.ConsultationId.HasValue && signedConsultIds.Contains(r.ConsultationId.Value)) ||
-                         (!r.QueueItemId.HasValue && !r.ConsultationId.HasValue && patientIds.Contains(r.PatientId) && r.ReferralDate >= startDateOnly && r.ReferralDate <= endDateOnly)))
+                         (!r.QueueItemId.HasValue && !r.ConsultationId.HasValue && patientIds.Contains(r.PatientId) &&
+                          (!hasStart || r.ReferralDate >= startDateOnly) &&
+                          (!hasEnd || r.ReferralDate <= endDateOnly))))
                     .ToListAsync(cancellationToken);
             }
 
@@ -232,7 +254,9 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
                         o.Status != LabOrderStatus.Cancelled &&
                         ((o.QueueItemId.HasValue && queueItemIds.Contains(o.QueueItemId.Value)) ||
                          (o.ConsultationId.HasValue && signedConsultIds.Contains(o.ConsultationId.Value)) ||
-                         (!o.QueueItemId.HasValue && !o.ConsultationId.HasValue && patientIds.Contains(o.PatientId) && o.OrderDate >= start && o.OrderDate < end)))
+                         (!o.QueueItemId.HasValue && !o.ConsultationId.HasValue && patientIds.Contains(o.PatientId) &&
+                          (!hasStart || o.OrderDate >= startVal) &&
+                          (!hasEnd || o.OrderDate < endVal))))
                     .Include(o => o.Items)
                     .ToListAsync(cancellationToken);
             }
@@ -1488,9 +1512,12 @@ public sealed class GetClinicCensusReportQueryHandler : IRequestHandler<GetClini
             .Select(kv => new CensusServiceItemBreakdownDto(kv.Key, kv.Value))
             .ToList();
 
+        var effectiveReportStart = startUtc ?? (queueItems.Count > 0 ? queueItems.Min(q => q.CheckInTime).Date : DateTime.UtcNow.Date);
+        var effectiveReportEnd = endUtc?.AddDays(-1) ?? (queueItems.Count > 0 ? queueItems.Max(q => q.CheckInTime).Date : DateTime.UtcNow.Date);
+
         var fullPeriodReport = new ClinicCensusReportDto(
-            StartDate: start,
-            EndDate: end.AddDays(-1),
+            StartDate: effectiveReportStart,
+            EndDate: effectiveReportEnd,
             TenantId: _clinicContext.TenantId,
             ClinicId: _clinicContext.ClinicId,
             ClinicName: settings?.ClinicName ?? "Clinic",
