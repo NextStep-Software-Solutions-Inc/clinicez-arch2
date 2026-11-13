@@ -119,6 +119,7 @@ const {
   isValidBooleanRuleValue,
   isBooleanTriggerField,
   formatLiveRulePreview,
+  isDateBoundaryModeChanged,
 } = await import('../components/settings/AddEditFieldModal');
 const { default: SortableCustomFieldsList } = await import('../components/settings/SortableCustomFieldsList');
 const { default: SortableCustomFieldsListWeb } = await import('../components/settings/SortableCustomFieldsList.web');
@@ -2352,6 +2353,61 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
         "Visible when [affiliation] equals 'Student'"
       );
       expect(formatLiveRulePreview('', 'equals', '', false)).toBe('');
+    });
+  });
+
+  describe('Issue #161: Date Boundary Rule Evolution & Advisory Notice', () => {
+    test('isDateBoundaryModeChanged detects changes from historical boundaryMode', () => {
+      const field = {
+        dataType: 'Date' as const,
+        category: 'Clinical',
+        boundaryMode: 'futureOrToday' as const,
+      };
+
+      // Unchanged
+      expect(isDateBoundaryModeChanged(field, 'futureOrToday', 'Date')).toBe(false);
+
+      // Changed to pastOrToday
+      expect(isDateBoundaryModeChanged(field, 'pastOrToday', 'Date')).toBe(true);
+
+      // Changed to any
+      expect(isDateBoundaryModeChanged(field, 'any', 'Date')).toBe(true);
+
+      // Changed to futureOnly
+      expect(isDateBoundaryModeChanged(field, 'futureOnly', 'Date')).toBe(true);
+    });
+
+    test('isDateBoundaryModeChanged handles default category boundary modes', () => {
+      // Clinical field without explicit boundaryMode defaults to pastOrToday
+      const clinicalField = {
+        dataType: 'Date' as const,
+        category: 'Clinical',
+        boundaryMode: null,
+      };
+      expect(isDateBoundaryModeChanged(clinicalField, 'pastOrToday', 'Date')).toBe(false);
+      expect(isDateBoundaryModeChanged(clinicalField, 'futureOrToday', 'Date')).toBe(true);
+
+      // Demographics field without explicit boundaryMode defaults to any
+      const demoField = {
+        dataType: 'Date' as const,
+        category: 'Demographics',
+        boundaryMode: null,
+      };
+      expect(isDateBoundaryModeChanged(demoField, 'any', 'Date')).toBe(false);
+      expect(isDateBoundaryModeChanged(demoField, 'pastOrToday', 'Date')).toBe(true);
+    });
+
+    test('isDateBoundaryModeChanged returns false for non-date fields or new fields', () => {
+      const textField = {
+        dataType: 'Text' as const,
+        category: 'Demographics',
+        boundaryMode: 'pastOrToday' as const,
+      };
+      expect(isDateBoundaryModeChanged(textField, 'futureOrToday', 'Text')).toBe(false);
+
+      // New field (fieldToEdit is null)
+      expect(isDateBoundaryModeChanged(null, 'pastOrToday', 'Date')).toBe(false);
+      expect(isDateBoundaryModeChanged(undefined, 'pastOrToday', 'Date')).toBe(false);
     });
   });
 });

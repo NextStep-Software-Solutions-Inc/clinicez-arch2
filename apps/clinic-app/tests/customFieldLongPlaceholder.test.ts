@@ -316,6 +316,40 @@ describe('GitHub #162: Component rendering across DynamicCustomFieldsRenderer, A
     expect(modalWithShortHint).not.toContain('e.g. College of Science');
   });
 
+  test('Issue #161: AddEditFieldModal renders Allowed Dates chips and explanations for Date custom fields', () => {
+    const modalMarkup = renderToStaticMarkup(
+      React.createElement(AddEditFieldModal, {
+        visible: true,
+        onClose: () => {},
+        existingFields: [],
+        onSave: async () => true,
+        fieldToEdit: {
+          id: 'date-field-1',
+          tenantId: 't1',
+          clinicId: 'c1',
+          entityType: 'ClinicPatient',
+          fieldKey: 'last_physical_exam_date',
+          label: 'Date of Last Physical Examination',
+          dataType: 'Date',
+          category: 'Clinical',
+          isRequired: false,
+          displayOrder: 1,
+          boundaryMode: 'pastOrToday',
+          isActive: true,
+        },
+      })
+    );
+
+    expect(modalMarkup).toContain('Allowed Dates');
+    expect(modalMarkup).toContain('Past or Today');
+    expect(modalMarkup).toContain('Today or Future');
+    expect(modalMarkup).toContain('Future Only');
+    expect(modalMarkup).toContain('Any Date');
+    expect(modalMarkup).toContain('Allows past dates or today');
+    // When boundaryMode matches historical, advisory banner is not shown
+    expect(modalMarkup).not.toContain('Existing historical patient records remain preserved and will not be locked out.');
+  });
+
   test('CustomFieldsTab displays Expanded Guidance badge for single-line fields with >75 char hints and SkeletonList without zero-count chips when loading', () => {
     const loadingTabMarkup = renderToStaticMarkup(
       React.createElement(CustomFieldsTab, {
