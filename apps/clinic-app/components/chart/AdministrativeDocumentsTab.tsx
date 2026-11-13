@@ -13,6 +13,7 @@ import {
 import { openDocument } from '../../services/documentOpener';
 import { notify } from '../../utils/feedback';
 import IssueMedicalCertificateModal from '../patient/IssueMedicalCertificateModal';
+import IssueReferralLetterModal from '../patient/IssueReferralLetterModal';
 
 export interface AdministrativeDocumentsTabProps {
   patient?: ClinicPatient | null;
@@ -62,6 +63,7 @@ export default function AdministrativeDocumentsTab({
   const [filterType, setFilterType] = useState<DocumentFilterType>('ALL');
   const [actioningDocId, setActioningDocId] = useState<string | null>(null);
   const [issueModalVisible, setIssueModalVisible] = useState(false);
+  const [referralModalVisible, setReferralModalVisible] = useState(false);
 
   const totalCerts = medicalCertificates.length;
   const totalReferrals = referralLetters.length;
@@ -160,9 +162,40 @@ export default function AdministrativeDocumentsTab({
     </View>
   );
 
-  const renderSections = () => (
-    <>
-      {/* MEDICAL CERTIFICATES SECTION */}
+  const renderSections = () => {
+    if (filterType === 'REFERRALS' && filteredReferrals.length === 0) {
+      return (
+        <View style={styles.tabEmptyContainer}>
+          <EmptyState
+            icon="file"
+            title="No Referral Letters"
+            description="No referral letters have been issued for this patient yet."
+            actionTitle="Issue Referral Letter"
+            onAction={() => setReferralModalVisible(true)}
+            actionTestID="empty-filter-issue-referral-btn"
+          />
+        </View>
+      );
+    }
+
+    if (filterType === 'CERTIFICATES' && filteredCerts.length === 0) {
+      return (
+        <View style={styles.tabEmptyContainer}>
+          <EmptyState
+            icon="file"
+            title="No Medical Certificates"
+            description="No medical certificates have been issued for this patient yet."
+            actionTitle="Issue Medical Certificate"
+            onAction={() => setIssueModalVisible(true)}
+            actionTestID="empty-filter-issue-med-cert-btn"
+          />
+        </View>
+      );
+    }
+
+    return (
+      <>
+        {/* MEDICAL CERTIFICATES SECTION */}
       {filteredCerts.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -358,7 +391,8 @@ export default function AdministrativeDocumentsTab({
         </View>
       )}
     </>
-  );
+    );
+  };
 
   if (totalDocuments === 0) {
     return (
@@ -369,10 +403,21 @@ export default function AdministrativeDocumentsTab({
           description="Medical certificates and referral letters issued to this patient will appear here for viewing or reprinting."
           actionTitle="Issue Medical Certificate"
           onAction={() => setIssueModalVisible(true)}
+          actionTestID="empty-global-issue-med-cert-btn"
+          secondaryActionTitle="Issue Referral Letter"
+          onSecondaryAction={() => setReferralModalVisible(true)}
+          secondaryActionTestID="empty-global-issue-referral-btn"
         />
         <IssueMedicalCertificateModal
           visible={issueModalVisible}
           onClose={() => setIssueModalVisible(false)}
+          patient={patient ?? null}
+          queueItemId={queueItemId}
+          onSuccess={() => onRefreshChart?.()}
+        />
+        <IssueReferralLetterModal
+          visible={referralModalVisible}
+          onClose={() => setReferralModalVisible(false)}
           patient={patient ?? null}
           queueItemId={queueItemId}
           onSuccess={() => onRefreshChart?.()}
@@ -394,14 +439,24 @@ export default function AdministrativeDocumentsTab({
           </ThemedText>
         </View>
 
-        <Button
-          title="Issue Certificate"
-          variant="primary"
-          size="sm"
-          icon="plus"
-          onPress={() => setIssueModalVisible(true)}
-          testID="open-issue-med-cert-btn"
-        />
+        <View style={styles.actionButtonGroup}>
+          <Button
+            title="Issue Certificate"
+            variant={filterType === 'REFERRALS' ? 'outline' : 'primary'}
+            size="sm"
+            icon="plus"
+            onPress={() => setIssueModalVisible(true)}
+            testID="open-issue-med-cert-btn"
+          />
+          <Button
+            title={filterType === 'REFERRALS' ? 'Issue Referral Letter' : 'Issue Referral'}
+            variant={filterType === 'REFERRALS' ? 'primary' : 'outline'}
+            size="sm"
+            icon="plus"
+            onPress={() => setReferralModalVisible(true)}
+            testID="open-issue-referral-btn"
+          />
+        </View>
 
         {/* Filter Pills */}
         {renderFilterChips()}
@@ -412,6 +467,13 @@ export default function AdministrativeDocumentsTab({
       <IssueMedicalCertificateModal
         visible={issueModalVisible}
         onClose={() => setIssueModalVisible(false)}
+        patient={patient ?? null}
+        queueItemId={queueItemId}
+        onSuccess={() => onRefreshChart?.()}
+      />
+      <IssueReferralLetterModal
+        visible={referralModalVisible}
+        onClose={() => setReferralModalVisible(false)}
         patient={patient ?? null}
         queueItemId={queueItemId}
         onSuccess={() => onRefreshChart?.()}
@@ -439,6 +501,9 @@ const styles = StyleSheet.create({
   emptyContainer: {
     paddingVertical: theme.spacing.md,
   },
+  tabEmptyContainer: {
+    paddingVertical: theme.spacing.md,
+  },
   headerStrip: {
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.md,
@@ -454,6 +519,12 @@ const styles = StyleSheet.create({
   headerInfo: {
     flex: 1,
     minWidth: 200,
+  },
+  actionButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
   },
   filterScrollWrap: {
     flexDirection: 'row',
