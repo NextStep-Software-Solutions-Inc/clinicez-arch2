@@ -442,5 +442,44 @@ describe('R4: Expo Config Deterministic Branching & Side-by-Side Coexistence', (
       expect(rootEasIgnore).toContain('services/');
       expect(rootEasIgnore).toContain('!bun.lock');
     });
+
+    it('gates branch native builds behind per-platform require-approval jobs without blocking OTA updates', () => {
+      const otaPreviewRaw = fs.readFileSync(
+        path.resolve(__dirname, '../.eas/workflows/ota-preview.yml'),
+        'utf8'
+      );
+      const otaProdRaw = fs.readFileSync(
+        path.resolve(__dirname, '../.eas/workflows/ota-production.yml'),
+        'utf8'
+      );
+
+      const yamlParse = (globalThis as any).Bun.YAML.parse;
+      const previewDoc = yamlParse(otaPreviewRaw) as { jobs: Record<string, any> };
+      const prodDoc = yamlParse(otaProdRaw) as { jobs: Record<string, any> };
+
+      expect(previewDoc.jobs.approve_android_build).toBeDefined();
+      expect(previewDoc.jobs.approve_android_build.type).toBe('require-approval');
+      expect(previewDoc.jobs.approve_android_build.needs).toEqual(['get_android_build']);
+      expect(previewDoc.jobs.approve_android_build.if).toContain('!needs.get_android_build.outputs.build_id');
+      expect(previewDoc.jobs.approve_android_build.env).toBeUndefined();
+      expect(previewDoc.jobs.approve_android_build.params).toBeUndefined();
+
+      expect(previewDoc.jobs.approve_ios_build).toBeDefined();
+      expect(previewDoc.jobs.approve_ios_build.type).toBe('require-approval');
+      expect(previewDoc.jobs.approve_ios_build.needs).toEqual(['get_ios_build']);
+      expect(previewDoc.jobs.approve_ios_build.if).toContain('!needs.get_ios_build.outputs.build_id');
+      expect(previewDoc.jobs.approve_ios_build.env).toBeUndefined();
+      expect(previewDoc.jobs.approve_ios_build.params).toBeUndefined();
+
+      expect(previewDoc.jobs.build_android.needs).toContain('approve_android_build');
+      expect(previewDoc.jobs.build_ios.needs).toContain('approve_ios_build');
+
+      expect(previewDoc.jobs.update.needs).toEqual(['quality_gate']);
+
+      const prodApprovalJobs = Object.values(prodDoc.jobs).filter(
+        (job) => job?.type === 'require-approval'
+      );
+      expect(prodApprovalJobs).toHaveLength(0);
+    });
   });
 });
