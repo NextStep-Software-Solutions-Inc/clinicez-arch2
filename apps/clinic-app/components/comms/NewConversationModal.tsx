@@ -15,7 +15,7 @@ export interface NewConversationModalProps {
   onClose: () => void;
   onCreateConversation: (params: {
     scope: 'Direct' | 'StaffContext' | 'Facility';
-    title: string;
+    title?: string | null;
     participantStaffIds?: string[];
     participants?: Array<{
       participantType: string;
@@ -196,8 +196,8 @@ export default function NewConversationModal({
   };
 
   const handleSubmit = async () => {
-    // 1. Title validation
-    if (!title || !title.trim()) {
+    // 1. Title validation (optional for Direct messages)
+    if (activeTab !== 'Direct' && (!title || !title.trim())) {
       setValidationError('Conversation title cannot be empty.');
       return;
     }
@@ -222,8 +222,8 @@ export default function NewConversationModal({
     setIsSubmitting(true);
     try {
       const found = selectedStaffId ? staff.find((s) => s.id === selectedStaffId) : null;
-      const recipientName = found ? formatStaffName(found) : 'Staff Member';
-      const creatorName = current ? formatStaffName(current) : 'Staff Member';
+      const recipientName = found ? formatStaffName(found) : '';
+      const creatorName = current ? formatStaffName(current) : '';
 
       const directParticipants = activeTab === 'Direct' && selectedStaffId
         ? [
@@ -248,7 +248,7 @@ export default function NewConversationModal({
 
       await onCreateConversation({
         scope: activeTab,
-        title: title.trim(),
+        title: title.trim() ? title.trim() : null,
         participantStaffIds: selectedStaffId ? [selectedStaffId] : undefined,
         participants: directParticipants,
         patientId: selectedPatient?.id,
@@ -377,7 +377,7 @@ export default function NewConversationModal({
         {/* Title Input */}
         <View style={styles.formGroup}>
           <ThemedText variant="smallBold" color={theme.colors.text}>
-            Conversation Title
+            Conversation Title{activeTab === 'Direct' ? ' (Optional)' : ''}
           </ThemedText>
           <View style={styles.inputContainer}>
             <TextInput
@@ -388,7 +388,7 @@ export default function NewConversationModal({
               }}
               placeholder={
                 activeTab === 'Direct'
-                  ? 'Colleague name or optional custom title'
+                  ? 'Conversation title (optional for direct chats)'
                   : activeTab === 'StaffContext'
                   ? 'Select patient below to auto-populate'
                   : 'Enter channel title or select department below'
