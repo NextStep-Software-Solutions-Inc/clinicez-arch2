@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef, useSyncExternalStore } from 'react';
-import { View, StyleSheet, Pressable, Platform, Modal, Animated, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Pressable, Platform, Modal, Animated, useWindowDimensions, type ViewStyle } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
   useComms,
@@ -55,7 +55,9 @@ export default function ClinicChatDrawerHost() {
   const status = comms?.status || 'connected';
   const reconnect = comms?.reconnect;
   const isReconnecting = comms?.isReconnecting || false;
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation() as unknown as {
+    navigate: (screen: string, params?: Record<string, unknown>) => void;
+  };
 
   const facilityId = license?.clinicId || user?.clinicId || '';
   const canViewTriage = can(PERMISSIONS.triageRead) || can('messaging:triage') || user?.role === 'Admin';
@@ -287,8 +289,8 @@ export default function ClinicChatDrawerHost() {
           );
           notify.success('Inquiry routed to attending clinician.');
         }
-      } catch (err: any) {
-        notify.error(err?.message || 'Failed to record triage disposition.');
+      } catch (err) {
+        notify.error(err instanceof Error ? err.message : 'Failed to record triage disposition.');
       }
     },
     [answerRequest, requestVisit, declineRequest, routeToStaff, user?.id],
@@ -364,8 +366,8 @@ export default function ClinicChatDrawerHost() {
     (patientId: string) => {
       handleClose();
       navigation.navigate('Patients', {
-        screen: 'PatientDetail',
-        params: { patientId, initialTab: 'chart' },
+        patientId,
+        tab: 'chart',
       });
     },
     [handleClose, navigation],
@@ -400,8 +402,8 @@ export default function ClinicChatDrawerHost() {
         refreshTriage?.(),
       ]);
       notify.success('Reconnected to clinic communications.');
-    } catch (err: any) {
-      notify.error(err?.message || 'Reconnect attempt failed.');
+    } catch (err) {
+      notify.error(err instanceof Error ? err.message : 'Reconnect attempt failed.');
     } finally {
       setIsManualReconnecting(false);
     }
@@ -731,7 +733,7 @@ export default function ClinicChatDrawerHost() {
 function createStyles() {
   return StyleSheet.create({
     desktopOverlay: {
-      position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+      position: Platform.OS === 'web' ? ('fixed' as 'absolute') : 'absolute',
       top: 0,
       bottom: 0,
       left: 0,
@@ -866,7 +868,7 @@ function createStyles() {
       backgroundColor: theme.colors.transparent,
       borderWidth: theme.sizes.borderWidth,
       borderColor: theme.colors.transparent,
-      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : {}),
     },
     tabButtonActive: {
       backgroundColor: theme.colors.primaryLight,
