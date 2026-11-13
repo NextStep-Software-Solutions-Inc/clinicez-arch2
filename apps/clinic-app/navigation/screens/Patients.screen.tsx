@@ -43,7 +43,9 @@ import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { PERMISSIONS } from '@constants/permissions';
 import { useAuth, usePermission } from '@context/AuthContext';
-import { normalizeAttachmentStaffAttribution } from '../../components/chart/AttachExternalDocumentModal';
+import AttachExternalDocumentModal, {
+  normalizeAttachmentStaffAttribution,
+} from '../../components/chart/AttachExternalDocumentModal';
 import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
@@ -588,19 +590,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [patientAttachments, setPatientAttachments] = useState<ClinicRecordAttachmentRecord[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
-  const [docTitle, setDocTitle] = useState('');
-  const [docRecordType, setDocRecordType] = useState('OutsideChestXRay');
-  const [docFileType, setDocFileType] = useState<'PDF' | 'Photo'>('PDF');
-  const [docNotes, setDocNotes] = useState('');
-  const [docDate, setDocDate] = useState(new Date().toISOString().split('T')[0]);
-  const [pickedDocFile, setPickedDocFile] = useState<{
-    name: string;
-    size?: number;
-    uri: string;
-    mimeType?: string;
-    file?: any;
-  } | null>(null);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
   const [verifyingAttachmentId, setVerifyingAttachmentId] = useState<string | null>(null);
 
   // Prescription Slip & External Dispense (Path B) state
@@ -1229,7 +1218,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
       setPatientChart(reconcileChartWithPatient(chartData, authoritativePatient));
       setChartError(null);
-      if (chartData.attachments && chartData.attachments.length > 0) {
+      if (chartData.attachments) {
         setPatientAttachments(chartData.attachments);
         setLoadingAttachments(false);
       }
@@ -1436,6 +1425,26 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       )
     );
 
+    setPatientChart((prev) =>
+      prev
+        ? {
+            ...prev,
+            attachments: (prev.attachments || []).map((att) =>
+              att.id === attachmentId
+                ? {
+                    ...att,
+                    verificationStatus: isApproved ? 'Verified' : 'Rejected',
+                    rejectionReason,
+                    verifiedAt: new Date().toISOString(),
+                    verifiedByStaffId: actorStaffId || att.verifiedByStaffId,
+                    verifiedByStaffName: actorStaffName || att.verifiedByStaffName || undefined,
+                  }
+                : att
+            ),
+          }
+        : prev
+    );
+
     notify.success(isApproved ? 'Document verified.' : 'Document rejected.');
   };
 
@@ -1445,140 +1454,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       if (!(await openDocument(url))) throw new Error('Could not open the document');
     } catch (e: any) {
       Alert.alert('Unable to open document', e.message || 'Network error');
-    }
-  };
-
-  const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/jpeg', 'image/png'],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      setPickedDocFile({
-        name: asset.name,
-        size: asset.size,
-        uri: asset.uri,
-        mimeType: asset.mimeType || (asset.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
-        file: (asset as any).file,
-      });
-      if (!docTitle.trim()) {
-        const cleanName = asset.name.replace(/\.[^/.]+$/, '');
-        setDocTitle(cleanName);
-      }
-      if (asset.name.toLowerCase().endsWith('.pdf')) {
-        setDocFileType('PDF');
-      } else {
-        setDocFileType('Photo');
-      }
-    } catch (err: any) {
-      Alert.alert('File Selection Error', err?.message || 'Could not pick file.');
-    }
-  };
-
-  const handleUploadDocument = async () => {
-    if (!selectedPatient) return;
-    if (!docTitle.trim()) {
-      Alert.alert('Title required', 'Enter a document title.');
-      return;
-    }
-
-    const docDateValidation = validateDateString(docDate, { boundaryMode: 'pastOrToday' });
-    if (!docDateValidation.isValid) {
-      Alert.alert('Invalid Document Date', docDateValidation.errorMessage || 'Please enter a valid document date not in the future.');
-      return;
-    }
-
-    const strictlyFormattedDocDate = (docDateValidation.formattedDate || new Date().toISOString().split('T')[0]).split('T')[0];
-
-    setUploadingDoc(true);
-
-    if (pickedDocFile) {
-      try {
-        const formData = new FormData();
-        formData.append('PatientId', selectedPatient.id);
-        formData.append('RecordType', docRecordType);
-        formData.append('Title', docTitle.trim());
-        if (docNotes.trim()) formData.append('Notes', docNotes.trim());
-        formData.append('DocumentDate', strictlyFormattedDocDate);
-        if (actorStaffId) formData.append('UploadedByStaffId', actorStaffId);
-        if (actorStaffName) formData.append('UploadedByStaffName', actorStaffName);
-
-        if (pickedDocFile.file) {
-          formData.append('File', pickedDocFile.file);
-        } else {
-          formData.append('File', {
-            uri: pickedDocFile.uri,
-            name: pickedDocFile.name,
-            type: pickedDocFile.mimeType || 'application/octet-stream',
-          } as any);
-        }
-
-        const [newAtt, err] = await clinicService.uploadRecordAttachmentFile(formData);
-        setUploadingDoc(false);
-
-        if (newAtt) {
-          const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
-          setPatientAttachments((prev) => [attributedAtt, ...prev]);
-          setUploadDocModalVisible(false);
-          setPickedDocFile(null);
-          setDocTitle('');
-          setDocNotes('');
-          setDocDate(new Date().toISOString().split('T')[0]);
-          notify.success('Document attached to the patient record.');
-          return;
-        } else if (err) {
-          notify.error(err.message || 'The server rejected this document upload.');
-          return;
-        }
-      } catch (uploadErr: any) {
-        setUploadingDoc(false);
-        notify.error(uploadErr?.message || 'Failed to upload document file.');
-        return;
-      }
-    }
-
-    const payload = {
-      patientId: selectedPatient.id,
-      recordType: docRecordType,
-      title: docTitle.trim(),
-      fileName: `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
-      contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
-      fileSizeBytes: 1024 * 450,
-      storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
-      documentDate: strictlyFormattedDocDate,
-      notes: docNotes.trim() || undefined,
-      uploadedByStaffId: actorStaffId,
-      uploadedByStaffName: actorStaffName || undefined,
-      encryptionAlgorithm: 'AES-256-GCM',
-      encryptionKeyId: 'cmk-v1',
-    };
-
-    const [newAtt, err] = await clinicService.uploadRecordAttachment(payload);
-    setUploadingDoc(false);
-
-    if (newAtt) {
-      const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
-      setPatientAttachments((prev) => [attributedAtt, ...prev]);
-      setUploadDocModalVisible(false);
-      setPickedDocFile(null);
-      setDocTitle('');
-      setDocNotes('');
-      setDocDate(new Date().toISOString().split('T')[0]);
-      notify.success('Document attached to the patient record.');
-    } else if (!shouldQueueOffline(err?.status ?? 0)) {
-      notify.error(err?.message || 'The server rejected this document.');
-    } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, actorStaffName || undefined);
-      setPatientAttachments((prev) => [queuedAtt, ...prev]);
-      setUploadDocModalVisible(false);
-      setPickedDocFile(null);
-      setDocTitle('');
-      setDocNotes('');
-      setDocDate(new Date().toISOString().split('T')[0]);
-      Alert.alert('Saved on this device', 'The document is queued and will upload automatically once the connection is back.');
     }
   };
 
@@ -3188,159 +3063,39 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         onSuccess={handleExternalDispenseSuccess}
       />
 
-      {/* Attach External Physical Document Modal (School Clinic / 80/20) */}
-      <Modal raw visible={uploadDocModalVisible} transparent animationType="slide" onClose={() => setUploadDocModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 500 }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
-              <Button
-                variant="ghost"
-                size="sm"
-                icon="close"
-                iconOnly
-                accessibilityLabel="Close"
-                onPress={() => setUploadDocModalVisible(false)}
-              />
-            </View>
-            <ThemedText style={styles.modalSub}>
-              Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {selectedPatient?.fullName}'s profile.
-            </ThemedText>
-
-            <ScrollView
-              style={{ flexShrink: 1 }}
-              contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
-              showsVerticalScrollIndicator={true}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View>
-                <ThemedText style={styles.inputLabel}>Document Title *</ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Chest X-ray (outside clinic)"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={docTitle}
-                  onChangeText={setDocTitle}
-                />
-              </View>
-
-              <ValidatedDateInput
-                label="Document Date (YYYY-MM-DD)"
-                required
-                value={docDate}
-                onChangeText={setDocDate}
-                boundaryMode="pastOrToday"
-                placeholder="YYYY-MM-DD"
-              />
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Document / Record Classification</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                  {[
-                    { key: 'OutsideChestXRay', label: 'Chest X-Ray' },
-                    { key: 'CertificateOfRegistration', label: 'Paper COR' },
-                    { key: 'MedicalCertificate', label: 'Outside MedCert' },
-                    { key: 'LabResult', label: 'Lab Sheet' },
-                    { key: 'Other', label: 'Other' },
-                  ].map((t) => (
-                    <Pressable
-                      key={t.key}
-                      style={[styles.formatChip, docRecordType === t.key && styles.formatChipActive]}
-                      onPress={() => setDocRecordType(t.key)}
-                    >
-                      <ThemedText style={[styles.formatChipText, docRecordType === t.key && styles.formatChipTextActive]}>
-                        {t.label}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Ingestion Source / Format</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  {(['PDF', 'Photo'] as const).map((fmt) => (
-                    <Pressable
-                      key={fmt}
-                      style={[styles.formatChip, docFileType === fmt && styles.formatChipActive]}
-                      onPress={() => setDocFileType(fmt)}
-                    >
-                      <ThemedText style={[styles.formatChipText, docFileType === fmt && styles.formatChipTextActive]}>
-                        {fmt === 'PDF' ? 'Scanned PDF' : 'Flatbed / Camera Scan'}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>File Attachment (PDF, JPEG, PNG)</ThemedText>
-                {pickedDocFile ? (
-                  <View style={styles.pickedFileBox}>
-                    <View style={styles.pickedFileInfo}>
-                      <Icon
-                        name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
-                        size={theme.sizes.iconMd}
-                        color={theme.colors.primary}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
-                          {pickedDocFile.name}
-                        </ThemedText>
-                        <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
-                        </ThemedText>
-                      </View>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <Button title="Change" variant="outline" size="xs" onPress={handlePickDocument} />
-                      <Button title="Clear" variant="dangerOutline" size="xs" onPress={() => setPickedDocFile(null)} />
-                    </View>
-                  </View>
-                ) : (
-                  <Button
-                    title="Select Document File (PDF, JPEG, PNG)"
-                    variant="outline"
-                    size="md"
-                    icon="upload"
-                    onPress={handlePickDocument}
-                  />
-                )}
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Clinical Review Findings & Notes</ThemedText>
-                <TextInput
-                  style={[styles.textInput, { height: 60 }]}
-                  multiline
-                  placeholder="e.g. Clean chest PA film, no active pulmonary disease seen."
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={docNotes}
-                  onChangeText={setDocNotes}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
-              <Button
-                title="Cancel"
-                variant="secondary"
-                size="md"
-                onPress={() => setUploadDocModalVisible(false)}
-                disabled={uploadingDoc}
-              />
-              <Button
-                title="Save & Attach to Profile"
-                variant="primary"
-                size="md"
-                loading={uploadingDoc}
-                disabled={uploadingDoc}
-                onPress={handleUploadDocument}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Attach External Physical Document Modal */}
+      <AttachExternalDocumentModal
+        visible={uploadDocModalVisible}
+        patient={selectedPatient}
+        patientId={selectedPatient?.id}
+        onClose={() => setUploadDocModalVisible(false)}
+        onAttachmentUploaded={async (attributedAtt) => {
+          setPatientAttachments((prev) => [
+            attributedAtt,
+            ...prev.filter((a) => a.id !== attributedAtt.id),
+          ]);
+          setPatientChart((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  attachments: [
+                    attributedAtt,
+                    ...(prev.attachments || []).filter((a) => a.id !== attributedAtt.id),
+                  ],
+                }
+              : prev
+          );
+          if (selectedPatient) {
+            void handleOpenChart(
+              selectedPatient,
+              activeChartTab,
+              undefined,
+              chartQueueItemId,
+              chartForceSeparateVisit
+            );
+          }
+        }}
+      />
 
       {/* Standalone PhilHealth Patient Profile Modal (Offline & Walk-In Capable) */}
       <PhilHealthProfileModal

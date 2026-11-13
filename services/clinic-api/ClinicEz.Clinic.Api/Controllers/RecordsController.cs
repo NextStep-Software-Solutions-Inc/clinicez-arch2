@@ -77,12 +77,16 @@ public sealed class RecordsController : ControllerBase
         using var memoryStream = new MemoryStream();
         await form.File.CopyToAsync(memoryStream, ct);
 
+        var effectiveFileName = !string.IsNullOrWhiteSpace(form.FileName)
+            ? form.FileName.Trim()
+            : form.File.FileName;
+
         var command = new UploadAndEncryptRecordAttachmentCommand(
             PatientId: form.PatientId,
             ConsultationId: form.ConsultationId,
             RecordType: string.IsNullOrWhiteSpace(form.RecordType) ? "LabResult" : form.RecordType,
-            Title: string.IsNullOrWhiteSpace(form.Title) ? form.File.FileName : form.Title,
-            FileName: form.File.FileName,
+            Title: string.IsNullOrWhiteSpace(form.Title) ? effectiveFileName : form.Title,
+            FileName: effectiveFileName,
             ContentType: string.IsNullOrWhiteSpace(form.File.ContentType) ? "application/octet-stream" : form.File.ContentType,
             FileBytes: memoryStream.ToArray(),
             Notes: form.Notes,
@@ -154,6 +158,7 @@ public sealed class UploadRecordAttachmentForm
     public Guid? ConsultationId { get; set; }
     public string? RecordType { get; set; }
     public string? Title { get; set; }
+    public string? FileName { get; set; }
     public string? Notes { get; set; }
     public DateOnly? DocumentDate { get; set; }
     public Guid? UploadedByStaffId { get; set; }
