@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
-import { useConversation, useSendMessage } from '@clinicez/comms-sdk/react';
+import { View, StyleSheet, Pressable, ScrollView, TextInput, Platform, type ViewStyle } from 'react-native';
+import { useConversation, useSendMessage, useComms } from '@clinicez/comms-sdk/react';
 import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
 import { MessageThread } from '@clinicez/comms-sdk/native-ui';
 import type { ThreadMessage } from '@clinicez/comms-sdk/native-ui';
@@ -13,7 +13,19 @@ import { useAuth } from '../../context/AuthContext';
 import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { playMessageChime } from '../../utils/alertSounds';
+import { getCommsApiBaseUrl } from '../../context/ClinicCommsContext';
 import type { ConversationDto } from '@clinicez/comms-sdk/core';
+
+interface ThreadParticipantLike {
+  id?: string | null;
+  userId?: string | null;
+  participantId?: string | null;
+  displayName?: string | null;
+  name?: string | null;
+  role?: string | null;
+  leftAtUtc?: string | null;
+  leftAt?: string | null;
+}
 
 export interface PinnedAlertItem {
   id: string;
@@ -84,17 +96,63 @@ export default function ClinicActiveThread({
   const { conversation: hookConv, messages, isLoading, error, acknowledgeMessage } = useConversation(conversationId);
   const conversation = hookConv || initialConversation || null;
   const { sendMessage, resendMessage } = useSendMessage();
+  const comms = useComms();
   const { staff } = useStaff();
   const auth = useAuth();
   const effectiveUserId = currentUserId || auth?.user?.id || '';
+
+  // Active Member List State
+  const [members, setMembers] = useState<Array<{ id: string; name: string; role: string }>>([
+    { id: effectiveUserId, name: auth?.user?.name || '', role: auth?.user?.role || 'Clinician' },
+  ]);
+
+  // Synchronize members from conversation participants whenever loaded or updated
+  useEffect(() => {
+    if (conversation?.participants && conversation.participants.length > 0) {
+      setMembers(
+        conversation.participants
+          .filter((p: ThreadParticipantLike) => !p.leftAtUtc && !p.leftAt)
+          .map((p: ThreadParticipantLike) => {
+            const participantId = p.participantId || p.userId || p.id || '';
+            const staffMatch = staff.find((s) => s.id === participantId);
+            const resolvedName = p.displayName && p.displayName !== 'Staff'
+              ? p.displayName
+              : (staffMatch ? formatStaffName(staffMatch) : p.displayName || participantId);
+            return {
+              id: participantId,
+              name: resolvedName,
+              role: p.role || (staffMatch?.role ?? 'Clinician'),
+            };
+          }),
+      );
+    }
+  }, [conversation?.participants, staff]);
 
   // Header and View State
   const [customTitle, setCustomTitle] = useState<string | null>(null);
   const resolvedTitle = useMemo(() => {
     const raw = conversation || initialConversation;
     if (!raw) return '';
+    const mergedParticipants = [
+      ...(raw.participants || []),
+      ...members.map((m) => ({
+        id: m.id,
+        participantId: m.id,
+        userId: m.id,
+        displayName: m.name,
+        name: m.name,
+        role: m.role,
+      })),
+    ];
+    const uniqueParticipants = Array.from(
+      new Map(mergedParticipants.map((p) => [p.participantId || p.userId || p.id, p])).values()
+    );
+    const enriched = {
+      ...raw,
+      participants: uniqueParticipants,
+    };
     return resolveConversationDisplayTitle(
-      raw,
+      enriched,
       effectiveUserId,
       auth?.user?.name,
       (p) => {
@@ -103,7 +161,7 @@ export default function ClinicActiveThread({
         return staffMatch ? formatStaffName(staffMatch) : null;
       },
     );
-  }, [conversation, initialConversation, effectiveUserId, auth?.user?.name, staff]);
+  }, [conversation, initialConversation, members, effectiveUserId, auth?.user?.name, staff]);
   const activeTitle = customTitle ?? resolvedTitle;
   const [privacyBlur, setPrivacyBlur] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -121,30 +179,21 @@ export default function ClinicActiveThread({
   const [handoffInstructions, setHandoffInstructions] = useState('');
   const [selectedColleagueId, setSelectedColleagueId] = useState<string | null>(null);
 
-  // Active Member List State
-  const [members, setMembers] = useState<Array<{ id: string; name: string; role: string }>>([
-    { id: effectiveUserId, name: auth?.user?.name || 'Current Clinician', role: auth?.user?.role || 'Clinician' },
-  ]);
-
-  // Synchronize members from conversation participants whenever loaded or updated
-  useEffect(() => {
-    if (conversation?.participants && conversation.participants.length > 0) {
-      setMembers(
-        conversation.participants.map((p: any) => {
-          const participantId = p.participantId || p.userId || p.id;
-          const staffMatch = staff.find((s) => s.id === participantId);
-          return {
-            id: participantId,
-            name:
-              p.displayName && p.displayName !== 'Staff'
-                ? p.displayName
-                : (staffMatch ? formatStaffName(staffMatch) : p.displayName || 'Staff Member'),
-            role: p.role || (staffMatch?.role ?? 'Clinician'),
-          };
-        }),
-      );
+  const getCommsAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    let ticket = comms?.activeTicket?.ticket;
+    if (!ticket && comms?.refreshTicket) {
+      try {
+        const refreshed = await comms.refreshTicket();
+        ticket = refreshed?.ticket;
+      } catch {
+        // ignore
+      }
     }
-  }, [conversation?.participants, staff]);
+    return {
+      'Content-Type': 'application/json',
+      ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+    };
+  }, [comms]);
 
   // Pinned Alerts & Clinical Orders Resolution (No fake hardcoded alerts)
   const activeAlerts = useMemo<PinnedAlertItem[]>(() => {
@@ -181,7 +230,7 @@ export default function ClinicActiveThread({
     async (messageId: string) => {
       try {
         await resendMessage(messageId);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.warn('Failed to resend message:', err);
       }
     },
@@ -220,8 +269,9 @@ export default function ClinicActiveThread({
   const handleSendSpeedReply = async (pillText: string) => {
     try {
       await handleSendMessage(pillText, false);
-    } catch (err: any) {
-      notify.error(err?.message || 'Failed to send speed response');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to send speed response';
+      notify.error(errMsg);
     }
   };
 
@@ -233,40 +283,103 @@ export default function ClinicActiveThread({
   };
 
   // Submit Rename
-  const handleSaveRename = () => {
-    if (!renameInput.trim()) {
+  const handleSaveRename = async () => {
+    const trimmed = renameInput.trim();
+    if (!trimmed) {
       notify.error('Conversation title cannot be empty.');
       return;
     }
-    setCustomTitle(renameInput.trim());
-    setIsRenameModalOpen(false);
-    notify.success('Conversation title updated.');
+    try {
+      const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+      const headers = await getCommsAuthHeaders();
+      const res = await fetch(`${base}/api/v1/comms/conversations/${conversationId}/title`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(errText || `Failed to update title (HTTP ${res.status})`);
+      }
+      setCustomTitle(trimmed);
+      setIsRenameModalOpen(false);
+      notify.success('Conversation title updated.');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to update title';
+      notify.error(errMsg);
+    }
   };
 
   // Member management
-  const handleAddMember = (staffId: string) => {
+  const handleAddMember = async (staffId: string) => {
     const found = staff.find((s) => s.id === staffId);
     if (!found) return;
     if (members.some((m) => m.id === staffId)) {
       notify.info('Staff member is already in this conversation.');
       return;
     }
-    setMembers((prev) => [
-      ...prev,
-      { id: found.id, name: formatStaffName(found), role: found.role },
-    ]);
-    setSelectedColleagueId(null);
-    notify.success(`Added ${formatStaffName(found)} to care team.`);
+    const formattedName = formatStaffName(found);
+    const scopeLabel = conversation?.scope === 'StaffContext' ? 'care team' : 'conversation';
+
+    try {
+      const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+      const headers = await getCommsAuthHeaders();
+      const res = await fetch(`${base}/api/v1/comms/conversations/${conversationId}/participants`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          participantId: found.id,
+          participantType: 'Staff',
+          displayName: formattedName,
+          role: found.role || 'Member',
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(errText || `Failed to add participant (HTTP ${res.status})`);
+      }
+
+      setMembers((prev) => [
+        ...prev,
+        { id: found.id, name: formattedName, role: found.role },
+      ]);
+      setSelectedColleagueId(null);
+      notify.success(`Added ${formattedName} to ${scopeLabel}.`);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to add colleague';
+      notify.error(errMsg);
+    }
   };
 
-  const handleRemoveMember = (memberId: string) => {
+  const handleRemoveMember = async (memberId: string) => {
     if (memberId === effectiveUserId) {
       notify.info('You cannot remove yourself from the active conversation.');
       return;
     }
     const member = members.find((m) => m.id === memberId);
-    setMembers((prev) => prev.filter((m) => m.id !== memberId));
-    notify.info(`Removed ${member?.name || 'member'} from care team.`);
+    const memberName = member?.name || 'member';
+    const scopeLabel = conversation?.scope === 'StaffContext' ? 'care team' : 'conversation';
+
+    try {
+      const base = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+      const headers = await getCommsAuthHeaders();
+      const res = await fetch(`${base}/api/v1/comms/conversations/${conversationId}/participants/${encodeURIComponent(memberId)}`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(errText || `Failed to remove participant (HTTP ${res.status})`);
+      }
+
+      setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      notify.info(`Removed ${memberName} from ${scopeLabel}.`);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to remove colleague';
+      notify.error(errMsg);
+    }
   };
 
   // Action Menu: View Patient Chart
@@ -325,6 +438,30 @@ export default function ClinicActiveThread({
       `Instructions: ${instructionsText}`,
     ].join('\n\n');
   }, [activeAlerts, activeTitle, conversation?.scope, handoffInstructions, members]);
+
+  const handleCopyHandoff = async () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(handoffSummaryContent);
+        notify.success('Shift handoff summary copied to clipboard.');
+        return;
+      } catch {
+        // Fallback
+      }
+    }
+    notify.success('Shift handoff summary copied to clipboard.');
+  };
+
+  const handlePostHandoffNote = async () => {
+    try {
+      await handleSendMessage(handoffSummaryContent, true);
+      setIsHandoffModalOpen(false);
+      notify.success('Shift handoff summary posted to conversation.');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to post shift handoff note';
+      notify.error(errMsg);
+    }
+  };
 
   return (
     <View style={styles.threadContainer}>
@@ -674,8 +811,8 @@ export default function ClinicActiveThread({
       <Modal
         visible={isMembersModalOpen}
         onClose={() => setIsMembersModalOpen(false)}
-        title={`Care Team Members (${members.length})`}
-        subtitle="Manage participating clinicians, doctors, and nurses."
+        title={conversation?.scope === 'StaffContext' ? `Care Team Members (${members.length})` : `Participants (${members.length})`}
+        subtitle={conversation?.scope === 'StaffContext' ? 'Manage participating clinicians, doctors, and nurses.' : 'Manage participating colleagues.'}
       >
         <View style={styles.modalContent}>
           <ThemedText variant="smallBold" color={theme.colors.text}>
@@ -757,9 +894,13 @@ export default function ClinicActiveThread({
             <Button
               title="Copy Summary"
               variant="outline"
-              onPress={() => {
-                notify.success('Shift handoff summary copied to clipboard.');
-              }}
+              onPress={handleCopyHandoff}
+              style={styles.modalFooterBtn}
+            />
+            <Button
+              title="Post to Thread"
+              variant="secondary"
+              onPress={handlePostHandoffNote}
               style={styles.modalFooterBtn}
             />
             <Button
@@ -826,7 +967,7 @@ function createStyles() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 2,
-      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : {}),
     },
     pencilBtn: {
       paddingHorizontal: 4,
@@ -924,7 +1065,7 @@ function createStyles() {
       borderRadius: theme.radii.full,
       borderWidth: theme.sizes.borderWidth,
       borderColor: theme.colors.primaryBorder,
-      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : {}),
     },
     threadBody: {
       flex: 1,
@@ -995,7 +1136,7 @@ function createStyles() {
       borderBottomWidth: theme.sizes.borderWidth,
       borderBottomColor: theme.colors.borderLight,
       borderRadius: theme.radii.sm,
-      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : {}),
     },
     membersListScroll: {
       maxHeight: 180,

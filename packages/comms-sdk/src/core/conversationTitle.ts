@@ -5,6 +5,8 @@ export interface ParticipantLike {
   displayName?: string | null;
   name?: string | null;
   role?: string | null;
+  leftAt?: string | null;
+  leftAtUtc?: string | null;
 }
 
 export interface ConversationTitleLike {
@@ -43,8 +45,11 @@ export function resolveConversationDisplayTitle(
 
   const participants = conversation?.participants || [];
 
-  // Filter out current viewer
+  // Filter out current viewer and departed participants
   const otherParticipants = participants.filter((p) => {
+    if (p.leftAt || p.leftAtUtc) {
+      return false;
+    }
     const pid = p.participantId || p.userId || p.id;
     if (currentUserId && pid && String(pid).trim().toLowerCase() === String(currentUserId).trim().toLowerCase()) {
       return false;

@@ -415,4 +415,103 @@ public class DirectConversationAdversarialAndLifecycleTests
         Assert.NotNull(stored);
         Assert.Equal(RequestStatus.Closed, stored.Status);
     }
+
+    [Fact]
+    public async Task AddParticipant_ToDirectConversation_PersistsAndAppendsToDynamicTitle()
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var createHandler = new CreateConversationCommandHandler(db);
+        var mockNotifier = new Mock<ICommsRealtimeNotifier>();
+        var addHandler = new AddParticipantCommandHandler(db, mockNotifier.Object);
+        var getByIdHandler = new GetConversationByIdQueryHandler(db);
+
+        // Alice creates 1-on-1 direct conversation with Bob
+        var conv = await createHandler.Handle(new CreateConversationCommand(
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            BranchId: null,
+            Scope: ConversationScope.Direct,
+            Kind: ConversationKind.Direct,
+            Title: null,
+            ContextType: null,
+            ContextId: null,
+            Category: null,
+            IsEmergencyConfirmed: false,
+            IsLocalOnly: false,
+            CreatedBy: "staff-alice",
+            Participants: new List<ParticipantInput>
+            {
+                new("Staff", "staff-bob", "Bob", "Member")
+            },
+            CreatedByDisplayName: "Alice"), CancellationToken.None);
+
+        // Add Charlie to form a group
+        var added = await addHandler.Handle(new AddParticipantCommand(
+            conv.Id,
+            TenantId: "",
+            ParticipantId: "staff-charlie",
+            ParticipantType: "Staff",
+            DisplayName: "Charlie",
+            Role: "Member"), CancellationToken.None);
+
+        Assert.Equal("staff-charlie", added.ParticipantId);
+        Assert.Equal("Charlie", added.DisplayName);
+
+        // Verify participant is persisted and dynamic title appends Charlie
+        var fetched = await getByIdHandler.Handle(new GetConversationByIdQuery(conv.Id, TenantId, "staff-alice"), CancellationToken.None);
+        Assert.NotNull(fetched);
+        Assert.Equal(3, fetched.Participants.Count);
+        Assert.Contains(fetched.Participants, p => p.ParticipantId == "staff-charlie" && p.LeftAtUtc == null);
+        Assert.Equal("Bob, Charlie", fetched.Title);
+
+        mockNotifier.Verify(n => n.NotifyParticipantJoinedAsync(
+            conv.Id, "staff-charlie", "Charlie", "Member", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemoveParticipant_FromDirectConversation_SoftDeletesAndUpdatesTitle()
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var createHandler = new CreateConversationCommandHandler(db);
+        var mockNotifier = new Mock<ICommsRealtimeNotifier>();
+        var addHandler = new AddParticipantCommandHandler(db, mockNotifier.Object);
+        var removeHandler = new RemoveParticipantCommandHandler(db, mockNotifier.Object);
+        var getByIdHandler = new GetConversationByIdQueryHandler(db);
+
+        var conv = await createHandler.Handle(new CreateConversationCommand(
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            BranchId: null,
+            Scope: ConversationScope.Direct,
+            Kind: ConversationKind.Direct,
+            Title: null,
+            ContextType: null,
+            ContextId: null,
+            Category: null,
+            IsEmergencyConfirmed: false,
+            IsLocalOnly: false,
+            CreatedBy: "staff-alice",
+            Participants: new List<ParticipantInput>
+            {
+                new("Staff", "staff-bob", "Bob", "Member")
+            },
+            CreatedByDisplayName: "Alice"), CancellationToken.None);
+
+        await addHandler.Handle(new AddParticipantCommand(
+            conv.Id, TenantId, "staff-charlie", "Staff", "Charlie", "Member"), CancellationToken.None);
+
+        // Remove Charlie
+        var removed = await removeHandler.Handle(new RemoveParticipantCommand(
+            conv.Id, TenantId, "staff-charlie"), CancellationToken.None);
+
+        Assert.True(removed);
+
+        var fetched = await getByIdHandler.Handle(new GetConversationByIdQuery(conv.Id, TenantId, "staff-alice"), CancellationToken.None);
+        Assert.NotNull(fetched);
+        // Bob is only active participant left, so dynamic title returns to "Bob"
+        Assert.Equal("Bob", fetched.Title);
+
+        mockNotifier.Verify(n => n.NotifyParticipantLeftAsync(
+            conv.Id, "staff-charlie", "Charlie", It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

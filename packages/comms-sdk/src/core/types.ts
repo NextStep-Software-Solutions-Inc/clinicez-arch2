@@ -90,9 +90,11 @@ export interface MessageDto {
 export interface ParticipantDto {
   id: string;
   userId: string;
+  participantId?: string;
   displayName: string;
   role: string;
   joinedAtUtc: string;
+  leftAtUtc?: string | null;
 }
 
 export interface ConversationDto {

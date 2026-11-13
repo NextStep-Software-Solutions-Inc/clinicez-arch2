@@ -199,7 +199,62 @@ public class ConversationsController : ControllerBase
         }
         return NoContent();
     }
+
+    [HttpPost("{id:guid}/participants")]
+    public async Task<ActionResult<ParticipantDto>> AddParticipant(
+        Guid id,
+        [FromBody] AddParticipantApiRequest request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var command = new AddParticipantCommand(
+            id,
+            tenantId,
+            request.ParticipantId,
+            request.ParticipantType ?? "Staff",
+            request.DisplayName ?? "Staff Member",
+            request.Role ?? "Member");
+
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [HttpDelete("{id:guid}/participants/{participantId}")]
+    public async Task<IActionResult> RemoveParticipant(
+        Guid id,
+        string participantId,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var command = new RemoveParticipantCommand(id, tenantId, participantId);
+        var removed = await _mediator.Send(command, ct);
+        if (!removed)
+        {
+            return NotFound();
+        }
+        return NoContent();
+    }
+
+    [HttpPatch("{id:guid}/title")]
+    public async Task<ActionResult<ConversationDto>> UpdateTitle(
+        Guid id,
+        [FromBody] UpdateConversationTitleApiRequest request,
+        CancellationToken ct)
+    {
+        var tenantId = User.FindFirstValue("tenant_id") ?? User.FindFirstValue("TenantId") ?? string.Empty;
+        var command = new UpdateConversationTitleCommand(id, tenantId, request.Title);
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
+    }
 }
+
+public sealed record UpdateConversationTitleApiRequest(string? Title);
+
+public sealed record AddParticipantApiRequest(
+    string ParticipantId,
+    string? ParticipantType = "Staff",
+    string? DisplayName = null,
+    string? Role = "Member");
 
 public sealed record CloseConversationApiRequest(string? Notes = null, string? TenantId = null);
 

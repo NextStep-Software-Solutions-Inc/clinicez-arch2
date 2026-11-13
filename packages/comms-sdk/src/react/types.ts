@@ -184,6 +184,9 @@ export interface UseConversationResult {
   sendReaction: (messageId: string, reaction: string) => Promise<void>;
   confirmDelivery: (messageId: string) => Promise<void>;
   refresh: () => Promise<void>;
+  addParticipant?: (participantId: string, displayName?: string, role?: string) => Promise<ParticipantDto>;
+  removeParticipant?: (participantId: string) => Promise<void>;
+  reloadConversation?: () => Promise<void>;
 }
 
 // 4. useSendMessage

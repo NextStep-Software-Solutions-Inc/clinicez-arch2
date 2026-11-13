@@ -223,6 +223,7 @@ let mockResendMessage = mock(async () => {});
 let mockAcknowledgeMessage = mock(async () => {});
 
 mock.module('@clinicez/comms-sdk/react', () => ({
+  CommsProvider: ({ children }: any) => children,
   useConversation: (id: string) => ({
     conversation: {
       id,
