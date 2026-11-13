@@ -1084,6 +1084,8 @@ export default function ConsultationsScreen() {
   const [refUrgency, setRefUrgency] = useState('Routine');
   const [refReason, setRefReason] = useState('');
   const [refSummary, setRefSummary] = useState('');
+  const [refDiagnosis, setRefDiagnosis] = useState('');
+  const [refValidationAttempted, setRefValidationAttempted] = useState(false);
   const [issuedReferral, setIssuedReferral] = useState<ReferralLetterRecord | null>(null);
 
   const [previewDocModal, setPreviewDocModal] = useState(false);
@@ -1898,20 +1900,49 @@ export default function ConsultationsScreen() {
     setPreviewDocModal(true);
   };
 
+  const handleOpenIssueReferral = () => {
+    if (!refDiagnosis.trim()) {
+      setRefDiagnosis(primaryDiagnosisText());
+    }
+    if (!refSummary.trim() && subjective.trim()) {
+      setRefSummary(subjective.trim());
+    }
+    setRefValidationAttempted(false);
+    setReferralModalVisible(true);
+  };
+
   const handleIssueReferral = async () => {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
-    if (!refFacility.trim() || !refDepartment.trim()) {
-      Alert.alert('Incomplete referral', 'Enter the receiving facility and department / specialty.');
+
+    setRefValidationAttempted(true);
+
+    if (!refFacility.trim()) {
+      Alert.alert('Missing Destination', 'Please enter the receiving facility name.');
       return;
     }
-    const diagnosis = primaryDiagnosisText();
-    const summary = refSummary.trim() || subjective.trim();
-    if (!diagnosis || !summary || !refReason.trim()) {
+    if (!refDepartment.trim()) {
+      Alert.alert('Missing Destination', 'Please enter the receiving department or specialty.');
+      return;
+    }
+    if (!refReason.trim()) {
+      Alert.alert('Missing Reason', 'Please specify the reason for referral.');
+      return;
+    }
+    const diagnosis = refDiagnosis.trim() || primaryDiagnosisText();
+    if (!diagnosis) {
       Alert.alert(
-        'Incomplete referral',
-        'Enter the reason for referral, a clinical summary (or subjective notes) and an assessment before issuing.',
+        'Missing Diagnosis',
+        'Please provide a provisional diagnosis or assessment for the referral letter.',
+      );
+      return;
+    }
+    const summary = refSummary.trim() || subjective.trim();
+    if (!summary) {
+      Alert.alert(
+        'Missing Clinical Summary',
+        'Please provide a brief clinical summary or enter subjective consultation notes.',
       );
       return;
     }
@@ -2677,6 +2708,8 @@ export default function ConsultationsScreen() {
     setRefUrgency('Routine');
     setRefReason('');
     setRefSummary('');
+    setRefDiagnosis('');
+    setRefValidationAttempted(false);
     setDoctorPrc(signerPrc);
     setDoctorPtr(signerPtr);
     setDoctorS2(signerS2);
@@ -2886,6 +2919,8 @@ export default function ConsultationsScreen() {
     setRefUrgency('Routine');
     setRefReason('');
     setRefSummary('');
+    setRefDiagnosis('');
+    setRefValidationAttempted(false);
     setPrescriptionSlip(null);
     setIssuedMedCert(null);
     setIssuedReferral(null);
@@ -6218,7 +6253,7 @@ export default function ConsultationsScreen() {
                       setShowAddRx(true);
                       handleJumpToSection('medicines');
                     }}
-                    onOpenIssueReferral={() => setReferralModalVisible(true)}
+                    onOpenIssueReferral={handleOpenIssueReferral}
                   />
                   <View style={styles.planNotesDivider}>
                     <Input
@@ -6708,7 +6743,7 @@ export default function ConsultationsScreen() {
                   }
                   icon="file"
                   variant="outline"
-                  onPress={() => setReferralModalVisible(true)}
+                  onPress={handleOpenIssueReferral}
                 />
               </View>
 
@@ -7558,6 +7593,7 @@ export default function ConsultationsScreen() {
             placeholder="Hospital or clinic name"
             value={refFacility}
             onChangeText={setRefFacility}
+            error={refValidationAttempted && !refFacility.trim() ? 'Receiving facility is required' : undefined}
           />
           <Input
             label="Department / specialty"
@@ -7565,6 +7601,7 @@ export default function ConsultationsScreen() {
             placeholder="e.g. Cardiology, Surgery, Pulmonology"
             value={refDepartment}
             onChangeText={setRefDepartment}
+            error={refValidationAttempted && !refDepartment.trim() ? 'Department / specialty is required' : undefined}
           />
           <View style={styles.stack}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -7588,13 +7625,44 @@ export default function ConsultationsScreen() {
             placeholder="e.g. Specialist workup for chest pain"
             value={refReason}
             onChangeText={setRefReason}
+            error={refValidationAttempted && !refReason.trim() ? 'Reason for referral is required' : undefined}
+          />
+          <Input
+            label="Provisional Diagnosis / Assessment"
+            required
+            placeholder="e.g. Clearance for sports / Congenital murmur workup"
+            value={refDiagnosis}
+            onChangeText={setRefDiagnosis}
+            error={
+              refValidationAttempted && !refDiagnosis.trim() && !primaryDiagnosisText()
+                ? 'Provisional diagnosis is required'
+                : undefined
+            }
+            helperText={
+              primaryDiagnosisText() && refDiagnosis === primaryDiagnosisText()
+                ? 'Pre-populated from consultation assessment. You can edit this for the referral.'
+                : undefined
+            }
           />
           <Input
             label="Clinical summary"
-            placeholder="Summary of examination, diagnostics and initial medications (defaults to the subjective notes)"
+            required
+            placeholder="Summary of examination, diagnostics and clinical findings"
             value={refSummary}
             onChangeText={setRefSummary}
             multiline
+            error={
+              refValidationAttempted && !refSummary.trim() && !subjective.trim()
+                ? 'Clinical summary is required'
+                : undefined
+            }
+            helperText={
+              subjective.trim() && refSummary === subjective.trim()
+                ? 'Pre-populated from consultation subjective notes. You can edit or expand.'
+                : !subjective.trim() && !refSummary.trim()
+                ? 'Required: No subjective notes found in current consultation.'
+                : undefined
+            }
           />
         </Modal>
 
