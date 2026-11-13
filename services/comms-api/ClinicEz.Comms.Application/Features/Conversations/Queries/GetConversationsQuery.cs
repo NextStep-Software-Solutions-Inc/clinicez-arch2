@@ -77,7 +77,7 @@ public sealed class GetConversationsQueryHandler : IRequestHandler<GetConversati
             c.BranchId,
             c.Scope,
             c.Kind,
-            c.Title,
+            ResolveDisplayTitle(c, request.StaffId),
             c.ContextType,
             c.ContextId,
             c.Category,
@@ -117,6 +117,38 @@ public sealed class GetConversationsQueryHandler : IRequestHandler<GetConversati
             c.SlaBreached,
             c.SupervisorAlertedAtUtc
         )).ToList();
+    }
+
+    public static string? ResolveDisplayTitle(ClinicEz.Comms.Domain.Entities.Conversation c, string? currentStaffId)
+    {
+        if (!string.IsNullOrWhiteSpace(c.Title))
+        {
+            return c.Title;
+        }
+
+        if (c.Scope != ConversationScope.Direct)
+        {
+            return null;
+        }
+
+        var otherParticipants = c.Participants
+            .Where(p => (currentStaffId == null || !string.Equals(p.ParticipantId, currentStaffId, StringComparison.OrdinalIgnoreCase)) && p.LeftAtUtc == null)
+            .ToList();
+
+        if (otherParticipants.Count == 1)
+        {
+            return otherParticipants[0].DisplayName;
+        }
+        if (otherParticipants.Count == 2)
+        {
+            return $"{otherParticipants[0].DisplayName}, {otherParticipants[1].DisplayName}";
+        }
+        if (otherParticipants.Count > 2)
+        {
+            return $"{otherParticipants[0].DisplayName}, {otherParticipants[1].DisplayName} +{otherParticipants.Count - 2}";
+        }
+
+        return null;
     }
 }
 
@@ -159,7 +191,7 @@ public sealed class GetConversationByIdQueryHandler : IRequestHandler<GetConvers
             c.BranchId,
             c.Scope,
             c.Kind,
-            c.Title,
+            GetConversationsQueryHandler.ResolveDisplayTitle(c, request.StaffId),
             c.ContextType,
             c.ContextId,
             c.Category,

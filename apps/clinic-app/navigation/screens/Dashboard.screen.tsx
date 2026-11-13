@@ -147,6 +147,13 @@ export interface DashboardRouteParams {
   status?: string;
   queueStatus?: string;
   queueFilter?: string;
+  preset?: string;
+  acuity?: string;
+  visitType?: string;
+  repPreset?: string;
+  repStart?: string;
+  repEnd?: string;
+  eodDate?: string;
 }
 
 export function isDashboardPathname(pathname?: string | null): boolean {
@@ -337,14 +344,14 @@ function formatTimeOnly(timeStr?: string | null): string {
 }
 
 function formatDateRangeLabel(start?: string, end?: string): string {
-  if (!start && !end) return 'Select Date Range';
+  if (!start && !end) return 'All Time';
   if (start && !end) return `From ${start}`;
   if (!start && end) return `Up to ${end}`;
   if (start && end && start === end) return start;
   return `${start} to ${end}`;
 }
 
-function computeDatePresetRange(preset: 'today' | 'yesterday' | '7d' | '30d' | 'ytd'): { start: string; end: string } {
+function computeDatePresetRange(preset: 'today' | 'yesterday' | '7d' | '30d' | 'this_month' | 'all' | 'ytd'): { start: string; end: string } {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -364,6 +371,13 @@ function computeDatePresetRange(preset: 'today' | 'yesterday' | '7d' | '30d' | '
   if (preset === '30d') {
     const d = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
     return { start: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, end: todayStr };
+  }
+  if (preset === 'this_month') {
+    const startOfMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    return { start: startOfMonth, end: todayStr };
+  }
+  if (preset === 'all') {
+    return { start: '', end: '' };
   }
   return { start: `${now.getFullYear()}-01-01`, end: todayStr };
 }
@@ -407,9 +421,9 @@ export default function DashboardScreen({
     pathnameMatcher: isDashboardPathname,
     navigation,
     cleanupParamsByValue: {
-      QUEUE: ['report', 'subTab', 'reportType'],
-      REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter'],
-      ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType'],
+      QUEUE: ['report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      REPORTS: ['status', 'queueStatus', 'queueFilter', 'filter', 'preset', 'period', 'analyticsPreset'],
+      ANALYTICS: ['status', 'queueStatus', 'queueFilter', 'filter', 'report', 'subTab', 'reportType', 'repPreset', 'repStart', 'repEnd', 'eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
     },
     onPersist: (nextTab) => {
       activeTabRef.current = nextTab;
@@ -487,6 +501,14 @@ export default function DashboardScreen({
     syncUrl: activeTab === 'REPORTS',
     clearUrlOnInactive: true,
     navigation,
+    cleanupParamsByValue: {
+      DAILY_EOD: ['repPreset', 'repStart', 'repEnd', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      CENSUS: ['eodDate'],
+      DISPENSING_LEDGER: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      MORBIDITY: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      TAX_DISCOUNT: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+      DOCTOR_SHARES: ['eodDate', 'acuity', 'censusAcuity', 'visitType', 'censusVisitType'],
+    },
     onPersist: (nextReport) => {
       reportTypeRef.current = nextReport;
       resetScrollRef.current?.(`clinicez.scroll.dashboard.REPORTS.${nextReport}`);
@@ -519,8 +541,45 @@ export default function DashboardScreen({
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [censusSearchQuery, setCensusSearchQuery] = useState('');
-  const [censusAcuityFilter, setCensusAcuityFilter] = useState<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>('ALL');
-  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = useState<string>('ALL');
+  const [censusAcuityFilter, setCensusAcuityFilter] = usePersistedTab<'ALL' | 'Routine' | 'Urgent' | 'Emergency'>({
+    storageKey: 'clinicez_dashboard_census_acuity',
+    allowedValues: ['ALL', 'Routine', 'Urgent', 'Emergency'],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.acuity,
+    queryParam: 'acuity',
+    queryParamAliases: ['censusAcuity'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const [censusVisitTypeFilter, setCensusVisitTypeFilter] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_census_visit_type',
+    allowedValues: [
+      'ALL',
+      'RoutineCheckup',
+      'AcuteIllnessConsultation',
+      'FollowUpConsultation',
+      'ChronicDiseaseManagement',
+      'PrescriptionRefill',
+      'DiagnosticLabFollowUp',
+      'VaccinationImmunization',
+      'WoundCareDressing',
+      'PediatricWellBabyVisit',
+      'PreEmploymentSchoolCheck',
+      'Other',
+    ],
+    defaultValue: 'ALL',
+    routeParam: routeParams?.visitType,
+    queryParam: 'visitType',
+    queryParamAliases: ['censusVisitType'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'CENSUS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
   const [censusPage, setCensusPage] = useState<number>(1);
   const [censusPageSize, setCensusPageSize] = useState<10 | 20 | 50>(20);
   const [censusPageLoading, setCensusPageLoading] = useState<boolean>(false);
@@ -537,11 +596,72 @@ export default function DashboardScreen({
     }));
   }, []);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsStartDate, setAnalyticsStartDate] = useState('');
-  const [analyticsEndDate, setAnalyticsEndDate] = useState('');
-  const [reportsStartDate, setReportsStartDate] = useState('');
-  const [reportsEndDate, setReportsEndDate] = useState('');
-  const [eodDate, setEodDate] = useState('');
+  const [analyticsPreset, setAnalyticsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'ytd'>({
+    storageKey: 'clinicez_dashboard_analytics_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'ytd'],
+    defaultValue: '7d',
+    routeParam: routeParams?.preset as any,
+    queryParam: 'preset',
+    queryParamAliases: ['period', 'analyticsPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'ANALYTICS',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const initialAnalyticsRange = useMemo(() => computeDatePresetRange(analyticsPreset), [analyticsPreset]);
+  const [analyticsStartDate, setAnalyticsStartDate] = useState(initialAnalyticsRange.start);
+  const [analyticsEndDate, setAnalyticsEndDate] = useState(initialAnalyticsRange.end);
+  const [reportsPreset, setReportsPreset] = usePersistedTab<'today' | 'yesterday' | '7d' | '30d' | 'this_month' | 'all' | 'custom'>({
+    storageKey: 'clinicez_dashboard_reports_preset',
+    allowedValues: ['today', 'yesterday', '7d', '30d', 'this_month', 'all', 'custom'],
+    defaultValue: 'today',
+    routeParam: routeParams?.repPreset as any,
+    queryParam: 'repPreset',
+    queryParamAliases: ['reportPreset'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    omitDefaultFromUrl: true,
+    navigation,
+  });
+  const defaultReportsRange = useMemo(() => {
+    return reportsPreset === 'custom'
+      ? { start: getManilaTodayStr(), end: getManilaTodayStr() }
+      : computeDatePresetRange(reportsPreset);
+  }, [reportsPreset]);
+  const [reportsStartDate, setReportsStartDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_start',
+    defaultValue: defaultReportsRange.start,
+    routeParam: routeParams?.repStart,
+    queryParam: 'repStart',
+    queryParamAliases: ['reportStart', 'startDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [reportsEndDate, setReportsEndDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_reports_end',
+    defaultValue: defaultReportsRange.end,
+    routeParam: routeParams?.repEnd,
+    queryParam: 'repEnd',
+    queryParamAliases: ['reportEnd', 'endDate'],
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType !== 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
+  const [eodDate, setEodDate] = usePersistedTab<string>({
+    storageKey: 'clinicez_dashboard_eod_date',
+    defaultValue: getManilaTodayStr(),
+    routeParam: routeParams?.eodDate,
+    queryParam: 'eodDate',
+    pathnameMatcher: isDashboardPathname,
+    syncUrl: activeTab === 'REPORTS' && reportType === 'DAILY_EOD',
+    clearUrlOnInactive: true,
+    navigation,
+  });
   const [isAnalyticsDateRangeModalOpen, setIsAnalyticsDateRangeModalOpen] = useState(false);
   const [isReportsDateRangeModalOpen, setIsReportsDateRangeModalOpen] = useState(false);
   const [isEodDatePickerModalOpen, setIsEodDatePickerModalOpen] = useState(false);
@@ -620,9 +740,9 @@ export default function DashboardScreen({
     }) => {
       setCensusPageLoading(true);
       setReportsError(null);
-      const effectiveStart = params.start || reportsStartDate || getManilaTodayStr();
-      const effectiveEnd = params.end || reportsEndDate || getManilaTodayStr();
-      const [data, err] = await clinicService.getCensusReport(effectiveStart, effectiveEnd, {
+      const effectiveStart = params.start !== undefined ? params.start : reportsStartDate;
+      const effectiveEnd = params.end !== undefined ? params.end : reportsEndDate;
+      const [data, err] = await clinicService.getCensusReport(effectiveStart || undefined, effectiveEnd || undefined, {
         page: params.page,
         pageSize: params.pageSize,
         acuity: params.acuity && params.acuity !== 'ALL' ? params.acuity : undefined,
@@ -1252,7 +1372,7 @@ export default function DashboardScreen({
         : `Marked OTC dispensing for ${log.patientName} as reviewed.`
     );
     setUnreviewedOtcLogs((prev) => prev.filter((item) => item.id !== log.id));
-    loadReports('CENSUS', reportsStartDate || getManilaTodayStr(), reportsEndDate || getManilaTodayStr());
+    loadReports('CENSUS', reportsStartDate, reportsEndDate);
   };
 
   const queueCounts = useMemo(() => {
@@ -1898,10 +2018,11 @@ export default function DashboardScreen({
                 return (
                   <Button
                     key={preset}
-                    variant="subtle"
+                    variant={analyticsPreset === preset ? 'primary' : 'subtle'}
                     size="xs"
                     title={labelMap[preset]}
                     onPress={() => {
+                      setAnalyticsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setAnalyticsStartDate(range.start);
                       setAnalyticsEndDate(range.end);
@@ -4040,31 +4161,34 @@ export default function DashboardScreen({
             </Pressable>
 
             <View style={styles.presetChipsRow}>
-              <Button
-                variant="subtle"
-                size="xs"
-                title="Today"
-                onPress={() => {
-                  const today = getManilaTodayStr();
-                  setEodDate(today);
-                  loadReports('DAILY_EOD', undefined, undefined, today);
-                }}
-                accessibilityLabel="Select Today for EOD"
-              />
-              <Button
-                variant="subtle"
-                size="xs"
-                title="Yesterday"
-                onPress={() => {
-                  const now = new Date();
-                  const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                  const pad = (n: number) => String(n).padStart(2, '0');
-                  const yStr = `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`;
-                  setEodDate(yStr);
-                  loadReports('DAILY_EOD', undefined, undefined, yStr);
-                }}
-                accessibilityLabel="Select Yesterday for EOD"
-              />
+              {([
+                { key: 'today', label: 'Today', date: getManilaTodayStr() },
+                {
+                  key: 'yesterday',
+                  label: 'Yesterday',
+                  date: (() => {
+                    const now = new Date();
+                    const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    return `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`;
+                  })(),
+                },
+              ] as const).map((p) => {
+                const isActive = (eodDate || getManilaTodayStr()) === p.date;
+                return (
+                  <Button
+                    key={p.key}
+                    variant={isActive ? 'primary' : 'subtle'}
+                    size="xs"
+                    title={p.label}
+                    onPress={() => {
+                      setEodDate(p.date);
+                      loadReports('DAILY_EOD', undefined, undefined, p.date);
+                    }}
+                    accessibilityLabel={`Select ${p.label} for EOD`}
+                  />
+                );
+              })}
             </View>
           </>
         ) : (
@@ -4086,20 +4210,28 @@ export default function DashboardScreen({
             </Pressable>
 
             <View style={styles.presetChipsRow}>
-              {(['today', 'yesterday', '7d', '30d'] as const).map((preset) => {
-                const labelMap = {
+              {(['today', 'yesterday', '7d', 'this_month', 'all'] as const).map((preset) => {
+                const labelMap: Record<string, string> = {
                   today: 'Today',
                   yesterday: 'Yesterday',
                   '7d': 'Last 7 Days',
-                  '30d': 'This Month',
+                  this_month: 'This Month',
+                  all: 'All Time',
                 };
+                const range = computeDatePresetRange(preset);
+                const isActive =
+                  reportsPreset === preset ||
+                  (reportsPreset === 'custom' &&
+                    reportsStartDate === range.start &&
+                    reportsEndDate === range.end);
                 return (
                   <Button
                     key={preset}
-                    variant="subtle"
+                    variant={isActive ? 'primary' : 'subtle'}
                     size="xs"
                     title={labelMap[preset]}
                     onPress={() => {
+                      setReportsPreset(preset);
                       const range = computeDatePresetRange(preset);
                       setReportsStartDate(range.start);
                       setReportsEndDate(range.end);
@@ -4149,6 +4281,15 @@ export default function DashboardScreen({
         endDate={reportsEndDate}
         boundaryMode="pastOrToday"
         onApply={(start, end) => {
+          if (!start && !end) {
+            setReportsPreset('all');
+          } else {
+            const matchPreset = (['today', 'yesterday', '7d', 'this_month'] as const).find((p) => {
+              const r = computeDatePresetRange(p);
+              return r.start === start && r.end === end;
+            });
+            setReportsPreset(matchPreset ?? 'custom');
+          }
           setReportsStartDate(start);
           setReportsEndDate(end);
           setIsReportsDateRangeModalOpen(false);

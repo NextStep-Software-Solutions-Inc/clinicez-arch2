@@ -7,6 +7,7 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import SegmentedControl from '../ui/SegmentedControl';
 import { theme } from '../../constants/theme';
+import type { ApiError } from '@shared/safe';
 import {
   ROS_CATEGORY_OPTIONS,
   type ClinicDispenseItemCategory,
@@ -557,6 +558,53 @@ export const EMPTY_VITALS_FORM: VitalsFormState = {
   dispensedItems: [],
 };
 
+export function mapApiErrorsToVitalsFormErrors(
+  err?: ApiError | null
+): Partial<Record<keyof VitalsFormState, string>> {
+  const result: Partial<Record<keyof VitalsFormState, string>> = {};
+  if (!err) return result;
+
+  const rawMap = typeof err.getFieldErrorsMap === 'function' ? err.getFieldErrorsMap() : {};
+
+  const fieldMappings: Array<{ formKey: keyof VitalsFormState; candidates: string[] }> = [
+    { formKey: 'bpSys', candidates: ['systolicBp', 'bpSys', 'systolic'] },
+    { formKey: 'bpDia', candidates: ['diastolicBp', 'bpDia', 'diastolic'] },
+    { formKey: 'hr', candidates: ['heartRateBpm', 'heartRate', 'hr'] },
+    { formKey: 'rr', candidates: ['respiratoryRateBreathsPerMin', 'respiratoryRate', 'rr'] },
+    { formKey: 'temp', candidates: ['temperatureCelsius', 'temperature', 'temp'] },
+    { formKey: 'spo2', candidates: ['oxygenSaturationPercent', 'oxygenSaturation', 'spo2'] },
+    { formKey: 'pain', candidates: ['painScore', 'pain'] },
+    { formKey: 'height', candidates: ['heightCm', 'height'] },
+    { formKey: 'weight', candidates: ['weightKg', 'weight'] },
+    { formKey: 'bodyLength', candidates: ['bodyLengthCm', 'bodyLength'] },
+    { formKey: 'headCircumference', candidates: ['headCircumferenceCm', 'headCircumference'] },
+    { formKey: 'midUpperArmCircumference', candidates: ['midUpperArmCircumferenceCm', 'midUpperArmCircumference'] },
+    { formKey: 'skinfoldThickness', candidates: ['skinfoldThicknessMm', 'skinfoldThickness'] },
+    { formKey: 'limbsCircumference', candidates: ['limbsCircumferenceCm', 'limbsCircumference'] },
+    { formKey: 'waistCircumference', candidates: ['waistCircumferenceCm', 'waistCircumference'] },
+    { formKey: 'hipCircumference', candidates: ['hipCircumferenceCm', 'hipCircumference'] },
+    { formKey: 'visualAcuityLeft', candidates: ['visualAcuityLeft'] },
+    { formKey: 'visualAcuityRight', candidates: ['visualAcuityRight'] },
+    { formKey: 'chiefComplaint', candidates: ['chiefComplaint'] },
+    { formKey: 'notes', candidates: ['notes'] },
+    { formKey: 'preAssessmentNotes', candidates: ['preAssessmentNotes'] },
+    { formKey: 'preAssessmentRemarks', candidates: ['preAssessmentRemarks'] },
+    { formKey: 'homeInstructions', candidates: ['homeInstructions'] },
+  ];
+
+  for (const { formKey, candidates } of fieldMappings) {
+    for (const cand of candidates) {
+      const msg = err.getFieldError?.(cand) || rawMap[cand];
+      if (msg) {
+        result[formKey] = msg;
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
 export const parseOptionalInt = (val: string): number | undefined => {
   const parsed = parseInt(val.trim(), 10);
   return Number.isNaN(parsed) ? undefined : parsed;
@@ -780,7 +828,7 @@ export function formatVitalsSummary(vitals?: VitalsSummaryData | null): string {
   return parts.join(' • ');
 }
 
-export const PRE_ASSESSMENT_OBSERVATION_CHIPS = [
+export const ADULT_PRE_ASSESSMENT_OBSERVATION_CHIPS = [
   'Alert & Oriented',
   'Mild Distress',
   'Acute Dyspnea',
@@ -789,6 +837,24 @@ export const PRE_ASSESSMENT_OBSERVATION_CHIPS = [
   'Fall Risk',
   'Ambulatory with Assist',
 ];
+
+export const PEDIATRIC_PRE_ASSESSMENT_OBSERVATION_CHIPS = [
+  'Well-Appearing',
+  'Active & Playful',
+  'Mild Distress',
+  'Lethargic',
+  'Tolerating Orals',
+  'Hydrated / Moist Mucous Membranes',
+];
+
+export const PRE_ASSESSMENT_OBSERVATION_CHIPS = ADULT_PRE_ASSESSMENT_OBSERVATION_CHIPS;
+
+export function getPreAssessmentObservationChips(cohort?: DemographicCohort): string[] {
+  if (cohort?.isPediatric) {
+    return PEDIATRIC_PRE_ASSESSMENT_OBSERVATION_CHIPS;
+  }
+  return ADULT_PRE_ASSESSMENT_OBSERVATION_CHIPS;
+}
 
 export function togglePreAssessmentChip(currentRemarks: string, chip: string): string {
   if (currentRemarks.includes(chip)) {
@@ -1015,12 +1081,14 @@ export interface StandardVitalsSectionProps {
   form: VitalsFormState;
   updateField: (key: keyof VitalsFormState, val: string) => void;
   cohort: DemographicCohort;
+  errors?: Partial<Record<keyof VitalsFormState, string>>;
 }
 
 export function StandardVitalsSection({
   form,
   updateField,
   cohort,
+  errors,
 }: StandardVitalsSectionProps) {
   return (
     <View style={styles.sectionFirst}>
@@ -1042,6 +1110,8 @@ export function StandardVitalsSection({
             value={form.bpSys}
             onChangeText={(txt) => updateField('bpSys', txt)}
             keyboardType="number-pad"
+            error={errors?.bpSys}
+            helperText={!errors?.bpSys ? (cohort.isInfant ? undefined : 'Range: 50–300') : undefined}
           />
         </View>
         <View style={styles.gridItem}>
@@ -1051,6 +1121,8 @@ export function StandardVitalsSection({
             value={form.bpDia}
             onChangeText={(txt) => updateField('bpDia', txt)}
             keyboardType="number-pad"
+            error={errors?.bpDia}
+            helperText={!errors?.bpDia ? (cohort.isInfant ? undefined : 'Range: 30–200') : undefined}
           />
         </View>
         <View style={styles.gridItem}>
@@ -1060,6 +1132,8 @@ export function StandardVitalsSection({
             value={form.hr}
             onChangeText={(txt) => updateField('hr', txt)}
             keyboardType="number-pad"
+            error={errors?.hr}
+            helperText={!errors?.hr ? 'Range: 30–250' : undefined}
           />
         </View>
         <View style={styles.gridItem}>
@@ -1069,6 +1143,8 @@ export function StandardVitalsSection({
             value={form.rr}
             onChangeText={(txt) => updateField('rr', txt)}
             keyboardType="number-pad"
+            error={errors?.rr}
+            helperText={!errors?.rr ? 'Range: 8–60' : undefined}
           />
         </View>
         <View style={styles.gridItem}>
@@ -1078,6 +1154,8 @@ export function StandardVitalsSection({
             value={form.temp}
             onChangeText={(txt) => updateField('temp', txt)}
             keyboardType="decimal-pad"
+            error={errors?.temp}
+            helperText={!errors?.temp ? 'Range: 30–45' : undefined}
           />
         </View>
         <View style={styles.gridItem}>
@@ -1087,6 +1165,8 @@ export function StandardVitalsSection({
             value={form.spo2}
             onChangeText={(txt) => updateField('spo2', txt)}
             keyboardType="number-pad"
+            error={errors?.spo2}
+            helperText={!errors?.spo2 ? 'Range: 50–100' : undefined}
           />
         </View>
         <View style={styles.gridItem}>
@@ -1096,6 +1176,8 @@ export function StandardVitalsSection({
             value={form.pain}
             onChangeText={(txt) => updateField('pain', txt)}
             keyboardType="number-pad"
+            error={errors?.pain}
+            helperText={!errors?.pain ? 'Range: 0–10' : undefined}
           />
         </View>
       </View>
@@ -1111,6 +1193,7 @@ export interface AnthropometricsSectionProps {
   bmiCategory?: { label: string; variant: 'success' | 'warning' | 'emergency' } | null;
   centralObesity?: CentralObesityEvaluation | null;
   zScorePreview?: PediatricZScoreResult | null;
+  errors?: Partial<Record<keyof VitalsFormState, string>>;
 }
 
 export function AnthropometricsSection({
@@ -1121,7 +1204,24 @@ export function AnthropometricsSection({
   bmiCategory,
   centralObesity,
   zScorePreview,
+  errors,
 }: AnthropometricsSectionProps) {
+  const [showAdvancedAnthropometrics, setShowAdvancedAnthropometrics] = React.useState<boolean>(
+    () =>
+      !cohort.isPediatric ||
+      !!(
+        form.waistCircumference ||
+        form.hipCircumference ||
+        errors?.waistCircumference ||
+        errors?.hipCircumference
+      )
+  );
+
+  React.useEffect(() => {
+    if (errors?.waistCircumference || errors?.hipCircumference) {
+      setShowAdvancedAnthropometrics(true);
+    }
+  }, [errors?.waistCircumference, errors?.hipCircumference]);
   return (
     <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
@@ -1155,6 +1255,7 @@ export function AnthropometricsSection({
                   if (!form.height) updateField('height', txt);
                 }}
                 keyboardType="decimal-pad"
+                error={errors?.bodyLength}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1164,6 +1265,7 @@ export function AnthropometricsSection({
                 value={form.weight}
                 onChangeText={(txt) => updateField('weight', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.weight}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1173,6 +1275,7 @@ export function AnthropometricsSection({
                 value={form.headCircumference}
                 onChangeText={(txt) => updateField('headCircumference', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.headCircumference}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1182,6 +1285,7 @@ export function AnthropometricsSection({
                 value={form.midUpperArmCircumference}
                 onChangeText={(txt) => updateField('midUpperArmCircumference', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.midUpperArmCircumference}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1191,6 +1295,7 @@ export function AnthropometricsSection({
                 value={form.skinfoldThickness}
                 onChangeText={(txt) => updateField('skinfoldThickness', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.skinfoldThickness}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1200,6 +1305,7 @@ export function AnthropometricsSection({
                 value={form.limbsCircumference}
                 onChangeText={(txt) => updateField('limbsCircumference', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.limbsCircumference}
               />
             </View>
           </>
@@ -1212,6 +1318,7 @@ export function AnthropometricsSection({
                 value={form.height}
                 onChangeText={(txt) => updateField('height', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.height}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1221,6 +1328,7 @@ export function AnthropometricsSection({
                 value={form.weight}
                 onChangeText={(txt) => updateField('weight', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.weight}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1230,6 +1338,7 @@ export function AnthropometricsSection({
                 value={form.headCircumference}
                 onChangeText={(txt) => updateField('headCircumference', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.headCircumference}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1239,6 +1348,30 @@ export function AnthropometricsSection({
                 value={form.midUpperArmCircumference}
                 onChangeText={(txt) => updateField('midUpperArmCircumference', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.midUpperArmCircumference}
+              />
+            </View>
+          </>
+        ) : cohort.isPediatric ? (
+          <>
+            <View style={styles.gridItem}>
+              <Input
+                label="Height (cm)"
+                placeholder="e.g. 140"
+                value={form.height}
+                onChangeText={(txt) => updateField('height', txt)}
+                keyboardType="decimal-pad"
+                error={errors?.height}
+              />
+            </View>
+            <View style={styles.gridItem}>
+              <Input
+                label="Weight (kg)"
+                placeholder="e.g. 35.0"
+                value={form.weight}
+                onChangeText={(txt) => updateField('weight', txt)}
+                keyboardType="decimal-pad"
+                error={errors?.weight}
               />
             </View>
           </>
@@ -1251,6 +1384,7 @@ export function AnthropometricsSection({
                 value={form.height}
                 onChangeText={(txt) => updateField('height', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.height}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1260,6 +1394,7 @@ export function AnthropometricsSection({
                 value={form.weight}
                 onChangeText={(txt) => updateField('weight', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.weight}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1269,6 +1404,7 @@ export function AnthropometricsSection({
                 value={form.waistCircumference}
                 onChangeText={(txt) => updateField('waistCircumference', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.waistCircumference}
               />
             </View>
             <View style={styles.gridItem}>
@@ -1278,11 +1414,65 @@ export function AnthropometricsSection({
                 value={form.hipCircumference}
                 onChangeText={(txt) => updateField('hipCircumference', txt)}
                 keyboardType="decimal-pad"
+                error={errors?.hipCircumference}
               />
             </View>
           </>
         )}
       </View>
+
+      {/* Optional Advanced Anthropometrics Disclosure for Pediatric Patients */}
+      {cohort.isPediatric ? (
+        <View style={styles.advancedAnthropometricsContainer}>
+          <Pressable
+            testID="toggle-advanced-anthropometrics"
+            accessibilityRole="button"
+            accessibilityLabel={
+              showAdvancedAnthropometrics
+                ? 'Hide advanced anthropometrics'
+                : 'Show advanced anthropometrics'
+            }
+            onPress={() => setShowAdvancedAnthropometrics((prev) => !prev)}
+            style={styles.advancedDisclosureButton}
+          >
+            <Icon
+              name={showAdvancedAnthropometrics ? 'chevronUp' : 'chevronDown'}
+              size={theme.sizes.iconSm}
+              color={theme.colors.primary}
+            />
+            <ThemedText variant="captionBold" color={theme.colors.primary}>
+              {showAdvancedAnthropometrics
+                ? 'Hide Advanced Anthropometrics (Waist & Hip)'
+                : 'Advanced Anthropometrics (Waist & Hip)'}
+            </ThemedText>
+          </Pressable>
+
+          {showAdvancedAnthropometrics ? (
+            <View style={styles.advancedFormGrid}>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Waist Circumference (cm)"
+                  placeholder="Optional, e.g. 60"
+                  value={form.waistCircumference}
+                  onChangeText={(txt) => updateField('waistCircumference', txt)}
+                  keyboardType="decimal-pad"
+                  error={errors?.waistCircumference}
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Hip Circumference (cm)"
+                  placeholder="Optional, e.g. 70"
+                  value={form.hipCircumference}
+                  onChangeText={(txt) => updateField('hipCircumference', txt)}
+                  keyboardType="decimal-pad"
+                  error={errors?.hipCircumference}
+                />
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* Central Obesity & WHR Risk Badges (for adults) */}
       {cohort.isAdult && centralObesity ? (
@@ -1384,11 +1574,13 @@ export function AnthropometricsSection({
 export interface VisualAcuitySectionProps {
   form: VitalsFormState;
   updateField: (key: keyof VitalsFormState, val: string) => void;
+  errors?: Partial<Record<keyof VitalsFormState, string>>;
 }
 
 export function VisualAcuitySection({
   form,
   updateField,
+  errors,
 }: VisualAcuitySectionProps) {
   return (
     <View style={styles.sectionCard}>
@@ -1406,6 +1598,7 @@ export function VisualAcuitySection({
             placeholder="e.g. 20/20"
             value={form.visualAcuityLeft}
             onChangeText={(txt) => updateField('visualAcuityLeft', txt)}
+            error={errors?.visualAcuityLeft}
           />
         </View>
         <View style={styles.gridItem}>
@@ -1414,6 +1607,7 @@ export function VisualAcuitySection({
             placeholder="e.g. 20/20"
             value={form.visualAcuityRight}
             onChangeText={(txt) => updateField('visualAcuityRight', txt)}
+            error={errors?.visualAcuityRight}
           />
         </View>
       </View>
@@ -1426,6 +1620,7 @@ export function VisualAcuitySection({
           onChangeText={(txt) => updateField('notes', txt)}
           multiline
           numberOfLines={2}
+          error={errors?.notes}
         />
       </View>
     </View>
@@ -1435,12 +1630,18 @@ export function VisualAcuitySection({
 export interface PreAssessmentSectionProps {
   form: VitalsFormState;
   updateField: (key: keyof VitalsFormState, val: string) => void;
+  cohort?: DemographicCohort;
+  errors?: Partial<Record<keyof VitalsFormState, string>>;
 }
 
 export function PreAssessmentSection({
   form,
   updateField,
+  cohort,
+  errors,
 }: PreAssessmentSectionProps) {
+  const chips = getPreAssessmentObservationChips(cohort);
+
   return (
     <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
@@ -1470,11 +1671,12 @@ export function PreAssessmentSection({
           Pre-assessment Observations (tap to add to remarks)
         </ThemedText>
         <View style={styles.chipsRow}>
-          {PRE_ASSESSMENT_OBSERVATION_CHIPS.map((chip) => {
+          {chips.map((chip) => {
             const isActive = form.preAssessmentRemarks.includes(chip);
             return (
               <Pressable
                 key={chip}
+                testID={`observation-chip-${chip.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
                 onPress={() => {
                   const updated = togglePreAssessmentChip(form.preAssessmentRemarks, chip);
                   updateField('preAssessmentRemarks', updated);
@@ -1513,6 +1715,7 @@ export function PreAssessmentSection({
           onChangeText={(txt) => updateField('preAssessmentNotes', txt)}
           multiline
           numberOfLines={3}
+          error={errors?.preAssessmentNotes}
         />
       </View>
     </View>
@@ -1672,6 +1875,8 @@ export interface NurseCareAndOtcDispensingSectionProps {
   onChangeDispensedItems: (items: TriageDispensedItemInput[]) => void;
   hideChiefComplaint?: boolean;
   allowDispensing?: boolean;
+  chiefComplaintError?: string;
+  homeInstructionsError?: string;
 }
 
 export function NurseCareAndOtcDispensingSection({
@@ -1685,6 +1890,8 @@ export function NurseCareAndOtcDispensingSection({
   onChangeDispensedItems,
   hideChiefComplaint = false,
   allowDispensing = true,
+  chiefComplaintError,
+  homeInstructionsError,
 }: NurseCareAndOtcDispensingSectionProps) {
   const [customCategory, setCustomCategory] = useState<ClinicDispenseItemCategory>('Medicine');
   const [customName, setCustomName] = useState('');
@@ -1785,6 +1992,7 @@ export function NurseCareAndOtcDispensingSection({
             placeholder="e.g. Mild tension headache since morning, toothache, epigastric discomfort..."
             value={chiefComplaint}
             onChangeText={onChangeChiefComplaint}
+            error={chiefComplaintError}
           />
         ) : null}
 
@@ -1832,6 +2040,7 @@ export function NurseCareAndOtcDispensingSection({
           onChangeText={onChangeHomeInstructions}
           multiline
           numberOfLines={2}
+          error={homeInstructionsError}
         />
       </View>
 
@@ -2221,5 +2430,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  advancedAnthropometricsContainer: {
+    marginTop: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  advancedDisclosureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
+    alignSelf: 'flex-start',
+    borderRadius: theme.radii.sm,
+  },
+  advancedFormGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
   },
 });

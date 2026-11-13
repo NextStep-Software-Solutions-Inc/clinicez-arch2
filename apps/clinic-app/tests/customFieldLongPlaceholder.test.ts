@@ -10,11 +10,13 @@ const createMockComponent = (name: string) => {
     children,
     accessibilityLabel,
     accessibilityRole,
+    accessibilityHint,
     placeholder,
     value,
     onPress,
     title,
     visible,
+    helperText,
   }: any) => {
     if (name === 'Modal' && visible === false) return null;
     return React.createElement(
@@ -23,13 +25,16 @@ const createMockComponent = (name: string) => {
         'data-component': name,
         ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
         ...(accessibilityRole ? { role: accessibilityRole } : {}),
+        ...(accessibilityHint ? { 'data-accessibility-hint': accessibilityHint } : {}),
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
         ...(value !== undefined ? { 'data-value': String(value) } : {}),
-        ...(title ? { 'data-title': title } : {}),
+        ...(title ? { 'data-title': title, title } : {}),
+        ...(helperText ? { 'data-helper-text': helperText } : {}),
         onClick: onPress,
       },
       title,
       placeholder,
+      helperText,
       children
     );
   };
@@ -311,6 +316,40 @@ describe('GitHub #162: Component rendering across DynamicCustomFieldsRenderer, A
     expect(modalWithShortHint).not.toContain('e.g. College of Science');
   });
 
+  test('Issue #161: AddEditFieldModal renders Allowed Dates chips and explanations for Date custom fields', () => {
+    const modalMarkup = renderToStaticMarkup(
+      React.createElement(AddEditFieldModal, {
+        visible: true,
+        onClose: () => {},
+        existingFields: [],
+        onSave: async () => true,
+        fieldToEdit: {
+          id: 'date-field-1',
+          tenantId: 't1',
+          clinicId: 'c1',
+          entityType: 'ClinicPatient',
+          fieldKey: 'last_physical_exam_date',
+          label: 'Date of Last Physical Examination',
+          dataType: 'Date',
+          category: 'Clinical',
+          isRequired: false,
+          displayOrder: 1,
+          boundaryMode: 'pastOrToday',
+          isActive: true,
+        },
+      })
+    );
+
+    expect(modalMarkup).toContain('Allowed Dates');
+    expect(modalMarkup).toContain('Past or Today');
+    expect(modalMarkup).toContain('Today or Future');
+    expect(modalMarkup).toContain('Future Only');
+    expect(modalMarkup).toContain('Any Date');
+    expect(modalMarkup).toContain('Allows past dates or today');
+    // When boundaryMode matches historical, advisory banner is not shown
+    expect(modalMarkup).not.toContain('Existing historical patient records remain preserved and will not be locked out.');
+  });
+
   test('CustomFieldsTab displays Expanded Guidance badge for single-line fields with >75 char hints and SkeletonList without zero-count chips when loading', () => {
     const loadingTabMarkup = renderToStaticMarkup(
       React.createElement(CustomFieldsTab, {
@@ -354,3 +393,195 @@ describe('GitHub #162: Component rendering across DynamicCustomFieldsRenderer, A
     expect(tabMarkup).toContain(longTextPrompt);
   });
 });
+
+describe('TC-IF-018: Validate text boundaries and safe rendering (GitHub #162)', () => {
+  const boundaryPrompt200 =
+    "Please specify the referring medical specialist's full registered name, licensed PRC accreditation number, clinic hospital address, primary contact details, and initial diagnosis summary if known.";
+
+  test('TC-IF-018-1: 200-character maximum boundary placeholder renders complete hint in wrapping guidance without truncation', () => {
+    // Verify boundary test string length is up to 200 characters
+    expect(boundaryPrompt200.length).toBeGreaterThan(75);
+    expect(boundaryPrompt200.length).toBeLessThanOrEqual(200);
+
+    const presentation = resolveCustomFieldPlaceholderPresentation(boundaryPrompt200, 'Text');
+    expect(presentation.isExpandedHint).toBe(true);
+    expect(presentation.inputPlaceholder).toBe(EXPANDED_PLACEHOLDER_INPUT_TEXT);
+    expect(presentation.helperHint).toBe(boundaryPrompt200);
+
+    const markup = renderToStaticMarkup(
+      React.createElement(DynamicCustomFieldsRenderer, {
+        fields: [
+          {
+            id: 'cf-ref-notes',
+            tenantId: 't1',
+            clinicId: 'c1',
+            entityType: 'ClinicPatient',
+            fieldKey: 'referring_physician_notes',
+            label: 'Referring Physician Notes',
+            dataType: 'Text',
+            isRequired: false,
+            displayOrder: 1,
+            placeholder: boundaryPrompt200,
+            isActive: true,
+          },
+        ],
+        values: {},
+        onChange: () => {},
+      })
+    );
+
+    // Short cue in input placeholder
+    expect(markup).toContain(EXPANDED_PLACEHOLDER_INPUT_TEXT);
+    // 100% of instructions rendered in expanded guidance callout
+    const normalizedMarkup = markup.replace(/&#x27;/g, "'");
+    expect(normalizedMarkup).toContain(boundaryPrompt200);
+    // Tooltip title and accessibilityHint attributes present
+    expect(normalizedMarkup).toContain(`data-title="${boundaryPrompt200}"`);
+    expect(normalizedMarkup).toContain(`data-accessibility-hint="${boundaryPrompt200}"`);
+  });
+
+  test('TC-IF-018-2: Native hover tooltip and accessibilityHint forwarding across single-line field types (Text, Number, Date)', () => {
+    const textHint = 'Enter full licensed PRC accreditation number';
+    const numHint = 'Enter systolic blood pressure in mmHg';
+    const dateHint = 'Enter date of initial referral consultation (YYYY-MM-DD)';
+
+    const markup = renderToStaticMarkup(
+      React.createElement(DynamicCustomFieldsRenderer, {
+        fields: [
+          {
+            id: 'f-txt',
+            tenantId: 't1',
+            clinicId: 'c1',
+            entityType: 'ClinicPatient',
+            fieldKey: 'prc_no',
+            label: 'PRC Number',
+            dataType: 'Text',
+            isRequired: false,
+            displayOrder: 1,
+            placeholder: textHint,
+            isActive: true,
+          },
+          {
+            id: 'f-num',
+            tenantId: 't1',
+            clinicId: 'c1',
+            entityType: 'ClinicPatient',
+            fieldKey: 'sbp_reading',
+            label: 'SBP Reading',
+            dataType: 'Number',
+            isRequired: false,
+            displayOrder: 2,
+            placeholder: numHint,
+            isActive: true,
+          },
+          {
+            id: 'f-dt',
+            tenantId: 't1',
+            clinicId: 'c1',
+            entityType: 'ClinicPatient',
+            fieldKey: 'referral_date',
+            label: 'Referral Date',
+            dataType: 'Date',
+            isRequired: false,
+            displayOrder: 3,
+            placeholder: dateHint,
+            isActive: true,
+          },
+        ],
+        values: {},
+        onChange: () => {},
+      })
+    );
+
+    // Verify all 3 single-line types forward hover title and accessibilityHint
+    expect(markup).toContain(`data-title="${textHint}"`);
+    expect(markup).toContain(`data-accessibility-hint="${textHint}"`);
+    expect(markup).toContain(`data-title="${numHint}"`);
+    expect(markup).toContain(`data-accessibility-hint="${numHint}"`);
+    expect(markup).toContain(`data-title="${dateHint}"`);
+    expect(markup).toContain(`data-accessibility-hint="${dateHint}"`);
+  });
+
+  test('TC-IF-018-3: Form builder helperText guidance renders in AddEditFieldModal', () => {
+    const modalMarkup = renderToStaticMarkup(
+      React.createElement(AddEditFieldModal, {
+        visible: true,
+        onClose: () => {},
+        existingFields: [],
+        onSave: async () => true,
+      })
+    );
+
+    expect(modalMarkup).toContain('Recommended: under 50 characters');
+    expect(modalMarkup).toContain('Hints longer than 75 characters automatically wrap beneath the field during intake');
+  });
+
+  test('TC-IF-018-4: Exact length threshold boundaries (74, 75, 76, and 200 chars)', () => {
+    const s74 = 'X'.repeat(74);
+    const s75 = 'Y'.repeat(75);
+    const s76 = 'Z'.repeat(76);
+    const s200 = 'W'.repeat(200);
+
+    // 74: Normal
+    const r74 = resolveCustomFieldPlaceholderPresentation(s74, 'Text');
+    expect(r74.isExpandedHint).toBe(false);
+    expect(r74.inputPlaceholder).toBe(s74);
+    expect(r74.helperHint).toBeUndefined();
+
+    // 75: Normal (exact boundary limit)
+    const r75 = resolveCustomFieldPlaceholderPresentation(s75, 'Text');
+    expect(r75.isExpandedHint).toBe(false);
+    expect(r75.inputPlaceholder).toBe(s75);
+    expect(r75.helperHint).toBeUndefined();
+
+    // 76: Expanded
+    const r76 = resolveCustomFieldPlaceholderPresentation(s76, 'Text');
+    expect(r76.isExpandedHint).toBe(true);
+    expect(r76.inputPlaceholder).toBe(EXPANDED_PLACEHOLDER_INPUT_TEXT);
+    expect(r76.helperHint).toBe(s76);
+
+    // 200: Expanded
+    const r200 = resolveCustomFieldPlaceholderPresentation(s200, 'Text');
+    expect(r200.isExpandedHint).toBe(true);
+    expect(r200.inputPlaceholder).toBe(EXPANDED_PLACEHOLDER_INPUT_TEXT);
+    expect(r200.helperHint).toBe(s200);
+  });
+
+  test('TC-IF-018-5: Invariant with active user values and validation errors', () => {
+    const markupWithValAndErr = renderToStaticMarkup(
+      React.createElement(DynamicCustomFieldsRenderer, {
+        fields: [
+          {
+            id: 'cf-ref-notes',
+            tenantId: 't1',
+            clinicId: 'c1',
+            entityType: 'ClinicPatient',
+            fieldKey: 'referring_physician_notes',
+            label: 'Referring Physician Notes',
+            dataType: 'Text',
+            isRequired: true,
+            displayOrder: 1,
+            placeholder: boundaryPrompt200,
+            isActive: true,
+          },
+        ],
+        values: {
+          referring_physician_notes: 'Dr. Jane Doe, St. Jude Medical Center',
+        },
+        errors: {
+          referring_physician_notes: 'PRC accreditation number missing in physician notes',
+        },
+        onChange: () => {},
+      })
+    );
+
+    const normalizedMarkup = markupWithValAndErr.replace(/&#x27;/g, "'");
+    // Input has the current typed value
+    expect(normalizedMarkup).toContain('data-value="Dr. Jane Doe, St. Jude Medical Center"');
+    // Error feedback is rendered
+    expect(normalizedMarkup).toContain('PRC accreditation number missing in physician notes');
+    // Wrapping guidance callout remains visible so staff can reference it
+    expect(normalizedMarkup).toContain(boundaryPrompt200);
+  });
+});
+

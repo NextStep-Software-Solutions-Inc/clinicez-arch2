@@ -1,9 +1,8 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
-import { resolveServiceApiUrl } from '@shared/safe';
 import { clinicApiClient } from '../services/apiClient';
-import { getApiBaseUrl } from '../services/runtimeConfig';
+import { getSetting, isCommsEnabled as isCommsConfigEnabled } from '../services/runtimeConfig';
 import { useAuth } from './AuthContext';
 import { useClinic } from './ClinicContext';
 import { useStaff, formatStaffName } from './StaffContext';
@@ -34,6 +33,7 @@ export interface ClinicCommsContextValue {
   teleconsultSession: TeleconsultSessionParams | null;
   openTeleconsultWaitingRoom: (params: TeleconsultSessionParams) => void;
   closeTeleconsultWaitingRoom: () => void;
+  isCommsEnabled: boolean;
 
   // Workstation Consultation Chart Docking (Milestone 5)
   isCallStageDocked: boolean;
@@ -53,6 +53,7 @@ const ClinicCommsContext = createContext<ClinicCommsContextValue>({
   teleconsultSession: null,
   openTeleconsultWaitingRoom: () => {},
   closeTeleconsultWaitingRoom: () => {},
+  isCommsEnabled: true,
   isCallStageDocked: false,
   dockCallStage: () => {},
   maximizeCallStage: () => {},
@@ -62,26 +63,8 @@ const ClinicCommsContext = createContext<ClinicCommsContextValue>({
 
 export const useClinicComms = () => useContext(ClinicCommsContext);
 
-export function getCommsApiBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_COMMS_API_URL) {
-    return process.env.EXPO_PUBLIC_COMMS_API_URL.replace(/\/+$/, '');
-  }
-  const apiBase = getApiBaseUrl();
-  if (apiBase) {
-    try {
-      const url = new URL(apiBase);
-      if (url.port === '5245' || url.port === '5240' || url.port === '5242' || url.port === '5243' || url.port === '5310') {
-        url.port = '5247';
-        return url.origin;
-      }
-      return `${url.protocol}//comms.${url.host}`;
-    } catch {
-      // Ignore invalid URL parse
-    }
-    return apiBase;
-  }
-  return resolveServiceApiUrl({ fallbackPort: 5247 });
-}
+import { getCommsApiBaseUrl } from '../services/commsUrl';
+export { getCommsApiBaseUrl };
 
 export function ClinicCommsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -174,6 +157,15 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
     };
   }, [user?.id, user?.permissions, staffDisplayName, tenantId, facilityId]);
 
+  let commsBaseUrl = '';
+  try {
+    commsBaseUrl = getCommsApiBaseUrl();
+  } catch {
+    commsBaseUrl = '';
+  }
+
+  const commsEnabled = isCommsConfigEnabled() && Boolean(commsBaseUrl);
+
   const contextValue = useMemo<ClinicCommsContextValue>(
     () => ({
       isChatDrawerOpen,
@@ -185,6 +177,7 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      isCommsEnabled: commsEnabled,
       isCallStageDocked,
       dockCallStage,
       maximizeCallStage,
@@ -200,6 +193,7 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      commsEnabled,
       isCallStageDocked,
       dockCallStage,
       maximizeCallStage,
@@ -210,13 +204,13 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
 
   return (
     <CommsProvider
-      baseUrl={getCommsApiBaseUrl()}
+      baseUrl={commsBaseUrl}
       getCommsTicket={getCommsTicket}
       tenantId={tenantId}
       facilityId={facilityId}
       staffId={staffId}
       staffDisplayName={staffDisplayName}
-      options={{ autoConnect: isAuthenticated }}
+      options={{ autoConnect: isAuthenticated && commsEnabled }}
     >
       <ClinicCommsContext.Provider value={contextValue}>
         {children}

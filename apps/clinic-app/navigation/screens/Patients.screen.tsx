@@ -16,6 +16,7 @@ import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, Err
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import { pickLabResultDocument, type PickedDocumentResult } from '../../utils/documentPickerHelper';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   PatientSummarySpine,
   reconcileChartWithPatient,
@@ -42,7 +43,9 @@ import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { PERMISSIONS } from '@constants/permissions';
 import { useAuth, usePermission } from '@context/AuthContext';
-import { normalizeAttachmentStaffAttribution } from '../../components/chart/AttachExternalDocumentModal';
+import AttachExternalDocumentModal, {
+  normalizeAttachmentStaffAttribution,
+} from '../../components/chart/AttachExternalDocumentModal';
 import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
@@ -148,8 +151,10 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     return (
       p.customFields?.assigned_doctor_id === staffId ||
       p.customFields?.doctor_id === staffId ||
+      p.customFields?.activeQueueDoctorId === staffId ||
       (p as any).activeQueueDoctorId === staffId ||
-      (p as any).doctorId === staffId
+      (p as any).doctorId === staffId ||
+      Boolean(p.activeQueueTickets?.some((t) => t.doctorId === staffId))
     );
   }
 
@@ -157,13 +162,15 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     const nurseRooms = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
     const patientRoomId = (p as any).roomId || (p as any).activeQueueRoomId || p.customFields?.room_id || p.customFields?.assigned_room_id;
     const roomMatch = !!patientRoomId && nurseRooms.includes(patientRoomId);
+    const ticketRoomMatch = Boolean(p.activeQueueTickets?.some((t) => !!t.roomId && nurseRooms.includes(t.roomId)));
 
     return (
       p.customFields?.nurse_id === staffId ||
       p.customFields?.assigned_nurse_id === staffId ||
       p.customFields?.vitals_recorded_by_nurse_id === staffId ||
       p.customFields?.recorded_by_nurse_id === staffId ||
-      roomMatch
+      roomMatch ||
+      ticketRoomMatch
     );
   }
 
@@ -173,8 +180,10 @@ export const isMyPatient = (p: ClinicPatient, currentStaff: StaffMember | null |
     p.customFields?.nurse_id === staffId ||
     p.customFields?.assigned_nurse_id === staffId ||
     p.customFields?.staff_id === staffId ||
+    p.customFields?.activeQueueDoctorId === staffId ||
     (p as any).activeQueueDoctorId === staffId ||
-    (p as any).doctorId === staffId
+    (p as any).doctorId === staffId ||
+    Boolean(p.activeQueueTickets?.some((t) => t.doctorId === staffId))
   );
 };
 
@@ -224,20 +233,36 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<PatientFilter>(() => {
-    const saved = getSessionItem('clinicez_patients_filter_mode') as PatientFilter | null;
-    if (saved && ['ALL', 'MY_PATIENTS', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'].includes(saved)) {
-      return saved;
-    }
-    return 'ALL';
+  const [filterMode, setFilterMode] = usePersistedTab<PatientFilter>({
+    storageKey: 'clinicez_patients_filter_mode',
+    allowedValues: ['ALL', 'MY_PATIENTS', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'],
+    defaultValue: 'ALL',
+    routeParam: (route?.params as any)?.filter,
+    queryParam: 'filter',
+    queryParamAliases: ['filterMode', 'category'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
+    onPersist: (mode, prev) => {
+      setPatientsError(null);
+      if (mode !== prev) {
+        setPatients(null);
+        setLoading(true);
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+      }
+    },
   });
 
-  const [viewMode, setViewMode] = useState<PatientDirectoryViewMode>(() => {
-    const saved = getSessionItem('clinicez_patients_view_mode') as PatientDirectoryViewMode | null;
-    if (saved === 'cards' || saved === 'table') {
-      return saved;
-    }
-    return 'cards';
+  const [viewMode, setViewMode] = usePersistedTab<PatientDirectoryViewMode>({
+    storageKey: 'clinicez_patients_view_mode',
+    allowedValues: ['cards', 'table'],
+    defaultValue: 'cards',
+    routeParam: (route?.params as any)?.view,
+    queryParam: 'view',
+    queryParamAliases: ['viewMode'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
   });
 
   useEffect(() => {
@@ -248,19 +273,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   }, [searchTerm]);
 
   const handleFilterModeChange = (mode: PatientFilter) => {
-    setPatientsError(null);
-    if (mode !== filterMode) {
-      setPatients(null);
-      setLoading(true);
-      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    }
     setFilterMode(mode);
-    setSessionItem('clinicez_patients_filter_mode', mode);
   };
 
   const handleViewModeChange = (mode: PatientDirectoryViewMode) => {
     setViewMode(mode);
-    setSessionItem('clinicez_patients_view_mode', mode);
   };
 
   const effectiveViewMode: PatientDirectoryViewMode = isWorkstation ? viewMode : 'cards';
@@ -465,28 +482,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
 
-  const getInitialChartTab = (): ChartTab => {
-    if (routeTab && (CHART_TABS.some((t) => t.value === routeTab) || routeTab === 'dental')) {
-      return routeTab;
-    }
-    if (routeToothNumber) {
-      return 'dental';
-    }
-    if (typeof window !== 'undefined' && window.location?.search) {
-      try {
-        const sp = new URLSearchParams(window.location.search);
-        const tabParam = sp.get('tab') as ChartTab;
-        if (tabParam && (CHART_TABS.some((t) => t.value === tabParam) || tabParam === 'dental')) {
-          return tabParam;
-        }
-      } catch {}
-    }
-    const saved = getSessionItem('clinicez_active_chart_tab') as ChartTab | null;
-    if (saved && (CHART_TABS.some((t) => t.value === saved) || saved === 'dental')) {
-      return saved;
-    }
-    return 'summary';
-  };
+  const [activeChartTab, setActiveChartTab] = usePersistedTab<ChartTab>({
+    storageKey: 'clinicez_active_chart_tab',
+    allowedValues: [...CHART_TABS.map((t) => t.value), 'dental'],
+    defaultValue: routeToothNumber ? 'dental' : 'summary',
+    routeParam: routeTab,
+    queryParam: 'chartTab',
+    queryParamAliases: ['tab'],
+    syncUrl: chartVisible,
+    clearUrlOnInactive: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('patients'),
+  });
 
   const getInitialFocusTooth = (): number | undefined => {
     if (routeToothNumber !== undefined) {
@@ -505,19 +512,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     return undefined;
   };
 
-  const [activeChartTab, setActiveChartTab] = useState<ChartTab>(getInitialChartTab);
   const [focusToothNumber, setFocusToothNumber] = useState<number | undefined>(getInitialFocusTooth);
 
   const handleChartTabChange = (tab: ChartTab) => {
     setActiveChartTab(tab);
-    setSessionItem('clinicez_active_chart_tab', tab);
-    if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', tab);
-        window.history.replaceState(null, '', url.toString());
-      } catch {}
-    }
   };
 
   // Queue Check-In Anti-Spam & Concurrency Guard states
@@ -598,19 +596,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [patientAttachments, setPatientAttachments] = useState<ClinicRecordAttachmentRecord[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
-  const [docTitle, setDocTitle] = useState('');
-  const [docRecordType, setDocRecordType] = useState('OutsideChestXRay');
-  const [docFileType, setDocFileType] = useState<'PDF' | 'Photo'>('PDF');
-  const [docNotes, setDocNotes] = useState('');
-  const [docDate, setDocDate] = useState(new Date().toISOString().split('T')[0]);
-  const [pickedDocFile, setPickedDocFile] = useState<{
-    name: string;
-    size?: number;
-    uri: string;
-    mimeType?: string;
-    file?: any;
-  } | null>(null);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
   const [verifyingAttachmentId, setVerifyingAttachmentId] = useState<string | null>(null);
 
   // Prescription Slip & External Dispense (Path B) state
@@ -652,12 +637,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         : authUser?.role === 'Doctor'
           ? actorStaffId
           : undefined;
+    const roomIds = currentStaff?.assignedRoomIds ?? (currentStaff?.assignedRoomId ? [currentStaff.assignedRoomId] : undefined);
 
     setPatientsError(null);
     setPage(1);
     setScrollY(0);
     lastScrollYRef.current = 0;
-    clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId).then(([countsData]) => {
+    clinicService.getPatientCounts(activeSearch || undefined, staffId, doctorId, roomIds).then(([countsData]) => {
       if (requestId === fetchRequestIdRef.current && countsData) {
         setTotalCounts(countsData);
       }
@@ -670,7 +656,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       PAGE_SIZE,
       serverFilterMode,
       staffId,
-      doctorId
+      doctorId,
+      undefined,
+      roomIds
     );
     if (requestId !== fetchRequestIdRef.current) {
       return;
@@ -703,6 +691,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         : authUser?.role === 'Doctor'
           ? actorStaffId
           : undefined;
+    const roomIds = currentStaff?.assignedRoomIds ?? (currentStaff?.assignedRoomId ? [currentStaff.assignedRoomId] : undefined);
 
     const [data, err] = await clinicService.getPatients(
       activeSearch || undefined,
@@ -711,7 +700,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       PAGE_SIZE,
       serverFilterMode,
       staffId,
-      doctorId
+      doctorId,
+      undefined,
+      roomIds
     );
 
 
@@ -1191,7 +1182,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setChartQueueItemId(queueItemId ?? null);
     setChartForceSeparateVisit(forceSeparateVisit);
     setSelectedPatient(patient);
-    const targetTab = tabToOpen ?? activeChartTab ?? getInitialChartTab();
+    const targetTab = tabToOpen ?? activeChartTab ?? 'summary';
     setActiveChartTab(targetTab);
     if (toothToFocus !== undefined) {
       setFocusToothNumber(toothToFocus);
@@ -1239,7 +1230,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
       setPatientChart(reconcileChartWithPatient(chartData, authoritativePatient));
       setChartError(null);
-      if (chartData.attachments && chartData.attachments.length > 0) {
+      if (chartData.attachments) {
         setPatientAttachments(chartData.attachments);
         setLoadingAttachments(false);
       }
@@ -1300,7 +1291,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     (async () => {
       const [patient] = await clinicService.getPatientById(targetPatientId!);
       if (cancelled || !patient) return;
-      const initialTab = getInitialChartTab();
+      const initialTab = activeChartTab;
       const initialTooth = getInitialFocusTooth();
       handleOpenChart(patient, initialTab, initialTooth);
     })();
@@ -1446,6 +1437,26 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       )
     );
 
+    setPatientChart((prev) =>
+      prev
+        ? {
+            ...prev,
+            attachments: (prev.attachments || []).map((att) =>
+              att.id === attachmentId
+                ? {
+                    ...att,
+                    verificationStatus: isApproved ? 'Verified' : 'Rejected',
+                    rejectionReason,
+                    verifiedAt: new Date().toISOString(),
+                    verifiedByStaffId: actorStaffId || att.verifiedByStaffId,
+                    verifiedByStaffName: actorStaffName || att.verifiedByStaffName || undefined,
+                  }
+                : att
+            ),
+          }
+        : prev
+    );
+
     notify.success(isApproved ? 'Document verified.' : 'Document rejected.');
   };
 
@@ -1455,140 +1466,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       if (!(await openDocument(url))) throw new Error('Could not open the document');
     } catch (e: any) {
       Alert.alert('Unable to open document', e.message || 'Network error');
-    }
-  };
-
-  const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/jpeg', 'image/png'],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      setPickedDocFile({
-        name: asset.name,
-        size: asset.size,
-        uri: asset.uri,
-        mimeType: asset.mimeType || (asset.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
-        file: (asset as any).file,
-      });
-      if (!docTitle.trim()) {
-        const cleanName = asset.name.replace(/\.[^/.]+$/, '');
-        setDocTitle(cleanName);
-      }
-      if (asset.name.toLowerCase().endsWith('.pdf')) {
-        setDocFileType('PDF');
-      } else {
-        setDocFileType('Photo');
-      }
-    } catch (err: any) {
-      Alert.alert('File Selection Error', err?.message || 'Could not pick file.');
-    }
-  };
-
-  const handleUploadDocument = async () => {
-    if (!selectedPatient) return;
-    if (!docTitle.trim()) {
-      Alert.alert('Title required', 'Enter a document title.');
-      return;
-    }
-
-    const docDateValidation = validateDateString(docDate, { boundaryMode: 'pastOrToday' });
-    if (!docDateValidation.isValid) {
-      Alert.alert('Invalid Document Date', docDateValidation.errorMessage || 'Please enter a valid document date not in the future.');
-      return;
-    }
-
-    const strictlyFormattedDocDate = (docDateValidation.formattedDate || new Date().toISOString().split('T')[0]).split('T')[0];
-
-    setUploadingDoc(true);
-
-    if (pickedDocFile) {
-      try {
-        const formData = new FormData();
-        formData.append('PatientId', selectedPatient.id);
-        formData.append('RecordType', docRecordType);
-        formData.append('Title', docTitle.trim());
-        if (docNotes.trim()) formData.append('Notes', docNotes.trim());
-        formData.append('DocumentDate', strictlyFormattedDocDate);
-        if (actorStaffId) formData.append('UploadedByStaffId', actorStaffId);
-        if (actorStaffName) formData.append('UploadedByStaffName', actorStaffName);
-
-        if (pickedDocFile.file) {
-          formData.append('File', pickedDocFile.file);
-        } else {
-          formData.append('File', {
-            uri: pickedDocFile.uri,
-            name: pickedDocFile.name,
-            type: pickedDocFile.mimeType || 'application/octet-stream',
-          } as any);
-        }
-
-        const [newAtt, err] = await clinicService.uploadRecordAttachmentFile(formData);
-        setUploadingDoc(false);
-
-        if (newAtt) {
-          const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
-          setPatientAttachments((prev) => [attributedAtt, ...prev]);
-          setUploadDocModalVisible(false);
-          setPickedDocFile(null);
-          setDocTitle('');
-          setDocNotes('');
-          setDocDate(new Date().toISOString().split('T')[0]);
-          notify.success('Document attached to the patient record.');
-          return;
-        } else if (err) {
-          notify.error(err.message || 'The server rejected this document upload.');
-          return;
-        }
-      } catch (uploadErr: any) {
-        setUploadingDoc(false);
-        notify.error(uploadErr?.message || 'Failed to upload document file.');
-        return;
-      }
-    }
-
-    const payload = {
-      patientId: selectedPatient.id,
-      recordType: docRecordType,
-      title: docTitle.trim(),
-      fileName: `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
-      contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
-      fileSizeBytes: 1024 * 450,
-      storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
-      documentDate: strictlyFormattedDocDate,
-      notes: docNotes.trim() || undefined,
-      uploadedByStaffId: actorStaffId,
-      uploadedByStaffName: actorStaffName || undefined,
-      encryptionAlgorithm: 'AES-256-GCM',
-      encryptionKeyId: 'cmk-v1',
-    };
-
-    const [newAtt, err] = await clinicService.uploadRecordAttachment(payload);
-    setUploadingDoc(false);
-
-    if (newAtt) {
-      const attributedAtt = normalizeAttachmentStaffAttribution(newAtt, actorStaffName, actorStaffId);
-      setPatientAttachments((prev) => [attributedAtt, ...prev]);
-      setUploadDocModalVisible(false);
-      setPickedDocFile(null);
-      setDocTitle('');
-      setDocNotes('');
-      setDocDate(new Date().toISOString().split('T')[0]);
-      notify.success('Document attached to the patient record.');
-    } else if (!shouldQueueOffline(err?.status ?? 0)) {
-      notify.error(err?.message || 'The server rejected this document.');
-    } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, actorStaffName || undefined);
-      setPatientAttachments((prev) => [queuedAtt, ...prev]);
-      setUploadDocModalVisible(false);
-      setPickedDocFile(null);
-      setDocTitle('');
-      setDocNotes('');
-      setDocDate(new Date().toISOString().split('T')[0]);
-      Alert.alert('Saved on this device', 'The document is queued and will upload automatically once the connection is back.');
     }
   };
 
@@ -1834,68 +1711,30 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     fetchPatients();
   };
 
-  const filterCounts = useMemo(() => {
-    if (!patients) return null;
-    let myPatients = 0;
-    let students = 0;
-    let employees = 0;
-    let alerts = 0;
-    let seniorPwd = 0;
-    for (const p of patients) {
-      if (isMyPatient(p, currentStaff)) {
-        myPatients++;
-      }
-      if (
-        p.customFields?.classification === 'Student' ||
-        p.customFields?.category === 'Student' ||
-        (typeof p.customFields?.student_id === 'string'
-          ? p.customFields.student_id.trim().length > 0
-          : !!p.customFields?.student_id)
-      ) {
-        students++;
-      }
-      if (
-        p.customFields?.classification === 'Employee' ||
-        p.customFields?.category === 'Employee' ||
-        (typeof p.customFields?.employee_id === 'string'
-          ? p.customFields.employee_id.trim().length > 0
-          : !!p.customFields?.employee_id)
-      ) {
-        employees++;
-      }
-      if (hasKnownAllergies(p.allergies) || (p.alerts && p.alerts.trim().length > 0)) {
-        alerts++;
-      }
-      if (!!p.seniorCitizenId || !!p.pwdId || p.age >= 60) {
-        seniorPwd++;
-      }
+  const activeTotal = useMemo(() => {
+    if (!totalCounts) return undefined;
+    switch (filterMode) {
+      case 'MY_PATIENTS':
+        return totalCounts.myPatients;
+      case 'STUDENTS':
+        return totalCounts.students;
+      case 'EMPLOYEES':
+        return totalCounts.employees;
+      case 'ALERTS':
+        return totalCounts.alerts;
+      case 'SENIOR_PWD':
+        return totalCounts.seniorPwd;
+      case 'ALL':
+      default:
+        return totalCounts.all;
     }
-    return {
-      all: patients.length,
-      myPatients: filterMode === 'MY_PATIENTS' ? patients.length : myPatients,
-      students: filterMode === 'STUDENTS' ? patients.length : students,
-      employees: filterMode === 'EMPLOYEES' ? patients.length : employees,
-      alerts: filterMode === 'ALERTS' ? patients.length : alerts,
-      seniorPwd: filterMode === 'SENIOR_PWD' ? patients.length : seniorPwd,
-    };
-  }, [patients, currentStaff, filterMode]);
+  }, [totalCounts, filterMode]);
 
   const filteredPatients = useMemo(() => patients ?? [], [patients]);
 
-
-  const formatTabCount = useCallback(
-    (loaded: number | undefined, total: number | undefined): string | number | undefined => {
-      if (loaded === undefined) return undefined;
-      if (total !== undefined && total !== null) {
-        return `${loaded}/${total}`;
-      }
-      if (!hasMore && patients !== null) {
-        return `${loaded}/${loaded}`;
-      }
-      return loaded;
-    },
-    [hasMore, patients]
-  );
+  const formatTabCount = useCallback((total: number | undefined): number | undefined => {
+    return total;
+  }, []);
 
   const isTable = effectiveViewMode === 'table';
   const itemHeight = isTable ? 64 : 270;
@@ -2049,17 +1888,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             value={filterMode}
             onChange={handleFilterModeChange}
             options={[
-              { value: 'ALL', label: 'All patients', count: formatTabCount(filterCounts?.all, totalCounts?.all) },
-              { value: 'MY_PATIENTS', label: 'My patients', count: formatTabCount(filterCounts?.myPatients, totalCounts?.myPatients) },
-              { value: 'STUDENTS', label: 'Students', count: formatTabCount(filterCounts?.students, totalCounts?.students) },
-              { value: 'EMPLOYEES', label: 'Employees', count: formatTabCount(filterCounts?.employees, totalCounts?.employees) },
+              { value: 'ALL', label: 'All patients', count: totalCounts?.all },
+              { value: 'MY_PATIENTS', label: 'My patients', count: totalCounts?.myPatients },
+              { value: 'STUDENTS', label: 'Students', count: totalCounts?.students },
+              { value: 'EMPLOYEES', label: 'Employees', count: totalCounts?.employees },
               {
                 value: 'ALERTS',
                 label: 'Alerts & allergies',
-                count: formatTabCount(filterCounts?.alerts, totalCounts?.alerts),
-                badgeVariant: (filterCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
+                count: totalCounts?.alerts,
+                badgeVariant: (totalCounts?.alerts ?? 0) > 0 ? 'emergency' : undefined,
               },
-              { value: 'SENIOR_PWD', label: 'Senior & PWD', count: formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd) },
+              { value: 'SENIOR_PWD', label: 'Senior & PWD', count: totalCounts?.seniorPwd },
             ]}
           />
         </View>
@@ -2213,13 +2052,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               </ThemedText>
             </View>
           ) : hasMore ? (
-            <Button
-              title="Load more patients"
-              variant="ghost"
-              size="sm"
-              icon="chevronDown"
-              onPress={loadMorePatients}
-            />
+            <View style={{ alignItems: 'center', gap: 8 }}>
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
+                Showing {patients.length} of {activeTotal ?? patients.length} {activeTotal === 1 ? 'patient' : 'patients'}
+              </ThemedText>
+              <Button
+                title="Load more patients"
+                variant="ghost"
+                size="sm"
+                icon="chevronDown"
+                onPress={loadMorePatients}
+              />
+            </View>
           ) : (
             <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
               All {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'} loaded
@@ -3198,159 +3042,39 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         onSuccess={handleExternalDispenseSuccess}
       />
 
-      {/* Attach External Physical Document Modal (School Clinic / 80/20) */}
-      <Modal raw visible={uploadDocModalVisible} transparent animationType="slide" onClose={() => setUploadDocModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 500 }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
-              <Button
-                variant="ghost"
-                size="sm"
-                icon="close"
-                iconOnly
-                accessibilityLabel="Close"
-                onPress={() => setUploadDocModalVisible(false)}
-              />
-            </View>
-            <ThemedText style={styles.modalSub}>
-              Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {selectedPatient?.fullName}'s profile.
-            </ThemedText>
-
-            <ScrollView
-              style={{ flexShrink: 1 }}
-              contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
-              showsVerticalScrollIndicator={true}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View>
-                <ThemedText style={styles.inputLabel}>Document Title *</ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Chest X-ray (outside clinic)"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={docTitle}
-                  onChangeText={setDocTitle}
-                />
-              </View>
-
-              <ValidatedDateInput
-                label="Document Date (YYYY-MM-DD)"
-                required
-                value={docDate}
-                onChangeText={setDocDate}
-                boundaryMode="pastOrToday"
-                placeholder="YYYY-MM-DD"
-              />
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Document / Record Classification</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                  {[
-                    { key: 'OutsideChestXRay', label: 'Chest X-Ray' },
-                    { key: 'CertificateOfRegistration', label: 'Paper COR' },
-                    { key: 'MedicalCertificate', label: 'Outside MedCert' },
-                    { key: 'LabResult', label: 'Lab Sheet' },
-                    { key: 'Other', label: 'Other' },
-                  ].map((t) => (
-                    <Pressable
-                      key={t.key}
-                      style={[styles.formatChip, docRecordType === t.key && styles.formatChipActive]}
-                      onPress={() => setDocRecordType(t.key)}
-                    >
-                      <ThemedText style={[styles.formatChipText, docRecordType === t.key && styles.formatChipTextActive]}>
-                        {t.label}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Ingestion Source / Format</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  {(['PDF', 'Photo'] as const).map((fmt) => (
-                    <Pressable
-                      key={fmt}
-                      style={[styles.formatChip, docFileType === fmt && styles.formatChipActive]}
-                      onPress={() => setDocFileType(fmt)}
-                    >
-                      <ThemedText style={[styles.formatChipText, docFileType === fmt && styles.formatChipTextActive]}>
-                        {fmt === 'PDF' ? 'Scanned PDF' : 'Flatbed / Camera Scan'}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>File Attachment (PDF, JPEG, PNG)</ThemedText>
-                {pickedDocFile ? (
-                  <View style={styles.pickedFileBox}>
-                    <View style={styles.pickedFileInfo}>
-                      <Icon
-                        name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
-                        size={theme.sizes.iconMd}
-                        color={theme.colors.primary}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
-                          {pickedDocFile.name}
-                        </ThemedText>
-                        <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
-                        </ThemedText>
-                      </View>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <Button title="Change" variant="outline" size="xs" onPress={handlePickDocument} />
-                      <Button title="Clear" variant="dangerOutline" size="xs" onPress={() => setPickedDocFile(null)} />
-                    </View>
-                  </View>
-                ) : (
-                  <Button
-                    title="Select Document File (PDF, JPEG, PNG)"
-                    variant="outline"
-                    size="md"
-                    icon="upload"
-                    onPress={handlePickDocument}
-                  />
-                )}
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Clinical Review Findings & Notes</ThemedText>
-                <TextInput
-                  style={[styles.textInput, { height: 60 }]}
-                  multiline
-                  placeholder="e.g. Clean chest PA film, no active pulmonary disease seen."
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={docNotes}
-                  onChangeText={setDocNotes}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
-              <Button
-                title="Cancel"
-                variant="secondary"
-                size="md"
-                onPress={() => setUploadDocModalVisible(false)}
-                disabled={uploadingDoc}
-              />
-              <Button
-                title="Save & Attach to Profile"
-                variant="primary"
-                size="md"
-                loading={uploadingDoc}
-                disabled={uploadingDoc}
-                onPress={handleUploadDocument}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Attach External Physical Document Modal */}
+      <AttachExternalDocumentModal
+        visible={uploadDocModalVisible}
+        patient={selectedPatient}
+        patientId={selectedPatient?.id}
+        onClose={() => setUploadDocModalVisible(false)}
+        onAttachmentUploaded={async (attributedAtt) => {
+          setPatientAttachments((prev) => [
+            attributedAtt,
+            ...prev.filter((a) => a.id !== attributedAtt.id),
+          ]);
+          setPatientChart((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  attachments: [
+                    attributedAtt,
+                    ...(prev.attachments || []).filter((a) => a.id !== attributedAtt.id),
+                  ],
+                }
+              : prev
+          );
+          if (selectedPatient) {
+            void handleOpenChart(
+              selectedPatient,
+              activeChartTab,
+              undefined,
+              chartQueueItemId,
+              chartForceSeparateVisit
+            );
+          }
+        }}
+      />
 
       {/* Standalone PhilHealth Patient Profile Modal (Offline & Walk-In Capable) */}
       <PhilHealthProfileModal

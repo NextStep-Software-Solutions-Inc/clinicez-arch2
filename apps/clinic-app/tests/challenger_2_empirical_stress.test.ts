@@ -318,6 +318,7 @@ mock.module('@clinicez/comms-sdk/react', () => ({
     declineRequest: mock(async () => {}),
     routeToStaff: mock(async () => {}),
   }),
+  resolveConversationDisplayTitle: (c: any) => c?.title || '',
 }));
 
 let capturedSelectCard: ((id: string) => void) | null = null;
@@ -345,9 +346,11 @@ let mockClinicComms = {
 
 mock.module('../context/ClinicCommsContext', () => ({
   useClinicComms: () => mockClinicComms,
+  getCommsApiBaseUrl: () => 'https://clinicez-comms.api.dev.nextstep-software.com',
 }));
 mock.module('../../context/ClinicCommsContext', () => ({
   useClinicComms: () => mockClinicComms,
+  getCommsApiBaseUrl: () => 'https://clinicez-comms.api.dev.nextstep-software.com',
 }));
 
 const { default: ClinicActiveThread } = await import('../components/comms/ClinicActiveThread');
@@ -683,9 +686,9 @@ describe('Challenger 2 Empirical Verification: Comms Active Thread, Modals & Dra
   // Section 3: NewConversationModal Boundary Validation & Creation
   // =========================================================================
   describe('Section 3: NewConversationModal Boundary Validation & Creation', () => {
-    test('Empirical 3.1: Rejects creation when title is empty string or whitespace only', async () => {
+    test('Empirical 3.1: Allows empty title for Direct Messages, but rejects empty title for channels/care teams', async () => {
       const validateAndSubmit = async (title: string, tab: string, staffId: string | null, patientId: string) => {
-        if (!title || !title.trim()) {
+        if (tab !== 'Direct' && (!title || !title.trim())) {
           return { error: 'Conversation title cannot be empty.' };
         }
         if (tab === 'Direct' && !staffId) {
@@ -697,17 +700,21 @@ describe('Challenger 2 Empirical Verification: Comms Active Thread, Modals & Dra
         return { success: true };
       };
 
-      // Empty string
-      const res1 = await validateAndSubmit('', 'Direct', 'staff-2', '');
-      expect(res1.error).toBe('Conversation title cannot be empty.');
+      // Empty string for Direct is valid
+      const resDirectEmpty = await validateAndSubmit('', 'Direct', 'staff-2', '');
+      expect(resDirectEmpty.success).toBe(true);
 
-      // Whitespace only
-      const res2 = await validateAndSubmit('    ', 'Direct', 'staff-2', '');
-      expect(res2.error).toBe('Conversation title cannot be empty.');
+      // Whitespace only for Direct is valid
+      const resDirectWs = await validateAndSubmit('    ', 'Direct', 'staff-2', '');
+      expect(resDirectWs.success).toBe(true);
 
-      // Newlines and tabs
-      const res3 = await validateAndSubmit('\t\n  ', 'Direct', 'staff-2', '');
-      expect(res3.error).toBe('Conversation title cannot be empty.');
+      // Empty string for Facility Channel is rejected
+      const resFacilityEmpty = await validateAndSubmit('', 'Facility', null, '');
+      expect(resFacilityEmpty.error).toBe('Conversation title cannot be empty.');
+
+      // Whitespace only for Care Team is rejected
+      const resCareTeamWs = await validateAndSubmit('   ', 'StaffContext', null, 'pat-1');
+      expect(resCareTeamWs.error).toBe('Conversation title cannot be empty.');
     });
 
     test('Empirical 3.2: Rejects Direct Message creation when no staff member is selected', async () => {
@@ -876,6 +883,23 @@ describe('Challenger 2 Empirical Verification: Comms Active Thread, Modals & Dra
       // 5. Back navigation clears activeConversationId
       mockClinicComms.setActiveConversationId(undefined);
       expect(mockClinicComms.activeConversationId).toBeUndefined();
+    });
+
+    test('Empirical 4.5: Conversation deletion and archive removes item from list and triggers backend close', () => {
+      const hostSource = fs.readFileSync(
+        path.resolve(__dirname, '../components/comms/ClinicChatDrawerHost.tsx'),
+        'utf-8'
+      );
+      expect(hostSource).toContain('onDeleteConversation={handleDeleteConversation}');
+      expect(hostSource).toContain('onCloseAndArchive={handleCloseAndArchive}');
+      expect(hostSource).toContain('removedConversationIds.has(c.id)');
+
+      const threadSource = fs.readFileSync(
+        path.resolve(__dirname, '../components/comms/ClinicActiveThread.tsx'),
+        'utf-8'
+      );
+      expect(threadSource).toContain('onDeleteConversation?.(conversationId)');
+      expect(threadSource).toContain('onCloseAndArchive?.(conversationId)');
     });
   });
 });

@@ -319,4 +319,108 @@ describe('YAKAP 2.0 Plan Management (Annex B Section 5)', () => {
     expect(maleAdultHtml).not.toContain('Pediatric &amp; Adolescent');
     expect(maleAdultHtml).not.toContain('Prenatal / Antenatal');
   });
+
+  test('Issue #187: Demographic cohort filtering & Recommended badges for 84yo senior male (Dagohoy, Artemio V.)', () => {
+    // Reference Patient: Dagohoy, Artemio V. (PAT-2026-01D10 · 84 yrs, Male · DOB: 1941-12-07)
+    const seniorMaleHtml = renderToStaticMarkup(
+      React.createElement(PlanManagementCard, {
+        embedded: true,
+        value: {
+          ...DEFAULT_YAKAP_PLAN_MANAGEMENT,
+          hasCancerScreening: true,
+          cancerScreeningCodes: ['15'], // FOBT
+        },
+        onChange: () => {},
+        patientAgeYears: 84,
+        patientDateOfBirth: '1941-12-07',
+        patientSex: 'Male',
+      })
+    );
+
+    // 1. Dynamic title: Routine Screening Plan (omits & Prenatal)
+    expect(seniorMaleHtml).toContain('Routine Screening Plan');
+    expect(seniorMaleHtml).not.toContain('Routine &amp; Prenatal Screening Plan');
+
+    // 2. Visible "Recommended" badge on recommended Adults tab
+    expect(seniorMaleHtml).toContain('Adults');
+    expect(seniorMaleHtml).toContain('Recommended');
+
+    // 3. Cancer Screening: subtitle omits Pap Smear for male patients
+    expect(seniorMaleHtml).toContain('Early detection screening tests (FOBT/FIT, AFP, Colonoscopy, Imaging)');
+    expect(seniorMaleHtml).not.toContain('Early detection screening tests (FOBT/FIT, Pap Smear, AFP, Colonoscopy, Imaging)');
+
+    // 4. Cancer Screening chips: excludes Pap Smear Cytology (code 13) for male
+    expect(seniorMaleHtml).toContain('Fecal Occult Blood Test (FOBT) / FIT');
+    expect(seniorMaleHtml).not.toContain('Pap Smear Cytology');
+
+    // 5. Preservation rule: if hydrated encounter already contains Pap Smear (code 13), preserve it
+    const hydratedPreservedHtml = renderToStaticMarkup(
+      React.createElement(PlanManagementCard, {
+        embedded: true,
+        value: {
+          ...DEFAULT_YAKAP_PLAN_MANAGEMENT,
+          hasCancerScreening: true,
+          cancerScreeningCodes: ['13'], // Pre-existing selection
+        },
+        onChange: () => {},
+        patientAgeYears: 84,
+        patientSex: 'Male',
+      })
+    );
+    expect(hydratedPreservedHtml).toContain('Pap Smear Cytology');
+
+    // 6. DOB Age-Resolution parity: if patientAgeYears is null but patientDateOfBirth (1941-12-07) is provided
+    const tabsFromDobOnly = getScreeningCohortTabsForPatient({
+      patientAgeYears: null,
+      patientDateOfBirth: '1941-12-07',
+      patientSex: 'Male',
+    });
+    expect(tabsFromDobOnly.map((t) => t.id)).toEqual(['adult']);
+    expect(tabsFromDobOnly[0].isRecommended).toBe(true);
+
+    const dobOnlyHtml = renderToStaticMarkup(
+      React.createElement(PlanManagementCard, {
+        embedded: true,
+        value: DEFAULT_YAKAP_PLAN_MANAGEMENT,
+        onChange: () => {},
+        patientAgeYears: null,
+        patientDateOfBirth: '1941-12-07',
+        patientSex: 'Male',
+      })
+    );
+    expect(dobOnlyHtml).toContain('Routine Screening Plan');
+    expect(dobOnlyHtml).not.toContain('Pediatric &amp; Adolescent');
+    expect(dobOnlyHtml).toContain('Recommended');
+
+    // 7. Pediatric cohort recommendation: < 20yo displays Recommended badge on Pediatric tab
+    const pediatricHtml = renderToStaticMarkup(
+      React.createElement(PlanManagementCard, {
+        embedded: true,
+        value: DEFAULT_YAKAP_PLAN_MANAGEMENT,
+        onChange: () => {},
+        patientAgeYears: 8,
+        patientSex: 'Male',
+      })
+    );
+    expect(pediatricHtml).toContain('Pediatric &amp; Adolescent');
+    expect(pediatricHtml).toContain('Recommended');
+
+    // 8. Female patient parity: preserves Routine & Prenatal Screening Plan and Pap Smear
+    const femaleHtml = renderToStaticMarkup(
+      React.createElement(PlanManagementCard, {
+        embedded: true,
+        value: {
+          ...DEFAULT_YAKAP_PLAN_MANAGEMENT,
+          hasCancerScreening: true,
+          cancerScreeningCodes: [],
+        },
+        onChange: () => {},
+        patientAgeYears: 32,
+        patientSex: 'Female',
+      })
+    );
+    expect(femaleHtml).toContain('Routine &amp; Prenatal Screening Plan');
+    expect(femaleHtml).toContain('Early detection screening tests (FOBT/FIT, Pap Smear, AFP, Colonoscopy, Imaging)');
+    expect(femaleHtml).toContain('Pap Smear Cytology');
+  });
 });

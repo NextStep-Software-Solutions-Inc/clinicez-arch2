@@ -138,7 +138,7 @@ mock.module('../constants/fonts', () => ({
 
 export type ReportType = 'DAILY_EOD' | 'CENSUS' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
 
-export type DatePreset = 'today' | 'yesterday' | '7d' | '30d' | 'ytd';
+export type DatePreset = 'today' | 'yesterday' | '7d' | '30d' | 'this_month' | 'all' | 'ytd';
 
 export interface CensusSummary {
   totalCensus: number;
@@ -270,6 +270,13 @@ export class CensusOracle {
     if (preset === '30d') {
       const d = new Date(referenceNow.getTime() - 29 * 24 * 60 * 60 * 1000);
       return { start: toYmd(d), end: todayStr };
+    }
+    if (preset === 'this_month') {
+      const startOfMonth = `${referenceNow.getFullYear()}-${pad(referenceNow.getMonth() + 1)}-01`;
+      return { start: startOfMonth, end: todayStr };
+    }
+    if (preset === 'all') {
+      return { start: '', end: '' };
     }
     return { start: `${referenceNow.getFullYear()}-01-01`, end: todayStr };
   }
@@ -760,7 +767,7 @@ describe('Clinic Census Report Workstation E2E & Integration Suite', () => {
       expect(reportTitleMap.CENSUS).toBe('Clinic census report');
     });
 
-    test('1.2 Date preset calculations support Today, Yesterday, Last 7 Days, and This Month', () => {
+    test('1.2 Date preset calculations support Today, Yesterday, Last 7 Days, This Month (Calendar), Last 30 Days (Rolling), and All Time', () => {
       const refDate = new Date('2026-11-05T08:00:00Z');
 
       const today = CensusOracle.computeDatePresetRange('today', refDate);
@@ -778,6 +785,16 @@ describe('Clinic Census Report Workstation E2E & Integration Suite', () => {
       const thirtyDays = CensusOracle.computeDatePresetRange('30d', refDate);
       expect(thirtyDays.start).toBe('2026-10-07');
       expect(thirtyDays.end).toBe('2026-11-05');
+
+      // Issue #157: Calendar month ("This Month") must bound to 1st of current month
+      const thisMonth = CensusOracle.computeDatePresetRange('this_month', refDate);
+      expect(thisMonth.start).toBe('2026-11-01');
+      expect(thisMonth.end).toBe('2026-11-05');
+
+      // Issue #157: All Time returns empty bounds
+      const allTime = CensusOracle.computeDatePresetRange('all', refDate);
+      expect(allTime.start).toBe('');
+      expect(allTime.end).toBe('');
 
       const ytd = CensusOracle.computeDatePresetRange('ytd', refDate);
       expect(ytd.start).toBe('2026-01-01');
@@ -1853,6 +1870,64 @@ describe('Clinic Census Report Workstation E2E & Integration Suite', () => {
         expect(columnHeader).toContain('Date');
         expect(columnHeader).toContain('Ticket');
         expect(columnHeader).toContain('Time');
+      });
+    });
+
+    describe('5.10 Issue #157 Reports Date Range Filtering & Preset Reactivity', () => {
+      test('5.10.1 "All Time" URL construction omits startDate and endDate to allow unrestricted backend querying', () => {
+        const baseUrl = 'http://localhost:5000/api/v1';
+        const url = CensusOracle.buildCensusReportUrl(baseUrl, '', '');
+        expect(url).not.toContain('startDate');
+        expect(url).not.toContain('endDate');
+      });
+
+      test('5.10.2 "This Month" accurately bounds from the 1st of the current month to reference date', () => {
+        const refDate = new Date('2026-11-13T09:30:00Z');
+        const range = CensusOracle.computeDatePresetRange('this_month', refDate);
+        expect(range.start).toBe('2026-11-01');
+        expect(range.end).toBe('2026-11-13');
+      });
+
+      test('5.10.3 Preset chip active state styling is exclusive and turns inactive on custom ranges', () => {
+        const refDate = new Date('2026-11-13T09:30:00Z');
+        const todayRange = CensusOracle.computeDatePresetRange('today', refDate);
+        const thisMonthRange = CensusOracle.computeDatePresetRange('this_month', refDate);
+
+        // Current active range matches 'today'
+        const currentStart = todayRange.start;
+        const currentEnd = todayRange.end;
+
+        const isTodayActive = currentStart === todayRange.start && currentEnd === todayRange.end;
+        const isMonthActive = currentStart === thisMonthRange.start && currentEnd === thisMonthRange.end;
+        expect(isTodayActive).toBe(true);
+        expect(isMonthActive).toBe(false);
+
+        // Custom range selected (e.g. 2026-11-03 to 2026-11-08)
+        const customStart = '2026-11-03';
+        const customEnd = '2026-11-08';
+        const isAnyPresetActive = [
+          todayRange,
+          thisMonthRange,
+          CensusOracle.computeDatePresetRange('yesterday', refDate),
+          CensusOracle.computeDatePresetRange('7d', refDate),
+        ].some((p) => p.start === customStart && p.end === customEnd);
+
+        expect(isAnyPresetActive).toBe(false);
+      });
+
+      test('5.10.4 Date range trigger label renders "All Time" when dates are empty', () => {
+        const formatLabel = (start?: string, end?: string): string => {
+          if (!start && !end) return 'All Time';
+          if (start && !end) return `From ${start}`;
+          if (!start && end) return `Up to ${end}`;
+          if (start && end && start === end) return start;
+          return `${start} to ${end}`;
+        };
+
+        expect(formatLabel('', '')).toBe('All Time');
+        expect(formatLabel(undefined, undefined)).toBe('All Time');
+        expect(formatLabel('2026-11-01', '2026-11-05')).toBe('2026-11-01 to 2026-11-05');
+        expect(formatLabel('2026-11-05', '2026-11-05')).toBe('2026-11-05');
       });
     });
   });

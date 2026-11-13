@@ -163,10 +163,16 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
 
         if (_customFieldRepo != null)
         {
+            var staticContext = new PatientStaticContext(
+                Sex: request.Sex,
+                CivilStatus: request.CivilStatus,
+                DateOfBirth: request.DateOfBirth);
+
             await CustomFieldValueValidator.ValidateAndNormalizeAsync(
                 customFields,
                 _customFieldRepo,
                 "Patient",
+                staticContext,
                 ct);
         }
 

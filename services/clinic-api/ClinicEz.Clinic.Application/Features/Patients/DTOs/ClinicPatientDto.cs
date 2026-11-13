@@ -72,4 +72,5 @@ public sealed record PatientActiveQueueTicketDto(
     Guid? DoctorId,
     string? DoctorName,
     DateTime CheckInTime,
-    bool IsDirectVisit = false);
+    bool IsDirectVisit = false,
+    Guid? RoomId = null);

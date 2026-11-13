@@ -37,11 +37,12 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] Guid? staffId = null,
         [FromQuery] Guid? doctorId = null,
         [FromQuery] DateOnly? queueDate = null,
+        [FromQuery] Guid[]? roomIds = null,
         CancellationToken ct = default)
     {
         var result = await _sender.Send(new GetClinicPatientsQuery(
             search, hasAlerts, verificationStatus, filterMode, page, pageSize,
-            StaffId: staffId, DoctorId: doctorId, QueueDate: queueDate), ct);
+            StaffId: staffId, DoctorId: doctorId, RoomIds: roomIds, QueueDate: queueDate), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
 
@@ -51,9 +52,11 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] string? search,
         [FromQuery] Guid? staffId = null,
         [FromQuery] Guid? doctorId = null,
+        [FromQuery] Guid[]? roomIds = null,
+        [FromQuery] DateOnly? queueDate = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicPatientCountsQuery(search, staffId, doctorId), ct);
+        var result = await _sender.Send(new GetClinicPatientCountsQuery(search, staffId, doctorId, roomIds, queueDate), ct);
         return Ok(ApiResponse<PatientDirectoryCountsDto>.Success(result));
     }
 

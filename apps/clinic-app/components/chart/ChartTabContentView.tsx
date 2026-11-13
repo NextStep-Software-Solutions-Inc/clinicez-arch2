@@ -131,7 +131,11 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
         <ExternalDocumentVaultTab
           patient={patient}
           patientId={patient?.id}
-          attachments={patientChart?.attachments || patientAttachments}
+          attachments={
+            patientAttachments && patientAttachments.length > 0
+              ? patientAttachments
+              : (patientChart?.attachments || [])
+          }
           onUploadDocument={onUploadDocument}
           onVerifyAttachment={onVerifyAttachment}
           onDownloadAttachment={onDownloadAttachment}

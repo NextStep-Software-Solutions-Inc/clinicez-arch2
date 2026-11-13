@@ -488,9 +488,15 @@ export function EditPatientModal({
     return effectiveCustomFields.filter((f) => f.category === 'Emergency Contacts');
   }, [effectiveCustomFields]);
 
+  const otherCustomFields = useMemo(() => {
+    return effectiveCustomFields.filter(
+      (f) => f.category !== 'Address' && f.category !== 'Emergency Contacts'
+    );
+  }, [effectiveCustomFields]);
+
   const renderedCustomFields = useMemo(() => {
-    return [...addressFields, ...emergencyFields];
-  }, [addressFields, emergencyFields]);
+    return [...addressFields, ...emergencyFields, ...otherCustomFields];
+  }, [addressFields, emergencyFields, otherCustomFields]);
 
   const handleCustomFieldChange = (key: string, val: any) => {
     setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
@@ -594,8 +600,10 @@ export function EditPatientModal({
     setGuardian(extractInitialGuardianFromPatient(source));
     setGuardianErrors({});
     setIsGuardianPinValid(null);
+    const rawAffiliation = cf['affiliation'] || (cf['classification'] === 'Student' ? 'Student' : cf['classification'] === 'Employee' ? 'Employee/Faculty' : undefined);
     setCustomFieldValues({
       ...cf,
+      ...(rawAffiliation ? { affiliation: rawAffiliation } : {}),
       emergency_contact_name: cf['emergency_contact_name'] ?? (source as any).emergencyContactName ?? '',
       emergency_contact_phone: cf['emergency_contact_phone'] ?? (source as any).emergencyContactPhone ?? '',
       emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (source as any).emergencyContactRelationship ?? '',
@@ -1194,6 +1202,22 @@ export function EditPatientModal({
                 </ThemedText>
                 <DynamicCustomFieldsRenderer
                   fields={emergencyFields}
+                  values={customFieldValues}
+                  onChange={handleCustomFieldChange}
+                  errors={customFieldErrors}
+                  staticValues={staticValues}
+                />
+              </>
+            )}
+
+            {/* Additional Custom Fields (Institutional, Student, Employee, etc.) */}
+            {otherCustomFields.length > 0 && (
+              <>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+                  Additional Details
+                </ThemedText>
+                <DynamicCustomFieldsRenderer
+                  fields={otherCustomFields}
                   values={customFieldValues}
                   onChange={handleCustomFieldChange}
                   errors={customFieldErrors}

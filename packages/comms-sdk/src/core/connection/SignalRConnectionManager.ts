@@ -56,7 +56,8 @@ export class SignalRConnectionManager implements ICommsClient {
       .withUrl(options.hubUrl, {
         accessTokenFactory: async () => {
           return await this.renewalTimer.getValidTicket();
-        }
+        },
+        timeout: 10000,
       })
       .withAutomaticReconnect(retryPolicy)
       .configureLogging(options.logLevel ?? LogLevel.Warning)
@@ -93,7 +94,10 @@ export class SignalRConnectionManager implements ICommsClient {
         await this.renewalTimer.start(this.options.initialTicket);
 
         this.events.emit('connectionStateChanged', 'Connecting');
-        await this.connection.start();
+        await Promise.race([
+          this.connection.start(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('SignalR connection start timeout')), 10000)),
+        ]);
         this.events.emit('connectionStateChanged', 'Connected');
 
         // Rejoin any previously active conversations

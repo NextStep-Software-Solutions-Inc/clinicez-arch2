@@ -1,11 +1,12 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef, useSyncExternalStore } from 'react';
-import { View, StyleSheet, Pressable, Platform, Modal, Animated, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Pressable, Platform, Modal, Animated, useWindowDimensions, type ViewStyle } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
   useComms,
   useConversations,
   useTriageQueue,
 } from '@clinicez/comms-sdk/react';
+import { resolveConversationDisplayTitle } from '@clinicez/comms-sdk/core';
 import {
   ChatDrawer,
   TriageQueueView,
@@ -19,7 +20,9 @@ import type {
 import ClinicActiveThread from './ClinicActiveThread';
 import NewConversationModal from './NewConversationModal';
 import { useClinicComms } from '../../context/ClinicCommsContext';
+import { getCommsApiBaseUrl } from '../../services/commsUrl';
 import { useAuth } from '../../context/AuthContext';
+import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
@@ -46,13 +49,16 @@ export default function ClinicChatDrawerHost() {
 
   const { isChatDrawerOpen, closeChatDrawer, activeConversationId, setActiveConversationId } = useClinicComms();
   const { user, can } = useAuth();
+  const { staff } = useStaff();
   const { facilityName, license } = useClinic();
   const { isWorkstation } = useBreakpoint();
   const comms = useComms();
   const status = comms?.status || 'connected';
   const reconnect = comms?.reconnect;
   const isReconnecting = comms?.isReconnecting || false;
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation() as unknown as {
+    navigate: (screen: string, params?: Record<string, unknown>) => void;
+  };
 
   const facilityId = license?.clinicId || user?.clinicId || '';
   const canViewTriage = can(PERMISSIONS.triageRead) || can('messaging:triage') || user?.role === 'Admin';
@@ -62,6 +68,7 @@ export default function ClinicChatDrawerHost() {
   const [isManualReconnecting, setIsManualReconnecting] = useState(false);
   const [isNewConvModalOpen, setIsNewConvModalOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [removedConversationIds, setRemovedConversationIds] = useState<Set<string>>(new Set());
 
   // Play audio chime when any incoming message is received
   useEffect(() => {
@@ -114,15 +121,111 @@ export default function ClinicChatDrawerHost() {
   const [selectedScope, setSelectedScope] = useState<ConversationScopeFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      setRemovedConversationIds((prev) => new Set(prev).add(id));
+      setActiveConversationId(undefined);
+      try {
+        const cleanBase = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+        if (cleanBase) {
+          let ticket = comms?.activeTicket?.ticket;
+          if (!ticket && comms?.refreshTicket) {
+            try {
+              const refreshed = await comms.refreshTicket();
+              ticket = refreshed?.ticket;
+            } catch {
+              // ignore
+            }
+          }
+          const deleteRes = await fetch(`${cleanBase}/api/v1/comms/conversations/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+            },
+          });
+          if (!deleteRes.ok) {
+            // Fallback to close if DELETE is rejected
+            await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+              },
+              body: JSON.stringify({ notes: 'Deleted by clinician', tenantId: facilityId }),
+            });
+          }
+        }
+        await refreshConversations();
+        notify.success('Conversation deleted.');
+      } catch (err) {
+        console.warn('Failed to delete/close conversation on server:', err);
+        notify.error('Failed to delete conversation on server.');
+      }
+    },
+    [comms, facilityId, refreshConversations, setActiveConversationId],
+  );
+
+  const handleCloseAndArchive = useCallback(
+    async (id: string) => {
+      setRemovedConversationIds((prev) => new Set(prev).add(id));
+      setActiveConversationId(undefined);
+      try {
+        const cleanBase = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
+        if (cleanBase) {
+          let ticket = comms?.activeTicket?.ticket;
+          if (!ticket && comms?.refreshTicket) {
+            try {
+              const refreshed = await comms.refreshTicket();
+              ticket = refreshed?.ticket;
+            } catch {
+              // ignore
+            }
+          }
+          const res = await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+            },
+            body: JSON.stringify({ notes: 'Closed and archived', tenantId: facilityId }),
+          });
+          if (!res.ok) {
+            throw new Error(`Server returned HTTP ${res.status}`);
+          }
+        }
+        await refreshConversations();
+        notify.success('Conversation closed and archived.');
+      } catch (err) {
+        console.warn('Failed to archive conversation on server:', err);
+        notify.error('Failed to archive conversation on server.');
+      }
+    },
+    [comms, facilityId, refreshConversations, setActiveConversationId],
+  );
+
   const chatItems: ChatDrawerItem[] = useMemo(() => {
     return conversations
       .filter((c) => {
+        if (removedConversationIds.has(c.id)) return false;
+        if (c.status === 'Closed') return false;
         if (selectedScope !== 'All' && c.scope !== selectedScope) return false;
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
+          const displayTitle = resolveConversationDisplayTitle(
+            c,
+            user?.id,
+            user?.name,
+            (p) => {
+              const pid = p.participantId || p.userId || p.id;
+              const match = staff.find((s) => s.id === pid);
+              return match ? formatStaffName(match) : null;
+            },
+          ).toLowerCase();
           return (
-            c.title.toLowerCase().includes(q) ||
-            (c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
+            displayTitle.includes(q) ||
+            Boolean(c.title && c.title.toLowerCase().includes(q)) ||
+            Boolean(c.lastMessageSnippet && c.lastMessageSnippet.toLowerCase().includes(q))
           );
         }
         return true;
@@ -130,15 +233,24 @@ export default function ClinicChatDrawerHost() {
       .map((c) => ({
         id: c.id,
         scope: c.scope as ChatDrawerItem['scope'],
-        title: c.title,
+        title: resolveConversationDisplayTitle(
+          c,
+          user?.id,
+          user?.name,
+          (p) => {
+            const pid = p.participantId || p.userId || p.id;
+            const match = staff.find((s) => s.id === pid);
+            return match ? formatStaffName(match) : null;
+          },
+        ),
         lastMessageSnippet: c.lastMessageSnippet ?? undefined,
         lastMessageAtUtc: c.lastMessageAtUtc ?? undefined,
-        unreadCount: (c as any).unreadCount ?? 0,
+        unreadCount: c.unreadCount ?? 0,
         urgentCount: c.priority === 'Urgent' ? 1 : 0,
         isEmergency: c.priority === 'Critical',
         isActive: c.id === activeConversationId,
       }));
-  }, [conversations, selectedScope, searchQuery, activeConversationId]);
+  }, [conversations, removedConversationIds, selectedScope, searchQuery, activeConversationId, user, staff]);
 
   const mappedTriageItems: TriageQueueItem[] = useMemo(() => {
     return triageItems.map((i) => ({
@@ -195,8 +307,8 @@ export default function ClinicChatDrawerHost() {
           );
           notify.success('Inquiry routed to attending clinician.');
         }
-      } catch (err: any) {
-        notify.error(err?.message || 'Failed to record triage disposition.');
+      } catch (err) {
+        notify.error(err instanceof Error ? err.message : 'Failed to record triage disposition.');
       }
     },
     [answerRequest, requestVisit, declineRequest, routeToStaff, user?.id],
@@ -272,8 +384,8 @@ export default function ClinicChatDrawerHost() {
     (patientId: string) => {
       handleClose();
       navigation.navigate('Patients', {
-        screen: 'PatientDetail',
-        params: { patientId, initialTab: 'chart' },
+        patientId,
+        tab: 'chart',
       });
     },
     [handleClose, navigation],
@@ -295,15 +407,21 @@ export default function ClinicChatDrawerHost() {
     setIsManualReconnecting(true);
     try {
       if (typeof reconnect === 'function') {
-        await reconnect();
+        // Enforce 8s timeout so manual reconnect never hangs indefinitely
+        await Promise.race([
+          reconnect(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Connection timed out. Please verify network connectivity.')), 8000)
+          ),
+        ]);
       }
       await Promise.allSettled([
         refreshConversations?.(),
         refreshTriage?.(),
       ]);
       notify.success('Reconnected to clinic communications.');
-    } catch (err: any) {
-      notify.error(err?.message || 'Reconnect attempt failed.');
+    } catch (err) {
+      notify.error(err instanceof Error ? err.message : 'Reconnect attempt failed.');
     } finally {
       setIsManualReconnecting(false);
     }
@@ -376,7 +494,9 @@ export default function ClinicChatDrawerHost() {
               size="sm"
               icon="refresh"
               iconOnly
-              loading={isSpinning}
+              spinIcon={isSpinning}
+              loading={isManualReconnecting}
+              disabled={isManualReconnecting}
               onPress={handleManualReconnect}
               accessibilityLabel="Manual reconnect to clinic communications"
             >
@@ -482,6 +602,8 @@ export default function ClinicChatDrawerHost() {
             onBack={() => setActiveConversationId(undefined)}
             onOpenPatientChart={handleOpenPatientChart}
             currentUserId={user?.id || ''}
+            onDeleteConversation={handleDeleteConversation}
+            onCloseAndArchive={handleCloseAndArchive}
           />
         ) : drawerTab === 'triage' && canViewTriage ? (
           <TriageQueueView
@@ -559,7 +681,7 @@ export default function ClinicChatDrawerHost() {
             scope: params.scope,
             title: params.title,
             contextId: params.patientId,
-            category: params.department as any,
+            department: params.department,
             participantStaffIds: params.participantStaffIds,
             participants: params.participants,
           });
@@ -629,7 +751,7 @@ export default function ClinicChatDrawerHost() {
 function createStyles() {
   return StyleSheet.create({
     desktopOverlay: {
-      position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+      position: Platform.OS === 'web' ? ('fixed' as 'absolute') : 'absolute',
       top: 0,
       bottom: 0,
       left: 0,
@@ -764,7 +886,7 @@ function createStyles() {
       backgroundColor: theme.colors.transparent,
       borderWidth: theme.sizes.borderWidth,
       borderColor: theme.colors.transparent,
-      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : {}),
     },
     tabButtonActive: {
       backgroundColor: theme.colors.primaryLight,

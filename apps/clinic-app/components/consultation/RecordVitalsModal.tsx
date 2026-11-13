@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { theme } from '../../constants/theme';
@@ -18,6 +18,7 @@ import {
   type MeasurementPosture,
   type VitalsFormState,
   EMPTY_VITALS_FORM,
+  mapApiErrorsToVitalsFormErrors,
   parseOptionalInt,
   parseOptionalFloat,
   resolveCohort,
@@ -68,6 +69,7 @@ export default function RecordVitalsModal({
   title = 'Record vitals',
 }: RecordVitalsModalProps) {
   const [form, setForm] = useState<VitalsFormState>(EMPTY_VITALS_FORM);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof VitalsFormState, string>>>({});
   const [saving, setSaving] = useState(false);
   const [zScorePreview, setZScorePreview] = useState<PediatricZScoreResult | null>(null);
 
@@ -82,6 +84,7 @@ export default function RecordVitalsModal({
         posture: cohort.isInfant ? 'RECUMBENT' : 'STANDING',
         chiefComplaint: initialChiefComplaint || '',
       });
+      setFieldErrors({});
       setZScorePreview(null);
     }
   }, [visible, cohort.isInfant, initialChiefComplaint]);
@@ -133,6 +136,13 @@ export default function RecordVitalsModal({
 
   const updateField = (key: keyof VitalsFormState, val: string) => {
     setForm((prev) => ({ ...prev, [key]: val }));
+    if (fieldErrors[key]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   const updateRosCategory = (val: RosCategoryCode) => {
@@ -269,9 +279,14 @@ export default function RecordVitalsModal({
 
     if (err || !savedVitals) {
       setSaving(false);
-      notify.error(err?.message || 'Could not save vitals.');
+      if (err) {
+        setFieldErrors(mapApiErrorsToVitalsFormErrors(err));
+      }
+      notify.error(err?.message || 'Could not save vitals.', { traceId: err?.traceId });
       return;
     }
+
+    setFieldErrors({});
 
     if (escalateToDoctor && effectiveQueueItemId) {
       const escalationPriority = form.triagePriority === 'Routine' ? 'Urgent' : form.triagePriority;
@@ -343,8 +358,9 @@ export default function RecordVitalsModal({
         </View>
       }
     >
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <StandardVitalsSection form={form} updateField={updateField} cohort={cohort} />
+      <View style={styles.formContent}>
+        <StandardVitalsSection form={form} updateField={updateField} cohort={cohort} errors={fieldErrors} />
+        <PreAssessmentSection form={form} updateField={updateField} cohort={cohort} errors={fieldErrors} />
         <AnthropometricsSection
           form={form}
           updateField={updateField}
@@ -353,9 +369,9 @@ export default function RecordVitalsModal({
           bmiCategory={bmiEval?.category}
           centralObesity={centralObesity}
           zScorePreview={zScorePreview}
+          errors={fieldErrors}
         />
-        <VisualAcuitySection form={form} updateField={updateField} />
-        <PreAssessmentSection form={form} updateField={updateField} />
+        <VisualAcuitySection form={form} updateField={updateField} errors={fieldErrors} />
         <NurseCareAndOtcDispensingSection
           allowDispensing={isVisitTypeEligibleForOtcDispensing(visitType)}
           chiefComplaint={form.chiefComplaint}
@@ -366,13 +382,18 @@ export default function RecordVitalsModal({
           onChangeRosCategory={updateRosCategory}
           dispensedItems={form.dispensedItems}
           onChangeDispensedItems={updateDispensedItems}
+          chiefComplaintError={fieldErrors.chiefComplaint}
+          homeInstructionsError={fieldErrors.homeInstructions}
         />
-      </ScrollView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  formContent: {
+    gap: theme.spacing.md,
+  },
   modalFooter: {
     flexDirection: 'row',
     flexWrap: 'wrap',

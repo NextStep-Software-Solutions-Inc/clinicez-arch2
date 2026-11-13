@@ -15,7 +15,7 @@ export interface NewConversationModalProps {
   onClose: () => void;
   onCreateConversation: (params: {
     scope: 'Direct' | 'StaffContext' | 'Facility';
-    title: string;
+    title?: string | null;
     participantStaffIds?: string[];
     participants?: Array<{
       participantType: string;
@@ -158,12 +158,7 @@ export default function NewConversationModal({
       const dept = selectedDepartment || availableDepartments[0] || 'General Clinic';
       setTitle(`${dept} Channel`);
     } else if (tab === 'Direct') {
-      if (selectedStaffId) {
-        const found = staff.find((s) => s.id === selectedStaffId);
-        if (found) setTitle(`Chat with ${formatStaffName(found)}`);
-      } else {
-        setTitle('');
-      }
+      setTitle('');
     } else if (tab === 'StaffContext') {
       if (selectedPatient) {
         setTitle(`Care Team: ${selectedPatient.fullName}`);
@@ -176,10 +171,6 @@ export default function NewConversationModal({
   const handleSelectStaff = (staffMemberId: string) => {
     setSelectedStaffId(staffMemberId);
     setValidationError(null);
-    const found = staff.find((s) => s.id === staffMemberId);
-    if (found) {
-      setTitle(`Chat with ${formatStaffName(found)}`);
-    }
   };
 
   const handleSelectDepartment = (dept: string) => {
@@ -205,8 +196,8 @@ export default function NewConversationModal({
   };
 
   const handleSubmit = async () => {
-    // 1. Title validation
-    if (!title || !title.trim()) {
+    // 1. Title validation (optional for Direct messages)
+    if (activeTab !== 'Direct' && (!title || !title.trim())) {
       setValidationError('Conversation title cannot be empty.');
       return;
     }
@@ -231,8 +222,8 @@ export default function NewConversationModal({
     setIsSubmitting(true);
     try {
       const found = selectedStaffId ? staff.find((s) => s.id === selectedStaffId) : null;
-      const recipientName = found ? formatStaffName(found) : 'Staff Member';
-      const creatorName = current ? formatStaffName(current) : 'Staff Member';
+      const recipientName = found ? formatStaffName(found) : '';
+      const creatorName = current ? formatStaffName(current) : '';
 
       const directParticipants = activeTab === 'Direct' && selectedStaffId
         ? [
@@ -257,7 +248,7 @@ export default function NewConversationModal({
 
       await onCreateConversation({
         scope: activeTab,
-        title: title.trim(),
+        title: title.trim() ? title.trim() : null,
         participantStaffIds: selectedStaffId ? [selectedStaffId] : undefined,
         participants: directParticipants,
         patientId: selectedPatient?.id,
@@ -386,7 +377,7 @@ export default function NewConversationModal({
         {/* Title Input */}
         <View style={styles.formGroup}>
           <ThemedText variant="smallBold" color={theme.colors.text}>
-            Conversation Title
+            Conversation Title{activeTab === 'Direct' ? ' (Optional)' : ''}
           </ThemedText>
           <View style={styles.inputContainer}>
             <TextInput
@@ -397,7 +388,7 @@ export default function NewConversationModal({
               }}
               placeholder={
                 activeTab === 'Direct'
-                  ? 'Select staff colleague or enter custom title'
+                  ? 'Conversation title (optional for direct chats)'
                   : activeTab === 'StaffContext'
                   ? 'Select patient below to auto-populate'
                   : 'Enter channel title or select department below'

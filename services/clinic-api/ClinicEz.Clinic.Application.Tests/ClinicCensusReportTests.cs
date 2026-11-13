@@ -828,6 +828,113 @@ public class ClinicCensusReportTests
         result.Items.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task GetClinicCensusReport_WhenDatesAreNull_ReturnsAllEncountersAcrossAllDatesWithoutDefaultingToToday()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(context, sieve);
+        var vitalsRepo = TestDbHelper.CreateRepository<PatientVitals>(context, sieve);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<Procedure>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+
+        var p1 = new Patient
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-ALL-001",
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            Sex = BiologicalSex.Male,
+            ContactNumber = "09170000001"
+        };
+        var p2 = new Patient
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-ALL-002",
+            FirstName = "Maria",
+            LastName = "Clara",
+            DateOfBirth = new DateOnly(1995, 5, 5),
+            Sex = BiologicalSex.Female,
+            ContactNumber = "09170000002"
+        };
+        await patientRepo.AddAsync(p1);
+        await patientRepo.AddAsync(p2);
+
+        var date1 = new DateTime(2026, 11, 1, 9, 0, 0, DateTimeKind.Utc);
+        var date2 = new DateTime(2026, 11, 3, 14, 0, 0, DateTimeKind.Utc);
+        var date3 = new DateTime(2026, 11, 5, 11, 0, 0, DateTimeKind.Utc);
+
+        var q1 = new QueueItem
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = p1.Id,
+            PatientName = "Dela Cruz, Juan",
+            QueueNumber = "Q-001",
+            SequenceNumber = 1,
+            QueueDate = DateOnly.FromDateTime(date1),
+            Priority = QueuePriority.Routine,
+            VisitType = VisitType.RoutineCheckup,
+            Status = QueueStatus.Completed,
+            CheckInTime = date1,
+            CompletedTime = date1.AddMinutes(30)
+        };
+        var q2 = new QueueItem
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = p2.Id,
+            PatientName = "Clara, Maria",
+            QueueNumber = "Q-002",
+            SequenceNumber = 2,
+            QueueDate = DateOnly.FromDateTime(date2),
+            Priority = QueuePriority.Urgent,
+            VisitType = VisitType.AcuteIllnessConsultation,
+            Status = QueueStatus.Completed,
+            CheckInTime = date2,
+            CompletedTime = date2.AddMinutes(20)
+        };
+        var q3 = new QueueItem
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientId = p1.Id,
+            PatientName = "Dela Cruz, Juan",
+            QueueNumber = "Q-003",
+            SequenceNumber = 3,
+            QueueDate = DateOnly.FromDateTime(date3),
+            Priority = QueuePriority.Routine,
+            VisitType = VisitType.RoutineCheckup,
+            Status = QueueStatus.Completed,
+            CheckInTime = date3,
+            CompletedTime = date3.AddMinutes(40)
+        };
+        await queueRepo.AddAsync(q1);
+        await queueRepo.AddAsync(q2);
+        await queueRepo.AddAsync(q3);
+        await uow.SaveChangesAsync();
+
+        var handler = new GetClinicCensusReportQueryHandler(
+            queueRepo, patientRepo, vitalsRepo, consultRepo, procRepo, invoiceRepo, _clinicContext);
+
+        // Act: Open-ended / "All Time" query
+        var result = await handler.Handle(
+            new GetClinicCensusReportQuery(StartDate: null, EndDate: null),
+            CancellationToken.None);
+
+        // Assert: All 3 encounters across 3 dates returned without falling back to today
+        result.Should().NotBeNull();
+        result.Summary.TotalCensus.Should().Be(3);
+        result.Items.Should().HaveCount(3);
+        result.StartDate.Should().Be(date1.Date);
+        result.EndDate.Should().Be(date3.Date);
+    }
+
     // =========================================================================
     // PART 2: CLOSEDXML SPREADSHEET GENERATION TESTS
     // =========================================================================

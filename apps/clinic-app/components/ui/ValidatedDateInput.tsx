@@ -224,6 +224,8 @@ export interface ValidatedDateInputProps {
   onCalendarPress?: () => void;
   disableCalendarPicker?: boolean;
   hideValidFeedback?: boolean;
+  accessibilityHint?: string;
+  title?: string;
 }
 
 export default function ValidatedDateInput({
@@ -252,6 +254,8 @@ export default function ValidatedDateInput({
   onCalendarPress,
   disableCalendarPicker = false,
   hideValidFeedback = true,
+  accessibilityHint,
+  title,
 }: ValidatedDateInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -345,6 +349,9 @@ export default function ValidatedDateInput({
       ) : null}
 
       <View
+        {...({
+          ...(title ? { title } : {}),
+        } as any)}
         style={[
           styles.inputWrapper,
           { borderColor: wrapperBorderColor, backgroundColor: wrapperBgColor },
@@ -390,6 +397,8 @@ export default function ValidatedDateInput({
           onBlur={handleBlur}
           autoCorrect={false}
           autoCapitalize="none"
+          accessibilityHint={accessibilityHint}
+          {...(title ? { title } : {})}
         />
 
         {value.length > 0 && isInteractive ? (

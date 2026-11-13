@@ -20,6 +20,8 @@ export interface InputProps extends TextInputProps {
   error?: string;
   helperText?: string;
   disabled?: boolean;
+  /** Web-native tooltip displayed on hover */
+  title?: string;
   /** IconName (e.g. "search"). Legacy emoji glyphs are still resolved for old call sites. */
   leftIcon?: string;
   rightIcon?: string;
@@ -47,6 +49,7 @@ export default function Input({
   onFocus,
   onBlur,
   editable,
+  title,
   ...rest
 }: InputProps) {
   const { multiplier } = useUiDensity();
@@ -133,6 +136,7 @@ export default function Input({
         {...({
           onMouseEnter: () => setIsHovered(true),
           onMouseLeave: () => setIsHovered(false),
+          ...(title ? { title } : {}),
         } as any)}
         style={[
           styles.inputWrapper,
@@ -167,6 +171,7 @@ export default function Input({
             setIsFocused(false);
             onBlur?.(e);
           }}
+          {...(title ? { title } : {})}
           {...rest}
         />
 

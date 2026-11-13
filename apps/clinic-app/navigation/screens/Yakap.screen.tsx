@@ -7,6 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   ThemedText,
   Badge,
@@ -24,6 +25,7 @@ import {
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   clinicService,
   GamotBeneficiaryLedger,
@@ -47,11 +49,31 @@ function formatPeso(value: number): string {
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function YakapScreen() {
+export default function YakapScreen({
+  route: routeProp,
+}: { route?: { params?: { tab?: string } } } = {}) {
+  const navigation = useNavigation<any>();
+  let hookRoute: any = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    hookRoute = useRoute<any>();
+  } catch {
+    // ignore
+  }
+  const routeParams = routeProp?.params ?? hookRoute?.params;
   const { accreditationNumber } = useClinic();
 
   // Active point-of-care tab
-  const [activeTab, setActiveTab] = useState<YakapTab>('pin-checker');
+  const [activeTab, setActiveTab] = usePersistedTab<YakapTab>({
+    storageKey: 'clinicez_yakap_active_tab',
+    allowedValues: ['pin-checker', 'gamot', 'masterlist'],
+    defaultValue: 'pin-checker',
+    routeParam: routeParams?.tab,
+    queryParam: 'tab',
+    queryParamAliases: ['section'],
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('yakap'),
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // GAMOT Ledger Tab State

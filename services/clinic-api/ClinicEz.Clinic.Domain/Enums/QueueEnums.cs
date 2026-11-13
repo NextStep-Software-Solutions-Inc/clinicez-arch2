@@ -6,7 +6,16 @@ public enum VisitType
     AcuteIllnessConsultation = 2,
     ChronicDiseaseFollowUp = 3,
     PreventiveHealthAssessment = 4,
-    UrgentCareVisit = 5
+    UrgentCareVisit = 5,
+
+    // Legacy visit types preserved for backwards compatibility and test fixtures
+    Consultation = 6,
+    VitalsCheckOnly = 7,
+    RetailPurchase = 8,
+    StandaloneProcedure = 9,
+    LaboratorySpecimen = 10,
+    AdministrativeDocument = 11,
+    CashierSettlement = 12
 }
 
 public static class VisitTypeExtensions
@@ -17,6 +26,7 @@ public static class VisitTypeExtensions
         VisitType.AcuteIllnessConsultation => true,
         VisitType.ChronicDiseaseFollowUp => true,
         VisitType.UrgentCareVisit => true,
+        VisitType.Consultation => true,
         _ => false
     };
 
@@ -37,6 +47,13 @@ public static class VisitTypeExtensions
         VisitType.ChronicDiseaseFollowUp => "Chronic Disease Follow-Up",
         VisitType.PreventiveHealthAssessment => "Preventive Health Assessment",
         VisitType.UrgentCareVisit => "Urgent Care Visit",
+        VisitType.Consultation => "Consultation",
+        VisitType.VitalsCheckOnly => "Vitals Check",
+        VisitType.RetailPurchase => "Retail Purchase",
+        VisitType.StandaloneProcedure => "Standalone Procedure",
+        VisitType.LaboratorySpecimen => "Laboratory Specimen",
+        VisitType.AdministrativeDocument => "Administrative Document",
+        VisitType.CashierSettlement => "Cashier Settlement",
         _ => string.Empty
     };
 }

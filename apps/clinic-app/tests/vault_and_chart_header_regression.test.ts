@@ -248,6 +248,23 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(adminVaultMarkup).toContain('MC-2026-0001');
     expect(adminVaultMarkup).toContain('REF-2026-0001');
     expect(adminVaultMarkup).not.toContain('Attach External Document');
+    // Issue #167: Header contains both Issue Certificate and Issue Referral actions
+    expect(adminVaultMarkup).toContain('Issue Certificate');
+    expect(adminVaultMarkup).toContain('Issue Referral');
+  });
+
+  test('2c. Issue #167: Empty Admin Vault renders dual CTAs (Issue Certificate & Issue Referral Letter)', () => {
+    const emptyMarkup = renderToStaticMarkup(
+      React.createElement(AdministrativeDocumentsTab, {
+        patient: mockPatient,
+        medicalCertificates: [],
+        referralLetters: [],
+      })
+    );
+
+    expect(emptyMarkup).toContain('No Issued Administrative Documents');
+    expect(emptyMarkup).toContain('Issue Medical Certificate');
+    expect(emptyMarkup).toContain('Issue Referral Letter');
   });
 
   test('3. ExternalDocumentVaultTab invokes onUploadDocument when Attach External Document is clicked', () => {
@@ -285,5 +302,26 @@ describe('Consultation Chart Header & Vault Regression Tests', () => {
     expect(CHART_TAB_DESCRIPTIONS.immunizations).toContain('immunizations');
     expect(CHART_TAB_DESCRIPTIONS.profiles).toContain('profiles');
     expect(CHART_TAB_DESCRIPTIONS.vault).toBe('External document vault, outside imaging films, and clearances');
+  });
+
+  test('5. Issue #167: IssueReferralLetterModal is exported from patient components and AdministrativeDocumentsTab mounts both issuance modals', async () => {
+    const patientIndexSource = fs.readFileSync(
+      path.resolve(__dirname, '../components/patient/index.ts'),
+      'utf8',
+    );
+    expect(patientIndexSource).toContain('IssueReferralLetterModal');
+    expect(patientIndexSource).toContain('IssueReferralLetterModalProps');
+
+    const adminVaultSource = fs.readFileSync(
+      path.resolve(__dirname, '../components/chart/AdministrativeDocumentsTab.tsx'),
+      'utf8',
+    );
+    expect(adminVaultSource).toContain('import IssueReferralLetterModal');
+    expect(adminVaultSource).toContain('<IssueReferralLetterModal');
+    expect(adminVaultSource).toContain('open-issue-referral-btn');
+    expect(adminVaultSource).toContain('open-issue-med-cert-btn');
+    expect(adminVaultSource).toContain("filterType === 'REFERRALS' && filteredReferrals.length === 0");
+    expect(adminVaultSource).toContain('No Referral Letters');
+    expect(adminVaultSource).toContain('empty-filter-issue-referral-btn');
   });
 });

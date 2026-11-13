@@ -129,7 +129,8 @@ function CommsChatButtonContent() {
 
 function CommsChatButton() {
   const commsCtx = React.useContext(CommsContext);
-  if (!commsCtx) return null;
+  const { isCommsEnabled } = useClinicComms();
+  if (!commsCtx || isCommsEnabled === false) return null;
   return <CommsChatButtonContent />;
 }
 

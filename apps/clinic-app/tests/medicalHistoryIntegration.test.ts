@@ -133,6 +133,7 @@ const {
   matchProblemToPersonalHistoryCondition,
   mergeOtherConditionDescriptions,
   reconcilePersonalHistoryWithClinicalRecords,
+  getLockedPersonalConditionCodes,
   defaultPhilHealthProfile,
 } = await import('../components/chart/ClinicalHistoryTab');
 
@@ -617,6 +618,181 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
         })
       );
       expect(tabMarkup).not.toContain('Document Allergy / Adverse Sensitivity');
+    });
+  });
+
+  describe('6. Issue #136: Prevent Untoggling Conditions Linked to Active Structured Problems', () => {
+    test('6.1 getLockedPersonalConditionCodes locks conditions linked to active Structured Problems', () => {
+      const locked = getLockedPersonalConditionCodes({
+        problems: [
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus without complications', status: 'Active' },
+          { icd10Code: 'I10', problemTitle: 'Essential (primary) hypertension', status: 'Active' },
+          { icd10Code: 'M10.9', problemTitle: 'Gout, unspecified', status: 'Active' },
+        ],
+        allergies: [],
+      });
+
+      expect(locked.has('006')).toBe(true); // Diabetes Mellitus
+      expect(locked.get('006')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(locked.has('011')).toBe(true); // Hypertension
+      expect(locked.get('011')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(locked.has('998')).toBe(true); // Others (Gout)
+      expect(locked.get('998')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+      expect(locked.has('002')).toBe(false); // Asthma not documented
+    });
+
+    test('6.2 getLockedPersonalConditionCodes does NOT lock conditions for Resolved or Inactive problems', () => {
+      const lockedResolved = getLockedPersonalConditionCodes({
+        problems: [
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus without complications', status: 'Resolved' },
+          { icd10Code: 'I10', problemTitle: 'Essential (primary) hypertension', status: 'Inactive' },
+        ],
+        allergies: [],
+      });
+
+      expect(lockedResolved.has('006')).toBe(false);
+      expect(lockedResolved.has('011')).toBe(false);
+      expect(lockedResolved.size).toBe(0);
+
+      // Multiple problems: one active, one resolved for same condition -> stays locked until all resolved
+      const mixed = getLockedPersonalConditionCodes({
+        problems: [
+          { icd10Code: 'E10.9', problemTitle: 'Type 1 diabetes mellitus', status: 'Resolved' },
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus', status: 'Active' },
+        ],
+        allergies: [],
+      });
+      expect(mixed.has('006')).toBe(true);
+    });
+
+    test('6.3 Active documented allergies lock condition 001', () => {
+      const lockedAllergy = getLockedPersonalConditionCodes({
+        problems: [],
+        allergies: [{ allergen: 'Amoxicillin', status: 'Active' }],
+      });
+
+      expect(lockedAllergy.has('001')).toBe(true);
+      expect(lockedAllergy.get('001')).toBe('Managed in Documented Allergies — remove allergy to remove.');
+
+      const inactiveAllergy = getLockedPersonalConditionCodes({
+        problems: [],
+        allergies: [{ allergen: 'Penicillin', status: 'Inactive' }],
+      });
+      expect(inactiveAllergy.has('001')).toBe(false);
+
+      // Precedence: If active problem also maps to 001, Structured Problem List message takes precedence
+      const both = getLockedPersonalConditionCodes({
+        problems: [{ icd10Code: 'J30.9', problemTitle: 'Allergic rhinitis, unspecified', status: 'Active' }],
+        allergies: [{ allergen: 'Pollen', status: 'Active' }],
+      });
+      expect(both.has('001')).toBe(true);
+      expect(both.get('001')).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+    });
+
+    test('6.4 reconcilePersonalHistoryWithClinicalRecords ignores Resolved problems and Inactive allergies', () => {
+      // Patient had '006' untoggled in baseline
+      const reconciled = reconcilePersonalHistoryWithClinicalRecords({
+        selectedCodes: ['011'],
+        otherDesc: '',
+        problems: [
+          { icd10Code: 'E11.9', problemTitle: 'Type 2 diabetes mellitus', status: 'Resolved' },
+          { icd10Code: 'J45.9', problemTitle: 'Asthma, unspecified', status: 'Active' },
+        ],
+        allergies: [{ allergen: 'Shellfish', status: 'Inactive' }],
+      });
+
+      expect(reconciled.codes.has('006')).toBe(false); // Resolved problem does NOT auto-reselect
+      expect(reconciled.codes.has('001')).toBe(false); // Inactive allergy does NOT auto-reselect
+      expect(reconciled.codes.has('002')).toBe(true); // Active Asthma IS auto-reconciled
+      expect(reconciled.codes.has('011')).toBe(true); // Baseline Hypertension preserved
+    });
+
+    test('6.5 Chip toggle protection prevents untoggling locked conditions and allows unlocked ones', () => {
+      const lockedCodes = new Map<string, string>([
+        ['006', 'Managed in Structured Problem List — resolve or delete problem to remove.'],
+      ]);
+
+      let selected = new Set(['006', '002']); // 006 is locked, 002 is self-reported
+      let notifiedReason: string | null = null;
+
+      const simulateToggle = (code: string) => {
+        if (selected.has(code)) {
+          const reason = lockedCodes.get(code);
+          if (reason) {
+            notifiedReason = reason;
+            return; // blocked
+          }
+          selected.delete(code);
+        } else {
+          selected.add(code);
+        }
+      };
+
+      // Attempt to untoggle locked '006'
+      simulateToggle('006');
+      expect(selected.has('006')).toBe(true);
+      expect(notifiedReason).toBe('Managed in Structured Problem List — resolve or delete problem to remove.');
+
+      // Untoggle unlocked self-reported '002'
+      simulateToggle('002');
+      expect(selected.has('002')).toBe(false);
+
+      // Toggle back on
+      simulateToggle('002');
+      expect(selected.has('002')).toBe(true);
+
+      // When problem is resolved, code unlocks and can be untoggled
+      lockedCodes.delete('006');
+      simulateToggle('006');
+      expect(selected.has('006')).toBe(false);
+    });
+
+    test('6.6 Component renders lock icon, title tooltip, and accessibility label for active problem condition', () => {
+      const markupWithoutProblems = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: {
+            ...defaultPhilHealthProfile,
+            medicalHistories: [{ code: '006', specificDesc: 'Diabetes Mellitus' }],
+          },
+        })
+      );
+
+      // Normal rendering without active problems: toggle personal Diabetes Mellitus (unlocked)
+      expect(markupWithoutProblems).toContain('Toggle personal Diabetes Mellitus');
+      expect(markupWithoutProblems).not.toContain('Toggle personal Diabetes Mellitus (locked)');
+
+      // Rendering with active problem for Diabetes Mellitus
+      const markupWithActiveProblem = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: {
+            ...defaultPhilHealthProfile,
+            medicalHistories: [{ code: '006', specificDesc: 'Diabetes Mellitus' }],
+          },
+          initialProblems: [
+            {
+              id: 'prob-e11',
+              clinicId: 'clinic-1',
+              patientId: mockPatient.id,
+              icd10Code: 'E11.9',
+              problemTitle: 'Type 2 diabetes mellitus without complications',
+              status: 'Active',
+              severity: 'Moderate',
+              isChronicNcd: true,
+              recordedByDoctorId: 'doc-1',
+              recordedByDoctorName: 'Dr. Cruz',
+              createdAt: '2025-01-01',
+            },
+          ],
+        })
+      );
+
+      // Locked chip attributes:
+      expect(markupWithActiveProblem).toContain('Toggle personal Diabetes Mellitus (locked)');
+      expect(markupWithActiveProblem).toContain(
+        'title="Managed in Structured Problem List — resolve or delete problem to remove."'
+      );
     });
   });
 });

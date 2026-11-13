@@ -28,6 +28,7 @@ import {
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   parseConfiguredSearchFields,
 } from '../../components/patient/PatientSearchResultRow';
@@ -174,7 +175,17 @@ export default function BillingScreen() {
   const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, settings } = useClinic();
   const { current: currentStaff, currentName } = useStaff();
 
-  const [billingMode, setBillingMode] = useState<BillingMode>('queue');
+  const [billingMode, setBillingMode] = usePersistedTab<BillingMode>({
+    storageKey: 'clinicez_billing_mode',
+    allowedValues: ['queue', 'unsettled', 'paid', 'registry', 'retail'],
+    defaultValue: 'queue',
+    routeParam: (route?.params as any)?.mode,
+    queryParam: 'mode',
+    queryParamAliases: ['tab'],
+    omitDefaultFromUrl: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('billing'),
+  });
   const [walkInCustomerName, setWalkInCustomerName] = useState('');
   const [walkInCustomerTouched, setWalkInCustomerTouched] = useState(false);
   const [registrySearch, setRegistrySearch] = useState('');

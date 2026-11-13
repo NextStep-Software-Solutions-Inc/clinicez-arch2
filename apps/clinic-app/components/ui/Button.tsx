@@ -38,6 +38,7 @@ export interface ButtonProps extends Omit<PressableProps, 'style'> {
   rightIcon?: string;
   loading?: boolean;
   disabled?: boolean;
+  spinIcon?: boolean;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   numberOfLines?: number;
@@ -56,6 +57,7 @@ export default function Button({
   rightIcon,
   loading = false,
   disabled = false,
+  spinIcon = false,
   style,
   textStyle,
   numberOfLines,
@@ -133,7 +135,7 @@ export default function Button({
       ) : loading ? (
         <ActivityIndicator size="small" color={variantStyles.indicatorColor} />
       ) : showLeftIcon ? (
-        <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
+        <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} spin={spinIcon} />
       ) : null}
 
       {!iconOnly && normalizedTitle ? (

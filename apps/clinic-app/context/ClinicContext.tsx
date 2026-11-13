@@ -21,6 +21,7 @@ import {
   DEFAULT_CLINIC_BRAND_COLOR,
   HEX_COLOR,
   LEGACY_UNSET_ACCENT,
+  isUnsetAccent,
 } from '../constants/color';
 
 export const CLINIC_LOGO_STORAGE_KEY = 'clinicez_clinic_logo';
@@ -212,7 +213,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       const cleanServerColor = data?.primaryColorHex?.trim();
       if (
         cleanServerColor &&
-        cleanServerColor.toLowerCase() !== LEGACY_UNSET_ACCENT.toLowerCase() &&
+        !isUnsetAccent(cleanServerColor) &&
         HEX_COLOR.test(cleanServerColor)
       ) {
         const normalizedServerColor = cleanServerColor.toUpperCase();
@@ -297,10 +298,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setPrimaryColorHex = useCallback(async (colorHex: string | null): Promise<boolean> => {
-    const isReset =
-      !colorHex ||
-      !colorHex.trim() ||
-      colorHex.trim().toLowerCase() === LEGACY_UNSET_ACCENT.toLowerCase();
+    const isReset = !colorHex || isUnsetAccent(colorHex);
     const targetHex = isReset ? null : colorHex.trim().toUpperCase();
 
     setLocalOverrideColor(targetHex);

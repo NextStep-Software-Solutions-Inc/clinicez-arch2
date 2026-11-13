@@ -90,9 +90,11 @@ export interface MessageDto {
 export interface ParticipantDto {
   id: string;
   userId: string;
+  participantId?: string;
   displayName: string;
   role: string;
   joinedAtUtc: string;
+  leftAtUtc?: string | null;
 }
 
 export interface ConversationDto {
@@ -102,7 +104,7 @@ export interface ConversationDto {
   branchId?: string | null;
   scope: ConversationScope;
   kind: ConversationKind;
-  title: string;
+  title?: string | null;
   contextType?: string | null;
   contextId?: string | null;
   category?: MessageCategory | null;
@@ -119,6 +121,7 @@ export interface ConversationDto {
   lastMessageAtUtc?: string | null;
   lastMessageSnippet?: string | null;
   messageCount: number;
+  unreadCount?: number;
   lastSeq: number;
   createdAtUtc: string;
   createdBy: string;

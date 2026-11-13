@@ -70,6 +70,7 @@ import type {
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { formatLongAge } from '../../utils/age';
 import { getSessionItem, setSessionItem, getDeviceItem, setDeviceItem } from '../../utils/deviceStorage';
+import { usePersistedTab } from '../../hooks/usePersistedTab';
 import {
   InlinePhysicalExamCard,
   DEFAULT_PHYSICAL_EXAM_NORMAL,
@@ -110,6 +111,9 @@ import {
   shouldOverlayLocalConsultationDraft,
   mergeConsultationRecordWithLocalDraft,
   type BuildConsultationDraftPayloadInput,
+  HOME_INSTRUCTION_PRESETS,
+  toggleHomeInstructionPreset,
+  type HomeInstructionPreset,
 } from '../../components/consultation';
 import {
   normalizeTeethToMultiRecord,
@@ -375,6 +379,9 @@ export {
   buildConsultationDraftPayload,
   rehydrateEncounterPlanManagementWithWorkspace,
   type BuildConsultationDraftPayloadInput,
+  HOME_INSTRUCTION_PRESETS,
+  type HomeInstructionPreset,
+  toggleHomeInstructionPreset,
 };
 
 export default function ConsultationsScreen() {
@@ -450,12 +457,17 @@ export default function ConsultationsScreen() {
     documents: 'Issued medical certificates and referral letters',
     dental: 'Odontogram findings, tooth condition, surfaces, and dental procedures',
   };
-  const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>(() => {
-    const saved = getSessionItem('clinicez_consultations_active_chart_tab') as ChartReviewTab | null;
-    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'documents', 'dental'].includes(saved)) {
-      return saved;
-    }
-    return 'summary';
+  const [activeChartTab, setActiveChartTab] = usePersistedTab<ChartReviewTab>({
+    storageKey: 'clinicez_consultations_active_chart_tab',
+    allowedValues: ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'documents', 'dental'],
+    defaultValue: 'summary',
+    routeParam: (route?.params as any)?.chartTab,
+    queryParam: 'chartTab',
+    queryParamAliases: ['tab', 'section'],
+    syncUrl: Boolean(selectedPatient),
+    clearUrlOnInactive: true,
+    navigation,
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
   });
 
   const [chartTabHistory, setChartTabHistory] = useState<ChartReviewTab[]>([]);
@@ -464,7 +476,6 @@ export default function ConsultationsScreen() {
     if (tab === activeChartTab) return;
     setChartTabHistory((prev) => pushChartTabHistory(prev, activeChartTab, tab));
     setActiveChartTab(tab);
-    setSessionItem('clinicez_consultations_active_chart_tab', tab);
   };
   const [isWorkspaceExpanded, setIsWorkspaceExpanded] = useState<boolean>(() => {
     return getSessionItem('clinicez_consultations_workspace_expanded') === 'true';
@@ -510,14 +521,24 @@ export default function ConsultationsScreen() {
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
 
-  const [queueViewFilter, setQueueViewFilter] = useState<QueueView>(() => {
-    const saved = getDeviceItem(`${staffKey}:queueView`);
-    return saved === 'WaitingForDoctor' || saved === 'MyRoom' || saved === 'PendingProcedure' || saved === 'Completed' || saved === 'All'
-      ? saved
-      : 'WaitingForDoctor';
+  const [queueViewFilter, setQueueViewFilter] = usePersistedTab<QueueView>({
+    storageKey: `${staffKey}:queueView`,
+    allowedValues: ['WaitingForDoctor', 'MyRoom', 'PendingProcedure', 'Completed', 'All'],
+    defaultValue: 'WaitingForDoctor',
+    routeParam: (route?.params as any)?.queueView,
+    queryParam: 'queueView',
+    queryParamAliases: ['view', 'status'],
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
+    navigation,
   });
-  const [selectedStationFilter, setSelectedStationFilter] = useState<string>(() => {
-    return getDeviceItem(`${staffKey}:station`) || 'ALL';
+  const [selectedStationFilter, setSelectedStationFilter] = usePersistedTab<string>({
+    storageKey: `${staffKey}:station`,
+    defaultValue: 'ALL',
+    routeParam: (route?.params as any)?.station,
+    queryParam: 'station',
+    omitDefaultFromUrl: true,
+    pathnameMatcher: (p) => (p || '').includes('consultations'),
+    navigation,
   });
   const didApplyStaffRoomDefaults = useRef(false);
 
@@ -1069,6 +1090,8 @@ export default function ConsultationsScreen() {
   const [refUrgency, setRefUrgency] = useState('Routine');
   const [refReason, setRefReason] = useState('');
   const [refSummary, setRefSummary] = useState('');
+  const [refDiagnosis, setRefDiagnosis] = useState('');
+  const [refValidationAttempted, setRefValidationAttempted] = useState(false);
   const [issuedReferral, setIssuedReferral] = useState<ReferralLetterRecord | null>(null);
 
   const [previewDocModal, setPreviewDocModal] = useState(false);
@@ -1883,20 +1906,49 @@ export default function ConsultationsScreen() {
     setPreviewDocModal(true);
   };
 
+  const handleOpenIssueReferral = () => {
+    if (!refDiagnosis.trim()) {
+      setRefDiagnosis(primaryDiagnosisText());
+    }
+    if (!refSummary.trim() && subjective.trim()) {
+      setRefSummary(subjective.trim());
+    }
+    setRefValidationAttempted(false);
+    setReferralModalVisible(true);
+  };
+
   const handleIssueReferral = async () => {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
-    if (!refFacility.trim() || !refDepartment.trim()) {
-      Alert.alert('Incomplete referral', 'Enter the receiving facility and department / specialty.');
+
+    setRefValidationAttempted(true);
+
+    if (!refFacility.trim()) {
+      Alert.alert('Missing Destination', 'Please enter the receiving facility name.');
       return;
     }
-    const diagnosis = primaryDiagnosisText();
-    const summary = refSummary.trim() || subjective.trim();
-    if (!diagnosis || !summary || !refReason.trim()) {
+    if (!refDepartment.trim()) {
+      Alert.alert('Missing Destination', 'Please enter the receiving department or specialty.');
+      return;
+    }
+    if (!refReason.trim()) {
+      Alert.alert('Missing Reason', 'Please specify the reason for referral.');
+      return;
+    }
+    const diagnosis = refDiagnosis.trim() || primaryDiagnosisText();
+    if (!diagnosis) {
       Alert.alert(
-        'Incomplete referral',
-        'Enter the reason for referral, a clinical summary (or subjective notes) and an assessment before issuing.',
+        'Missing Diagnosis',
+        'Please provide a provisional diagnosis or assessment for the referral letter.',
+      );
+      return;
+    }
+    const summary = refSummary.trim() || subjective.trim();
+    if (!summary) {
+      Alert.alert(
+        'Missing Clinical Summary',
+        'Please provide a brief clinical summary or enter subjective consultation notes.',
       );
       return;
     }
@@ -2662,6 +2714,8 @@ export default function ConsultationsScreen() {
     setRefUrgency('Routine');
     setRefReason('');
     setRefSummary('');
+    setRefDiagnosis('');
+    setRefValidationAttempted(false);
     setDoctorPrc(signerPrc);
     setDoctorPtr(signerPtr);
     setDoctorS2(signerS2);
@@ -2871,6 +2925,8 @@ export default function ConsultationsScreen() {
     setRefUrgency('Routine');
     setRefReason('');
     setRefSummary('');
+    setRefDiagnosis('');
+    setRefValidationAttempted(false);
     setPrescriptionSlip(null);
     setIssuedMedCert(null);
     setIssuedReferral(null);
@@ -6186,6 +6242,12 @@ export default function ConsultationsScreen() {
                     onChange={setPlanManagement}
                     disabled={isSigned}
                     patientAgeYears={patientRecord?.age ?? patientChart?.demographics?.age ?? null}
+                    patientDateOfBirth={
+                      patientRecord?.dateOfBirth ??
+                      patientChart?.demographics?.dateOfBirth ??
+                      patientChart?.demographics?.dob ??
+                      null
+                    }
                     patientSex={patientRecord?.sex ?? patientChart?.demographics?.sex ?? null}
                     orderedLabsCount={orderedLabs.length}
                     completedLabResultsCount={
@@ -6203,7 +6265,7 @@ export default function ConsultationsScreen() {
                       setShowAddRx(true);
                       handleJumpToSection('medicines');
                     }}
-                    onOpenIssueReferral={() => setReferralModalVisible(true)}
+                    onOpenIssueReferral={handleOpenIssueReferral}
                   />
                   <View style={styles.planNotesDivider}>
                     <Input
@@ -6554,26 +6616,38 @@ export default function ConsultationsScreen() {
                       Quick presets:
                     </ThemedText>
                     <View style={styles.chipsRow}>
-                      {[
-                        'Hydration & Rest (8+ glasses water daily)',
-                        'Low Salt & Low Fat Diet',
-                        'Warning Signs: Return immediately if fever > 38.5°C or acute chest pain occurs',
-                        'Strict Medication Compliance: Complete the full course as prescribed',
-                        'Wound Care: Keep area clean, dry, and change dressing daily',
-                      ].map((preset) => (
-                        <Button
-                          key={preset}
-                          variant="subtle"
-                          size="xs"
-                          icon="plus"
-                          title={preset.split(':')[0].split('(')[0].trim()}
-                          onPress={() => {
-                            setHomeInstructions((prev) =>
-                              prev.trim() ? `${prev.trim()}\n• ${preset}` : `• ${preset}`
-                            );
-                          }}
-                        />
-                      ))}
+                      {HOME_INSTRUCTION_PRESETS.map((preset) => {
+                        const isActive = homeInstructions.includes(preset.text);
+                        return (
+                          <Pressable
+                            key={preset.id}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isActive }}
+                            accessibilityLabel={`${preset.label} preset`}
+                            style={({ pressed }) => [
+                              styles.presetChip,
+                              isActive && styles.presetChipActive,
+                              pressed && styles.pressed,
+                            ]}
+                            onPress={() => {
+                              setHomeInstructions((prev) => toggleHomeInstructionPreset(prev, preset.text));
+                            }}
+                          >
+                            <Icon
+                              name={isActive ? 'check' : 'plus'}
+                              size={theme.sizes.iconSm}
+                              color={isActive ? theme.colors.onPrimary : theme.colors.primaryDark}
+                            />
+                            <ThemedText
+                              variant="smallBold"
+                              color={isActive ? theme.colors.onPrimary : theme.colors.primaryDark}
+                              style={styles.presetChipText}
+                            >
+                              {preset.label}
+                            </ThemedText>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   </View>
                 ) : null}
@@ -6693,7 +6767,7 @@ export default function ConsultationsScreen() {
                   }
                   icon="file"
                   variant="outline"
-                  onPress={() => setReferralModalVisible(true)}
+                  onPress={handleOpenIssueReferral}
                 />
               </View>
 
@@ -7543,6 +7617,7 @@ export default function ConsultationsScreen() {
             placeholder="Hospital or clinic name"
             value={refFacility}
             onChangeText={setRefFacility}
+            error={refValidationAttempted && !refFacility.trim() ? 'Receiving facility is required' : undefined}
           />
           <Input
             label="Department / specialty"
@@ -7550,6 +7625,7 @@ export default function ConsultationsScreen() {
             placeholder="e.g. Cardiology, Surgery, Pulmonology"
             value={refDepartment}
             onChangeText={setRefDepartment}
+            error={refValidationAttempted && !refDepartment.trim() ? 'Department / specialty is required' : undefined}
           />
           <View style={styles.stack}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -7573,13 +7649,44 @@ export default function ConsultationsScreen() {
             placeholder="e.g. Specialist workup for chest pain"
             value={refReason}
             onChangeText={setRefReason}
+            error={refValidationAttempted && !refReason.trim() ? 'Reason for referral is required' : undefined}
+          />
+          <Input
+            label="Provisional Diagnosis / Assessment"
+            required
+            placeholder="e.g. Clearance for sports / Congenital murmur workup"
+            value={refDiagnosis}
+            onChangeText={setRefDiagnosis}
+            error={
+              refValidationAttempted && !refDiagnosis.trim() && !primaryDiagnosisText()
+                ? 'Provisional diagnosis is required'
+                : undefined
+            }
+            helperText={
+              primaryDiagnosisText() && refDiagnosis === primaryDiagnosisText()
+                ? 'Pre-populated from consultation assessment. You can edit this for the referral.'
+                : undefined
+            }
           />
           <Input
             label="Clinical summary"
-            placeholder="Summary of examination, diagnostics and initial medications (defaults to the subjective notes)"
+            required
+            placeholder="Summary of examination, diagnostics and clinical findings"
             value={refSummary}
             onChangeText={setRefSummary}
             multiline
+            error={
+              refValidationAttempted && !refSummary.trim() && !subjective.trim()
+                ? 'Clinical summary is required'
+                : undefined
+            }
+            helperText={
+              subjective.trim() && refSummary === subjective.trim()
+                ? 'Pre-populated from consultation subjective notes. You can edit or expand.'
+                : !subjective.trim() && !refSummary.trim()
+                ? 'Required: No subjective notes found in current consultation.'
+                : undefined
+            }
           />
         </Modal>
 
@@ -9223,6 +9330,25 @@ const styles = StyleSheet.create({
   },
   presetsSection: {
     marginVertical: theme.spacing.xs,
+  },
+  presetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    minHeight: theme.sizes.controlSm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radii.full,
+  },
+  presetChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  presetChipText: {
+    fontWeight: '600',
   },
   postEncounterContainer: {
     gap: theme.spacing.md,

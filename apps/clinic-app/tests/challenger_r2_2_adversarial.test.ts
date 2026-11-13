@@ -352,9 +352,11 @@ let mockClinicComms = {
 
 mock.module('../context/ClinicCommsContext', () => ({
   useClinicComms: () => mockClinicComms,
+  getCommsApiBaseUrl: () => 'https://clinicez-comms.api.dev.nextstep-software.com',
 }));
 mock.module('../../context/ClinicCommsContext', () => ({
   useClinicComms: () => mockClinicComms,
+  getCommsApiBaseUrl: () => 'https://clinicez-comms.api.dev.nextstep-software.com',
 }));
 
 const { default: ClinicActiveThread } = await import('../components/comms/ClinicActiveThread');
