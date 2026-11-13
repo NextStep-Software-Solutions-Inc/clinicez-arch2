@@ -1,4 +1,12 @@
 import { describe, expect, test, mock, afterEach } from "bun:test";
+import React from "react";
+
+try {
+  const commsSdkReact = require.resolve("../../../packages/comms-sdk/node_modules/react");
+  mock.module(commsSdkReact, () => React);
+} catch {
+  // Single workspace React instance
+}
 
 mock.module("next/navigation", () => ({
   useParams: () => ({ kind: "rx", token: "RX-01" }),
@@ -10,62 +18,6 @@ mock.module("next/navigation", () => ({
   },
 }));
 
-mock.module("@/components/teleconsult/TeleconsultGuestFlow", () => ({
-  TeleconsultGuestFlow: (props: any) => {
-    if (props?.clinicName || props?.initialStage) {
-      if (props.initialStage === "waiting_room") {
-        return (
-          <div data-testid="teleconsult-guest-flow">
-            <span>Teleconsultation Staging &amp; Waiting Room</span>
-            <span>YAKAP Auto-Exempt</span>
-            <span>Informed Recording Disclosure</span>
-            <span>Consent to Recording</span>
-            <span>Consult Without Recording</span>
-            <span>Enter Consultation Room</span>
-          </div>
-        );
-      }
-      if (props.initialStage === "in_call") {
-        return (
-          <div data-testid="teleconsult-guest-flow">
-            <span>{props.clinicName}</span>
-            <span>Teleconsultation</span>
-            <span>End-to-End Encrypted</span>
-            <span>Clinician Video Feed Active</span>
-            <span>In-Call Chat</span>
-            <span>Leave</span>
-          </div>
-        );
-      }
-      if (props.initialStage === "ended") {
-        return (
-          <div data-testid="teleconsult-guest-flow">
-            <span>Consultation Concluded</span>
-            <span>Return to Teleconsultation Portal</span>
-          </div>
-        );
-      }
-      return (
-        <div data-testid="teleconsult-guest-flow">
-          <span>{props.clinicName}</span>
-          <span>Security Verification</span>
-          <span>5 attempts allowed</span>
-          <span>Verify &amp; Enter Waiting Room</span>
-          <span>YYYY-MM-DD</span>
-          <span>Date of Birth</span>
-          <span>{props.inviteToken}</span>
-        </div>
-      );
-    }
-    return (
-      <div data-testid="teleconsult-guest-flow">
-        <span>Date of Birth</span>
-        <span>{props?.inviteToken}</span>
-      </div>
-    );
-  },
-}));
-
 mock.module("@clerk/nextjs", () => ({
   useUser: () => ({ isSignedIn: false, user: null, isLoaded: true }),
   useAuth: () => ({ getToken: async () => null }),
@@ -74,7 +26,6 @@ mock.module("@clerk/nextjs", () => ({
   SignUpButton: ({ children }: any) => <button>{children}</button>,
 }));
 
-import React from "react";
 import { renderToString } from "react-dom/server";
 import DynamicVerifyPage, { generateMetadata } from "../src/app/verify/[kind]/[token]/page";
 import VerifyIndexPage from "../src/app/verify/page";
