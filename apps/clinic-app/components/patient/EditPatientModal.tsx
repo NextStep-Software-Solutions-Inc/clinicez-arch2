@@ -895,8 +895,9 @@ export function EditPatientModal({
         if (Array.isArray(err.errors)) {
           for (const item of err.errors) {
             if (item.field) {
+              const fieldName = item.field;
               const matchedCustom = renderedCustomFields.find(
-                (f) => f.fieldKey.toLowerCase() === item.field.toLowerCase()
+                (f) => f.fieldKey.toLowerCase() === fieldName.toLowerCase()
               );
               if (matchedCustom) {
                 newCustomFieldErrors[matchedCustom.fieldKey] = item.message;
