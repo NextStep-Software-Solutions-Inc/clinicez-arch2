@@ -110,6 +110,9 @@ import {
   shouldOverlayLocalConsultationDraft,
   mergeConsultationRecordWithLocalDraft,
   type BuildConsultationDraftPayloadInput,
+  HOME_INSTRUCTION_PRESETS,
+  toggleHomeInstructionPreset,
+  type HomeInstructionPreset,
 } from '../../components/consultation';
 import {
   normalizeTeethToMultiRecord,
@@ -375,6 +378,9 @@ export {
   buildConsultationDraftPayload,
   rehydrateEncounterPlanManagementWithWorkspace,
   type BuildConsultationDraftPayloadInput,
+  HOME_INSTRUCTION_PRESETS,
+  type HomeInstructionPreset,
+  toggleHomeInstructionPreset,
 };
 
 export default function ConsultationsScreen() {
@@ -6554,26 +6560,38 @@ export default function ConsultationsScreen() {
                       Quick presets:
                     </ThemedText>
                     <View style={styles.chipsRow}>
-                      {[
-                        'Hydration & Rest (8+ glasses water daily)',
-                        'Low Salt & Low Fat Diet',
-                        'Warning Signs: Return immediately if fever > 38.5°C or acute chest pain occurs',
-                        'Strict Medication Compliance: Complete the full course as prescribed',
-                        'Wound Care: Keep area clean, dry, and change dressing daily',
-                      ].map((preset) => (
-                        <Button
-                          key={preset}
-                          variant="subtle"
-                          size="xs"
-                          icon="plus"
-                          title={preset.split(':')[0].split('(')[0].trim()}
-                          onPress={() => {
-                            setHomeInstructions((prev) =>
-                              prev.trim() ? `${prev.trim()}\n• ${preset}` : `• ${preset}`
-                            );
-                          }}
-                        />
-                      ))}
+                      {HOME_INSTRUCTION_PRESETS.map((preset) => {
+                        const isActive = homeInstructions.includes(preset.text);
+                        return (
+                          <Pressable
+                            key={preset.id}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isActive }}
+                            accessibilityLabel={`${preset.label} preset`}
+                            style={({ pressed }) => [
+                              styles.presetChip,
+                              isActive && styles.presetChipActive,
+                              pressed && styles.pressed,
+                            ]}
+                            onPress={() => {
+                              setHomeInstructions((prev) => toggleHomeInstructionPreset(prev, preset.text));
+                            }}
+                          >
+                            <Icon
+                              name={isActive ? 'check' : 'plus'}
+                              size={theme.sizes.iconSm}
+                              color={isActive ? theme.colors.onPrimary : theme.colors.primaryDark}
+                            />
+                            <ThemedText
+                              variant="smallBold"
+                              color={isActive ? theme.colors.onPrimary : theme.colors.primaryDark}
+                              style={styles.presetChipText}
+                            >
+                              {preset.label}
+                            </ThemedText>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   </View>
                 ) : null}
@@ -9223,6 +9241,25 @@ const styles = StyleSheet.create({
   },
   presetsSection: {
     marginVertical: theme.spacing.xs,
+  },
+  presetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    minHeight: theme.sizes.controlSm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radii.full,
+  },
+  presetChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  presetChipText: {
+    fontWeight: '600',
   },
   postEncounterContainer: {
     gap: theme.spacing.md,

@@ -146,6 +146,8 @@ export {
   clearLocalConsultationDraft,
   shouldOverlayLocalConsultationDraft,
   mergeConsultationRecordWithLocalDraft,
+  HOME_INSTRUCTION_PRESETS,
+  toggleHomeInstructionPreset,
 } from './consultationDraftHelpers';
 export type {
   DraftDiagnosisItem,
@@ -155,4 +157,5 @@ export type {
   BuildConsultationDraftPayloadInput,
   LocalConsultationDraftEntry,
   LocalConsultationDraftLookup,
+  HomeInstructionPreset,
 } from './consultationDraftHelpers';

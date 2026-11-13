@@ -731,3 +731,9 @@ export function mergeConsultationRecordWithLocalDraft(
     draftWorkspace: payload.draftWorkspace ?? null,
   };
 }
+
+export {
+  HOME_INSTRUCTION_PRESETS,
+  toggleHomeInstructionPreset,
+  type HomeInstructionPreset,
+} from './homeInstructionPresets';
