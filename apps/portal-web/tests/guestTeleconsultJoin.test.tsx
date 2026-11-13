@@ -210,8 +210,8 @@ describe("Milestone M7: Guest Teleconsultation Experience in Portal Web", () => 
       expect(html).toContain("Teleconsultation Staging &amp; Waiting Room");
       expect(html).toContain("YAKAP Auto-Exempt");
       expect(html).toContain("Informed Recording Disclosure");
-      expect(html).toContain("Consent to Recording");
-      expect(html).toContain("Consult Without Recording");
+      expect(html).toContain('role="switch"');
+      expect(html).toContain("Call Recording");
       expect(html).toContain("Enter Consultation Room");
     });
 

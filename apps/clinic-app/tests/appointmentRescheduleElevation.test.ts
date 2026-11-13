@@ -260,7 +260,7 @@ describe('Elevated Appointment Reschedule & Inspection Confirmation Dialogs Suit
   });
 
   describe('2. Appointment Inspection Modal Close & Cancel Confirmation', () => {
-    test('renders distinct Close button in footer alongside Cancel button', () => {
+    test('renders header Close button without redundant footer Close button so footer actions spread full width', () => {
       const html = renderToStaticMarkup(
         React.createElement(AppointmentInspectionModal, {
           visible: true,
@@ -271,9 +271,10 @@ describe('Elevated Appointment Reschedule & Inspection Confirmation Dialogs Suit
         })
       );
 
-      // Explicit Close button in footer
-      expect(html).toContain('data-testid="btn-drawer-close-footer"');
-      expect(html).toContain('Close');
+      // Top-right header Close button remains distinct from Cancel
+      expect(html).toContain('data-testid="btn-drawer-close"');
+      // Redundant footer Close button removed so action buttons spread evenly across footer
+      expect(html).not.toContain('data-testid="btn-drawer-close-footer"');
 
       // Cancel button in footer
       expect(html).toContain('data-testid="btn-drawer-cancel"');
@@ -295,7 +296,7 @@ describe('Elevated Appointment Reschedule & Inspection Confirmation Dialogs Suit
       );
 
       expect(html).toContain('data-testid="appointment-inspection-drawer"');
-      expect(html).toContain('btn-drawer-close-footer');
+      expect(html).toContain('btn-drawer-close');
       expect(html).toContain('btn-drawer-cancel');
     });
   });

@@ -655,23 +655,6 @@ export function AppointmentInspectionModal({
             testID="drawer-actions"
             style={styles.footer}
           >
-            <Pressable
-              data-testid="btn-drawer-close-footer"
-              testID="btn-drawer-close-footer"
-              accessibilityRole="button"
-              accessibilityLabel="Close details"
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.btn,
-                styles.btnSecondary,
-                pressed && styles.pressed,
-              ]}
-            >
-              <ThemedText variant="smallBold" color={theme.colors.text}>
-                Close
-              </ThemedText>
-            </Pressable>
-
             <View style={styles.rightActionsRow}>
               {isTeleconsult && currentAppointment.status !== 'Cancelled' ? (
                 <>
@@ -1136,8 +1119,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   rightActionsRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
   },
@@ -1145,6 +1130,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    flexGrow: 1,
+    flexShrink: 0,
     gap: 6,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,

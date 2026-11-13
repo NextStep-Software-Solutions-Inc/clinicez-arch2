@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   View,
   StyleSheet,
@@ -35,7 +35,7 @@ import { useClinicComms, type TeleconsultSessionParams } from '../../context/Cli
 import { useAuth } from '../../context/AuthContext';
 import { clinicService, type TeleconsultStatusDto } from '../../services/clinicService';
 import { notify } from '../../utils/feedback';
-import { theme } from '../../constants/theme';
+import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
 import CustomModal from '../ui/Modal';
 import Button from '../ui/Button';
 import ThemedText from '../ui/ThemedText';
@@ -334,6 +334,27 @@ export interface TeleconsultWaitingRoomModalProps {
   onNavigateToChart?: (patientId?: string, patientName?: string) => void;
 }
 
+function getThemeSchemeSnapshot(): 'light' | 'dark' {
+  return getActiveThemeState().scheme;
+}
+
+function getWebBodyPortal(): ((children: React.ReactNode, container: Element) => React.ReactPortal) | null {
+  if (
+    Platform.OS === 'web' &&
+    typeof document !== 'undefined' &&
+    Boolean(document.body) &&
+    typeof (globalThis as any).Bun === 'undefined'
+  ) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return (require('react-dom') as typeof import('react-dom')).createPortal;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export default function TeleconsultWaitingRoomModal({
   onNavigateToChart,
 }: TeleconsultWaitingRoomModalProps = {}) {
@@ -351,7 +372,7 @@ export default function TeleconsultWaitingRoomModal({
     return null;
   }
 
-  return (
+  const content = (
     <ActiveTeleconsultModal
       key={teleconsultSession.callId || teleconsultSession.appointmentId}
       teleconsultSession={teleconsultSession}
@@ -363,6 +384,26 @@ export default function TeleconsultWaitingRoomModal({
       onNavigateToChart={onNavigateToChart}
     />
   );
+
+  const webPortal = getWebBodyPortal();
+  if (webPortal && typeof document !== 'undefined' && document.body) {
+    return webPortal(
+      <View
+        pointerEvents="box-none"
+        testID="teleconsult-top-portal-host"
+        style={styles.teleconsultTopPortalHost}
+        {...({
+          dataSet: { clinicezTopLayer: 'true' },
+          'data-clinicez-top-layer': 'true',
+        } as any)}
+      >
+        {content}
+      </View>,
+      document.body,
+    );
+  }
+
+  return content;
 }
 
 interface ActiveTeleconsultModalProps {
@@ -385,6 +426,14 @@ function ActiveTeleconsultModal({
   onNavigateToChart,
 }: ActiveTeleconsultModalProps) {
   const { user } = useAuth();
+  const activeThemeScheme = useSyncExternalStore(
+    subscribeActiveTheme,
+    getThemeSchemeSnapshot,
+    getThemeSchemeSnapshot,
+  );
+  const isDarkTheme = activeThemeScheme === 'dark';
+  const pipStageBg = isDarkTheme ? theme.colors.background : theme.colors.surfaceInverse;
+  const pipStageText = isDarkTheme ? theme.colors.text : theme.colors.textInverted;
   const [isInCall, setIsInCall] = useState(false);
   const [isLocalPreviewMode, setIsLocalPreviewMode] = useState(false);
   const [mediaRevision, setMediaRevision] = useState(0);
@@ -1226,208 +1275,218 @@ function ActiveTeleconsultModal({
           pointerEvents="box-none"
           testID="docked-call-mini-bar-wrapper"
         >
-          {isPipActive && (
-            <View
-              testID="docked-pip-frame"
-              data-testid="docked-pip-frame"
-              style={[
-                styles.dockedPipFrame,
-                videoOrientation === 'portrait'
-                  ? styles.dockedPipFramePortrait
-                  : styles.dockedPipFrameLandscape,
-                isDraggingDock && styles.dockedGrabbing,
-                Platform.OS === 'web' && ({ touchAction: 'none', WebkitUserSelect: 'none' } as any),
-              ]}
-              {...panResponder.panHandlers}
-              {...(Platform.OS === 'web' ? { onPointerDown: handleWebDragPointerDown } : {})}
-              accessibilityLabel="Picture-in-picture consultation preview"
-            >
-              {primaryPipTrack ? (
-                <View style={styles.dockedPipVideoLayer} pointerEvents="none">
-                  <WebVideoTrackView
-                    track={primaryPipTrack}
-                    muted={true}
-                    mirror={isPrimaryLocal}
-                  />
-                </View>
-              ) : (
-                <View
-                  style={styles.dockedPipFallback}
-                  testID="docked-pip-fallback"
-                  data-testid="docked-pip-fallback"
-                  pointerEvents="none"
-                >
-                  <View style={styles.dockedPipAvatarCircle}>
-                    <ThemedText variant="bodyBold" color={theme.colors.onPrimary}>
-                      {participantInitials}
+          <View
+            testID="docked-unified-card"
+            data-testid="docked-unified-card"
+            style={[
+              styles.dockedUnifiedCard,
+              Platform.OS === 'web' && ({ isolation: 'isolate' } as any),
+            ]}
+          >
+            {isPipActive && (
+              <View
+                testID="docked-pip-frame"
+                data-testid="docked-pip-frame"
+                style={[
+                  styles.dockedPipFrame,
+                  { backgroundColor: pipStageBg },
+                  videoOrientation === 'portrait'
+                    ? styles.dockedPipFramePortrait
+                    : styles.dockedPipFrameLandscape,
+                  isDraggingDock && styles.dockedGrabbing,
+                  Platform.OS === 'web' && ({ touchAction: 'none', WebkitUserSelect: 'none' } as any),
+                ]}
+                {...panResponder.panHandlers}
+                {...(Platform.OS === 'web' ? { onPointerDown: handleWebDragPointerDown } : {})}
+                accessibilityLabel="Picture-in-picture consultation preview"
+              >
+                {primaryPipTrack ? (
+                  <View style={styles.dockedPipVideoLayer} pointerEvents="none">
+                    <WebVideoTrackView
+                      track={primaryPipTrack}
+                      muted={true}
+                      mirror={isPrimaryLocal}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    style={[styles.dockedPipFallback, { backgroundColor: pipStageBg }]}
+                    testID="docked-pip-fallback"
+                    data-testid="docked-pip-fallback"
+                    pointerEvents="none"
+                  >
+                    <View style={styles.dockedPipAvatarCircle}>
+                      <ThemedText variant="bodyBold" color={theme.colors.onPrimary}>
+                        {participantInitials}
+                      </ThemedText>
+                    </View>
+                    <ThemedText variant="captionBold" color={pipStageText} numberOfLines={1}>
+                      {resolvedPatientName}
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textLight}>
+                      {session.mediaTracks.isCameraEnabled ? 'Waiting for Patient Video' : 'Camera Off'}
                     </ThemedText>
                   </View>
-                  <ThemedText variant="captionBold" color={theme.colors.textInverted} numberOfLines={1}>
-                    {resolvedPatientName}
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textLight}>
-                    {session.mediaTracks.isCameraEnabled ? 'Waiting for Patient Video' : 'Camera Off'}
-                  </ThemedText>
-                </View>
-              )}
+                )}
 
-              {remoteVideoTrack && localVideoTrack && (
-                <View style={styles.dockedPipSelfInset} pointerEvents="none">
-                  <WebVideoTrackView track={localVideoTrack} muted={true} mirror={true} />
-                </View>
-              )}
+                {remoteVideoTrack && localVideoTrack && (
+                  <View style={[styles.dockedPipSelfInset, { backgroundColor: pipStageBg }]} pointerEvents="none">
+                    <WebVideoTrackView track={localVideoTrack} muted={true} mirror={true} />
+                  </View>
+                )}
 
-              {isPrimaryLocal && (
-                <View style={styles.dockedPipBadgeBottomLeft} pointerEvents="none">
-                  <ThemedText variant="caption" color={theme.colors.textInverted}>
-                    Self Preview
-                  </ThemedText>
-                </View>
-              )}
+                {isPrimaryLocal && (
+                  <View style={styles.dockedPipBadgeBottomLeft} pointerEvents="none">
+                    <ThemedText variant="caption" color={pipStageText}>
+                      Self Preview
+                    </ThemedText>
+                  </View>
+                )}
 
-              <View
-                style={styles.dockedPipOverlayBar}
-                {...(Platform.OS === 'web' ? { onPointerDown: stopDragPropagation } : {})}
-              >
-                <TouchableOpacity
-                  testID="btn-rotate-docked-pip"
-                  data-testid="btn-rotate-docked-pip"
-                  style={styles.dockedCompactButton}
-                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  onPress={handleToggleOrientation}
-                  accessibilityLabel="Toggle picture-in-picture orientation"
-                  accessibilityRole="button"
+                <View
+                  style={styles.dockedPipOverlayBar}
+                  {...(Platform.OS === 'web' ? { onPointerDown: stopDragPropagation } : {})}
                 >
-                  <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.text} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  testID="btn-close-docked-pip"
-                  data-testid="btn-close-docked-pip"
-                  style={styles.dockedCompactButton}
-                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  onPress={() => setIsPipActive(false)}
-                  accessibilityLabel="Close picture-in-picture"
-                  accessibilityRole="button"
-                >
-                  <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.text} />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    testID="btn-rotate-docked-pip"
+                    data-testid="btn-rotate-docked-pip"
+                    style={styles.dockedCompactButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    onPress={handleToggleOrientation}
+                    accessibilityLabel="Toggle picture-in-picture orientation"
+                    accessibilityRole="button"
+                  >
+                    <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.text} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    testID="btn-close-docked-pip"
+                    data-testid="btn-close-docked-pip"
+                    style={styles.dockedCompactButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    onPress={() => setIsPipActive(false)}
+                    accessibilityLabel="Close picture-in-picture"
+                    accessibilityRole="button"
+                  >
+                    <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.text} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          )}
+            )}
 
-          <View
-            style={[styles.dockedBar, isPipActive && styles.dockedBarWithPip]}
-            testID="docked-call-mini-bar"
-            role="toolbar"
-            accessibilityLabel="Docked Consultation Call Bar"
-          >
             <View
-              testID="docked-drag-handle"
-              data-testid="docked-drag-handle"
-              style={[
-                styles.dockedDragHandle,
-                isDraggingDock && styles.dockedGrabbing,
-                Platform.OS === 'web' && ({ touchAction: 'none', WebkitUserSelect: 'none' } as any),
-              ]}
-              {...panResponder.panHandlers}
-              {...(Platform.OS === 'web' ? { onPointerDown: handleWebDragPointerDown } : {})}
-              accessibilityLabel="Drag docked consultation bar"
-              accessibilityRole="adjustable"
+              style={[styles.dockedBar, isPipActive && styles.dockedBarWithPip]}
+              testID="docked-call-mini-bar"
+              role="toolbar"
+              accessibilityLabel="Docked Consultation Call Bar"
             >
-              <Icon name="gripVertical" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-            </View>
-
-            <View style={styles.dockedInfoSection}>
-              <ThemedText
-                variant="captionBold"
-                color={theme.colors.text}
-                numberOfLines={1}
-                style={styles.dockedPatientName}
-                testID="docked-patient-label"
-                data-testid="docked-patient-label"
+              <View
+                testID="docked-drag-handle"
+                data-testid="docked-drag-handle"
+                style={[
+                  styles.dockedDragHandle,
+                  isDraggingDock && styles.dockedGrabbing,
+                  Platform.OS === 'web' && ({ touchAction: 'none', WebkitUserSelect: 'none' } as any),
+                ]}
+                {...panResponder.panHandlers}
+                {...(Platform.OS === 'web' ? { onPointerDown: handleWebDragPointerDown } : {})}
+                accessibilityLabel="Drag docked consultation bar"
+                accessibilityRole="adjustable"
               >
-                {resolvedPatientName}
-              </ThemedText>
-              {session.recordingState.isRecording && (
-                <View style={styles.dockedRecordingPill}>
-                  <Icon name="recordDot" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                  <ThemedText variant="caption" color={theme.colors.emergencyText}>
-                    REC
-                  </ThemedText>
-                </View>
-              )}
-            </View>
+                <Icon name="gripVertical" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+              </View>
 
-            <View style={styles.dockedControlsSection}>
-              <TouchableOpacity
-                style={styles.dockedCompactButton}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                onPress={session.mediaTracks.toggleMic}
-                accessibilityLabel={session.mediaTracks.isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
-                accessibilityRole="button"
-              >
-                <Icon
-                  name={session.mediaTracks.isMicEnabled ? 'mic' : 'micOff'}
-                  size={theme.sizes.iconSm}
-                  color={session.mediaTracks.isMicEnabled ? theme.colors.text : theme.colors.emergencyText}
-                />
-              </TouchableOpacity>
+              <View style={styles.dockedInfoSection}>
+                <ThemedText
+                  variant="captionBold"
+                  color={theme.colors.text}
+                  numberOfLines={1}
+                  style={styles.dockedPatientName}
+                  testID="docked-patient-label"
+                  data-testid="docked-patient-label"
+                >
+                  {resolvedPatientName}
+                </ThemedText>
+                {session.recordingState.isRecording && (
+                  <View style={styles.dockedRecordingPill}>
+                    <Icon name="recordDot" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                    <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                      REC
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
 
-              <TouchableOpacity
-                style={styles.dockedCompactButton}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                onPress={session.mediaTracks.toggleCamera}
-                accessibilityLabel={session.mediaTracks.isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
-                accessibilityRole="button"
-              >
-                <Icon
-                  name={session.mediaTracks.isCameraEnabled ? 'video' : 'videoOff'}
-                  size={theme.sizes.iconSm}
-                  color={session.mediaTracks.isCameraEnabled ? theme.colors.text : theme.colors.emergencyText}
-                />
-              </TouchableOpacity>
-
-              {isPipSupported && (
+              <View style={styles.dockedControlsSection}>
                 <TouchableOpacity
-                  testID="btn-toggle-pip"
-                  data-testid="btn-toggle-pip"
-                  style={[styles.dockedCompactButton, isPipActive && styles.dockedActiveButton]}
+                  style={styles.dockedCompactButton}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  onPress={handleTogglePip}
-                  accessibilityLabel={isPipActive ? 'Exit picture-in-picture' : 'Enter picture-in-picture'}
+                  onPress={session.mediaTracks.toggleMic}
+                  accessibilityLabel={session.mediaTracks.isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
                   accessibilityRole="button"
                 >
                   <Icon
-                    name="layoutModal"
+                    name={session.mediaTracks.isMicEnabled ? 'mic' : 'micOff'}
                     size={theme.sizes.iconSm}
-                    color={isPipActive ? theme.colors.primaryDark : theme.colors.text}
+                    color={session.mediaTracks.isMicEnabled ? theme.colors.text : theme.colors.emergencyText}
                   />
                 </TouchableOpacity>
-              )}
 
-              <TouchableOpacity
-                testID="btn-maximize-call"
-                data-testid="btn-maximize-call"
-                style={styles.dockedCompactButton}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                onPress={handleMaximizeStage}
-                accessibilityLabel="Maximize call stage"
-                accessibilityRole="button"
-              >
-                <Icon name="maximize" size={theme.sizes.iconSm} color={theme.colors.primary} />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dockedCompactButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  onPress={session.mediaTracks.toggleCamera}
+                  accessibilityLabel={session.mediaTracks.isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+                  accessibilityRole="button"
+                >
+                  <Icon
+                    name={session.mediaTracks.isCameraEnabled ? 'video' : 'videoOff'}
+                    size={theme.sizes.iconSm}
+                    color={session.mediaTracks.isCameraEnabled ? theme.colors.text : theme.colors.emergencyText}
+                  />
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                testID="btn-docked-end-call"
-                data-testid="btn-docked-end-call"
-                style={[styles.dockedCompactButton, styles.dockedEndButton]}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                onPress={() => setIsConfirmEndCallOpen(true)}
-                accessibilityLabel="End consultation call"
-                accessibilityRole="button"
-              >
-                <Icon name="phoneOff" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-              </TouchableOpacity>
+                {isPipSupported && (
+                  <TouchableOpacity
+                    testID="btn-toggle-pip"
+                    data-testid="btn-toggle-pip"
+                    style={[styles.dockedCompactButton, isPipActive && styles.dockedActiveButton]}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    onPress={handleTogglePip}
+                    accessibilityLabel={isPipActive ? 'Exit picture-in-picture' : 'Enter picture-in-picture'}
+                    accessibilityRole="button"
+                  >
+                    <Icon
+                      name="layoutModal"
+                      size={theme.sizes.iconSm}
+                      color={isPipActive ? theme.colors.primaryDark : theme.colors.text}
+                    />
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  testID="btn-maximize-call"
+                  data-testid="btn-maximize-call"
+                  style={styles.dockedCompactButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  onPress={handleMaximizeStage}
+                  accessibilityLabel="Maximize call stage"
+                  accessibilityRole="button"
+                >
+                  <Icon name="maximize" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  testID="btn-docked-end-call"
+                  data-testid="btn-docked-end-call"
+                  style={[styles.dockedCompactButton, styles.dockedEndButton]}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  onPress={() => setIsConfirmEndCallOpen(true)}
+                  accessibilityLabel="End consultation call"
+                  accessibilityRole="button"
+                >
+                  <Icon name="phoneOff" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Animated.View>
@@ -1533,26 +1592,22 @@ function ActiveTeleconsultModal({
           <View style={styles.headerBar}>
             <View style={styles.headerTitleGroup}>
               <Icon name="video" size={theme.sizes.iconMd} color={theme.colors.primary} />
-              <View>
-                <ThemedText variant="title" color={theme.colors.text}>
-                  Virtual Waiting Room
-                </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  {resolvedPatientName} • {teleconsultSession.scheduledTime}
-                </ThemedText>
-              </View>
+              <ThemedText variant="title" color={theme.colors.text} style={styles.headerTitleText}>
+                Virtual Waiting Room
+              </ThemedText>
             </View>
             <View style={styles.headerRightActions}>
-              <Button
+              <TouchableOpacity
                 testID="btn-close-waiting-room"
-                variant="secondary"
-                size="sm"
-                icon="close"
-                iconOnly
+                data-testid="btn-close-waiting-room"
+                style={styles.headerCloseButton}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 onPress={handleCancelCall}
                 accessibilityLabel="Close teleconsult waiting room"
-                style={styles.touchableMinSize}
-              />
+                accessibilityRole="button"
+              >
+                <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.text} />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -1647,8 +1702,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSubtle,
@@ -1656,12 +1711,27 @@ const styles = StyleSheet.create({
   headerTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-start',
     gap: theme.spacing.sm,
+  },
+  headerTitleText: {
+    lineHeight: 22,
+    includeFontPadding: false,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    justifyContent: 'flex-end',
+  },
+  headerCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   body: {
     flex: 1,
@@ -1673,27 +1743,36 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     padding: theme.spacing.md,
   },
+  teleconsultTopPortalHost: {
+    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2147483000,
+  },
   dockedBarContainer: {
     position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
     bottom: theme.spacing.xl,
     right: theme.spacing.xl,
-    zIndex: 9999,
+    zIndex: 2000000,
     alignItems: 'stretch',
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    elevation: 8,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.transparent,
+    ...theme.shadows.lg,
+  },
+  dockedUnifiedCard: {
+    borderRadius: theme.radii.md,
+    overflow: 'hidden',
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    backgroundColor: theme.colors.transparent,
+    alignItems: 'stretch',
   },
   dockedPipFrame: {
     backgroundColor: theme.colors.surfaceInverse,
-    borderColor: theme.colors.primaryBorder,
-    borderWidth: theme.sizes.borderWidth,
-    borderBottomWidth: 0,
-    borderTopLeftRadius: theme.radii.md,
-    borderTopRightRadius: theme.radii.md,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.primaryBorder,
     overflow: 'hidden',
     position: 'relative',
     cursor: 'grab' as any,
@@ -1768,23 +1847,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.primaryBorder,
-    borderWidth: theme.sizes.borderWidth,
-    borderRadius: theme.radii.md,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 2,
     height: 38,
     maxHeight: 38,
     gap: theme.spacing.xs,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    overflow: 'hidden',
   },
   dockedBarWithPip: {
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
     minWidth: 320,
   },
   dockedDragHandle: {
@@ -1870,7 +1940,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: '100vw' as any,
     height: '100vh' as any,
-    zIndex: 9999,
+    zIndex: 2000000,
     backgroundColor: theme.colors.surface,
   },
   persistentVideoHidden: {
@@ -1890,7 +1960,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10000,
+    zIndex: 2000001,
     padding: theme.spacing.lg,
   },
   confirmModalCard: {

@@ -72,8 +72,36 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
     paymentPolicy === 'Prepaid' &&
     paymentStatus === 'Unpaid' &&
     !isYakapExempt;
+  const isRecordingEnabled = recordingConsentStatus === 'Approved';
+  const recordingSubtitle = isRecordingEnabled
+    ? 'Recording is on for this consultation.'
+    : recordingConsentStatus === 'Rejected'
+      ? 'Recording is off for this consultation.'
+      : 'Turn on to record this consultation for the medical chart.';
   const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
   const isDoctor = userRole === 'Clinician';
+
+  const clearedBannerCopy =
+    paymentPolicy === 'Exempt'
+      ? {
+          title: 'Exempt — Admission Cleared',
+          subtitle: 'This consultation is exempt from payment and ready to start.',
+        }
+      : paymentPolicy === 'Postpaid'
+        ? {
+            title: 'Postpaid — Admission Cleared',
+            subtitle: 'Charges will be settled after the visit. Ready to start.',
+          }
+        : {
+            title:
+              paymentStatus === 'Overridden'
+                ? 'Prepaid — Override Approved'
+                : 'Prepaid — Payment Cleared',
+            subtitle:
+              paymentStatus === 'Overridden'
+                ? 'Staff admission override approved. Ready to start.'
+                : 'Prepayment confirmed and ready to start.',
+          };
 
   // Override note validation: reasonNote >= 5 chars
   const trimmedReason = overrideReason.trim();
@@ -382,15 +410,17 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
               {/* Payment Gate Banner */}
               {isPrepaidBlocked ? (
                 <View style={styles.blockedCard}>
-                  {renderIcon ? (
-                    renderIcon('lock', { size: 18, color: lightColors.warningText })
-                  ) : (
-                    <Text style={styles.blockedIcon}>LOCK</Text>
-                  )}
+                  <View style={styles.bannerIconContainer}>
+                    {renderIcon ? (
+                      renderIcon('lock', { size: 18, color: lightColors.warningText })
+                    ) : (
+                      <Text style={styles.blockedIcon}>LOCK</Text>
+                    )}
+                  </View>
                   <View style={styles.gateTextContainer}>
-                    <Text style={styles.blockedTitle}>Payment Required Before Consultation</Text>
+                    <Text style={styles.blockedTitle}>Prepaid — Payment Required Before Consultation</Text>
                     <Text style={styles.blockedSubtitle}>
-                      Prepayment Gate: Settlement Required. Admission will unlock immediately upon cashier or online payment.
+                      Prepayment Gate: Settlement Required. Admission unlocks immediately after payment.
                     </Text>
                     {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
                       <TouchableOpacity
@@ -406,20 +436,16 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 </View>
               ) : (
                 <View style={styles.clearedCard}>
-                  {renderIcon ? (
-                    renderIcon('shieldCheck', { size: 18, color: lightColors.routineText })
-                  ) : (
-                    <Text style={styles.clearedIcon}>OK</Text>
-                  )}
+                  <View style={styles.bannerIconContainer}>
+                    {renderIcon ? (
+                      renderIcon('shieldCheck', { size: 18, color: lightColors.routineText })
+                    ) : (
+                      <Text style={styles.clearedIcon}>OK</Text>
+                    )}
+                  </View>
                   <View style={styles.gateTextContainer}>
-                    <Text style={styles.clearedTitle}>
-                      {paymentPolicy === 'Exempt' ? 'Admission Cleared (Exempt)' : 'Payment Cleared'}
-                    </Text>
-                    <Text style={styles.clearedSubtitle}>
-                      {paymentPolicy === 'Exempt'
-                        ? 'Consultation is exempt from prepayment. Ready for admission.'
-                        : 'Payment confirmed. Ready for consultation.'}
-                    </Text>
+                    <Text style={styles.clearedTitle}>{clearedBannerCopy.title}</Text>
+                    <Text style={styles.clearedSubtitle}>{clearedBannerCopy.subtitle}</Text>
                   </View>
                 </View>
               )}
@@ -427,50 +453,38 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
               {/* Informed Recording Consent (hidden cleanly when disabled at facility/workflow level) */}
               {recordingConsentStatus !== 'Disabled' && (
                 <View style={styles.consentCard}>
-                  <Text style={styles.consentTitle}>Call Recording Notice</Text>
-                  <Text style={styles.consentSubtitle}>
-                    Informed Recording Disclosure. This teleconsultation may be recorded for medical records under RA 10173 and facility policy.
-                  </Text>
-
-                  <View style={styles.consentActions}>
+                  <View style={styles.consentCardRow}>
+                    <View style={styles.consentTextColumn}>
+                      <Text style={styles.consentTitle}>Call Recording</Text>
+                      <Text style={styles.consentSubtitle}>{recordingSubtitle}</Text>
+                    </View>
                     <TouchableOpacity
-                      style={[
-                        styles.consentButton,
-                        recordingConsentStatus === 'Approved' && styles.consentButtonApproved
-                      ]}
-                      onPress={() => onSubmitConsent && onSubmitConsent(true)}
-                      disabled={recordingConsentStatus === 'Approved'}
-                      accessibilityRole="button"
-                      accessibilityLabel="Consent to session recording"
+                      testID="switch-call-recording"
+                      style={styles.recordingSwitchHitArea}
+                      onPress={() =>
+                        onSubmitConsent &&
+                        onSubmitConsent(
+                          !isRecordingEnabled,
+                          isRecordingEnabled ? 'Patient declined recording' : undefined,
+                        )
+                      }
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: isRecordingEnabled }}
+                      accessibilityLabel={isRecordingEnabled ? 'Turn off call recording' : 'Turn on call recording'}
                     >
-                      <Text
+                      <View
                         style={[
-                          styles.consentButtonText,
-                          recordingConsentStatus === 'Approved' && styles.consentButtonTextApproved
+                          styles.recordingSwitchTrack,
+                          isRecordingEnabled && styles.recordingSwitchTrackOn,
                         ]}
                       >
-                        Consent to Recording
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.consentButton,
-                        recordingConsentStatus === 'Rejected' && styles.consentButtonRejected
-                      ]}
-                      onPress={() => onSubmitConsent && onSubmitConsent(false, 'Patient declined recording')}
-                      disabled={recordingConsentStatus === 'Rejected'}
-                      accessibilityRole="button"
-                      accessibilityLabel="Consult without recording"
-                    >
-                      <Text
-                        style={[
-                          styles.consentButtonText,
-                          recordingConsentStatus === 'Rejected' && styles.consentButtonTextRejected
-                        ]}
-                      >
-                        Consult Without Recording
-                      </Text>
+                        <View
+                          style={[
+                            styles.recordingSwitchThumb,
+                            isRecordingEnabled && styles.recordingSwitchThumbOn,
+                          ]}
+                        />
+                      </View>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -898,13 +912,18 @@ const styles = StyleSheet.create({
     padding: spaceScale.md,
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: spaceScale.md,
     marginBottom: spaceScale.md
+  },
+  bannerIconContainer: {
+    padding: spaceScale.xs,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   blockedIcon: {
     fontSize: fontSizeScale.lg,
     fontWeight: '700',
-    color: lightColors.warningText,
-    marginRight: spaceScale.sm
+    color: lightColors.warningText
   },
   gateTextContainer: {
     flex: 1
@@ -943,13 +962,13 @@ const styles = StyleSheet.create({
     padding: spaceScale.md,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spaceScale.md,
     marginBottom: spaceScale.md
   },
   clearedIcon: {
     fontSize: fontSizeScale.lg,
     fontWeight: '700',
-    color: lightColors.successText,
-    marginRight: spaceScale.sm
+    color: lightColors.successText
   },
   clearedTitle: {
     fontSize: fontSizeScale.sm,
@@ -969,6 +988,15 @@ const styles = StyleSheet.create({
     padding: spaceScale.md,
     marginBottom: spaceScale.md
   },
+  consentCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spaceScale.md
+  },
+  consentTextColumn: {
+    flex: 1
+  },
   consentTitle: {
     fontSize: fontSizeScale.sm,
     fontWeight: '700',
@@ -977,44 +1005,34 @@ const styles = StyleSheet.create({
   },
   consentSubtitle: {
     fontSize: fontSizeScale.xs,
-    color: lightColors.textSecondary,
-    marginBottom: spaceScale.sm
+    color: lightColors.textSecondary
   },
-  consentActions: {
-    flexDirection: 'row',
-    gap: spaceScale.xs
-  },
-  consentButton: {
-    flex: 1,
+  recordingSwitchHitArea: {
+    minWidth: sizes.touchTarget,
     minHeight: sizes.touchTarget,
-    backgroundColor: lightColors.surfaceSubtle,
-    borderColor: lightColors.border,
-    borderWidth: 1,
-    borderRadius: radiusScale.sm,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spaceScale.xs
+    justifyContent: 'center'
   },
-  consentButtonApproved: {
-    backgroundColor: lightColors.routineBg,
-    borderColor: lightColors.routineBorder
+  recordingSwitchTrack: {
+    width: 48,
+    height: 28,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.border,
+    padding: 2,
+    justifyContent: 'center'
   },
-  consentButtonRejected: {
-    backgroundColor: lightColors.surfaceSubtle,
-    borderColor: lightColors.border
+  recordingSwitchTrackOn: {
+    backgroundColor: lightColors.primary
   },
-  consentButtonText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '600',
-    color: lightColors.textSecondary,
-    textAlign: 'center'
+  recordingSwitchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: radiusScale.full,
+    backgroundColor: lightColors.onPrimary,
+    alignSelf: 'flex-start'
   },
-  consentButtonTextApproved: {
-    color: lightColors.routineText,
-    fontWeight: '700'
-  },
-  consentButtonTextRejected: {
-    color: lightColors.textMuted
+  recordingSwitchThumbOn: {
+    alignSelf: 'flex-end'
   },
   bottomBar: {
     flexDirection: 'row',

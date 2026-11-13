@@ -58,12 +58,40 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
   const isDoctor = userRole === 'Clinician';
 
+  const isRecordingEnabled = recordingConsentStatus === 'Approved';
+  const recordingSubtitle = isRecordingEnabled
+    ? 'Recording is on for this consultation.'
+    : recordingConsentStatus === 'Rejected'
+      ? 'Recording is off for this consultation.'
+      : 'Turn on to record this consultation for the medical chart.';
   const trimmedReason = overrideReason.trim();
   const isReasonValid = trimmedReason.length >= 5;
   const canSubmitOverride =
     isReasonValid &&
     !isSubmittingOverride &&
     (Boolean(onStaffPaymentOverride) || Boolean(onEmergencyPaymentOverride));
+
+  const clearedBannerCopy =
+    paymentPolicy === 'Exempt'
+      ? {
+          title: 'Exempt — Admission Cleared',
+          subtitle: 'This consultation is exempt from payment and ready to start.',
+        }
+      : paymentPolicy === 'Postpaid'
+        ? {
+            title: 'Postpaid — Admission Cleared',
+            subtitle: 'Charges will be settled after the visit. Ready to start.',
+          }
+        : {
+            title:
+              paymentStatus === 'Overridden'
+                ? 'Prepaid — Override Approved'
+                : 'Prepaid — Payment Cleared',
+            subtitle:
+              paymentStatus === 'Overridden'
+                ? 'Staff admission override approved. Ready to start.'
+                : 'Prepayment confirmed and ready to start.',
+          };
 
   const handlePolicyChange = async (newPolicy: 'Prepaid' | 'Postpaid' | 'Exempt') => {
     if (!onChangePaymentPolicy || isUpdatingPolicy || newPolicy === paymentPolicy) return;
@@ -362,16 +390,16 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           {/* Payment Gate Banner */}
           {isPrepaidBlocked ? (
             <div className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex items-start gap-3">
-              <span className="text-base font-bold">
+              <span className="p-1 text-base font-bold flex items-center justify-center shrink-0">
                 {renderIcon ? renderIcon('lock', { size: 18 }) : 'LOCK'}
               </span>
               <div className="flex-1">
                 <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                  Payment Required Before Consultation
+                  Prepaid — Payment Required Before Consultation
                   <span className="sr-only"> (Prepayment Gate: Settlement Required)</span>
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                  This consultation is prepaid. Admission will unlock immediately upon cashier settlement.
+                  This visit requires prepayment. Admission unlocks immediately after payment.
                 </p>
                 {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
                   <button
@@ -385,18 +413,16 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               </div>
             </div>
           ) : (
-            <div className="p-3.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 flex items-start gap-3">
-              <span className="text-base text-emerald-600 font-bold">
+            <div className="p-3.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 flex items-center gap-3">
+              <span className="p-1 text-base text-emerald-600 font-bold flex items-center justify-center shrink-0">
                 {renderIcon ? renderIcon('shieldCheck', { size: 18 }) : 'OK'}
               </span>
               <div>
                 <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                  {paymentPolicy === 'Exempt' ? 'Admission Cleared (Exempt)' : 'Payment Cleared'}
+                  {clearedBannerCopy.title}
                 </p>
                 <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
-                  {paymentPolicy === 'Exempt'
-                    ? 'Consultation is exempt from prepayment. Ready for admission.'
-                    : 'Payment confirmed. Ready for consultation admission.'}
+                  {clearedBannerCopy.subtitle}
                 </p>
               </div>
             </div>
@@ -404,44 +430,46 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
           {/* Informed Recording Consent */}
           {recordingConsentStatus !== 'Disabled' && (
-            <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-              <div>
+            <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+              <div className="flex-1">
                 <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-0.5">
-                  Call Recording Notice
+                  Call Recording
                   <span className="sr-only"> (Informed Recording Disclosure)</span>
                 </h2>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  This clinical consultation may be recorded for medical records under RA 10173 and facility policy.
+                  {recordingSubtitle}
                 </p>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => onSubmitConsent && onSubmitConsent(true)}
-                  disabled={recordingConsentStatus === 'Approved'}
-                  className={`flex-1 min-h-[44px] px-3 rounded text-xs font-semibold border transition-colors ${
-                    recordingConsentStatus === 'Approved'
-                      ? 'bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-200 border-teal-300 font-bold'
-                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isRecordingEnabled}
+                aria-label={isRecordingEnabled ? 'Turn off call recording' : 'Turn on call recording'}
+                data-testid="switch-call-recording"
+                onClick={() =>
+                  onSubmitConsent &&
+                  onSubmitConsent(
+                    !isRecordingEnabled,
+                    isRecordingEnabled ? 'Patient declined recording' : undefined,
+                  )
+                }
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center shrink-0 focus:outline-hidden"
+              >
+                <span
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full p-0.5 transition-colors ${
+                    isRecordingEnabled
+                      ? 'bg-teal-700'
+                      : 'bg-slate-300 dark:bg-slate-700'
                   }`}
                 >
-                  Consent to Recording
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onSubmitConsent && onSubmitConsent(false, 'Patient declined recording')}
-                  disabled={recordingConsentStatus === 'Rejected'}
-                  className={`flex-1 min-h-[44px] px-3 rounded text-xs font-semibold border transition-colors ${
-                    recordingConsentStatus === 'Rejected'
-                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 font-bold'
-                      : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  Consult Without Recording
-                </button>
-              </div>
+                  <span
+                    className={`inline-block h-6 w-6 rounded-full bg-white shadow-xs transition-transform ${
+                      isRecordingEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </span>
+              </button>
             </div>
           )}
 

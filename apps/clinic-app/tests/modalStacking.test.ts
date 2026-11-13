@@ -1760,6 +1760,38 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         (globalThis as any).document = originalDoc;
       }
     });
+
+    test('ADV-17: findPortalContainer ignores top-layer portals marked with data-clinicez-top-layer="true"', () => {
+      const originalDoc = (globalThis as any).document;
+      try {
+        const mockBody: any = { children: [] };
+        const topLayerPortal: any = {
+          parentNode: mockBody,
+          dataset: { clinicezTopLayer: 'true' },
+          getAttribute: (attr: string) => (attr === 'data-clinicez-top-layer' ? 'true' : null),
+        };
+        const nestedConfirmDialog: any = {
+          parentNode: topLayerPortal,
+          getAttribute: (attr: string) => (attr === 'aria-modal' ? 'true' : null),
+        };
+        const normalModalPortal: any = {
+          parentNode: mockBody,
+          dataset: {},
+          getAttribute: () => null,
+        };
+        const normalDialog: any = {
+          parentNode: normalModalPortal,
+          getAttribute: (attr: string) => (attr === 'aria-modal' ? 'true' : null),
+        };
+        mockBody.children = [normalModalPortal, topLayerPortal];
+        (globalThis as any).document = { body: mockBody };
+
+        expect(findPortalContainer(nestedConfirmDialog)).toBeNull();
+        expect(findPortalContainer(normalDialog)).toBe(normalModalPortal);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
   });
 
   afterAll(() => {

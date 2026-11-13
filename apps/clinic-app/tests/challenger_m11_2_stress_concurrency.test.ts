@@ -446,10 +446,10 @@ describe('Challenger M11.2: Empirical Stress, Concurrency & Resilience Suite', (
       expect(mediaSessionHangup![1]).toContain('setIsConfirmEndCallOpen(true)');
     });
 
-    it('2.5: Dialog overlay styling uses zIndex: 10000, floating above docked bar and full-screen stage', () => {
+    it('2.5: Dialog overlay styling uses zIndex: 2000001, floating above docked bar and full-screen stage', () => {
       const confirmOverlay = modalSource.match(/confirmModalOverlay:\s*\{([\s\S]*?)\}/);
       expect(confirmOverlay).not.toBeNull();
-      expect(confirmOverlay![1]).toContain('zIndex: 10000');
+      expect(confirmOverlay![1]).toContain('zIndex: 2000001');
       expect(confirmOverlay![1]).toContain("position: 'absolute'");
       expect(confirmOverlay![1]).toContain('top: 0');
       expect(confirmOverlay![1]).toContain('bottom: 0');

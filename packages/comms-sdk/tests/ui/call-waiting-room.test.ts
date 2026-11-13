@@ -615,5 +615,82 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       expect(webText).toContain(inviteUrl);
       webHarness.unmount();
     });
+
+    it('adapts cleared banner labels per facility payment policy and simplifies Call Recording notice', () => {
+      for (const [policy, status, expectedTitle] of [
+        ['Prepaid', 'Paid', 'Prepaid — Payment Cleared'],
+        ['Prepaid', 'Overridden', 'Prepaid — Override Approved'],
+        ['Postpaid', 'Unpaid', 'Postpaid — Admission Cleared'],
+        ['Exempt', 'Exempt', 'Exempt — Admission Cleared'],
+      ] as const) {
+        const nativeHarness = createHookHarness(() =>
+          NativeCallWaitingRoom({
+            ...baseNativeProps,
+            paymentPolicy: policy,
+            paymentStatus: status,
+          })
+        );
+        const nativeText = getTextContent(nativeHarness.result.current);
+        expect(nativeText).toContain(expectedTitle);
+        expect(nativeText).toContain('Call Recording');
+        expect(nativeText).not.toContain('RA 10173');
+        nativeHarness.unmount();
+
+        const webHarness = createHookHarness(() =>
+          WebCallWaitingRoom({
+            ...baseWebProps,
+            paymentPolicy: policy,
+            paymentStatus: status,
+          })
+        );
+        const webText = getTextContent(webHarness.result.current);
+        expect(webText).toContain(expectedTitle);
+        expect(webText).not.toContain('RA 10173');
+        webHarness.unmount();
+      }
+    });
+
+    it('renders Call Recording card with an accessible toggle switch that flips consent on and off', async () => {
+      const consentCalls: Array<[boolean, string | undefined]> = [];
+      const nativePending = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          recordingConsentStatus: 'Pending',
+          onSubmitConsent: async (approved: boolean, reason?: string) => {
+            consentCalls.push([approved, reason]);
+          },
+        })
+      );
+      const nativeSwitch = findElement(
+        nativePending.result.current,
+        (el) => el.props?.testID === 'switch-call-recording'
+      );
+      expect(nativeSwitch).not.toBeNull();
+      expect(nativeSwitch.props.accessibilityRole).toBe('switch');
+      expect(nativeSwitch.props.accessibilityState).toEqual({ checked: false });
+      await nativeSwitch.props.onPress();
+      expect(consentCalls[0]).toEqual([true, undefined]);
+      nativePending.unmount();
+
+      const webApproved = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          recordingConsentStatus: 'Approved',
+          onSubmitConsent: async (approved: boolean, reason?: string) => {
+            consentCalls.push([approved, reason]);
+          },
+        })
+      );
+      const webSwitch = findElement(
+        webApproved.result.current,
+        (el) => el.props?.['data-testid'] === 'switch-call-recording'
+      );
+      expect(webSwitch).not.toBeNull();
+      expect(webSwitch.props.role).toBe('switch');
+      expect(webSwitch.props['aria-checked']).toBe(true);
+      await webSwitch.props.onClick();
+      expect(consentCalls[1]).toEqual([false, 'Patient declined recording']);
+      webApproved.unmount();
+    });
   });
 });

@@ -168,7 +168,7 @@ describe('Challenger M9: Clinic Workstation UI/UX, Draggable Dock, Native PiP & 
       expect(styleBody).toContain('bottom: 0');
       expect(styleBody).toContain("width: '100vw'");
       expect(styleBody).toContain("height: '100vh'");
-      expect(styleBody).toContain('zIndex: 9999');
+      expect(styleBody).toContain('zIndex: 2000000');
     });
 
     it('1.4: In full-screen mode, headerBar, modalCard, and btn-close-waiting-room are bypassed', () => {
@@ -439,6 +439,25 @@ describe('Challenger M9: Clinic Workstation UI/UX, Draggable Dock, Native PiP & 
       expect(modalSource).toContain("navigator.mediaSession.setActionHandler('hangup' as any, () => {");
       expect(modalSource).toContain('setIsConfirmEndCallOpen(true);');
     });
+
+    it('3.9: Unified dock card clips PiP + bar inside single rounded mask and portals to document.body above all modals', () => {
+      expect(modalSource).toContain('testID="docked-unified-card"');
+      const unifiedCardStyle = modalSource.match(/dockedUnifiedCard:\s*\{([\s\S]*?)\},/);
+      expect(unifiedCardStyle).not.toBeNull();
+      expect(unifiedCardStyle![1]).toContain('borderRadius: theme.radii.md');
+      expect(unifiedCardStyle![1]).toContain("overflow: 'hidden'");
+
+      const containerStyle = modalSource.match(/dockedBarContainer:\s*\{([\s\S]*?)\},/);
+      expect(containerStyle).not.toBeNull();
+      expect(containerStyle![1]).toContain('borderRadius: theme.radii.md');
+      expect(containerStyle![1]).toContain('...theme.shadows.lg');
+
+      const portalHostStyle = modalSource.match(/teleconsultTopPortalHost:\s*\{([\s\S]*?)\},/);
+      expect(portalHostStyle).not.toBeNull();
+      expect(portalHostStyle![1]).toContain('zIndex: 2147483000');
+      expect(modalSource).toContain('createPortal');
+      expect(modalSource).toContain("clinicezTopLayer: 'true'");
+    });
   });
 
   // =========================================================================
@@ -486,11 +505,11 @@ describe('Challenger M9: Clinic Workstation UI/UX, Draggable Dock, Native PiP & 
       expect(dockedEndBtnMatch![1]).not.toContain('handleEndCall');
     });
 
-    it('4.6: Confirm modal overlay has zIndex: 10000, floating above full-screen stage and dock bar', () => {
+    it('4.6: Confirm modal overlay has zIndex: 2000001, floating above full-screen stage and dock bar', () => {
       const overlayStyleMatch = modalSource.match(/confirmModalOverlay:\s*\{([\s\S]*?)\},/);
       expect(overlayStyleMatch).not.toBeNull();
       const styleBody = overlayStyleMatch![1];
-      expect(styleBody).toContain('zIndex: 10000');
+      expect(styleBody).toContain('zIndex: 2000001');
       expect(styleBody).toContain("position: 'absolute'");
     });
 

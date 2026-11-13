@@ -217,9 +217,10 @@ describe('Challenger M6.2: Workstation Clinic App Teleconsultation Adversarial S
       expect(modalCode).toContain('testID="btn-docked-end-call"');
       expect(modalCode).toContain('testID="btn-dock-call"');
 
-      // Verify docked bar container is pinned to viewport with high zIndex
+      // Verify docked bar container is pinned to viewport with dominant top-layer zIndex
       expect(modalCode).toContain('dockedBarContainer:');
-      expect(modalCode).toContain('zIndex: 9999');
+      expect(modalCode).toContain('zIndex: 2000000');
+      expect(modalCode).toContain('zIndex: 2147483000');
 
       // Verify docked controls use touchable minimum size
       expect(modalCode).toContain('touchableMinSize:');

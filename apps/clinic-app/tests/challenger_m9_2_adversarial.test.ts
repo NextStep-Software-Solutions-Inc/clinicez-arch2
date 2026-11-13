@@ -319,9 +319,9 @@ describe('Challenger M9.2: Clinic Workstation UI/UX Adversarial Stress Suite', (
       expect(endCallInvocationCount).toBe(1);
     });
 
-    it('2.6: Confirmation modal overlay has zIndex: 10000, floating above docked bar and full-screen stage', () => {
-      expect(modalContent).toContain('zIndex: 10000');
-      expect(modalContent).toContain('zIndex: 9999'); // dockedBarContainer & fullScreenStage are 9999
+    it('2.6: Confirmation modal overlay has zIndex: 2000001, floating above docked bar and full-screen stage', () => {
+      expect(modalContent).toContain('zIndex: 2000001');
+      expect(modalContent).toContain('zIndex: 2000000'); // dockedBarContainer & fullScreenStage are 2000000
     });
   });
 
