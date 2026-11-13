@@ -336,4 +336,83 @@ public class DirectConversationAdversarialAndLifecycleTests
         Assert.Equal("Weekend Clinical Rotation", aliceCustom.Title);
         Assert.Equal("Weekend Clinical Rotation", waveCustom.Title);
     }
+
+    [Fact]
+    public async Task DeleteConversation_RemovesConversationPermanentlyFromDatabase()
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var createHandler = new CreateConversationCommandHandler(db);
+        var deleteHandler = new DeleteConversationCommandHandler(db);
+
+        var conv = await createHandler.Handle(new CreateConversationCommand(
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            BranchId: null,
+            Scope: ConversationScope.Direct,
+            Kind: ConversationKind.Direct,
+            Title: null,
+            ContextType: null,
+            ContextId: null,
+            Category: null,
+            IsEmergencyConfirmed: false,
+            IsLocalOnly: false,
+            CreatedBy: "staff-alice",
+            Participants: new List<ParticipantInput>
+            {
+                new("Staff", "staff-bob", "Bob", "Member")
+            },
+            CreatedByDisplayName: "Alice"), CancellationToken.None);
+
+        Assert.NotNull(await db.Conversations.FindAsync(conv.Id));
+
+        var deleted = await deleteHandler.Handle(new DeleteConversationCommand(conv.Id, TenantId, "staff-alice"), CancellationToken.None);
+        Assert.True(deleted);
+
+        Assert.Null(await db.Conversations.FindAsync(conv.Id));
+    }
+
+    [Fact]
+    public async Task CloseConversation_EmptyTenantId_ResolvesAndClosesConversation()
+    {
+        var db = TestDbContextFactory.CreateInMemory();
+        var createHandler = new CreateConversationCommandHandler(db);
+        var mockSerializer = new Mock<ITranscriptSerializer>();
+        mockSerializer.Setup(s => s.Serialize(It.IsAny<Conversation>(), It.IsAny<List<Participant>>(), It.IsAny<List<Message>>()))
+            .Returns(new SerializedTranscript(null!, "{}", "# Closed", "dummy-sha"));
+
+        var mockNotifier = new Mock<ICommsRealtimeNotifier>();
+        var closeHandler = new CloseConversationCommandHandler(db, mockSerializer.Object, mockNotifier.Object);
+
+        var conv = await createHandler.Handle(new CreateConversationCommand(
+            TenantId: TenantId,
+            FacilityId: FacilityId,
+            BranchId: null,
+            Scope: ConversationScope.Direct,
+            Kind: ConversationKind.Direct,
+            Title: null,
+            ContextType: null,
+            ContextId: null,
+            Category: null,
+            IsEmergencyConfirmed: false,
+            IsLocalOnly: false,
+            CreatedBy: "staff-alice",
+            Participants: new List<ParticipantInput>
+            {
+                new("Staff", "staff-bob", "Bob", "Member")
+            },
+            CreatedByDisplayName: "Alice"), CancellationToken.None);
+
+        // Close with empty tenantId (e.g. dev token without tenant_id claim)
+        var closed = await closeHandler.Handle(new CloseConversationCommand(
+            conv.Id,
+            TenantId: "",
+            ClosedByStaffId: "staff-alice",
+            ClosedByStaffName: "Alice",
+            Notes: "Archive test"), CancellationToken.None);
+
+        Assert.Equal(RequestStatus.Closed, closed.Status);
+        var stored = await db.Conversations.FindAsync(conv.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(RequestStatus.Closed, stored.Status);
+    }
 }

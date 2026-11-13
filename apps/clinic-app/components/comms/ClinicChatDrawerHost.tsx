@@ -19,7 +19,7 @@ import type {
 } from '@clinicez/comms-sdk/native-ui';
 import ClinicActiveThread from './ClinicActiveThread';
 import NewConversationModal from './NewConversationModal';
-import { useClinicComms } from '../../context/ClinicCommsContext';
+import { useClinicComms, getCommsApiBaseUrl } from '../../context/ClinicCommsContext';
 import { useAuth } from '../../context/AuthContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
@@ -125,7 +125,7 @@ export default function ClinicChatDrawerHost() {
       setRemovedConversationIds((prev) => new Set(prev).add(id));
       setActiveConversationId(undefined);
       try {
-        const cleanBase = (process.env.EXPO_PUBLIC_COMMS_API_URL || '').trim().replace(/\/+$/, '');
+        const cleanBase = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
         if (cleanBase) {
           let ticket = comms?.activeTicket?.ticket;
           if (!ticket && comms?.refreshTicket) {
@@ -136,21 +136,33 @@ export default function ClinicChatDrawerHost() {
               // ignore
             }
           }
-          await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
-            method: 'POST',
+          const deleteRes = await fetch(`${cleanBase}/api/v1/comms/conversations/${id}`, {
+            method: 'DELETE',
             headers: {
               'Content-Type': 'application/json',
               ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
             },
-            body: JSON.stringify({ notes: 'Deleted by clinician' }),
           });
+          if (!deleteRes.ok) {
+            // Fallback to close if DELETE is rejected
+            await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
+              },
+              body: JSON.stringify({ notes: 'Deleted by clinician', tenantId: facilityId }),
+            });
+          }
         }
         await refreshConversations();
+        notify.success('Conversation deleted.');
       } catch (err) {
         console.warn('Failed to delete/close conversation on server:', err);
+        notify.error('Failed to delete conversation on server.');
       }
     },
-    [comms, refreshConversations, setActiveConversationId],
+    [comms, facilityId, refreshConversations, setActiveConversationId],
   );
 
   const handleCloseAndArchive = useCallback(
@@ -158,7 +170,7 @@ export default function ClinicChatDrawerHost() {
       setRemovedConversationIds((prev) => new Set(prev).add(id));
       setActiveConversationId(undefined);
       try {
-        const cleanBase = (process.env.EXPO_PUBLIC_COMMS_API_URL || '').trim().replace(/\/+$/, '');
+        const cleanBase = getCommsApiBaseUrl().trim().replace(/\/+$/, '');
         if (cleanBase) {
           let ticket = comms?.activeTicket?.ticket;
           if (!ticket && comms?.refreshTicket) {
@@ -169,21 +181,26 @@ export default function ClinicChatDrawerHost() {
               // ignore
             }
           }
-          await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
+          const res = await fetch(`${cleanBase}/api/v1/comms/conversations/${id}/close`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...(ticket ? { Authorization: `Bearer ${ticket}` } : {}),
             },
-            body: JSON.stringify({ notes: 'Closed and archived' }),
+            body: JSON.stringify({ notes: 'Closed and archived', tenantId: facilityId }),
           });
+          if (!res.ok) {
+            throw new Error(`Server returned HTTP ${res.status}`);
+          }
         }
         await refreshConversations();
+        notify.success('Conversation closed and archived.');
       } catch (err) {
         console.warn('Failed to archive conversation on server:', err);
+        notify.error('Failed to archive conversation on server.');
       }
     },
-    [comms, refreshConversations, setActiveConversationId],
+    [comms, facilityId, refreshConversations, setActiveConversationId],
   );
 
   const chatItems: ChatDrawerItem[] = useMemo(() => {

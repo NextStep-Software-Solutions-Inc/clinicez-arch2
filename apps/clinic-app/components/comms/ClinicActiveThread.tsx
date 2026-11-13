@@ -287,9 +287,8 @@ export default function ClinicActiveThread({
   // Action Menu: Close & Archive
   const handleCloseAndArchive = () => {
     setIsActionMenuOpen(false);
-    onCloseAndArchive?.(conversationId);
-    notify.success('Conversation closed and archived.');
     onBack();
+    onCloseAndArchive?.(conversationId);
   };
 
   // Action Menu: Delete Conversation
@@ -299,9 +298,8 @@ export default function ClinicActiveThread({
       notify.error('Cannot delete active clinical conversation with recorded notes. Use Close & Archive instead.');
       return;
     }
-    onDeleteConversation?.(conversationId);
-    notify.success('Conversation deleted.');
     onBack();
+    onDeleteConversation?.(conversationId);
   };
 
   // Action Menu: Generate Shift Handoff Summary
