@@ -155,16 +155,28 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         <View style={styles.header}>
           <View style={styles.headerInfo}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {conversationTitle}
+              {!conversationTitle || conversationTitle.toLowerCase() === 'conversation'
+                ? (conversationScope === 'PatientFacility'
+                    ? 'Patient Request'
+                    : conversationScope === 'StaffContext' || conversationScope === 'PatientContext'
+                      ? 'Care Team'
+                      : conversationScope === 'Direct'
+                        ? 'Direct Message'
+                        : conversationScope === 'Facility'
+                          ? 'Facility Channel'
+                          : conversationScope || 'Facility Channel')
+                : conversationTitle}
             </Text>
             <Text style={styles.headerSubtitle}>
               {conversationScope === 'PatientFacility'
                 ? 'Patient Request'
-                : conversationScope === 'StaffContext'
+                : conversationScope === 'StaffContext' || conversationScope === 'PatientContext'
                   ? 'Care Team'
-                  : conversationScope === 'Facility'
-                    ? 'Facility Channel'
-                    : conversationScope}
+                  : conversationScope === 'Direct'
+                    ? 'Direct Message'
+                    : conversationScope === 'Facility'
+                      ? 'Facility Channel'
+                      : conversationScope}
             </Text>
           </View>
 

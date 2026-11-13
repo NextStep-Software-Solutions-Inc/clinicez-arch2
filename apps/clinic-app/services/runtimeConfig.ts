@@ -38,6 +38,7 @@ const BUILD_SETTINGS: SettingValues = {
   get EXPO_PUBLIC_PORTAL_URL() { return process.env.EXPO_PUBLIC_PORTAL_URL; },
   get EXPO_PUBLIC_STORAGE_PUBLIC_URL() { return process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL; },
   get EXPO_PUBLIC_OFFLINE_GRACE_HOURS() { return process.env.EXPO_PUBLIC_OFFLINE_GRACE_HOURS; },
+  get EXPO_PUBLIC_ENABLE_COMMS() { return process.env.EXPO_PUBLIC_ENABLE_COMMS; },
 };
 
 /** One setting, resolved the same way on every deployment: runtime (on-prem `config.json`) first, then build-time. */
@@ -184,4 +185,11 @@ export function getPortalBaseUrl(): string {
 
   const defaultHost = ['portal', 'clinicez', 'ph'].join('.');
   return `https://${defaultHost}`;
+}
+
+/** Whether real-time clinic communications (chat drawer) is enabled for this deployment. Defaults to true. */
+export function isCommsEnabled(): boolean {
+  const setting = getSetting('EXPO_PUBLIC_ENABLE_COMMS');
+  if (setting === 'false' || setting === '0') return false;
+  return true;
 }

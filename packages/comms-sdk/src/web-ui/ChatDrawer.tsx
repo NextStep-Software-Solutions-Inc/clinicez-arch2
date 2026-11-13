@@ -102,7 +102,7 @@ export const ChatDrawer: React.FC<WebChatDrawerProps> = ({
                 role="tab"
                 aria-selected={isSelected}
                 onClick={() => onSelectScope(scope)}
-                className={`min-h-[44px] px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`min-h-[30px] px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   isSelected
                     ? 'bg-teal-700 text-white font-semibold'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'

@@ -140,6 +140,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
                 onPress={() => onSelectScope(scope)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
+                hitSlop={{ top: 7, bottom: 7, left: 4, right: 4 }}
               >
                 <Text style={[styles.scopePillText, isSelected && styles.scopePillTextActive]}>
                   {scope === 'PatientFacility'
@@ -450,7 +451,7 @@ function createStyles(c: ResolvedCommsColors) {
       flexDirection: 'row'
     },
     scopePill: {
-      minHeight: 34,
+      minHeight: 30,
       paddingHorizontal: spaceScale.md,
       paddingVertical: spaceScale.xs,
       borderRadius: radiusScale.full,

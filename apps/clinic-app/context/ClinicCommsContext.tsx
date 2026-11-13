@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import { CommsProvider } from '@clinicez/comms-sdk/react';
 import type { CommsTicketResponse } from '@clinicez/comms-sdk/react';
 import { clinicApiClient } from '../services/apiClient';
-import { getApiBaseUrl, getSetting } from '../services/runtimeConfig';
+import { getSetting, isCommsEnabled as isCommsConfigEnabled } from '../services/runtimeConfig';
 import { useAuth } from './AuthContext';
 import { useClinic } from './ClinicContext';
 import { useStaff, formatStaffName } from './StaffContext';
@@ -28,6 +28,7 @@ export interface ClinicCommsContextValue {
   teleconsultSession: TeleconsultSessionParams | null;
   openTeleconsultWaitingRoom: (params: TeleconsultSessionParams) => void;
   closeTeleconsultWaitingRoom: () => void;
+  isCommsEnabled: boolean;
 }
 
 const ClinicCommsContext = createContext<ClinicCommsContextValue>({
@@ -40,6 +41,7 @@ const ClinicCommsContext = createContext<ClinicCommsContextValue>({
   teleconsultSession: null,
   openTeleconsultWaitingRoom: () => {},
   closeTeleconsultWaitingRoom: () => {},
+  isCommsEnabled: true,
 });
 
 export const useClinicComms = () => useContext(ClinicCommsContext);
@@ -129,6 +131,15 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
     };
   }, [user?.id, user?.permissions, staffDisplayName, tenantId, facilityId]);
 
+  let commsBaseUrl = '';
+  try {
+    commsBaseUrl = getCommsApiBaseUrl();
+  } catch {
+    commsBaseUrl = '';
+  }
+
+  const commsEnabled = isCommsConfigEnabled() && Boolean(commsBaseUrl);
+
   const contextValue = useMemo<ClinicCommsContextValue>(
     () => ({
       isChatDrawerOpen,
@@ -140,6 +151,7 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      isCommsEnabled: commsEnabled,
     }),
     [
       isChatDrawerOpen,
@@ -150,18 +162,19 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      commsEnabled,
     ],
   );
 
   return (
     <CommsProvider
-      baseUrl={getCommsApiBaseUrl()}
+      baseUrl={commsBaseUrl}
       getCommsTicket={getCommsTicket}
       tenantId={tenantId}
       facilityId={facilityId}
       staffId={staffId}
       staffDisplayName={staffDisplayName}
-      options={{ autoConnect: isAuthenticated }}
+      options={{ autoConnect: isAuthenticated && commsEnabled }}
     >
       <ClinicCommsContext.Provider value={contextValue}>
         {children}

@@ -88,6 +88,7 @@ function ActiveThreadView({ conversationId, onBack, currentUserId }: ActiveThrea
         }}
         privacyBlurEnabled={privacyBlur}
         onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
+        showHeader={false}
         canWriteInternalNotes={true}
         isLoading={isLoading}
         error={error ? error.message : null}

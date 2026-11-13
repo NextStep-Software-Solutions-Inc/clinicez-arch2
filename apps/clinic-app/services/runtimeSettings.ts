@@ -13,6 +13,7 @@ export const SETTING_NAMES = [
   'EXPO_PUBLIC_PORTAL_URL',
   'EXPO_PUBLIC_STORAGE_PUBLIC_URL',
   'EXPO_PUBLIC_OFFLINE_GRACE_HOURS',
+  'EXPO_PUBLIC_ENABLE_COMMS',
 ] as const;
 
 export type SettingName = (typeof SETTING_NAMES)[number];
