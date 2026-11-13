@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Clinic.Application.Features.Billing.Commands;
@@ -29,6 +30,7 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
 {
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IRepository<PaymentRecord>? _paymentRepo;
+    private readonly IRepository<Appointment>? _appointmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IInteropPublisher? _interopPublisher;
@@ -37,7 +39,7 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         IRepository<Invoice> invoiceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
-        : this(invoiceRepo, null, unitOfWork, clinicContext, null)
+        : this(invoiceRepo, null, null, unitOfWork, clinicContext, null)
     {
     }
 
@@ -46,7 +48,7 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         IRepository<PaymentRecord>? paymentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
-        : this(invoiceRepo, paymentRepo, unitOfWork, clinicContext, null)
+        : this(invoiceRepo, paymentRepo, null, unitOfWork, clinicContext, null)
     {
     }
 
@@ -56,9 +58,21 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IInteropPublisher? interopPublisher)
+        : this(invoiceRepo, paymentRepo, null, unitOfWork, clinicContext, interopPublisher)
+    {
+    }
+
+    public RecordPaymentCommandHandler(
+        IRepository<Invoice> invoiceRepo,
+        IRepository<PaymentRecord>? paymentRepo,
+        IRepository<Appointment>? appointmentRepo,
+        IUnitOfWork unitOfWork,
+        IClinicContext clinicContext,
+        IInteropPublisher? interopPublisher)
     {
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
+        _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _interopPublisher = interopPublisher;
@@ -154,6 +168,50 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         else
         {
             invoice.Status = InvoiceStatus.PartiallyPaid;
+        }
+
+        // ── Teleconsultation Appointment Clearance Linkage ───────────────────
+        if (invoice.Status == InvoiceStatus.Paid && _appointmentRepo != null)
+        {
+            var appointment = await _appointmentRepo.Query(a =>
+                !a.IsDeleted && a.ClinicId == _clinicContext.ClinicId &&
+                ((invoice.AppointmentId.HasValue && a.Id == invoice.AppointmentId.Value) ||
+                 a.InvoiceId == invoice.Id ||
+                 (a.InvoiceRequestId.HasValue && a.InvoiceRequestId.Value == invoice.Id)))
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (appointment != null && appointment.IsTeleconsult)
+            {
+                appointment.PaymentStatus = TeleconsultPaymentStatus.Paid;
+                appointment.PaidAmount = invoice.AmountPaid > 0m ? invoice.AmountPaid : invoice.NetAmount;
+                appointment.PaidAt = payment.PaymentDate;
+                appointment.PaymentReceiptNumber = receiptNumber;
+                appointment.PaymentMethod = request.Method.ToString();
+                if (!appointment.InvoiceId.HasValue) appointment.InvoiceId = invoice.Id;
+                if (!invoice.AppointmentId.HasValue) invoice.AppointmentId = appointment.Id;
+
+                var callId = appointment.CallId ?? Guid.NewGuid();
+                appointment.CallId = callId;
+
+                if (_interopPublisher != null && !string.IsNullOrWhiteSpace(_clinicContext.TenantId))
+                {
+                    _interopPublisher.Enqueue(
+                        InteropTypes.CommsCallPaymentCleared,
+                        Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic),
+                        Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic, InteropServices.Comms),
+                        callId,
+                        new CommsCallPaymentClearedPayload(
+                            callId,
+                            _clinicContext.TenantId,
+                            _clinicContext.ClinicId.ToString(),
+                            invoice.Id,
+                            request.Method.ToString(),
+                            payment.PaymentDate,
+                            IsEmergencyOverride: false,
+                            OverrideReason: null
+                        ));
+                }
+            }
         }
 
         var otcItems = invoice.LineItems

@@ -26,11 +26,14 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   scheduledTime,
   paymentPolicy,
   paymentStatus,
+  hasActiveYakapEnlistment,
   isYakapExempt,
+  onChangePaymentPolicy,
+  onStaffPaymentOverride,
+  onEmergencyPaymentOverride,
   isReadyToAdmit,
   recordingConsentStatus,
   onAdmitPatient,
-  onEmergencyPaymentOverride,
   onSubmitConsent,
   onEnterCall,
   onCancelCall,
@@ -42,20 +45,49 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
   const [isMicActive, setIsMicActive] = useState(true);
   const [overrideModalVisible, setOverrideModalVisible] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
+  const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
 
-  const isPrepaidBlocked = paymentPolicy === 'Prepaid' && paymentStatus === 'Unpaid' && !isYakapExempt;
+  // YAKAP enlistment is informational; it does NOT automatically exempt prepayment unless legacy isYakapExempt is true
+  const isYakapEnlisted = Boolean(hasActiveYakapEnlistment ?? isYakapExempt);
+  const isPrepaidBlocked =
+    paymentPolicy === 'Prepaid' &&
+    paymentStatus === 'Unpaid' &&
+    !isYakapExempt;
+  const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
   const isDoctor = userRole === 'Clinician';
 
-  const handleOverrideSubmit = async () => {
-    if (!overrideReason.trim() || isSubmitting || !onEmergencyPaymentOverride) return;
-    setIsSubmitting(true);
+  // Override note validation: reasonNote >= 5 chars
+  const trimmedReason = overrideReason.trim();
+  const isReasonValid = trimmedReason.length >= 5;
+  const canSubmitOverride =
+    isReasonValid &&
+    !isSubmittingOverride &&
+    (Boolean(onStaffPaymentOverride) || Boolean(onEmergencyPaymentOverride));
+
+  const handlePolicyChange = async (newPolicy: 'Prepaid' | 'Postpaid' | 'Exempt') => {
+    if (!onChangePaymentPolicy || isUpdatingPolicy || newPolicy === paymentPolicy) return;
+    setIsUpdatingPolicy(true);
     try {
-      await onEmergencyPaymentOverride(overrideReason.trim());
+      await onChangePaymentPolicy(newPolicy);
+    } finally {
+      setIsUpdatingPolicy(false);
+    }
+  };
+
+  const handleOverrideSubmit = async () => {
+    if (!canSubmitOverride) return;
+    setIsSubmittingOverride(true);
+    try {
+      if (onStaffPaymentOverride) {
+        await onStaffPaymentOverride(trimmedReason);
+      } else if (onEmergencyPaymentOverride) {
+        await onEmergencyPaymentOverride(trimmedReason);
+      }
       setOverrideModalVisible(false);
       setOverrideReason('');
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingOverride(false);
     }
   };
 
@@ -105,6 +137,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
               <TouchableOpacity
                 style={[styles.mediaButton, !isMicActive && styles.mediaButtonOff]}
                 onPress={() => setIsMicActive((prev) => !prev)}
+                accessibilityRole="button"
                 accessibilityLabel={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
               >
                 <Text style={styles.mediaButtonText}>{isMicActive ? 'MIC' : 'MUTE'}</Text>
@@ -113,6 +146,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
               <TouchableOpacity
                 style={[styles.mediaButton, !isCameraActive && styles.mediaButtonOff]}
                 onPress={() => setIsCameraActive((prev) => !prev)}
+                accessibilityRole="button"
                 accessibilityLabel={isCameraActive ? 'Stop video' : 'Start video'}
               >
                 <Text style={styles.mediaButtonText}>{isCameraActive ? 'CAM' : 'OFF'}</Text>
@@ -132,18 +166,49 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
             </View>
           </View>
 
-          {/* Payment Gate Banner */}
-          {isYakapExempt ? (
-            <View style={styles.exemptCard}>
-              <Text style={styles.exemptIcon}>OK</Text>
-              <View style={styles.gateTextContainer}>
-                <Text style={styles.exemptTitle}>Admission Cleared • YAKAP Auto-Exempt</Text>
-                <Text style={styles.exemptSubtitle}>
-                  PhilHealth Konsulta consultation automatically cleared for admission.
-                </Text>
+          {/* Informational YAKAP Badge (Non-Mutating) */}
+          {isYakapEnlisted && (
+            <View style={styles.yakapCard}>
+              <View style={styles.yakapBadgeHeader}>
+                <View style={styles.yakapPill}>
+                  <Text style={styles.yakapPillText}>PHILHEALTH YAKAP</Text>
+                </View>
+                <Text style={styles.yakapBadgeTitle}>Active Konsulta Enlistment</Text>
+              </View>
+              <Text style={styles.yakapBadgeDescription}>
+                Patient has an active PhilHealth YAKAP enlistment. Staff may adjust the payment policy to Exempt or Postpaid if covered under primary care capitation.
+              </Text>
+            </View>
+          )}
+
+          {/* Staff Payment Policy Selector */}
+          {isStaffOrDoctor && onChangePaymentPolicy && (
+            <View style={styles.policyCard}>
+              <Text style={styles.policyCardTitle}>Facility Payment Policy</Text>
+              <View style={styles.policySelectorRow}>
+                {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((policy) => {
+                  const isSelected = paymentPolicy === policy;
+                  return (
+                    <TouchableOpacity
+                      key={policy}
+                      style={[styles.policyOptionButton, isSelected && styles.policyOptionButtonSelected]}
+                      onPress={() => handlePolicyChange(policy)}
+                      disabled={isUpdatingPolicy || isSelected}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set payment policy to ${policy}`}
+                    >
+                      <Text style={[styles.policyOptionText, isSelected && styles.policyOptionTextSelected]}>
+                        {policy}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
-          ) : isPrepaidBlocked ? (
+          )}
+
+          {/* Payment Gate Banner */}
+          {isPrepaidBlocked ? (
             <View style={styles.blockedCard}>
               <Text style={styles.blockedIcon}>LOCK</Text>
               <View style={styles.gateTextContainer}>
@@ -151,12 +216,14 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 <Text style={styles.blockedSubtitle}>
                   This consultation is prepaid. Admission will unlock immediately upon cashier or online payment.
                 </Text>
-                {isDoctor && onEmergencyPaymentOverride && (
+                {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
                   <TouchableOpacity
                     style={styles.overrideButton}
                     onPress={() => setOverrideModalVisible(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open plain-note override modal"
                   >
-                    <Text style={styles.overrideButtonText}>Emergency Clinical Override</Text>
+                    <Text style={styles.overrideButtonText}>Staff Plain-Note Override</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -165,8 +232,14 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
             <View style={styles.clearedCard}>
               <Text style={styles.clearedIcon}>OK</Text>
               <View style={styles.gateTextContainer}>
-                <Text style={styles.clearedTitle}>Payment Cleared</Text>
-                <Text style={styles.clearedSubtitle}>Payment confirmed. Ready for consultation.</Text>
+                <Text style={styles.clearedTitle}>
+                  {paymentPolicy === 'Exempt' ? 'Admission Cleared (Exempt)' : 'Payment Cleared'}
+                </Text>
+                <Text style={styles.clearedSubtitle}>
+                  {paymentPolicy === 'Exempt'
+                    ? 'Consultation is exempt from prepayment. Ready for admission.'
+                    : 'Payment confirmed. Ready for consultation.'}
+                </Text>
               </View>
             </View>
           )}
@@ -186,6 +259,8 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 ]}
                 onPress={() => onSubmitConsent && onSubmitConsent(true)}
                 disabled={recordingConsentStatus === 'Approved'}
+                accessibilityRole="button"
+                accessibilityLabel="Consent to session recording"
               >
                 <Text
                   style={[
@@ -204,6 +279,8 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 ]}
                 onPress={() => onSubmitConsent && onSubmitConsent(false, 'Patient declined recording')}
                 disabled={recordingConsentStatus === 'Rejected'}
+                accessibilityRole="button"
+                accessibilityLabel="Consult without recording"
               >
                 <Text
                   style={[
@@ -219,7 +296,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
 
           {/* Main Action Buttons */}
           <View style={styles.bottomBar}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onCancelCall}>
+            <TouchableOpacity style={styles.cancelButton} onPress={onCancelCall} accessibilityRole="button">
               <Text style={styles.cancelButtonText}>Cancel / Leave</Text>
             </TouchableOpacity>
 
@@ -228,6 +305,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 style={[styles.admitButton, isPrepaidBlocked && styles.admitButtonDisabled]}
                 onPress={onAdmitPatient}
                 disabled={isPrepaidBlocked}
+                accessibilityRole="button"
               >
                 <Text style={styles.admitButtonText}>Admit Patient to Call</Text>
               </TouchableOpacity>
@@ -238,6 +316,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
                 style={[styles.admitButton, !isReadyToAdmit && styles.admitButtonDisabled]}
                 onPress={onEnterCall}
                 disabled={!isReadyToAdmit}
+                accessibilityRole="button"
               >
                 <Text style={styles.admitButtonText}>
                   {isReadyToAdmit ? 'Enter Consultation Room' : 'Waiting for Clinician...'}
@@ -248,7 +327,7 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
         </View>
       )}
 
-      {/* Emergency Override Modal */}
+      {/* Staff Plain-Note Override Modal */}
       <Modal
         visible={overrideModalVisible}
         transparent
@@ -257,36 +336,45 @@ export const CallWaitingRoom: React.FC<CallWaitingRoomProps> = ({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Emergency Clinical Override</Text>
+            <Text style={styles.modalTitle}>Staff Admission Override</Text>
             <Text style={styles.modalDescription}>
-              Under facility policy, an attending clinician may bypass prepayment for acute clinical urgency. This action is permanently audited.
+              Facility staff or attending clinicians may bypass the prepayment gate by submitting a plain reason note. This administrative action is permanently recorded in the facility audit log.
             </Text>
 
             <TextInput
               style={styles.modalInput}
               value={overrideReason}
               onChangeText={setOverrideReason}
-              placeholder="Clinical rationale for emergency admission..."
+              placeholder="Enter reason for admission override (min 5 characters)..."
               placeholderTextColor={lightColors.textMuted}
               multiline
               numberOfLines={3}
+              accessibilityLabel="Override reason input"
             />
+
+            <Text style={[styles.charCountText, !isReasonValid && trimmedReason.length > 0 && styles.charCountWarning]}>
+              {trimmedReason.length < 5
+                ? `Minimum 5 characters required (${trimmedReason.length}/5)`
+                : `Valid reason note (${trimmedReason.length} characters)`}
+            </Text>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancelButton}
                 onPress={() => setOverrideModalVisible(false)}
-                disabled={isSubmitting}
+                disabled={isSubmittingOverride}
+                accessibilityRole="button"
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.modalSubmitButton}
+                style={[styles.modalSubmitButton, !canSubmitOverride && styles.modalSubmitButtonDisabled]}
                 onPress={handleOverrideSubmit}
-                disabled={isSubmitting || !overrideReason.trim()}
+                disabled={!canSubmitOverride}
+                accessibilityRole="button"
               >
                 <Text style={styles.modalSubmitText}>
-                  {isSubmitting ? 'Bypassing...' : 'Audit & Admit Patient'}
+                  {isSubmittingOverride ? 'Overriding...' : 'Audit & Admit Patient'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -316,7 +404,35 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary,
-    marginTop: 2
+    marginTop: spaceScale.xxs
+  },
+  stateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spaceScale['2xl']
+  },
+  stateText: {
+    fontSize: fontSizeScale.sm,
+    color: lightColors.textSecondary,
+    marginTop: spaceScale.sm
+  },
+  errorIcon: {
+    fontSize: fontSizeScale['3xl'],
+    color: lightColors.emergency,
+    fontWeight: '700',
+    marginBottom: spaceScale.xs
+  },
+  errorTitle: {
+    fontSize: fontSizeScale.md,
+    fontWeight: '700',
+    color: lightColors.emergencyText,
+    marginBottom: spaceScale.xxs
+  },
+  errorSubtitle: {
+    fontSize: fontSizeScale.xs,
+    color: lightColors.textMuted,
+    textAlign: 'center'
   },
   body: {
     flex: 1,
@@ -338,6 +454,8 @@ const styles = StyleSheet.create({
   },
   videoPlaceholderIcon: {
     fontSize: fontSizeScale['3xl'],
+    fontWeight: '700',
+    color: lightColors.textMuted,
     marginBottom: spaceScale.xs
   },
   videoPlaceholderText: {
@@ -352,13 +470,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: lightColors.overlay,
     paddingHorizontal: spaceScale.sm,
-    paddingVertical: 2,
+    paddingVertical: spaceScale.xxs,
     borderRadius: radiusScale.xs
   },
   audioMeterLabel: {
     fontSize: fontSizeScale.xs,
     color: lightColors.onPrimary,
-    marginRight: 4
+    marginRight: spaceScale.xs
   },
   audioMeterBar: {
     width: 60,
@@ -393,7 +511,9 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.emergencyBg
   },
   mediaButtonText: {
-    fontSize: fontSizeScale.lg
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.text
   },
   detailsCard: {
     backgroundColor: lightColors.surface,
@@ -417,20 +537,81 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: lightColors.text
   },
-  exemptCard: {
-    backgroundColor: lightColors.routineBg,
-    borderColor: lightColors.routineBorder,
+  yakapCard: {
+    backgroundColor: lightColors.infoBg,
+    borderColor: lightColors.infoBorder,
     borderWidth: 1,
     borderRadius: radiusScale.sm,
     padding: spaceScale.md,
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: spaceScale.md
   },
-  exemptIcon: {
-    fontSize: fontSizeScale.xl,
-    color: lightColors.routineText,
-    marginRight: spaceScale.sm
+  yakapBadgeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spaceScale.xs,
+    marginBottom: spaceScale.xs
+  },
+  yakapPill: {
+    backgroundColor: lightColors.info,
+    paddingHorizontal: spaceScale.xs,
+    paddingVertical: spaceScale.xxs,
+    borderRadius: radiusScale.xs
+  },
+  yakapPillText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.onPrimary
+  },
+  yakapBadgeTitle: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.infoText
+  },
+  yakapBadgeDescription: {
+    fontSize: fontSizeScale.xs,
+    color: lightColors.infoText,
+    lineHeight: 18
+  },
+  policyCard: {
+    backgroundColor: lightColors.surface,
+    borderColor: lightColors.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.sm,
+    padding: spaceScale.md,
+    marginBottom: spaceScale.md
+  },
+  policyCardTitle: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.textSecondary,
+    marginBottom: spaceScale.sm
+  },
+  policySelectorRow: {
+    flexDirection: 'row',
+    gap: spaceScale.xs
+  },
+  policyOptionButton: {
+    flex: 1,
+    minHeight: sizes.touchTarget,
+    borderRadius: radiusScale.sm,
+    backgroundColor: lightColors.surfaceSubtle,
+    borderColor: lightColors.border,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  policyOptionButtonSelected: {
+    backgroundColor: lightColors.primary,
+    borderColor: lightColors.primaryDark
+  },
+  policyOptionText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '600',
+    color: lightColors.textSecondary
+  },
+  policyOptionTextSelected: {
+    color: lightColors.onPrimary,
+    fontWeight: '700'
   },
   blockedCard: {
     backgroundColor: lightColors.warningBg,
@@ -443,8 +624,39 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.md
   },
   blockedIcon: {
-    fontSize: fontSizeScale.xl,
+    fontSize: fontSizeScale.lg,
+    fontWeight: '700',
+    color: lightColors.warningText,
     marginRight: spaceScale.sm
+  },
+  gateTextContainer: {
+    flex: 1
+  },
+  blockedTitle: {
+    fontSize: fontSizeScale.sm,
+    fontWeight: '700',
+    color: lightColors.warningText
+  },
+  blockedSubtitle: {
+    fontSize: fontSizeScale.xs,
+    color: lightColors.warningText,
+    marginTop: spaceScale.xxs
+  },
+  overrideButton: {
+    marginTop: spaceScale.sm,
+    alignSelf: 'flex-start',
+    backgroundColor: lightColors.emergencyBg,
+    borderColor: lightColors.emergencyBorder,
+    borderWidth: 1,
+    paddingHorizontal: spaceScale.sm,
+    minHeight: sizes.touchTarget,
+    justifyContent: 'center',
+    borderRadius: radiusScale.xs
+  },
+  overrideButtonText: {
+    fontSize: fontSizeScale.xs,
+    fontWeight: '700',
+    color: lightColors.emergencyText
   },
   clearedCard: {
     backgroundColor: lightColors.successBg,
@@ -457,32 +669,10 @@ const styles = StyleSheet.create({
     marginBottom: spaceScale.md
   },
   clearedIcon: {
-    fontSize: fontSizeScale.xl,
+    fontSize: fontSizeScale.lg,
+    fontWeight: '700',
     color: lightColors.successText,
     marginRight: spaceScale.sm
-  },
-  gateTextContainer: {
-    flex: 1
-  },
-  exemptTitle: {
-    fontSize: fontSizeScale.sm,
-    fontWeight: '700',
-    color: lightColors.routineText
-  },
-  exemptSubtitle: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.routineText,
-    marginTop: 2
-  },
-  blockedTitle: {
-    fontSize: fontSizeScale.sm,
-    fontWeight: '700',
-    color: lightColors.warningText
-  },
-  blockedSubtitle: {
-    fontSize: fontSizeScale.xs,
-    color: lightColors.warningText,
-    marginTop: 2
   },
   clearedTitle: {
     fontSize: fontSizeScale.sm,
@@ -492,22 +682,7 @@ const styles = StyleSheet.create({
   clearedSubtitle: {
     fontSize: fontSizeScale.xs,
     color: lightColors.successText,
-    marginTop: 2
-  },
-  overrideButton: {
-    marginTop: spaceScale.sm,
-    alignSelf: 'flex-start',
-    backgroundColor: lightColors.emergencyBg,
-    borderColor: lightColors.emergencyBorder,
-    borderWidth: 1,
-    paddingHorizontal: spaceScale.sm,
-    paddingVertical: 4,
-    borderRadius: radiusScale.xs
-  },
-  overrideButtonText: {
-    fontSize: fontSizeScale.xs,
-    fontWeight: '700',
-    color: lightColors.emergencyText
+    marginTop: spaceScale.xxs
   },
   consentCard: {
     backgroundColor: lightColors.surface,
@@ -521,7 +696,7 @@ const styles = StyleSheet.create({
     fontSize: fontSizeScale.sm,
     fontWeight: '700',
     color: lightColors.text,
-    marginBottom: 2
+    marginBottom: spaceScale.xxs
   },
   consentSubtitle: {
     fontSize: fontSizeScale.xs,
@@ -579,7 +754,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   cancelButtonText: {
-    fontSize: fontSizeScale.sm,
+    fontSize: fontSizeScale.xs,
     fontWeight: '600',
     color: lightColors.textSecondary
   },
@@ -604,37 +779,48 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spaceScale.lg
+    padding: spaceScale.md
   },
   modalContent: {
     width: '100%',
     maxWidth: 480,
     backgroundColor: lightColors.surface,
     borderRadius: radiusScale.md,
-    padding: spaceScale.lg
+    padding: spaceScale.lg,
+    borderWidth: 1,
+    borderColor: lightColors.border
   },
   modalTitle: {
     fontSize: fontSizeScale.lg,
     fontWeight: '700',
-    color: lightColors.emergencyText,
+    color: lightColors.text,
     marginBottom: spaceScale.xs
   },
   modalDescription: {
     fontSize: fontSizeScale.xs,
     color: lightColors.textSecondary,
-    lineHeight: 16,
-    marginBottom: spaceScale.md
+    marginBottom: spaceScale.md,
+    lineHeight: 18
   },
   modalInput: {
-    backgroundColor: lightColors.surfaceSubtle,
-    borderColor: lightColors.border,
     borderWidth: 1,
+    borderColor: lightColors.border,
     borderRadius: radiusScale.sm,
-    padding: spaceScale.md,
-    fontSize: fontSizeScale.sm,
+    padding: spaceScale.sm,
+    fontSize: fontSizeScale.xs,
     color: lightColors.text,
-    marginBottom: spaceScale.md,
+    minHeight: sizes.touchTarget * 1.8,
     textAlignVertical: 'top'
+  },
+  charCountText: {
+    fontSize: fontSizeScale.xs,
+    color: lightColors.textMuted,
+    marginTop: spaceScale.xs,
+    marginBottom: spaceScale.md
+  },
+  charCountWarning: {
+    color: lightColors.warningText,
+    fontWeight: '600'
   },
   modalActions: {
     flexDirection: 'row',
@@ -643,54 +829,31 @@ const styles = StyleSheet.create({
   },
   modalCancelButton: {
     minHeight: sizes.touchTarget,
-    paddingHorizontal: spaceScale.lg,
-    borderRadius: radiusScale.sm,
-    backgroundColor: lightColors.surfaceSubtle,
+    paddingHorizontal: spaceScale.md,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    borderRadius: radiusScale.sm,
+    backgroundColor: lightColors.surfaceSubtle
   },
   modalCancelText: {
-    fontSize: fontSizeScale.sm,
-    fontWeight: '600',
-    color: lightColors.textSecondary
+    fontSize: fontSizeScale.xs,
+    color: lightColors.textSecondary,
+    fontWeight: '600'
   },
   modalSubmitButton: {
     minHeight: sizes.touchTarget,
-    paddingHorizontal: spaceScale.lg,
-    borderRadius: radiusScale.sm,
-    backgroundColor: lightColors.emergency,
+    paddingHorizontal: spaceScale.md,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    borderRadius: radiusScale.sm,
+    backgroundColor: lightColors.emergency
+  },
+  modalSubmitButtonDisabled: {
+    opacity: 0.5
   },
   modalSubmitText: {
-    fontSize: fontSizeScale.sm,
-    fontWeight: '700',
-    color: lightColors.onPrimary
-  },
-  stateContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spaceScale.xl
-  },
-  stateText: {
-    marginTop: spaceScale.sm,
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted
-  },
-  errorIcon: {
-    fontSize: fontSizeScale['3xl'],
-    marginBottom: spaceScale.sm
-  },
-  errorTitle: {
-    fontSize: fontSizeScale.lg,
-    fontWeight: '600',
-    color: lightColors.emergencyText,
-    marginBottom: spaceScale.xs
-  },
-  errorSubtitle: {
-    fontSize: fontSizeScale.sm,
-    color: lightColors.textMuted,
-    textAlign: 'center'
+    fontSize: fontSizeScale.xs,
+    color: lightColors.onPrimary,
+    fontWeight: '700'
   }
 });

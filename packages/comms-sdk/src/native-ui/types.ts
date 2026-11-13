@@ -155,14 +155,62 @@ export interface CallWaitingRoomProps {
   scheduledTime: string;
   paymentPolicy: 'Prepaid' | 'Postpaid' | 'Exempt';
   paymentStatus: 'Unpaid' | 'Paid' | 'Exempt' | 'Overridden';
-  isYakapExempt: boolean;
+  hasActiveYakapEnlistment?: boolean;
+  isYakapExempt?: boolean;
+  onChangePaymentPolicy?: (policy: 'Prepaid' | 'Postpaid' | 'Exempt') => Promise<void>;
+  onStaffPaymentOverride?: (reasonNote: string) => Promise<void>;
+  onEmergencyPaymentOverride?: (reason: string) => Promise<void>;
   isReadyToAdmit: boolean;
   recordingConsentStatus: 'Pending' | 'Approved' | 'Rejected' | 'Disabled';
   onAdmitPatient?: () => Promise<void>;
-  onEmergencyPaymentOverride?: (reason: string) => Promise<void>;
   onSubmitConsent?: (approved: boolean, reason?: string) => Promise<void>;
   onEnterCall: () => void;
   onCancelCall: () => void;
+  isLoading?: boolean;
+  error?: string | null;
+  style?: ViewStyle;
+}
+
+export interface CallStageParticipant {
+  identity: string;
+  name: string;
+  role?: 'Clinician' | 'Patient' | 'Staff' | 'Guest';
+  isCameraActive?: boolean;
+  isMicActive?: boolean;
+  isSpeaking?: boolean;
+  isScreenSharing?: boolean;
+}
+
+export interface CallStageProps {
+  callId: string;
+  roomName: string;
+  userRole?: 'Clinician' | 'Patient' | 'Staff' | 'Guest';
+  participantName: string;
+  selfName?: string;
+  isMicEnabled: boolean;
+  isCameraEnabled: boolean;
+  isScreenSharing?: boolean;
+  onToggleMic: () => void | Promise<void>;
+  onToggleCamera: () => void | Promise<void>;
+  onToggleScreenShare?: () => void | Promise<void>;
+  onSwitchCamera?: () => void | Promise<void>;
+  isRecording?: boolean;
+  recordingDurationSeconds?: number;
+  onStartRecording?: () => void | Promise<void>;
+  canStartRecording?: boolean;
+  recordingConsentStatus?: 'none' | 'requested' | 'approved' | 'declined' | 'revoked';
+  onApproveConsentPreview?: () => void | Promise<void>;
+  onStopRecording?: () => void | Promise<void>;
+  canStopRecording?: boolean;
+  isChatOpen?: boolean;
+  unreadChatCount?: number;
+  onToggleChat?: () => void;
+  renderChatDrawer?: () => React.ReactNode;
+  renderWorkstationAction?: () => React.ReactNode;
+  renderCustomVideoSurface?: (trackType: 'remote' | 'local') => React.ReactNode;
+  onEndCall: () => void | Promise<void>;
+  isE2eeActive?: boolean;
+  networkQuality?: 'excellent' | 'good' | 'poor' | 'reconnecting';
   isLoading?: boolean;
   error?: string | null;
   style?: ViewStyle;

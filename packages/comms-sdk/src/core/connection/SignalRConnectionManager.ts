@@ -6,7 +6,12 @@ import {
 } from '@microsoft/signalr';
 import { ExponentialBackoffRetryPolicy } from './ExponentialBackoffRetryPolicy';
 import { TicketRenewalTimer, TicketProvider } from './TicketRenewalTimer';
-import { CommsEventEmitter } from '../events/CommsEventEmitter';
+import {
+  CommsEventEmitter,
+  CallPaymentClearedPayload,
+  CallStateChangedPayload,
+  RecordingConsentLoggedPayload
+} from '../events/CommsEventEmitter';
 import { ConnectionError } from '../errors';
 import {
   ConnectionState,
@@ -246,6 +251,27 @@ export class SignalRConnectionManager implements ICommsClient {
 
     this.connection.on('OnConversationUpdated', (conversation: ConversationDto) => {
       this.events.emit('conversationUpdated', conversation);
+    });
+
+    this.connection.on('OnCallStateChanged', (payload: CallStateChangedPayload) => {
+      this.events.emit('callStateChanged', payload);
+    });
+    this.connection.on('CallStateChanged', (payload: CallStateChangedPayload) => {
+      this.events.emit('callStateChanged', payload);
+    });
+
+    this.connection.on('OnCallPaymentCleared', (payload: CallPaymentClearedPayload) => {
+      this.events.emit('callPaymentCleared', payload);
+    });
+    this.connection.on('CallPaymentCleared', (payload: CallPaymentClearedPayload) => {
+      this.events.emit('callPaymentCleared', payload);
+    });
+
+    this.connection.on('OnRecordingConsentLogged', (payload: RecordingConsentLoggedPayload) => {
+      this.events.emit('recordingConsentLogged', payload);
+    });
+    this.connection.on('RecordingConsentLogged', (payload: RecordingConsentLoggedPayload) => {
+      this.events.emit('recordingConsentLogged', payload);
     });
   }
 

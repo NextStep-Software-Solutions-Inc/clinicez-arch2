@@ -46,6 +46,7 @@ export type {
   CallConsentState,
   CallParticipant,
   EmergencyOverrideInput,
+  UseCallSessionCallbacks,
   UseCallSessionOptions,
   UseCallSessionResult
 } from './react';

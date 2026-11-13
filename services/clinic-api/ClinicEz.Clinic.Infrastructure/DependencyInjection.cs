@@ -307,6 +307,8 @@ public static class DependencyInjection
                 InteropTypes.YakapSubmissionRequested, InteropTypes.YakapSubmissionResponded)
             .HandleReply(InteropTypes.GamotLookupResponded)
             .HandleReply(InteropTypes.PhilHealthResponse)
+            .HandleReply(InteropTypes.MediaRoomResponded)
+            .Handle<CommsRecordingConsentLoggedPayload, CommsRecordingConsentLoggedHandler>(InteropTypes.CommsRecordingConsentLogged)
             .HandleEntitlementsChanged());
 
         return services;

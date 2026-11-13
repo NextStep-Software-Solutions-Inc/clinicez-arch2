@@ -106,6 +106,7 @@ public sealed class ConsentCommandHandler :
         var patientName = $"{patient.FirstName} {patient.LastName}";
 
         var now = DateTime.UtcNow;
+        var consentRequired = settings == null || settings.TeleconsultRecordingConsentRequired;
         var session = new TeleconsultRecordingSession
         {
             Id = Guid.NewGuid(),
@@ -118,8 +119,8 @@ public sealed class ConsentCommandHandler :
             PatientName = patientName,
             DoctorId = request.DoctorId,
             DoctorName = doctorName,
-            ConsentStatus = "ConsentPending",
-            RecordingState = "PendingConsent",
+            ConsentStatus = consentRequired ? "ConsentPending" : "Consented",
+            RecordingState = consentRequired ? "PendingConsent" : "ReadyToRecord",
             StoragePolicy = policy,
             RetentionPolicyDays = settings?.TeleconsultRecordingRetentionDays ?? 90,
             ContainerFormat = request.ContainerFormat ?? "video/webm; codecs=vp8,opus",

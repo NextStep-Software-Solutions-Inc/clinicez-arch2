@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +40,17 @@ public sealed record AppointmentDto(
     DateTime? Reminder24hSentAt = null,
     DateTime? Reminder2hSentAt = null,
     DateTime? LastReminderSentAt = null,
-    string? LastReminderType = null)
+    string? LastReminderType = null,
+    AppointmentType AppointmentType = AppointmentType.InPerson,
+    bool IsTeleconsult = false,
+    TeleconsultPaymentPolicy PaymentPolicy = TeleconsultPaymentPolicy.Prepaid,
+    TeleconsultPaymentStatus PaymentStatus = TeleconsultPaymentStatus.Pending,
+    Guid? InvoiceId = null,
+    decimal? PaidAmount = null,
+    Guid? CallId = null,
+    DateTime? AdmittedAtUtc = null,
+    bool IsEmergencyOverride = false,
+    string? EmergencyOverrideReasonCode = null)
 {
     public static AppointmentDto From(Appointment a) => new(
         a.Id,
@@ -66,7 +77,17 @@ public sealed record AppointmentDto(
         a.Reminder24hSentAt,
         a.Reminder2hSentAt,
         a.LastReminderSentAt,
-        a.LastReminderType);
+        a.LastReminderType,
+        a.AppointmentType,
+        a.IsTeleconsult,
+        a.PaymentPolicy,
+        a.PaymentStatus,
+        a.InvoiceId,
+        a.PaidAmount,
+        a.CallId,
+        a.AdmittedAtUtc,
+        a.IsEmergencyOverride,
+        a.EmergencyOverrideReasonCode);
 
     private static IReadOnlyList<ShareItemDto> ParseItems(string? json) =>
         string.IsNullOrWhiteSpace(json)

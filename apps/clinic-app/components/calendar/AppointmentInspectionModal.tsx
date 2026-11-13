@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Modal, Pressable, ScrollView, Platform } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
@@ -6,7 +6,7 @@ import Icon from '../ui/Icon';
 import Button from '../ui/Button';
 import CustomModal from '../ui/Modal';
 import { notify } from '../../utils/feedback';
-import { clinicService } from '../../services/clinicService';
+import { clinicService, type TeleconsultPaymentPolicy } from '../../services/clinicService';
 import type { ExtendedAppointmentItem } from './types';
 import {
   resolveAppointmentUrgency,
@@ -68,8 +68,40 @@ export function AppointmentInspectionModal({
 }: AppointmentInspectionModalProps) {
   const [currentAppointment, setCurrentAppointment] = useState<ExtendedAppointmentItem | null>(appointment);
   const [sendingReminder, setSendingReminder] = useState<boolean>(false);
+  const [isUpdatingPolicy, setIsUpdatingPolicy] = useState<boolean>(false);
   const { openTeleconsultWaitingRoom } = useClinicComms();
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
+
+  const handleUpdatePaymentPolicy = useCallback(async (newPolicy: TeleconsultPaymentPolicy) => {
+    if (!currentAppointment) return;
+    setIsUpdatingPolicy(true);
+    try {
+      const [res, err] = await clinicService.updateTeleconsultPaymentPolicy(currentAppointment.id, newPolicy);
+      if (err && err.status !== 404) {
+        notify.error(err.message ?? 'Failed to update payment policy');
+      } else {
+        notify.success(`Payment policy updated to ${newPolicy}`);
+        setCurrentAppointment((prev) =>
+          prev
+            ? {
+                ...prev,
+                paymentPolicy: newPolicy,
+                paymentStatus:
+                  newPolicy === 'Exempt'
+                    ? 'Exempt'
+                    : prev.paymentStatus === 'Exempt'
+                      ? 'Pending'
+                      : prev.paymentStatus,
+              }
+            : prev
+        );
+      }
+    } catch (ex: any) {
+      notify.error(ex?.message ?? 'Failed to update payment policy');
+    } finally {
+      setIsUpdatingPolicy(false);
+    }
+  }, [currentAppointment]);
 
   useEffect(() => {
     setCurrentAppointment(appointment);
@@ -123,6 +155,14 @@ export function AppointmentInspectionModal({
 
   const initials = getPatientInitials(currentAppointment.patientName);
   const isYakap = Boolean((currentAppointment as any).isYakapEligible);
+  const hasLegacyTeleconsultService =
+    currentAppointment.appointmentType === undefined &&
+    currentAppointment.isTeleconsult === undefined &&
+    /^teleconsult(ation)?$/i.test((currentAppointment.serviceType || '').trim());
+  const isTeleconsult =
+    currentAppointment.appointmentType === 'Teleconsult' ||
+    currentAppointment.isTeleconsult === true ||
+    hasLegacyTeleconsultService;
 
   return (
     <Modal
@@ -180,6 +220,7 @@ export function AppointmentInspectionModal({
               accessibilityRole="button"
               accessibilityLabel="Close details"
               onPress={onClose}
+              hitSlop={theme.spacing.xs}
               style={({ pressed }) => [
                 styles.closeIconBtn,
                 pressed && styles.pressed,
@@ -244,6 +285,76 @@ export function AppointmentInspectionModal({
                 </ThemedText>
               </View>
 
+              {/* Modality Badge */}
+              <View
+                data-testid="appointment-modality-badge"
+                testID="appointment-modality-badge"
+                style={[
+                  styles.badge,
+                  isTeleconsult ? styles.teleconsultBadge : styles.inPersonBadge,
+                ]}
+              >
+                <Icon
+                  name={isTeleconsult ? 'consultations' : 'patient'}
+                  size={13}
+                  color={isTeleconsult ? theme.colors.primaryDark : theme.colors.textSecondary}
+                />
+                <ThemedText
+                  variant="caption"
+                  color={isTeleconsult ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  style={styles.badgeText}
+                >
+                  {isTeleconsult ? 'Teleconsult' : 'InPerson'}
+                </ThemedText>
+              </View>
+
+              {/* Payment Policy Badge (for teleconsult) */}
+              {isTeleconsult ? (
+                <View
+                  data-testid="badge-payment-policy"
+                  testID="badge-payment-policy"
+                  style={[styles.badge, styles.policyBadge]}
+                >
+                  <ThemedText variant="caption" color={theme.colors.text} style={styles.badgeText}>
+                    {currentAppointment.paymentPolicy || 'Prepaid'}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {/* Payment Status Badge (for teleconsult) */}
+              {isTeleconsult ? (
+                <View
+                  data-testid="badge-payment-status"
+                  testID="badge-payment-status"
+                  style={[
+                    styles.badge,
+                    currentAppointment.paymentStatus === 'Paid'
+                      ? styles.paidBadge
+                      : currentAppointment.paymentStatus === 'Exempt'
+                        ? styles.exemptBadge
+                        : currentAppointment.paymentStatus === 'Overridden'
+                          ? styles.overriddenBadge
+                          : styles.pendingBadge,
+                  ]}
+                >
+                  <ThemedText
+                    variant="caption"
+                    color={
+                      currentAppointment.paymentStatus === 'Paid'
+                        ? theme.colors.successText
+                        : currentAppointment.paymentStatus === 'Exempt'
+                          ? theme.colors.infoText
+                          : currentAppointment.paymentStatus === 'Overridden'
+                            ? theme.colors.warningText
+                            : theme.colors.emergencyText
+                    }
+                    style={styles.badgeText}
+                  >
+                    {currentAppointment.paymentStatus || 'Pending'}
+                  </ThemedText>
+                </View>
+              ) : null}
+
               {isYakap ? (
                 <View style={[styles.badge, styles.yakapBadge]}>
                   <Icon name="yakap" size={13} color={theme.colors.successText} />
@@ -257,6 +368,46 @@ export function AppointmentInspectionModal({
                 </View>
               ) : null}
             </View>
+
+            {/* Inline Payment Policy Switcher (Teleconsult) */}
+            {isTeleconsult && (
+              <View
+                data-testid="inline-policy-switcher"
+                testID="inline-policy-switcher"
+                style={styles.inlinePolicySwitcher}
+              >
+                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.policySwitcherLabel}>
+                  Payment Policy:
+                </ThemedText>
+                <View style={styles.policySwitcherGroup}>
+                  {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((pol) => {
+                    const isCurrent = (currentAppointment.paymentPolicy || 'Prepaid') === pol;
+                    return (
+                      <Pressable
+                        key={pol}
+                        data-testid={`btn-switch-policy-${pol.toLowerCase()}`}
+                        testID={`btn-switch-policy-${pol.toLowerCase()}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Switch payment policy to ${pol}`}
+                        disabled={isUpdatingPolicy}
+                        onPress={() => handleUpdatePaymentPolicy(pol)}
+                        style={[
+                          styles.policySwitchBtn,
+                          isCurrent ? styles.policySwitchBtnActive : styles.policySwitchBtnInactive,
+                        ]}
+                      >
+                        <ThemedText
+                          variant="captionBold"
+                          color={isCurrent ? theme.colors.routineText : theme.colors.text}
+                        >
+                          {pol}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             {/* Hero Scheduled Date & Time Card */}
             <View style={styles.heroTimeCard}>
@@ -522,7 +673,7 @@ export function AppointmentInspectionModal({
             </Pressable>
 
             <View style={styles.rightActionsRow}>
-              {currentAppointment.status !== 'Cancelled' ? (
+              {isTeleconsult && currentAppointment.status !== 'Cancelled' ? (
                 <Pressable
                   data-testid="btn-drawer-teleconsult"
                   testID="btn-drawer-teleconsult"
@@ -531,14 +682,16 @@ export function AppointmentInspectionModal({
                   onPress={() => {
                     onClose();
                     openTeleconsultWaitingRoom({
-                      callId: currentAppointment.id,
+                      callId: currentAppointment.callId || currentAppointment.id,
                       appointmentId: currentAppointment.id,
+                      patientId: currentAppointment.patientId,
                       patientName: currentAppointment.patientName || 'Patient',
                       clinicianName: currentAppointment.doctorName || 'Attending Physician',
                       scheduledTime: currentAppointment.scheduledAt,
-                      paymentPolicy: (currentAppointment as any).isYakapEligible ? 'Exempt' : 'Prepaid',
-                      paymentStatus: currentAppointment.status === 'CheckedIn' ? 'Paid' : 'Unpaid',
-                      isYakapExempt: (currentAppointment as any).isYakapEligible ?? false,
+                      paymentPolicy: currentAppointment.paymentPolicy || 'Prepaid',
+                      paymentStatus: currentAppointment.paymentStatus || 'Pending',
+                      isYakapExempt: currentAppointment.paymentPolicy === 'Exempt',
+                      hasActiveYakapEnlistment: currentAppointment.hasActiveYakapEnlistment ?? isYakap ?? false,
                     });
                   }}
                   style={({ pressed }) => [
@@ -923,6 +1076,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radii.md,
     marginTop: theme.spacing.xs,
+    minHeight: theme.sizes.touchTarget,
     ...theme.shadows.sm,
   },
   btnSendReminderDisabled: {
@@ -950,10 +1104,13 @@ const styles = StyleSheet.create({
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radii.md,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
   },
   btnPrimary: {
     backgroundColor: theme.colors.primary,
@@ -973,6 +1130,73 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primarySubtle,
     borderWidth: 1,
     borderColor: theme.colors.primaryBorder,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+  },
+  teleconsultBadge: {
+    backgroundColor: theme.colors.primaryLight,
+  },
+  inPersonBadge: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  policyBadge: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  paidBadge: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+  },
+  exemptBadge: {
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
+  },
+  overriddenBadge: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+  },
+  pendingBadge: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  inlinePolicySwitcher: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  policySwitcherLabel: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  policySwitcherGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  policySwitchBtn: {
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  policySwitchBtnActive: {
+    backgroundColor: theme.colors.routineBg,
+    borderColor: theme.colors.routineBorder,
+  },
+  policySwitchBtnInactive: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
   },
   pressed: {
     opacity: 0.75,

@@ -13,6 +13,7 @@ public record AppointmentBookedEvent
     public string? TenantId { get; init; }
     public DateOnly? PreferredDate { get; init; }
     public string? PreferredTime { get; init; }
+    public string? AppointmentType { get; init; }
     public string? Reason { get; init; }
     public string? Notes { get; init; }
     public string ShareFieldsJson { get; init; } = "[]";

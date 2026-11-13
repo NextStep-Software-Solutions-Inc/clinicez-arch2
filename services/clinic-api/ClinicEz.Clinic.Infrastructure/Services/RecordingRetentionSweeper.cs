@@ -54,7 +54,7 @@ public sealed class RecordingRetentionSweeper : BackgroundService, IRecordingRet
 
         foreach (var session in expiredSessions)
         {
-            // 1. Delete all encrypted segment chunks from sovereign storage
+            // 1. Delete all encrypted segment chunks and .key sidecars from sovereign storage
             foreach (var segment in session.Segments)
             {
                 if (!string.IsNullOrWhiteSpace(segment.StorageKey))
@@ -67,10 +67,23 @@ public sealed class RecordingRetentionSweeper : BackgroundService, IRecordingRet
                     {
                         _logger.LogWarning(ex, "[RetentionSweeper] Could not delete segment file {Key}", segment.StorageKey);
                     }
+
+                    var sidecarKey = segment.StorageKey + ".key";
+                    try
+                    {
+                        if (await storage.FileExistsAsync(sidecarKey, ct))
+                        {
+                            await storage.DeleteEncryptedFileAsync(sidecarKey, ct);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[RetentionSweeper] Could not delete segment sidecar key file {Key}", sidecarKey);
+                    }
                 }
             }
 
-            // 2. Delete manifest if present
+            // 2. Delete manifest and .key sidecar if present
             if (!string.IsNullOrWhiteSpace(session.ManifestStorageKey))
             {
                 try
@@ -80,6 +93,19 @@ public sealed class RecordingRetentionSweeper : BackgroundService, IRecordingRet
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "[RetentionSweeper] Could not delete manifest file {Key}", session.ManifestStorageKey);
+                }
+
+                var manifestSidecarKey = session.ManifestStorageKey + ".key";
+                try
+                {
+                    if (await storage.FileExistsAsync(manifestSidecarKey, ct))
+                    {
+                        await storage.DeleteEncryptedFileAsync(manifestSidecarKey, ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[RetentionSweeper] Could not delete manifest sidecar key file {Key}", manifestSidecarKey);
                 }
             }
 

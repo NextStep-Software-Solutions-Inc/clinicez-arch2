@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { lightColors } from '@clinicez/design-tokens';
 import { WebCallWaitingRoomProps } from './types';
 
 export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
@@ -11,11 +10,14 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   scheduledTime,
   paymentPolicy,
   paymentStatus,
+  hasActiveYakapEnlistment,
   isYakapExempt,
+  onChangePaymentPolicy,
+  onStaffPaymentOverride,
+  onEmergencyPaymentOverride,
   isReadyToAdmit,
   recordingConsentStatus,
   onAdmitPatient,
-  onEmergencyPaymentOverride,
   onSubmitConsent,
   onEnterCall,
   onCancelCall,
@@ -27,21 +29,49 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   const [isMicActive, setIsMicActive] = useState(true);
   const [overrideModalVisible, setOverrideModalVisible] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
+  const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
 
-  const isPrepaidBlocked = paymentPolicy === 'Prepaid' && paymentStatus === 'Unpaid' && !isYakapExempt;
+  // YAKAP enlistment is informational; it does NOT automatically exempt prepayment unless legacy isYakapExempt is true
+  const isYakapEnlisted = Boolean(hasActiveYakapEnlistment ?? isYakapExempt);
+  const isPrepaidBlocked =
+    paymentPolicy === 'Prepaid' &&
+    paymentStatus === 'Unpaid' &&
+    !isYakapExempt;
+  const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
   const isDoctor = userRole === 'Clinician';
+
+  const trimmedReason = overrideReason.trim();
+  const isReasonValid = trimmedReason.length >= 5;
+  const canSubmitOverride =
+    isReasonValid &&
+    !isSubmittingOverride &&
+    (Boolean(onStaffPaymentOverride) || Boolean(onEmergencyPaymentOverride));
+
+  const handlePolicyChange = async (newPolicy: 'Prepaid' | 'Postpaid' | 'Exempt') => {
+    if (!onChangePaymentPolicy || isUpdatingPolicy || newPolicy === paymentPolicy) return;
+    setIsUpdatingPolicy(true);
+    try {
+      await onChangePaymentPolicy(newPolicy);
+    } finally {
+      setIsUpdatingPolicy(false);
+    }
+  };
 
   const handleOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!overrideReason.trim() || isSubmitting || !onEmergencyPaymentOverride) return;
-    setIsSubmitting(true);
+    if (!canSubmitOverride) return;
+    setIsSubmittingOverride(true);
     try {
-      await onEmergencyPaymentOverride(overrideReason.trim());
+      if (onStaffPaymentOverride) {
+        await onStaffPaymentOverride(trimmedReason);
+      } else if (onEmergencyPaymentOverride) {
+        await onEmergencyPaymentOverride(trimmedReason);
+      }
       setOverrideModalVisible(false);
       setOverrideReason('');
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingOverride(false);
     }
   };
 
@@ -58,12 +88,12 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
       {/* Content States */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400" role="status">
-          <div className="animate-spin text-3xl mb-2">...</div>
+          <div className="animate-spin text-3xl mb-2 font-bold">...</div>
           <p className="text-sm">Staging teleconsultation hardware...</p>
         </div>
       ) : error ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <div className="text-3xl mb-2">!</div>
+          <div className="text-3xl mb-2 font-bold text-red-600">!</div>
           <p className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">
             Hardware or Media Connection Error
           </p>
@@ -74,7 +104,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           {/* 16:9 Video Preview */}
           <div className="relative aspect-video w-full rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden shadow-inner">
             <div className="text-center text-slate-400">
-              <div className="text-4xl mb-2">{isCameraActive ? 'CAM' : 'OFF'}</div>
+              <div className="text-4xl mb-2 font-bold">{isCameraActive ? 'CAM' : 'OFF'}</div>
               <p className="text-sm font-medium">
                 {isCameraActive ? 'Camera Self-Preview Active' : 'Camera Disabled'}
               </p>
@@ -84,9 +114,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
             <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 px-2.5 py-1 rounded text-xs text-white">
               <span>Mic:</span>
               <div className="w-16 h-2 rounded-full bg-white/30 overflow-hidden">
-                <div
-                  className={`h-full transition-all ${isMicActive ? 'w-2/3 bg-teal-700' : 'w-0'}`}
-                />
+                <div className={`h-full transition-all ${isMicActive ? 'w-2/3 bg-teal-700' : 'w-0'}`} />
               </div>
             </div>
 
@@ -132,22 +160,59 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
             </div>
           </div>
 
-          {/* Payment Gate Banner */}
-          {isYakapExempt ? (
-            <div className="p-3.5 rounded-lg border border-teal-300 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-teal-900 dark:text-teal-200 flex items-start gap-3">
-              <span className="text-base text-teal-700 font-bold">OK</span>
-              <div>
-                <p className="text-xs font-bold text-teal-700 dark:text-teal-300">
-                  Admission Cleared • YAKAP Auto-Exempt
-                </p>
-                <p className="text-xs text-teal-800 dark:text-teal-400 mt-0.5">
-                  PhilHealth Konsulta consultation automatically cleared for admission without prepayment gate.
-                </p>
+          {/* Informational YAKAP Badge (Non-Mutating) */}
+          {isYakapEnlisted && (
+            <div className="p-3.5 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-600 text-white">
+                  PHILHEALTH YAKAP
+                </span>
+                <span className="text-xs font-bold text-blue-800 dark:text-blue-300">
+                  Active Konsulta Enlistment Verified
+                </span>
+              </div>
+              <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                Patient has an active PhilHealth YAKAP enlistment. Staff may adjust the payment policy to Exempt or Postpaid if covered under primary care capitation.
+              </p>
+            </div>
+          )}
+
+          {/* Staff Payment Policy Selector */}
+          {isStaffOrDoctor && onChangePaymentPolicy && (
+            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Facility Payment Policy
+                </span>
+                {isUpdatingPolicy && <span className="text-xs text-slate-400">Updating...</span>}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((policy) => {
+                  const isSelected = paymentPolicy === policy;
+                  return (
+                    <button
+                      key={policy}
+                      type="button"
+                      onClick={() => handlePolicyChange(policy)}
+                      disabled={isUpdatingPolicy || isSelected}
+                      className={`min-h-[44px] px-3 py-2 rounded text-xs font-bold transition-colors ${
+                        isSelected
+                          ? 'bg-teal-700 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {policy}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          ) : isPrepaidBlocked ? (
+          )}
+
+          {/* Payment Gate Banner */}
+          {isPrepaidBlocked ? (
             <div className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex items-start gap-3">
-              <span className="text-base">LOCK</span>
+              <span className="text-base font-bold">LOCK</span>
               <div className="flex-1">
                 <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
                   Prepayment Gate: Settlement Required
@@ -155,13 +220,13 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                   This consultation is prepaid. Admission will unlock immediately upon cashier settlement.
                 </p>
-                {isDoctor && onEmergencyPaymentOverride && (
+                {isStaffOrDoctor && (onStaffPaymentOverride || onEmergencyPaymentOverride) && (
                   <button
                     type="button"
                     onClick={() => setOverrideModalVisible(true)}
-                    className="mt-2.5 px-3 py-1.5 rounded text-xs font-bold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-800 hover:bg-red-200"
+                    className="mt-2.5 min-h-[44px] px-3 py-1.5 rounded text-xs font-bold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-800 hover:bg-red-200 transition-colors"
                   >
-                    Emergency Clinical Override
+                    Staff Plain-Note Override
                   </button>
                 )}
               </div>
@@ -171,10 +236,12 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               <span className="text-base text-emerald-600 font-bold">OK</span>
               <div>
                 <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                  Payment Cleared
+                  {paymentPolicy === 'Exempt' ? 'Admission Cleared (Exempt)' : 'Payment Cleared'}
                 </p>
                 <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
-                  Payment confirmed. Ready for consultation admission.
+                  {paymentPolicy === 'Exempt'
+                    ? 'Consultation is exempt from prepayment. Ready for admission.'
+                    : 'Payment confirmed. Ready for consultation admission.'}
                 </p>
               </div>
             </div>
@@ -255,44 +322,52 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
         </div>
       )}
 
-      {/* Emergency Override Modal */}
+      {/* Staff Plain-Note Override Modal */}
       {overrideModalVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
           <form
             onSubmit={handleOverrideSubmit}
-            className="w-full max-w-md rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl"
+            className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 shadow-xl space-y-4"
           >
-            <h2 className="text-base font-bold text-red-600 dark:text-red-400 mb-2">
-              Emergency Clinical Override
-            </h2>
-            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              Attending clinicians may bypass the prepayment gate for acute clinical urgency. This action is permanently logged and audited.
-            </p>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Staff Admission Override
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Facility staff or attending clinicians may bypass the prepayment gate by submitting a plain reason note. This administrative action is permanently recorded in the facility audit log.
+              </p>
+            </div>
 
-            <textarea
-              value={overrideReason}
-              onChange={(e) => setOverrideReason(e.target.value)}
-              placeholder="Clinical rationale for emergency admission..."
-              rows={3}
-              className="w-full p-2.5 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
-              required
-            />
+            <div>
+              <textarea
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                placeholder="Enter reason for admission override (min 5 characters)..."
+                rows={3}
+                className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-teal-500"
+              />
+              <p className={`text-[11px] mt-1 ${isReasonValid ? 'text-slate-500' : 'text-amber-600 font-semibold'}`}>
+                {trimmedReason.length < 5
+                  ? `Minimum 5 characters required (${trimmedReason.length}/5)`
+                  : `Valid reason note (${trimmedReason.length} characters)`}
+              </p>
+            </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setOverrideModalVisible(false)}
-                disabled={isSubmitting}
+                disabled={isSubmittingOverride}
                 className="min-h-[44px] px-4 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !overrideReason.trim()}
-                className="min-h-[44px] px-4 rounded text-xs font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                disabled={!canSubmitOverride}
+                className="min-h-[44px] px-4 rounded text-xs font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
-                {isSubmitting ? 'Bypassing...' : 'Audit & Admit Patient'}
+                {isSubmittingOverride ? 'Overriding...' : 'Audit & Admit Patient'}
               </button>
             </div>
           </form>

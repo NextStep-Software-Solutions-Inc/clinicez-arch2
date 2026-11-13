@@ -11,12 +11,17 @@ import { useStaff, formatStaffName } from './StaffContext';
 export interface TeleconsultSessionParams {
   callId: string;
   appointmentId?: string;
+  patientId?: string;
   patientName: string;
   clinicianName: string;
   scheduledTime: string;
-  paymentPolicy?: 'Prepaid' | 'Postpaid' | 'Exempt';
-  paymentStatus?: 'Unpaid' | 'Paid' | 'Exempt' | 'Overridden';
+  paymentPolicy?: 'Prepaid' | 'Postpaid' | 'Exempt' | string;
+  paymentStatus?: 'Unpaid' | 'Paid' | 'Exempt' | 'Overridden' | 'Pending' | string;
   isYakapExempt?: boolean;
+  hasActiveYakapEnlistment?: boolean;
+  recordingPolicy?: 'Disabled' | 'WorkspaceVaultOnly' | 'Both' | string;
+  recordingConsentRequired?: boolean;
+  activeRecordingSessionId?: string | null;
 }
 
 export interface ClinicCommsContextValue {
@@ -29,6 +34,13 @@ export interface ClinicCommsContextValue {
   teleconsultSession: TeleconsultSessionParams | null;
   openTeleconsultWaitingRoom: (params: TeleconsultSessionParams) => void;
   closeTeleconsultWaitingRoom: () => void;
+
+  // Workstation Consultation Chart Docking (Milestone 5)
+  isCallStageDocked: boolean;
+  dockCallStage: () => void;
+  maximizeCallStage: () => void;
+  onOpenConsultationChart?: ((appointmentId?: string, patientId?: string) => void) | null;
+  setOnOpenConsultationChart: (callback: ((appointmentId?: string, patientId?: string) => void) | null) => void;
 }
 
 const ClinicCommsContext = createContext<ClinicCommsContextValue>({
@@ -41,6 +53,11 @@ const ClinicCommsContext = createContext<ClinicCommsContextValue>({
   teleconsultSession: null,
   openTeleconsultWaitingRoom: () => {},
   closeTeleconsultWaitingRoom: () => {},
+  isCallStageDocked: false,
+  dockCallStage: () => {},
+  maximizeCallStage: () => {},
+  onOpenConsultationChart: null,
+  setOnOpenConsultationChart: () => {},
 });
 
 export const useClinicComms = () => useContext(ClinicCommsContext);
@@ -74,6 +91,10 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined);
   const [teleconsultSession, setTeleconsultSession] = useState<TeleconsultSessionParams | null>(null);
+  const [isCallStageDocked, setIsCallStageDocked] = useState(false);
+  const [onOpenConsultationChart, setOnOpenConsultationChart] = useState<
+    ((appointmentId?: string, patientId?: string) => void) | null
+  >(null);
 
   const toggleChatDrawer = useCallback(() => {
     setIsChatDrawerOpen((prev) => !prev);
@@ -87,11 +108,21 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
     setIsChatDrawerOpen(false);
   }, []);
 
+  const dockCallStage = useCallback(() => {
+    setIsCallStageDocked(true);
+  }, []);
+
+  const maximizeCallStage = useCallback(() => {
+    setIsCallStageDocked(false);
+  }, []);
+
   const openTeleconsultWaitingRoom = useCallback((params: TeleconsultSessionParams) => {
+    setIsCallStageDocked(false);
     setTeleconsultSession(params);
   }, []);
 
   const closeTeleconsultWaitingRoom = useCallback(() => {
+    setIsCallStageDocked(false);
     setTeleconsultSession(null);
   }, []);
 
@@ -154,6 +185,11 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      isCallStageDocked,
+      dockCallStage,
+      maximizeCallStage,
+      onOpenConsultationChart,
+      setOnOpenConsultationChart,
     }),
     [
       isChatDrawerOpen,
@@ -164,6 +200,11 @@ export function ClinicCommsProvider({ children }: { children: React.ReactNode })
       teleconsultSession,
       openTeleconsultWaitingRoom,
       closeTeleconsultWaitingRoom,
+      isCallStageDocked,
+      dockCallStage,
+      maximizeCallStage,
+      onOpenConsultationChart,
+      setOnOpenConsultationChart,
     ],
   );
 

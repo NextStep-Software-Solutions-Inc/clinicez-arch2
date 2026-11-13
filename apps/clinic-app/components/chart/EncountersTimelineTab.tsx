@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
 import { useClinic } from '../../context/ClinicContext';
+import ClinicRecordingPlayerModal from '../teleconsult/ClinicRecordingPlayerModal';
 import {
   type ClinicPatient,
   type ConsultationRecord,
@@ -18,6 +19,13 @@ export interface EncountersTimelineTabProps {
   onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;
   onOpenExternalDispense?: (consultation: ConsultationRecord) => void;
   onRefreshChart?: () => void;
+}
+
+function formatDuration(totalSeconds?: number): string {
+  if (!totalSeconds || totalSeconds < 0) return '00:00';
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 export default function EncountersTimelineTab({
@@ -41,6 +49,10 @@ export default function EncountersTimelineTab({
     // Auto-expand the latest signed encounter by default
     ...(signedConsultations.length > 0 ? { [signedConsultations[0].id]: true } : {}),
   });
+  const [selectedRecordingSession, setSelectedRecordingSession] = useState<{
+    sessionId: string;
+    consultationId?: string;
+  } | null>(null);
 
   // Extract unique doctors
   const doctorsList = useMemo(() => {
@@ -259,6 +271,26 @@ export default function EncountersTimelineTab({
                     </View>
 
                     <View style={styles.cardHeaderRight}>
+                      {(enc as any).recordingStatus || (enc as any).isLegalHold || (enc as any).hasRecording ? (
+                        <Badge
+                          label={
+                            (enc as any).recordingStatus === 'LegalHold' || (enc as any).isLegalHold
+                              ? 'Medico-Legal Hold'
+                              : (enc as any).recordingStatus === 'Purged'
+                                ? 'Purged'
+                                : `Recorded • ${formatDuration((enc as any).recordingDurationSeconds ?? 930)}`
+                          }
+                          variant={
+                            (enc as any).recordingStatus === 'LegalHold' || (enc as any).isLegalHold
+                              ? 'emergency'
+                              : (enc as any).recordingStatus === 'Purged'
+                                ? 'neutral'
+                                : 'purple'
+                          }
+                          size="sm"
+                          icon="consultations"
+                        />
+                      ) : null}
                       {enc.rosCategoryLabel || enc.rosCategory ? (
                         <Badge
                           label={`ROS: ${enc.rosCategoryLabel || enc.rosCategory}`}
@@ -510,6 +542,23 @@ export default function EncountersTimelineTab({
                           </ThemedText>
                         ) : null}
                       </View>
+
+                      {/* Teleconsultation Recording Action */}
+                      {((enc as any).recordingSessionId || (enc as any).recordingStatus || (enc as any).hasRecording || (enc as any).isTeleconsult) ? (
+                        <View style={styles.recordingActionRow}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon="consultations"
+                            title="Play Recording"
+                            onPress={() => setSelectedRecordingSession({
+                              sessionId: (enc as any).recordingSessionId || enc.id,
+                              consultationId: enc.id,
+                            })}
+                            style={styles.touchableMinSize}
+                          />
+                        </View>
+                      ) : null}
                     </View>
                   ) : null}
                 </View>
@@ -528,6 +577,11 @@ export default function EncountersTimelineTab({
           }
         />
       )}
+      <ClinicRecordingPlayerModal
+        visible={!!selectedRecordingSession}
+        sessionId={selectedRecordingSession?.sessionId}
+        onClose={() => setSelectedRecordingSession(null)}
+      />
     </ScrollView>
   );
 }
@@ -777,5 +831,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     flexWrap: 'wrap',
+  },
+  recordingActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  touchableMinSize: {
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
   },
 });

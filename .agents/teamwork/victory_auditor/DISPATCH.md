@@ -1,34 +1,19 @@
-# Dispatch for Victory Forensic Auditor
-Working directory: /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/victory_auditor
-Repository root: /Users/macuser/projects/github/nextstep/clinicez-calendar
+## 2026-11-13T04:03:45Z
+You are the independent Post-Victory Auditor. The Project Orchestrator has claimed 100% completion on finalization of the teleconsultation feature.
 
-## 2026-10-20T04:32:08Z
-[Message] timestamp=2026-10-20T04:32:08Z sender=7535da92-2247-4cf9-b2de-2da99510b734 priority=MESSAGE_PRIORITY_HIGH content=You are the Final Victory Forensic Auditor for the complete Clinic Calendar project.
-Working directory: /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/victory_auditor
-Repository root: /Users/macuser/projects/github/nextstep/clinicez-calendar
+Your audit is BLOCKING. Conduct an independent 3-phase audit with zero shared context from the implementation team:
+1. Phase 1 — Timeline and Scope Verification: Verify every item in ORIGINAL_REQUEST.md against the actual codebase.
+2. Phase 2 — Cheating & Stub Detection: Search for any fake implementations, hardcoded returns, stubs, mocks in production code, or bypassed validations.
+3. Phase 3 — Independent Test Execution:
+   - dotnet test packages/shared-dotnet/ClinicEz.Shared.Tests/ClinicEz.Shared.Tests.csproj
+   - dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj
+   - cd packages/comms-sdk && bun run typecheck && bun test
+   - cd apps/clinic-app && bun run typecheck && bun run lint:tokens && bun run lint:hosts && bun test
+   - Verify strict guardrails: 0 PostgreSQL migrations, 0 external brokers, 0 hardcoded hosts, 0 design token violations, >=44px touch targets, zero-PHI tokens, and AES-256-GCM encryption with HMAC streaming.
 
-Authoritative request: Read /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/ORIGINAL_REQUEST.md (MANDATORY)
-Project plan: Read /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/orchestrator_1/PROJECT.md
-Gate tracking: Read /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/orchestrator_1/GATE_STATUS.md
+Original Request path: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/ORIGINAL_REQUEST.md
+Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api
+State folder: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api/.agents/teamwork/victory_auditor
+Reference Implementation Plan: /Users/macuser/.gemini/antigravity/brain/9542d721-8b8b-46ea-9635-c34ef9a2bc0a/implementation_plan.md
 
-Your mission:
-Perform an exhaustive, project-wide forensic integrity audit across the entire Clinic Calendar implementation:
-1. Audit all modified and newly created source files:
-   - services/clinic-api/ClinicEz.Clinic.Application/Features/Appointments/GetAppointmentsQuery.cs
-   - services/clinic-api/ClinicEz.Clinic.Api/Controllers/AppointmentsController.cs
-   - apps/clinic-app/services/clinicService.ts
-   - apps/clinic-app/components/calendar/ (all 14 files: types, calendarUtils, CalendarHeader, CalendarSkeleton, AppointmentCard, MonthView, WeekView, DayView, DoctorTimelineColumn, DateCarousel, AgendaView, AppointmentInspectionModal, AppointmentRescheduleModal, index)
-   - apps/clinic-app/navigation/screens/Appointments.screen.tsx
-2. Verify:
-   - ZERO hardcoded test results, fake mocks in production code, or dummy facades.
-   - ZERO raw hex color literals (#...) or direct palette.ts imports across all .ts/.tsx files in apps/clinic-app.
-   - Authentic logic: genuine PostgreSQL UTC calculations, genuine Asia/Manila date math, real 42-cell Gregorian grids, real 07:00-19:00 intervals, genuine 409 conflict detection and error alert banners, genuine check-in routing via QueueRoutingSelector.
-3. Execute verification commands directly:
-   - export PATH="$HOME/.dotnet:$HOME/.bun/bin:$PATH"
-   - dotnet build services/clinic-api/ClinicEz.Clinic.sln
-   - dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Appointments"
-   - cd apps/clinic-app && bun run typecheck
-   - bun apps/clinic-app/scripts/check-tokens.mjs --strict
-   - bun test apps/clinic-app/tests/calendar* apps/clinic-app/tests/appointmentsPreselectBooking.test.ts apps/clinic-app/tests/rosterEdgeStates.test.ts
-4. Determine your verdict: CLEAN or INTEGRITY VIOLATION.
-5. Deliver handoff.md with your findings. When finished, send a message to parent (conversation ID: 7535da92-2247-4cf9-b2de-2da99510b734).
+Deliver your final structured report with an explicit verdict: VICTORY CONFIRMED or VICTORY REJECTED.

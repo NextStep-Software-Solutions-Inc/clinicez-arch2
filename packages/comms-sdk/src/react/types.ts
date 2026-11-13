@@ -310,8 +310,40 @@ export interface TeleconsultPaymentState {
   status: TeleconsultPaymentStatus;
   canAdmit: boolean;
   isYakapExempt: boolean;
+  hasActiveYakapEnlistment?: boolean;
   isEmergencyOverride: boolean;
   overrideReason?: string;
+}
+
+export interface UseCallSessionCallbacks {
+  /** Called when clinic staff updates the payment policy (Prepaid, Postpaid, Exempt) */
+  onUpdatePaymentPolicy?: (policy: TeleconsultPaymentPolicy) => Promise<void>;
+  /** Called when admitting the patient (optionally with plain-note clinical override) */
+  onAdmitPatient?: (emergencyOverride?: EmergencyOverrideInput) => Promise<void>;
+  /** Called when joining the teleconsultation media call room */
+  onJoinCall?: () => Promise<{
+    liveKitToken?: string;
+    roomName?: string;
+    wsUrl?: string;
+    mediaAvailable?: boolean;
+    isFallbackToken?: boolean;
+    participantIdentity?: string;
+  } | void>;
+  /** Called when leaving or ending the teleconsultation call */
+  onEndCall?: () => Promise<void>;
+  /** Called when requesting recording consent from patient */
+  onRequestRecordingConsent?: () => Promise<{
+    recordingSessionId?: string;
+    status?: CallConsentState['status'];
+  } | string | void>;
+  /** Called when patient responds to recording consent request */
+  onRespondRecordingConsent?: (approved: boolean, reason?: string) => Promise<void>;
+  /** Called when either clinician or patient revokes consent / stops recording */
+  onRevokeRecordingConsent?: (reason?: string) => Promise<void>;
+  /** Called when a 10s recording segment is sliced and ready for CMK AES-256-GCM upload */
+  onSegmentUploaded?: (segment: { segmentIndex: number; durationMs: number; bytes: Uint8Array }) => Promise<void>;
+  /** Called to finalize an active recording session after stopping or ending call */
+  onFinalizeRecording?: (sessionId: string) => Promise<void>;
 }
 
 export interface CallConsentState {
@@ -338,10 +370,17 @@ export interface EmergencyOverrideInput {
   reasonNote: string;
 }
 
-export interface UseCallSessionOptions {
+export interface UseCallSessionOptions extends UseCallSessionCallbacks {
   participantIdentity?: string;
+  participantName?: string;
+  isDoctor?: boolean;
   e2eeKey?: string;
   autoJoinWaitingRoom?: boolean;
+  initialPaymentState?: Partial<TeleconsultPaymentState>;
+  mediaAdapter?: import('../core/media/IMediaRoomAdapter').IMediaRoomAdapter;
+  appointmentId?: string;
+  facilityId?: string;
+  roomName?: string;
 }
 
 export interface UseCallSessionResult {
@@ -373,9 +412,13 @@ export interface UseCallSessionResult {
     requestRecordingConsent: () => Promise<void>;
     respondToRecordingConsent: (approved: boolean, reason?: string) => Promise<void>;
     revokeRecordingConsent: (reason?: string) => Promise<void>;
+    recordingDurationSeconds?: number;
   };
+  updatePaymentPolicy: (policy: TeleconsultPaymentPolicy) => Promise<void>;
   admitPatient: (emergencyOverride?: EmergencyOverrideInput) => Promise<void>;
+  joinCall?: () => Promise<void>;
   leaveCall: () => Promise<void>;
   endCall: () => Promise<void>;
+  mediaAdapter?: import('../core/media/IMediaRoomAdapter').IMediaRoomAdapter;
   error: Error | null;
 }

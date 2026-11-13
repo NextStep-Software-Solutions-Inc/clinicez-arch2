@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
+  Pressable,
   StyleSheet,
   ScrollView,
   RefreshControl,
@@ -40,6 +41,7 @@ import {
   ClinicPatient,
   ClinicCustomFieldDefinition,
   GetAppointmentsOptions,
+  type TeleconsultPaymentPolicy,
   formatClinicDate,
   formatClinicTime,
   getClinicTodayStr,
@@ -192,6 +194,18 @@ export function AppointmentBookedSuccessView({ appointment }: AppointmentBookedS
         </View>
         <View style={styles.successSummaryRow}>
           <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Visit modality
+          </ThemedText>
+          <ThemedText variant="bodyBold">
+            {appointment.appointmentType === 'Teleconsult' ||
+            appointment.isTeleconsult ||
+            /^teleconsult(ation)?$/i.test((appointment.serviceType || '').trim())
+              ? `Teleconsultation${appointment.paymentPolicy ? ` (${appointment.paymentPolicy})` : ''}`
+              : 'In-Person'}
+          </ThemedText>
+        </View>
+        <View style={styles.successSummaryRow}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
             Attending physician
           </ThemedText>
           <ThemedText variant="body">
@@ -340,6 +354,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [formDate, setFormDate] = useState<string>(() => (initialPreselected ? defaultSlot().date : ''));
   const [formTime, setFormTime] = useState<string>(() => (initialPreselected ? defaultSlot().time : ''));
   const [formServiceTypes, setFormServiceTypes] = useState<string[]>(['Consultation']);
+  const [formModality, setFormModality] = useState<'InPerson' | 'Teleconsult'>('InPerson');
+  const [formPaymentPolicy, setFormPaymentPolicy] = useState<TeleconsultPaymentPolicy>('Prepaid');
   const [formReason, setFormReason] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
@@ -426,6 +442,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setFormPatient(null);
     setFormDoctorId(null);
     setFormServiceTypes(['Consultation']);
+    setFormModality('InPerson');
+    setFormPaymentPolicy('Prepaid');
     setFormReason('');
     setFormNotes('');
   }, []);
@@ -448,6 +466,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     setFormDate(slot.date);
     setFormTime(slot.time);
     setFormServiceTypes(['Consultation']);
+    setFormModality('InPerson');
+    setFormPaymentPolicy('Prepaid');
     setFormReason('');
     setFormNotes('');
     setBookModalVisible(true);
@@ -595,6 +615,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       setFormDate(dateStr);
       setFormTime(timeStr);
       setFormServiceTypes(['Consultation']);
+      setFormModality('InPerson');
+      setFormPaymentPolicy('Prepaid');
       setFormReason('');
       setFormNotes('');
       setBookModalVisible(true);
@@ -620,6 +642,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       return;
     }
     const doctor = doctors.find((d) => d.id === formDoctorId);
+    const selectedServices = formServiceTypes.join(', ').trim();
 
     try {
       isBookingRef.current = true;
@@ -630,9 +653,11 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         doctorId: doctor?.id,
         doctorName: doctor ? formatStaffName(doctor) : undefined,
         scheduledAt,
-        serviceType: formServiceTypes.join(', ').trim() || undefined,
-        reason: formReason.trim() || 'General Consultation',
+        serviceType: formModality === 'Teleconsult' ? 'Teleconsult' : selectedServices || undefined,
+        reason: formReason.trim() || selectedServices || 'General Consultation',
         notes: formNotes.trim() || undefined,
+        appointmentType: formModality === 'Teleconsult' ? 'Teleconsult' : 'InPerson',
+        paymentPolicy: formModality === 'Teleconsult' ? formPaymentPolicy : undefined,
       });
 
       if (err || !newApt) {
@@ -640,8 +665,21 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         return;
       }
 
-      setAppointments((prev) => [newApt, ...prev]);
-      setBookedAppointment(newApt);
+      const createdApt: AppointmentItem =
+        formModality === 'Teleconsult'
+          ? {
+              ...newApt,
+              appointmentType: newApt.appointmentType ?? 'Teleconsult',
+              isTeleconsult: true,
+              paymentPolicy:
+                (newApt.paymentPolicy as TeleconsultPaymentPolicy | undefined) ?? formPaymentPolicy,
+              paymentStatus:
+                newApt.paymentStatus ?? (formPaymentPolicy === 'Exempt' ? 'Exempt' : 'Pending'),
+            }
+          : newApt;
+
+      setAppointments((prev) => [createdApt, ...prev]);
+      setBookedAppointment(createdApt);
       notify.success(`Appointment booked for ${formPatient.fullName}.`);
     } finally {
       setBooking(false);
@@ -961,6 +999,112 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
               </View>
             )}
 
+            <View style={styles.fieldGroup}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                Visit modality
+              </ThemedText>
+              <View style={styles.modalityToggleGroup} testID="book-modality-toggle-group">
+                <Pressable
+                  testID="book-modality-in-person"
+                  accessibilityRole="button"
+                  accessibilityLabel="In-Person Consultation"
+                  onPress={() => setFormModality('InPerson')}
+                  style={[
+                    styles.modalityOptionBtn,
+                    formModality === 'InPerson'
+                      ? styles.modalityChipSelected
+                      : styles.modalityChipUnselected,
+                  ]}
+                >
+                  <Icon
+                    name="patient"
+                    size={theme.sizes.iconSm}
+                    color={
+                      formModality === 'InPerson'
+                        ? theme.colors.routineText
+                        : theme.colors.textMuted
+                    }
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={
+                      formModality === 'InPerson' ? theme.colors.routineText : theme.colors.text
+                    }
+                  >
+                    In-Person
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  testID="book-modality-teleconsult"
+                  accessibilityRole="button"
+                  accessibilityLabel="Virtual Teleconsultation"
+                  onPress={() => setFormModality('Teleconsult')}
+                  style={[
+                    styles.modalityOptionBtn,
+                    formModality === 'Teleconsult'
+                      ? styles.modalityChipSelected
+                      : styles.modalityChipUnselected,
+                  ]}
+                >
+                  <Icon
+                    name="consultations"
+                    size={theme.sizes.iconSm}
+                    color={
+                      formModality === 'Teleconsult'
+                        ? theme.colors.routineText
+                        : theme.colors.textMuted
+                    }
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={
+                      formModality === 'Teleconsult'
+                        ? theme.colors.routineText
+                        : theme.colors.text
+                    }
+                  >
+                    Teleconsultation
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+
+            {formModality === 'Teleconsult' ? (
+              <View style={styles.fieldGroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Payment policy
+                </ThemedText>
+                <View style={styles.chipRow} testID="book-teleconsult-policy-picker">
+                  {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((pol) => {
+                    const isSelected = formPaymentPolicy === pol;
+                    return (
+                      <Pressable
+                        key={pol}
+                        testID={`book-policy-option-${pol.toLowerCase()}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${pol} Policy`}
+                        onPress={() => setFormPaymentPolicy(pol)}
+                        style={[
+                          styles.policyOptionBtn,
+                          isSelected
+                            ? styles.modalityChipSelected
+                            : styles.modalityChipUnselected,
+                        ]}
+                      >
+                        <ThemedText
+                          variant="smallBold"
+                          color={isSelected ? theme.colors.routineText : theme.colors.text}
+                        >
+                          {pol}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             {doctors.length > 0 ? (
               <View style={styles.fieldGroup}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -1262,6 +1406,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
+  },
+  modalityToggleGroup: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  modalityOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  policyOptionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  modalityChipSelected: {
+    backgroundColor: theme.colors.routineBg,
+    borderColor: theme.colors.routineBorder,
+  },
+  modalityChipUnselected: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
   },
   successContainer: {
     gap: theme.spacing.md,

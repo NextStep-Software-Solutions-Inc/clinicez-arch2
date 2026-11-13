@@ -1,4 +1,5 @@
 using System;
+using ClinicEz.Shared.Interop.Contracts;
 
 namespace ClinicEz.Clinic.Application.Features.Settings.DTOs;
 
@@ -79,4 +80,9 @@ public sealed record ClinicSettingsDto(
     int KioskTokenVersion = 1,
     string TvDisplaySoundTheme = "classicChime",
     bool TvDisplayVoiceEnabled = false,
-    bool TvDisplayShowPhysicianName = true);
+    bool TvDisplayShowPhysicianName = true,
+    string TeleconsultRecordingPolicy = "Disabled",
+    int TeleconsultRecordingRetentionDays = 90,
+    bool TeleconsultRecordingConsentRequired = true,
+    TeleconsultPaymentPolicy TeleconsultPaymentPolicy = TeleconsultPaymentPolicy.Prepaid,
+    decimal? TeleconsultDefaultFee = 400.00m);

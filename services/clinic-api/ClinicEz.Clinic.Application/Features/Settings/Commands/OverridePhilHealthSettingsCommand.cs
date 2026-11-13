@@ -6,6 +6,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -173,6 +174,11 @@ public sealed class OverridePhilHealthSettingsCommandHandler : IRequestHandler<O
             KioskTokenVersion: settings.KioskTokenVersion,
             TvDisplaySoundTheme: settings.TvDisplaySoundTheme ?? "classicChime",
             TvDisplayVoiceEnabled: settings.TvDisplayVoiceEnabled,
-            TvDisplayShowPhysicianName: settings.TvDisplayShowPhysicianName);
+            TvDisplayShowPhysicianName: settings.TvDisplayShowPhysicianName,
+            TeleconsultRecordingPolicy: settings.TeleconsultRecordingPolicy ?? "Disabled",
+            TeleconsultRecordingRetentionDays: settings.TeleconsultRecordingRetentionDays,
+            TeleconsultRecordingConsentRequired: settings.TeleconsultRecordingConsentRequired,
+            TeleconsultPaymentPolicy: Enum.TryParse<TeleconsultPaymentPolicy>(settings.TeleconsultPaymentPolicy, true, out var pol) ? pol : TeleconsultPaymentPolicy.Prepaid,
+            TeleconsultDefaultFee: settings.TeleconsultDefaultFee);
     }
 }

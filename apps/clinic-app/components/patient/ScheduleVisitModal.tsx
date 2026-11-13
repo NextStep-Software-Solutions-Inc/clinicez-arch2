@@ -24,6 +24,7 @@ import {
   type ClinicPatient,
   type StaffMember,
   type AvailableSlotItem,
+  type TeleconsultPaymentPolicy,
 } from '../../services/clinicService';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { notify } from '../../utils/feedback';
@@ -137,7 +138,15 @@ export default function ScheduleVisitModal({
     return (staff ?? []).filter((s) => s.role === 'Doctor');
   }, [doctorsProp, staff]);
 
+  const hasYakap = Boolean(
+    (patient as any)?.hasActiveYakapEnlistment ??
+    (patient as any)?.isYakapEnrolled ??
+    (patient as any)?.isYakapEligible
+  );
+
   // Form states
+  const [modality, setModality] = useState<'InPerson' | 'Teleconsult'>('InPerson');
+  const [paymentPolicy, setPaymentPolicy] = useState<TeleconsultPaymentPolicy>('Prepaid');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(() => initialDoctorId ?? '');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayIsoDate());
   const [selectedSlotTime, setSelectedSlotTime] = useState<string>('');
@@ -188,6 +197,8 @@ export default function ScheduleVisitModal({
       setClinicalNotes('');
       setScheduling(false);
       setNotifying(false);
+      setModality('InPerson');
+      setPaymentPolicy('Prepaid');
     }
   }, [visible]);
 
@@ -322,9 +333,11 @@ export default function ScheduleVisitModal({
         doctorName: selectedDoctorId ? docName : undefined,
         scheduledAt,
         durationMinutes: 30,
-        serviceType: purpose,
+        serviceType: modality === 'Teleconsult' ? 'Teleconsult' : purpose,
         reason: clinicalNotes.trim() || purpose,
         notes: clinicalNotes.trim() || undefined,
+        appointmentType: modality === 'Teleconsult' ? 'Teleconsult' : 'InPerson',
+        paymentPolicy: modality === 'Teleconsult' ? paymentPolicy : undefined,
       };
 
       const [res, err] = await clinicService.createAppointment(payload);
@@ -544,6 +557,103 @@ export default function ScheduleVisitModal({
               contentContainerStyle={styles.formScrollContent}
               showsVerticalScrollIndicator
             >
+              {/* Visit Modality Selector */}
+              <View style={styles.formSection}>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionTitle}>
+                  Visit Modality
+                </ThemedText>
+                <View style={styles.modalityToggleGroup} testID="modality-toggle-group">
+                  <Pressable
+                    testID="btn-modality-in-person"
+                    accessibilityRole="button"
+                    accessibilityLabel="In-Person Consultation"
+                    onPress={() => setModality('InPerson')}
+                    style={[
+                      styles.modalityBtn,
+                      modality === 'InPerson' ? styles.chipSelected : styles.chipUnselected,
+                    ]}
+                  >
+                    <Icon
+                      name="patient"
+                      size={theme.sizes.iconSm}
+                      color={modality === 'InPerson' ? theme.colors.routineText : theme.colors.textMuted}
+                    />
+                    <ThemedText
+                      variant="smallBold"
+                      color={modality === 'InPerson' ? theme.colors.routineText : theme.colors.text}
+                    >
+                      In-Person
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    testID="btn-modality-teleconsult"
+                    accessibilityRole="button"
+                    accessibilityLabel="Virtual Teleconsultation"
+                    onPress={() => setModality('Teleconsult')}
+                    style={[
+                      styles.modalityBtn,
+                      modality === 'Teleconsult' ? styles.chipSelected : styles.chipUnselected,
+                    ]}
+                  >
+                    <Icon
+                      name="consultations"
+                      size={theme.sizes.iconSm}
+                      color={modality === 'Teleconsult' ? theme.colors.routineText : theme.colors.textMuted}
+                    />
+                    <ThemedText
+                      variant="smallBold"
+                      color={modality === 'Teleconsult' ? theme.colors.routineText : theme.colors.text}
+                    >
+                      Teleconsultation
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Teleconsultation Payment Policy Picker */}
+              {modality === 'Teleconsult' && (
+                <View style={styles.formSection}>
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionTitle}>
+                    Payment Policy
+                  </ThemedText>
+                  <View style={styles.chipsRow} testID="teleconsult-policy-picker">
+                    {(['Prepaid', 'Postpaid', 'Exempt'] as const).map((pol) => {
+                      const isSelected = paymentPolicy === pol;
+                      return (
+                        <Pressable
+                          key={pol}
+                          testID={`btn-policy-option-${pol.toLowerCase()}`}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${pol} Policy`}
+                          onPress={() => setPaymentPolicy(pol)}
+                          style={[
+                            styles.policyOptionBtn,
+                            isSelected ? styles.chipSelected : styles.chipUnselected,
+                          ]}
+                        >
+                          <ThemedText
+                            variant="smallBold"
+                            color={isSelected ? theme.colors.routineText : theme.colors.text}
+                          >
+                            {pol}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {hasYakap && (
+                    <View style={styles.yakapInfoBanner} testID="teleconsult-yakap-badge">
+                      <Badge variant="info" icon="shield" label="PhilHealth YAKAP Enlisted" />
+                      <ThemedText variant="caption" color={theme.colors.infoText}>
+                        Patient is enlisted in PhilHealth YAKAP. This status is informational. Prepayment exemption may be granted by selecting 'Exempt' above.
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
+              )}
+
               {/* Attending Physician Section */}
               <View style={styles.formSection}>
                 <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionTitle}>
@@ -804,6 +914,7 @@ export default function ScheduleVisitModal({
                   style={styles.footerBtn}
                 />
                 <Button
+                  testID="btn-confirm-booking"
                   title="Confirm and schedule"
                   variant="primary"
                   loading={scheduling}
@@ -1022,5 +1133,41 @@ const styles = StyleSheet.create({
   postActionBtn: {
     flexBasis: '48%',
     flexGrow: 1,
+  },
+  modalityToggleGroup: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  modalityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+  },
+  policyOptionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xl,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.touchTarget,
+    minWidth: theme.sizes.touchTarget,
+  },
+  yakapInfoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.xs,
   },
 });

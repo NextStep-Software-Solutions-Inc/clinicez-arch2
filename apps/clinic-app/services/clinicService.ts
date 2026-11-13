@@ -732,6 +732,174 @@ export interface ConsultationRecord {
   draftWorkspace?: ConsultationDraftWorkspaceDto | null;
 }
 
+// ============================================================================
+// Teleconsultation & Virtual Care DTOs (Milestone 5)
+// ============================================================================
+
+export type TeleconsultPaymentPolicy = 'Prepaid' | 'Postpaid' | 'Exempt';
+export type TeleconsultPaymentStatus = 'Pending' | 'Paid' | 'Exempt' | 'Overridden';
+export type TeleconsultRecordingPolicy = 'Disabled' | 'WorkspaceVaultOnly' | 'Both';
+export type AppointmentType = 'InPerson' | 'Teleconsult';
+
+export interface EmergencyOverrideDto {
+  reasonCode?: string;
+  reasonNote?: string;
+}
+
+export type EmergencyOverrideInput = EmergencyOverrideDto;
+
+export interface AdmitTeleconsultPatientPayload {
+  appointmentId: string;
+  emergencyOverride?: EmergencyOverrideDto | null;
+}
+
+export interface TeleconsultAdmissionResultDto {
+  appointmentId: string;
+  callId: string;
+  roomName: string;
+  admittedAtUtc: string;
+  paymentStatus: TeleconsultPaymentStatus | string;
+  isEmergencyOverride: boolean;
+}
+
+export interface TeleconsultStatusDto {
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  doctorId?: string;
+  clinicianName?: string;
+  scheduledAt?: string;
+  scheduledTime?: string;
+  appointmentType?: AppointmentType | string;
+  paymentPolicy: TeleconsultPaymentPolicy | string;
+  paymentStatus: TeleconsultPaymentStatus | string;
+  canAdmit: boolean;
+  hasActiveYakapEnlistment: boolean;
+  callId?: string | null;
+  isEmergencyOverride: boolean;
+  overrideReason?: string | null;
+  emergencyOverrideReasonCode?: string | null;
+  invoiceId?: string | null;
+  recordingPolicy?: 'Disabled' | 'WorkspaceVaultOnly' | 'Both' | string;
+  recordingConsentRequired?: boolean;
+  activeRecordingSessionId?: string | null;
+  isYakapExempt?: boolean;
+  admittedAtUtc?: string | null;
+}
+
+export interface TeleconsultCallJoinDto {
+  appointmentId?: string;
+  callId: string;
+  roomName: string;
+  relayUrl?: string | null;
+  clinicianToken?: string | null;
+  participantIdentity?: string;
+  mediaAvailable?: boolean;
+  mediaStatusMessage?: string | null;
+  recordingPolicy?: TeleconsultRecordingPolicy | string;
+  recordingConsentRequired?: boolean;
+  accessToken?: string | null;
+  token?: string | null;
+  liveKitServerUrl?: string | null;
+  isFallbackToken?: boolean;
+  expiresAtUtc?: string | null;
+}
+
+export interface TeleconsultCallEndResultDto {
+  appointmentId: string;
+  callId: string;
+  roomName: string;
+  endedAtUtc: string;
+  status: string;
+  recordingFinalized?: boolean;
+  wormAuditLogged?: boolean;
+  commsCallStateChangedEnqueued?: boolean;
+}
+
+export interface RecordingSessionDto {
+  id: string;
+  tenantId?: string;
+  clinicId?: string;
+  callId: string;
+  appointmentId?: string | null;
+  consultationId?: string | null;
+  patientId?: string;
+  patientName?: string;
+  doctorId?: string;
+  doctorName?: string;
+  status?: 'Recording' | 'Finalized' | 'Purged' | string;
+  consentStatus?: 'none' | 'requested' | 'approved' | 'declined' | 'revoked' | string;
+  recordingState?:
+    | 'Initializing'
+    | 'ReadyToRecord'
+    | 'Recording'
+    | 'Paused'
+    | 'Blocked'
+    | 'Finalizing'
+    | 'Completed'
+    | 'Aborted'
+    | 'Purged'
+    | string;
+  storagePolicy?: string;
+  totalDurationSeconds?: number;
+  durationSeconds?: number;
+  segmentCount?: number;
+  totalSizeBytes?: number;
+  sizeBytes?: number;
+  containerFormat?: string;
+  manifestStorageKey?: string | null;
+  hasGaps?: boolean;
+  retentionPolicyDays?: number;
+  expiresAtUtc?: string | null;
+  isLegalHold?: boolean;
+  hasLegalHold?: boolean;
+  legalHoldReason?: string | null;
+  isPurged?: boolean;
+  createdAt?: string;
+}
+
+export type TeleconsultRecordingSessionDto = RecordingSessionDto;
+
+export interface RecordingSegmentDto {
+  id: string;
+  sessionId: string;
+  segmentIndex: number;
+  durationMs: number;
+  storageKey?: string;
+  sizeBytes?: number;
+  sha256Checksum?: string;
+  receivedAtUtc?: string;
+}
+
+export interface PlaybackTicketDto {
+  ticket: string;
+  expiresAtUtc: string;
+  streamUrl?: string;
+  durationSeconds?: number;
+  sizeBytes?: number;
+  hasLegalHold?: boolean;
+  legalHoldReason?: string;
+}
+
+export type TeleconsultPlaybackTicketDto = PlaybackTicketDto;
+
+export interface RequestRecordingConsentPayload {
+  callId?: string;
+  patientId?: string;
+  doctorId?: string;
+  appointmentId?: string | null;
+  consultationId?: string | null;
+  containerFormat?: string | null;
+  policy?: TeleconsultRecordingPolicy | string;
+}
+
+export interface PatientConsentPayload {
+  approved?: boolean;
+  consented?: boolean;
+  rejectionReason?: string | null;
+  refusalReason?: string | null;
+}
+
 export interface AppointmentItem {
   id: string;
   tenantId?: string;
@@ -754,6 +922,19 @@ export interface AppointmentItem {
   reminder2hSentAt?: string | null;
   lastReminderSentAt?: string | null;
   lastReminderType?: string | null;
+
+  // Teleconsultation properties (Milestone 2 & Milestone 5)
+  appointmentType?: 'InPerson' | 'Teleconsult' | string;
+  isTeleconsult?: boolean;
+  paymentPolicy?: TeleconsultPaymentPolicy | string;
+  paymentStatus?: TeleconsultPaymentStatus | string;
+  invoiceId?: string | null;
+  paidAmount?: number | null;
+  callId?: string | null;
+  admittedAtUtc?: string | null;
+  isEmergencyOverride?: boolean;
+  emergencyOverrideReasonCode?: string | null;
+  hasActiveYakapEnlistment?: boolean;
 }
 
 export interface GetAppointmentsOptions {
@@ -3260,6 +3441,13 @@ export interface ClinicSettingsRecord {
   branchSoftwareCertificateId?: string | null;
   branchKonsultaEndpoint?: string | null;
   isBranchPhilHealthAccredited?: boolean;
+
+  // Teleconsultation Settings (Milestone 1 & Milestone 5)
+  teleconsultRecordingPolicy?: TeleconsultRecordingPolicy | string;
+  teleconsultRecordingRetentionDays?: number;
+  teleconsultRecordingConsentRequired?: boolean;
+  teleconsultPaymentPolicy?: TeleconsultPaymentPolicy | string;
+  teleconsultDefaultFee?: number | null;
 }
 
 export interface DocumentSignatoryItemConfig {
@@ -4726,6 +4914,8 @@ export const clinicService = {
     serviceType?: string;
     reason?: string;
     notes?: string;
+    appointmentType?: 'InPerson' | 'Teleconsult' | string;
+    paymentPolicy?: TeleconsultPaymentPolicy | string;
   }) {
     return clinicApiClient.post<AppointmentItem>('/appointments', payload);
   },
@@ -5373,6 +5563,203 @@ export const clinicService = {
 
   async voidToothRecord(patientId: string, recordId: string, reason?: string) {
     return this.voidDentalToothRecord(patientId, recordId, reason);
+  },
+
+  // ============================================================================
+  // Teleconsultation & Virtual Care API Client Methods (Milestone 5)
+  // ============================================================================
+
+  /** 1. Retrieves live teleconsult admission, payment gate status, and recording status. */
+  async getTeleconsultStatus(appointmentId: string) {
+    return clinicApiClient.get<TeleconsultStatusDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/status`,
+    );
+  },
+
+  /** 2. Updates the teleconsultation payment policy (Prepaid, Postpaid, Exempt). */
+  async updateTeleconsultPaymentPolicy(
+    appointmentId: string,
+    paymentPolicy: TeleconsultPaymentPolicy | string,
+  ) {
+    return clinicApiClient.put<TeleconsultStatusDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/payment-policy`,
+      { paymentPolicy },
+    );
+  },
+
+  /** 3. Admits patient from the virtual waiting room (with optional plain-note emergency override). */
+  async admitTeleconsultPatient(
+    appointmentId: string,
+    emergencyOverride?: EmergencyOverrideDto | null,
+  ) {
+    return clinicApiClient.post<TeleconsultAdmissionResultDto>('/teleconsult/admit', {
+      appointmentId,
+      emergencyOverride: emergencyOverride || undefined,
+    });
+  },
+
+  /** 4. Joins teleconsult call and requests zero-PHI room tokens from media broker. */
+  async joinTeleconsultCall(appointmentId: string) {
+    return clinicApiClient.post<TeleconsultCallJoinDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/join`,
+      {},
+    );
+  },
+
+  /** 5. Ends teleconsult call, marks appointment completed, and auto-finalizes recording. */
+  async endTeleconsultCall(appointmentId: string, endReason?: string) {
+    return clinicApiClient.post<TeleconsultCallEndResultDto>(
+      `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/end`,
+      endReason ? { endReason } : {},
+    );
+  },
+
+  /** 6. Clinician initiates informed recording consent for a call session. */
+  async requestRecordingConsent(payload: RequestRecordingConsentPayload) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      '/teleconsult/recordings/sessions/request-consent',
+      payload,
+    );
+  },
+
+  /** 7. Submits patient recording consent decision (approved or declined). */
+  async submitPatientRecordingConsent(
+    sessionId: string,
+    payload: PatientConsentPayload | { approved?: boolean; consented?: boolean; rejectionReason?: string | null; refusalReason?: string | null },
+  ) {
+    const approved = payload.approved ?? payload.consented ?? true;
+    const rejectionReason = payload.rejectionReason ?? payload.refusalReason ?? undefined;
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/patient-consent`,
+      { approved, rejectionReason },
+    );
+  },
+
+  /** 8. Unilaterally revokes recording consent, halting active recording immediately. */
+  async revokeRecordingConsent(sessionId: string, reason?: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/revoke-consent`,
+      reason ? { reason } : {},
+    );
+  },
+
+  /** 9. Streams a ~10s recording chunk for CMK AES-256-GCM envelope vault encryption. */
+  async uploadRecordingSegment(
+    sessionId: string,
+    segmentIndexOrChunk: number | Blob | Uint8Array | ArrayBuffer,
+    durationMsOrMeta?: number | { segmentIndex: number; durationMs: number; iv?: string; tag?: string },
+    chunk?: Blob | Uint8Array | ArrayBuffer,
+    encryptionMeta?: { iv?: string; tag?: string },
+  ) {
+    let segmentIndex = 0;
+    let durationMs = 0;
+    let payloadChunk: Blob | Uint8Array | ArrayBuffer;
+    let iv: string | undefined;
+    let tag: string | undefined;
+
+    if (typeof segmentIndexOrChunk === 'number') {
+      segmentIndex = segmentIndexOrChunk;
+      durationMs = typeof durationMsOrMeta === 'number' ? durationMsOrMeta : 0;
+      payloadChunk = chunk!;
+      iv = encryptionMeta?.iv;
+      tag = encryptionMeta?.tag;
+    } else {
+      payloadChunk = segmentIndexOrChunk;
+      if (typeof durationMsOrMeta === 'object' && durationMsOrMeta !== null) {
+        segmentIndex = durationMsOrMeta.segmentIndex ?? 0;
+        durationMs = durationMsOrMeta.durationMs ?? 0;
+        iv = durationMsOrMeta.iv;
+        tag = durationMsOrMeta.tag;
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/octet-stream',
+      'X-Segment-Index': segmentIndex.toString(),
+      'X-Segment-Duration-Ms': durationMs.toString(),
+    };
+    if (iv) headers['X-Encryption-Iv'] = iv;
+    if (tag) headers['X-Encryption-Tag'] = tag;
+
+    return clinicApiClient.post<RecordingSegmentDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/segments`,
+      payloadChunk,
+      { headers },
+    );
+  },
+
+  /** 10. Finalizes recording session, creates encrypted manifest, and schedules retention. */
+  async finalizeRecordingSession(sessionId: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/finalize`,
+      {},
+    );
+  },
+
+  /** 11. Freezes automated retention deletion by placing a medico-legal hold (Admin only). */
+  async placeRecordingLegalHold(sessionId: string, reason: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/legal-hold`,
+      { reason },
+    );
+  },
+
+  /** 12. Releases medico-legal hold, allowing normal retention scheduling (Admin only). */
+  async releaseRecordingLegalHold(sessionId: string, reason?: string) {
+    return clinicApiClient.post<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/release-legal-hold`,
+      reason ? { reason } : {},
+    );
+  },
+
+  /** 13. Mints short-lived 15-minute signed HMAC ticket for authorized clinical playback. */
+  async createRecordingPlaybackTicket(sessionId: string) {
+    return clinicApiClient.post<PlaybackTicketDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/playback-ticket`,
+      {},
+    );
+  },
+
+  /** 14. Synchronously builds the ticketed range-streaming playback URL for video seeking. */
+  buildRecordingStreamUrl(sessionId: string, ticket: string, segmentIndex?: number): string {
+    const segQuery =
+      segmentIndex !== undefined && segmentIndex !== null
+        ? `&segmentIndex=${encodeURIComponent(segmentIndex.toString())}`
+        : '';
+    return clinicApiUrl(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}/stream?ticket=${encodeURIComponent(ticket)}${segQuery}`,
+    );
+  },
+
+  /** 14b. Alias for buildRecordingStreamUrl. */
+  getRecordingStreamUrl(sessionId: string, ticket: string, segmentIndex?: number): string {
+    return this.buildRecordingStreamUrl(sessionId, ticket, segmentIndex);
+  },
+
+  /** 15. Retrieves recording metadata linked to a consultation encounter for chart display. */
+  async getConsultationRecording(consultationId: string) {
+    return clinicApiClient.get<RecordingSessionDto | null>(
+      `/teleconsult/recordings/consultations/${encodeURIComponent(consultationId)}`,
+    );
+  },
+
+  /** 16. Lists all active or completed recording sessions associated with an appointment. */
+  async getAppointmentRecordings(appointmentId: string) {
+    return clinicApiClient.get<RecordingSessionDto[]>(
+      `/teleconsult/recordings/appointments/${encodeURIComponent(appointmentId)}`,
+    );
+  },
+
+  /** 16b. Alias for getAppointmentRecordings. */
+  async getAppointmentRecording(appointmentId: string) {
+    return this.getAppointmentRecordings(appointmentId);
+  },
+
+  /** 17. Retrieves single recording session details by session ID. */
+  async getRecordingSession(sessionId: string) {
+    return clinicApiClient.get<RecordingSessionDto>(
+      `/teleconsult/recordings/sessions/${encodeURIComponent(sessionId)}`,
+    );
   },
 };
 

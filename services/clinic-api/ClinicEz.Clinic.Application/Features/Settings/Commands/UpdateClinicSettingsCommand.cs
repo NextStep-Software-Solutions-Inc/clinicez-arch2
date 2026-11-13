@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -69,7 +70,12 @@ public sealed record UpdateClinicSettingsCommand(
     bool? IsKioskIntakeEnabled = null,
     string? TvDisplaySoundTheme = null,
     bool? TvDisplayVoiceEnabled = null,
-    bool? TvDisplayShowPhysicianName = null) : IRequest<ClinicSettingsDto>;
+    bool? TvDisplayShowPhysicianName = null,
+    string? TeleconsultRecordingPolicy = null,
+    int? TeleconsultRecordingRetentionDays = null,
+    bool? TeleconsultRecordingConsentRequired = null,
+    TeleconsultPaymentPolicy? TeleconsultPaymentPolicy = null,
+    decimal? TeleconsultDefaultFee = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -323,6 +329,31 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             _kioskInvalidator?.Invalidate(settings.ClinicId);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.TeleconsultRecordingPolicy))
+        {
+            var normalized = request.TeleconsultRecordingPolicy.Trim();
+            if (normalized.Equals("Disabled", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "Disabled";
+            else if (normalized.Equals("WorkspaceVaultOnly", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "WorkspaceVaultOnly";
+            else if (normalized.Equals("Both", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "Both";
+            else if (normalized.Equals("LocalDeviceOnly", StringComparison.OrdinalIgnoreCase))
+                settings.TeleconsultRecordingPolicy = "LocalDeviceOnly";
+        }
+
+        if (request.TeleconsultRecordingRetentionDays.HasValue && request.TeleconsultRecordingRetentionDays.Value >= 0)
+            settings.TeleconsultRecordingRetentionDays = request.TeleconsultRecordingRetentionDays.Value;
+
+        if (request.TeleconsultRecordingConsentRequired.HasValue)
+            settings.TeleconsultRecordingConsentRequired = request.TeleconsultRecordingConsentRequired.Value;
+
+        if (request.TeleconsultPaymentPolicy.HasValue)
+            settings.TeleconsultPaymentPolicy = request.TeleconsultPaymentPolicy.Value.ToString();
+
+        if (request.TeleconsultDefaultFee.HasValue && request.TeleconsultDefaultFee.Value >= 0)
+            settings.TeleconsultDefaultFee = request.TeleconsultDefaultFee.Value;
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -405,7 +436,12 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             KioskTokenVersion: settings.KioskTokenVersion,
             TvDisplaySoundTheme: settings.TvDisplaySoundTheme ?? "classicChime",
             TvDisplayVoiceEnabled: settings.TvDisplayVoiceEnabled,
-            TvDisplayShowPhysicianName: settings.TvDisplayShowPhysicianName);
+            TvDisplayShowPhysicianName: settings.TvDisplayShowPhysicianName,
+            TeleconsultRecordingPolicy: settings.TeleconsultRecordingPolicy ?? "Disabled",
+            TeleconsultRecordingRetentionDays: settings.TeleconsultRecordingRetentionDays,
+            TeleconsultRecordingConsentRequired: settings.TeleconsultRecordingConsentRequired,
+            TeleconsultPaymentPolicy: Enum.TryParse<TeleconsultPaymentPolicy>(settings.TeleconsultPaymentPolicy, true, out var pol) ? pol : TeleconsultPaymentPolicy.Prepaid,
+            TeleconsultDefaultFee: settings.TeleconsultDefaultFee);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)

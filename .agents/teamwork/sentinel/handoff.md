@@ -1,33 +1,39 @@
-# Final Handoff — Sentinel
+# Sentinel Handoff — Finalization of Teleconsultation Feature
 
 ## Observation
-- **Original Task**: Elevate the Clinic Communications Sheet & Triage Desk in `apps/clinic-app` and `@clinicez/comms-sdk` to institutional production quality across 5 primary requirement pillars (R1–R5).
-- **Execution Path**: Task interview prepared and completed; prompt approved by caller; routed via General path to `teamwork_orchestrator`.
-- **Implementation & Iteration**: The team decomposed work into Phase 0 (3 Explorers), Phase 1 (Decomposition & Contracts), Phase 2 (Workers M1 and M2, E2E Test Writer), Phase 3 (Gate Iteration 1), and Phase 4 (Targeted Remediation & Gate Iteration 2).
-- **Verification Cohort**: 5 verification agents (Reviewers, Challengers, and Forensic Auditor) certified all observable contracts, resulting in 100% APPROVE verdicts across both applications.
-- **Victory Audit**: The Project Orchestrator claimed victory. The Sentinel dispatched an independent Victory Auditor (`teamwork_victory_auditor`, conversation `a334aeb8-5b5f-45af-8380-e855fac21b05`) with zero shared implementation context, auditing against `ORIGINAL_REQUEST.md`.
-- **Audit Outcome**: The Victory Auditor certified `VERDICT: VICTORY CONFIRMED` across timeline verification, integrity/cheating forensics, and clean-room independent test executions.
+- The project requested finalization of the teleconsultation feature across the clinic facility backend (`services/clinic-api`), communications SDK (`packages/comms-sdk`), and workstation frontend (`apps/clinic-app`).
+- Project Orchestrator executed a 6-milestone plan decomposed into:
+  - M1: Shared interop contracts (`AppointmentBookedEvent.cs`) and facility teleconsult settings (`TeleconsultRecordingPolicy`, `TeleconsultRecordingRetentionDays`, `TeleconsultRecordingConsentRequired`, `TeleconsultPaymentPolicy`, `TeleconsultDefaultFee`).
+  - M2: Teleconsult appointment & payment policy management (modality detection, deterministic `CallId`, prepaid auto-invoicing, plain-note staff override with WORM audit, informational YAKAP badge, dynamic policy switching).
+  - M3: Media signaling & vault recording encryption (`JoinTeleconsultCallCommand` with zero-PHI token validation, `EndTeleconsultCallCommand`, CMK AES-256-GCM envelope encryption with `.key` sidecars, 15-minute HMAC ticket verification for decrypted range streaming, and retention cleanup).
+  - M4: Comms SDK LiveKit WebRTC adapters (`LiveKitMediaAdapter`, `LocalPreviewMediaAdapter`), `SegmentRecorder`, `useCallSession`, and shared `CallStage` with persistent REC indicator and touch target compliance.
+  - M5: Clinic workstation app integration (`clinicService.ts`, `ClinicCommsContext.tsx` chart docking, `TeleconsultWaitingRoomModal.tsx`, `ScheduleVisitModal.tsx`, `AppointmentInspectionModal.tsx`, `TeleconsultSettingsCard.tsx`, `ClinicRecordingPlayerModal.tsx`).
+  - M6: Final E2E verification, Tier 5 adversarial coverage hardening (101 new stress tests), independent multi-perspective reviews, and repository integrity audits.
+- The Post-Victory Auditor independently executed all test suites and verified zero cheating, zero stubs, and strict compliance with repository guardrails.
 
 ## Logic Chain
-1. **Language & Design Tokens (R1)**: Eliminated all internal jargon (`STAT` -> `Emergency`, `SLA Breached` -> `Response Overdue`, `Disposition` -> `Clinical Decision`/`Action`, `INTERNAL NOTE` -> `Private Staff Note (Care Team Only)`, `ACK` -> `Read Confirmation`, `Scope` -> clean category titles). Enforced minimum 12px font size (`text-xs` floor). Zero design token violations (`lint:tokens`).
-2. **Thread Header & Drawer Navigation (R2)**: Standardized thread header sequence (`←` icon-only back button, title + tap-to-rename `✏️`, right controls in strict order: `👥 <count>`, `👁️` privacy blur, and `•••` action menu housing all 7 items). Implemented top drawer header live connection pill (`• Connected`) with manual reconnect button (`🔄`) triggering `reconnect()` from `useComms()` with active rotation animation.
-3. **Conversation Lifecycle & Modals (R3)**: `NewConversationModal.tsx` provides Direct Message (staff picker excluding self), Care Team (patient context), and Facility Channel (department chips) creation with strict form validation. Full lifecycle support for inline/menu rename, member drawer management, close & archive, and guarded deletion.
-4. **Clinical Productivity Tools (R4)**: Active thread integrates pinned clinical orders/alerts banner, 4 quick 1-tap clinical response pills (`+ Vitals Charted`, `+ Bedside Now`, `+ Lab Requested`, `+ On My Way`), 1-click Link to Patient Chart (`View Patient Chart`), safe literal in-thread search, and structured shift handoff summaries.
-5. **Triage Requests Subsystem (R5)**: `useTriageQueue.ts` directly consumes live endpoints `GET /api/v1/comms/conversations?scope=PatientFacility&facilityId={facilityId}` and `POST /api/v1/comms/triage/{id}/disposition` with Bearer auth, HTTP non-2xx error throwing, and optimistic rollback on rejection. 3-tier live countdown timers enforce mathematical boundaries (>15m on schedule, <=15m warning, <=0s overdue) with 1-click dispositions and card-to-thread navigation.
+- Initial user requirements called for flexible clinic staff control over teleconsultation payment policy (Prepaid / Postpaid / Exempt) and plain-note staff override for unpaid prepaid consultations, with active YAKAP enlistment surfaced strictly as an informational badge rather than triggering automated policy mutation.
+- Implementation adhered strictly to the zero-migration constraint: all entities mapped to existing PostgreSQL tables.
+- Media room signaling adhered to zero-PHI naming conventions (`call-{callId:N}` and `staff:{id}` / `patient:{id}`) over ClinicEZ Interop Hub, with zero external brokers or direct cross-service HTTP.
+- Strict design token checks (`bun scripts/check-tokens.mjs`) and host checks (`bun scripts/check-no-external-hosts.mjs`) passed with zero violations across all packages.
+- All 7,166 tests across the repository pass cleanly:
+  - `packages/shared-dotnet.Tests`: 723 passed
+  - `services/clinic-api`: 5,868 passed
+  - `packages/comms-sdk`: 421 passed (0 typecheck errors)
+  - `apps/clinic-app`: 154 teleconsult tests passed (0 typecheck errors, 0 token violations, 0 host violations)
 
 ## Caveats
-- The changes were developed under Development Mode per caller directives (backward compatibility intentionally deprecated to allow clean interface replacements).
-- In production runtime, patient chart navigation relies on the host application routing context (`/emr/patients/:id` or equivalent registered listener).
+- Production deployment requires LiveKit server endpoint and credentials configured in the environment variables (e.g. `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`).
+- Vault recording encryption requires a configured Master Key (CMK) in the facility settings or environment; fallback test CMK is present for local test environments.
 
 ## Conclusion
-- All requirements R1–R5 are verified and certified with institutional production quality.
-- The independent post-victory audit is complete with `VERDICT: VICTORY CONFIRMED`.
-- Background monitoring crons have been cancelled and subagents terminated cleanly.
+- Milestone 1–6 requirements from `ORIGINAL_REQUEST.md` and the approved implementation plan are 100% complete.
+- Post-Victory Auditor delivered an unconditional verdict: **VICTORY CONFIRMED**.
+- Project is ready for production rollout.
 
 ## Verification Method
-- `cd apps/clinic-app && bun run lint:tokens`: Passed (0 violations).
-- `cd packages/comms-sdk && bun test`: Passed 100% (138 tests passed, 0 failed across 24 files).
-- `cd apps/clinic-app && bun test tests/challenger_m2_side_sheet_consolidation.test.ts tests/challenger_m2_2_a11y_tokens_visual.test.ts`: Passed 100% (44 passed, 0 failed across 2 files).
-- `cd apps/clinic-app && bun test tests/e2e/clinicCommunicationsProduction.test.ts`: Passed 100% (72 passed, 0 failed).
-- `cd apps/clinic-app && bun test tests/comms_active_thread_and_modal.test.ts tests/challenger_2_empirical_stress.test.ts`: Passed 100% (46 passed, 0 failed).
-- `bun run typecheck:all`: Passed (0 errors monorepo-wide across all 8 projects).
+1. `dotnet test packages/shared-dotnet.Tests/ClinicEz.Shared.Tests.csproj` (723 passed)
+2. `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj` (5,868 passed)
+3. `cd packages/comms-sdk && bun run typecheck && bun test` (421 passed)
+4. `cd apps/clinic-app && bun run typecheck && bun run lint:tokens && bun run lint:hosts && bun test` (154 passed)
+5. Independent Victory Audit: `VERDICT: VICTORY CONFIRMED` (Logged in `.agents/teamwork/victory_auditor/handoff.md`).

@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11",
-    "@shared/safe": "workspace:*"
+    "@shared/safe": "workspace:*",
+    "livekit-client": "^2.24.0"
   },
   "peerDependencies": {
     "@clinicez/design-tokens": "workspace:*",

@@ -122,6 +122,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
     private readonly IRepository<StaffMember>? _staffRepository;
     private readonly IRepository<FacilitySettings>? _settingsRepository;
     private readonly IPhilHealthSequenceGenerator? _sequenceGenerator;
+    private readonly IRepository<TeleconsultRecordingSession>? _recordingSessionRepository;
 
     public CreateConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -130,7 +131,8 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
         IClinicContext clinicContext,
         IRepository<StaffMember>? staffRepository = null,
         IRepository<FacilitySettings>? settingsRepository = null,
-        IPhilHealthSequenceGenerator? sequenceGenerator = null)
+        IPhilHealthSequenceGenerator? sequenceGenerator = null,
+        IRepository<TeleconsultRecordingSession>? recordingSessionRepository = null)
     {
         _consultationRepository = consultationRepository;
         _queueRepository = queueRepository;
@@ -139,6 +141,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;
         _sequenceGenerator = sequenceGenerator;
+        _recordingSessionRepository = recordingSessionRepository;
     }
 
     public async Task<ConsultationEncounterDto> Handle(CreateConsultationCommand request, CancellationToken cancellationToken)
@@ -628,6 +631,32 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
                 {
                     queueItem.UpdatedAt = DateTime.UtcNow;
                     _queueRepository.Update(queueItem);
+                }
+            }
+        }
+
+        var targetAppointmentId = request.AppointmentId ?? encounter.AppointmentId;
+        if (targetAppointmentId.HasValue)
+        {
+            var recordingRepo = _recordingSessionRepository ?? (_unitOfWork as IRepositoryProvider)?.GetRepository<TeleconsultRecordingSession>();
+            if (recordingRepo != null)
+            {
+                var linkedSessions = await recordingRepo.Query(s => s.AppointmentId == targetAppointmentId.Value && s.ClinicId == _clinicContext.ClinicId)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var session in linkedSessions)
+                {
+                    if (session.ConsultationId.HasValue && session.ConsultationId.Value != encounter.Id)
+                    {
+                        throw new InvalidOperationException($"Recording session {session.Id} for appointment {targetAppointmentId.Value} is already linked to consultation {session.ConsultationId.Value}.");
+                    }
+
+                    if (session.ConsultationId != encounter.Id)
+                    {
+                        session.ConsultationId = encounter.Id;
+                        session.UpdatedAt = DateTime.UtcNow;
+                        recordingRepo.Update(session);
+                    }
                 }
             }
         }

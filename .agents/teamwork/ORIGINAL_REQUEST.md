@@ -1,96 +1,75 @@
 # Original User Request
 
-## Initial Request — 2026-11-05T23:56:12Z
+## Initial Request — 2026-11-12T23:12:21Z
 
-Elevate the Clinic Communications Sheet & Triage Desk in `apps/clinic-app` and `@clinicez/comms-sdk` to production-ready quality.
+Finalize the teleconsultation feature across the clinic facility backend (services/clinic-api), communications SDK (packages/comms-sdk), and workstation frontend (apps/clinic-app) according to the approved architecture and strict repository guardrails.
 
+Working directory: /Users/macuser/.gemini/antigravity/worktrees/clinicez-arch2/finalize_teleconsultation_api
 Integrity mode: development
 
-Reference Material:
-- Implementation Plan: `/Users/macuser/.gemini/antigravity/brain/35833875-1d06-46ae-9d1c-223b7b36e6a9/clinic_communications_sheet_production_plan.md`
+Reference: /Users/macuser/.gemini/antigravity/brain/9542d721-8b8b-46ea-9635-c34ef9a2bc0a/implementation_plan.md
 
 ## Requirements
 
-### R1. Human-Centered Clinical Language and Design Tokens Guardrails
-Replace developer jargon, internal acronyms, and clinical jargon with clear everyday language:
-- Replace `STAT` with `Emergency`
-- Replace `SLA Breached` with `Response Overdue`
-- Replace `Disposition` with `Clinical Decision` or `Action`
-- Replace `INTERNAL NOTE — NEVER DELIVERED TO PATIENT` with `Private Staff Note (Care Team Only)`
-- Replace `ACK` with `Read Confirmation`
-- Replace `Scope` with clean titles (`Patient Request`, `Direct`, `Care Team`, `Facility Channel`)
-Ensure no sub-12px micro-text (minimum `text-xs` / 12px everywhere). Strictly adhere to `@clinicez/design-tokens` with no hardcoded hex colors, no raw palette imports, and no emojis.
+### R1. Shared Interop Contracts & Facility Teleconsult Settings
+- In `packages/shared-dotnet/Common/AppointmentBookedEvent.cs`, add optional `public string? AppointmentType { get; init; }`.
+- In `services/clinic-api`, expose and validate `TeleconsultRecordingPolicy` (`Disabled` | `WorkspaceVaultOnly` | `Both`), `TeleconsultRecordingRetentionDays` (`>= 0`, `0` = indefinite), `TeleconsultRecordingConsentRequired` (`bool`), `TeleconsultPaymentPolicy` (`Prepaid` | `Postpaid` | `Exempt`), and `TeleconsultDefaultFee` (`decimal? >= 0`) across `ClinicSettingsDto.cs`, `GetClinicSettingsQuery.cs`, and `UpdateClinicSettingsCommand.cs`.
 
-### R2. Thread Header and Drawer Header Navigation Controls
-Implement the active thread header layout:
-- Left: Back button (Icon Only `←`, no text label).
-- Center: Title + Edit Pencil icon (`✏️`) for tap-to-rename.
-- Right Controls (in exact order):
-  1. Care Team / Members counter button (`👥 3`) to open member management drawer.
-  2. Medical Privacy Blur (Icon Only `👁️`, toggles blur on sensitive patient details).
-  3. Action Menu (`•••` at the rightmost edge), housing Rename, View Patient Chart, Search in Conversation, Shift Handoff Summary, Mute Channel, Close & Archive, and Delete Conversation.
-In the top drawer header, provide the live connection indicator pill (`• Connected`) alongside a manual reconnect icon button (`🔄`) right beside the connection pill that triggers `reconnect()` from `useComms()` with an active rotation spin animation and resyncs conversations.
+### R2. Appointment & Payment Policy Management
+- In `services/clinic-api` (`CreateAppointmentCommand.cs`, `GetAppointmentsQuery.cs`, `AppointmentBookedHandler.cs`):
+  - Accept optional `AppointmentType` and `PaymentPolicy` (inferring `Teleconsult` if `ServiceType` is `"Teleconsult"` or `"Teleconsultation"`).
+  - For teleconsult appointments: assign `CallId = Guid.NewGuid()`, resolve `PaymentPolicy` from request or facility settings, set `PaymentStatus = PaymentPolicy == Exempt ? Exempt : Pending`, and for `Prepaid` appointments create a linked `Invoice` with `AppointmentId = appointment.Id` and enqueue `InteropTypes.BillingInvoiceRequested` if cashier mode is `CashierCounter`.
+  - Extend `AppointmentDto` with `AppointmentType`, `IsTeleconsult`, `PaymentPolicy`, `PaymentStatus`, `InvoiceId`, `PaidAmount`, `CallId`, `AdmittedAtUtc`, `IsEmergencyOverride`, and `EmergencyOverrideReasonCode`.
+- In `services/clinic-api/RecordPaymentCommand.cs`: when linked invoice is marked `Paid`, update teleconsult `Appointment.PaymentStatus = Paid`, set payment receipt metadata, and enqueue `InteropTypes.CommsCallPaymentCleared`.
+- In `GetTeleconsultStatusQuery.cs` and `AdmitTeleconsultPatientCommand.cs`:
+  - Surface `HasActiveYakapEnlistment` as an informational badge without automatic policy mutation.
+  - Relax unpaid `Prepaid` admission override: allow staff with `ConsultationsWrite` or `ConsultationsSign` to bypass with a plain reason note (`ReasonNote >= 5` characters), defaulting `ReasonCode` to `"STAFF-OVERRIDE"`, write WORM `AuditEntry`, and emit `CommsCallPaymentCleared`.
+- Add `UpdateTeleconsultPaymentPolicyCommand.cs` (`PUT /api/v1/teleconsult/appointments/{appointmentId:guid}/payment-policy`) to let clinic staff switch payment policy (`Prepaid`, `Postpaid`, `Exempt`) anytime.
 
-### R3. Conversation Lifecycle and Management Modal
-Implement `NewConversationModal.tsx` supporting Direct Message (with staff picker from `useStaff()`), Care Team, and Facility Channel, with validation preventing empty titles or unselected staff. Support full conversation lifecycle operations: inline and menu rename, members management (add colleague, leave/remove), close and archive with audit retention compliance, and delete conversation guarded for empty or test chats.
+### R3. Media Signaling & Vault Recording Encryption
+- Add `JoinTeleconsultCallCommand.cs` (`POST /api/v1/teleconsult/appointments/{appointmentId:guid}/join`) requesting zero-PHI tokens (`call-{callId:N}` and `staff:{id}` / `patient:{id}`) from `Party.Media` via Interop Hub with 10s timeout and graceful fallback, enqueue `InteropTypes.CommsCallStateChanged`, and return `TeleconsultCallJoinDto`.
+- Add `EndTeleconsultCallCommand.cs` (`POST /api/v1/teleconsult/appointments/{appointmentId:guid}/end`) enqueuing `CommsCallStateChanged` (`Status: "Ended"`), writing WORM audit log, and auto-finalizing active recording sessions.
+- In `TeleconsultRecordingsController.cs` and recording handlers: enforce CMK AES-256-GCM encryption at rest on segment uploads with `{storageKey}.key` wrapped DEK sidecars, ticketed on-the-fly decryption streaming with 15-minute HMAC tickets, sidecar cleanup in `RecordingRetentionSweeper`, and consultation linkage.
+- Register interop handlers (`InteropTypes.MediaRoomResponded`, `InteropTypes.CommsRecordingConsentLogged`) in `DependencyInjection.cs`.
 
-### R4. Clinical Productivity Tools
-Provide in-thread clinical productivity tools:
-- Pinned Clinical Orders & Alerts banner
-- Quick 1-tap clinical response pills (`+ Vitals Charted`, `+ Bedside Now`, `+ Lab Requested`, `+ On My Way`)
-- 1-click Link to Patient Chart (`View Patient Chart`)
-- In-thread search bar
-- Shift handoff summary action
+### R4. Workspace Communications & Media SDK
+- In `packages/comms-sdk/package.json`, add `"livekit-client": "^2.24.0"`.
+- Implement `IMediaRoomAdapter.ts`, `LiveKitMediaAdapter.ts`, `LocalPreviewMediaAdapter.ts`, `SegmentRecorder.ts`, and export them from SDK core.
+- Upgrade `useCallSession.ts` to support backend and media callbacks and SignalR `CommsContext` event subscriptions while preserving zero-arg in-memory fallback for existing tests.
+- Update `CallWaitingRoom.tsx` (`native-ui` and `web-ui`) to include staff payment policy selector, informational YAKAP badge, and plain-note override.
+- Implement shared `CallStage.tsx` (`native-ui` and `web-ui`) with video surfaces, media controls (mic, camera, screen share, chat), persistent recording indicator with single-party stop, `renderWorkstationAction` slot, and end call control.
 
-### R5. Triage Requests Subsystem
-Wire `useTriageQueue.ts` to live backend endpoints `GET /api/v1/comms/conversations?scope=PatientFacility&facilityId={facilityId}` and `POST /api/v1/comms/triage/{id}/disposition`. Provide live response countdown timers with visual priority indicators. Implement 1-click clinical actions (Consult, Need Visit, Route, Decline) and card-to-thread navigation.
+### R5. Clinic Workstation App Integration
+- Extend `apps/clinic-app/src/services/clinicService.ts` with teleconsult DTOs and API methods (admission, policy switch, call join/end, recording consent/upload/finalize, playback ticket, medico-legal hold).
+- Update `ClinicCommsContext.tsx` and `TeleconsultWaitingRoomModal.tsx` to integrate with `@clinicez/comms-sdk` (`useCallSession`, `CallWaitingRoom`, `CallStage`) and provide workstation consultation chart docking.
+- Update `ScheduleVisitModal.tsx` (In-Person vs Teleconsult toggle, payment policy selector) and `AppointmentInspectionModal.tsx` (teleconsult badges, inline policy switch, waiting room launcher).
+- Add `TeleconsultSettingsCard.tsx` under `GeneralSettingsTab.tsx`.
+- Add `ClinicRecordingPlayerModal.tsx` under `EncountersTimelineTab.tsx` with 15-minute ticketed playback and admin medico-legal hold toggle.
+
+### R6. Architectural & Repository Guardrails
+- Zero PostgreSQL schema migrations.
+- Zero external message brokers: all cross-service communication must strictly use ClinicEZ Interop Hub (`IInteropPublisher` / `IInteropRequestClient`). Zero direct cross-service HTTP.
+- Zero-PHI LiveKit room and participant identifiers (`^call-[0-9a-fA-F\-]{32,36}$` and `^(staff|patient|guest|participant)(:|-)[0-9a-zA-Z\-_]{1,64}$`).
+- Strict design token enforcement (`bun scripts/check-tokens.mjs`): zero hex/rgb color literals, zero numeric font sizes or border radii, zero emojis, minimum 44px touch targets.
+- Strict host guard enforcement (`bun scripts/check-no-external-hosts.mjs`): zero hardcoded URLs, localhost, or IP addresses in source code.
 
 ## Verification Resources
-- Design Tokens Linting: `cd apps/clinic-app && bun run lint:tokens`
-- Comms SDK Tests: `cd packages/comms-sdk && bun test`
-- Side-Drawer Integration Tests: `cd apps/clinic-app && bun test tests/challenger_m2_side_sheet_consolidation.test.ts tests/challenger_m2_2_a11y_tokens_visual.test.ts`
-- Additional verification resources: left to the team to determine.
+- `services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`
+- `packages/comms-sdk/` test suite and type checking
+- `apps/clinic-app/` test suite, type checking, token linter, and host linter
 
 ## Acceptance Criteria
 
-### Language & Design Tokens
-- [ ] Developer, internal, and clinical jargon is replaced with everyday language (`STAT` -> `Emergency`, `SLA Breached` -> `Response Overdue`, `Disposition` -> `Clinical Decision` or `Action`, `INTERNAL NOTE — NEVER DELIVERED TO PATIENT` -> `Private Staff Note (Care Team Only)`, `ACK` -> `Read Confirmation`, and `Scope` -> clean category titles).
-- [ ] No font size in the UI is smaller than 12px (`text-xs`).
-- [ ] `cd apps/clinic-app && bun run lint:tokens` passes with 0 violations.
+### Backend Verification
+- [ ] `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj` executes and passes with zero test failures.
+- [ ] Automated tests cover teleconsult payment gating, policy updates, plain-note admission override, zero-PHI naming validation, and AES-256-GCM recording encryption with `.key` sidecar management.
 
-### Thread Header & Drawer Controls
-- [ ] Active thread header back button is icon-only (`←`) with no text label.
-- [ ] Thread header center displays conversation title and tap-to-rename pencil icon (`✏️`).
-- [ ] Thread header right controls appear in exact order: Care Team / Members counter button (`👥 <count>`), Medical Privacy Blur icon-only button (`👁️`), and Action Menu (`•••`) at the rightmost edge.
-- [ ] Action Menu contains Rename, View Patient Chart, Search in Conversation, Shift Handoff Summary, Mute Channel, Close & Archive, and Delete Conversation.
-- [ ] Top drawer header renders live connection indicator pill (`• Connected`) with manual reconnect icon button (`🔄`) beside it that triggers `reconnect()` from `useComms()` with active rotation animation and refreshes conversations.
+### Communications SDK Verification
+- [ ] `cd packages/comms-sdk && bun run typecheck` completes with zero TypeScript diagnostic errors.
+- [ ] `cd packages/comms-sdk && bun test` executes and passes all test suites.
 
-### Conversation Management & Modals
-- [ ] `NewConversationModal.tsx` allows creating Direct Messages (with staff from `useStaff()`), Care Team, and Facility Channel conversations, preventing creation with empty title or unselected staff.
-- [ ] Inline and menu Rename updates the conversation title.
-- [ ] Member management drawer allows viewing members, adding colleagues, and removing/leaving.
-- [ ] Close & Archive completes and archives conversations with retention compliance.
-- [ ] Delete conversation is available and guarded for empty/test chats.
-
-### Clinical Productivity Tools
-- [ ] Pinned Clinical Orders & Alerts banner renders at the top of active threads.
-- [ ] Quick 1-tap clinical response pills are displayed above the composer.
-- [ ] 1-click "View Patient Chart" opens patient medical records when patient context is linked.
-- [ ] In-thread search bar filters and highlights conversation content.
-- [ ] Shift handoff summary action generates summary of active patients and open instructions.
-
-### Triage Requests Subsystem
-- [ ] `useTriageQueue.ts` fetches from `GET /api/v1/comms/conversations?scope=PatientFacility&facilityId={facilityId}`.
-- [ ] `useTriageQueue.ts` submits dispositions to `POST /api/v1/comms/triage/{id}/disposition`.
-- [ ] Triage cards display live response countdown timers with color coding (Green >15m, Amber <15m, Red Response Overdue).
-- [ ] 1-click actions (Consult, Need Visit, Route, Decline) execute their respective dispositions.
-- [ ] Tapping a triage card opens the active thread displaying patient inquiry details and attachments.
-
-### Automated Test Verification
-- [ ] `cd packages/comms-sdk && bun test` passes 100%.
-- [ ] `cd apps/clinic-app && bun test tests/challenger_m2_side_sheet_consolidation.test.ts tests/challenger_m2_2_a11y_tokens_visual.test.ts` passes 100%.
-
-
-## Follow-up — 2026-11-06T00:04:42Z
-
-User directive / reminder: No backward compatibility consideration is needed - we are in the development stage. Feel free to refactor, replace, or clean up outdated interfaces and legacy stubs directly without worrying about backward compatibility.
+### Clinic Workstation App Verification
+- [ ] `cd apps/clinic-app && bun run typecheck` completes with zero TypeScript diagnostic errors.
+- [ ] `cd apps/clinic-app && bun run lint:tokens` completes with zero design token violations.
+- [ ] `cd apps/clinic-app && bun run lint:hosts` completes with zero external host violations.
+- [ ] `cd apps/clinic-app && bun test` executes and passes all test suites, including teleconsultation workflow tests.
