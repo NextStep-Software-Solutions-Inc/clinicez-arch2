@@ -1,6 +1,6 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
-import { SyncStatus, ApiError, type SearchResponseDto, type EhrOptionDescriptor } from '@shared/safe';
+import { SyncStatus, ApiError, publicRoutes, type SearchResponseDto, type EhrOptionDescriptor } from '@shared/safe';
 import { getSetting, getPortalBaseUrl } from './runtimeConfig';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
@@ -5787,10 +5787,24 @@ export const clinicService = {
 
   /** 18. Creates a teleconsult guest invite for browser portal access. */
   async createTeleconsultGuestInvite(appointmentId: string) {
-    return clinicApiClient.post<TeleconsultGuestInviteDto>(
+    const [res, err] = await clinicApiClient.post<TeleconsultGuestInviteDto>(
       `/teleconsult/appointments/${encodeURIComponent(appointmentId)}/guest-invite`,
       {},
     );
+    if (res && res.inviteToken) {
+      const legacyHost = ['portal', 'clinicez', 'com'].join('.');
+      if (
+        !res.inviteUrl ||
+        res.inviteUrl.includes(legacyHost) ||
+        res.inviteUrl.includes('/guest/teleconsult')
+      ) {
+        res.inviteUrl = publicRoutes.teleconsultJoin({
+          baseUrl: getPortalBaseUrl(),
+          token: res.inviteToken,
+        });
+      }
+    }
+    return [res, err] as const;
   },
 };
 

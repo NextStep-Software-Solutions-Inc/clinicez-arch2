@@ -194,16 +194,19 @@ describe('Challenger M9: Clinic Workstation UI/UX, Draggable Dock, Native PiP & 
       expect(callStageProps).toContain('onSharePatientLink={handleSharePatientLink}');
     });
 
-    it('1.6: CallStage workstation action renders dock button (btn-dock-call) invoking handleDockAndOpenChart', () => {
-      expect(modalSource).toContain('testID="btn-dock-call"');
-      expect(modalSource).toContain('onPress={handleDockAndOpenChart}');
-      expect(modalSource).toContain('onDockCall={handleDockAndOpenChart}');
+    it('1.6: CallStage consolidates dock into PiP toggle (btn-toggle-pip) and reserves Docked PiP primary frame for remote patient video', () => {
+      expect(modalSource).toContain('onTogglePip={handleTogglePip}');
+      expect(modalSource).toContain('testID="btn-toggle-pip"');
+      expect(modalSource).not.toContain('testID="btn-dock-call"');
+      expect(modalSource).not.toContain('onDockCall=');
+      expect(modalSource).toContain('const primaryPipTrack = remoteVideoTrack;');
+      expect(modalSource).not.toContain("'Self Preview'");
     });
 
     it('1.7: Full-screen CallStage onEndCall triggers confirmation modal rather than direct disconnect', () => {
       // Find full-screen active call stage return block
       const fullScreenMatch = modalSource.match(
-        /if \(isActuallyInCall && !isCallStageDocked\) \{([\s\S]*?return \([\s\S]*?<CallStage[\s\S]*?renderWorkstationAction=[\s\S]*?\/>[\s\S]*?\);[\s\S]*?\})/,
+        /if \(isActuallyInCall && !isCallStageDocked\) \{([\s\S]*?return \([\s\S]*?<CallStage[\s\S]*?onTogglePip=\{handleTogglePip\}[\s\S]*?\/>[\s\S]*?\);[\s\S]*?\})/,
       );
       expect(fullScreenMatch).not.toBeNull();
       const callStageBlock = fullScreenMatch![1];

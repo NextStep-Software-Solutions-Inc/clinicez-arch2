@@ -21,6 +21,7 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
   private isVideoEnabled: boolean;
   private isScreenSharing = false;
   private localStream: MediaStream | null = null;
+  private screenStream: MediaStream | null = null;
   private remoteParticipants: Map<string, RemoteMediaParticipant> = new Map();
   private options: LocalPreviewMediaAdapterOptions;
 
@@ -68,6 +69,13 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
   }
 
   async disconnect(): Promise<void> {
+    if (this.screenStream) {
+      for (const track of this.screenStream.getTracks()) {
+        track.stop();
+      }
+      this.screenStream = null;
+    }
+    this.isScreenSharing = false;
     if (this.localStream) {
       for (const track of this.localStream.getTracks()) {
         track.stop();
@@ -99,8 +107,48 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
   }
 
   async setScreenShareEnabled(enabled: boolean): Promise<void> {
-    this.isScreenSharing = enabled;
-    this.emit('localTrackChanged', 'screen', enabled);
+    if (enabled) {
+      const canUseDisplayMedia =
+        !this.options.mockMode &&
+        typeof navigator !== 'undefined' &&
+        typeof navigator.mediaDevices?.getDisplayMedia === 'function';
+
+      if (canUseDisplayMedia) {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        if (this.screenStream) {
+          for (const track of this.screenStream.getTracks()) {
+            track.stop();
+          }
+        }
+        this.screenStream = displayStream;
+        const screenTrack = displayStream.getVideoTracks()[0];
+        if (screenTrack) {
+          screenTrack.onended = () => {
+            if (this.screenStream) {
+              for (const t of this.screenStream.getTracks()) {
+                t.stop();
+              }
+              this.screenStream = null;
+            }
+            this.isScreenSharing = false;
+            this.emit('localTrackChanged', 'screen', false);
+          };
+        }
+      }
+
+      this.isScreenSharing = true;
+      this.emit('localTrackChanged', 'screen', true);
+      return;
+    }
+
+    if (this.screenStream) {
+      for (const track of this.screenStream.getTracks()) {
+        track.stop();
+      }
+      this.screenStream = null;
+    }
+    this.isScreenSharing = false;
+    this.emit('localTrackChanged', 'screen', false);
   }
 
   async switchCamera(_deviceId?: string): Promise<void> {
@@ -108,6 +156,10 @@ export class LocalPreviewMediaAdapter implements IMediaRoomAdapter {
   }
 
   getLocalVideoTrack(): unknown | null {
+    if (this.isScreenSharing) {
+      const screenTrack = this.screenStream?.getVideoTracks()[0];
+      if (screenTrack) return screenTrack;
+    }
     return this.localStream?.getVideoTracks()[0] || null;
   }
 

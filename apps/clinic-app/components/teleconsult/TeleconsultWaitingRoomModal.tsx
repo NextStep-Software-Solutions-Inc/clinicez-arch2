@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,9 +17,17 @@ const PanResponder =
 import {
   CallWaitingRoom,
   CallStage,
+  MessageThread,
   type CommsCallIconName,
+  type ThreadMessage,
 } from '@clinicez/comms-sdk/native-ui';
-import { useCallSession } from '@clinicez/comms-sdk/react';
+import {
+  CommsContext,
+  useCallSession,
+  useConversations,
+  useConversation,
+  useSendMessage,
+} from '@clinicez/comms-sdk/react';
 import {
   LiveKitMediaAdapter,
   LocalPreviewMediaAdapter,
@@ -35,7 +43,8 @@ import { useClinicComms, type TeleconsultSessionParams } from '../../context/Cli
 import { useAuth } from '../../context/AuthContext';
 import { clinicService, type TeleconsultStatusDto } from '../../services/clinicService';
 import { notify } from '../../utils/feedback';
-import { getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
+import { createShadows } from '@clinicez/design-tokens';
+import { getActiveThemeSnapshot, getActiveThemeState, subscribeActiveTheme, theme } from '../../constants/theme';
 import CustomModal from '../ui/Modal';
 import Button from '../ui/Button';
 import ThemedText from '../ui/ThemedText';
@@ -78,28 +87,26 @@ class WorkstationMediaAdapter implements IMediaRoomAdapter {
       Boolean(connectOpts.token) &&
       isWebRtcSupported();
 
-    if (useLiveKit) {
-      const liveKit = new LiveKitMediaAdapter();
-      this.swapActiveAdapter(liveKit);
-      try {
-        await liveKit.connect(connectOpts);
-        this.opts.onModeChanged(false);
-        this.opts.onTracksChanged();
-        return;
-      } catch {
-        try {
-          await liveKit.disconnect();
-        } catch {
-          // Ignore cleanup error before local preview fallback
-        }
-      }
+    if (!useLiveKit) {
+      throw new Error('Video server unavailable. Could not connect to consultation call.');
     }
 
-    const localPreview = new LocalPreviewMediaAdapter();
-    this.swapActiveAdapter(localPreview);
-    await localPreview.connect(connectOpts);
-    this.opts.onModeChanged(true);
-    this.opts.onTracksChanged();
+    const liveKit = new LiveKitMediaAdapter();
+    this.swapActiveAdapter(liveKit);
+    try {
+      await liveKit.connect(connectOpts);
+      this.opts.onModeChanged(false);
+      this.opts.onTracksChanged();
+    } catch (err) {
+      try {
+        await liveKit.disconnect();
+      } catch {
+        // Ignore disconnect error on failed connection
+      }
+      throw err instanceof Error
+        ? err
+        : new Error('Video server unavailable. Could not connect to consultation call.');
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -149,6 +156,16 @@ class WorkstationMediaAdapter implements IMediaRoomAdapter {
     return this.activeAdapter.getRecordingStream();
   }
 
+  getNetworkQuality(): 'excellent' | 'good' | 'poor' | 'reconnecting' {
+    return this.activeAdapter.getNetworkQuality ? this.activeAdapter.getNetworkQuality() : 'good';
+  }
+
+  async sendDataMessage(payload: string): Promise<void> {
+    if (this.activeAdapter.sendDataMessage) {
+      await this.activeAdapter.sendDataMessage(payload);
+    }
+  }
+
   on(event: MediaAdapterEventType, listener: MediaEventListener): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
@@ -181,12 +198,23 @@ class WorkstationMediaAdapter implements IMediaRoomAdapter {
       'trackSubscribed',
       'trackUnsubscribed',
       'localTrackChanged',
+      'networkQualityChanged',
+      'dataMessageReceived',
       'error',
     ];
     for (const evt of events) {
       this.unsubscribers.push(
         adapter.on(evt, (...args: unknown[]) => {
-          if (evt === 'trackSubscribed' || evt === 'trackUnsubscribed' || evt === 'localTrackChanged') {
+          if (
+            evt === 'trackSubscribed' ||
+            evt === 'trackUnsubscribed' ||
+            evt === 'localTrackChanged' ||
+            evt === 'networkQualityChanged' ||
+            evt === 'reconnecting' ||
+            evt === 'reconnected' ||
+            evt === 'participantJoined' ||
+            evt === 'participantLeft'
+          ) {
             this.opts.onTracksChanged();
           }
           const handlers = this.listeners.get(evt);
@@ -280,10 +308,11 @@ interface WebVideoTrackViewProps {
   track: unknown;
   muted?: boolean;
   mirror?: boolean;
+  objectFit?: 'cover' | 'contain';
 }
 
 const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
-  ({ track, muted = false, mirror = false }) => {
+  ({ track, muted = false, mirror = false, objectFit = 'cover' }) => {
     const videoElRef = useRef<HTMLVideoElement | null>(null);
 
     useEffect(() => {
@@ -321,7 +350,7 @@ const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
       style: {
         width: '100%',
         height: '100%',
-        objectFit: 'cover',
+        objectFit,
         userSelect: 'none',
         pointerEvents: 'none',
         transform: mirror ? 'scaleX(-1)' : undefined,
@@ -330,12 +359,194 @@ const WebVideoTrackView: React.FC<WebVideoTrackViewProps> = React.memo(
   },
 );
 
-export interface TeleconsultWaitingRoomModalProps {
-  onNavigateToChart?: (patientId?: string, patientName?: string) => void;
+function mapDtoToThreadMessage(m: {
+  messageId: string;
+  seq: number;
+  conversationId: string;
+  senderType: string;
+  senderId: string | null;
+  senderDisplayName: string;
+  contentText: string;
+  visibility: 'Public' | 'Internal';
+  deliveryState: ThreadMessage['state'];
+  sentAtUtc: string;
+  requiresAcknowledgement: boolean;
+  isAcknowledged: boolean;
+  acknowledgedByName: string | null;
+  acknowledgedAtUtc: string | null;
+}): ThreadMessage {
+  return {
+    id: m.messageId,
+    seq: m.seq,
+    conversationId: m.conversationId,
+    senderType: (m.senderType as ThreadMessage['senderType']) || 'Staff',
+    senderId: m.senderId ?? undefined,
+    senderDisplayName: m.senderDisplayName,
+    contentText: m.contentText,
+    visibility: m.visibility,
+    state: m.deliveryState,
+    clientSentAtUtc: m.sentAtUtc,
+    requiresAcknowledgement: m.requiresAcknowledgement,
+    isAcknowledged: m.isAcknowledged,
+    acknowledgedByName: m.acknowledgedByName ?? undefined,
+    acknowledgedAtUtc: m.acknowledgedAtUtc ?? undefined,
+  };
 }
 
-function getThemeSchemeSnapshot(): 'light' | 'dark' {
-  return getActiveThemeState().scheme;
+interface TeleconsultInCallChatDrawerProps {
+  callId: string;
+  patientId?: string;
+  patientName: string;
+  currentUserId: string;
+  dataChannelMessages: ThreadMessage[];
+  onSendDataChannelMessage: (text: string, isInternal: boolean) => Promise<void>;
+}
+
+const SyncedPatientThreadChat: React.FC<TeleconsultInCallChatDrawerProps> = ({
+  callId,
+  patientId,
+  patientName,
+  currentUserId,
+  dataChannelMessages,
+  onSendDataChannelMessage,
+}) => {
+  const [privacyBlur, setPrivacyBlur] = useState(false);
+  const { conversations } = useConversations('PatientFacility');
+  const activeConv = useMemo(
+    () =>
+      patientId
+        ? conversations.find(
+            (c) =>
+              c.patientId === patientId ||
+              c.participants?.some((p) => p.participantId === patientId || p.userId === patientId),
+          )
+        : undefined,
+    [conversations, patientId],
+  );
+  const activeConvId = activeConv?.id ?? null;
+  const { messages: persistedMessages, isLoading, error, acknowledgeMessage } =
+    useConversation(activeConvId);
+  const { sendMessage, resendMessage } = useSendMessage();
+
+  const mergedMessages = useMemo(() => {
+    const base = persistedMessages.map(mapDtoToThreadMessage);
+    const merged = [...base];
+    for (const liveMsg of dataChannelMessages) {
+      const liveTs = new Date(liveMsg.clientSentAtUtc).getTime();
+      const duplicate = base.some(
+        (m) =>
+          m.id === liveMsg.id ||
+          (m.senderType === liveMsg.senderType &&
+            m.contentText === liveMsg.contentText &&
+            Math.abs(new Date(m.clientSentAtUtc).getTime() - liveTs) < 5000),
+      );
+      if (!duplicate) {
+        merged.push(liveMsg);
+      }
+    }
+    return merged.sort(
+      (a, b) =>
+        new Date(a.clientSentAtUtc).getTime() - new Date(b.clientSentAtUtc).getTime() ||
+        a.seq - b.seq,
+    );
+  }, [persistedMessages, dataChannelMessages]);
+
+  const handleSend = useCallback(
+    async (text: string, isInternal: boolean) => {
+      await onSendDataChannelMessage(text, isInternal);
+      if (activeConvId) {
+        await sendMessage({
+          conversationId: activeConvId,
+          contentText: text,
+          visibility: isInternal ? 'Internal' : 'Public',
+        });
+      }
+    },
+    [activeConvId, onSendDataChannelMessage, sendMessage],
+  );
+
+  const handleResend = useCallback(
+    async (messageId: string) => {
+      if (activeConvId) {
+        await resendMessage(messageId);
+      }
+    },
+    [activeConvId, resendMessage],
+  );
+
+  return (
+    <MessageThread
+      conversationId={activeConvId || callId || 'teleconsult-chat'}
+      conversationTitle={`Chat • ${patientName}`}
+      conversationScope={activeConvId ? 'PatientFacility' : 'In-Call Session'}
+      messages={mergedMessages}
+      currentUserId={currentUserId}
+      onSendMessage={handleSend}
+      onResendMessage={handleResend}
+      onAcknowledgeMessage={
+        activeConvId
+          ? async (messageId: string) => {
+              await acknowledgeMessage(messageId);
+            }
+          : undefined
+      }
+      privacyBlurEnabled={privacyBlur}
+      onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
+      canWriteInternalNotes={true}
+      isLoading={Boolean(activeConvId && isLoading)}
+      error={error?.message ?? null}
+      colors={getActiveThemeState().resolvedColors}
+      shadows={createShadows(getActiveThemeState().resolvedColors)}
+      style={staticChatStyles.chatThreadFill}
+    />
+  );
+};
+
+const TeleconsultInCallChatDrawer: React.FC<TeleconsultInCallChatDrawerProps> = (props) => {
+  const commsCtx = useContext(CommsContext);
+  const [privacyBlur, setPrivacyBlur] = useState(false);
+  const activeThemeSnapshot = useSyncExternalStore(
+    subscribeActiveTheme,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
+  );
+  const activeTheme = React.useMemo(() => getActiveThemeState(), [activeThemeSnapshot]);
+  const activeCommsShadows = React.useMemo(
+    () => createShadows(activeTheme.resolvedColors),
+    [activeTheme],
+  );
+
+  if (commsCtx) {
+    return <SyncedPatientThreadChat {...props} />;
+  }
+
+  return (
+    <MessageThread
+      conversationId={props.callId || 'teleconsult-chat'}
+      conversationTitle={`Chat • ${props.patientName}`}
+      conversationScope="In-Call Session"
+      messages={props.dataChannelMessages}
+      currentUserId={props.currentUserId}
+      onSendMessage={props.onSendDataChannelMessage}
+      onResendMessage={async () => {}}
+      privacyBlurEnabled={privacyBlur}
+      onTogglePrivacyBlur={() => setPrivacyBlur((prev) => !prev)}
+      canWriteInternalNotes={true}
+      colors={activeTheme.resolvedColors}
+      shadows={activeCommsShadows}
+      style={staticChatStyles.chatThreadFill}
+    />
+  );
+};
+
+const staticChatStyles = StyleSheet.create({
+  chatThreadFill: {
+    flex: 1,
+  },
+});
+
+export interface TeleconsultWaitingRoomModalProps {
+  onNavigateToChart?: (patientId?: string, patientName?: string) => void;
 }
 
 function getWebBodyPortal(): ((children: React.ReactNode, container: Element) => React.ReactPortal) | null {
@@ -359,6 +570,7 @@ export default function TeleconsultWaitingRoomModal({
   onNavigateToChart,
 }: TeleconsultWaitingRoomModalProps = {}) {
   const isHostOwner = useSingletonTeleconsultHost();
+  const styles = React.useMemo(() => createStyles(), []);
   const {
     teleconsultSession,
     closeTeleconsultWaitingRoom,
@@ -416,7 +628,7 @@ interface ActiveTeleconsultModalProps {
   onNavigateToChart?: (patientId?: string, patientName?: string) => void;
 }
 
-function ActiveTeleconsultModal({
+export function ActiveTeleconsultModal({
   teleconsultSession,
   closeTeleconsultWaitingRoom,
   isCallStageDocked,
@@ -426,12 +638,18 @@ function ActiveTeleconsultModal({
   onNavigateToChart,
 }: ActiveTeleconsultModalProps) {
   const { user } = useAuth();
-  const activeThemeScheme = useSyncExternalStore(
+  const activeThemeSnapshot = useSyncExternalStore(
     subscribeActiveTheme,
-    getThemeSchemeSnapshot,
-    getThemeSchemeSnapshot,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
   );
-  const isDarkTheme = activeThemeScheme === 'dark';
+  const activeTheme = React.useMemo(() => getActiveThemeState(), [activeThemeSnapshot]);
+  const activeCommsShadows = React.useMemo(
+    () => createShadows(activeTheme.resolvedColors),
+    [activeTheme],
+  );
+  const styles = React.useMemo(() => createStyles(), [activeThemeSnapshot]);
+  const isDarkTheme = activeTheme.scheme === 'dark';
   const pipStageBg = isDarkTheme ? theme.colors.background : theme.colors.surfaceInverse;
   const pipStageText = isDarkTheme ? theme.colors.text : theme.colors.textInverted;
   const [isInCall, setIsInCall] = useState(false);
@@ -445,6 +663,7 @@ function ActiveTeleconsultModal({
   const callId = teleconsultSession.callId || '';
   const appointmentId = teleconsultSession.appointmentId;
   const preferLiveKitRef = useRef<boolean>(false);
+  const hasAdmittedOnServerRef = useRef<boolean>(false);
   const stagingStreamRef = useRef<MediaStream | null>(null);
   const recordingSessionIdRef = useRef<string | null>(
     teleconsultSession.activeRecordingSessionId ?? null,
@@ -455,14 +674,25 @@ function ActiveTeleconsultModal({
 
   const [hydratedStatus, setHydratedStatus] = useState<TeleconsultStatusDto | null>(null);
   const [patientInviteUrl, setPatientInviteUrl] = useState<string | undefined>(undefined);
+  const [videoServerError, setVideoServerError] = useState<string | null>(null);
+  const [stageRecordIntent, setStageRecordIntent] = useState<boolean>(false);
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+  const [dataChannelMessages, setDataChannelMessages] = useState<ThreadMessage[]>([]);
+  const [dockedTooltip, setDockedTooltip] = useState<string | null>(null);
   const [isPipActive, setIsPipActive] = useState<boolean>(false);
   const [videoOrientation, setVideoOrientation] = useState<'portrait' | 'landscape'>('landscape');
   const [isDraggingDock, setIsDraggingDock] = useState<boolean>(false);
   const [isConfirmEndCallOpen, setIsConfirmEndCallOpen] = useState<boolean>(false);
   const isPipActiveRef = useRef<boolean>(isPipActive);
   const videoOrientationRef = useRef<'portrait' | 'landscape'>(videoOrientation);
+  const isChatOpenRef = useRef<boolean>(isChatOpen);
   isPipActiveRef.current = isPipActive;
   videoOrientationRef.current = videoOrientation;
+  isChatOpenRef.current = isChatOpen;
+
+  const effectiveRecordingPolicy =
+    hydratedStatus?.recordingPolicy ?? teleconsultSession.recordingPolicy ?? 'Disabled';
 
   useEffect(() => {
     let isMounted = true;
@@ -473,6 +703,9 @@ function ActiveTeleconsultModal({
         const [status, err] = await clinicService.getTeleconsultStatus(appointmentId);
         if (!isMounted || err || !status) return;
         setHydratedStatus(status);
+        if (status.admittedAtUtc) {
+          hasAdmittedOnServerRef.current = true;
+        }
         if (status.activeRecordingSessionId) {
           recordingSessionIdRef.current = status.activeRecordingSessionId;
         }
@@ -480,6 +713,15 @@ function ActiveTeleconsultModal({
         // Fallback to initial teleconsultSession
       }
     })();
+
+    void clinicService
+      .createTeleconsultGuestInvite(appointmentId)
+      .then(([invite, inviteErr]) => {
+        if (isMounted && !inviteErr && invite?.inviteUrl) {
+          setPatientInviteUrl(invite.inviteUrl);
+        }
+      })
+      .catch(() => {});
 
     return () => {
       isMounted = false;
@@ -544,6 +786,8 @@ function ActiveTeleconsultModal({
   useEffect(() => {
     recordingSessionIdRef.current = teleconsultSession.activeRecordingSessionId ?? null;
     preferLiveKitRef.current = false;
+    hasAdmittedOnServerRef.current = false;
+    setVideoServerError(null);
     setIsLocalPreviewMode(false);
     return () => {
       stopStagingStream();
@@ -593,6 +837,7 @@ function ActiveTeleconsultModal({
           notify.error(err.message || 'Failed to admit patient to teleconsultation.');
           throw err;
         }
+        hasAdmittedOnServerRef.current = true;
       }
     },
     onJoinCall: async () => {
@@ -600,24 +845,30 @@ function ActiveTeleconsultModal({
       if (appointmentId) {
         const [res, err] = await clinicService.joinTeleconsultCall(appointmentId);
         if (err) {
-          if (err.status === 404) {
-            preferLiveKitRef.current = false;
-            return {
-              roomName: callId.startsWith('call-') ? callId : `call-${callId}`,
-              mediaAvailable: false,
-              isFallbackToken: true,
-              participantIdentity: user?.id ? `staff:${user.id}` : undefined,
-            };
-          }
-          notify.error(err.message || 'Could not connect to consultation call.');
-          throw err;
+          preferLiveKitRef.current = false;
+          const msg =
+            err.message ||
+            'Live video server is currently unavailable. Could not connect to consultation call.';
+          setVideoServerError(msg);
+          notify.error(msg);
+          throw new Error(msg);
         }
         const token = res?.clinicianToken || res?.token || res?.accessToken || undefined;
         const wsUrl = res?.relayUrl || res?.liveKitServerUrl || undefined;
         const hasRealLiveKit = Boolean(
           res?.mediaAvailable && !res?.isFallbackToken && wsUrl && token && isWebRtcSupported(),
         );
-        preferLiveKitRef.current = hasRealLiveKit;
+        if (!hasRealLiveKit) {
+          preferLiveKitRef.current = false;
+          const msg =
+            res?.mediaStatusMessage ||
+            'Live video server is currently unavailable. Could not connect to consultation call.';
+          setVideoServerError(msg);
+          notify.error(msg);
+          throw new Error(msg);
+        }
+        setVideoServerError(null);
+        preferLiveKitRef.current = true;
         return {
           liveKitToken: token,
           roomName: res?.roomName,
@@ -644,17 +895,9 @@ function ActiveTeleconsultModal({
         patientId: teleconsultSession?.patientId,
         doctorId: user?.id,
         appointmentId,
-        policy: (teleconsultSession?.recordingPolicy as any) || 'Both',
+        policy: (effectiveRecordingPolicy as any) || 'Both',
       });
       if (err) {
-        if (err.status === 404) {
-          const previewSessionId = `local-preview-${appointmentId}`;
-          recordingSessionIdRef.current = previewSessionId;
-          return {
-            recordingSessionId: previewSessionId,
-            status: 'requested',
-          };
-        }
         throw err;
       }
       if (res?.id) {
@@ -664,6 +907,12 @@ function ActiveTeleconsultModal({
         res?.consentStatus === 'Consented' || res?.consentStatus === 'approved'
           ? 'approved'
           : 'requested';
+      void mediaAdapter.sendDataMessage(
+        JSON.stringify({
+          type: 'recording_consent_requested',
+          recordingSessionId: res?.id,
+        }),
+      );
       return {
         recordingSessionId: res?.id,
         status: nextStatus,
@@ -731,14 +980,213 @@ function ActiveTeleconsultModal({
       if (session.joinCall) {
         await session.joinCall();
       }
+      setVideoServerError(null);
       setIsInCall(true);
       notify.success('Connected to teleconsultation.');
-    } catch {
+    } catch (err: any) {
+      const msg =
+        err?.message ||
+        'Live video server could not be reached. Could not connect to consultation call.';
+      setVideoServerError(msg);
+      setIsInCall(false);
       notify.error('Could not connect to consultation call.');
     }
   }, [session]);
 
+  const handleAdmitFromWaitingRoom = useCallback(
+    async (override?: { reasonCode: string; reasonNote: string }) => {
+      try {
+        await session.admitPatient(override);
+        setVideoServerError(null);
+      } catch (err: any) {
+        const msg =
+          err?.message ||
+          'Live video server could not be reached. Could not connect to consultation call.';
+        setVideoServerError(msg);
+        setIsInCall(false);
+      }
+    },
+    [session],
+  );
+
+  const handleRetryVideoServer = useCallback(async () => {
+    if (
+      hasAdmittedOnServerRef.current ||
+      hydratedStatus?.admittedAtUtc ||
+      session.status === 'admitted' ||
+      !isDoctor
+    ) {
+      await handleEnterCall();
+      return;
+    }
+    await handleAdmitFromWaitingRoom();
+  }, [
+    handleAdmitFromWaitingRoom,
+    handleEnterCall,
+    hydratedStatus?.admittedAtUtc,
+    isDoctor,
+    session.status,
+  ]);
+
   const isActuallyInCall = isInCall || session.status === 'connected' || session.status === 'connecting';
+
+  void mediaRevision;
+  const remoteParticipants = mediaAdapter.getRemoteParticipants();
+  const hasRemoteParticipant =
+    remoteParticipants.length > 0 ||
+    Boolean(mediaAdapter.getRemoteVideoTrack()) ||
+    Boolean(mediaAdapter.getRemoteAudioTrack());
+  const networkQuality = mediaAdapter.getNetworkQuality();
+
+  useEffect(() => {
+    if (isChatOpen) {
+      setUnreadChatCount(0);
+    }
+  }, [isChatOpen]);
+
+  useEffect(() => {
+    const unsub = mediaAdapter.on('dataMessageReceived', (rawPayload) => {
+      if (typeof rawPayload !== 'string') return;
+      try {
+        const parsed = JSON.parse(rawPayload) as {
+          type?: string;
+          id?: string;
+          senderName?: string;
+          senderRole?: string;
+          text?: string;
+          sentAtUtc?: string;
+          approved?: boolean;
+          reason?: string;
+        };
+        if (parsed.type === 'chat' && parsed.text) {
+          const incoming: ThreadMessage = {
+            id: parsed.id || `dc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            seq: Date.now(),
+            conversationId: callId || 'teleconsult-chat',
+            senderType: parsed.senderRole === 'Clinician' ? 'Staff' : 'Patient',
+            senderDisplayName: parsed.senderName || resolvedPatientName,
+            contentText: parsed.text,
+            visibility: 'Public',
+            state: 'Received',
+            clientSentAtUtc: parsed.sentAtUtc || new Date().toISOString(),
+          };
+          setDataChannelMessages((prev) =>
+            prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming],
+          );
+          if (!isChatOpenRef.current) {
+            setUnreadChatCount((c) => c + 1);
+          }
+        } else if (parsed.type === 'recording_consent_response') {
+          if (typeof parsed.approved === 'boolean') {
+            void session.recordingState.respondToRecordingConsent(parsed.approved, parsed.reason);
+          }
+        }
+      } catch {
+        // Ignore non-JSON data messages
+      }
+    });
+    return unsub;
+  }, [callId, mediaAdapter, resolvedPatientName, session.recordingState]);
+
+  useEffect(() => {
+    if (
+      isActuallyInCall &&
+      hasRemoteParticipant &&
+      stageRecordIntent &&
+      effectiveRecordingPolicy !== 'Disabled' &&
+      !session.recordingState.isRecording &&
+      session.recordingState.consentStatus === 'none'
+    ) {
+      setStageRecordIntent(false);
+      void session.recordingState.requestRecordingConsent().catch(() => {});
+    }
+  }, [
+    effectiveRecordingPolicy,
+    hasRemoteParticipant,
+    isActuallyInCall,
+    session.recordingState,
+    stageRecordIntent,
+  ]);
+
+  const handleStartRecordingInStage = useCallback(async () => {
+    if (!hasRemoteParticipant) {
+      notify.error('Wait for the patient to join before requesting call recording consent.');
+      return;
+    }
+    try {
+      await session.recordingState.requestRecordingConsent();
+      notify.info('Recording consent request sent to patient.');
+    } catch (err: any) {
+      notify.error(err?.message || 'Could not request patient recording consent.');
+    }
+  }, [hasRemoteParticipant, session.recordingState]);
+
+  const handleSendDataChannelMessage = useCallback(
+    async (text: string, isInternal: boolean) => {
+      const id = `dc-staff-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const sentAtUtc = new Date().toISOString();
+      const outgoing: ThreadMessage = {
+        id,
+        seq: Date.now(),
+        conversationId: callId || 'teleconsult-chat',
+        senderType: 'Staff',
+        senderId: user?.id,
+        senderDisplayName: resolvedClinicianName,
+        contentText: text,
+        visibility: isInternal ? 'Internal' : 'Public',
+        state: 'Received',
+        clientSentAtUtc: sentAtUtc,
+      };
+      setDataChannelMessages((prev) => [...prev, outgoing]);
+      if (!isInternal) {
+        try {
+          await mediaAdapter.sendDataMessage(
+            JSON.stringify({
+              type: 'chat',
+              id,
+              senderName: resolvedClinicianName,
+              senderRole: 'Clinician',
+              text,
+              sentAtUtc,
+            }),
+          );
+        } catch {
+          // Persisted CommsHub message remains primary fallback if DataChannel is inactive
+        }
+      }
+    },
+    [callId, mediaAdapter, resolvedClinicianName, user?.id],
+  );
+
+  const handleMessagePatient = useCallback(async () => {
+    setIsChatOpen(true);
+    setUnreadChatCount(0);
+    if (!appointmentId) return;
+    try {
+      const [, err] = await clinicService.sendAppointmentReminder(appointmentId);
+      if (err) {
+        notify.info('In-call chat opened. Could not send external reminder notification.');
+      } else {
+        notify.success('Notification sent to patient app and in-call chat opened.');
+      }
+    } catch {
+      notify.info('In-call chat opened.');
+    }
+  }, [appointmentId]);
+
+  const bindDockTip = useCallback(
+    (label: string) =>
+      Platform.OS === 'web'
+        ? ({
+            title: label,
+            onMouseEnter: () => setDockedTooltip(label),
+            onMouseLeave: () => setDockedTooltip((prev) => (prev === label ? null : prev)),
+            onFocus: () => setDockedTooltip(label),
+            onBlur: () => setDockedTooltip(null),
+          } as any)
+        : {},
+    [],
+  );
 
   // Acquire eager local camera/mic preview on Web while staging in waiting room
   useEffect(() => {
@@ -879,12 +1327,14 @@ function ActiveTeleconsultModal({
   );
 
   const recordingConsentStatus: 'Pending' | 'Approved' | 'Rejected' | 'Disabled' =
-    session.recordingState.consentStatus === 'approved'
-      ? 'Approved'
-      : session.recordingState.consentStatus === 'declined' || session.recordingState.consentStatus === 'revoked'
-        ? 'Rejected'
-        : teleconsultSession.recordingPolicy === 'Disabled'
-          ? 'Disabled'
+    effectiveRecordingPolicy === 'Disabled'
+      ? 'Disabled'
+      : session.recordingState.consentStatus === 'approved' ||
+          (isDoctor && stageRecordIntent && !isActuallyInCall)
+        ? 'Approved'
+        : session.recordingState.consentStatus === 'declined' ||
+            session.recordingState.consentStatus === 'revoked'
+          ? 'Rejected'
           : 'Pending';
 
   // Unified In-App Coupled Picture-in-Picture + Dock support
@@ -1260,11 +1710,10 @@ function ActiveTeleconsultModal({
     void mediaRevision;
     const remoteVideoTrack = Platform.OS === 'web' ? mediaAdapter.getRemoteVideoTrack() : null;
     const localVideoTrack =
-      Platform.OS === 'web' && session.mediaTracks.isCameraEnabled
+      Platform.OS === 'web' && (session.mediaTracks.isCameraEnabled || session.mediaTracks.isScreenSharing)
         ? mediaAdapter.getLocalVideoTrack()
         : null;
-    const primaryPipTrack = remoteVideoTrack || localVideoTrack;
-    const isPrimaryLocal = !remoteVideoTrack && Boolean(localVideoTrack);
+    const primaryPipTrack = remoteVideoTrack;
 
     return (
       <>
@@ -1275,6 +1724,17 @@ function ActiveTeleconsultModal({
           pointerEvents="box-none"
           testID="docked-call-mini-bar-wrapper"
         >
+          {dockedTooltip && (
+            <View
+              testID="docked-floating-tooltip"
+              style={[styles.dockedFloatingTooltip, { backgroundColor: pipStageBg }]}
+              pointerEvents="none"
+            >
+              <ThemedText variant="caption" color={pipStageText} numberOfLines={1}>
+                {dockedTooltip}
+              </ThemedText>
+            </View>
+          )}
           <View
             testID="docked-unified-card"
             data-testid="docked-unified-card"
@@ -1298,14 +1758,14 @@ function ActiveTeleconsultModal({
                 ]}
                 {...panResponder.panHandlers}
                 {...(Platform.OS === 'web' ? { onPointerDown: handleWebDragPointerDown } : {})}
-                accessibilityLabel="Picture-in-picture consultation preview"
+                accessibilityLabel="Picture-in-picture patient video view"
               >
                 {primaryPipTrack ? (
                   <View style={styles.dockedPipVideoLayer} pointerEvents="none">
                     <WebVideoTrackView
                       track={primaryPipTrack}
                       muted={true}
-                      mirror={isPrimaryLocal}
+                      mirror={false}
                     />
                   </View>
                 ) : (
@@ -1324,22 +1784,25 @@ function ActiveTeleconsultModal({
                       {resolvedPatientName}
                     </ThemedText>
                     <ThemedText variant="caption" color={theme.colors.textLight}>
-                      {session.mediaTracks.isCameraEnabled ? 'Waiting for Patient Video' : 'Camera Off'}
+                      {networkQuality === 'reconnecting'
+                        ? 'Reconnecting Patient Video...'
+                        : networkQuality === 'poor'
+                          ? 'Weak Network • Audio Active'
+                          : hasRemoteParticipant
+                            ? 'Patient Connected • Audio Only'
+                            : session.mediaTracks.isCameraEnabled ? 'Waiting for Patient Video' : 'Camera Off'}
                     </ThemedText>
                   </View>
                 )}
 
-                {remoteVideoTrack && localVideoTrack && (
+                {localVideoTrack && (
                   <View style={[styles.dockedPipSelfInset, { backgroundColor: pipStageBg }]} pointerEvents="none">
-                    <WebVideoTrackView track={localVideoTrack} muted={true} mirror={true} />
-                  </View>
-                )}
-
-                {isPrimaryLocal && (
-                  <View style={styles.dockedPipBadgeBottomLeft} pointerEvents="none">
-                    <ThemedText variant="caption" color={pipStageText}>
-                      Self Preview
-                    </ThemedText>
+                    <WebVideoTrackView
+                      track={localVideoTrack}
+                      muted={true}
+                      mirror={!session.mediaTracks.isScreenSharing}
+                      objectFit={session.mediaTracks.isScreenSharing ? 'contain' : 'cover'}
+                    />
                   </View>
                 )}
 
@@ -1355,6 +1818,7 @@ function ActiveTeleconsultModal({
                     onPress={handleToggleOrientation}
                     accessibilityLabel="Toggle picture-in-picture orientation"
                     accessibilityRole="button"
+                    {...bindDockTip('Rotate picture-in-picture view')}
                   >
                     <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.text} />
                   </TouchableOpacity>
@@ -1366,6 +1830,7 @@ function ActiveTeleconsultModal({
                     onPress={() => setIsPipActive(false)}
                     accessibilityLabel="Close picture-in-picture"
                     accessibilityRole="button"
+                    {...bindDockTip('Hide picture-in-picture video')}
                   >
                     <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.text} />
                   </TouchableOpacity>
@@ -1423,6 +1888,7 @@ function ActiveTeleconsultModal({
                   onPress={session.mediaTracks.toggleMic}
                   accessibilityLabel={session.mediaTracks.isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
                   accessibilityRole="button"
+                  {...bindDockTip(session.mediaTracks.isMicEnabled ? 'Mute microphone' : 'Unmute microphone')}
                 >
                   <Icon
                     name={session.mediaTracks.isMicEnabled ? 'mic' : 'micOff'}
@@ -1437,6 +1903,7 @@ function ActiveTeleconsultModal({
                   onPress={session.mediaTracks.toggleCamera}
                   accessibilityLabel={session.mediaTracks.isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
                   accessibilityRole="button"
+                  {...bindDockTip(session.mediaTracks.isCameraEnabled ? 'Turn off camera' : 'Turn on camera')}
                 >
                   <Icon
                     name={session.mediaTracks.isCameraEnabled ? 'video' : 'videoOff'}
@@ -1454,6 +1921,7 @@ function ActiveTeleconsultModal({
                     onPress={handleTogglePip}
                     accessibilityLabel={isPipActive ? 'Exit picture-in-picture' : 'Enter picture-in-picture'}
                     accessibilityRole="button"
+                    {...bindDockTip(isPipActive ? 'Hide picture-in-picture' : 'Show picture-in-picture')}
                   >
                     <Icon
                       name="layoutModal"
@@ -1471,6 +1939,7 @@ function ActiveTeleconsultModal({
                   onPress={handleMaximizeStage}
                   accessibilityLabel="Maximize call stage"
                   accessibilityRole="button"
+                  {...bindDockTip('Expand to full video view')}
                 >
                   <Icon name="maximize" size={theme.sizes.iconSm} color={theme.colors.primary} />
                 </TouchableOpacity>
@@ -1483,6 +1952,7 @@ function ActiveTeleconsultModal({
                   onPress={() => setIsConfirmEndCallOpen(true)}
                   accessibilityLabel="End consultation call"
                   accessibilityRole="button"
+                  {...bindDockTip('End consultation call')}
                 >
                   <Icon name="phoneOff" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
                 </TouchableOpacity>
@@ -1503,16 +1973,21 @@ function ActiveTeleconsultModal({
         <CallStage
           callId={callId}
           roomName={session.roomName || callId}
+          colors={activeTheme.resolvedColors}
+          shadows={activeCommsShadows}
           userRole={isDoctor ? 'Clinician' : 'Staff'}
           participantName={resolvedPatientName}
           selfName={user?.name || 'You'}
           hideHeader
           videoOrientation={videoOrientation}
           onToggleOrientation={handleToggleOrientation}
+          networkQuality={networkQuality}
           remoteStatusLabel={
-            isLocalPreviewMode
-              ? 'Waiting for Patient to Connect'
-              : 'Waiting for Patient Video'
+            networkQuality === 'reconnecting'
+              ? 'Connection Interrupted • Reconnecting Patient...'
+              : hasRemoteParticipant
+                ? 'Patient Connected • Camera Off or Audio Only'
+                : 'Waiting for Patient to Connect'
           }
           renderIcon={renderCommsIcon}
           isMicEnabled={session.mediaTracks.isMicEnabled}
@@ -1523,25 +1998,36 @@ function ActiveTeleconsultModal({
           onToggleScreenShare={session.mediaTracks.toggleScreenShare}
           isRecording={session.recordingState.isRecording}
           recordingDurationSeconds={session.recordingState.recordingDurationSeconds}
-          onStartRecording={session.recordingState.requestRecordingConsent}
-          canStartRecording={teleconsultSession.recordingPolicy !== 'Disabled'}
-          recordingConsentStatus={session.recordingState.consentStatus}
-          onApproveConsentPreview={
-            isLocalPreviewMode
-              ? () => session.recordingState.respondToRecordingConsent(true)
-              : undefined
+          onStartRecording={handleStartRecordingInStage}
+          canStartRecording={effectiveRecordingPolicy !== 'Disabled'}
+          isRecordDisabled={!hasRemoteParticipant}
+          recordButtonTooltip={
+            !hasRemoteParticipant
+              ? 'Waiting for patient to join before recording'
+              : 'Request patient consent to record'
           }
+          recordingConsentStatus={session.recordingState.consentStatus}
           onStopRecording={() => session.recordingState.revokeRecordingConsent('Clinician stopped recording')}
           canStopRecording={true}
+          isChatOpen={isChatOpen}
+          unreadChatCount={unreadChatCount}
+          onToggleChat={() => setIsChatOpen((prev) => !prev)}
           patientLink={patientInviteUrl}
           onSharePatientLink={handleSharePatientLink}
-          onDockCall={handleDockAndOpenChart}
+          onMessagePatient={handleMessagePatient}
           onTogglePip={handleTogglePip}
           isPipSupported={isPipSupported}
           isPipActive={isPipActive}
+          onEndCall={() => setIsConfirmEndCallOpen(true)}
           renderCustomVideoSurface={(trackType) => {
             if (Platform.OS !== 'web') return undefined;
-            if (trackType === 'local' && !session.mediaTracks.isCameraEnabled) return undefined;
+            if (
+              trackType === 'local' &&
+              !session.mediaTracks.isCameraEnabled &&
+              !session.mediaTracks.isScreenSharing
+            ) {
+              return undefined;
+            }
             const track =
               trackType === 'local'
                 ? mediaAdapter.getLocalVideoTrack()
@@ -1549,25 +2035,26 @@ function ActiveTeleconsultModal({
             if (!track) return undefined;
             // Keep DOM <video> instance stable across unrelated renders
             void mediaRevision;
+            const mirrorLocal = trackType === 'local' && !session.mediaTracks.isScreenSharing;
+            const fitMode =
+              trackType === 'local' && session.mediaTracks.isScreenSharing ? 'contain' : 'cover';
             return (
               <WebVideoTrackView
                 track={track}
                 muted={true}
-                mirror={trackType === 'local'}
+                mirror={mirrorLocal}
+                objectFit={fitMode}
               />
             );
           }}
-          onEndCall={() => setIsConfirmEndCallOpen(true)}
-          renderWorkstationAction={() => (
-            <Button
-              testID="btn-dock-call"
-              variant="secondary"
-              size="sm"
-              icon="clipboard"
-              title="Dock Call & Chart"
-              accessibilityLabel="Dock teleconsultation call and open chart"
-              onPress={handleDockAndOpenChart}
-              style={styles.touchableMinSize}
+          renderChatDrawer={() => (
+            <TeleconsultInCallChatDrawer
+              callId={callId}
+              patientId={teleconsultSession.patientId}
+              patientName={resolvedPatientName}
+              currentUserId={user?.id || 'staff-clinician'}
+              dataChannelMessages={dataChannelMessages}
+              onSendDataChannelMessage={handleSendDataChannelMessage}
             />
           )}
         />
@@ -1606,7 +2093,7 @@ function ActiveTeleconsultModal({
                 accessibilityLabel="Close teleconsult waiting room"
                 accessibilityRole="button"
               >
-                <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.text} />
+                <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
               </TouchableOpacity>
             </View>
           </View>
@@ -1615,6 +2102,8 @@ function ActiveTeleconsultModal({
             <CallWaitingRoom
               callId={callId}
               appointmentId={appointmentId}
+              colors={activeTheme.resolvedColors}
+              shadows={activeCommsShadows}
               userRole={isDoctor ? 'Clinician' : 'Staff'}
               patientName={resolvedPatientName}
               clinicianName={resolvedClinicianName}
@@ -1656,15 +2145,36 @@ function ActiveTeleconsultModal({
               isYakapExempt={teleconsultSession.isYakapExempt ?? false}
               isReadyToAdmit={session.paymentState.canAdmit}
               recordingConsentStatus={recordingConsentStatus}
+              recordingToggleHint={
+                isDoctor
+                  ? stageRecordIntent
+                    ? 'Recording will be requested once the patient joins and consents.'
+                    : 'Turn on to request patient recording consent once connected.'
+                  : undefined
+              }
+              videoServerUnavailable={Boolean(videoServerError)}
+              videoServerBannerMessage={videoServerError || undefined}
+              onRetryVideoServer={handleRetryVideoServer}
               onChangePaymentPolicy={session.updatePaymentPolicy}
               onStaffPaymentOverride={async (reasonNote) => {
-                await session.admitPatient({ reasonCode: 'STAFF_OVERRIDE', reasonNote });
+                await handleAdmitFromWaitingRoom({ reasonCode: 'STAFF_OVERRIDE', reasonNote });
               }}
               onEmergencyPaymentOverride={async (reason) => {
-                await session.admitPatient({ reasonCode: 'CLINICAL_EMERGENCY', reasonNote: reason });
+                await handleAdmitFromWaitingRoom({ reasonCode: 'CLINICAL_EMERGENCY', reasonNote: reason });
               }}
-              onAdmitPatient={session.admitPatient}
-              onSubmitConsent={session.recordingState.respondToRecordingConsent}
+              onAdmitPatient={() => handleAdmitFromWaitingRoom()}
+              onSubmitConsent={async (approved, reason) => {
+                if (isDoctor) {
+                  setStageRecordIntent(approved);
+                  notify.info(
+                    approved
+                      ? 'Recording will be requested once the patient joins and consents.'
+                      : 'Call recording staged off.',
+                  );
+                  return;
+                }
+                await session.recordingState.respondToRecordingConsent(approved, reason);
+              }}
               onEnterCall={handleEnterCall}
               onCancelCall={handleCancelCall}
             />
@@ -1675,7 +2185,7 @@ function ActiveTeleconsultModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: theme.colors.overlay,
@@ -1692,11 +2202,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
+    ...theme.shadows.lg,
   },
   headerBar: {
     flexDirection: 'row',
@@ -1727,11 +2233,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primarySubtle,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
+    ...theme.shadows.brandSubtle,
   },
   body: {
     flex: 1,
@@ -1760,6 +2267,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.transparent,
     ...theme.shadows.lg,
+  },
+  dockedFloatingTooltip: {
+    alignSelf: 'flex-end',
+    marginBottom: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    zIndex: 2000001,
+    ...theme.shadows.lg,
+  },
+  chatThreadFill: {
+    flex: 1,
   },
   dockedUnifiedCard: {
     borderRadius: theme.radii.md,
@@ -1824,6 +2345,7 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
     backgroundColor: theme.colors.surfaceInverse,
+    ...theme.shadows.md,
   },
   dockedPipBadgeBottomLeft: {
     position: 'absolute',
@@ -1881,18 +2403,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
     backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.full,
+    ...theme.shadows.brandSubtle,
   },
   dockedRecordingPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
     backgroundColor: theme.colors.emergencyBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.full,
+    ...theme.shadows.dangerSm,
   },
   dockedControlsSection: {
     flexDirection: 'row',
@@ -1905,10 +2433,11 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
     padding: theme.spacing.xs,
+    ...theme.shadows.brandSubtle,
   },
   dockedCompactButton: {
     width: 28,
@@ -1916,17 +2445,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
+    ...theme.shadows.brandSubtle,
   },
   dockedActiveButton: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+    ...theme.shadows.brandSm,
   },
   dockedEndButton: {
     backgroundColor: theme.colors.emergencyBg,
     borderColor: theme.colors.emergencyBorder,
+    ...theme.shadows.dangerSm,
   },
   touchableMinSize: {
     minHeight: theme.sizes.touchTarget,
@@ -1972,11 +2504,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 20,
+    ...theme.shadows.lg,
   },
   confirmModalHeader: {
     flexDirection: 'row',

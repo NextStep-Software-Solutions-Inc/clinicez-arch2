@@ -367,6 +367,11 @@ export function getActiveThemeState(): ActiveThemeState {
   };
 }
 
+export function getActiveThemeSnapshot(): string {
+  const effectiveBrand = activeUserBrandColorHex ?? activeBrandColorHex;
+  return `${effectiveBrand}|${activeBrandColorHex}|${activeUserBrandColorHex ?? ''}|${activeScheme}`;
+}
+
 export function subscribeActiveTheme(listener: () => void): () => void {
   themeListeners.add(listener);
   return () => {

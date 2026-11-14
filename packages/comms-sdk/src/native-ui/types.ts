@@ -1,7 +1,8 @@
 import { ViewStyle } from 'react-native';
-import type { lightColors } from '@clinicez/design-tokens';
+import type { lightColors, ShadowScale } from '@clinicez/design-tokens';
 
 export type CommsThemeColors = Partial<Record<keyof typeof lightColors, string>>;
+export type CommsThemeShadows = Partial<ShadowScale>;
 
 export type ConversationScopeFilter =
   | 'All'
@@ -44,6 +45,7 @@ export interface ChatDrawerProps {
   renderEmptyState?: () => React.ReactNode;
   renderSearchIcon?: () => React.ReactNode;
   colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
   style?: ViewStyle;
 }
 
@@ -97,6 +99,7 @@ export interface MessageThreadProps {
   hasMoreHistory?: boolean;
   onLoadMoreHistory?: () => void;
   colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
   style?: ViewStyle;
 }
 
@@ -143,6 +146,7 @@ export interface TriageQueueViewProps {
   activeFilter?: 'All' | 'Emergency' | 'Urgent' | 'Routine';
   onFilterChange?: (filter: 'All' | 'Emergency' | 'Urgent' | 'Routine') => void;
   colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
   style?: ViewStyle;
 }
 
@@ -201,6 +205,12 @@ export interface CallWaitingRoomProps {
   onToggleOrientation?: () => void;
   patientLink?: string;
   onSharePatientLink?: () => void | Promise<void>;
+  videoServerUnavailable?: boolean;
+  videoServerBannerMessage?: string;
+  onRetryVideoServer?: () => void | Promise<void>;
+  recordingToggleHint?: string;
+  colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
 }
 
 export interface CallStageParticipant {
@@ -257,4 +267,9 @@ export interface CallStageProps {
   onTogglePip?: () => void | Promise<void>;
   isPipSupported?: boolean;
   isPipActive?: boolean;
+  onMessagePatient?: () => void | Promise<void>;
+  isRecordDisabled?: boolean;
+  recordButtonTooltip?: string;
+  colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
 }

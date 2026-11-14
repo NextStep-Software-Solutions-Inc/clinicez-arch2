@@ -29,6 +29,8 @@ export interface LiveKitMediaAdapterOptions {
 export class LiveKitMediaAdapter implements IMediaRoomAdapter {
   private room: Room | null = null;
   private state: MediaConnectionState = 'disconnected';
+  private networkQuality: 'excellent' | 'good' | 'poor' | 'reconnecting' = 'good';
+  private participantQualities: Map<string, 'excellent' | 'good' | 'poor'> = new Map();
   private listeners: Map<MediaAdapterEventType, Set<MediaEventListener>> = new Map();
   private isSupported: boolean;
 
@@ -37,12 +39,28 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
     if (options?.room) {
       this.room = options.room;
     } else if (this.isSupported) {
-      this.room = new Room(options?.roomOptions);
+      this.room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        ...options?.roomOptions
+      });
     }
   }
 
   get connectionState(): MediaConnectionState {
     return this.state;
+  }
+
+  getNetworkQuality(): 'excellent' | 'good' | 'poor' | 'reconnecting' {
+    return this.networkQuality;
+  }
+
+  async sendDataMessage(payload: string): Promise<void> {
+    if (!this.room?.localParticipant) return;
+    const encoded = typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(payload) : null;
+    if (!encoded) return;
+    await (this.room.localParticipant as { publishData?: (data: Uint8Array, opts?: unknown) => Promise<void> })
+      .publishData?.(encoded, { reliable: true });
   }
 
   isConnected(): boolean {
@@ -126,8 +144,11 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
 
   getLocalVideoTrack(): unknown | null {
     if (!this.room?.localParticipant) return null;
-    const pub = Array.from(this.room.localParticipant.videoTrackPublications.values())[0];
-    return pub?.track || null;
+    const pubs = Array.from(this.room.localParticipant.videoTrackPublications.values());
+    const screenPub = pubs.find((pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted);
+    if (screenPub?.track) return screenPub.track;
+    const camPub = pubs.find((pub) => pub.track && !pub.isMuted);
+    return camPub?.track || null;
   }
 
   getLocalAudioTrack(): unknown | null {
@@ -143,8 +164,11 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
       ? participants.find((p) => p.identity === participantIdentity)
       : participants[0];
     if (!participant) return null;
-    const pub = Array.from(participant.videoTrackPublications.values())[0];
-    return pub?.track || null;
+    const pubs = Array.from(participant.videoTrackPublications.values());
+    const screenPub = pubs.find((pub) => (pub as { source?: string }).source === 'screen_share' && pub.track && !pub.isMuted);
+    if (screenPub?.track) return screenPub.track;
+    const camPub = pubs.find((pub) => pub.track && !pub.isMuted);
+    return camPub?.track || null;
   }
 
   getRemoteAudioTrack(participantIdentity?: string): unknown | null {
@@ -203,21 +227,46 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
     }
   }
 
+  private updateOverallNetworkQuality(): void {
+    if (this.state === 'reconnecting') {
+      this.networkQuality = 'reconnecting';
+      this.emit('networkQualityChanged', 'reconnecting');
+      return;
+    }
+    const qualities = Array.from(this.participantQualities.values());
+    let next: 'excellent' | 'good' | 'poor' = 'good';
+    if (qualities.includes('poor')) {
+      next = 'poor';
+    } else if (qualities.length > 0 && qualities.every((q) => q === 'excellent')) {
+      next = 'excellent';
+    }
+    if (next !== this.networkQuality) {
+      this.networkQuality = next;
+      this.emit('networkQualityChanged', next);
+    }
+  }
+
   private wireRoomEvents(room: Room): void {
     room.on(RoomEvent.Connected, () => {
       this.state = 'connected';
+      this.networkQuality = 'good';
+      this.emit('networkQualityChanged', 'good');
       this.emit('connected', room.name);
     });
     room.on(RoomEvent.Disconnected, () => {
       this.state = 'disconnected';
+      this.participantQualities.clear();
       this.emit('disconnected');
     });
     room.on(RoomEvent.Reconnecting, () => {
       this.state = 'reconnecting';
+      this.networkQuality = 'reconnecting';
+      this.emit('networkQualityChanged', 'reconnecting');
       this.emit('reconnecting');
     });
     room.on(RoomEvent.Reconnected, () => {
       this.state = 'connected';
+      this.updateOverallNetworkQuality();
       this.emit('reconnected');
     });
     room.on(RoomEvent.ParticipantConnected, (p) => {
@@ -231,6 +280,8 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
       });
     });
     room.on(RoomEvent.ParticipantDisconnected, (p) => {
+      this.participantQualities.delete(p.identity);
+      this.updateOverallNetworkQuality();
       this.emit('participantLeft', p.identity);
     });
     room.on(RoomEvent.TrackSubscribed, (track, pub, p) => {
@@ -251,5 +302,61 @@ export class LiveKitMediaAdapter implements IMediaRoomAdapter {
         isScreenSharing: p.isScreenShareEnabled
       });
     });
+    if (RoomEvent.TrackMuted) {
+      room.on(RoomEvent.TrackMuted, (pub, p) => {
+        this.emit('trackUnsubscribed', (pub as { track?: unknown })?.track, pub, {
+          identity: (p as { identity?: string })?.identity || '',
+          name: (p as { name?: string })?.name
+        });
+      });
+    }
+    if (RoomEvent.TrackUnmuted) {
+      room.on(RoomEvent.TrackUnmuted, (pub, p) => {
+        this.emit('trackSubscribed', (pub as { track?: unknown })?.track, pub, {
+          identity: (p as { identity?: string })?.identity || '',
+          name: (p as { name?: string })?.name
+        });
+      });
+    }
+    if (RoomEvent.TrackStreamStateChanged) {
+      room.on(RoomEvent.TrackStreamStateChanged, (pub, streamState, p) => {
+        const paused = String(streamState ?? '').toLowerCase() === 'paused';
+        this.emit(paused ? 'trackUnsubscribed' : 'trackSubscribed', (pub as { track?: unknown })?.track, pub, {
+          identity: (p as { identity?: string })?.identity || '',
+          name: (p as { name?: string })?.name
+        });
+      });
+    }
+    if (RoomEvent.ConnectionQualityChanged) {
+      room.on(RoomEvent.ConnectionQualityChanged, (quality, p) => {
+        const raw = String(quality ?? '').toLowerCase();
+        const mapped: 'excellent' | 'good' | 'poor' =
+          raw === 'poor' || raw === 'lost' || raw === '0' || raw === '1'
+            ? 'poor'
+            : raw === 'excellent' || raw === '3'
+              ? 'excellent'
+              : 'good';
+        const key = (p as { identity?: string })?.identity || '__local__';
+        this.participantQualities.set(key, mapped);
+        this.updateOverallNetworkQuality();
+      });
+    }
+    if (RoomEvent.LocalTrackUnpublished) {
+      room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
+        if ((pub as { source?: string })?.source === 'screen_share') {
+          this.emit('localTrackChanged', 'screen', false);
+        }
+      });
+    }
+    if (RoomEvent.DataReceived) {
+      room.on(RoomEvent.DataReceived, (payload, p) => {
+        try {
+          const text = typeof TextDecoder !== 'undefined' ? new TextDecoder().decode(payload) : String(payload);
+          this.emit('dataMessageReceived', text, (p as { identity?: string })?.identity);
+        } catch {
+          // Ignore malformed non-UTF8 data packets
+        }
+      });
+    }
   }
 }

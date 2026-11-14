@@ -6,6 +6,7 @@ import {
   CallWaitingRoom,
   CallStage,
   MessageThread,
+  resolveWebShadows,
   type GuestVerificationResult,
   type ThreadMessage,
 } from "@clinicez/comms-sdk/web-ui";
@@ -149,7 +150,18 @@ export function TeleconsultGuestFlow({
   const [recordingConsent, setRecordingConsent] = useState<"Pending" | "Approved" | "Rejected" | "Disabled">("Pending");
   const [isReadyToAdmit] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [pendingConsentSessionId, setPendingConsentSessionId] = useState<string | null>(null);
   const [privacyBlurEnabled, setPrivacyBlurEnabled] = useState(true);
+  const guestShadows = useMemo(() => resolveWebShadows(), []);
+  const isChatOpenRef = useRef(isChatOpen);
+
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen;
+    if (isChatOpen) {
+      setUnreadChatCount(0);
+    }
+  }, [isChatOpen]);
 
   // In-call messages thread state
   const [messages, setMessages] = useState<ThreadMessage[]>([
@@ -177,10 +189,11 @@ export function TeleconsultGuestFlow({
     return new LocalPreviewMediaAdapter();
   }, []);
 
-  // Track state synchronization
+  // Track & network state synchronization
   const [localVideoTrack, setLocalVideoTrack] = useState<unknown | null>(null);
   const [remoteVideoTrack, setRemoteVideoTrack] = useState<unknown | null>(null);
   const [remoteAudioTrack, setRemoteAudioTrack] = useState<unknown | null>(null);
+  const [networkQuality, setNetworkQuality] = useState<"excellent" | "good" | "poor" | "reconnecting">("good");
 
   useEffect(() => {
     if (!mediaAdapter) return;
@@ -188,6 +201,9 @@ export function TeleconsultGuestFlow({
       setLocalVideoTrack(mediaAdapter.getLocalVideoTrack());
       setRemoteVideoTrack(mediaAdapter.getRemoteVideoTrack());
       setRemoteAudioTrack(mediaAdapter.getRemoteAudioTrack());
+      if (mediaAdapter.getNetworkQuality) {
+        setNetworkQuality(mediaAdapter.getNetworkQuality());
+      }
     };
 
     updateTracks();
@@ -196,6 +212,56 @@ export function TeleconsultGuestFlow({
     const unsubLocal = mediaAdapter.on("localTrackChanged", updateTracks);
     const unsubConn = mediaAdapter.on("connected", updateTracks);
     const unsubDisc = mediaAdapter.on("disconnected", updateTracks);
+    const unsubQuality = mediaAdapter.on("networkQualityChanged", (quality) => {
+      if (
+        quality === "excellent" ||
+        quality === "good" ||
+        quality === "poor" ||
+        quality === "reconnecting"
+      ) {
+        setNetworkQuality(quality);
+      }
+    });
+    const unsubData = mediaAdapter.on("dataMessageReceived", (rawPayload) => {
+      if (typeof rawPayload !== "string") return;
+      try {
+        const parsed = JSON.parse(rawPayload) as {
+          type?: string;
+          id?: string;
+          senderName?: string;
+          senderRole?: string;
+          text?: string;
+          sentAtUtc?: string;
+          recordingSessionId?: string;
+        };
+        if (parsed.type === "chat" && parsed.text) {
+          const incoming: ThreadMessage = {
+            id: parsed.id || `dc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            seq: Date.now(),
+            conversationId: session?.callId || "teleconsult-conv",
+            senderType: parsed.senderRole === "Clinician" ? "Staff" : "Patient",
+            senderId: parsed.senderRole === "Clinician" ? "clinician-remote" : "patient-remote",
+            senderDisplayName: parsed.senderName || `${clinicName} Attending Clinician`,
+            contentText: parsed.text,
+            clientSentAtUtc: parsed.sentAtUtc || new Date().toISOString(),
+            state: "Received",
+            visibility: "Public",
+            requiresAcknowledgement: false,
+          };
+          setMessages((prev) =>
+            prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]
+          );
+          if (!isChatOpenRef.current) {
+            setUnreadChatCount((c) => c + 1);
+          }
+        } else if (parsed.type === "recording_consent_requested") {
+          setPendingConsentSessionId(parsed.recordingSessionId || "pending");
+          setRecordingConsent("Pending");
+        }
+      } catch {
+        // Ignore non-JSON data channel packets
+      }
+    });
 
     return () => {
       unsubSub();
@@ -203,8 +269,10 @@ export function TeleconsultGuestFlow({
       unsubLocal();
       unsubConn();
       unsubDisc();
+      unsubQuality();
+      unsubData();
     };
-  }, [mediaAdapter]);
+  }, [mediaAdapter, session?.callId, clinicName]);
 
   // Picture-in-Picture & Video Element references
   const [isPipSupported, setIsPipSupported] = useState(false);
@@ -312,7 +380,9 @@ export function TeleconsultGuestFlow({
   };
 
   const handleSendMessage = async (text: string, isInternal: boolean): Promise<void> => {
-    const newId = `msg-${Date.now()}`;
+    const newId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const sentAtUtc = new Date().toISOString();
+    const senderName = userRole === "Clinician" ? "Attending Clinician" : "Guest Patient";
     const newMsg: ThreadMessage = {
       id: newId,
       seq: messages.length + 1,
@@ -321,13 +391,34 @@ export function TeleconsultGuestFlow({
       senderId: "patient-guest-id",
       senderDisplayName: userRole === "Clinician" ? "Attending Clinician" : "You (Guest)",
       contentText: text,
-      clientSentAtUtc: new Date().toISOString(),
+      clientSentAtUtc: sentAtUtc,
       state: "Sending",
       visibility: isInternal ? "Internal" : "Public",
       requiresAcknowledgement: false,
     };
 
     setMessages((prev) => [...prev, newMsg]);
+
+    if (!isInternal && mediaAdapter?.sendDataMessage) {
+      try {
+        await mediaAdapter.sendDataMessage(
+          JSON.stringify({
+            type: "chat",
+            id: newId,
+            senderName,
+            senderRole: userRole === "Clinician" ? "Clinician" : "Patient",
+            text,
+            sentAtUtc,
+          })
+        );
+        setMessages((prev) =>
+          prev.map((m) => (m.id === newId ? { ...m, state: "Received" } : m))
+        );
+        return;
+      } catch {
+        // Fall through to status transition if DataChannel is temporarily offline
+      }
+    }
 
     setTimeout(() => {
       setMessages((prev) =>
@@ -340,6 +431,25 @@ export function TeleconsultGuestFlow({
         prev.map((m) => (m.id === newId ? { ...m, state: "Received" } : m))
       );
     }, 900);
+  };
+
+  const handleRespondRecordingConsent = async (approved: boolean): Promise<void> => {
+    const consentSessionId = pendingConsentSessionId;
+    setRecordingConsent(approved ? "Approved" : "Rejected");
+    setPendingConsentSessionId(null);
+    if (mediaAdapter?.sendDataMessage) {
+      try {
+        await mediaAdapter.sendDataMessage(
+          JSON.stringify({
+            type: "recording_consent_response",
+            recordingSessionId: consentSessionId,
+            approved,
+          })
+        );
+      } catch {
+        // Best-effort DataChannel signal
+      }
+    }
   };
 
   const handleResendMessage = async (messageId: string): Promise<void> => {
@@ -411,7 +521,10 @@ export function TeleconsultGuestFlow({
         <WebAudioTrackView track={remoteAudioTrack} />
 
         {/* Navigation & Status Header with Plain Copy */}
-        <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border shadow-xs">
+        <header
+          className="flex items-center justify-between px-4 py-3 bg-card border-b border-border shadow-sm"
+          style={{ boxShadow: guestShadows.sm }}
+        >
           <div className="flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
             <div>
@@ -437,17 +550,20 @@ export function TeleconsultGuestFlow({
             <button
               type="button"
               onClick={() => setIsChatOpen((prev) => !prev)}
-              className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-colors cursor-pointer ${
+              className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer ${
                 isChatOpen
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-muted text-foreground border-border hover:bg-muted/80"
               }`}
+              style={{
+                boxShadow: isChatOpen ? guestShadows.brandSm : guestShadows.brandSubtle,
+              }}
               aria-label="Toggle consultation chat"
             >
               <MessageSquare className="w-4 h-4" />
               <span>In-Call Chat</span>
               <span className="px-1.5 py-0.5 rounded-full bg-background/20 text-[10px] font-bold">
-                {messages.length}
+                {unreadChatCount > 0 ? unreadChatCount : messages.length}
               </span>
             </button>
 
@@ -457,7 +573,8 @@ export function TeleconsultGuestFlow({
                 await callSession.endCall?.();
                 setStage("ended");
               }}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              style={{ boxShadow: guestShadows.dangerSm }}
               aria-label="Leave teleconsultation"
             >
               <PhoneOff className="w-4 h-4" />
@@ -465,6 +582,37 @@ export function TeleconsultGuestFlow({
             </button>
           </div>
         </header>
+
+        {pendingConsentSessionId && (
+          <div
+            data-testid="banner-patient-recording-consent"
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-muted border-b border-border text-xs"
+            style={{ boxShadow: guestShadows.sm }}
+          >
+            <span className="font-semibold text-foreground">
+              The clinician has requested to record this consultation. Do you consent?
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRespondRecordingConsent(false)}
+                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-card border border-border text-foreground font-semibold hover:bg-muted/80 transition-all cursor-pointer"
+                style={{ boxShadow: guestShadows.brandSubtle }}
+              >
+                Decline
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRespondRecordingConsent(true)}
+                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold hover:opacity-95 transition-all cursor-pointer"
+                style={{ boxShadow: guestShadows.brandSm }}
+              >
+                Approve Recording
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Call Workspace Grid */}
         <div className="flex-1 flex overflow-hidden">
@@ -478,10 +626,16 @@ export function TeleconsultGuestFlow({
               selfName="You (Guest)"
               hideHeader={true}
               remoteStatusLabel="Clinician Video Feed Active"
+              networkQuality={networkQuality}
               isMicEnabled={callSession.mediaTracks.isMicEnabled}
               isCameraEnabled={callSession.mediaTracks.isCameraEnabled}
+              isScreenSharing={callSession.mediaTracks.isScreenSharing}
               onToggleMic={callSession.mediaTracks.toggleMic}
               onToggleCamera={callSession.mediaTracks.toggleCamera}
+              onToggleScreenShare={callSession.mediaTracks.toggleScreenShare}
+              isChatOpen={isChatOpen}
+              unreadChatCount={unreadChatCount}
+              onToggleChat={() => setIsChatOpen((prev) => !prev)}
               onEndCall={async () => {
                 await callSession.endCall?.();
                 setStage("ended");
@@ -493,11 +647,15 @@ export function TeleconsultGuestFlow({
               onTogglePip={handleTogglePip}
               renderCustomVideoSurface={(type) => {
                 if (type === "remote") {
+                  const isRemoteScreenShare = Boolean(
+                    (remoteVideoTrack as { source?: string } | null)?.source === "screen_share"
+                  );
                   return remoteVideoTrack ? (
                     <div className="w-full h-full relative">
                       <span className="sr-only">Clinician Video Feed Active</span>
                       <WebVideoTrackView
                         track={remoteVideoTrack}
+                        className={isRemoteScreenShare ? "w-full h-full object-contain" : "w-full h-full object-cover"}
                         onVideoElement={(el) => {
                           remoteVideoElRef.current = el;
                         }}
@@ -506,11 +664,13 @@ export function TeleconsultGuestFlow({
                   ) : null;
                 }
                 if (type === "local") {
+                  const isLocalScreen = callSession.mediaTracks.isScreenSharing;
                   return localVideoTrack ? (
                     <WebVideoTrackView
                       track={localVideoTrack}
                       muted
-                      mirror
+                      mirror={!isLocalScreen}
+                      className={isLocalScreen ? "w-full h-full object-contain" : "w-full h-full object-cover"}
                       onVideoElement={(el) => {
                         localVideoElRef.current = el;
                       }}
@@ -525,7 +685,10 @@ export function TeleconsultGuestFlow({
 
           {/* In-Call Chat Drawer (MessageThread) */}
           {isChatOpen && (
-            <aside className="w-80 sm:w-96 border-l border-border bg-card flex flex-col h-full shadow-xl">
+            <aside
+              className="w-80 sm:w-96 border-l border-border bg-card flex flex-col h-full shadow-xl"
+              style={{ boxShadow: guestShadows.lg }}
+            >
               <MessageThread
                 conversationId={session?.callId || "teleconsult-chat"}
                 conversationTitle="Clinical Encounter Chat"
@@ -549,7 +712,10 @@ export function TeleconsultGuestFlow({
   // State 4: Session Ended
   return (
     <main className={`min-h-screen flex items-center justify-center p-4 bg-background text-foreground ${className}`}>
-      <div className="w-full max-w-md p-8 rounded-3xl bg-card border border-border text-center shadow-lg space-y-4">
+      <div
+        className="w-full max-w-md p-8 rounded-3xl bg-card border border-border text-center shadow-lg space-y-4"
+        style={{ boxShadow: guestShadows.lg }}
+      >
         <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center">
           <Check className="w-8 h-8" />
         </div>
@@ -564,6 +730,7 @@ export function TeleconsultGuestFlow({
             type="button"
             onClick={() => setStage("verify")}
             className="w-full min-h-[44px] rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:opacity-95 transition-all cursor-pointer"
+            style={{ boxShadow: guestShadows.brandSm }}
           >
             Return to Teleconsultation Portal
           </button>

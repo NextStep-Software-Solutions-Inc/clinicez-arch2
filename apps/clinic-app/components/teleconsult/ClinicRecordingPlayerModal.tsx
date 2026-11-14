@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Modal, Pressable, TextInput, Platform } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import Icon from '../ui/Icon';
-import { theme } from '../../constants/theme';
+import { getActiveThemeSnapshot, subscribeActiveTheme, theme } from '../../constants/theme';
 import {
   clinicService,
   type PlaybackTicketDto,
@@ -44,6 +44,12 @@ export default function ClinicRecordingPlayerModal({
   onClose,
   onHoldChanged,
 }: ClinicRecordingPlayerModalProps) {
+  const activeThemeSnapshot = useSyncExternalStore(
+    subscribeActiveTheme,
+    getActiveThemeSnapshot,
+    getActiveThemeSnapshot,
+  );
+  const styles = useMemo(() => createStyles(), [activeThemeSnapshot]);
   const [ticket, setTicket] = useState<PlaybackTicketDto | null>(propTicket || null);
   const [session, setSession] = useState<RecordingSessionDto | null>(propSession || null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -328,7 +334,7 @@ export default function ClinicRecordingPlayerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: theme.colors.overlay,
@@ -345,11 +351,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: theme.spacing.xl,
     gap: theme.spacing.md,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
+    ...theme.shadows.lg,
   },
   header: {
     flexDirection: 'row',
@@ -377,6 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
+    ...theme.shadows.sm,
   },
   encryptedBadge: {
     backgroundColor: theme.colors.successBg,
@@ -427,6 +430,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
+    ...theme.shadows.sm,
   },
   legalHoldStatusRow: {
     flexDirection: 'row',
@@ -441,6 +445,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     padding: theme.spacing.md,
     gap: theme.spacing.sm,
+    ...theme.shadows.md,
   },
   holdInput: {
     backgroundColor: theme.colors.surface,

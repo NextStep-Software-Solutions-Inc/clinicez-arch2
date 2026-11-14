@@ -215,7 +215,7 @@ describe('Challenger M6.2: Workstation Clinic App Teleconsultation Adversarial S
       expect(modalCode).toContain('testID="docked-patient-label"');
       expect(modalCode).toContain('testID="btn-maximize-call"');
       expect(modalCode).toContain('testID="btn-docked-end-call"');
-      expect(modalCode).toContain('testID="btn-dock-call"');
+      expect(modalCode).toContain('testID="btn-toggle-pip"');
 
       // Verify docked bar container is pinned to viewport with dominant top-layer zIndex
       expect(modalCode).toContain('dockedBarContainer:');

@@ -49,6 +49,9 @@ const createMockComponent = (name: string) => {
     onKeyPress: _onKeyPress,
     pointerEvents: _pointerEvents,
     size: _size,
+    thumbColor: _thumbColor,
+    trackColor: _trackColor,
+    onValueChange: _onValueChange,
     ...rest
   }: any) => {
     if (name === 'Modal' && visible === false) return null;
@@ -123,6 +126,23 @@ const reactNativeMockFactory = () => ({
         return this;
       }
     },
+    ValueXY: class {
+      x: any;
+      y: any;
+      constructor(val?: { x?: number; y?: number }) {
+        this.x = { _value: val?.x ?? 0 };
+        this.y = { _value: val?.y ?? 0 };
+      }
+      setValue(val: { x: number; y: number }) {
+        this.x._value = val.x;
+        this.y._value = val.y;
+      }
+      setOffset() {}
+      flattenOffset() {}
+      getTranslateTransform() {
+        return [{ translateX: 0 }, { translateY: 0 }];
+      }
+    },
     timing: () => ({ start: (cb?: any) => cb && cb() }),
     parallel: (anims: any[]) => ({
       start: (cb?: any) => {
@@ -135,6 +155,7 @@ const reactNativeMockFactory = () => ({
     Text: createMockComponent('Animated.Text'),
   },
   Alert: { alert: () => {} },
+  PanResponder: { create: () => ({ panHandlers: {} }) },
   I18nManager: { isRTL: false, allowRTL: () => {}, forceRTL: () => {} },
   Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
 });
@@ -318,7 +339,41 @@ mock.module('../../utils/alertSounds', () => ({
   playMessageChime: () => {},
 }));
 
+let mockCallStatus: 'staging' | 'connected' = 'staging';
 mock.module('@clinicez/comms-sdk/react', () => ({
+  CommsContext: React.createContext(null),
+  useCallSession: (_callId: string, opts: any) => ({
+    status: mockCallStatus,
+    roomName: 'room-teleconsult-1',
+    paymentState: opts?.initialPaymentState ?? {
+      policy: 'Exempt',
+      status: 'Exempt',
+      canAdmit: true,
+      isYakapExempt: true,
+      hasActiveYakapEnlistment: false,
+    },
+    recordingState: {
+      isRecording: false,
+      consentStatus: 'none',
+      recordingDurationSeconds: 0,
+      recordingSessionId: null,
+      requestRecordingConsent: async () => {},
+      respondToRecordingConsent: async () => {},
+      revokeRecordingConsent: async () => {},
+    },
+    mediaTracks: {
+      isCameraEnabled: true,
+      isMicEnabled: true,
+      isScreenSharing: false,
+      toggleCamera: () => {},
+      toggleMic: () => {},
+      toggleScreenShare: () => {},
+    },
+    updatePaymentPolicy: async () => {},
+    admitPatient: async () => {},
+    joinCall: async () => {},
+    endCall: async () => {},
+  }),
   useConversation: (id: string) => ({
     conversation: {
       id,
@@ -402,11 +457,15 @@ mock.module('@clinicez/comms-sdk/react', () => ({
 const { ChatDrawer } = await import('../../../packages/comms-sdk/src/native-ui/ChatDrawer');
 const { MessageThread } = await import('../../../packages/comms-sdk/src/native-ui/MessageThread');
 const { TriageQueueView } = await import('../../../packages/comms-sdk/src/native-ui/TriageQueueView');
+const { CallWaitingRoom } = await import('../../../packages/comms-sdk/src/native-ui/CallWaitingRoom');
+const { CallStage } = await import('../../../packages/comms-sdk/src/native-ui/CallStage');
 
 mock.module('@clinicez/comms-sdk/native-ui', () => ({
   ChatDrawer,
   MessageThread,
   TriageQueueView,
+  CallWaitingRoom,
+  CallStage,
 }));
 
 const { getActiveThemeState, syncActiveTheme } = await import('../constants/theme');
@@ -414,6 +473,8 @@ const { DEFAULT_CLINIC_BRAND_COLOR } = await import('../constants/color');
 const { default: ClinicChatDrawerHost } = await import('../components/comms/ClinicChatDrawerHost');
 const { default: ClinicActiveThread } = await import('../components/comms/ClinicActiveThread');
 const { default: NewConversationModal } = await import('../components/comms/NewConversationModal');
+const { ActiveTeleconsultModal } = await import('../components/teleconsult/TeleconsultWaitingRoomModal');
+const { default: ClinicRecordingPlayerModal } = await import('../components/teleconsult/ClinicRecordingPlayerModal');
 
 const renderMarkup = (element: React.ReactElement): string =>
   renderToStaticMarkup(element).replaceAll('&quot;', '"');
@@ -841,6 +902,125 @@ describe('Messaging Sidebar Chips, Soft Pastel Bubbles & Triage Brand Sync (#104
       expect(modalHtml).toContain(`"borderColor":"${amber.primaryBorder}"`);
       expect(modalHtml).toContain(`"color":"${amber.primaryDark}"`);
       expect(modalHtml).toContain(`"backgroundColor":"${amber.primarySubtle}"`);
+    });
+  });
+
+  describe('4. Teleconsultation Modals (Waiting Room, Notice Banner, Docked Bar & Recording Player)', () => {
+    test('ClinicRecordingPlayerModal updates scrubber fill and uses lg/sm/md shadows on brand switch', () => {
+      syncActiveTheme({ brandColorHex: '#E11D48', userBrandColorHex: null, scheme: 'light' });
+      const rose = getActiveThemeState().resolvedColors;
+
+      const playerBaseProps = {
+        visible: true,
+        onClose: () => {},
+        ticket: {
+          ticketToken: 'tkt-1',
+          recordingSessionId: 'rec-1',
+          callId: 'call-1',
+          playbackUrl: 'https://storage.local/rec.mp4',
+          expiresAtUtc: '2026-11-14T08:00:00Z',
+          durationSeconds: 120,
+          encryptionMode: 'AES-256-GCM',
+          hasLegalHold: false,
+        },
+        session: {
+          id: 'rec-1',
+          callId: 'call-1',
+          appointmentId: 'apt-1',
+          status: 'Ready' as const,
+          durationSeconds: 120,
+          hasLegalHold: false,
+          isLegalHold: false,
+          createdAtUtc: '2026-11-14T07:00:00Z',
+        },
+      };
+
+      const { html: roseHtml, stylesList: roseStyles } = renderStylesAndMarkup(
+        React.createElement(ClinicRecordingPlayerModal, playerBaseProps),
+      );
+      expect(roseHtml).toContain(`"backgroundColor":"${rose.primary}"`);
+      expect(roseStyles.some((s) => s.shadowColor === rose.shadowLgColor)).toBe(true);
+      expect(roseStyles.some((s) => s.shadowColor === rose.shadowSmColor)).toBe(true);
+      expect(roseStyles.some((s) => s.shadowOpacity === 0.25)).toBe(false);
+
+      syncActiveTheme({ brandColorHex: '#0284C7', userBrandColorHex: null, scheme: 'light' });
+      const sky = getActiveThemeState().resolvedColors;
+      const { html: skyHtml } = renderStylesAndMarkup(
+        React.createElement(ClinicRecordingPlayerModal, playerBaseProps),
+      );
+      expect(skyHtml).toContain(`"backgroundColor":"${sky.primary}"`);
+      expect(skyHtml).not.toContain(`"backgroundColor":"${rose.primary}"`);
+    });
+
+    test('ActiveTeleconsultModal propagates brand colors & drop shadows into Waiting Room, Admission Cleared banner, and Docked controls', () => {
+      syncActiveTheme({ brandColorHex: '#E11D48', userBrandColorHex: null, scheme: 'light' });
+      const rose = getActiveThemeState().resolvedColors;
+
+      const sessionProps = {
+        callId: 'call-tele-1',
+        appointmentId: 'apt-tele-1',
+        patientId: 'pat-1',
+        patientName: 'Clemente, Mark Kenneth C.',
+        clinicianName: 'Dr. Maria Santos',
+        scheduledTime: '2026-11-14 at 4:00 PM',
+        paymentPolicy: 'Exempt' as const,
+        paymentStatus: 'Exempt' as const,
+        isYakapExempt: true,
+        hasActiveYakapEnlistment: false,
+      };
+
+      const { html: waitingHtml, stylesList: waitingStyles } = renderStylesAndMarkup(
+        React.createElement(ActiveTeleconsultModal, {
+          teleconsultSession: sessionProps,
+          closeTeleconsultWaitingRoom: () => {},
+          isCallStageDocked: false,
+          dockCallStage: () => {},
+          maximizeCallStage: () => {},
+        }),
+      );
+
+      // Modal & header close button follow brand + elevation shadows (never static shadowOpacity 0.25)
+      expect(waitingStyles.some((s) => s.shadowColor === rose.shadowLgColor)).toBe(true);
+      expect(waitingStyles.some((s) => s.shadowOpacity === 0.25)).toBe(false);
+      expect(
+        waitingStyles.some(
+          (s) =>
+            s.backgroundColor === rose.primarySubtle &&
+            s.borderColor === rose.primaryBorder &&
+            s.shadowColor === rose.primaryShadowSubtle,
+        ),
+      ).toBe(true);
+
+      // Waiting Room CTA, active tab, AND "Exempt — Admission Cleared" notice banner follow brand palette + shadow
+      expect(waitingHtml).toContain('Exempt — Admission Cleared');
+      expect(waitingHtml).toContain(`"backgroundColor":"${rose.primary}","borderColor":"${rose.primaryDark}"`);
+      expect(waitingHtml).toContain(`"shadowColor":"${rose.primaryShadowSm}"`);
+      expect(waitingHtml).toContain(`"shadowColor":"${rose.primaryShadowSubtle}"`);
+      expect(waitingHtml).not.toContain(`"backgroundColor":"${rose.successBg}"`);
+
+      // Switch to Dark Violet (#7C3AED) and verify docked controls + CallStage re-theme immediately
+      mockCallStatus = 'connected';
+      syncActiveTheme({ brandColorHex: '#7C3AED', userBrandColorHex: null, scheme: 'dark' });
+      const darkViolet = getActiveThemeState().resolvedColors;
+
+      try {
+        const { html: dockedHtml, stylesList: dockedStyles } = renderStylesAndMarkup(
+          React.createElement(ActiveTeleconsultModal, {
+            teleconsultSession: sessionProps,
+            closeTeleconsultWaitingRoom: () => {},
+            isCallStageDocked: true,
+            dockCallStage: () => {},
+            maximizeCallStage: () => {},
+          }),
+        );
+
+        expect(dockedStyles.some((s) => s.shadowColor === darkViolet.shadowLgColor)).toBe(true);
+        expect(dockedStyles.some((s) => s.shadowColor === darkViolet.primaryShadowSubtle)).toBe(true);
+        expect(dockedStyles.some((s) => s.shadowColor === darkViolet.dangerShadowSm)).toBe(true);
+        expect(dockedHtml).not.toContain(rose.primary);
+      } finally {
+        mockCallStatus = 'staging';
+      }
     });
   });
 });

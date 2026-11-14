@@ -10,13 +10,16 @@ import {
   View
 } from 'react-native';
 import {
+  createShadows,
   fontSizeScale,
+  isLiveWebDom,
   lightColors,
   radiusScale,
   sizes,
   spaceScale
 } from '@clinicez/design-tokens';
 import {
+  CommsThemeShadows,
   TriageDispositionPayload,
   TriageQueueItem,
   TriageQueueViewProps
@@ -120,13 +123,15 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
   activeFilter = 'All',
   onFilterChange,
   colors,
+  shadows,
   style
 }) => {
   const colorsKey = colors
-    ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.routineBg ?? ''}|${colors.routineBorder ?? ''}|${colors.routineText ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.text ?? ''}`
+    ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.routineBg ?? ''}|${colors.routineBorder ?? ''}|${colors.routineText ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.text ?? ''}|${colors.primaryShadowSubtle ?? ''}|${colors.primaryShadowSm ?? ''}|${colors.primaryShadowMd ?? ''}`
     : '';
   const c = useMemo<ResolvedCommsColors>(() => ({ ...lightColors, ...colors }), [colors, colorsKey]);
-  const styles = useMemo(() => createStyles(c), [c]);
+  const s = useMemo(() => ({ ...createShadows(c, isLiveWebDom), ...shadows }), [c, shadows]);
+  const styles = useMemo(() => createStyles(c, s), [c, s]);
 
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -515,7 +520,10 @@ export const TriageQueueView: React.FC<TriageQueueViewProps> = ({
 
 type ResolvedCommsColors = Record<keyof typeof lightColors, string>;
 
-function createStyles(c: ResolvedCommsColors) {
+function createStyles(
+  c: ResolvedCommsColors,
+  s: ReturnType<typeof createShadows>
+) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -552,6 +560,7 @@ function createStyles(c: ResolvedCommsColors) {
       borderRadius: radiusScale.full,
       justifyContent: 'center',
       alignItems: 'center',
+      ...s.brandSubtle,
     },
     refreshButtonText: {
       fontSize: fontSizeScale.xs,
@@ -575,6 +584,7 @@ function createStyles(c: ResolvedCommsColors) {
     filterPillActive: {
       backgroundColor: c.primaryLight,
       borderColor: c.primaryBorder,
+      ...s.brandSubtle,
     },
     filterPillText: {
       fontSize: fontSizeScale.xs,
@@ -595,7 +605,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderWidth: 1,
       borderRadius: radiusScale.md,
       padding: spaceScale.md,
-      marginBottom: spaceScale.md
+      marginBottom: spaceScale.md,
+      ...s.sm,
     },
     cardTopRow: {
       flexDirection: 'row',
@@ -739,7 +750,8 @@ function createStyles(c: ResolvedCommsColors) {
       backgroundColor: c.primary,
       borderRadius: radiusScale.sm,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSm,
     },
     answerButtonText: {
       color: c.onPrimary,
@@ -756,7 +768,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderWidth: 1,
       borderRadius: radiusScale.sm,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSubtle,
     },
     visitButtonText: {
       color: c.text,
@@ -771,7 +784,8 @@ function createStyles(c: ResolvedCommsColors) {
       backgroundColor: c.surfaceSubtle,
       borderRadius: radiusScale.sm,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSubtle,
     },
     routeButtonText: {
       color: c.textSecondary,
@@ -788,7 +802,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderWidth: 1,
       borderRadius: radiusScale.sm,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.dangerSm,
     },
     declineButtonText: {
       color: c.emergencyText,
@@ -809,7 +824,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderRadius: radiusScale.md,
       padding: spaceScale.lg,
       borderColor: c.border,
-      borderWidth: 1
+      borderWidth: 1,
+      ...s.lg,
     },
     modalTitle: {
       fontSize: fontSizeScale.lg,
@@ -877,7 +893,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderRadius: radiusScale.sm,
       backgroundColor: c.surfaceSubtle,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSubtle,
     },
     modalCancelText: {
       fontSize: fontSizeScale.sm,
@@ -890,7 +907,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderRadius: radiusScale.sm,
       backgroundColor: c.primary,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSm,
     },
     modalSubmitText: {
       fontSize: fontSizeScale.sm,
@@ -1014,7 +1032,8 @@ function createStyles(c: ResolvedCommsColors) {
       backgroundColor: c.emergency,
       borderRadius: radiusScale.sm,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.dangerSm,
     },
     errorRetryButtonText: {
       color: c.onPrimary,
@@ -1078,7 +1097,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderRadius: radiusScale.md,
       paddingVertical: spaceScale.sm,
       paddingHorizontal: spaceScale.xs,
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.sm,
     },
     emptyMetricValue: {
       fontSize: fontSizeScale.lg,
@@ -1100,7 +1120,8 @@ function createStyles(c: ResolvedCommsColors) {
       backgroundColor: c.primary,
       borderRadius: radiusScale.sm,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSm,
     },
     emptyRefreshButtonText: {
       color: c.onPrimary,

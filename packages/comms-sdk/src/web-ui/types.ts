@@ -1,6 +1,8 @@
 import {
   ChatDrawerItem,
   CommsCallIconName,
+  CommsThemeColors,
+  CommsThemeShadows,
   ConversationScopeFilter,
   ThreadAttachment,
   ThreadMessage,
@@ -11,6 +13,8 @@ import {
 export type {
   ChatDrawerItem,
   CommsCallIconName,
+  CommsThemeColors,
+  CommsThemeShadows,
   ConversationScopeFilter,
   ThreadAttachment,
   ThreadMessage,
@@ -103,6 +107,12 @@ export interface WebCallWaitingRoomProps {
   onToggleOrientation?: () => void;
   patientLink?: string;
   onSharePatientLink?: () => void | Promise<void>;
+  videoServerUnavailable?: boolean;
+  videoServerBannerMessage?: string;
+  onRetryVideoServer?: () => void | Promise<void>;
+  recordingToggleHint?: string;
+  colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
 }
 
 export interface WebCallStageProps {
@@ -149,6 +159,11 @@ export interface WebCallStageProps {
   onTogglePip?: () => void | Promise<void>;
   isPipSupported?: boolean;
   isPipActive?: boolean;
+  onMessagePatient?: () => void | Promise<void>;
+  isRecordDisabled?: boolean;
+  recordButtonTooltip?: string;
+  colors?: CommsThemeColors;
+  shadows?: CommsThemeShadows;
 }
 
 export interface GuestVerificationResult {

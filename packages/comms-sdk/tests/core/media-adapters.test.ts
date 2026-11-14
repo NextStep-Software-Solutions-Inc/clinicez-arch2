@@ -326,5 +326,81 @@ describe('Feature F15: Comms Media Adapters (LiveKit & LocalPreview)', () => {
       expect(adapter.getRemoteAudioTrack('staff:nurse-2')).toBeNull();
       expect(adapter.getRemoteVideoTrack('non-existent')).toBeNull();
     });
+
+    it('LocalPreviewMediaAdapter acquires getDisplayMedia screen track and reverts cleanly on onended or error', async () => {
+      const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+      const camVideoTrack = { id: 'cam-v1', kind: 'video', enabled: true, stop: () => {} };
+      const camAudioTrack = { id: 'cam-a1', kind: 'audio', enabled: true, stop: () => {} };
+      let screenStopped = false;
+      const screenVideoTrack: any = {
+        id: 'scr-v1',
+        kind: 'video',
+        enabled: true,
+        stop: () => {
+          screenStopped = true;
+        },
+        onended: null,
+      };
+      let rejectDisplayMedia = false;
+
+      Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        value: {
+          mediaDevices: {
+            getUserMedia: async () => ({
+              getTracks: () => [camVideoTrack, camAudioTrack],
+              getVideoTracks: () => [camVideoTrack],
+              getAudioTracks: () => [camAudioTrack],
+            }),
+            getDisplayMedia: async () => {
+              if (rejectDisplayMedia) {
+                throw new Error('Permission denied by user');
+              }
+              return {
+                getTracks: () => [screenVideoTrack],
+                getVideoTracks: () => [screenVideoTrack],
+                getAudioTracks: () => [],
+              };
+            },
+          },
+        },
+      });
+
+      try {
+        const adapter = new LocalPreviewMediaAdapter({ mockMode: false });
+        await adapter.connect({ url: 'wss://sfu.internal.mock', token: 'mock-token' });
+        expect(adapter.getLocalVideoTrack()).toBe(camVideoTrack);
+
+        const screenEvents: boolean[] = [];
+        adapter.on('localTrackChanged', (kind, enabled) => {
+          if (kind === 'screen') {
+            screenEvents.push(Boolean(enabled));
+          }
+        });
+
+        await adapter.setScreenShareEnabled(true);
+        expect(adapter.getLocalVideoTrack()).toBe(screenVideoTrack);
+        expect(screenEvents).toEqual([true]);
+
+        // Simulate browser native "Stop sharing" button ending the display track
+        expect(typeof screenVideoTrack.onended).toBe('function');
+        screenVideoTrack.onended();
+        expect(screenStopped).toBe(true);
+        expect(adapter.getLocalVideoTrack()).toBe(camVideoTrack);
+        expect(screenEvents).toEqual([true, false]);
+
+        rejectDisplayMedia = true;
+        await expect(adapter.setScreenShareEnabled(true)).rejects.toThrow('Permission denied by user');
+        expect(adapter.getLocalVideoTrack()).toBe(camVideoTrack);
+
+        await adapter.disconnect();
+      } finally {
+        if (originalNavigatorDescriptor) {
+          Object.defineProperty(globalThis, 'navigator', originalNavigatorDescriptor);
+        } else {
+          delete (globalThis as any).navigator;
+        }
+      }
+    });
   });
 });

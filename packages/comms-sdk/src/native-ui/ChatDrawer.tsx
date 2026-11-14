@@ -9,7 +9,9 @@ import {
   View
 } from 'react-native';
 import {
+  createShadows,
   fontSizeScale,
+  isLiveWebDom,
   lightColors,
   radiusScale,
   sizes,
@@ -56,13 +58,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   renderEmptyState,
   renderSearchIcon,
   colors,
+  shadows: shadowsProp,
   style
 }) => {
   const colorsKey = colors
     ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.text ?? ''}`
     : '';
   const c = useMemo<ResolvedCommsColors>(() => ({ ...lightColors, ...colors }), [colors, colorsKey]);
-  const styles = useMemo(() => createStyles(c), [c]);
+  const s = useMemo(
+    () => ({ ...createShadows(c, isLiveWebDom), ...(shadowsProp ?? {}) }),
+    [c, shadowsProp]
+  );
+  const styles = useMemo(() => createStyles(c, s), [c, s]);
 
   if (isCollapsed) {
     return (
@@ -299,7 +306,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
 type ResolvedCommsColors = Record<keyof typeof lightColors, string>;
 
-function createStyles(c: ResolvedCommsColors) {
+function createStyles(
+  c: ResolvedCommsColors,
+  s: ReturnType<typeof createShadows>
+) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -358,7 +368,8 @@ function createStyles(c: ResolvedCommsColors) {
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: radiusScale.sm,
-      backgroundColor: c.surfaceSubtle
+      backgroundColor: c.surfaceSubtle,
+      ...s.brandSubtle
     },
     headerButtonText: {
       color: c.textSecondary,
@@ -377,11 +388,7 @@ function createStyles(c: ResolvedCommsColors) {
       justifyContent: 'center',
       borderRadius: radiusScale.full,
       backgroundColor: c.primary,
-      shadowColor: c.shadow,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.12,
-      shadowRadius: 2,
-      elevation: 2,
+      ...s.brandSm
     },
     primaryIconButtonText: {
       color: c.onPrimary,
@@ -465,6 +472,7 @@ function createStyles(c: ResolvedCommsColors) {
     scopePillActive: {
       backgroundColor: c.primaryLight,
       borderColor: c.primaryBorder,
+      ...s.brandSubtle
     },
     scopePillText: {
       fontSize: fontSizeScale.xs,
@@ -674,7 +682,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderRadius: radiusScale.sm,
       backgroundColor: c.primary,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSm
     },
     emptyCtaText: {
       color: c.onPrimary,

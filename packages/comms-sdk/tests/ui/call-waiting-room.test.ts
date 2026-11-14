@@ -1,5 +1,6 @@
 import { describe, expect, it, mock, beforeAll } from 'bun:test';
 import React from 'react';
+import { lightColors, createShadows } from '@clinicez/design-tokens';
 
 // Mock react-native for headless test runner using HTML element string primitives
 const RNMock = {
@@ -18,12 +19,16 @@ const RNMock = {
 mock.module('react-native', () => RNMock);
 
 import { CallWaitingRoom as WebCallWaitingRoom } from '../../src/web-ui/CallWaitingRoom';
+import { OverlayTooltip as WebOverlayTooltip } from '../../src/web-ui/OverlayTooltip';
 import { createHookHarness, act } from '../react/hook-test-harness';
 
 let NativeCallWaitingRoom: any;
+let NativeOverlayTooltip: any;
 beforeAll(async () => {
   const mod = await import('../../src/native-ui/CallWaitingRoom');
   NativeCallWaitingRoom = mod.CallWaitingRoom;
+  const tipMod = await import('../../src/native-ui/OverlayTooltip');
+  NativeOverlayTooltip = tipMod.OverlayTooltip;
 });
 
 function getTextContent(element: any): string {
@@ -691,6 +696,439 @@ describe('Feature F17: Realignment of CallWaitingRoom (Native & Web)', () => {
       await webSwitch.props.onClick();
       expect(consentCalls[1]).toEqual([false, 'Patient declined recording']);
       webApproved.unmount();
+    });
+
+    it('Native & Web: replaces Admit/Enter CTA with persistent in-place Video Server Error + Retry button without header banner', async () => {
+      let nativeRetries = 0;
+      let nativeAdmits = 0;
+      const nativeDocHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          userRole: 'Clinician',
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          videoServerUnavailable: true,
+          onAdmitPatient: async () => {
+            nativeAdmits += 1;
+          },
+          onRetryVideoServer: async () => {
+            nativeRetries += 1;
+          },
+        })
+      );
+      const nativeBanner = findElement(
+        nativeDocHarness.result.current,
+        (el) => el.props?.testID === 'banner-video-server-unavailable'
+      );
+      expect(nativeBanner).toBeNull();
+
+      const nativeAdmitBtn = findElement(
+        nativeDocHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Admit Patient to Call')
+      );
+      expect(nativeAdmitBtn).toBeNull();
+
+      const nativeRetryBtn = findElement(
+        nativeDocHarness.result.current,
+        (el) => el.props?.testID === 'btn-retry-video-server'
+      );
+      expect(nativeRetryBtn).not.toBeNull();
+      expect(getTextContent(nativeRetryBtn)).toContain('Video Server Unavailable');
+      expect(getTextContent(nativeRetryBtn)).toContain('Retry');
+      await act(async () => {
+        await nativeRetryBtn.props.onPress?.();
+      });
+      expect(nativeRetries).toBe(1);
+      expect(nativeAdmits).toBe(0);
+      nativeDocHarness.unmount();
+
+      let nativeFallbackEnters = 0;
+      const nativePatientHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          userRole: 'Patient',
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          isReadyToAdmit: true,
+          videoServerUnavailable: true,
+          onEnterCall: () => {
+            nativeFallbackEnters += 1;
+          },
+        })
+      );
+      const nativeEnterBtn = findElement(
+        nativePatientHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Enter Consultation Room')
+      );
+      expect(nativeEnterBtn).toBeNull();
+
+      const nativePatientRetryBtn = findElement(
+        nativePatientHarness.result.current,
+        (el) => el.props?.testID === 'btn-retry-video-server'
+      );
+      expect(nativePatientRetryBtn).not.toBeNull();
+      expect(getTextContent(nativePatientRetryBtn)).toContain('Retry');
+      await act(async () => {
+        await nativePatientRetryBtn.props.onPress?.();
+      });
+      expect(nativeFallbackEnters).toBe(1);
+      nativePatientHarness.unmount();
+
+      let webRetries = 0;
+      const webDocHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          userRole: 'Clinician',
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          videoServerUnavailable: true,
+          onRetryVideoServer: async () => {
+            webRetries += 1;
+          },
+        })
+      );
+      const webBanner = findElement(
+        webDocHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'banner-video-server-unavailable'
+      );
+      expect(webBanner).toBeNull();
+
+      const webAdmitBtn = findElement(
+        webDocHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Admit Patient')
+      );
+      expect(webAdmitBtn).toBeNull();
+
+      const webRetryBtn = findElement(
+        webDocHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-retry-video-server'
+      );
+      expect(webRetryBtn).not.toBeNull();
+      expect(getTextContent(webRetryBtn)).toContain('Video Server Unavailable');
+      expect(getTextContent(webRetryBtn)).toContain('Retry');
+      await act(async () => {
+        await webRetryBtn.props.onClick?.();
+      });
+      expect(webRetries).toBe(1);
+      webDocHarness.unmount();
+
+      let webFallbackEnters = 0;
+      const webPatientHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          userRole: 'Patient',
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          isReadyToAdmit: true,
+          videoServerUnavailable: true,
+          onEnterCall: () => {
+            webFallbackEnters += 1;
+          },
+        })
+      );
+      const webEnterBtn = findElement(
+        webPatientHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Enter Consultation Room')
+      );
+      expect(webEnterBtn).toBeNull();
+
+      const webPatientRetryBtn = findElement(
+        webPatientHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-retry-video-server'
+      );
+      expect(webPatientRetryBtn).not.toBeNull();
+      expect(getTextContent(webPatientRetryBtn)).toContain('Retry');
+      await act(async () => {
+        await webPatientRetryBtn.props.onClick?.();
+      });
+      expect(webFallbackEnters).toBe(1);
+      webPatientHarness.unmount();
+    });
+
+    it('Native & Web: btn-share-patient-link-card uses compact 28x28 sizing, 14px icon, and reveals tooltip label on hover', async () => {
+      const inviteUrl = 'https://portal.clinicez.com/teleconsult/join?token=icon-tip-1';
+      for (const [isWeb, Component, TooltipComp] of [
+        [false, NativeCallWaitingRoom, NativeOverlayTooltip],
+        [true, WebCallWaitingRoom, WebOverlayTooltip],
+      ] as const) {
+        const iconCalls: Array<{ name: string; size?: number }> = [];
+        const harness = createHookHarness(() =>
+          Component({
+            ...(isWeb ? baseWebProps : baseNativeProps),
+            patientLink: inviteUrl,
+            onSharePatientLink: () => {},
+            renderIcon: (name: string, opts?: { size?: number }) => {
+              iconCalls.push({ name, size: opts?.size });
+              return React.createElement('span', { 'data-icon': name }, name);
+            },
+          })
+        );
+        const shareBtn = findElement(harness.result.current, (el) =>
+          isWeb
+            ? el.props?.['data-testid'] === 'btn-share-patient-link-card'
+            : el.props?.testID === 'btn-share-patient-link-card'
+        );
+        expect(shareBtn).not.toBeNull();
+        expect(getTextContent(shareBtn)).not.toContain('Share / Copy');
+        if (isWeb) {
+          expect(String(shareBtn.props.className)).toContain('h-7 w-7');
+        } else {
+          expect(shareBtn.props.style).toMatchObject({ width: 28, height: 28 });
+          expect(shareBtn.props.hitSlop).toEqual({ top: 8, bottom: 8, left: 8, right: 8 });
+        }
+        expect(iconCalls).toContainEqual({ name: 'share', size: 14 });
+
+        const tooltipEl = findElement(
+          harness.result.current,
+          (el) =>
+            el.props?.label === 'Copy patient invite link' &&
+            Boolean(
+              findElement(el.props?.children, (child) =>
+                isWeb
+                  ? child.props?.['data-testid'] === 'btn-share-patient-link-card'
+                  : child.props?.testID === 'btn-share-patient-link-card'
+              )
+            )
+        );
+        expect(tooltipEl).not.toBeNull();
+        harness.unmount();
+
+        const tipHarness = createHookHarness(() =>
+          TooltipComp({
+            label: 'Copy patient invite link',
+            placement: 'bottom',
+            children: React.createElement('button', {}, 'icon'),
+          })
+        );
+        expect(getTextContent(tipHarness.result.current)).not.toContain('Copy patient invite link');
+
+        await act(async () => {
+          tipHarness.result.current.props.onMouseEnter();
+        });
+        expect(getTextContent(tipHarness.result.current)).toContain('Copy patient invite link');
+        if (isWeb) {
+          const webTip = findElement(
+            tipHarness.result.current,
+            (el) => el.props?.role === 'tooltip'
+          );
+          expect(String(webTip?.props?.className)).toContain('z-[999999]');
+        } else {
+          expect(tipHarness.result.current.props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ zIndex: 999999 })])
+          );
+        }
+
+        await act(async () => {
+          tipHarness.result.current.props.onMouseLeave();
+        });
+        expect(getTextContent(tipHarness.result.current)).not.toContain('Copy patient invite link');
+        tipHarness.unmount();
+      }
+    });
+
+    it('Native & Web: buttons, active policy tabs, and cards react dynamically to brand colors and drop shadows', () => {
+      const roseColors = {
+        ...lightColors,
+        primary: '#E11D48',
+        primaryDark: '#9F1239',
+        primaryLight: '#FFE4E6',
+        primarySubtle: '#FFF1F2',
+        primaryBorder: '#FECDD3',
+        onPrimary: '#FFFFFF',
+        primaryShadowSubtle: 'rgba(225, 29, 72, 0.22)',
+        primaryShadowSm: 'rgba(225, 29, 72, 0.34)',
+        primaryShadowMd: 'rgba(225, 29, 72, 0.46)',
+      };
+      const nativeShadows = createShadows(roseColors, false);
+      const webShadows = createShadows(roseColors, true);
+
+      // 1. Native enabled state: brand fills + shadows on primary CTA, Cancel, and active policy tab
+      const nativeHarness = createHookHarness(() =>
+        NativeCallWaitingRoom({
+          ...baseNativeProps,
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          isReadyToAdmit: true,
+          onAdmitPatient: async () => {},
+          colors: roseColors,
+          shadows: nativeShadows,
+        })
+      );
+      const nativeAdmit = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.accessibilityRole === 'button' && getTextContent(el).includes('Admit Patient')
+      );
+      expect(nativeAdmit.props.style).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            backgroundColor: '#E11D48',
+            shadowColor: 'rgba(225, 29, 72, 0.34)',
+          }),
+        ])
+      );
+
+      const nativeCancel = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.accessibilityRole === 'button' && getTextContent(el).includes('Cancel / Leave')
+      );
+      expect(nativeCancel.props.style).toMatchObject({
+        backgroundColor: '#FFF1F2',
+        borderColor: '#FECDD3',
+        shadowColor: 'rgba(225, 29, 72, 0.22)',
+      });
+
+      const nativeExemptTab = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.accessibilityLabel === 'Set payment policy to Exempt'
+      );
+      expect(nativeExemptTab.props.style).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            backgroundColor: '#E11D48',
+            borderColor: '#9F1239',
+            shadowColor: 'rgba(225, 29, 72, 0.34)',
+          }),
+        ])
+      );
+
+      const nativePrepaidTab = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.accessibilityLabel === 'Set payment policy to Prepaid'
+      );
+      expect(nativePrepaidTab.props.style).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            backgroundColor: 'transparent',
+            shadowOpacity: 0,
+          }),
+        ])
+      );
+
+      const nativeClearedBannerTitle = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.style && el.props?.children === 'Exempt — Admission Cleared'
+      );
+      expect(nativeClearedBannerTitle.props.style).toMatchObject({ color: '#9F1239' });
+      const nativeClearedBannerCard = findElement(
+        nativeHarness.result.current,
+        (el) =>
+          el.props?.style?.backgroundColor === '#FFF1F2' &&
+          el.props?.style?.borderColor === '#FECDD3' &&
+          getTextContent(el).includes('Exempt — Admission Cleared')
+      );
+      expect(nativeClearedBannerCard).not.toBeNull();
+      expect(nativeClearedBannerCard.props.style).toMatchObject({
+        backgroundColor: '#FFF1F2',
+        borderColor: '#FECDD3',
+        shadowColor: 'rgba(225, 29, 72, 0.22)',
+      });
+      nativeHarness.unmount();
+
+      // 2. Web explicit brand theme + disabled CTA drops shadow to 'none'
+      const webHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          isReadyToAdmit: true,
+          onAdmitPatient: async () => {},
+          colors: roseColors,
+          shadows: webShadows,
+        })
+      );
+      const webAdmit = findElement(
+        webHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Admit Patient')
+      );
+      expect(webAdmit.props.style).toMatchObject({
+        backgroundColor: '#E11D48',
+        color: '#FFFFFF',
+      });
+      expect(String(webAdmit.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.34)');
+
+      const webCancel = findElement(
+        webHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Cancel / Leave')
+      );
+      expect(webCancel.props.style).toMatchObject({
+        backgroundColor: '#FFF1F2',
+        borderColor: '#FECDD3',
+        color: '#9F1239',
+      });
+      expect(String(webCancel.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.22)');
+
+      const webExemptTab = findElement(
+        webHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el) === 'Exempt'
+      );
+      expect(webExemptTab.props.style).toMatchObject({
+        backgroundColor: '#E11D48',
+        borderColor: '#9F1239',
+      });
+      expect(String(webExemptTab.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.34)');
+
+      const webClearedBanner = findElement(
+        webHarness.result.current,
+        (el) =>
+          el.type === 'div' &&
+          el.props?.style?.backgroundColor === '#FFF1F2' &&
+          getTextContent(el).includes('Exempt — Admission Cleared')
+      );
+      expect(webClearedBanner).not.toBeNull();
+      expect(webClearedBanner.props.style).toMatchObject({
+        backgroundColor: '#FFF1F2',
+        borderColor: '#FECDD3',
+        color: '#9F1239',
+      });
+      expect(String(webClearedBanner.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.22)');
+      expect(String(webClearedBanner.props.className)).not.toContain('emerald-');
+      webHarness.unmount();
+
+      // 3. Web CSS-var default mode (Next.js portal) & disabled CTA shadow removal
+      const webDefaultDisabledHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          paymentPolicy: 'Prepaid',
+          paymentStatus: 'Unpaid',
+          isReadyToAdmit: false,
+          onAdmitPatient: async () => {},
+        })
+      );
+      const webDisabledAdmit = findElement(
+        webDefaultDisabledHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el).includes('Admit Patient')
+      );
+      expect(webDisabledAdmit.props.style.boxShadow).toBe('none');
+      const webPrepaidActive = findElement(
+        webDefaultDisabledHarness.result.current,
+        (el) => el.type === 'button' && getTextContent(el) === 'Prepaid'
+      );
+      expect(String(webPrepaidActive.props.style.backgroundColor)).toContain('var(--ez-primary');
+      expect(String(webPrepaidActive.props.style.boxShadow)).toContain('var(--ez-primary-shadow-sm');
+      webDefaultDisabledHarness.unmount();
+
+      // 4. Web CSS-var default mode on Exempt — Admission Cleared notice banner (no static emerald)
+      const webDefaultClearedHarness = createHookHarness(() =>
+        WebCallWaitingRoom({
+          ...baseWebProps,
+          paymentPolicy: 'Exempt',
+          paymentStatus: 'Exempt',
+          isReadyToAdmit: true,
+        })
+      );
+      const webDefaultClearedBanner = findElement(
+        webDefaultClearedHarness.result.current,
+        (el) =>
+          el.type === 'div' &&
+          typeof el.props?.style?.backgroundColor === 'string' &&
+          getTextContent(el).includes('Exempt — Admission Cleared')
+      );
+      expect(String(webDefaultClearedBanner.props.style.backgroundColor)).toContain('var(--ez-primary-subtle');
+      expect(String(webDefaultClearedBanner.props.style.borderColor)).toContain('var(--ez-primary-border');
+      expect(String(webDefaultClearedBanner.props.style.color)).toContain('var(--ez-primary-dark');
+      expect(String(webDefaultClearedBanner.props.style.boxShadow)).toContain('var(--ez-primary-shadow-subtle');
+      expect(String(webDefaultClearedBanner.props.className)).not.toContain('emerald-');
+      webDefaultClearedHarness.unmount();
     });
   });
 });

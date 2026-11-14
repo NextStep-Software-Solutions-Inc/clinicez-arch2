@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { WebCallWaitingRoomProps } from './types';
+import { OverlayTooltip } from './OverlayTooltip';
+import { resolveWebTheme } from './shadows';
 
 export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   callId,
@@ -36,8 +38,17 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   videoOrientation = 'portrait',
   onToggleOrientation,
   patientLink,
-  onSharePatientLink
+  onSharePatientLink,
+  videoServerUnavailable = false,
+  videoServerBannerMessage,
+  onRetryVideoServer,
+  recordingToggleHint,
+  colors,
+  shadows
 }) => {
+  const webTheme = useMemo(() => resolveWebTheme(colors, shadows), [colors, shadows]);
+  const webShadows = webTheme.shadows;
+  const webColors = webTheme.colors;
   const [localCameraActive, setLocalCameraActive] = useState(true);
   const [localMicActive, setLocalMicActive] = useState(true);
   const [overrideModalVisible, setOverrideModalVisible] = useState(false);
@@ -45,6 +56,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
   const [isUpdatingPolicy, setIsUpdatingPolicy] = useState(false);
   const [isAdmitting, setIsAdmitting] = useState(false);
+  const [isRetryingVideoServer, setIsRetryingVideoServer] = useState(false);
 
   const isCameraActive = isCameraEnabled ?? localCameraActive;
   const isMicActive = isMicEnabled ?? localMicActive;
@@ -55,15 +67,18 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
     paymentPolicy === 'Prepaid' &&
     paymentStatus === 'Unpaid' &&
     !isYakapExempt;
+  const isAdmitBlocked = isPrepaidBlocked || videoServerUnavailable;
   const isStaffOrDoctor = userRole === 'Clinician' || userRole === 'Staff';
   const isDoctor = userRole === 'Clinician';
 
   const isRecordingEnabled = recordingConsentStatus === 'Approved';
-  const recordingSubtitle = isRecordingEnabled
-    ? 'Recording is on for this consultation.'
-    : recordingConsentStatus === 'Rejected'
-      ? 'Recording is off for this consultation.'
-      : 'Turn on to record this consultation for the medical chart.';
+  const recordingSubtitle =
+    recordingToggleHint ??
+    (isRecordingEnabled
+      ? 'Recording is on for this consultation.'
+      : recordingConsentStatus === 'Rejected'
+        ? 'Recording is off for this consultation.'
+        : 'Turn on to record this consultation for the medical chart.');
   const trimmedReason = overrideReason.trim();
   const isReasonValid = trimmedReason.length >= 5;
   const canSubmitOverride =
@@ -120,12 +135,28 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
   };
 
   const handleAdmitPress = async () => {
-    if (!onAdmitPatient || isPrepaidBlocked || isAdmitting) return;
+    if (!onAdmitPatient || isAdmitBlocked || isAdmitting) return;
     setIsAdmitting(true);
     try {
       await onAdmitPatient();
     } finally {
       setIsAdmitting(false);
+    }
+  };
+
+  const handleRetryPress = async () => {
+    if (isRetryingVideoServer) return;
+    setIsRetryingVideoServer(true);
+    try {
+      if (onRetryVideoServer) {
+        await onRetryVideoServer();
+      } else if (isDoctor && onAdmitPatient) {
+        await onAdmitPatient();
+      } else {
+        onEnterCall();
+      }
+    } finally {
+      setIsRetryingVideoServer(false);
     }
   };
 
@@ -156,7 +187,10 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
     <div className={`flex flex-col h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 ${className}`}>
       {/* Header */}
       {!hideHeader && (
-        <div className="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <div
+          className="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800"
+          style={{ boxShadow: webShadows.sm }}
+        >
           <h1 className="text-lg font-bold">
             Teleconsultation Waiting Room
             <span className="sr-only"> (Teleconsultation Staging &amp; Waiting Room)</span>
@@ -192,7 +226,8 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               videoOrientation === 'landscape'
                 ? 'aspect-video w-full'
                 : 'aspect-[3/4] max-w-sm mx-auto w-full'
-            } rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden shadow-inner`}
+            } rounded-lg bg-slate-900 flex items-center justify-center overflow-hidden shadow-md`}
+            style={{ boxShadow: webShadows.md }}
           >
             {renderVideoPreview ? (
               renderVideoPreview()
@@ -218,7 +253,10 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 <div className="w-16 h-2 rounded-full bg-white/30 overflow-hidden">
                   <div
                     className={`h-full transition-all ${isMicActive ? 'bg-teal-500' : ''}`}
-                    style={{ width: `${computedMicPercent}%` }}
+                    style={{
+                      width: `${computedMicPercent}%`,
+                      backgroundColor: isMicActive ? webColors.primary : undefined,
+                    }}
                   />
                 </div>
               </div>
@@ -231,101 +269,150 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
             {/* Media Bar */}
             <div className="absolute bottom-3 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleToggleMic}
-                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                  isMicActive
-                    ? 'bg-white text-slate-900 hover:bg-slate-100'
-                    : 'bg-red-600 text-white hover:bg-red-700'
-                }`}
-                aria-label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
-              >
-                {renderIcon
-                  ? renderIcon(isMicActive ? 'mic' : 'micOff', { size: 18 })
-                  : isMicActive
-                    ? 'MIC'
-                    : 'MUTE'}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleToggleCamera}
-                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                  isCameraActive
-                    ? 'bg-white text-slate-900 hover:bg-slate-100'
-                    : 'bg-red-600 text-white hover:bg-red-700'
-                }`}
-                aria-label={isCameraActive ? 'Stop video' : 'Start video'}
-              >
-                {renderIcon
-                  ? renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 18 })
-                  : isCameraActive
-                    ? 'CAM'
-                    : 'OFF'}
-              </button>
-
-              {onToggleOrientation && (
+              <OverlayTooltip label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}>
                 <button
                   type="button"
-                  id="btn-toggle-orientation"
-                  data-testid="btn-toggle-orientation"
-                  onClick={onToggleOrientation}
-                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors bg-white/20 hover:bg-white/30 text-white backdrop-blur-xs"
-                  aria-label="Toggle camera orientation"
-                  title="Toggle camera orientation"
+                  onClick={handleToggleMic}
+                  className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                    isMicActive
+                      ? 'bg-white text-slate-900 hover:bg-slate-100'
+                      : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
+                  style={{
+                    boxShadow: isMicActive ? webShadows.brandSubtle : webShadows.dangerSm,
+                  }}
+                  aria-label={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
+                  title={isMicActive ? 'Mute microphone' : 'Unmute microphone'}
                 >
                   {renderIcon
-                    ? renderIcon('rotate', { size: 18 })
-                    : videoOrientation === 'landscape'
-                      ? 'PORTRAIT'
-                      : 'LANDSCAPE'}
+                    ? renderIcon(isMicActive ? 'mic' : 'micOff', { size: 18 })
+                    : isMicActive
+                      ? 'MIC'
+                      : 'MUTE'}
                 </button>
+              </OverlayTooltip>
+
+              <OverlayTooltip label={isCameraActive ? 'Turn off camera' : 'Turn on camera'}>
+                <button
+                  type="button"
+                  onClick={handleToggleCamera}
+                  className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                    isCameraActive
+                      ? 'bg-white text-slate-900 hover:bg-slate-100'
+                      : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
+                  style={{
+                    boxShadow: isCameraActive ? webShadows.brandSubtle : webShadows.dangerSm,
+                  }}
+                  aria-label={isCameraActive ? 'Stop video' : 'Start video'}
+                  title={isCameraActive ? 'Turn off camera' : 'Turn on camera'}
+                >
+                  {renderIcon
+                    ? renderIcon(isCameraActive ? 'video' : 'videoOff', { size: 18 })
+                    : isCameraActive
+                      ? 'CAM'
+                      : 'OFF'}
+                </button>
+              </OverlayTooltip>
+
+              {onToggleOrientation && (
+                <OverlayTooltip
+                  label={
+                    videoOrientation === 'landscape'
+                      ? 'Switch to portrait view'
+                      : 'Switch to landscape view'
+                  }
+                >
+                  <button
+                    type="button"
+                    id="btn-toggle-orientation"
+                    data-testid="btn-toggle-orientation"
+                    onClick={onToggleOrientation}
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors bg-white/20 hover:bg-white/30 text-white backdrop-blur-xs"
+                    style={{ boxShadow: webShadows.brandSubtle }}
+                    aria-label="Toggle camera orientation"
+                    title="Toggle camera orientation"
+                  >
+                    {renderIcon
+                      ? renderIcon('rotate', { size: 18 })
+                      : videoOrientation === 'landscape'
+                        ? 'PORTRAIT'
+                        : 'LANDSCAPE'}
+                  </button>
+                </OverlayTooltip>
               )}
 
               {(patientLink || onSharePatientLink) && (
-                <button
-                  type="button"
-                  id="btn-share-patient-link"
-                  data-testid="btn-share-patient-link"
-                  onClick={() => void onSharePatientLink?.()}
-                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors bg-white/20 hover:bg-white/30 text-white backdrop-blur-xs"
-                  aria-label="Share patient invite link"
-                  title="Share patient invite link"
-                >
-                  {renderIcon ? renderIcon('share', { size: 18 }) : 'SHARE'}
-                </button>
+                <OverlayTooltip label="Copy patient invite link">
+                  <button
+                    type="button"
+                    id="btn-share-patient-link"
+                    data-testid="btn-share-patient-link"
+                    onClick={() => void onSharePatientLink?.()}
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-xs font-bold transition-colors bg-white/20 hover:bg-white/30 text-white backdrop-blur-xs"
+                    style={{ boxShadow: webShadows.brandSubtle }}
+                    aria-label="Share patient invite link"
+                    title="Copy patient invite link"
+                  >
+                    {renderIcon ? renderIcon('share', { size: 18 }) : 'SHARE'}
+                  </button>
+                </OverlayTooltip>
               )}
             </div>
           </div>
 
           {/* Patient Invite Link Card */}
           {patientLink && (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-xs">
+            <div
+              className="flex items-center justify-between p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-xs"
+              style={{
+                backgroundColor: webColors.primarySubtle,
+                borderColor: webColors.primaryBorder,
+                boxShadow: webShadows.sm,
+              }}
+            >
               <div className="flex flex-col min-w-0 pr-2">
-                <span className="font-semibold text-teal-900 dark:text-teal-200">Patient Consultation Link</span>
-                <span className="text-teal-700 dark:text-teal-400 font-mono text-[11px] truncate">
+                <span
+                  className="font-semibold text-teal-900 dark:text-teal-200"
+                  style={{ color: webColors.primaryDark }}
+                >
+                  Patient Consultation Link
+                </span>
+                <span
+                  className="text-teal-700 dark:text-teal-400 font-mono text-[11px] truncate"
+                  style={{ color: webColors.primary }}
+                >
                   {patientLink}
                 </span>
               </div>
               {onSharePatientLink && (
-                <button
-                  type="button"
-                  id="btn-share-patient-link-card"
-                  data-testid="btn-share-patient-link-card"
-                  onClick={() => void onSharePatientLink()}
-                  className="min-h-[44px] px-3.5 py-1.5 rounded-md text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center gap-1.5 shrink-0"
-                  aria-label="Share patient consultation link"
-                >
-                  {renderIcon ? renderIcon('share', { size: 16 }) : null}
-                  <span>Share Link</span>
-                </button>
+                <OverlayTooltip label="Copy patient invite link" placement="bottom">
+                  <button
+                    type="button"
+                    id="btn-share-patient-link-card"
+                    data-testid="btn-share-patient-link-card"
+                    onClick={() => void onSharePatientLink()}
+                    className="h-7 w-7 p-1.5 rounded-md text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 transition-colors flex items-center justify-center shrink-0"
+                    style={{
+                      backgroundColor: webColors.primary,
+                      color: webColors.onPrimary,
+                      boxShadow: webShadows.brandSm,
+                    }}
+                    aria-label="Copy patient consultation link"
+                    title="Copy patient invite link"
+                  >
+                    {renderIcon ? renderIcon('share', { size: 14 }) : 'COPY'}
+                  </button>
+                </OverlayTooltip>
               )}
             </div>
           )}
 
           {/* Details Card */}
-          <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+          <div
+            className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs"
+            style={{ boxShadow: webShadows.sm }}
+          >
             <div className="flex justify-between">
               <span className="text-slate-500">Patient:</span>
               <span className="font-semibold text-slate-900 dark:text-slate-100">{patientName}</span>
@@ -338,7 +425,10 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
           {/* Informational YAKAP Badge (Non-Mutating) */}
           {isYakapEnlisted && (
-            <div className="p-3.5 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 flex flex-col gap-1">
+            <div
+              className="p-3.5 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 flex flex-col gap-1"
+              style={{ boxShadow: webShadows.sm }}
+            >
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-600 text-white">
                   PHILHEALTH YAKAP
@@ -357,7 +447,10 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
           {/* Staff Payment Policy Selector */}
           {isStaffOrDoctor && onChangePaymentPolicy && (
-            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+            <div
+              className="p-3.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2"
+              style={{ boxShadow: webShadows.sm }}
+            >
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Facility Payment Policy
@@ -373,11 +466,21 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                       type="button"
                       onClick={() => handlePolicyChange(policy)}
                       disabled={isUpdatingPolicy || isSelected}
-                      className={`min-h-[44px] px-3 py-2 rounded text-xs font-bold transition-colors ${
+                      className={`min-h-[44px] px-3 py-2 rounded text-xs font-bold transition-all ${
                         isSelected
                           ? 'bg-teal-700 text-white shadow-xs'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200'
                       }`}
+                      style={
+                        isSelected
+                          ? {
+                              backgroundColor: webColors.primary,
+                              borderColor: webColors.primaryDark,
+                              color: webColors.onPrimary,
+                              boxShadow: webShadows.brandSm,
+                            }
+                          : { boxShadow: webShadows.none }
+                      }
                     >
                       {policy}
                     </button>
@@ -389,7 +492,10 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
           {/* Payment Gate Banner */}
           {isPrepaidBlocked ? (
-            <div className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex items-start gap-3">
+            <div
+              className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex items-start gap-3"
+              style={{ boxShadow: webShadows.sm }}
+            >
               <span className="p-1 text-base font-bold flex items-center justify-center shrink-0">
                 {renderIcon ? renderIcon('lock', { size: 18 }) : 'LOCK'}
               </span>
@@ -406,6 +512,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                     type="button"
                     onClick={() => setOverrideModalVisible(true)}
                     className="mt-2.5 min-h-[44px] px-3 py-1.5 rounded text-xs font-bold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-800 hover:bg-red-200 transition-colors"
+                    style={{ boxShadow: webShadows.dangerSm }}
                   >
                     Staff Admission Override
                   </button>
@@ -413,15 +520,26 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
               </div>
             </div>
           ) : (
-            <div className="p-3.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 flex items-center gap-3">
-              <span className="p-1 text-base text-emerald-600 font-bold flex items-center justify-center shrink-0">
+            <div
+              className="p-3.5 rounded-lg border flex items-center gap-3"
+              style={{
+                backgroundColor: webColors.primarySubtle,
+                borderColor: webColors.primaryBorder,
+                color: webColors.primaryDark,
+                boxShadow: webShadows.brandSubtle,
+              }}
+            >
+              <span
+                className="p-1 text-base font-bold flex items-center justify-center shrink-0"
+                style={{ color: webColors.primaryDark }}
+              >
                 {renderIcon ? renderIcon('shieldCheck', { size: 18 }) : 'OK'}
               </span>
               <div>
-                <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                <p className="text-xs font-bold" style={{ color: webColors.primaryDark }}>
                   {clearedBannerCopy.title}
                 </p>
-                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+                <p className="text-xs mt-0.5" style={{ color: webColors.primaryDark }}>
                   {clearedBannerCopy.subtitle}
                 </p>
               </div>
@@ -430,7 +548,10 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
 
           {/* Informed Recording Consent */}
           {recordingConsentStatus !== 'Disabled' && (
-            <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+            <div
+              className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4"
+              style={{ boxShadow: webShadows.sm }}
+            >
               <div className="flex-1">
                 <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 mb-0.5">
                   Call Recording
@@ -462,11 +583,16 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                       ? 'bg-teal-700'
                       : 'bg-slate-300 dark:bg-slate-700'
                   }`}
+                  style={{
+                    backgroundColor: isRecordingEnabled ? webColors.primary : undefined,
+                    boxShadow: isRecordingEnabled ? webShadows.brandSubtle : webShadows.none,
+                  }}
                 >
                   <span
                     className={`inline-block h-6 w-6 rounded-full bg-white shadow-xs transition-transform ${
                       isRecordingEnabled ? 'translate-x-5' : 'translate-x-0'
                     }`}
+                    style={{ boxShadow: webShadows.sm }}
                   />
                 </span>
               </button>
@@ -478,31 +604,76 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
             <button
               type="button"
               onClick={onCancelCall}
-              className="flex-1 min-h-[44px] px-4 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+              className="flex-1 min-h-[44px] px-4 rounded text-xs font-semibold border transition-all"
+              style={{
+                backgroundColor: webColors.primarySubtle,
+                borderColor: webColors.primaryBorder,
+                color: webColors.primaryDark,
+                boxShadow: webShadows.brandSubtle,
+              }}
             >
               Cancel / Leave
             </button>
 
-            {isDoctor && onAdmitPatient && (
-              <button
-                type="button"
-                onClick={handleAdmitPress}
-                disabled={isPrepaidBlocked || isAdmitting}
-                className="flex-[2] min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-colors"
+            {videoServerUnavailable ? (
+              <OverlayTooltip
+                label={
+                  videoServerBannerMessage ||
+                  'Live video server could not be reached. Click to retry.'
+                }
+                placement="top"
+                className="flex-[2] min-w-0"
               >
-                {isAdmitting ? 'Admitting Patient...' : 'Admit Patient to Video Consultation'}
-              </button>
-            )}
+                <button
+                  type="button"
+                  data-testid="btn-retry-video-server"
+                  onClick={() => void handleRetryPress()}
+                  disabled={isRetryingVideoServer}
+                  className="w-full min-h-[44px] px-4 rounded text-xs font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 transition-all truncate"
+                  style={{
+                    boxShadow: isRetryingVideoServer ? webShadows.none : webShadows.dangerSm,
+                  }}
+                  aria-label="Video Server Unavailable — Retry"
+                >
+                  {isRetryingVideoServer
+                    ? 'Retrying Video Server...'
+                    : 'Video Server Unavailable • Retry'}
+                </button>
+              </OverlayTooltip>
+            ) : (
+              <>
+                {isDoctor && onAdmitPatient && (
+                  <button
+                    type="button"
+                    onClick={handleAdmitPress}
+                    disabled={isAdmitBlocked || isAdmitting}
+                    className="flex-[2] min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-all"
+                    style={{
+                      backgroundColor: webColors.primary,
+                      color: webColors.onPrimary,
+                      boxShadow: isAdmitBlocked || isAdmitting ? webShadows.none : webShadows.brandSm,
+                    }}
+                  >
+                    {isAdmitting ? 'Admitting Patient...' : 'Admit Patient to Video Consultation'}
+                  </button>
+                )}
 
-            {!isDoctor && (
-              <button
-                type="button"
-                onClick={onEnterCall}
-                disabled={!isReadyToAdmit}
-                className="flex-[2] min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-colors"
-              >
-                {isReadyToAdmit ? 'Enter Consultation Room' : 'Waiting for Clinician...'}
-              </button>
+                {!isDoctor && (
+                  <button
+                    type="button"
+                    onClick={onEnterCall}
+                    disabled={!isReadyToAdmit}
+                    className="flex-[2] min-h-[44px] px-4 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 transition-all"
+                    style={{
+                      backgroundColor: webColors.primary,
+                      color: webColors.onPrimary,
+                      boxShadow: !isReadyToAdmit ? webShadows.none : webShadows.brandSm,
+                    }}
+                  >
+                    {isReadyToAdmit ? 'Enter Consultation Room' : 'Waiting for Clinician...'}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -514,6 +685,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
           <form
             onSubmit={handleOverrideSubmit}
             className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 shadow-xl space-y-4"
+            style={{ boxShadow: webShadows.lg }}
           >
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
@@ -544,7 +716,13 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 type="button"
                 onClick={() => setOverrideModalVisible(false)}
                 disabled={isSubmittingOverride}
-                className="min-h-[44px] px-4 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                className="min-h-[44px] px-4 rounded text-xs font-semibold border transition-all"
+                style={{
+                  backgroundColor: webColors.primarySubtle,
+                  borderColor: webColors.primaryBorder,
+                  color: webColors.primaryDark,
+                  boxShadow: isSubmittingOverride ? webShadows.none : webShadows.brandSubtle,
+                }}
               >
                 Cancel
               </button>
@@ -552,6 +730,7 @@ export const CallWaitingRoom: React.FC<WebCallWaitingRoomProps> = ({
                 type="submit"
                 disabled={!canSubmitOverride}
                 className="min-h-[44px] px-4 rounded text-xs font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                style={{ boxShadow: canSubmitOverride ? webShadows.dangerSm : webShadows.none }}
               >
                 {isSubmittingOverride ? 'Overriding...' : 'Audit & Admit Patient'}
               </button>

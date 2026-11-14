@@ -4,4 +4,6 @@ export * from './MessageThread';
 export * from './TriageQueueView';
 export * from './CallWaitingRoom';
 export * from './CallStage';
+export * from './OverlayTooltip';
 export * from './GuestJoinPage';
+export * from './shadows';

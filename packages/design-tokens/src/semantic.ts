@@ -91,6 +91,16 @@ export const lightColors = {
   // Overlays
   overlay: 'rgba(15, 23, 42, 0.55)',
   shadow: palette.slate[900],
+  shadowSmColor: 'rgba(15, 23, 42, 0.09)',
+  shadowMdColor: 'rgba(15, 23, 42, 0.14)',
+  shadowLgColor: 'rgba(15, 23, 42, 0.20)',
+  primaryShadowSubtle: 'rgba(13, 105, 99, 0.22)',
+  primaryShadowSm: 'rgba(13, 105, 99, 0.34)',
+  primaryShadowMd: 'rgba(13, 105, 99, 0.46)',
+  dangerShadowSm: 'rgba(220, 38, 38, 0.22)',
+  dangerShadowMd: 'rgba(220, 38, 38, 0.32)',
+  successShadowSm: 'rgba(22, 163, 74, 0.22)',
+  successShadowMd: 'rgba(22, 163, 74, 0.32)',
   transparent: 'transparent',
 } as const;
 
@@ -173,6 +183,16 @@ export const darkColors: Record<ColorToken, string> = {
 
   overlay: 'rgba(2, 6, 23, 0.7)',
   shadow: '#000000',
+  shadowSmColor: 'rgba(2, 6, 23, 0.44)',
+  shadowMdColor: 'rgba(2, 6, 23, 0.56)',
+  shadowLgColor: 'rgba(2, 6, 23, 0.68)',
+  primaryShadowSubtle: 'rgba(46, 179, 159, 0.28)',
+  primaryShadowSm: 'rgba(46, 179, 159, 0.40)',
+  primaryShadowMd: 'rgba(46, 179, 159, 0.52)',
+  dangerShadowSm: 'rgba(248, 113, 113, 0.30)',
+  dangerShadowMd: 'rgba(248, 113, 113, 0.42)',
+  successShadowSm: 'rgba(74, 222, 128, 0.30)',
+  successShadowMd: 'rgba(74, 222, 128, 0.42)',
   transparent: 'transparent',
 };
 

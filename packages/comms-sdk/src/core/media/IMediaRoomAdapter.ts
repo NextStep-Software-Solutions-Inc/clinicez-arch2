@@ -36,6 +36,8 @@ export type MediaAdapterEventType =
   | 'trackSubscribed'
   | 'trackUnsubscribed'
   | 'localTrackChanged'
+  | 'networkQualityChanged'
+  | 'dataMessageReceived'
   | 'error';
 
 export type MediaEventListener = (...args: unknown[]) => void;
@@ -55,6 +57,8 @@ export interface IMediaRoomAdapter {
   getRemoteAudioTrack(participantIdentity?: string): unknown | null;
   getRemoteParticipants(): RemoteMediaParticipant[];
   getRecordingStream(): MediaStream | null;
+  getNetworkQuality?(): 'excellent' | 'good' | 'poor' | 'reconnecting';
+  sendDataMessage?(payload: string): Promise<void>;
   on(event: MediaAdapterEventType, listener: MediaEventListener): () => void;
   off(event: MediaAdapterEventType, listener: MediaEventListener): void;
 }

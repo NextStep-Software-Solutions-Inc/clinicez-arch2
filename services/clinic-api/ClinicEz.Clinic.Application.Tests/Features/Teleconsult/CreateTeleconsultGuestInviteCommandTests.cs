@@ -187,7 +187,7 @@ public sealed class CreateTeleconsultGuestInviteCommandTests
         // Assert DTO
         result.Should().NotBeNull();
         result.InviteToken.Should().HaveLength(32);
-        result.InviteUrl.Should().Be($"https://portal.clinicez.test/guest/teleconsult?token={result.InviteToken}");
+        result.InviteUrl.Should().Be($"https://portal.clinicez.test/teleconsult/join?token={result.InviteToken}");
         result.Otp.Should().MatchRegex(@"^\d{6}$");
         result.DobHint.Should().Be("1990-**-**");
         result.ExpiresAtUtc.Should().BeAfter(DateTime.UtcNow.AddMinutes(50));
@@ -216,5 +216,68 @@ public sealed class CreateTeleconsultGuestInviteCommandTests
         audit.Should().NotBeNull();
         audit!.ActorStaffId.Should().Be(_staffId);
         audit.PatientId.Should().Be(patientId);
+    }
+
+    [Fact]
+    public async Task CreateGuestInvite_ResolvesClinicPortalBaseUrlAndBaseDomainFallbacks()
+    {
+        var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var aptRepo = TestDbHelper.CreateRepository<Appointment>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<Patient>(db, sieve);
+        var auditRepo = TestDbHelper.CreateRepository<AuditEntry>(db, sieve);
+        var publisher = Substitute.For<IInteropPublisher>();
+
+        var patientId = Guid.NewGuid();
+        db.Patients.Add(new Patient
+        {
+            Id = patientId,
+            ClinicId = _clinicId,
+            PatientCode = "P-1003",
+            FirstName = "Maria",
+            LastName = "Clara",
+            ContactNumber = "09123456700",
+            DateOfBirth = new DateOnly(1992, 8, 12)
+        });
+
+        var aptId = Guid.NewGuid();
+        db.Appointments.Add(new Appointment
+        {
+            Id = aptId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            PatientName = "Maria Clara",
+            ScheduledAt = DateTime.UtcNow,
+            AppointmentType = AppointmentType.Teleconsult,
+            CallId = Guid.NewGuid()
+        });
+        await db.SaveChangesAsync();
+
+        var clinicPortalConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Clinic:PortalBaseUrl"] = "https://dev.clinicez.net/",
+            ["Portal:BaseUrl"] = ""
+        }).Build();
+
+        var clinicPortalHandler = new CreateTeleconsultGuestInviteCommandHandler(
+            aptRepo, patientRepo, auditRepo, uow, _clinicContext, publisher, clinicPortalConfig,
+            NullLogger<CreateTeleconsultGuestInviteCommandHandler>.Instance);
+
+        var clinicPortalResult = await clinicPortalHandler.Handle(new CreateTeleconsultGuestInviteCommand(aptId), CancellationToken.None);
+        clinicPortalResult.InviteUrl.Should().Be($"https://dev.clinicez.net/teleconsult/join?token={clinicPortalResult.InviteToken}");
+
+        var baseDomainConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Clinic:PortalBaseUrl"] = "",
+            ["Portal:BaseUrl"] = "",
+            ["Facility:BaseDomain"] = "dev.clinicez.net"
+        }).Build();
+
+        var baseDomainHandler = new CreateTeleconsultGuestInviteCommandHandler(
+            aptRepo, patientRepo, auditRepo, uow, _clinicContext, publisher, baseDomainConfig,
+            NullLogger<CreateTeleconsultGuestInviteCommandHandler>.Instance);
+
+        var baseDomainResult = await baseDomainHandler.Handle(new CreateTeleconsultGuestInviteCommand(aptId), CancellationToken.None);
+        baseDomainResult.InviteUrl.Should().Be($"https://dev.clinicez.net/teleconsult/join?token={baseDomainResult.InviteToken}");
     }
 }

@@ -338,11 +338,19 @@ export function useCallSession(
 
   const toggleScreenShare = useCallback(async (): Promise<void> => {
     const next = !isScreenSharingRef.current;
+    if (options?.mediaAdapter) {
+      try {
+        await options.mediaAdapter.setScreenShareEnabled(next);
+        isScreenSharingRef.current = next;
+        setIsScreenSharing(next);
+      } catch {
+        isScreenSharingRef.current = false;
+        setIsScreenSharing(false);
+      }
+      return;
+    }
     isScreenSharingRef.current = next;
     setIsScreenSharing(next);
-    if (options?.mediaAdapter) {
-      await options.mediaAdapter.setScreenShareEnabled(next).catch(() => {});
-    }
   }, [options?.mediaAdapter]);
 
   const switchCamera = useCallback(async (): Promise<void> => {

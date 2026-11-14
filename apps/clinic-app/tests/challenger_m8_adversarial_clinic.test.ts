@@ -129,8 +129,9 @@ describe('Challenger M8.2: Workstation Clinic App Adversarial Invariant Suite', 
       expect(count).toBeGreaterThanOrEqual(2);
     });
 
-    it('2.2: Modal provides static and dynamic testID="btn-dock-call" hooks', () => {
-      expect(modalContent).toContain('testID="btn-dock-call"');
+    it('2.2: Modal provides static and dynamic testID="btn-toggle-pip" hooks without redundant btn-dock-call', () => {
+      expect(modalContent).toContain('testID="btn-toggle-pip"');
+      expect(modalContent).not.toContain('testID="btn-dock-call"');
       expect(modalContent).toContain('testID="docked-call-mini-bar-wrapper"');
     });
 

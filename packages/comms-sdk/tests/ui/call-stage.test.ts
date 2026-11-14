@@ -1,5 +1,6 @@
 import { describe, expect, it, mock, beforeAll } from 'bun:test';
 import React from 'react';
+import { lightColors, createShadows } from '@clinicez/design-tokens';
 
 // Mock react-native for headless test runner using HTML element string primitives
 const RNMock = {
@@ -552,6 +553,267 @@ describe('Feature F18: CallStage Video Surface & In-Call Controls (Native & Web)
       expect(webRotateBtn).not.toBeNull();
       await webRotateBtn.props.onClick?.();
       expect(webRotateTriggered).toBe(true);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: renders networkQuality banner for poor and reconnecting states', () => {
+      for (const quality of ['poor', 'reconnecting'] as const) {
+        const nativeHarness = createHookHarness(() =>
+          NativeCallStage({
+            ...baseNativeProps,
+            networkQuality: quality,
+          })
+        );
+        const nativeBanner = findElement(
+          nativeHarness.result.current,
+          (el) => el.props?.testID === 'banner-network-quality'
+        );
+        expect(nativeBanner).not.toBeNull();
+        expect(getTextContent(nativeBanner)).toContain(
+          quality === 'reconnecting' ? 'Connection Interrupted' : 'Weak Network Connection'
+        );
+        nativeHarness.unmount();
+
+        const webHarness = createHookHarness(() =>
+          WebCallStage({
+            ...baseWebProps,
+            networkQuality: quality,
+          })
+        );
+        const webBanner = findElement(
+          webHarness.result.current,
+          (el) => el.props?.['data-testid'] === 'banner-network-quality'
+        );
+        expect(webBanner).not.toBeNull();
+        expect(getTextContent(webBanner)).toContain(
+          quality === 'reconnecting' ? 'Connection Interrupted' : 'Weak Network Connection'
+        );
+        webHarness.unmount();
+      }
+    });
+
+    it('Native & Web: renders Copy Invite and Message Patient buttons in waiting placeholder', async () => {
+      let nativeCopied = 0;
+      let nativeMessaged = 0;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          onSharePatientLink: () => {
+            nativeCopied += 1;
+          },
+          onMessagePatient: () => {
+            nativeMessaged += 1;
+          },
+        })
+      );
+      const nativeCopyBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-stage-copy-invite'
+      );
+      const nativeMsgBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-stage-message-patient'
+      );
+      expect(nativeCopyBtn).not.toBeNull();
+      expect(nativeMsgBtn).not.toBeNull();
+      await nativeCopyBtn.props.onPress?.();
+      await nativeMsgBtn.props.onPress?.();
+      expect(nativeCopied).toBe(1);
+      expect(nativeMessaged).toBe(1);
+      nativeHarness.unmount();
+
+      let webCopied = 0;
+      let webMessaged = 0;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          onSharePatientLink: () => {
+            webCopied += 1;
+          },
+          onMessagePatient: () => {
+            webMessaged += 1;
+          },
+        })
+      );
+      const webCopyBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-stage-copy-invite'
+      );
+      const webMsgBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-stage-message-patient'
+      );
+      expect(webCopyBtn).not.toBeNull();
+      expect(webMsgBtn).not.toBeNull();
+      await webCopyBtn.props.onClick?.();
+      await webMsgBtn.props.onClick?.();
+      expect(webCopied).toBe(1);
+      expect(webMessaged).toBe(1);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: shows unread chat badge and keeps idle record button neutral & blocked when isRecordDisabled', async () => {
+      let nativeStarted = 0;
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          renderIcon: (name: string) => React.createElement('span', { 'data-icon': name }, name),
+          onToggleChat: () => {},
+          unreadChatCount: 3,
+          isRecording: false,
+          canStartRecording: true,
+          isRecordDisabled: true,
+          onStartRecording: () => {
+            nativeStarted += 1;
+          },
+        })
+      );
+      const nativeUnread = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'badge-unread-chat'
+      );
+      expect(nativeUnread).not.toBeNull();
+      expect(getTextContent(nativeUnread)).toContain('3');
+
+      const nativeRecBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-start-recording'
+      );
+      expect(nativeRecBtn).not.toBeNull();
+      expect(nativeRecBtn.props.disabled).toBe(true);
+      await nativeRecBtn.props.onPress?.();
+      expect(nativeStarted).toBe(0);
+      nativeHarness.unmount();
+
+      let webStarted = 0;
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          renderIcon: (name: string) => React.createElement('span', { 'data-icon': name }, name),
+          onToggleChat: () => {},
+          unreadChatCount: 2,
+          isRecording: false,
+          canStartRecording: true,
+          isRecordDisabled: true,
+          onStartRecording: () => {
+            webStarted += 1;
+          },
+        })
+      );
+      const webUnread = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'badge-unread-chat'
+      );
+      expect(webUnread).not.toBeNull();
+      expect(getTextContent(webUnread)).toContain('2');
+
+      const webRecBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-start-recording'
+      );
+      expect(webRecBtn).not.toBeNull();
+      expect(webRecBtn.props.disabled).toBe(true);
+      expect(String(webRecBtn.props.className)).not.toContain('bg-red-600');
+      await webRecBtn.props.onClick?.();
+      expect(webStarted).toBe(0);
+      webHarness.unmount();
+    });
+
+    it('Native & Web: active stage pills, invite CTAs, and end button apply brand and semantic drop shadows', () => {
+      const roseColors = {
+        ...lightColors,
+        primary: '#E11D48',
+        primaryDark: '#9F1239',
+        primaryLight: '#FFE4E6',
+        primarySubtle: '#FFF1F2',
+        primaryBorder: '#FECDD3',
+        onPrimary: '#FFFFFF',
+        primaryShadowSubtle: 'rgba(225, 29, 72, 0.22)',
+        primaryShadowSm: 'rgba(225, 29, 72, 0.34)',
+        primaryShadowMd: 'rgba(225, 29, 72, 0.46)',
+        dangerShadowSm: 'rgba(220, 38, 38, 0.28)',
+      };
+      const nativeShadows = createShadows(roseColors, false);
+      const webShadows = createShadows(roseColors, true);
+
+      // Native active PiP + Chat open + Copy Invite + End Call
+      const nativeHarness = createHookHarness(() =>
+        NativeCallStage({
+          ...baseNativeProps,
+          onTogglePip: () => {},
+          isPipActive: true,
+          onToggleChat: () => {},
+          isChatOpen: true,
+          onSharePatientLink: () => {},
+          colors: roseColors,
+          shadows: nativeShadows,
+        })
+      );
+      const nativePipBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-toggle-pip'
+      );
+      expect(nativePipBtn.props.style).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            backgroundColor: '#E11D48',
+            shadowColor: 'rgba(225, 29, 72, 0.34)',
+          }),
+        ])
+      );
+
+      const nativeCopyBtn = findElement(
+        nativeHarness.result.current,
+        (el) => el.props?.testID === 'btn-stage-copy-invite'
+      );
+      expect(nativeCopyBtn.props.style).toEqual(
+        expect.objectContaining({
+          borderColor: '#FECDD3',
+          shadowColor: 'rgba(225, 29, 72, 0.22)',
+        })
+      );
+      nativeHarness.unmount();
+
+      // Web explicit brand theme on active PiP & active Chat & Copy Invite
+      const webHarness = createHookHarness(() =>
+        WebCallStage({
+          ...baseWebProps,
+          onTogglePip: () => {},
+          isPipActive: true,
+          onToggleChat: () => {},
+          isChatOpen: true,
+          onSharePatientLink: () => {},
+          colors: roseColors,
+          shadows: webShadows,
+        })
+      );
+      const webPipBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-toggle-pip'
+      );
+      expect(String(webPipBtn.props.className)).toContain('bg-teal-700 text-white');
+      expect(webPipBtn.props.style).toMatchObject({
+        backgroundColor: '#E11D48',
+        color: '#FFFFFF',
+      });
+      expect(String(webPipBtn.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.34)');
+
+      const webChatBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-toggle-chat'
+      );
+      expect(webChatBtn.props.style).toMatchObject({
+        backgroundColor: '#E11D48',
+        color: '#FFFFFF',
+      });
+      expect(String(webChatBtn.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.34)');
+
+      const webCopyBtn = findElement(
+        webHarness.result.current,
+        (el) => el.props?.['data-testid'] === 'btn-stage-copy-invite'
+      );
+      expect(webCopyBtn.props.style.borderColor).toBe('#FECDD3');
+      expect(String(webCopyBtn.props.style.boxShadow)).toContain('rgba(225, 29, 72, 0.22)');
       webHarness.unmount();
     });
   });

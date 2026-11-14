@@ -155,8 +155,8 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
         await _auditRepo.AddAsync(audit, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var portalBaseUrl = _configuration["Portal:BaseUrl"] ?? "https://portal.clinicez.com";
-        var inviteUrl = $"{portalBaseUrl.TrimEnd('/')}/guest/teleconsult?token={inviteToken}";
+        var portalBaseUrl = ResolvePortalBaseUrl();
+        var inviteUrl = $"{portalBaseUrl.TrimEnd('/')}/teleconsult/join?token={Uri.EscapeDataString(inviteToken)}";
         var dobHint = $"{patient.DateOfBirth.Year}-**-**";
 
         return new TeleconsultGuestInviteDto(
@@ -165,5 +165,47 @@ public sealed class CreateTeleconsultGuestInviteCommandHandler : IRequestHandler
             Otp: otp,
             ExpiresAtUtc: expiresAtUtc,
             DobHint: dobHint);
+    }
+
+    private string ResolvePortalBaseUrl()
+    {
+        var configuredCandidates = new[]
+        {
+            _configuration["Clinic:PortalBaseUrl"],
+            _configuration["PORTAL_BASE_URL"],
+            _configuration["Portal:BaseUrl"],
+            _configuration["PortalBaseUrl"],
+        };
+
+        foreach (var candidate in configuredCandidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                return candidate.Trim().TrimEnd('/');
+            }
+        }
+
+        var baseDomainCandidates = new[]
+        {
+            _configuration["Facility:BaseDomain"],
+            _configuration["Tenancy:BaseDomain"],
+            _configuration["BaseDomain"],
+        };
+
+        foreach (var domain in baseDomainCandidates)
+        {
+            if (!string.IsNullOrWhiteSpace(domain))
+            {
+                var cleaned = domain.Trim().TrimStart('.').TrimEnd('/');
+                if (cleaned.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                    cleaned.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    return cleaned;
+                }
+                return $"https://{cleaned}";
+            }
+        }
+
+        return "https://portal.clinicez.ph";
     }
 }

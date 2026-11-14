@@ -9,7 +9,9 @@ import {
   View
 } from 'react-native';
 import {
+  createShadows,
   fontSizeScale,
+  isLiveWebDom,
   lightColors,
   radiusScale,
   sizes,
@@ -40,13 +42,18 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
   hasMoreHistory = false,
   onLoadMoreHistory,
   colors,
+  shadows: shadowsProp,
   style
 }) => {
   const colorsKey = colors
     ? `${colors.primary ?? ''}|${colors.primaryLight ?? ''}|${colors.primarySubtle ?? ''}|${colors.primaryBorder ?? ''}|${colors.primaryDark ?? ''}|${colors.background ?? ''}|${colors.surface ?? ''}|${colors.text ?? ''}`
     : '';
   const c = useMemo<ResolvedCommsColors>(() => ({ ...lightColors, ...colors }), [colors, colorsKey]);
-  const styles = useMemo(() => createStyles(c), [c]);
+  const s = useMemo(
+    () => ({ ...createShadows(c, isLiveWebDom), ...(shadowsProp ?? {}) }),
+    [c, shadowsProp]
+  );
+  const styles = useMemo(() => createStyles(c, s), [c, s]);
 
   const [inputText, setInputText] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -389,7 +396,10 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
 type ResolvedCommsColors = Record<keyof typeof lightColors, string>;
 
-function createStyles(c: ResolvedCommsColors) {
+function createStyles(
+  c: ResolvedCommsColors,
+  s: ReturnType<typeof createShadows>
+) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -423,12 +433,14 @@ function createStyles(c: ResolvedCommsColors) {
       borderRadius: radiusScale.sm,
       backgroundColor: c.surfaceSubtle,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSubtle
     },
     privacyButtonActive: {
       backgroundColor: c.warningBg,
       borderColor: c.warningBorder,
-      borderWidth: 1
+      borderWidth: 1,
+      ...s.sm
     },
     privacyButtonText: {
       fontSize: fontSizeScale.xs,
@@ -454,11 +466,7 @@ function createStyles(c: ResolvedCommsColors) {
       paddingHorizontal: spaceScale.md,
       paddingVertical: spaceScale.xs,
       borderRadius: radiusScale.full,
-      shadowColor: c.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 4,
+      ...s.brandSm
     },
     newMessagesPillText: {
       fontSize: fontSizeScale.xs,
@@ -503,13 +511,15 @@ function createStyles(c: ResolvedCommsColors) {
       backgroundColor: c.primaryLight,
       borderColor: c.primaryBorder,
       borderWidth: 1,
-      borderBottomRightRadius: radiusScale.xs
+      borderBottomRightRadius: radiusScale.xs,
+      ...s.sm
     },
     bubbleOther: {
       backgroundColor: c.surface,
       borderColor: c.border,
       borderWidth: 1,
-      borderBottomLeftRadius: radiusScale.xs
+      borderBottomLeftRadius: radiusScale.xs,
+      ...s.sm
     },
     bubbleTextMe: {
       color: c.text,
@@ -585,7 +595,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderWidth: 1,
       paddingHorizontal: spaceScale.xs,
       borderRadius: radiusScale.xs,
-      justifyContent: 'center'
+      justifyContent: 'center',
+      ...s.dangerSm
     },
     resendButtonText: {
       fontSize: fontSizeScale.xs,
@@ -641,7 +652,8 @@ function createStyles(c: ResolvedCommsColors) {
       borderWidth: 1,
       borderRadius: radiusScale.sm,
       justifyContent: 'center',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...s.brandSubtle
     },
     ackButtonText: {
       color: c.routineText,
@@ -722,14 +734,11 @@ function createStyles(c: ResolvedCommsColors) {
       gap: 4,
       justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: c.shadow,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 2,
-      elevation: 2,
+      ...s.brandSm
     },
     sendButtonDisabled: {
       opacity: 0.5,
+      ...s.none
     },
     sendIconText: {
       color: c.onPrimary,
