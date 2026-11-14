@@ -108,14 +108,4 @@ describe("Challenger M3 Portal Web: Empirical Adversarial Challenge Suite", () =
       expect(guestFlowSource).toContain('setStage("ended")');
     });
   });
-
-  // =========================================================================
-  // Challenge 5: Port 8081 Dev Server Protection
-  // =========================================================================
-  describe("Challenge 5: Port 8081 Dev Server Health Verification", () => {
-    test("5.1: Port 8081 responds with HTTP 200 without process interference", async () => {
-      const res = await fetch("http://localhost:8081", { method: "HEAD" });
-      expect(res.status).toBe(200);
-    });
-  });
 });

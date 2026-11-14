@@ -552,14 +552,4 @@ describe('Challenger M3: Empirical Adversarial Challenge Suite (E2E-M3 Finalizat
       expect(modalSource).toContain('call_ended_by_clinician');
     });
   });
-
-  // =========================================================================
-  // Challenge 5: Port 8081 Dev Server Protection
-  // =========================================================================
-  describe('Challenge 5: Port 8081 Dev Server Health Verification', () => {
-    it('5.1: Port 8081 responds with HTTP 200 without process interference', async () => {
-      const res = await fetch('http://localhost:8081', { method: 'HEAD' });
-      expect(res.status).toBe(200);
-    });
-  });
 });

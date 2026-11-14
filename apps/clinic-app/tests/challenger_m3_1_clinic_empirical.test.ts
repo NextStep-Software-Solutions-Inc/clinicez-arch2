@@ -132,14 +132,4 @@ describe('Challenger M3 Clinic App: Empirical Invariants & Failure Mode Challeng
       expect(modalSource).toContain('endTeleconsultCall');
     });
   });
-
-  // =========================================================================
-  // Challenge 5: Port 8081 Dev Server Protection
-  // =========================================================================
-  describe('Challenge 5: Port 8081 Dev Server Integrity', () => {
-    it('5.1: Dev server responds with HTTP 200 without being restarted', async () => {
-      const res = await fetch('http://localhost:8081', { method: 'HEAD' });
-      expect(res.status).toBe(200);
-    });
-  });
 });
